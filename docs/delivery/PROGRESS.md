@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 3 (Phase 2)
-Current phase: Phase 2 — Intelligence (in progress)  |  Current slice: P2-S01 complete; P2-S02 next
+Current phase: Phase 2 — Intelligence (in progress)  |  Current slice: P2-S02 complete; P2-S03 next
 Branch: phase-2/intelligence  |  CI: unchanged from Phase 1 (`.github/workflows/ci.yml` mirror at `ci/github-actions-ci.yml`)
 
 ## Phase 2 — Intelligence (in progress)
@@ -21,7 +21,7 @@ the résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never m
 |---------|---------------------------------------------|--------|----------|-----------|-------|
 | P2-env  | Prisma baseline migration (Phase 1 schema)  | ✅     | n/a      | `368493c` | phase-1/foundation had schema.prisma but no committed migration; baseline added so DB provisions reproducibly (all P1 tables + pgvector) |
 | P2-S01  | User repo + real auth (bcrypt + JWT)        | ✅     | 7/7 (py) | `4d1c166` | `/auth/register` (bcrypt, 201, no hash leak, 409 dup, 422 weak) + `/auth/login` (JWT userId/email/iat/exp 24h) + `get_current_user` Bearer guard; protected `GET /jobs`; web NextAuth wired to real backend; TS `UserRepository.create` |
-| P2-S02  | Job discovery adapters + persistence        | ⬜     | —        | —         | seek/linkedin/indeed adapters + JobRepository + jobs router |
+| P2-S02  | Job discovery adapters + persistence        | ✅     | 5/5 (py), 4/4 (web) | `41c6dd2` | `BaseAdapter` (fetch/parse split, fixture replay) + real `httpx`+BeautifulSoup `SeekAdapter`/`LinkedInAdapter`/`IndeedAdapter` (canonical dedupe URLs) + `adapter_registry` + `run_scout` (per-adapter isolation) + `JobRepository` (idempotent upsert on `(userId, sourceUrl)`; preserves status/fitScore/saved) + full jobs router (`GET /jobs` filters, `GET /jobs/{id}`, `POST /jobs/{id}/save`, `DELETE` archive, `POST /agents/scout/run` → 202) + Zod-validated TS `jobs.ts` client |
 | P2-S03  | ATS scoring engine (TF-IDF + embeddings)    | ⬜     | —        | —         | deterministic 0–100 |
 | P2-S04  | FitScorer agent                             | ⬜     | —        | —         | wires ATS engine to Job rows |
 | P2-S05  | Resume tailoring agent (LLM + guard)        | ⬜     | —        | —         | evidence-traced; replay-mode until real key |
@@ -37,6 +37,16 @@ the résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never m
   enforced in code (independent of any model output) so correctness does not depend on the key. **Action
   for the user:** provide a valid OpenRouter key to run the online record pass + connectivity validation.
 - Auth deps pinned: `bcrypt==4.0.1` (passlib 1.7.x is incompatible with bcrypt ≥4.1).
+- **Job-discovery fixtures are representative, not live captures.** Seek/LinkedIn/Indeed all block
+  non-browser clients from this environment (Seek returns HTTP 403; Indeed serves a Cloudflare
+  challenge; LinkedIn rate-limits/challenges guests), so a live capture in CI is not possible. The
+  fixtures under `apps/api/tests/fixtures/http/{seek,linkedin,indeed}/search.html` are therefore
+  hand-built to faithfully mirror each site's real search-results DOM (the exact `data-automation`
+  hooks Seek emits, LinkedIn's guest `base-card` markup, Indeed's `job_seen_beacon` cards). The
+  adapters' parsing logic is real and runs the **same code path** in tests and production — only the
+  HTML source differs (fixture string vs. live `httpx.get`). **Action for the user:** when a browser
+  egress/proxy is available, replace these with recorded live responses; no adapter code change is
+  needed. The `mock_http` fixture asserts adapter unit tests never touch the network.
 
 ## Phase 1 — Foundation (in progress)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
