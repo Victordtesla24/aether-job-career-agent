@@ -234,14 +234,110 @@
           <span class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/25"><i class="fa-solid fa-circle-check text-[10px]"></i>Voice-Authentic</span>
           <span class="text-[11px] text-[#6B6B82]">Tailored output de-robotified · AI detection 2%</span>
         </div>
-        <div class="flex items-center gap-3">
-          <button data-design-id="btn-tailor-apply-jd17" class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold py-3 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-wand-magic-sparkles"></i>Tailor &amp; Apply</button>
-          <button data-design-id="btn-review-jd18" class="px-5 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/8 hover:bg-white/10 transition">Review</button>
-          <button data-design-id="btn-skip-jd19" class="px-5 py-3 rounded-xl text-sm font-medium text-[#A0A0B8] hover:text-white hover:bg-white/5 transition">Skip</button>
+        <!-- P0-S02 · TWO-STEP APPLY FLOW: (1) Tailor Resume → (2) Review & Apply -->
+        <div data-design-id="apply-flow-jd32" class="flex flex-col gap-3">
+          <!-- step indicator -->
+          <div class="flex items-center gap-3 text-[11px]">
+            <div id="stepPill1" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/30 font-semibold transition"><span id="stepDot1" class="w-4 h-4 rounded-full bg-[#FF6B35] text-white flex items-center justify-center text-[9px] mono">1</span>Tailor Resume</div>
+            <div class="flex-1 h-px bg-white/10"></div>
+            <div id="stepPill2" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-[#6B6B82] border border-white/8 transition"><span id="stepDot2" class="w-4 h-4 rounded-full bg-white/10 text-[#6B6B82] flex items-center justify-center text-[9px] mono">2</span>Review &amp; Apply</div>
+          </div>
+
+          <!-- STEP 1 — Tailor Resume (initial state) -->
+          <div id="applyStep1" class="flex items-center gap-3">
+            <button data-design-id="btn-tailor-resume-jd17" type="button" onclick="startTailoring()" class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold py-3 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-wand-magic-sparkles"></i>Tailor Resume<i class="fa-solid fa-arrow-right text-[12px]"></i></button>
+            <button data-design-id="btn-preview-jd33" type="button" class="px-5 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/8 hover:bg-white/10 transition">Preview</button>
+            <button data-design-id="btn-skip-jd19" type="button" class="px-5 py-3 rounded-xl text-sm font-medium text-[#A0A0B8] hover:text-white hover:bg-white/5 transition">Skip</button>
+          </div>
+
+          <!-- tailoring in-progress (briefly shown after clicking Tailor Resume) -->
+          <div id="tailoringProgress" class="hidden items-center gap-3 rounded-xl glass-raised border border-[#4F46E5]/25 px-4 py-3">
+            <i class="fa-solid fa-circle-notch fa-spin text-[#818CF8]"></i>
+            <span class="text-sm text-[#C8C8DC]">Tailoring your resume for <span class="font-semibold text-white">Canva</span> — matching keywords, preserving your voice…</span>
+          </div>
+
+          <!-- STEP 2 — Review & Apply (revealed once tailoring completes) -->
+          <div id="applyStep2" class="hidden flex-col gap-3">
+            <div class="rounded-xl bg-[#34D399]/10 border border-[#34D399]/25 px-4 py-3">
+              <div class="flex items-center gap-2 text-[13px] text-[#C8C8DC]"><i class="fa-solid fa-circle-check text-[#34D399]"></i><span>Resume tailored · <span class="mono text-[#34D399] font-semibold">96%</span> Voice DNA authenticity · <span class="mono text-[#34D399]">2%</span> AI detection</span></div>
+              <div class="flex items-center gap-4 mt-2 text-[11px]">
+                <a data-design-id="link-story-bank-jd34" href="story-bank.html" class="inline-flex items-center gap-1.5 text-[#818CF8] hover:text-white transition font-medium"><i class="fa-solid fa-book-bookmark text-[10px]"></i>Pull from Story Bank<i class="fa-solid fa-arrow-right text-[9px]"></i></a>
+                <a data-design-id="link-open-studio-jd35" href="resume-studio.html" class="inline-flex items-center gap-1.5 text-[#A0A0B8] hover:text-white transition"><i class="fa-solid fa-file-lines text-[10px]"></i>Open in Resume Studio</a>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <button data-design-id="btn-review-apply-jd18" type="button" onclick="openSubmitGate()" class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold py-3 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-paper-plane"></i>Review &amp; Apply<i class="fa-solid fa-arrow-right text-[12px]"></i></button>
+              <button data-design-id="btn-retailor-jd36" type="button" onclick="resetTailoring()" class="px-5 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/8 hover:bg-white/10 transition">Re-tailor</button>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
   </div>
 </div>
+
+<!-- ============================================================= -->
+<!-- P0-S02 · SUBMIT APPLICATION CONFIRMATION GATE -->
+<!-- ============================================================= -->
+<div data-design-id="submit-gate-jd37" id="submitGate" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeSubmitGate()"></div>
+  <div role="dialog" aria-modal="true" aria-labelledby="submitGateTitle" class="relative w-[480px] max-w-[92vw] glass-raised rounded-2xl border border-[#FF6B35]/40 p-6 shadow-2xl shadow-black/60">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl bg-[#FBBF24]/15 border border-[#FBBF24]/30 flex items-center justify-center shrink-0"><i class="fa-solid fa-triangle-exclamation text-[#FBBF24]"></i></div>
+      <div class="flex-1">
+        <h3 id="submitGateTitle" class="text-base font-semibold leading-snug">Submit application to <span class="text-[#FF6B35]">Canva</span>?</h3>
+        <p class="text-[12px] text-[#A0A0B8] mt-1">Your tailored resume for <span class="text-[#C7C7D6]">Senior Technical Program Manager</span> will be submitted via <span class="mono text-[#C7C7D6]">Seek.com.au</span>. <span class="text-[#FBBF24]">This action cannot be undone.</span></p>
+      </div>
+      <button type="button" onclick="closeSubmitGate()" class="text-[#A0A0B8] hover:text-white transition"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="mt-4 rounded-xl bg-black/25 border border-white/8 p-3.5 space-y-2 text-[12px]">
+      <div class="flex items-center justify-between"><span class="text-[#6B6B82]">Role</span><span class="text-[#C7C7D6]">Senior Technical Program Manager</span></div>
+      <div class="flex items-center justify-between"><span class="text-[#6B6B82]">Resume</span><span class="text-[#C7C7D6]">Vik_Resume_Canva_TPM.pdf <span class="text-[#34D399]">(tailored)</span></span></div>
+      <div class="flex items-center justify-between"><span class="text-[#6B6B82]">Match score</span><span class="mono text-[#34D399] font-semibold">94</span></div>
+    </div>
+
+    <div class="flex items-center justify-end gap-2 mt-5">
+      <button data-design-id="submit-cancel-jd38" type="button" onclick="closeSubmitGate()" class="px-4 py-2.5 rounded-xl glass-raised hover:border-white/20 transition text-[13px]">Cancel</button>
+      <button data-design-id="submit-confirm-jd39" type="button" onclick="confirmSubmit()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-[13px] font-semibold"><i class="fa-solid fa-paper-plane"></i>Submit Application</button>
+    </div>
+
+    <div id="submittedState" class="hidden mt-4 rounded-xl bg-[#34D399]/10 border border-[#34D399]/25 px-3.5 py-2.5 flex items-center gap-2 text-[12px]">
+      <i class="fa-solid fa-circle-check text-[#34D399]"></i><span>Application submitted to Canva. <span class="text-[#A0A0B8]">Tracking in Applications · status: Applied.</span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // P0-S02 — two-step apply: Tailor Resume (step 1) must complete before Review & Apply (step 2) unlocks.
+  function startTailoring(){
+    document.getElementById('applyStep1').classList.add('hidden');
+    var prog = document.getElementById('tailoringProgress');
+    prog.classList.remove('hidden'); prog.classList.add('flex');
+    setTimeout(function(){
+      prog.classList.add('hidden'); prog.classList.remove('flex');
+      var s2 = document.getElementById('applyStep2');
+      s2.classList.remove('hidden'); s2.classList.add('flex');
+      // activate step 2 pill
+      var pill2 = document.getElementById('stepPill2');
+      pill2.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/30 font-semibold transition';
+      document.getElementById('stepDot2').className = 'w-4 h-4 rounded-full bg-[#FF6B35] text-white flex items-center justify-center text-[9px] mono';
+      // mark step 1 complete (checkmark)
+      document.getElementById('stepDot1').innerHTML = '<i class="fa-solid fa-check text-[8px]"></i>';
+    }, 1500);
+  }
+  function resetTailoring(){
+    var s2 = document.getElementById('applyStep2'); s2.classList.add('hidden'); s2.classList.remove('flex');
+    document.getElementById('applyStep1').classList.remove('hidden');
+    document.getElementById('stepDot1').innerHTML = '1';
+    var pill2 = document.getElementById('stepPill2');
+    pill2.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-[#6B6B82] border border-white/8 transition';
+    document.getElementById('stepDot2').className = 'w-4 h-4 rounded-full bg-white/10 text-[#6B6B82] flex items-center justify-center text-[9px] mono';
+  }
+  function openSubmitGate(){ var g=document.getElementById('submitGate'); g.classList.remove('hidden'); g.classList.add('flex'); document.getElementById('submittedState').classList.add('hidden'); }
+  function closeSubmitGate(){ var g=document.getElementById('submitGate'); g.classList.add('hidden'); g.classList.remove('flex'); }
+  function confirmSubmit(){ document.getElementById('submittedState').classList.remove('hidden'); setTimeout(closeSubmitGate, 1600); }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeSubmitGate(); });
+</script>
 </body>
 </html>
