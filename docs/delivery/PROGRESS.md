@@ -15,7 +15,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S01  | Monorepo scaffolding: shared/agents/queue + turbo | ✅     | green | `67b82fb` |
 | P1-S02  | Prisma schema (pgvector + all models) + repos     | ✅     | green | `fff6c15` |
 | P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ✅     | green | `d00ae4a` |
-| P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ⬜     | -     | -         |
+| P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ✅     | green | `28f991b` |
 | P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ⬜     | -     | -         |
 | P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ⬜     | -     | -         |
 | P1-S09  | FastAPI skeleton + `/health`                      | ⬜     | -     | -         |
@@ -48,6 +48,16 @@ callback with injected user-lookup + password-verify; never leaks the hash), `op
 18 green (5 JWT + 6 guard + 7 credentials/config). NextAuth route-handler wiring is deferred to
 P1-S06 when Next.js lands — see DECISIONS D-0006. Secret comes from `NEXTAUTH_SECRET` (already in
 `.env.example`); it is never logged.
+
+**P1-S04 detail:** `apps/api/app/services` — `resume_parser.py` (`compute_format_hash` = SHA-256 of
+the raw PDF bytes → the immutable format identity; `parse_resume_pdf` extracts page count, raw text,
+contact fields (email/phone/linkedin/github via regex) and detects known section headings using
+`pdfplumber`) and `resume_tailor.py` (`tailor_bullets`, a lossless passthrough stub — the seam for
+LLM tailoring in Phase 2). Tests: 10 green, asserting against the *real* content of the read-only
+`assets/resume/Vik_Resume_Final.pdf` (no fabrication) and pinning the format hash
+`0700d1aa…0768a25`. Runtime dep `pdfplumber` added to `pyproject.toml` + `requirements.txt`;
+`requirements-dev.txt` now `-r requirements.txt` so CI installs runtime deps too. The resume asset is
+byte-for-byte unchanged. Uses the repo's existing `app/` package (not the spec's `api/`).
 
 ---
 
