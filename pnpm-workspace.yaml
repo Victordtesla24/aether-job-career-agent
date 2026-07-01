@@ -1,9 +1,15 @@
 packages:
-  - "apps/web"
+  - "apps/*"
+  - "packages/*"
 
-# Allow esbuild (pulled in by Vitest) to run its install build script.
-# pnpm v11 blocks dependency build scripts by default; this allow-lists the one we trust.
+# pnpm v11 blocks dependency install/build scripts by default. We explicitly
+# decide, per dependency, whether its build script may run:
+#   - esbuild (pulled in by Vitest) is trusted and needs its build script.
+#   - msgpackr-extract (optional native accel for msgpackr, via BullMQ) is left
+#     unbuilt; msgpackr transparently falls back to its pure-JS codec, so we
+#     avoid running an untrusted native build with no functional loss.
 onlyBuiltDependencies:
   - esbuild
 allowBuilds:
   esbuild: true
+  msgpackr-extract: false
