@@ -100,13 +100,85 @@
             </div>
           </section>
 
-          <!-- Integrations -->
-          <section data-design-id="integrations-st13" class="glass rounded-2xl border border-white/8 p-6">
-            <h2 class="text-sm font-semibold mb-4">Integrations & API Keys</h2>
+          <!-- P0-S03 · JOB BOARD INTEGRATIONS — status mirrors Job Discovery sources -->
+          <section data-design-id="job-board-integrations-st13" class="glass rounded-2xl border border-white/8 p-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2"><i class="fa-solid fa-plug text-[#818CF8] text-sm"></i><h2 class="text-sm font-semibold">Job Board Integrations</h2></div>
+              <div class="flex items-center gap-3">
+                <span class="text-[11px] text-[#6B6B82] mono">Last synced: 2 hours ago</span>
+                <button data-design-id="btn-sync-all-st20" type="button" onclick="syncAll()" class="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition"><i class="fa-solid fa-rotate text-[10px]"></i>Sync All</button>
+              </div>
+            </div>
+
+            <!-- status legend -->
+            <div class="flex items-center gap-4 mb-4 text-[11px] text-[#A0A0B8]">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#34D399]"></span>Connected</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#818CF8]"></span>Syncing</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span>Disconnected</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#FBBF24]"></span>Not configured</span>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+              <!-- Seek — Connected -->
+              <div data-design-id="int-seek-st21" class="glass-raised rounded-xl border border-[#34D399]/25 p-3.5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-[#E60278] flex items-center justify-center text-white font-bold text-[10px] shrink-0">SEEK</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2"><p class="text-xs font-semibold">Seek.com.au</p><span class="w-2 h-2 rounded-full bg-[#34D399]"></span><span class="text-[11px] text-[#34D399]">Connected · via Browser</span></div>
+                  <p class="text-[10px] text-[#6B6B82] mono mt-0.5">Last synced 2 hours ago · 98 roles</p>
+                </div>
+                <button data-design-id="btn-sync-seek-st22" type="button" onclick="syncOne(this)" class="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-rotate text-[10px]"></i>Sync Now</button>
+              </div>
+
+              <!-- LinkedIn AU — Syncing -->
+              <div data-design-id="int-linkedin-st23" class="glass-raised rounded-xl border border-[#818CF8]/30 p-3.5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-[#0A66C2] flex items-center justify-center shrink-0"><i class="fa-brands fa-linkedin-in text-white text-sm"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2"><p class="text-xs font-semibold">LinkedIn AU</p><span class="w-2 h-2 rounded-full bg-[#818CF8]"></span><span class="text-[11px] text-[#818CF8] flex items-center gap-1"><i class="fa-solid fa-circle-notch fa-spin text-[9px]"></i>Syncing… 44%</span></div>
+                  <p class="text-[10px] text-[#6B6B82] mono mt-0.5">Started 12s ago · OAuth</p>
+                </div>
+                <button data-design-id="btn-sync-linkedin-st24" type="button" disabled class="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 opacity-50 cursor-not-allowed">Syncing…</button>
+              </div>
+
+              <!-- Workforce AU — Not configured -->
+              <div data-design-id="int-workforce-st25" class="glass-raised rounded-xl border border-[#FBBF24]/30 p-3.5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-[#00843D] flex items-center justify-center shrink-0"><i class="fa-solid fa-landmark text-white text-xs"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2"><p class="text-xs font-semibold">Workforce Australia</p><span class="w-2 h-2 rounded-full bg-[#FBBF24]"></span><span class="text-[11px] text-[#FBBF24]">Not configured · MyGov login required</span></div>
+                  <p class="text-[10px] text-[#6B6B82] mono mt-0.5">Never synced</p>
+                </div>
+                <button data-design-id="btn-connect-workforce-st26" type="button" class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition">Connect via MyGov</button>
+              </div>
+
+              <!-- Jora — Disconnected -->
+              <div data-design-id="int-jora-st27" class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-[#2557A7] flex items-center justify-center text-white font-bold text-[10px] shrink-0">Jora</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2"><p class="text-xs font-semibold">Jora</p><span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span><span class="text-[11px] text-[#6B6B82]">Disconnected</span></div>
+                  <p class="text-[10px] text-[#6B6B82] mono mt-0.5">Never synced</p>
+                </div>
+                <button data-design-id="btn-connect-jora-st28" type="button" class="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-robot text-[10px] text-[#818CF8]"></i>Connect</button>
+              </div>
+
+              <!-- Indeed AU — Disconnected -->
+              <div data-design-id="int-indeed-st29" class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-[#003A9B] flex items-center justify-center text-white font-bold text-[10px] shrink-0">in</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2"><p class="text-xs font-semibold">Indeed AU</p><span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span><span class="text-[11px] text-[#6B6B82]">Disconnected</span></div>
+                  <p class="text-[10px] text-[#6B6B82] mono mt-0.5">Never synced</p>
+                </div>
+                <button data-design-id="btn-connect-indeed-st30" type="button" class="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-robot text-[10px] text-[#818CF8]"></i>Connect</button>
+              </div>
+            </div>
+            <p class="text-[11px] text-[#6B6B82] mt-4 flex items-center gap-1.5"><i class="fa-solid fa-circle-info text-[10px]"></i>These sources feed the <span class="text-[#818CF8]">Job Discovery</span> screen. Status here always matches the Connected Job Boards bar there.</p>
+          </section>
+
+          <!-- Connected accounts + API keys -->
+          <section data-design-id="integrations-st14" class="glass rounded-2xl border border-white/8 p-6">
+            <h2 class="text-sm font-semibold mb-4">Connected Accounts & API Keys</h2>
             <div class="grid grid-cols-3 gap-3">
-              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-linkedin text-[#4F46E5] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">LinkedIn</p><p class="text-[10px] text-[#34D399]">connected</p></div></div>
-              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-github text-lg"></i><div class="flex-1"><p class="text-xs font-medium">GitHub</p><p class="text-[10px] text-[#34D399]">connected</p></div></div>
-              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-solid fa-briefcase text-[#A0A0B8] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">Seek</p><p class="text-[10px] text-[#6B6B82]">not linked</p></div></div>
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-linkedin text-[#4F46E5] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">LinkedIn</p><p class="text-[10px] text-[#34D399] flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#34D399]"></span>Connected</p></div></div>
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-github text-lg"></i><div class="flex-1"><p class="text-xs font-medium">GitHub</p><p class="text-[10px] text-[#34D399] flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#34D399]"></span>Connected</p></div></div>
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-solid fa-key text-[#A0A0B8] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">OpenRouter API</p><p class="text-[10px] text-[#34D399] flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#34D399]"></span>Key set</p></div></div>
             </div>
           </section>
         </div>
@@ -114,5 +186,20 @@
     </main>
   </div>
 </div>
+
+<script>
+  // P0-S03 — job board sync affordances (wireframe-level feedback)
+  function syncOne(btn){
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-[10px]"></i>Syncing…';
+    setTimeout(function(){ btn.disabled = false; btn.innerHTML = original; }, 1600);
+  }
+  function syncAll(){
+    document.querySelectorAll('[data-design-id^="btn-sync-seek"], [data-design-id^="btn-sync-linkedin"]').forEach(function(b){
+      if(!b.disabled){ syncOne(b); }
+    });
+  }
+</script>
 </body>
 </html>
