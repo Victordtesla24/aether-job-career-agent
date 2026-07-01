@@ -105,7 +105,55 @@ def client():
 
     app = create_app()
     app.dependency_overrides[get_db] = _override_get_db
+
+    # Bind the Scout agent to fixture-backed adapters so `/agents/scout/run`
+    # exercises the real parsing/persistence path with zero live HTTP. Guarded
+    # so the suite still imports cleanly before the discovery module exists
+    # (RED phase of P2-S02).
+    try:
+        from app.routers.jobs import get_scout_adapters
+        from app.services.discovery.linkedin_adapter import LinkedInAdapter
+        from app.services.discovery.seek_adapter import SeekAdapter
+
+        def _override_scout_adapters():
+            return [
+                SeekAdapter(fixture=_read_http_fixture("seek")),
+                LinkedInAdapter(fixture=_read_http_fixture("linkedin")),
+            ]
+
+        app.dependency_overrides[get_scout_adapters] = _override_scout_adapters
+    except ImportError:
+        pass
+
     return TestClient(app)
+
+
+def _read_http_fixture(source: str) -> str:
+    """Read a representative search-results HTML fixture for ``source``."""
+    from pathlib import Path
+
+    path = Path(__file__).parent / "fixtures" / "http" / source / "search.html"
+    return path.read_text(encoding="utf-8")
+
+
+@pytest.fixture()
+def mock_http(monkeypatch):
+    """Fail loudly if an adapter attempts live HTTP during a unit test.
+
+    Adapter unit tests construct adapters with ``fixture=...`` and must never
+    touch the network; patching httpx to raise guarantees that contract.
+    """
+    import httpx
+
+    def _blocked(*_args, **_kwargs):
+        raise RuntimeError(
+            "Live HTTP is disabled in tests; adapters must parse fixtures."
+        )
+
+    monkeypatch.setattr(httpx, "get", _blocked, raising=False)
+    monkeypatch.setattr(httpx.Client, "get", _blocked, raising=False)
+    monkeypatch.setattr(httpx.Client, "request", _blocked, raising=False)
+    yield
 
 
 @pytest.fixture()

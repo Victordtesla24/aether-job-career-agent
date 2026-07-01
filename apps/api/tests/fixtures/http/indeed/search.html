@@ -1,0 +1,42 @@
+<!--
+  Representative Indeed.com.au search-results fragment.
+
+  Live capture is blocked from CI (Indeed serves a Cloudflare challenge to
+  non-browser clients), so this is a faithful hand-built mirror of Indeed's
+  real SERP DOM: the `job_seen_beacon` card with `h2.jobTitle > a > span[title]`,
+  `span[data-testid="company-name"]`, and `div[data-testid="text-location"]`
+  match the live selectors, so `IndeedAdapter` parses it with the same code
+  path it uses against production HTML. See docs/delivery/PROGRESS.md.
+-->
+<div id="mosaic-provider-jobcards">
+  <div class="job_seen_beacon">
+    <h2 class="jobTitle">
+      <a class="jcs-JobTitle" href="/rc/clk?jk=a1b2c3d4e5f6&amp;fccid=xyz">
+        <span title="Python Developer">Python Developer</span>
+      </a>
+    </h2>
+    <span data-testid="company-name">Initech</span>
+    <div data-testid="text-location">Sydney NSW</div>
+    <div class="job-snippet">
+      <ul>
+        <li>Develop and maintain Python microservices</li>
+        <li>Work with PostgreSQL and Redis at scale</li>
+      </ul>
+    </div>
+  </div>
+  <div class="job_seen_beacon">
+    <h2 class="jobTitle">
+      <a class="jcs-JobTitle" href="/rc/clk?jk=99887766aabb&amp;fccid=uvw">
+        <span title="Data Engineer">Data Engineer</span>
+      </a>
+    </h2>
+    <span data-testid="company-name">Umbrella Corp</span>
+    <div data-testid="text-location">Remote</div>
+    <div class="job-snippet">
+      <ul>
+        <li>Build ETL pipelines in Python</li>
+        <li>Own data quality and warehouse modelling</li>
+      </ul>
+    </div>
+  </div>
+</div>

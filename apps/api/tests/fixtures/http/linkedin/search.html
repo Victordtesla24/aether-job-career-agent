@@ -1,0 +1,48 @@
+<!--
+  Representative LinkedIn guest jobs-search fragment.
+
+  This mirrors the markup returned by LinkedIn's unauthenticated
+  `/jobs-guest/jobs/api/seeMoreJobPostings/search` endpoint (a list of
+  `<li>` cards). Live capture is blocked from CI (LinkedIn rate-limits and
+  challenges non-browser clients), so this is a faithful hand-built mirror:
+  the class hooks (base-card, base-card__full-link, base-search-card__title,
+  base-search-card__subtitle, job-search-card__location, job-search-card__listdate)
+  match the live guest DOM, so `LinkedInAdapter` uses the same parsing path in
+  tests and production. See docs/delivery/PROGRESS.md.
+-->
+<ul class="jobs-search__results-list">
+  <li>
+    <div class="base-card relative w-full base-search-card base-search-card--link job-search-card">
+      <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/3712345678/?refId=abc">
+        <span class="sr-only">Backend Engineer</span>
+      </a>
+      <div class="base-search-card__info">
+        <h3 class="base-search-card__title">Backend Engineer</h3>
+        <h4 class="base-search-card__subtitle">
+          <a class="hidden-nested-link" href="https://www.linkedin.com/company/globex">Globex Corporation</a>
+        </h4>
+        <div class="base-search-card__metadata">
+          <span class="job-search-card__location">Melbourne, Victoria, Australia</span>
+          <time class="job-search-card__listdate" datetime="2026-06-30">2 days ago</time>
+        </div>
+      </div>
+    </div>
+  </li>
+  <li>
+    <div class="base-card relative w-full base-search-card base-search-card--link job-search-card">
+      <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/3719998887/?refId=def">
+        <span class="sr-only">Senior Python Engineer (Remote)</span>
+      </a>
+      <div class="base-search-card__info">
+        <h3 class="base-search-card__title">Senior Python Engineer (Remote)</h3>
+        <h4 class="base-search-card__subtitle">
+          <a class="hidden-nested-link" href="https://www.linkedin.com/company/hooli">Hooli</a>
+        </h4>
+        <div class="base-search-card__metadata">
+          <span class="job-search-card__location">Melbourne, Victoria, Australia (Remote)</span>
+          <time class="job-search-card__listdate" datetime="2026-06-29">3 days ago</time>
+        </div>
+      </div>
+    </div>
+  </li>
+</ul>

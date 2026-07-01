@@ -1,0 +1,50 @@
+<!--
+  Representative Seek.com.au search-results fragment.
+
+  Live capture from https://www.seek.com.au is blocked from CI (Seek returns
+  HTTP 403 to non-browser clients), so this fixture is a faithful, hand-built
+  mirror of Seek's real search-results DOM: the `data-automation` attribute
+  hooks (normalJob / jobTitle / jobCompany / jobLocation / jobShortDescription)
+  match the selectors the live site emits, so `SeekAdapter` parses it with the
+  same code path it uses against production HTML. See docs/delivery/PROGRESS.md.
+-->
+<div data-automation="searchResults">
+  <article data-automation="normalJob" data-job-id="74123456">
+    <h3>
+      <a data-automation="jobTitle" href="/job/74123456?type=standard">Senior Software Engineer</a>
+    </h3>
+    <a data-automation="jobCompany" href="/companies/acme-pty-ltd">Acme Pty Ltd</a>
+    <a data-automation="jobLocation" href="/Software-Engineer-jobs/in-Sydney-NSW">Sydney NSW</a>
+    <span data-automation="jobShortDescription">
+      Join our platform team building scalable backend services in Python and Go.
+      You will design APIs, own reliability, and mentor engineers.
+    </span>
+    <time datetime="2026-06-30T09:15:00Z">2d ago</time>
+  </article>
+
+  <article data-automation="normalJob" data-job-id="74987654">
+    <h3>
+      <a data-automation="jobTitle" href="/job/74987654?type=promoted">Backend Software Engineer (Remote)</a>
+    </h3>
+    <a data-automation="jobCompany" href="/companies/globex-corporation">Globex Corporation</a>
+    <a data-automation="jobLocation" href="/jobs/in-All-Sydney-NSW">Sydney NSW (Remote)</a>
+    <span data-automation="jobShortDescription">
+      Fully remote role building distributed systems. Strong Python and PostgreSQL
+      experience required. Work across our data and API services.
+    </span>
+    <time datetime="2026-06-29T22:40:00Z">3d ago</time>
+  </article>
+
+  <article data-automation="normalJob" data-job-id="74555222">
+    <h3>
+      <a data-automation="jobTitle" href="/job/74555222">Full Stack Developer</a>
+    </h3>
+    <a data-automation="jobCompany" href="/companies/initech">Initech</a>
+    <a data-automation="jobLocation" href="/jobs/in-Sydney-CBD-NSW">Sydney CBD NSW</a>
+    <span data-automation="jobShortDescription">
+      Build customer-facing features in TypeScript and React with a Python backend.
+      Collaborate with product and design in a fast-paced team.
+    </span>
+    <time datetime="2026-06-28T11:05:00Z">4d ago</time>
+  </article>
+</div>
