@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: monorepo scaffolding + core packages (in progress)
+Current phase: Phase 1 — Foundation  |  Current slice: FastAPI skeleton + `/health` (P1-S09, next)
 Branch: phase-1/foundation  |  CI: to be activated at `.github/workflows/ci.yml` this phase (slice P1-S10)
 
 ## Phase 1 — Foundation (in progress)
@@ -17,7 +17,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ✅     | green | `d00ae4a` |
 | P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ✅     | green | `28f991b` |
 | P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ✅     | green | `be54f16` |
-| P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ⬜     | -     | -         |
+| P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ✅     | green | `95c34a2` |
 | P1-S09  | FastAPI skeleton + `/health`                      | ⬜     | -     | -         |
 | P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ⬜     | -     | -         |
 | P1-S11  | LLM fixture record-replay infra                   | ⬜     | -     | -         |
@@ -66,6 +66,20 @@ mode (`fixture=`) runs fully offline for tests; live mode fetches the public Git
 stdlib `urllib` (no new dependency ahead of the FastAPI/httpx slice). Deterministic, clearly-synthetic
 fixtures live in `tests/fixtures/github_fixture.py`. Tests: 5 green (normalisation, star-sort,
 language aggregation, empty-profile, blank-username guard).
+
+**P1-S06 detail:** `apps/web` becomes a real Next.js 14 App Router app. The 12-item Schema-A sidebar
+renders from a single pure-data contract, `src/lib/navigation.ts` (no React/Next imports), asserted
+by `__tests__/navigation.test.ts` (5 tests: count = 12, canonical order/labels, "Resume Studio" with
+no accent per D-0002, unique hrefs + non-empty icons, Dashboard → `/dashboard`). Shell: root
+`layout.tsx` (fonts/Font Awesome via `<link>` — offline-safe, not `next/font`), `page.tsx`
+(`/`→`/dashboard`), `dashboard/{layout,page}.tsx`, and `components/{sidebar,topbar}.tsx`, styled with
+Tailwind + the glassmorphism tokens from `design/screens/dashboard.html`. NextAuth is wired
+(fulfilling D-0006): `src/lib/auth/next-auth-options.ts` (real `NextAuthOptions` delegating to the
+P1-S03 `authorizeCredentials`; user store seeded in Phase 2) + `src/app/api/auth/[...nextauth]/route.ts`.
+Tooling: `next build`, `tsc --noEmit`, and `next lint` all pass; Vitest = 25 web tests; Playwright
+smoke (`e2e/dashboard.spec.ts`, 2 tests) verifies the 12 nav items render and the root redirect. See
+DECISIONS D-0007. Orphaned `tsconfig.build.json`/`.eslintrc.cjs` removed; `unrs-resolver` added to the
+pnpm allowed-build list.
 
 ---
 

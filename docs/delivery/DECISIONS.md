@@ -117,3 +117,44 @@ green offline. When P1-S06 adds Next.js, the NextAuth route handler
 (`app/api/auth/[...nextauth]/route.ts`) simply consumes `authConfig` + the `jose` helpers and the
 Credentials `authorize` delegates to `authorizeCredentials`. Signing secret is read from
 `NEXTAUTH_SECRET` (already in `.env.example`) and is never logged.
+
+
+
+---
+
+## D-0007 — Web: App Router + offline-safe fonts via `<link>` (not `next/font`)
+**Date:** 2026-07-02 · **Author:** Aether Delivery Agent (Session 2) · **Status:** Adopted
+
+**Context.** P1-S06 introduces Next.js for the dashboard shell. Two choices needed pinning: (1) how
+to load the Inter / JetBrains Mono web fonts and Font Awesome icon set, and (2) how the NextAuth
+route handler deferred in D-0006 gets wired.
+
+**Decision.**
+- **App Router** (`src/app/*`) is the routing model. The 12-item Schema-A sidebar renders straight
+  from a single pure-data contract, `src/lib/navigation.ts` (no React/Next imports), so the ordering
+  is unit-testable under a plain Node/Vitest environment and is asserted by
+  `__tests__/navigation.test.ts`.
+- **Fonts/icons load via `<link>` tags in the root layout `<head>`**, not `next/font`. `next/font`
+  fetches font files from Google at *build* time; that would make `next build` (and therefore CI and
+  offline builds) network-dependent and non-deterministic. Loading via `<link>` keeps builds hermetic.
+  Because this is the correct App Router pattern (there is no Pages-Router `_document.js`), the legacy
+  `@next/next/no-page-custom-font` lint rule is disabled in `.eslintrc.json` with this rationale.
+- **NextAuth wiring (fulfils D-0006).** `src/lib/auth/next-auth-options.ts` builds a real
+  `NextAuthOptions` (Credentials provider + stateless-JWT session) whose `authorize` delegates to the
+  P1-S03 `authorizeCredentials`. `src/app/api/auth/[...nextauth]/route.ts` exports the `NextAuth`
+  handler as both `GET` and `POST`. The user-lookup / password-verify dependencies are placeholders
+  returning `null`/`false` (no user store is seeded yet); they are wired to `UserRepository` + a real
+  hash comparison in Phase 2. Secret is read from `NEXTAUTH_SECRET`; never logged.
+
+**Alternatives.** `next/font` (rejected: build-time network); embedding the sidebar order in the
+component (rejected: not independently testable); pulling NextAuth peers back in P1-S03 (rejected in
+D-0006).
+
+**Consequences.** `next build`, `type-check`, `lint`, Vitest (25 web tests) and a Playwright smoke
+test (`e2e/dashboard.spec.ts`, 2 tests asserting the 12 nav items render and `/`→`/dashboard`) all
+pass offline. Build tooling added to `@aether/web`: `next`, `react`, `react-dom`, `next-auth`,
+`tailwindcss`/`postcss`/`autoprefixer`, `@types/*`, `eslint-config-next`, `@playwright/test`. The
+`build` script is now `next build` (the orphaned `tsconfig.build.json` and `.eslintrc.cjs` were
+removed). `unrs-resolver` was added to `pnpm-workspace.yaml`'s allowed build scripts (a native
+dependency of `eslint-config-next`). **Reversible?** Yes — fonts could later move to `next/font` with
+a self-hosted/offline cache without touching the navigation contract or auth wiring.
