@@ -249,6 +249,7 @@
             <span class="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 mono">v2 · 2h</span>
             <span class="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 mono">v1 · base</span>
           </div>
+          <button data-design-id="btn-compare-rs17" type="button" onclick="openVersionCompare()" class="ml-2 flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-code-compare text-[10px] text-[#818CF8]"></i>Compare</button>
         </div>
         <div class="flex items-center gap-3">
           <button data-design-id="btn-revert-rs08" class="text-sm font-medium px-4 py-2.5 rounded-xl text-[#A0A0B8] hover:text-white hover:bg-white/5 transition"><i class="fa-solid fa-rotate-left mr-2 text-xs"></i>Revert</button>
@@ -260,5 +261,37 @@
     </footer>
   </div>
 </div>
+
+<!-- Version comparison modal [P0-S07] -->
+<div data-design-id="version-compare-rs18" id="versionCompare" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeVersionCompare()"></div>
+  <div class="relative glass-raised rounded-2xl border border-[#FF6B35]/40 w-[660px] max-w-[92vw] p-6 shadow-2xl">
+    <div class="flex items-center justify-between mb-5">
+      <div class="flex items-center gap-2"><i class="fa-solid fa-code-compare text-[#FF6B35]"></i><h3 class="text-base font-semibold">Compare Versions</h3></div>
+      <button data-design-id="btn-close-compare-rs19" type="button" onclick="closeVersionCompare()" class="w-8 h-8 rounded-lg glass hover:bg-white/10 transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+    <div class="flex items-center gap-3 mb-5">
+      <div class="flex-1"><label class="text-[11px] text-[#6B6B82] block mb-1">Base</label><select data-design-id="select-ver-a-rs20" class="w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2 text-[13px] text-[#C8C8DC] mono focus:outline-none focus:border-[#4F46E5]/50"><option>v2 · 2h ago</option><option>v1 · base</option></select></div>
+      <i class="fa-solid fa-arrow-right text-[#6B6B82] mt-5"></i>
+      <div class="flex-1"><label class="text-[11px] text-[#6B6B82] block mb-1">Compare</label><select data-design-id="select-ver-b-rs21" class="w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2 text-[13px] text-[#C8C8DC] mono focus:outline-none focus:border-[#4F46E5]/50"><option>v3 · now</option><option>v2 · 2h ago</option></select></div>
+    </div>
+    <div class="flex items-center gap-4 text-[11px] text-[#6B6B82] mb-3"><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm bg-[#34D399]"></span>added</span><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm bg-[#FF6B35]"></span>keyword</span><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm bg-white/40"></span>metadata</span></div>
+    <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+      <div class="flex items-start gap-3 glass rounded-lg p-3"><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#34D399]/20 text-[#34D399] shrink-0 mt-0.5">+ added</span><p class="text-[13px] text-[#C8C8DC]">"Chaired PI Planning and executive steering across 8 squads, aligning 40+ GMs on roadmap."</p></div>
+      <div class="flex items-start gap-3 glass rounded-lg p-3"><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/20 text-[#FF6B35] shrink-0 mt-0.5">keyword</span><p class="text-[13px] text-[#C8C8DC]">Objective now leads with <span class="bg-[#FF6B35]/20 rounded px-0.5">Technical Program Manager</span> + <span class="bg-[#FF6B35]/20 rounded px-0.5">Financial Services</span>.</p></div>
+      <div class="flex items-start gap-3 glass rounded-lg p-3"><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/20 text-[#FF6B35] shrink-0 mt-0.5">keyword</span><p class="text-[13px] text-[#C8C8DC]">Skills add <span class="bg-[#34D399]/20 rounded px-0.5">Technical Program Mgmt</span>, <span class="bg-[#34D399]/20 rounded px-0.5">SAFe / Agile</span>, <span class="bg-[#34D399]/20 rounded px-0.5">Risk &amp; Budget ($5M+)</span>.</p></div>
+      <div class="flex items-start gap-3 glass rounded-lg p-3"><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-[#A0A0B8] shrink-0 mt-0.5">ATS</span><p class="text-[13px] text-[#C8C8DC]">ATS score <span class="mono text-[#A0A0B8]">88</span> → <span class="mono text-[#34D399] font-semibold">96</span> (+8) · <span class="text-[#34D399]">0 format changes</span>, layout locked.</p></div>
+    </div>
+    <div class="flex items-center justify-end gap-3 mt-5">
+      <button data-design-id="btn-restore-ver-rs22" type="button" onclick="closeVersionCompare()" class="text-[13px] font-medium px-4 py-2 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-rotate-left mr-1.5 text-xs"></i>Restore Base</button>
+      <button data-design-id="btn-keep-ver-rs23" type="button" onclick="closeVersionCompare()" class="text-[13px] font-semibold px-4 py-2 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition"><i class="fa-solid fa-check mr-1.5 text-xs"></i>Keep Compared</button>
+    </div>
+  </div>
+</div>
+<script>
+  function openVersionCompare(){var m=document.getElementById('versionCompare');m.classList.remove('hidden');m.classList.add('flex');}
+  function closeVersionCompare(){var m=document.getElementById('versionCompare');m.classList.add('hidden');m.classList.remove('flex');}
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeVersionCompare();});
+</script>
 </body>
 </html>
