@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <aside data-design-id="sidebar-main-st01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-st02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-gear w-4 text-[#FF6B35]"></i>Settings</a>
+    </nav>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header data-design-id="topbar-st03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div><h1 class="text-[15px] font-semibold">Settings & Profile</h1><p class="text-xs text-[#6B6B82] mono">Manage your account, resume, and agent behavior</p></div>
+      <button data-design-id="btn-save-st04" class="text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25">Save Changes</button>
+    </header>
+
+    <main data-design-id="main-st05" class="flex-1 px-8 py-6 overflow-hidden">
+      <div class="flex gap-6">
+        <!-- Sub nav -->
+        <nav data-design-id="settings-subnav-st06" class="w-52 shrink-0 flex flex-col gap-1">
+          <a href="#" class="text-sm font-medium px-3 py-2 rounded-lg bg-white/5 text-white">Profile</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Resume Management</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Portfolio Sync</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Notifications</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Agent Configuration</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Integrations</a>
+          <a href="#" class="text-sm px-3 py-2 rounded-lg text-[#A0A0B8] hover:bg-white/5 transition">Privacy & Compliance</a>
+        </nav>
+
+        <div class="flex-1 flex flex-col gap-6 min-w-0">
+          <!-- Profile -->
+          <section data-design-id="profile-st07" class="glass rounded-2xl border border-white/8 p-6">
+            <h2 class="text-sm font-semibold mb-5">Profile</h2>
+            <div class="flex items-center gap-4 mb-6">
+              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-xl font-bold">VD</div>
+              <div><button data-design-id="btn-avatar-st08" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Change avatar</button><p class="text-[11px] text-[#6B6B82] mt-1.5">PNG or JPG, max 2MB</p></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Full name</label><input type="text" value="Vikram Deshpande" class="mt-1.5 w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#4F46E5]/50 transition"></div>
+              <div><label class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Email</label><input type="text" value="vikram@email.com" class="mt-1.5 w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#4F46E5]/50 transition"></div>
+              <div><label class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Target role</label><input type="text" value="Senior ML / Software Engineer" class="mt-1.5 w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#4F46E5]/50 transition"></div>
+              <div><label class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Location</label><input type="text" value="Sydney, Australia" class="mt-1.5 w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#4F46E5]/50 transition"></div>
+            </div>
+          </section>
+
+          <!-- Resume management + portfolio -->
+          <div class="grid grid-cols-2 gap-6">
+            <section data-design-id="resume-mgmt-st09" class="glass rounded-2xl border border-white/8 p-6">
+              <h2 class="text-sm font-semibold mb-4">Resume Management</h2>
+              <div class="glass-raised rounded-xl border border-white/8 p-4 flex items-center gap-3 mb-3"><div class="w-9 h-9 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center"><i class="fa-solid fa-file-pdf text-[#FF6B35] text-sm"></i></div><div class="flex-1 min-w-0"><p class="text-xs font-medium">Vik_Resume_Final.pdf</p><p class="text-[11px] text-[#6B6B82] mono">base version · uploaded Jun 28</p></div><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/15 text-[#34D399]">active</span></div>
+              <button data-design-id="btn-upload-resume-st10" class="w-full text-xs font-medium py-2.5 rounded-lg bg-white/5 border border-dashed border-white/15 hover:bg-white/10 transition"><i class="fa-solid fa-cloud-arrow-up mr-2"></i>Upload new version</button>
+            </section>
+            <section data-design-id="portfolio-st11" class="glass rounded-2xl border border-white/8 p-6">
+              <h2 class="text-sm font-semibold mb-4">Portfolio Sync</h2>
+              <div><label class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Portfolio URL</label><input type="text" value="github.com/vikramd" class="mt-1.5 w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 text-sm mono focus:outline-none focus:border-[#4F46E5]/50 transition"></div>
+              <div class="flex items-center justify-between mt-4"><span class="text-xs text-[#A0A0B8]">Sync frequency</span><span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-white/5 border border-white/8">Daily</span></div>
+              <div class="flex items-center gap-2 mt-3 text-[11px] text-[#34D399]"><i class="fa-solid fa-circle-check"></i>Last synced 2 hours ago</div>
+            </section>
+          </div>
+
+          <!-- Agent config -->
+          <section data-design-id="agent-config-st12" class="glass rounded-2xl border border-white/8 p-6">
+            <div class="flex items-center gap-2 mb-5"><i class="fa-solid fa-robot text-[#FF6B35] text-sm"></i><h2 class="text-sm font-semibold">Agent Configuration</h2></div>
+            <div class="flex flex-col gap-4">
+              <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Auto-apply</p><p class="text-[11px] text-[#6B6B82] mt-0.5">Agents submit applications above your match threshold without asking</p></div><div class="w-11 h-6 rounded-full bg-white/10 relative cursor-pointer"><span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-[#6B6B82]"></span></div></div>
+              <div class="h-px bg-white/6"></div>
+              <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Approval gate for cover letters</p><p class="text-[11px] text-[#6B6B82] mt-0.5">Always require your approval before sending a cover letter</p></div><div class="w-11 h-6 rounded-full bg-[#FF6B35] relative cursor-pointer"><span class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-white"></span></div></div>
+              <div class="h-px bg-white/6"></div>
+              <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Match score threshold</p><p class="text-[11px] text-[#6B6B82] mt-0.5">Minimum score for an agent to act on a job</p></div><div class="flex items-center gap-3"><div class="w-32 h-1.5 rounded-full bg-white/8"><div class="h-1.5 rounded-full bg-[#FF6B35]" style="width:80%"></div></div><span class="mono text-xs font-semibold text-[#FF6B35] w-8">80%</span></div></div>
+            </div>
+          </section>
+
+          <!-- Integrations -->
+          <section data-design-id="integrations-st13" class="glass rounded-2xl border border-white/8 p-6">
+            <h2 class="text-sm font-semibold mb-4">Integrations & API Keys</h2>
+            <div class="grid grid-cols-3 gap-3">
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-linkedin text-[#4F46E5] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">LinkedIn</p><p class="text-[10px] text-[#34D399]">connected</p></div></div>
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-brands fa-github text-lg"></i><div class="flex-1"><p class="text-xs font-medium">GitHub</p><p class="text-[10px] text-[#34D399]">connected</p></div></div>
+              <div class="glass-raised rounded-xl border border-white/8 p-3.5 flex items-center gap-2.5"><i class="fa-solid fa-briefcase text-[#A0A0B8] text-lg"></i><div class="flex-1"><p class="text-xs font-medium">Seek</p><p class="text-[10px] text-[#6B6B82]">not linked</p></div></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

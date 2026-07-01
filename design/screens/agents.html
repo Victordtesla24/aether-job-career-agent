@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.045);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  .tip{visibility:hidden;opacity:0;transition:opacity .15s;}
+  .has-tip:hover .tip{visibility:visible;opacity:1;}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), radial-gradient(1000px 500px at -5% 10%, rgba(255,107,53,0.06), transparent 55%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <aside data-design-id="sidebar-main-ag01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-ag02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-robot w-4 text-[#FF6B35]"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+    <div class="mt-auto glass-raised rounded-2xl p-4 border border-white/8">
+      <div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 rounded-full bg-[#34D399]"></span><span class="text-xs font-medium text-[#34D399]">18 / 20 Active</span></div>
+      <p class="text-[11px] text-[#6B6B82] leading-relaxed">1 paused · 1 needs attention</p>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header data-design-id="topbar-ag03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div><h1 class="text-[15px] font-semibold">Manage Agents</h1><p class="text-xs text-[#6B6B82] mono">20 agents · 6 AI providers · configure models &amp; connections</p></div>
+      <div class="flex items-center gap-3">
+        <button data-design-id="btn-add-provider-ag04" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-plus text-[10px]"></i>Add Provider</button>
+        <button data-design-id="btn-run-all-ag05" class="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-play text-[10px]"></i>Run All</button>
+      </div>
+    </header>
+
+    <main data-design-id="main-ag06" class="flex-1 px-8 py-6 overflow-hidden">
+      <!-- AI Provider Connections -->
+      <section data-design-id="providers-ag07" class="mb-8">
+        <div class="flex items-center gap-2 mb-4"><i class="fa-solid fa-plug text-[#818CF8] text-sm"></i><h2 class="text-sm font-semibold">AI Provider Connections</h2></div>
+        <div class="grid grid-cols-3 gap-4">
+          <!-- Anthropic -->
+          <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#D97757] flex items-center justify-center"><i class="fa-solid fa-a text-white text-sm"></i></div><div><p class="text-sm font-semibold">Anthropic Claude</p><p class="text-[11px] text-[#6B6B82]">API Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#34D399] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#A0A0B8] mb-2">Claude Pro · <span class="mono text-white">45</span> messages remaining</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">claude-sonnet-4</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-anthropic-ag08" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+          </div>
+          <!-- OpenRouter -->
+          <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#6467F2] flex items-center justify-center"><i class="fa-solid fa-route text-white text-sm"></i></div><div><p class="text-sm font-semibold">OpenRouter</p><p class="text-[11px] text-[#6B6B82]">OAuth + API Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#34D399] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#A0A0B8] mb-2"><span class="mono text-white">$12.40</span> credit remaining</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">llama-3.1-405b</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-openrouter-ag09" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+          </div>
+          <!-- OpenAI -->
+          <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#10A37F] flex items-center justify-center"><i class="fa-solid fa-brain text-white text-sm"></i></div><div><p class="text-sm font-semibold">OpenAI</p><p class="text-[11px] text-[#6B6B82]">API Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#34D399] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#A0A0B8] mb-2">Tier 3 · <span class="mono text-white">2M</span> TPM limit</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">gpt-4o</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-openai-ag10" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+          </div>
+          <!-- Google Gemini -->
+          <div class="glass rounded-2xl border border-[#FBBF24]/30 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#4285F4] flex items-center justify-center"><i class="fa-solid fa-gem text-white text-sm"></i></div><div><p class="text-sm font-semibold">Google Gemini</p><p class="text-[11px] text-[#6B6B82]">OAuth + API Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#FBBF24] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#FBBF24] mb-2">Token expiring in 3 days</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">gemini-2.0-flash</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-gemini-ag11" class="w-full text-xs font-medium py-2 rounded-lg bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/25 hover:bg-[#FBBF24]/25 transition"><i class="fa-brands fa-google mr-1.5"></i>Re-authenticate</button>
+          </div>
+          <!-- AWS Bedrock -->
+          <div class="glass rounded-2xl border border-white/8 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#FF9900] flex items-center justify-center"><i class="fa-brands fa-aws text-[#232F3E] text-sm"></i></div><div><p class="text-sm font-semibold">AWS Bedrock</p><p class="text-[11px] text-[#6B6B82]">Access + Secret Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#6B6B82] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#6B6B82] mb-2">Not configured · IAM required</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#6B6B82]">Select region — ap-southeast-2</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-bedrock-ag12" class="w-full text-xs font-medium py-2 rounded-lg bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition">Configure keys</button>
+          </div>
+          <!-- Groq -->
+          <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#F55036] flex items-center justify-center"><i class="fa-solid fa-bolt-lightning text-white text-sm"></i></div><div><p class="text-sm font-semibold">Groq</p><p class="text-[11px] text-[#6B6B82]">API Key</p></div></div>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#34D399] mt-1"></span>
+            </div>
+            <p class="text-[11px] text-[#A0A0B8] mb-2">Free tier · <span class="mono text-white">14.4K</span> req/day</p>
+            <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">llama-3.3-70b-versatile</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
+            <button data-design-id="btn-groq-ag13" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent Configuration Grid -->
+      <section data-design-id="agent-grid-ag14" class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2"><i class="fa-solid fa-robot text-[#FF6B35] text-sm"></i><h2 class="text-sm font-semibold">Agent Configuration</h2><span class="text-[11px] text-[#6B6B82] mono">20 agents</span></div>
+          <div class="flex items-center gap-3 text-[11px] text-[#6B6B82]"><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#34D399]"></span>Active</span><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#FBBF24]"></span>Paused</span><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#F87171]"></span>Error</span></div>
+        </div>
+        <div class="grid grid-cols-4 gap-3">
+          <!-- Agent card template repeated -->
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> for speed and cost efficiency. Processes high volumes of listings — a fast, affordable model is ideal.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Job Discovery Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-[#FF6B35]/25 p-4 hover:border-[#FF6B35]/40 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center"><i class="fa-solid fa-file-pen text-[#FF6B35] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> for nuanced writing and format preservation. GPT-4o is a good alternative for speed. Avoid smaller models — they struggle with formatting constraints.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Resume Tailoring Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#F59E0B]/15 flex items-center justify-center"><i class="fa-solid fa-envelope-open-text text-[#F59E0B] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> or GPT-4o. Needs strong creative writing and tone adaptation capabilities.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Cover Letter Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-vector-square text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">text-embedding-3-large</span> for semantic matching. Uses embeddings, not chat — assign an embedding model.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">ATS Optimization Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">text-embedding-3-large</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-shield-halved text-[#34D399] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> for careful reasoning about truthfulness and evidence verification.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Compliance Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-paper-plane text-[#34D399] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o</span> for reliable form-filling and browser automation reasoning.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Submission Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-bullseye text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">claude-3.5-haiku</span> — fast scoring across many jobs at low cost.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Match Scoring Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-3.5-haiku</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#F59E0B]/15 flex items-center justify-center"><i class="fa-solid fa-sack-dollar text-[#F59E0B] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — aggregates salary data at scale affordably.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Salary Intelligence Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center"><i class="fa-solid fa-comments text-[#FF6B35] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> for realistic mock interviews and deep domain reasoning.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Interview Prep Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-reply text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — short, timely follow-up messages at low cost.</span></span><span class="w-2 h-2 rounded-full bg-[#FBBF24]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Follow-up Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#FBBF24]">Paused</span><span class="w-8 h-4 rounded-full bg-white/12 relative"><span class="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-[#6B6B82]"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-building-magnifying-glass text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o</span> for synthesizing company research from web sources.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Company Research Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-code-compare text-[#34D399] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">claude-3.5-haiku</span> — quick skill-gap comparisons against job requirements.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Skill Gap Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-3.5-haiku</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#F59E0B]/15 flex items-center justify-center"><i class="fa-brands fa-github text-[#F59E0B] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — syncs GitHub/portfolio activity into profile evidence.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Portfolio Sync Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center"><i class="fa-solid fa-handshake text-[#FF6B35] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> for personalised, professional recruiter outreach.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Recruiter Outreach Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-arrow-trend-up text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o</span> — synthesizes market &amp; hiring trend signals.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Market Trends Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-calendar-check text-[#34D399] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — lightweight scheduling &amp; calendar coordination.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Scheduling Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-[#F87171]/30 p-4 hover:border-[#F87171]/50 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#F87171]/15 flex items-center justify-center"><i class="fa-solid fa-face-smile text-[#F87171] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">claude-3.5-haiku</span>. Error: Groq rate limit exceeded — reassign a model.</span></span><span class="w-2 h-2 rounded-full bg-[#F87171]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Sentiment Analysis Agent</p>
+            <p class="text-[10px] text-[#F87171] mono mt-1">llama-3.3-70b · error</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#F87171]">Error</span><span class="w-8 h-4 rounded-full bg-white/12 relative"><span class="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-[#6B6B82]"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-user-check text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — manages reference requests &amp; reminders.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Reference Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center"><i class="fa-solid fa-graduation-cap text-[#FF6B35] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> — learns from outcomes to refine future tailoring.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Learning / Feedback Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center"><i class="fa-solid fa-sitemap text-[#818CF8] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">Claude claude-sonnet-4</span> — coordinates all agents and resolves task dependencies.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Orchestration Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">claude-sonnet-4</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+
+          <div class="glass rounded-xl border border-white/8 p-4 hover:border-white/15 transition relative">
+            <div class="flex items-start justify-between mb-2">
+              <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-bell text-[#34D399] text-xs"></i></div>
+              <div class="flex items-center gap-2"><span class="has-tip relative cursor-help"><i class="fa-solid fa-circle-info text-[#6B6B82] text-xs"></i><span class="tip absolute right-0 top-5 z-20 w-56 p-3 rounded-lg bg-[#1C1C29] border border-white/12 shadow-2xl text-[11px] text-[#C8C8DC] leading-relaxed">Best with <span class="text-white">GPT-4o-mini</span> — monitors status changes and pushes timely alerts.</span></span><span class="w-2 h-2 rounded-full bg-[#34D399]"></span></div>
+            </div>
+            <p class="text-xs font-semibold">Notification Agent</p>
+            <p class="text-[10px] text-[#818CF8] mono mt-1">gpt-4o-mini</p>
+            <div class="flex items-center justify-between mt-3"><span class="text-[10px] text-[#34D399]">Active</span><span class="w-8 h-4 rounded-full bg-[#FF6B35] relative"><span class="absolute right-0.5 top-0.5 w-3 h-3 rounded-full bg-white"></span></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom quick stats -->
+      <section data-design-id="quick-stats-ag15" class="grid grid-cols-4 gap-4">
+        <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">API Spend (Month)</span><i class="fa-solid fa-dollar-sign text-[#FF6B35] text-sm"></i></div><div class="mono text-2xl font-bold">$48.72</div><p class="text-[11px] text-[#6B6B82] mt-1">across 6 providers</p></div>
+        <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Tokens Used</span><i class="fa-solid fa-coins text-[#818CF8] text-sm"></i></div><div class="mono text-2xl font-bold">3.42M</div><p class="text-[11px] text-[#6B6B82] mt-1">2.1M in · 1.3M out</p></div>
+        <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Most Active Agent</span><i class="fa-solid fa-file-pen text-[#FF6B35] text-sm"></i></div><div class="text-lg font-bold">Resume Tailoring</div><p class="text-[11px] text-[#6B6B82] mt-1 mono">142 tasks</p></div>
+        <div class="glass rounded-2xl border border-white/8 p-5 relative overflow-hidden"><div class="absolute -right-6 -top-6 w-20 h-20 rounded-full bg-[#34D399]/10 blur-2xl"></div><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Success Rate</span><i class="fa-solid fa-circle-check text-[#34D399] text-sm"></i></div><div class="mono text-2xl font-bold text-[#34D399]">94.2%</div><p class="text-[11px] text-[#6B6B82] mt-1">last 1,000 tasks</p></div>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.045);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  .page-shadow{box-shadow:0 20px 60px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4);}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <aside data-design-id="sidebar-main-rs01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-rs02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-file-lines w-4 text-[#FF6B35]"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- Studio top bar -->
+    <header data-design-id="studio-topbar-rs03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div class="flex items-center gap-4">
+        <h1 class="text-[15px] font-semibold">Resume Studio</h1>
+        <div class="flex items-center gap-2 bg-white/5 border border-white/8 rounded-lg px-3 py-1.5"><span class="text-[11px] text-[#6B6B82]">Target</span><span class="text-xs font-medium">Senior TPM · ANZ Bank</span><i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></div>
+      </div>
+      <div class="flex items-center gap-5">
+        <div class="flex items-center gap-3">
+          <div class="relative w-12 h-12"><svg class="w-12 h-12 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="3.9" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-xs font-bold">96</span></div>
+          <div class="leading-tight"><div class="text-[11px] text-[#6B6B82]">ATS Score</div><div class="text-xs font-medium text-[#34D399]">Excellent</div></div>
+        </div>
+        <div class="flex items-center gap-2 pl-4 border-l border-white/8"><i class="fa-solid fa-brain text-[#818CF8]"></i><div class="leading-tight"><div class="text-[11px] text-[#6B6B82]">Confidence</div><div class="mono text-xs font-medium">92%</div></div></div>
+      </div>
+    </header>
+
+    <div class="flex-1 flex flex-col min-h-0">
+      <!-- Split panes -->
+      <div class="flex-1 flex min-h-0">
+        <!-- Original -->
+        <main data-design-id="pane-original-rs04" class="flex-1 border-r border-white/8 flex flex-col min-w-0">
+          <div class="px-6 py-3 border-b border-white/8 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span><span class="text-xs font-medium text-[#A0A0B8]">Original Resume</span>
+            <span class="text-[11px] text-[#6B6B82] flex items-center gap-1.5 ml-2"><i class="fa-solid fa-file-pdf text-[#FF6B35]"></i><span class="mono">Vik_Resume_Final.pdf</span></span>
+            <div class="ml-auto flex items-center gap-2 text-[11px] text-[#6B6B82]"><button data-design-id="btn-prev-page-rs12" class="w-6 h-6 rounded-md bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center"><i class="fa-solid fa-chevron-left text-[9px]"></i></button><span class="mono">Page 1 of 3</span><button data-design-id="btn-next-page-rs13" class="w-6 h-6 rounded-md bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center"><i class="fa-solid fa-chevron-right text-[9px]"></i></button></div>
+          </div>
+          <div class="flex-1 px-8 py-6 overflow-y-auto flex justify-center">
+            <!-- PDF page -->
+            <div class="w-[420px] bg-white text-[#20202e] rounded-sm page-shadow overflow-hidden shrink-0" style="font-size:8px;line-height:1.4;">
+              <div class="flex">
+                <!-- Left column -->
+                <div class="w-[38%] bg-[#FBEDE8] px-3.5 py-4">
+                  <div class="mb-4"><h2 class="text-[15px] font-extrabold leading-none text-[#20202e] tracking-tight">VIKRAM</h2><h2 class="text-[15px] font-extrabold leading-none text-[#FF6B35] tracking-tight">DESHPANDE</h2><p class="text-[7px] text-[#5a5a68] mt-1.5 leading-snug">Senior Technical Program / Delivery Manager &amp; AI Solutions Architect</p></div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Contact Info</p>
+                  <div class="flex flex-col gap-1.5 mb-4">
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-envelope text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48] break-all">sarkar.vikram@gmail.com</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-phone text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">+61 433 224 556</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-location-dot text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">Melbourne, VIC, Australia</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-brands fa-linkedin-in text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">linkedin.com/in/vikramd</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-brands fa-github text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">github.com/Victordtesla24</span></div>
+                  </div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Education</p>
+                  <div class="mb-2"><p class="text-[8px] font-bold text-[#20202e]">Master of Computer Science</p><p class="text-[7px] text-[#5a5a68]">Monash University · 2010</p></div>
+                  <div class="mb-4"><p class="text-[8px] font-bold text-[#20202e]">B.Eng, Computer Science</p><p class="text-[7px] text-[#5a5a68]">University of Melbourne · 2007</p></div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Skills</p>
+                  <div class="flex flex-wrap gap-1">
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">AI/ML Solutions</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">LLM Pipelines</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">Python</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">TypeScript</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">React/Next.js</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">Kubernetes</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">GCP/AWS</span>
+                  </div>
+                </div>
+                <!-- Right column -->
+                <div class="w-[62%] px-3.5 py-4">
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#20202e]/15 pb-1 mb-2">Career Objective</p>
+                  <p class="text-[7.5px] text-[#3a3a48] leading-relaxed mb-4">15+ year Senior Technical Leader and Certified Scrum Master (CSM) specializing in end-to-end program delivery, enterprise transformation, and architecting AI/ML-driven solutions across Financial Services and Telecommunications. Proven track record bridging technical engineering with executive strategy, guiding cloud modernisations that cut delivery time by over 30%.</p>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#20202e]/15 pb-1 mb-2">Work Experience</p>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Scrum Master / Project Manager</p><p class="text-[7px] text-[#FF6B35] font-semibold">Australian Taxation Office (ATO) · Mar 2026 – Present</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] text-[#4a4a58] leading-snug"><li>Lead end-to-end delivery for the Payday Super reform program (PI 47–48).</li><li>Architected mainframe test-evidence automation across 200+ SIT/E2E scenarios (≈92% effort reduction).</li></ul></div>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Senior Delivery Lead / Technical Product Owner</p><p class="text-[7px] text-[#FF6B35] font-semibold">ANZ · Sept 2017 – June 2025</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] text-[#4a4a58] leading-snug"><li>Led technical delivery of AI solutions incl. real-time WebSocket telemetry for 10k+ device concurrency (P95 &lt; 200ms).</li><li>Directed a $5M+ program portfolio, leading 5+ squads (up to 40 resources).</li></ul></div>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Senior Project Manager &amp; Business Analyst</p><p class="text-[7px] text-[#FF6B35] font-semibold">National Australia Bank (NAB) · Nov 2016 – Sept 2017</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] text-[#4a4a58] leading-snug"><li>Managed delivery stream for a critical risk &amp; compliance program (100% regulatory adherence).</li></ul></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- Tailored -->
+        <main data-design-id="pane-tailored-rs05" class="flex-1 flex flex-col min-w-0">
+          <div class="px-6 py-3 border-b border-white/8 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[#FF6B35]"></span><span class="text-xs font-medium">Tailored Version</span>
+            <span class="text-[11px] text-[#34D399] mono ml-2">+10 changes</span>
+            <div class="ml-auto flex items-center gap-3">
+              <div class="flex items-center gap-2"><div class="relative w-8 h-8"><svg class="w-8 h-8 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="4" stroke-dasharray="97.4" stroke-dashoffset="3.9" stroke-linecap="round"/></svg></div><div class="leading-tight"><span class="mono text-xs font-bold text-[#34D399]">96</span><span class="text-[9px] text-[#6B6B82] ml-1">ATS</span></div></div>
+            </div>
+          </div>
+          <div class="flex-1 px-8 py-6 overflow-y-auto flex justify-center relative">
+            <span class="absolute top-4 right-6 z-10 text-[10px] font-medium px-2.5 py-1 rounded-full bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/25 flex items-center gap-1.5"><i class="fa-solid fa-crosshairs text-[9px]"></i>Tailored for: Senior TPM — ANZ Bank</span>
+            <!-- PDF page -->
+            <div class="w-[420px] bg-white text-[#20202e] rounded-sm page-shadow overflow-hidden shrink-0 ring-1 ring-[#FF6B35]/30" style="font-size:8px;line-height:1.4;">
+              <div class="flex">
+                <!-- Left column -->
+                <div class="w-[38%] bg-[#FBEDE8] px-3.5 py-4">
+                  <div class="mb-4"><h2 class="text-[15px] font-extrabold leading-none text-[#20202e] tracking-tight">VIKRAM</h2><h2 class="text-[15px] font-extrabold leading-none text-[#FF6B35] tracking-tight">DESHPANDE</h2><p class="text-[7px] text-[#5a5a68] mt-1.5 leading-snug">Senior Technical Program / Delivery Manager &amp; AI Solutions Architect</p></div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Contact Info</p>
+                  <div class="flex flex-col gap-1.5 mb-4">
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-envelope text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48] break-all">sarkar.vikram@gmail.com</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-phone text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">+61 433 224 556</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-location-dot text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">Melbourne, VIC, Australia</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-brands fa-linkedin-in text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">linkedin.com/in/vikramd</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full bg-[#FF6B35]/12 flex items-center justify-center shrink-0"><i class="fa-brands fa-github text-[6px] text-[#FF6B35]"></i></span><span class="text-[7px] text-[#3a3a48]">github.com/Victordtesla24</span></div>
+                  </div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Education</p>
+                  <div class="mb-2"><p class="text-[8px] font-bold text-[#20202e]">Master of Computer Science</p><p class="text-[7px] text-[#5a5a68]">Monash University · 2010</p></div>
+                  <div class="mb-4"><p class="text-[8px] font-bold text-[#20202e]">B.Eng, Computer Science</p><p class="text-[7px] text-[#5a5a68]">University of Melbourne · 2007</p></div>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#FF6B35]/40 pb-1 mb-2">Skills</p>
+                  <div class="flex flex-wrap gap-1">
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">AI/ML Solutions</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#34D399]/20 text-[#1a7a52] font-semibold">Technical Program Mgmt</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#34D399]/20 text-[#1a7a52] font-semibold">SAFe / Agile</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">Python</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">Kubernetes</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#34D399]/20 text-[#1a7a52] font-semibold">Risk &amp; Budget ($5M+)</span>
+                    <span class="text-[7px] px-1.5 py-0.5 rounded-full bg-[#FF6B35]/10 text-[#3a3a48]">GCP/AWS</span>
+                  </div>
+                </div>
+                <!-- Right column -->
+                <div class="w-[62%] px-3.5 py-4">
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#20202e]/15 pb-1 mb-2">Career Objective</p>
+                  <p class="text-[7.5px] leading-relaxed mb-4"><span class="text-[#3a3a48]">15+ year Senior </span><span class="bg-[#FF6B35]/20 rounded px-0.5">Technical Program Manager</span><span class="text-[#3a3a48]"> and Certified Scrum Master (CSM) specializing in end-to-end program delivery within </span><span class="bg-[#FF6B35]/20 rounded px-0.5">Financial Services</span><span class="text-[#3a3a48]">. Proven track record </span><span class="bg-[#34D399]/25 rounded px-0.5">managing multi-million dollar banking transformation programs at ANZ &amp; NAB</span><span class="text-[#3a3a48]">, guiding cloud modernisations that cut delivery time by over 30%.</span></p>
+                  <p class="text-[8px] uppercase tracking-wider font-bold text-[#FF6B35] border-b border-[#20202e]/15 pb-1 mb-2">Work Experience</p>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Scrum Master / Project Manager</p><p class="text-[7px] text-[#FF6B35] font-semibold">Australian Taxation Office (ATO) · Mar 2026 – Present</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] leading-snug"><li class="text-[#4a4a58]">Lead end-to-end <span class="bg-[#FF6B35]/20 rounded px-0.5">program delivery</span> for the Payday Super reform (PI 47–48).</li><li class="text-[#4a4a58]">Architected mainframe test-evidence automation across 200+ scenarios (≈92% effort reduction).</li></ul></div>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Senior Delivery Lead / Technical Product Owner</p><p class="text-[7px] text-[#FF6B35] font-semibold">ANZ · Sept 2017 – June 2025</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] leading-snug"><li class="text-[#4a4a58]">Directed a <span class="bg-[#FF6B35]/20 rounded px-0.5">$5M+ program portfolio</span>, leading 5+ cross-functional squads (up to 40 resources).</li><li class="bg-[#34D399]/20 rounded px-0.5 text-[#1a5a3e] list-none flex gap-1"><i class="fa-solid fa-plus text-[6px] mt-0.5"></i>Chaired PI Planning and executive steering across 8 squads, aligning 40+ GMs on roadmap.</li></ul></div>
+                  <div class="mb-2.5"><p class="text-[8.5px] font-bold text-[#20202e]">Senior Project Manager &amp; Business Analyst</p><p class="text-[7px] text-[#FF6B35] font-semibold">National Australia Bank (NAB) · Nov 2016 – Sept 2017</p><ul class="list-disc list-outside ml-2.5 mt-1 space-y-0.5 text-[7px] leading-snug"><li class="text-[#4a4a58]">Managed delivery stream for a critical <span class="bg-[#FF6B35]/20 rounded px-0.5">risk &amp; compliance program</span> (100% regulatory adherence).</li></ul></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Evidence Trace + Voice DNA -->
+      <section data-design-id="evidence-voice-rs15" class="shrink-0 border-t border-white/8 glass px-8 py-4">
+        <div class="grid grid-cols-3 gap-4">
+          <!-- Evidence Trace -->
+          <div class="col-span-2 glass-raised rounded-xl border border-[#4F46E5]/25 p-4">
+            <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-diagram-project text-[#818CF8] text-sm"></i><h3 class="text-sm font-semibold">Evidence Trace</h3><span class="text-[11px] text-[#6B6B82]">every change is backed by a verifiable source</span></div>
+            <div class="flex flex-col gap-2.5">
+              <div class="flex items-start gap-3">
+                <span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#34D399]/20 text-[#34D399] shrink-0 mt-0.5">rewrite</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-[#C8C8DC]">"Architected mainframe test-evidence automation… (92% effort reduction)"</p>
+                  <div class="flex items-center gap-1.5 flex-wrap mt-1.5 text-[10px]">
+                    <span class="px-2 py-0.5 rounded-md bg-[#FF6B35]/12 text-[#FF6B35] border border-[#FF6B35]/20"><i class="fa-solid fa-diagram-project mr-1 text-[8px]"></i>Portfolio: Ride-with-Vic</span>
+                    <i class="fa-solid fa-arrow-right text-[8px] text-[#6B6B82]"></i>
+                    <span class="px-2 py-0.5 rounded-md bg-[#4F46E5]/12 text-[#818CF8] border border-[#4F46E5]/20"><i class="fa-brands fa-github mr-1 text-[8px]"></i>GitHub commit history</span>
+                    <i class="fa-solid fa-arrow-right text-[8px] text-[#6B6B82]"></i>
+                    <span class="px-2 py-0.5 rounded-md bg-white/5 text-[#A0A0B8] border border-white/8"><i class="fa-solid fa-file-lines mr-1 text-[8px]"></i>Resume line 14</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/20 text-[#FF6B35] shrink-0 mt-0.5">keyword</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-[#C8C8DC]">"$5M+ program portfolio, leading 5+ cross-functional squads"</p>
+                  <div class="flex items-center gap-1.5 flex-wrap mt-1.5 text-[10px]">
+                    <span class="px-2 py-0.5 rounded-md bg-white/5 text-[#A0A0B8] border border-white/8"><i class="fa-solid fa-file-lines mr-1 text-[8px]"></i>Resume line 22 (ANZ)</span>
+                    <i class="fa-solid fa-arrow-right text-[8px] text-[#6B6B82]"></i>
+                    <span class="px-2 py-0.5 rounded-md bg-[#4F46E5]/12 text-[#818CF8] border border-[#4F46E5]/20"><i class="fa-solid fa-book-bookmark mr-1 text-[8px]"></i>Story Bank: ANZ 30%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Voice DNA Controls -->
+          <div class="glass-raised rounded-xl border border-white/8 p-4">
+            <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-wave-square text-[#FF6B35] text-sm"></i><h3 class="text-sm font-semibold">Voice DNA</h3></div>
+            <div class="mb-3">
+              <div class="flex justify-between text-[11px] mb-1.5"><span class="text-[#6B6B82]">Tone</span><span class="text-[#A0A0B8]">Professional</span></div>
+              <div class="relative h-1.5 rounded-full bg-white/8"><div class="absolute left-0 top-0 h-1.5 rounded-full bg-[#4F46E5]" style="width:38%"></div><div class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-[#4F46E5]" style="left:36%"></div></div>
+              <div class="flex justify-between text-[9px] text-[#6B6B82] mt-1"><span>Professional</span><span>Conversational</span></div>
+            </div>
+            <div class="mb-3">
+              <div class="flex justify-between text-[11px] mb-1.5"><span class="text-[#6B6B82]">Formality</span><span class="text-[#A0A0B8]">Balanced</span></div>
+              <div class="relative h-1.5 rounded-full bg-white/8"><div class="absolute left-0 top-0 h-1.5 rounded-full bg-[#4F46E5]" style="width:55%"></div><div class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-[#4F46E5]" style="left:53%"></div></div>
+              <div class="flex justify-between text-[9px] text-[#6B6B82] mt-1"><span>High</span><span>Casual</span></div>
+            </div>
+            <div class="flex items-center justify-between glass rounded-lg border border-[#34D399]/25 px-3 py-2">
+              <div class="flex items-center gap-2"><i class="fa-solid fa-shield-halved text-[#34D399] text-xs"></i><span class="text-[11px] text-[#A0A0B8]">AI Detection</span></div>
+              <span class="mono text-sm font-bold text-[#34D399]">2% <span class="text-[10px] font-medium">Safe</span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Integrity + changes strip -->
+      <section data-design-id="integrity-strip-rs14" class="shrink-0 border-t border-white/8 glass px-8 py-4">
+        <div class="grid grid-cols-3 gap-4">
+          <div class="glass-raised rounded-xl border border-[#34D399]/25 p-4 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-[#34D399]/15 flex items-center justify-center"><i class="fa-solid fa-circle-check text-[#34D399]"></i></div>
+            <div><p class="text-xs font-semibold text-[#34D399]">Format Integrity Check</p><p class="text-[11px] text-[#6B6B82]">Typography, spacing, columns &amp; margins preserved</p></div>
+          </div>
+          <div class="glass-raised rounded-xl border border-white/8 p-4">
+            <p class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-semibold mb-2">Changes Summary</p>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm bg-[#FF6B35]"></span><span class="mono font-semibold">7</span> keyword insertions</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm bg-[#34D399]"></span><span class="mono font-semibold">3</span> achievement rewrites</span>
+            </div>
+            <p class="text-[11px] text-[#34D399] mt-2 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i><span class="mono font-semibold">0</span> format changes · layout locked</p>
+          </div>
+          <div class="glass-raised rounded-xl border border-white/8 p-4 flex items-center gap-4">
+            <div class="flex items-center gap-2"><i class="fa-solid fa-highlighter text-[#FF6B35] text-xs"></i><span class="text-[11px] text-[#A0A0B8]">Modifications</span></div>
+            <div class="flex items-center gap-2"><i class="fa-solid fa-plus text-[#34D399] text-xs"></i><span class="text-[11px] text-[#A0A0B8]">Additions</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom action + version bar -->
+    <footer data-design-id="studio-footer-rs07" class="shrink-0 border-t border-white/8 glass px-8 py-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] text-[#6B6B82] uppercase tracking-wide mr-1">Versions</span>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] px-2.5 py-1 rounded-lg bg-[#FF6B35]/12 text-[#FF6B35] border border-[#FF6B35]/20 mono">v3 · now</span>
+            <span class="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 mono">v2 · 2h</span>
+            <span class="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 mono">v1 · base</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button data-design-id="btn-revert-rs08" class="text-sm font-medium px-4 py-2.5 rounded-xl text-[#A0A0B8] hover:text-white hover:bg-white/5 transition"><i class="fa-solid fa-rotate-left mr-2 text-xs"></i>Revert</button>
+          <button data-design-id="btn-request-rs09" class="text-sm font-medium px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition">Request Changes</button>
+          <button data-design-id="btn-export-rs10" class="text-sm font-medium px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-file-arrow-down mr-2 text-xs"></i>Export PDF</button>
+          <button data-design-id="btn-approve-rs11" class="text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-check mr-2 text-xs"></i>Approve Tailoring</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "screens": [
+    {"screen_id": "dashboard", "frame_kind": "desktop", "label": "Main Dashboard"},
+    {"screen_id": "job-discovery", "frame_kind": "desktop", "label": "Job Discovery Feed"},
+    {"screen_id": "resume-studio", "frame_kind": "desktop", "label": "Resume Tailoring Studio"},
+    {"screen_id": "story-bank", "frame_kind": "desktop", "label": "Story Bank & Achievement Memory"},
+    {"screen_id": "application-tracker", "frame_kind": "desktop", "label": "Application Tracker"},
+    {"screen_id": "interview-center", "frame_kind": "desktop", "label": "Interview Command Center"},
+    {"screen_id": "networking", "frame_kind": "desktop", "label": "Networking & Recruiter CRM"},
+    {"screen_id": "email-center", "frame_kind": "desktop", "label": "Email Command Center"},
+    {"screen_id": "agent-monitor", "frame_kind": "desktop", "label": "Agent Orchestration"},
+    {"screen_id": "agents", "frame_kind": "desktop", "label": "Manage Agents"},
+    {"screen_id": "analytics", "frame_kind": "desktop", "label": "Analytics Dashboard"},
+    {"screen_id": "offer-comparison", "frame_kind": "desktop", "label": "Offer Comparison Engine"},
+    {"screen_id": "settings", "frame_kind": "desktop", "label": "Settings & Profile"},
+    {"screen_id": "approval-modal", "frame_kind": "desktop", "label": "Human Approval Modal"},
+    {"screen_id": "mobile-dashboard", "frame_kind": "phone", "label": "Mobile Dashboard"},
+    {"screen_id": "mobile-approval", "frame_kind": "phone", "label": "Mobile Approval"}
+  ]
+}

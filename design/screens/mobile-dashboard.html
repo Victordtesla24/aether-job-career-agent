@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.035);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  @keyframes pr{0%{box-shadow:0 0 0 0 rgba(255,107,53,0.35);}70%{box-shadow:0 0 0 6px rgba(255,107,53,0);}100%{box-shadow:0 0 0 0 rgba(255,107,53,0);}}
+  .live-dot{animation:pr 2s infinite;}
+</style>
+</head>
+<body class="w-[390px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(600px 400px at 90% -5%, rgba(79,70,229,0.14), transparent 60%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="min-h-[844px] flex flex-col pb-24">
+  <!-- Top -->
+  <header data-design-id="m-topbar-md01" class="px-5 pt-6 pb-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-sm font-semibold">VD</div>
+      <div><p class="text-[11px] text-[#6B6B82]">Good morning</p><p class="text-sm font-semibold">Vikram</p></div>
+    </div>
+    <button data-design-id="m-notif-md02" class="relative w-10 h-10 rounded-xl glass border border-white/8 flex items-center justify-center"><i class="fa-regular fa-bell text-[#A0A0B8]"></i><span class="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-[#FF6B35]"></span></button>
+  </header>
+
+  <main data-design-id="m-main-md03" class="px-5 flex flex-col gap-5">
+    <!-- Stats 2x2 -->
+    <section data-design-id="m-stats-md04" class="grid grid-cols-2 gap-3">
+      <div class="glass rounded-2xl border border-white/8 p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase text-[#6B6B82] font-medium">Active</span><i class="fa-solid fa-paper-plane text-[#FF6B35] text-xs"></i></div><p class="mono text-2xl font-bold">37</p></div>
+      <div class="glass rounded-2xl border border-white/8 p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase text-[#6B6B82] font-medium">Intvw Rate</span><i class="fa-solid fa-comments text-[#4F46E5] text-xs"></i></div><p class="mono text-2xl font-bold">24%</p></div>
+      <div class="glass rounded-2xl border border-white/8 p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase text-[#6B6B82] font-medium">Offers</span><i class="fa-solid fa-award text-[#F59E0B] text-xs"></i></div><p class="mono text-2xl font-bold">3</p></div>
+      <div class="glass rounded-2xl border border-white/8 p-4"><div class="flex items-center justify-between mb-2"><span class="text-[10px] uppercase text-[#6B6B82] font-medium">Confidence</span><i class="fa-solid fa-brain text-[#FF6B35] text-xs"></i></div><p class="mono text-2xl font-bold">91%</p></div>
+    </section>
+
+    <!-- Needs approval banner -->
+    <section data-design-id="m-approval-md05" class="glass rounded-2xl border border-[#FBBF24]/25 p-4">
+      <div class="flex items-center gap-2 mb-1"><i class="fa-solid fa-shield-halved text-[#FBBF24] text-xs"></i><span class="text-xs font-semibold">2 need your approval</span></div>
+      <p class="text-[11px] text-[#A0A0B8]">Tap to review pending agent actions</p>
+      <button data-design-id="btn-review-md06" class="mt-3 w-full text-xs font-semibold py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition">Review Now</button>
+    </section>
+
+    <!-- Activity feed -->
+    <section data-design-id="m-feed-md07">
+      <div class="flex items-center gap-2 mb-3"><span class="w-2 h-2 rounded-full bg-[#34D399] live-dot"></span><h2 class="text-sm font-semibold">Agent Activity</h2></div>
+      <div class="flex flex-col gap-2.5">
+        <div class="glass rounded-xl border border-white/8 p-3.5 flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-magnifying-glass text-[#818CF8] text-xs"></i></div><div class="flex-1 min-w-0"><p class="text-xs">Found <span class="font-medium">Senior ML Engineer</span> at Canva</p><p class="text-[10px] text-[#6B6B82] mono mt-0.5">2 min ago · 94% match</p></div></div>
+        <div class="glass rounded-xl border border-white/8 p-3.5 flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-pen text-[#FF6B35] text-xs"></i></div><div class="flex-1 min-w-0"><p class="text-xs">Tailored resume for <span class="font-medium">Atlassian</span></p><p class="text-[10px] text-[#6B6B82] mono mt-0.5">14 min ago · ATS 96</p></div></div>
+        <div class="glass rounded-xl border border-white/8 p-3.5 flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-[#34D399]/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-check text-[#34D399] text-xs"></i></div><div class="flex-1 min-w-0"><p class="text-xs">Applied to <span class="font-medium">Backend Lead</span> · Airtree</p><p class="text-[10px] text-[#6B6B82] mono mt-0.5">38 min ago</p></div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom tab bar -->
+  <nav data-design-id="m-tabbar-md08" class="fixed bottom-0 w-[390px] glass border-t border-white/8 px-6 py-3 flex items-center justify-between">
+    <a href="#" class="flex flex-col items-center gap-1 text-[#FF6B35]"><i class="fa-solid fa-gauge-high"></i><span class="text-[10px] font-medium">Home</span></a>
+    <a href="#" class="flex flex-col items-center gap-1 text-[#6B6B82]"><i class="fa-solid fa-magnifying-glass"></i><span class="text-[10px]">Jobs</span></a>
+    <a href="#" class="flex flex-col items-center gap-1 text-[#6B6B82]"><i class="fa-solid fa-paper-plane"></i><span class="text-[10px]">Apps</span></a>
+    <a href="#" class="flex flex-col items-center gap-1 text-[#6B6B82]"><i class="fa-solid fa-robot"></i><span class="text-[10px]">Agents</span></a>
+    <a href="#" class="flex flex-col items-center gap-1 text-[#6B6B82]"><i class="fa-solid fa-user"></i><span class="text-[10px]">Profile</span></a>
+  </nav>
+</div>
+</body>
+</html>

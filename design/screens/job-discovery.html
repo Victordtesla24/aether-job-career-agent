@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.045);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), radial-gradient(1000px 500px at -5% 10%, rgba(255,107,53,0.06), transparent 55%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <aside data-design-id="sidebar-main-jd01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-jd02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-magnifying-glass w-4 text-[#FF6B35]"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header data-design-id="topbar-jd03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div><h1 class="text-[15px] font-semibold">Job Discovery</h1><p class="text-xs text-[#6B6B82] mono">142 matches · 18 new today · 5 sources connected</p></div>
+      <div class="flex items-center gap-3">
+        <div class="relative w-80">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6B82] text-sm"></i>
+          <input type="text" placeholder="Search roles, companies, skills…" class="w-full bg-white/5 border border-white/8 rounded-xl pl-10 pr-4 py-2.5 text-sm placeholder:text-[#6B6B82] focus:outline-none focus:border-[#4F46E5]/50 transition">
+        </div>
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-sm font-semibold">VD</div>
+      </div>
+    </header>
+
+    <!-- Market tabs -->
+    <div class="px-8 pt-4 border-b border-white/8">
+      <div class="flex items-center gap-1">
+        <button data-design-id="tab-au-jd20" class="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-t-lg border-b-2 border-[#FF6B35] text-white transition"><span class="text-base">🇦🇺</span>Australia (Local)<span class="mono text-[10px] px-1.5 py-0.5 rounded-md bg-[#FF6B35]/15 text-[#FF6B35]">98</span></button>
+        <button data-design-id="tab-intl-jd21" class="flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-t-lg border-b-2 border-transparent text-[#A0A0B8] hover:text-white transition"><span class="text-base">🌏</span>International<span class="mono text-[10px] px-1.5 py-0.5 rounded-md bg-white/8 text-[#6B6B82]">44</span></button>
+      </div>
+    </div>
+
+    <!-- Source integration bar -->
+    <section data-design-id="source-bar-jd22" class="px-8 py-4 border-b border-white/8">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2"><i class="fa-solid fa-plug text-[#818CF8] text-xs"></i><span class="text-xs uppercase tracking-wide text-[#6B6B82] font-semibold">Connected Job Boards — Australia</span></div>
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] text-[#6B6B82] mono">Last synced: 2 hours ago</span>
+          <button data-design-id="btn-sync-jd23" class="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition"><i class="fa-solid fa-rotate text-[10px]"></i>Sync Now</button>
+        </div>
+      </div>
+      <div class="flex items-stretch gap-3 overflow-x-auto pb-1">
+        <!-- Seek -->
+        <div class="shrink-0 w-52 glass-raised rounded-xl border border-[#34D399]/25 p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#E60278] flex items-center justify-center text-white font-bold text-xs">SEEK</div><span class="text-xs font-semibold">Seek.com.au</span></div>
+            <span class="w-2 h-2 rounded-full bg-[#34D399]"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-[#34D399] mb-2.5"><i class="fa-solid fa-circle-check"></i>Connected · via Browser</div>
+          <button data-design-id="btn-seek-manage-jd24" class="w-full text-[11px] font-medium py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-robot text-[10px] text-[#818CF8]"></i>Playwright session</button>
+        </div>
+        <!-- LinkedIn AU -->
+        <div class="shrink-0 w-52 glass-raised rounded-xl border border-[#34D399]/25 p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#0A66C2] flex items-center justify-center"><i class="fa-brands fa-linkedin-in text-white text-sm"></i></div><span class="text-xs font-semibold">LinkedIn AU</span></div>
+            <span class="w-2 h-2 rounded-full bg-[#34D399]"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-[#34D399] mb-2.5"><i class="fa-solid fa-circle-check"></i>Connected · OAuth</div>
+          <button data-design-id="btn-li-manage-jd25" class="w-full text-[11px] font-medium py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Manage</button>
+        </div>
+        <!-- Workforce Australia -->
+        <div class="shrink-0 w-52 glass-raised rounded-xl border border-[#FBBF24]/30 p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#00843D] flex items-center justify-center"><i class="fa-solid fa-landmark text-white text-xs"></i></div><span class="text-xs font-semibold leading-tight">Workforce AU</span></div>
+            <span class="w-2 h-2 rounded-full bg-[#FBBF24]"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-[#FBBF24] mb-2.5"><i class="fa-solid fa-triangle-exclamation"></i>MyGov login req.</div>
+          <button data-design-id="btn-wfa-connect-jd26" class="w-full text-[11px] font-medium py-1.5 rounded-lg bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition">Connect via MyGov</button>
+        </div>
+        <!-- Jora -->
+        <div class="shrink-0 w-52 glass-raised rounded-xl border border-white/8 p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#2557A7] flex items-center justify-center text-white font-bold text-[11px]">Jora</div><span class="text-xs font-semibold">Jora</span></div>
+            <span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-[#6B6B82] mb-2.5"><i class="fa-regular fa-circle"></i>Not connected</div>
+          <button data-design-id="btn-jora-connect-jd27" class="w-full text-[11px] font-medium py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-robot text-[10px] text-[#818CF8]"></i>Connect via Browser</button>
+        </div>
+        <!-- Indeed AU -->
+        <div class="shrink-0 w-52 glass-raised rounded-xl border border-white/8 p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#003A9B] flex items-center justify-center text-white font-bold text-[11px]">in</div><span class="text-xs font-semibold">Indeed AU</span></div>
+            <span class="w-2 h-2 rounded-full bg-[#6B6B82]"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-[#6B6B82] mb-2.5"><i class="fa-regular fa-circle"></i>Not connected</div>
+          <button data-design-id="btn-indeed-connect-jd28" class="w-full text-[11px] font-medium py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-robot text-[10px] text-[#818CF8]"></i>Connect via Browser</button>
+        </div>
+        <!-- International sources hint -->
+        <div class="shrink-0 w-52 rounded-xl border border-dashed border-white/12 p-3.5 flex flex-col items-center justify-center text-center">
+          <p class="text-[11px] text-[#6B6B82] leading-relaxed">Switch to <span class="text-white">🌏 International</span> for LinkedIn Global, Glassdoor, Dice, ZipRecruiter, Wellfound &amp; USAJobs</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Filters -->
+    <div class="px-8 py-4 border-b border-white/8 flex items-center gap-2.5 flex-wrap">
+      <button data-design-id="filter-role-jd04" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Role <i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></button>
+      <button data-design-id="filter-source-jd29" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-plug text-[10px] text-[#818CF8]"></i>Source <i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></button>
+      <button data-design-id="filter-loc-jd05" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Location <i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></button>
+      <button data-design-id="filter-salary-jd06" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Salary <i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></button>
+      <button data-design-id="filter-remote-jd07" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-[#4F46E5]/15 border border-[#4F46E5]/25 text-[#818CF8] transition">Remote · Hybrid</button>
+      <div class="flex items-center gap-2.5 ml-2"><span class="text-xs text-[#6B6B82]">Match ≥</span><span class="mono text-xs font-semibold text-[#FF6B35]">80%</span><div class="w-28 h-1.5 rounded-full bg-white/8"><div class="h-1.5 rounded-full bg-[#FF6B35]" style="width:80%"></div></div></div>
+      <button data-design-id="btn-clear-jd08" class="ml-auto text-xs text-[#A0A0B8] hover:text-white transition">Clear all</button>
+    </div>
+
+    <div class="flex-1 flex min-h-0">
+      <!-- Job list -->
+      <main data-design-id="job-list-jd09" class="w-[560px] shrink-0 border-r border-white/8 px-6 py-5 overflow-hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2"><input type="checkbox" class="accent-[#FF6B35]"><span class="text-xs text-[#A0A0B8]">Select all · <span class="text-white">4 selected</span></span></div>
+          <div class="flex items-center gap-2"><button data-design-id="btn-bulk-tailor-jd10" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition">Tailor &amp; Apply (4)</button><button data-design-id="btn-bulk-skip-jd11" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Skip</button></div>
+        </div>
+        <div class="flex flex-col gap-3">
+          <article data-design-id="job-card-1-jd12" class="rounded-xl border border-[#FF6B35]/40 bg-[#FF6B35]/8 p-4 relative">
+            <div class="absolute left-0 top-4 bottom-4 w-0.5 rounded-full bg-[#FF6B35]"></div>
+            <div class="flex gap-4">
+              <div class="w-11 h-11 rounded-xl bg-white/8 flex items-center justify-center text-sm font-bold shrink-0">CV</div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between"><div><h3 class="text-sm font-semibold">Senior Technical Program Manager</h3><p class="text-xs text-[#A0A0B8]">Canva · Sydney · Hybrid</p></div><div class="relative w-11 h-11 shrink-0"><svg class="w-11 h-11 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="5.8" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-[11px] font-bold">94</span></div></div>
+                <div class="flex gap-1.5 mt-2.5 flex-wrap"><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Agile/SAFe</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">AI Delivery</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Cloud</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-[#6B6B82] border border-white/8">+4</span></div>
+                <div class="flex items-center justify-between mt-3"><span class="mono text-xs text-[#A0A0B8]">$180k – $220k</span><span class="text-[11px] text-[#6B6B82] flex items-center gap-2"><span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#E60278]/15 text-[#FF6FB5] font-medium"><i class="fa-solid fa-briefcase text-[9px]"></i>Seek</span>2d ago</span></div>
+              </div>
+            </div>
+          </article>
+          <article data-design-id="job-card-2-jd13" class="rounded-xl border border-white/8 glass p-4 hover:border-white/15 transition">
+            <div class="flex gap-4"><div class="w-11 h-11 rounded-xl bg-white/8 flex items-center justify-center text-sm font-bold shrink-0">AT</div><div class="flex-1 min-w-0"><div class="flex items-start justify-between"><div><h3 class="text-sm font-semibold">Solutions Architect — AI/ML</h3><p class="text-xs text-[#A0A0B8]">Atlassian · Remote</p></div><div class="relative w-11 h-11 shrink-0"><svg class="w-11 h-11 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="10.7" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-[11px] font-bold">89</span></div></div><div class="flex gap-1.5 mt-2.5 flex-wrap"><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Kubernetes</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">MLOps</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#FBBF24]/12 text-[#FBBF24] border border-[#FBBF24]/20">Terraform (gap)</span></div><div class="flex items-center justify-between mt-3"><span class="mono text-xs text-[#A0A0B8]">$210k – $250k</span><span class="text-[11px] text-[#6B6B82] flex items-center gap-2"><span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0A66C2]/15 text-[#7CB4F0] font-medium"><i class="fa-brands fa-linkedin-in text-[9px]"></i>LinkedIn</span>1d ago</span></div></div></div>
+          </article>
+          <article data-design-id="job-card-3-jd14" class="rounded-xl border border-white/8 glass p-4 hover:border-white/15 transition">
+            <div class="flex gap-4"><div class="w-11 h-11 rounded-xl bg-white/8 flex items-center justify-center text-sm font-bold shrink-0">GO</div><div class="flex-1 min-w-0"><div class="flex items-start justify-between"><div><h3 class="text-sm font-semibold">Delivery Manager — Digital</h3><p class="text-xs text-[#A0A0B8]">Services Australia · Canberra · Hybrid</p></div><div class="relative w-11 h-11 shrink-0"><svg class="w-11 h-11 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#FBBF24" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="17.5" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-[11px] font-bold">82</span></div></div><div class="flex gap-1.5 mt-2.5 flex-wrap"><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Program Mgmt</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Governance</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#FBBF24]/12 text-[#FBBF24] border border-[#FBBF24]/20">Baseline clearance</span></div><div class="flex items-center justify-between mt-3"><span class="mono text-xs text-[#A0A0B8]">$155k – $185k</span><span class="text-[11px] text-[#6B6B82] flex items-center gap-2"><span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#00843D]/20 text-[#5FD08C] font-medium"><i class="fa-solid fa-landmark text-[9px]"></i>Workforce AU</span>3d ago</span></div></div></div>
+          </article>
+          <article data-design-id="job-card-4-jd15" class="rounded-xl border border-white/8 glass p-4 hover:border-white/15 transition">
+            <div class="flex gap-4"><div class="w-11 h-11 rounded-xl bg-white/8 flex items-center justify-center text-sm font-bold shrink-0">NA</div><div class="flex-1 min-w-0"><div class="flex items-start justify-between"><div><h3 class="text-sm font-semibold">Senior Delivery Lead — Banking</h3><p class="text-xs text-[#A0A0B8]">NAB · Melbourne · Hybrid</p></div><div class="relative w-11 h-11 shrink-0"><svg class="w-11 h-11 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="12.7" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-[11px] font-bold">87</span></div></div><div class="flex gap-1.5 mt-2.5 flex-wrap"><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Financial Services</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Risk</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Azure</span></div><div class="flex items-center justify-between mt-3"><span class="mono text-xs text-[#A0A0B8]">$170k – $200k</span><span class="text-[11px] text-[#6B6B82] flex items-center gap-2"><span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#2557A7]/20 text-[#7FA6E0] font-medium"><i class="fa-solid fa-briefcase text-[9px]"></i>Jora</span>5h ago</span></div></div></div>
+          </article>
+        </div>
+      </main>
+
+      <!-- Detail panel -->
+      <aside data-design-id="job-detail-jd16" class="flex-1 px-8 py-6 overflow-hidden">
+        <div class="flex items-start justify-between mb-5">
+          <div class="flex gap-4"><div class="w-14 h-14 rounded-2xl bg-white/8 flex items-center justify-center text-lg font-bold">CV</div><div><h2 class="text-xl font-bold">Senior Technical Program Manager</h2><p class="text-sm text-[#A0A0B8] mt-0.5">Canva · Sydney, Hybrid · <span class="mono">$180k–$220k</span></p><div class="flex gap-2 mt-2"><span class="text-[11px] px-2 py-1 rounded-md bg-[#E60278]/15 border border-[#E60278]/25 text-[#FF6FB5] font-medium"><i class="fa-solid fa-briefcase mr-1"></i>Sourced from Seek.com.au</span><span class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-white/8 text-[#A0A0B8]">Posted 2d ago</span></div></div></div>
+          <div class="text-center"><div class="relative w-16 h-16"><svg class="w-16 h-16 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#34D399" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="5.8" stroke-linecap="round"/></svg><span class="absolute inset-0 flex flex-col items-center justify-center"><span class="mono text-base font-bold leading-none">94</span></span></div><p class="text-[10px] text-[#6B6B82] mt-1">match score</p></div>
+        </div>
+
+        <div class="glass rounded-2xl border border-[#4F46E5]/25 p-5 mb-5 relative overflow-hidden">
+          <div class="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-[#4F46E5]/15 blur-2xl"></div>
+          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-brain text-[#818CF8] text-sm"></i><h3 class="text-sm font-semibold">AI Match Analysis</h3></div>
+          <p class="text-sm text-[#C8C8DC] leading-relaxed">Exceptional alignment with your background. Your program delivery leadership at ATO and ANZ, plus AI/ML solution architecture, maps to 7 of 8 required competencies. Salary sits within your target band for Sydney.</p>
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="bg-white/5 rounded-lg p-3"><p class="text-[11px] text-[#6B6B82] mb-1">Skills matched</p><p class="mono text-sm font-semibold text-[#34D399]">7 / 8</p></div>
+            <div class="bg-white/5 rounded-lg p-3"><p class="text-[11px] text-[#6B6B82] mb-1">Skill gap</p><p class="text-sm font-semibold text-[#FBBF24]">Rust (minor)</p></div>
+          </div>
+        </div>
+
+        <!-- 10-Dimensional Fit Score -->
+        <section data-design-id="fit-score-jd30" class="glass rounded-2xl border border-white/8 p-5 mb-5">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2"><i class="fa-solid fa-radar text-[#818CF8] text-sm"></i><h3 class="text-sm font-semibold">10-Dimensional Fit Score</h3></div>
+            <span class="mono text-xs text-[#6B6B82]">hover a dimension for detail</span>
+          </div>
+          <div class="flex gap-6">
+            <!-- Radar chart -->
+            <div class="shrink-0 w-[188px] h-[188px] relative">
+              <svg viewBox="0 0 200 200" class="w-full h-full">
+                <g fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1">
+                  <polygon points="100,20 147,38 178,80 178,128 147,170 100,188 53,170 22,128 22,80 53,38"/>
+                  <polygon points="100,44 135,58 158,90 158,124 135,155 100,168 65,155 42,124 42,90 65,58"/>
+                  <polygon points="100,68 123,78 138,100 138,120 123,140 100,148 77,140 62,120 62,100 77,78"/>
+                </g>
+                <g stroke="rgba(255,255,255,0.06)" stroke-width="1">
+                  <line x1="100" y1="100" x2="100" y2="20"/><line x1="100" y1="100" x2="147" y2="38"/><line x1="100" y1="100" x2="178" y2="80"/><line x1="100" y1="100" x2="178" y2="128"/><line x1="100" y1="100" x2="147" y2="170"/><line x1="100" y1="100" x2="100" y2="188"/><line x1="100" y1="100" x2="53" y2="170"/><line x1="100" y1="100" x2="22" y2="128"/><line x1="100" y1="100" x2="22" y2="80"/><line x1="100" y1="100" x2="53" y2="38"/>
+                </g>
+                <polygon points="100,26 143,41 170,82 165,125 138,158 100,178 60,160 33,124 35,83 66,49" fill="rgba(255,107,53,0.18)" stroke="#FF6B35" stroke-width="2"/>
+              </svg>
+            </div>
+            <!-- Dimension bars -->
+            <div class="flex-1 grid grid-cols-2 gap-x-5 gap-y-2.5">
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Technical Skills</span><span class="mono text-[#34D399]">92</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:92%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Experience Level</span><span class="mono text-[#34D399]">96</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:96%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Industry Match</span><span class="mono text-[#34D399]">88</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:88%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Role Alignment</span><span class="mono text-[#34D399]">94</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:94%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Culture Fit</span><span class="mono text-[#FBBF24]">79</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#FBBF24]" style="width:79%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Salary Fit</span><span class="mono text-[#34D399]">90</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:90%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Location Match</span><span class="mono text-[#34D399]">100</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:100%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Career Growth</span><span class="mono text-[#34D399]">85</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:85%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">Company Stability</span><span class="mono text-[#34D399]">91</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:91%"></div></div></div>
+              <div><div class="flex justify-between text-[11px] mb-1"><span class="text-[#A0A0B8]">North Star Align</span><span class="mono text-[#34D399]">87</span></div><div class="h-1.5 rounded-full bg-white/6"><div class="h-1.5 rounded-full bg-[#34D399]" style="width:87%"></div></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Risk Signals -->
+        <section data-design-id="risk-signals-jd31" class="glass rounded-2xl border border-[#FBBF24]/25 p-5 mb-5">
+          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-triangle-exclamation text-[#FBBF24] text-sm"></i><h3 class="text-sm font-semibold">Risk Signals</h3><span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FBBF24]/15 text-[#FBBF24]">4 flags</span></div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="flex items-center gap-2.5 glass-raised rounded-lg border border-white/8 px-3 py-2.5"><i class="fa-solid fa-users text-[#F87171] text-xs"></i><span class="text-xs text-[#C8C8DC]">High applicant volume (500+)</span></div>
+            <div class="flex items-center gap-2.5 glass-raised rounded-lg border border-white/8 px-3 py-2.5"><i class="fa-solid fa-rotate-right text-[#FBBF24] text-xs"></i><span class="text-xs text-[#C8C8DC]">Role reposted 3 times</span></div>
+            <div class="flex items-center gap-2.5 glass-raised rounded-lg border border-white/8 px-3 py-2.5"><i class="fa-solid fa-dollar-sign text-[#FBBF24] text-xs"></i><span class="text-xs text-[#C8C8DC]">No salary listed</span></div>
+            <div class="flex items-center gap-2.5 glass-raised rounded-lg border border-white/8 px-3 py-2.5"><i class="fa-solid fa-reply text-[#F87171] text-xs"></i><span class="text-xs text-[#C8C8DC]">Recruiter response: Low</span></div>
+          </div>
+        </section>
+
+        <h3 class="text-sm font-semibold mb-2">Role Description</h3>
+        <p class="text-sm text-[#A0A0B8] leading-relaxed mb-5">Lead cross-functional delivery for Canva's platform program, owning roadmap, PI planning, and executive reporting across multiple squads. You'll bridge engineering and executive strategy while steering AI-enabled product initiatives to on-time delivery.</p>
+
+        <div class="flex items-center gap-2 mb-3">
+          <span class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/25"><i class="fa-solid fa-circle-check text-[10px]"></i>Voice-Authentic</span>
+          <span class="text-[11px] text-[#6B6B82]">Tailored output de-robotified · AI detection 2%</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button data-design-id="btn-tailor-apply-jd17" class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold py-3 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-wand-magic-sparkles"></i>Tailor &amp; Apply</button>
+          <button data-design-id="btn-review-jd18" class="px-5 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/8 hover:bg-white/10 transition">Review</button>
+          <button data-design-id="btn-skip-jd19" class="px-5 py-3 rounded-xl text-sm font-medium text-[#A0A0B8] hover:text-white hover:bg-white/5 transition">Skip</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</body>
+</html>

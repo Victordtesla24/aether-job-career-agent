@@ -1,0 +1,3063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation Specification v1.0 — Autonomous AI Job Application Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<style>
+/* ===== PAGE SETUP ===== */
+@page {
+  size: A4;
+  margin: 2cm 1.8cm 2cm 1.8cm;
+  background: #0a0a0f;
+  @top-left {
+    content: string(doctitle);
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5pt;
+    color: #666680;
+    padding-top: 0.3cm;
+  }
+  @top-right {
+    content: "Implementation Specification v1.0";
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5pt;
+    color: #666680;
+    padding-top: 0.3cm;
+  }
+  @bottom-center {
+    content: counter(page);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8pt;
+    color: #FF6B35;
+  }
+  @bottom-left {
+    content: "Autonomous AI Job Application Platform";
+    font-family: 'Inter', sans-serif;
+    font-size: 7pt;
+    color: #444460;
+  }
+}
+@page :first {
+  margin: 0;
+  background: #0a0a0f;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+  @bottom-left { content: none; }
+}
+html {
+  background: #0a0a0f;
+}
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.6;
+  color: #d0d0e0;
+  background: #0a0a0f;
+  string-set: doctitle "";
+}
+h1 { string-set: doctitle content(); }
+* { box-sizing: border-box; }
+
+/* ===== COVER PAGE ===== */
+.cover {
+  width: 210mm;
+  height: 297mm;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.cover-grid {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(255,107,53,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,107,53,0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.cover-glow-top {
+  position: absolute;
+  top: -80px; left: 50%;
+  transform: translateX(-50%);
+  width: 420px; height: 320px;
+  background: radial-gradient(ellipse, rgba(255,107,53,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover-glow-bottom {
+  position: absolute;
+  bottom: -80px; right: -60px;
+  width: 350px; height: 280px;
+  background: radial-gradient(ellipse, rgba(100,60,200,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover-content {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  padding: 0 2cm;
+  max-width: 100%;
+}
+.cover-badge {
+  display: inline-block;
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.4);
+  color: #FF6B35;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8pt;
+  font-weight: 500;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  padding: 5px 18px;
+  border-radius: 2px;
+  margin-bottom: 28px;
+}
+.cover h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: 26pt;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+  margin: 0 0 12px 0;
+  padding: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  text-shadow: 0 0 40px rgba(255,107,53,0.3);
+  string-set: doctitle "";
+}
+.cover-subtitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 13pt;
+  font-weight: 300;
+  color: rgba(255,107,53,0.85);
+  margin: 0 0 40px 0;
+  letter-spacing: 0.5px;
+}
+.cover-divider {
+  width: 100px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #FF6B35, transparent);
+  margin: 0 auto 36px auto;
+}
+.cover-meta {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+.cover-meta-item {
+  text-align: center;
+}
+.cover-meta-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7pt;
+  color: #555570;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  display: block;
+  margin-bottom: 3px;
+}
+.cover-meta-value {
+  font-size: 9pt;
+  font-weight: 600;
+  color: #a0a0c0;
+}
+.cover-classification {
+  display: inline-block;
+  background: rgba(255,107,53,0.08);
+  border: 1px solid rgba(255,107,53,0.25);
+  color: #FF6B35;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  letter-spacing: 2px;
+  padding: 6px 20px;
+  margin-top: 8px;
+}
+.cover-author-block {
+  position: absolute;
+  bottom: 2.5cm;
+  left: 0; right: 0;
+  text-align: center;
+}
+.cover-author {
+  font-size: 9pt;
+  color: #555570;
+  margin-bottom: 4px;
+}
+.cover-author span {
+  color: #8080a0;
+  font-weight: 500;
+}
+.cover-version-line {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+.cover-dot {
+  width: 4px; height: 4px;
+  background: #FF6B35;
+  border-radius: 50%;
+  opacity: 0.6;
+}
+.cover-version-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  color: #444460;
+}
+
+/* ===== TOC PAGE ===== */
+.toc-page {
+  padding: 0;
+}
+.toc-title {
+  font-size: 18pt;
+  font-weight: 700;
+  color: #FF6B35;
+  margin-bottom: 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1e1e2e;
+}
+.toc-list {
+  list-style: none;
+  padding: 0;
+  column-count: 2;
+  column-gap: 0.6cm;
+  margin: 0;
+}
+.toc-list li {
+  display: flex;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.toc-list li a {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  text-decoration: none;
+}
+.toc-list .toc-h2 .toc-text {
+  font-weight: 600;
+  font-size: 9.5pt;
+  color: #d0d0e0;
+}
+.toc-list .toc-h3 {
+  padding-left: 20px;
+}
+.toc-list .toc-h3 .toc-text {
+  font-weight: 400;
+  font-size: 9pt;
+  color: #8080a0;
+}
+.toc-list .toc-phase {
+  padding: 8px 0 2px 0;
+}
+.toc-list .toc-phase .toc-text {
+  font-weight: 700;
+  font-size: 10pt;
+  color: #FF6B35;
+}
+.toc-text {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.toc-dots {
+  flex: 1;
+  margin: 0 8px;
+  border-bottom: 1px dotted #2a2a3e;
+  min-width: 20px;
+  position: relative;
+  top: -3px;
+}
+.toc-page-num {
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5pt;
+  color: #FF6B35;
+}
+
+/* ===== SECTION HEADERS ===== */
+.section-break {
+  margin-top: 20px;
+}
+.phase-header {
+  background: linear-gradient(135deg, #0f0f1a 0%, #13131f 100%);
+  border-left: 4px solid #FF6B35;
+  padding: 18px 22px;
+  margin-bottom: 28px;
+  border-radius: 0 4px 4px 0;
+}
+.phase-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  color: #FF6B35;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+.phase-title {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.2;
+}
+.phase-subtitle {
+  font-size: 9pt;
+  color: #666680;
+  margin-top: 4px;
+}
+
+h2.section-heading {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 28px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1e1e2e;
+  page-break-after: avoid;
+}
+h2.section-heading .section-num {
+  color: #FF6B35;
+  margin-right: 8px;
+}
+h3.subsection-heading {
+  font-size: 10.5pt;
+  font-weight: 600;
+  color: #d0d0e0;
+  margin: 20px 0 8px 0;
+  page-break-after: avoid;
+}
+h3.subsection-heading .section-num {
+  color: #FF6B35;
+  margin-right: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9pt;
+}
+h4.sub4-heading {
+  font-size: 9.5pt;
+  font-weight: 600;
+  color: #a0a0c0;
+  margin: 14px 0 6px 0;
+  page-break-after: avoid;
+}
+
+/* ===== PROSE ===== */
+p {
+  margin: 0 0 10px 0;
+  text-align: justify;
+  text-align-last: left;
+  color: #c0c0d8;
+}
+ul, ol {
+  margin: 6px 0 10px 0;
+  padding-left: 22px;
+  color: #b0b0c8;
+}
+li {
+  margin-bottom: 3px;
+  line-height: 1.5;
+}
+li strong, p strong {
+  color: #e8e8f8;
+  font-weight: 600;
+}
+a { color: #FF6B35; word-break: break-all; }
+
+/* ===== CODE BLOCKS ===== */
+pre, code {
+  font-family: 'JetBrains Mono', monospace;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+pre {
+  background: #080810;
+  border: 1px solid #1e1e30;
+  border-left: 3px solid #FF6B35;
+  padding: 12px 14px;
+  font-size: 7.5pt;
+  line-height: 1.5;
+  color: #c8c8e0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 8px 0 14px 0;
+  border-radius: 0 3px 3px 0;
+}
+code {
+  background: #12121e;
+  border: 1px solid #1e1e30;
+  color: #e0a070;
+  padding: 1px 5px;
+  font-size: 8pt;
+  border-radius: 2px;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.code-comment { color: #4a4a6a; }
+.code-keyword { color: #cc7aff; }
+.code-string { color: #7bc97e; }
+.code-type { color: #5ba3f5; }
+.code-num { color: #f0a060; }
+.code-decorator { color: #FF6B35; }
+.code-func { color: #7bd4f0; }
+
+/* ===== TABLES ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px 0;
+  font-size: 8.5pt;
+  max-width: 100%;
+}
+thead tr {
+  background: #13131f;
+  border-bottom: 2px solid #FF6B35;
+}
+thead th {
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #e0e0f0;
+  font-size: 8.5pt;
+  white-space: nowrap;
+}
+tbody tr {
+  border-bottom: 1px solid #1a1a2a;
+}
+tbody tr:nth-child(even) {
+  background: rgba(255,107,53,0.03);
+}
+tbody td {
+  padding: 6px 10px;
+  color: #b0b0c8;
+  vertical-align: top;
+}
+tbody td code {
+  font-size: 7.5pt;
+}
+caption {
+  font-size: 8pt;
+  color: #666680;
+  text-align: left;
+  padding: 0 0 4px 0;
+  caption-side: top;
+}
+caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6B35; }
+
+/* ===== CALLOUT BOXES ===== */
+.callout {
+  background: #0d0d18;
+  border-left: 3px solid #FF6B35;
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-radius: 0 4px 4px 0;
+}
+.callout.info { border-left-color: #5ba3f5; }
+.callout.warning { border-left-color: #f0c030; }
+.callout.success { border-left-color: #50c878; }
+.callout-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  color: #FF6B35;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.callout.info .callout-title { color: #5ba3f5; }
+.callout.warning .callout-title { color: #f0c030; }
+.callout.success .callout-title { color: #50c878; }
+.callout p { margin: 0; font-size: 8.5pt; color: #a0a0c0; }
+
+/* ===== AGENT SPEC CARDS ===== */
+.agent-card {
+  background: #0d0d18;
+  border: 1px solid #1e1e30;
+  border-top: 2px solid #FF6B35;
+  padding: 14px 16px;
+  margin: 12px 0;
+  page-break-inside: avoid;
+}
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.agent-name {
+  font-size: 10pt;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+.agent-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7pt;
+  background: rgba(255,107,53,0.15);
+  color: #FF6B35;
+  padding: 2px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.agent-desc {
+  font-size: 8.5pt;
+  color: #8080a0;
+  margin: 0 0 8px 0;
+}
+.agent-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 7.5pt;
+  margin-bottom: 6px;
+}
+.agent-meta-item {
+  color: #555570;
+}
+.agent-meta-item span {
+  color: #a0a0c0;
+  font-weight: 500;
+}
+
+/* ===== PHASE TIMELINE ===== */
+.phase-timeline {
+  display: flex;
+  gap: 0;
+  margin: 12px 0 20px 0;
+}
+.phase-box {
+  flex: 1;
+  background: #0d0d18;
+  border: 1px solid #1e1e30;
+  padding: 10px 12px;
+  text-align: center;
+  position: relative;
+}
+.phase-box:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #FF6B35;
+  font-size: 10pt;
+  z-index: 2;
+}
+.phase-box-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7pt;
+  color: #FF6B35;
+  display: block;
+  margin-bottom: 2px;
+}
+.phase-box-label {
+  font-size: 8pt;
+  font-weight: 600;
+  color: #d0d0e0;
+  display: block;
+}
+.phase-box-weeks {
+  font-size: 7pt;
+  color: #555570;
+}
+
+/* ===== METRIC CHIPS ===== */
+.metrics-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.metric-chip {
+  background: #0d0d18;
+  border: 1px solid #2a2a3e;
+  padding: 6px 12px;
+  text-align: center;
+  min-width: 90px;
+}
+.metric-chip-value {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #FF6B35;
+  display: block;
+}
+.metric-chip-label {
+  font-size: 7pt;
+  color: #555570;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===== OVERFLOW PREVENTION ===== */
+pre, table, figure, img, svg, blockquote, .equation {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+figure img, figure svg { max-width: 80%; max-height: 40vh; height: auto; }
+figcaption { font-size: 8pt; color: #555570; margin-top: 4px; }
+figcaption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6B35; }
+.katex-display { overflow-x: auto; }
+
+/* ===== PAGE BREAK RULES ===== */
+figure { page-break-inside: avoid; max-height: 70vh; height: auto; width: 100%; object-fit: contain; }
+.agent-card { page-break-inside: avoid; }
+tr { page-break-inside: avoid; }
+li { page-break-inside: avoid; }
+h2.section-heading, h3.subsection-heading, h4.sub4-heading { page-break-after: avoid; }
+.callout { page-break-inside: avoid; }
+.phase-header { page-break-inside: avoid; }
+
+/* ===== INLINE CONTENT ===== */
+.inline-code-block {
+  background: #080810;
+  border: 1px solid #1e1e30;
+  border-left: 3px solid #2a6fbb;
+  padding: 10px 14px;
+  margin: 6px 0 12px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  color: #c8c8e0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.ts-interface {
+  border-left-color: #5ba3f5;
+}
+.yaml-block {
+  border-left-color: #f0c030;
+}
+.sql-block {
+  border-left-color: #50c878;
+}
+.bash-block {
+  border-left-color: #a060e8;
+}
+
+/* ===== ENDPOINT LIST ===== */
+.endpoint-group {
+  margin: 10px 0;
+}
+.endpoint-group-title {
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: #FF6B35;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #1e1e2e;
+  padding-bottom: 3px;
+}
+.endpoint-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 8pt;
+}
+.method-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7pt;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  min-width: 40px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.method-get { background: rgba(91,163,245,0.15); color: #5ba3f5; }
+.method-post { background: rgba(80,200,120,0.15); color: #50c878; }
+.method-put { background: rgba(255,200,50,0.15); color: #f0c030; }
+.method-delete { background: rgba(255,80,80,0.15); color: #ff5050; }
+.endpoint-path {
+  font-family: 'JetBrains Mono', monospace;
+  color: #e0e0f0;
+  font-size: 8pt;
+  flex: 1;
+}
+.endpoint-desc {
+  color: #666680;
+  font-size: 7.5pt;
+  flex: 1.5;
+}
+.endpoint-auth {
+  font-size: 7pt;
+  color: #FF6B35;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* ===== DEPENDENCY MATRIX ===== */
+.dep-matrix {
+  background: #080810;
+  border: 1px solid #1e1e30;
+  padding: 10px 14px;
+  margin: 8px 0;
+  font-size: 8pt;
+}
+.dep-row {
+  display: flex;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.dep-pkg {
+  font-family: 'JetBrains Mono', monospace;
+  color: #7bd4f0;
+  min-width: 160px;
+}
+.dep-version {
+  font-family: 'JetBrains Mono', monospace;
+  color: #50c878;
+  min-width: 80px;
+}
+.dep-purpose {
+  color: #8080a0;
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== COVER PAGE ==================== -->
+<div class="cover">
+  <div class="cover-grid"></div>
+  <div class="cover-glow-top"></div>
+  <div class="cover-glow-bottom"></div>
+  <div class="cover-content">
+    <div class="cover-badge">Agent-Ready Build Guide</div>
+    <h1>Autonomous AI Job Application Platform</h1>
+    <div class="cover-subtitle">Implementation Specification v1.0</div>
+    <div class="cover-divider"></div>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Document Type</span>
+        <span class="cover-meta-value">Implementation Reference</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Build Target</span>
+        <span class="cover-meta-value">AI Coding Agent / Dev Team</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Stack</span>
+        <span class="cover-meta-value">Next.js · FastAPI · LangGraph</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Horizon</span>
+        <span class="cover-meta-value">16 Weeks / 4 Phases</span>
+      </div>
+    </div>
+    <div class="cover-classification">CLASSIFICATION: IMPLEMENTATION REFERENCE</div>
+  </div>
+  <div class="cover-author-block">
+    <div class="cover-author">Authored for <span>Vikram Deshpande</span> — Technical Delivery Lead &amp; AI Solutions Architect</div>
+    <div class="cover-version-line">
+      <span class="cover-version-text">v1.0.0</span>
+      <span class="cover-dot"></span>
+      <span class="cover-version-text">July 2026</span>
+      <span class="cover-dot"></span>
+      <span class="cover-version-text">Companion to Architecture Document</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TABLE OF CONTENTS ==================== -->
+<div class="toc-page">
+  <h2 class="toc-title">Table of Contents</h2>
+  <ul class="toc-list">
+    <li class="toc-h2">
+      <a href="#sec-overview"><span class="toc-text">1. Implementation Overview</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-overview"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-phase1"><span class="toc-text">2. Phase 1 — Foundation (Weeks 1–4)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-phase1"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-scaffold"><span class="toc-text">2.1 Project Scaffolding</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-scaffold"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-schema"><span class="toc-text">2.2 Database Schema (Prisma)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-schema"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-api"><span class="toc-text">2.3 API Contract Specification</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-api"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-auth"><span class="toc-text">2.4 Authentication Setup</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-auth"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-phase2"><span class="toc-text">3. Phase 2 — Agent Implementation (Weeks 5–8)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-phase2"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-agent-framework"><span class="toc-text">3.1 Agent Framework Setup</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-agent-framework"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-agent-specs"><span class="toc-text">3.2 Individual Agent Specifications (20 Agents)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-agent-specs"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-orchestration"><span class="toc-text">3.3 Orchestration Graph</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-orchestration"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-phase3"><span class="toc-text">4. Phase 3 — Automation (Weeks 9–12)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-phase3"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-scraping"><span class="toc-text">4.1 Job Board Integration</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-scraping"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-submission"><span class="toc-text">4.2 Application Submission</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-submission"></span></span></a>
+    </li>
+    <li class="toc-h3">
+      <a href="#sec-email"><span class="toc-text">4.3 Email Integration</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-email"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-phase4"><span class="toc-text">5. Phase 4 — Learning &amp; Scale (Weeks 13–16)</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-phase4"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-config"><span class="toc-text">6. Configuration Specification</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-config"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-testing"><span class="toc-text">7. Testing Strategy</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-testing"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-deploy"><span class="toc-text">8. Deployment Specification</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-deploy"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-monitoring"><span class="toc-text">9. Monitoring &amp; Observability</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-monitoring"></span></span></a>
+    </li>
+    <li class="toc-h2">
+      <a href="#sec-quickref"><span class="toc-text">10. Quick Reference</span><span class="toc-dots"></span><span class="toc-page-num"><span class="page-ref" data-href="#sec-quickref"></span></span></a>
+    </li>
+  </ul>
+</div>
+
+<!-- ==================== SECTION 1: IMPLEMENTATION OVERVIEW ==================== -->
+<div class="section-break" id="sec-overview">
+  <div class="phase-header">
+    <div class="phase-label">Section 01</div>
+    <div class="phase-title">Implementation Overview</div>
+    <div class="phase-subtitle">System context, build order, environment requirements, and repository structure</div>
+  </div>
+  <h2 class="section-heading" id="sec-overview-h"><span class="section-num">1.</span>Implementation Overview</h2>
+
+  <p>This document is the <strong>definitive build guide</strong> for the Autonomous AI Job Application Platform — a 20-agent, multi-phase system purpose-built for Vikram Deshpande's Melbourne-based Technical Delivery Lead and AI Solutions Architect job search. It is a direct companion to the Architecture Document and translates every architectural decision into executable steps, code artifacts, and configuration files. An AI coding agent (Cursor, Aider, Devin) or a human development team can follow this guide sequentially from environment bootstrap to production deployment without requiring external clarification.</p>
+
+  <h3 class="subsection-heading"><span class="section-num">1.1</span>System Summary</h3>
+  <p>The platform is a <strong>full-stack TypeScript/Python monorepo</strong> that automates the entire job application lifecycle: discovery → evaluation → resume tailoring → cover letter generation → form submission → inbox management → outcome tracking → strategy adjustment. It is grounded in Vikram's demonstrated track record — 92% automation efficiency gains at ATO, $5M+ portfolio management at ANZ, 38% LLM error-rate reduction — and targets AI Architect, Senior Delivery Lead, and Technical Product Owner roles across ANZ, NAB, Telstra, and government agencies in Australia.</p>
+
+  <div class="metrics-row">
+    <div class="metric-chip"><span class="metric-chip-value">20</span><span class="metric-chip-label">AI Agents</span></div>
+    <div class="metric-chip"><span class="metric-chip-value">4</span><span class="metric-chip-label">Build Phases</span></div>
+    <div class="metric-chip"><span class="metric-chip-value">16</span><span class="metric-chip-label">Weeks</span></div>
+    <div class="metric-chip"><span class="metric-chip-value">3</span><span class="metric-chip-label">Job Boards</span></div>
+    <div class="metric-chip"><span class="metric-chip-value">0.85</span><span class="metric-chip-label">Auto-Apply Threshold</span></div>
+    <div class="metric-chip"><span class="metric-chip-value">pgvector</span><span class="metric-chip-label">Embedding Store</span></div>
+  </div>
+
+  <h3 class="subsection-heading"><span class="section-num">1.2</span>Build Order and Dependency Chain</h3>
+  <div class="phase-timeline">
+    <div class="phase-box"><span class="phase-box-num">PHASE 1</span><span class="phase-box-label">Foundation</span><span class="phase-box-weeks">Weeks 1–4</span></div>
+    <div class="phase-box"><span class="phase-box-num">PHASE 2</span><span class="phase-box-label">Agents</span><span class="phase-box-weeks">Weeks 5–8</span></div>
+    <div class="phase-box"><span class="phase-box-num">PHASE 3</span><span class="phase-box-label">Automation</span><span class="phase-box-weeks">Weeks 9–12</span></div>
+    <div class="phase-box"><span class="phase-box-num">PHASE 4</span><span class="phase-box-label">Learning</span><span class="phase-box-weeks">Weeks 13–16</span></div>
+  </div>
+
+  <p>The dependency chain is strict: <strong>Phase 1 must be complete before Phase 2 begins</strong>, because all agent definitions reference the database schema (Prisma models), the queue infrastructure (BullMQ), and the API contract (REST + tRPC). Phase 3 (automation) depends on the working agents from Phase 2. Phase 4 (learning) depends on the application submission data generated in Phase 3.</p>
+
+  <table>
+    <caption data-label="Table 1.1">Critical path dependencies</caption>
+    <thead><tr><th>Deliverable</th><th>Depends On</th><th>Blocks</th></tr></thead>
+    <tbody>
+      <tr><td><code>Prisma Schema</code></td><td>Environment bootstrap</td><td>All agents, all APIs</td></tr>
+      <tr><td><code>BullMQ queues</code></td><td>Redis, Prisma schema</td><td>Job discovery, agent dispatch</td></tr>
+      <tr><td><code>FastAPI /api/agents/*</code></td><td>LangGraph, BullMQ</td><td>Frontend approval UI</td></tr>
+      <tr><td><code>pgvector embeddings</code></td><td>PostgreSQL + extension</td><td>ATS agent, semantic search</td></tr>
+      <tr><td><code>Playwright scraper</code></td><td>Phase 1 complete</td><td>Job discovery pipeline</td></tr>
+      <tr><td><code>Langfuse project</code></td><td>API key provisioned</td><td>All agents (tracing)</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="subsection-heading"><span class="section-num">1.3</span>Environment Requirements</h3>
+
+  <table>
+    <caption data-label="Table 1.2">Minimum environment requirements</caption>
+    <thead><tr><th>Component</th><th>Minimum Version</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Node.js</td><td>20.x LTS</td><td>Next.js 14 frontend, BullMQ workers</td></tr>
+      <tr><td>pnpm</td><td>8.x</td><td>Monorepo package manager (workspaces)</td></tr>
+      <tr><td>Python</td><td>3.11+</td><td>FastAPI backend, LangGraph agents</td></tr>
+      <tr><td>Docker</td><td>24.x</td><td>Local dev containers, CI builds</td></tr>
+      <tr><td>Docker Compose</td><td>2.x</td><td>Local orchestration (DB, Redis, workers)</td></tr>
+      <tr><td>kubectl</td><td>1.28+</td><td>K8s cluster management</td></tr>
+      <tr><td>Terraform</td><td>1.6+</td><td>AWS infrastructure provisioning</td></tr>
+      <tr><td>PostgreSQL</td><td>16 + pgvector</td><td>Primary database + embedding store</td></tr>
+      <tr><td>Redis</td><td>7.x</td><td>BullMQ queues, session cache</td></tr>
+      <tr><td>AWS CLI</td><td>2.x</td><td>EKS, RDS, S3, SQS provisioning</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="subsection-heading"><span class="section-num">1.4</span>Repository Structure</h3>
+  <p>The repository uses a <strong>pnpm monorepo</strong> layout. All apps and shared packages live in the same repository to simplify cross-package TypeScript type sharing, atomic commits, and coordinated CI pipelines.</p>
+  <pre><code>/platform
+├── apps/
+│   ├── web/                    # Next.js 14 App Router frontend
+│   │   ├── app/                # Route segments (layout, pages, APIs)
+│   │   ├── components/         # Shared UI components (dark theme)
+│   │   ├── lib/                # tRPC client, auth helpers
+│   │   └── public/             # Static assets
+│   └── api/                    # FastAPI backend (Python)
+│       ├── routers/            # Endpoint route handlers
+│       ├── agents/             # LangGraph agent modules
+│       ├── workers/            # BullMQ worker processes
+│       ├── models/             # SQLAlchemy / Pydantic models
+│       └── services/           # Business logic layer
+├── packages/
+│   ├── agents/                 # LangGraph graph definitions (shared)
+│   │   ├── graphs/             # One file per agent workflow
+│   │   ├── tools/              # Tool function definitions
+│   │   ├── prompts/            # System prompt templates
+│   │   └── schemas/            # Input/Output Zod/Pydantic schemas
+│   ├── db/                     # Prisma schema + migrations
+│   │   ├── schema.prisma       # Single source-of-truth schema
+│   │   ├── migrations/         # Auto-generated migration history
+│   │   └── seed.ts             # Seed data for local dev
+│   ├── shared/                 # Cross-app TypeScript types
+│   │   ├── types/              # Domain types (Job, Application, etc.)
+│   │   ├── utils/              # Shared utilities (scoring, parsing)
+│   │   └── constants/          # Platform-wide constants / thresholds
+│   └── queue/                  # BullMQ job definitions
+│       ├── jobs/               # Job type definitions + payloads
+│       ├── processors/         # Queue processor factories
+│       └── schedulers/         # Cron-based scheduled jobs
+├── infra/
+│   ├── terraform/              # Terraform modules (EKS, RDS, S3)
+│   ├── k8s/                    # Kubernetes manifests
+│   └── docker/                 # Production Dockerfiles
+├── .github/workflows/          # CI/CD GitHub Actions
+├── docker-compose.yml          # Local development stack
+├── pnpm-workspace.yaml         # Workspace definition
+└── turbo.json                  # Turborepo build pipeline</code></pre>
+
+  <div class="callout info">
+    <div class="callout-title">AI Coding Agent Note</div>
+    <p>When initializing this repository, run <code>pnpm install</code> from the root. All package resolution is handled by pnpm workspaces. To add a dependency to a specific app: <code>pnpm --filter @platform/api add langchain</code>. To run all dev servers: <code>pnpm dev</code> (Turborepo orchestrates the startup order).</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 2: PHASE 1 ==================== -->
+<div class="section-break" id="sec-phase1">
+  <div class="phase-header">
+    <div class="phase-label">Section 02 · Phase 1 · Weeks 1–4</div>
+    <div class="phase-title">Foundation</div>
+    <div class="phase-subtitle">Project scaffolding, database schema, API contracts, and authentication</div>
+  </div>
+  <h2 class="section-heading" id="sec-scaffold"><span class="section-num">2.1</span>Project Scaffolding</h2>
+  <p>Run the following commands in sequence to initialize the monorepo from scratch. Each command is idempotent — safe to re-run if a step fails mid-way.</p>
+<pre><code><span class="code-comment"># 1. Bootstrap monorepo</span>
+mkdir platform && cd platform
+pnpm init
+echo "packages:\n  - 'apps/*'\n  - 'packages/*'" > pnpm-workspace.yaml
+
+<span class="code-comment"># 2. Initialize turbo</span>
+pnpm add -Dw turbo typescript @types/node
+npx turbo init
+
+<span class="code-comment"># 3. Create apps</span>
+pnpm create next-app apps/web --typescript --tailwind --app --src-dir
+mkdir -p apps/api && cd apps/api
+python3 -m venv .venv && source .venv/bin/activate
+pip install fastapi uvicorn langgraph langchain openai prisma
+
+<span class="code-comment"># 4. Create packages</span>
+for pkg in agents db shared queue; do
+  mkdir -p packages/&#36;pkg && cd packages/&#36;pkg
+  pnpm init && cd ../..
+done
+
+<span class="code-comment"># 5. Start local dev stack</span>
+docker compose up -d   # Starts PostgreSQL, Redis, pgAdmin</code></pre>
+
+  <h4 class="sub4-heading">docker-compose.yml (local development)</h4>
+<pre><code><span class="code-decorator">version</span>: <span class="code-string">'3.9'</span>
+<span class="code-decorator">services</span>:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform_dev
+      POSTGRES_DB: career_platform
+    ports: [<span class="code-string">"5432:5432"</span>]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7-alpine
+    ports: [<span class="code-string">"6379:6379"</span>]
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  worker:
+    build: ./apps/api
+    command: python -m workers.main
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql://platform:platform_dev@postgres/career_platform
+      REDIS_URL: redis://redis:6379
+
+volumes:
+  postgres_data:</code></pre>
+</div>
+
+<!-- SCHEMA subsection (within Phase 1 page) -->
+<div id="sec-schema">
+  <h2 class="section-heading"><span class="section-num">2.2</span>Database Schema (Prisma)</h2>
+  <p>The complete Prisma schema is the authoritative data contract for the platform. Save this to <code>packages/db/schema.prisma</code>. Run <code>pnpm prisma migrate dev --name init</code> to generate the first migration.</p>
+
+<pre><code><span class="code-comment">// packages/db/schema.prisma</span>
+<span class="code-keyword">generator</span> client {
+  provider        = <span class="code-string">"prisma-client-js"</span>
+  previewFeatures = [<span class="code-string">"postgresqlExtensions"</span>]
+}
+
+<span class="code-keyword">datasource</span> db {
+  provider   = <span class="code-string">"postgresql"</span>
+  url        = env(<span class="code-string">"DATABASE_URL"</span>)
+  extensions = [pgvector(map: <span class="code-string">"vector"</span>)]
+}
+
+<span class="code-comment">// ── ENUMS ──────────────────────────────────────────────────</span>
+<span class="code-keyword">enum</span> <span class="code-type">ApplicationStatus</span> {
+  DISCOVERED EVALUATED TAILORING_QUEUED TAILORING_COMPLETE
+  SUBMITTED ACKNOWLEDGED INTERVIEW_SCHEDULED OFFER REJECTED
+  WITHDRAWN ARCHIVED
+}
+<span class="code-keyword">enum</span> <span class="code-type">ConfidenceLevel</span> { AUTO_APPLY NEEDS_APPROVAL SKIP }
+<span class="code-keyword">enum</span> <span class="code-type">JobSource</span>       { LINKEDIN SEEK INDEED GLASSDOOR RSS DIRECT }
+<span class="code-keyword">enum</span> <span class="code-type">AgentStatus</span>     { PENDING RUNNING WAITING_APPROVAL COMPLETE FAILED }
+<span class="code-keyword">enum</span> <span class="code-type">InterviewType</span>   { PHONE TECHNICAL BEHAVIOURAL PANEL FINAL }
+<span class="code-keyword">enum</span> <span class="code-type">OAuthProvider</span>   { GOOGLE GITHUB LINKEDIN }
+
+<span class="code-comment">// ── USER & PROFILE ─────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">User</span> {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  profile       Profile?
+  accounts      OAuthAccount[]
+  sessions      Session[]
+  auditLogs     AuditTrail[]
+  @@index([email])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">OAuthAccount</span> {
+  id           String        @id @default(cuid())
+  userId       String
+  provider     OAuthProvider
+  providerAccountId String
+  accessToken  String?       @db.Text
+  refreshToken String?       @db.Text
+  expiresAt    DateTime?
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Session</span> {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([token])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Profile</span> {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  fullName        String    @default(<span class="code-string">"Vikram Deshpande"</span>)
+  title           String?
+  location        String    @default(<span class="code-string">"Melbourne, VIC, Australia"</span>)
+  linkedinUrl     String?
+  githubUrl       String?
+  portfolioUrl    String?
+  targetRoles     String[]
+  targetCompanies String[]
+  salaryMin       Int?
+  salaryMax       Int?
+  user            User      @relation(fields: [userId], references: [id])
+  resumes         Resume[]
+  skills          Skill[]
+  achievements    Achievement[]
+  portfolio       Portfolio?
+  @@index([userId])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Resume</span> {
+  id          String          @id @default(cuid())
+  profileId   String
+  name        String
+  isBase      Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  profile     Profile         @relation(fields: [profileId], references: [id])
+  versions    ResumeVersion[]
+  applications JobApplication[]
+  @@index([profileId])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">ResumeVersion</span> {
+  id           String   @id @default(cuid())
+  resumeId     String
+  versionNum   Int
+  contentJson  Json
+  pdfUrl       String?
+  atsScore     Float?
+  tailoredFor  String?
+  createdAt    DateTime @default(now())
+  resume       Resume   @relation(fields: [resumeId], references: [id])
+  @@unique([resumeId, versionNum])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Skill</span> {
+  id          String   @id @default(cuid())
+  profileId   String
+  name        String
+  category    String
+  proficiency Int      @default(3)
+  yearsExp    Float?
+  profile     Profile  @relation(fields: [profileId], references: [id])
+  @@index([profileId, category])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Achievement</span> {
+  id          String   @id @default(cuid())
+  profileId   String
+  title       String
+  metric      String
+  context     String   @db.Text
+  employer    String?
+  year        Int?
+  profile     Profile  @relation(fields: [profileId], references: [id])
+}
+
+<span class="code-comment">// ── JOBS ───────────────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">Job</span> {
+  id              String      @id @default(cuid())
+  externalId      String?
+  source          JobSource
+  title           String
+  company         String
+  location        String
+  description     String      @db.Text
+  salaryMin       Int?
+  salaryMax       Int?
+  postedAt        DateTime?
+  closingAt       DateTime?
+  url             String
+  matchScore      Float?
+  atsScore        Float?
+  confidenceLevel ConfidenceLevel?
+  isRemote        Boolean     @default(false)
+  skills          String[]
+  createdAt       DateTime    @default(now())
+  applications    JobApplication[]
+  embedding       Embedding?
+  @@unique([source, externalId])
+  @@index([matchScore])
+  @@index([confidenceLevel])
+  @@index([postedAt])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">JobApplication</span> {
+  id              String            @id @default(cuid())
+  jobId           String
+  resumeId        String
+  coverLetterId   String?
+  status          ApplicationStatus @default(DISCOVERED)
+  appliedAt       DateTime?
+  submissionUrl   String?
+  screenshotUrl   String?
+  notes           String?           @db.Text
+  job             Job               @relation(fields: [jobId], references: [id])
+  resume          Resume            @relation(fields: [resumeId], references: [id])
+  coverLetter     CoverLetter?      @relation(fields: [coverLetterId], references: [id])
+  statusHistory   ApplicationStatusHistory[]
+  interviews      Interview[]
+  agentActions    AgentAction[]
+  @@index([status])
+  @@index([appliedAt])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">ApplicationStatusHistory</span> {
+  id            String            @id @default(cuid())
+  applicationId String
+  fromStatus    ApplicationStatus
+  toStatus      ApplicationStatus
+  reason        String?
+  changedAt     DateTime          @default(now())
+  application   JobApplication    @relation(fields: [applicationId], references: [id])
+  @@index([applicationId])
+}
+
+<span class="code-comment">// ── COVER LETTERS ──────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">CoverLetter</span> {
+  id          String               @id @default(cuid())
+  jobId       String
+  createdAt   DateTime             @default(now())
+  versions    CoverLetterVersion[]
+  applications JobApplication[]
+}
+
+<span class="code-keyword">model</span> <span class="code-type">CoverLetterVersion</span> {
+  id            String      @id @default(cuid())
+  coverLetterId String
+  versionNum    Int
+  content       String      @db.Text
+  toneScore     Float?
+  createdAt     DateTime    @default(now())
+  coverLetter   CoverLetter @relation(fields: [coverLetterId], references: [id])
+  @@unique([coverLetterId, versionNum])
+}
+
+<span class="code-comment">// ── PORTFOLIO ──────────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">Portfolio</span> {
+  id          String     @id @default(cuid())
+  profileId   String     @unique
+  sourceUrl   String     @default(<span class="code-string">"https://forgotten-mistory.web.app"</span>)
+  lastSync    DateTime?
+  profile     Profile    @relation(fields: [profileId], references: [id])
+  projects    Project[]
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Project</span> {
+  id           String       @id @default(cuid())
+  portfolioId  String
+  name         String
+  description  String       @db.Text
+  metrics      String[]
+  repoUrl      String?
+  demoUrl      String?
+  technologies Technology[]
+  portfolio    Portfolio    @relation(fields: [portfolioId], references: [id])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Technology</span> {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  category  String
+  projects  Project[]
+}
+
+<span class="code-comment">// ── COMPANIES & RECRUITERS ─────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">Company</span> {
+  id           String      @id @default(cuid())
+  name         String      @unique
+  domain       String?
+  industry     String?
+  size         String?
+  hiringStatus String?
+  recruiters   Recruiter[]
+  @@index([name])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">Recruiter</span> {
+  id           String               @id @default(cuid())
+  companyId    String
+  name         String
+  email        String?
+  linkedinUrl  String?
+  company      Company              @relation(fields: [companyId], references: [id])
+  interactions RecruiterInteraction[]
+}
+
+<span class="code-keyword">model</span> <span class="code-type">RecruiterInteraction</span> {
+  id          String    @id @default(cuid())
+  recruiterId String
+  type        String
+  content     String    @db.Text
+  occurredAt  DateTime  @default(now())
+  recruiter   Recruiter @relation(fields: [recruiterId], references: [id])
+}
+
+<span class="code-comment">// ── INTERVIEWS ─────────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">Interview</span> {
+  id            String         @id @default(cuid())
+  applicationId String
+  type          InterviewType
+  scheduledAt   DateTime
+  location      String?
+  notes         String?        @db.Text
+  outcome       String?
+  application   JobApplication @relation(fields: [applicationId], references: [id])
+  prepSessions  InterviewPrep[]
+  @@index([scheduledAt])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">InterviewPrep</span> {
+  id          String    @id @default(cuid())
+  interviewId String
+  question    String    @db.Text
+  answer      String    @db.Text
+  category    String
+  quality     Float?
+  interview   Interview @relation(fields: [interviewId], references: [id])
+}
+
+<span class="code-comment">// ── AGENT SYSTEM ───────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">AgentAction</span> {
+  id            String         @id @default(cuid())
+  applicationId String?
+  agentName     String
+  actionType    String
+  input         Json
+  output        Json?
+  status        AgentStatus    @default(PENDING)
+  startedAt     DateTime       @default(now())
+  completedAt   DateTime?
+  error         String?        @db.Text
+  traceId       String?
+  application   JobApplication? @relation(fields: [applicationId], references: [id])
+  logs          AgentLog[]
+  @@index([agentName, status])
+  @@index([traceId])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">AgentLog</span> {
+  id           String      @id @default(cuid())
+  actionId     String
+  level        String
+  message      String      @db.Text
+  metadata     Json?
+  timestamp    DateTime    @default(now())
+  action       AgentAction @relation(fields: [actionId], references: [id])
+  @@index([actionId, timestamp])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">AuditTrail</span> {
+  id         String   @id @default(cuid())
+  userId     String
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+}
+
+<span class="code-comment">// ── LEARNING SYSTEM ────────────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">LearningOutcome</span> {
+  id              String   @id @default(cuid())
+  applicationId   String   @unique
+  outcome         String
+  responseTime    Int?
+  interviewRate   Boolean  @default(false)
+  features        Json
+  recordedAt      DateTime @default(now())
+}
+
+<span class="code-keyword">model</span> <span class="code-type">StrategyAdjustment</span> {
+  id              String   @id @default(cuid())
+  parameterKey    String
+  oldValue        Json
+  newValue        Json
+  reason          String   @db.Text
+  appliedAt       DateTime @default(now())
+  performanceDelta Float?
+}
+
+<span class="code-comment">// ── VECTOR KNOWLEDGE GRAPH ─────────────────────────────────</span>
+<span class="code-keyword">model</span> <span class="code-type">Embedding</span> {
+  id         String                  @id @default(cuid())
+  jobId      String                  @unique
+  vector     Unsupported(<span class="code-string">"vector(1536)"</span>)
+  model      String                  @default(<span class="code-string">"text-embedding-3-small"</span>)
+  createdAt  DateTime                @default(now())
+  job        Job                     @relation(fields: [jobId], references: [id])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">KnowledgeNode</span> {
+  id          String          @id @default(cuid())
+  type        String
+  label       String
+  properties  Json
+  createdAt   DateTime        @default(now())
+  outEdges    KnowledgeEdge[] @relation(<span class="code-string">"SourceNode"</span>)
+  inEdges     KnowledgeEdge[] @relation(<span class="code-string">"TargetNode"</span>)
+  @@index([type])
+}
+
+<span class="code-keyword">model</span> <span class="code-type">KnowledgeEdge</span> {
+  id           String        @id @default(cuid())
+  sourceId     String
+  targetId     String
+  relationship String
+  weight       Float         @default(1.0)
+  source       KnowledgeNode @relation(<span class="code-string">"SourceNode"</span>, fields: [sourceId], references: [id])
+  target       KnowledgeNode @relation(<span class="code-string">"TargetNode"</span>, fields: [targetId], references: [id])
+  @@index([sourceId, relationship])
+}</code></pre>
+
+  <div class="callout success">
+    <div class="callout-title">Post-Migration Step</div>
+    <p>After running migrations, enable pgvector: <code>psql -U platform career_platform -c "CREATE EXTENSION IF NOT EXISTS vector;"</code>. Then add the IVFFlat index for fast similarity search: <code>CREATE INDEX ON "Embedding" USING ivfflat (vector vector_cosine_ops) WITH (lists = 100);</code></p>
+  </div>
+</div>
+
+<!-- API CONTRACT subsection -->
+<div id="sec-api">
+  <h2 class="section-heading"><span class="section-num">2.3</span>API Contract Specification</h2>
+  <p>All endpoints are prefixed <code>/api</code>. REST endpoints are handled by FastAPI. tRPC routes (used in the Next.js frontend) are defined in <code>apps/web/lib/trpc.ts</code> and proxy through to the FastAPI backend. All authenticated routes require a valid JWT in the <code>Authorization: Bearer &lt;token&gt;</code> header.</p>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Auth</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/auth/register</span>
+      <span class="endpoint-desc">Register new user — body: <code>{ email, password, fullName }</code></span>
+      <span class="endpoint-auth">public</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/auth/login</span>
+      <span class="endpoint-desc">Login → returns <code>{ accessToken, refreshToken, user }</code></span>
+      <span class="endpoint-auth">public</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/auth/me</span>
+      <span class="endpoint-desc">Get current user profile and session info</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/auth/oauth/:provider</span>
+      <span class="endpoint-desc">Initiate OAuth flow (google | github | linkedin)</span>
+      <span class="endpoint-auth">public</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/auth/refresh</span>
+      <span class="endpoint-desc">Refresh access token — body: <code>{ refreshToken }</code></span>
+      <span class="endpoint-auth">public</span>
+    </div>
+  </div>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Profile</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/profile</span>
+      <span class="endpoint-desc">Get full profile including skills, achievements, portfolio</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-put">PUT</span>
+      <span class="endpoint-path">/api/profile</span>
+      <span class="endpoint-desc">Update profile — partial update supported (PATCH semantics)</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/profile/resume/upload</span>
+      <span class="endpoint-desc">Upload base resume PDF — multipart/form-data — triggers parse agent</span>
+      <span class="endpoint-auth">JWT · 10MB</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/profile/portfolio/sync</span>
+      <span class="endpoint-desc">Trigger portfolio sync from <code>forgotten-mistory.web.app</code></span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+  </div>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Jobs</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/jobs</span>
+      <span class="endpoint-desc">List jobs — query: <code>source, minScore, status, page, limit, sort</code></span>
+      <span class="endpoint-auth">JWT · 60/min</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/jobs/:id</span>
+      <span class="endpoint-desc">Get job detail including match/ATS scores and embedding metadata</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/jobs/:id/evaluate</span>
+      <span class="endpoint-desc">Manually trigger evaluation agent for a specific job</span>
+      <span class="endpoint-auth">JWT · 10/min</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/jobs/:id/apply</span>
+      <span class="endpoint-desc">Approve and submit application — body: <code>{ resumeId, coverLetterId }</code></span>
+      <span class="endpoint-auth">JWT · 5/min</span>
+    </div>
+  </div>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Applications</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/applications</span>
+      <span class="endpoint-desc">List applications — query: <code>status, dateFrom, dateTo, page, limit</code></span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/applications/:id</span>
+      <span class="endpoint-desc">Get application with status history, agent actions, and documents</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-put">PUT</span>
+      <span class="endpoint-path">/api/applications/:id/status</span>
+      <span class="endpoint-desc">Manually update status — body: <code>{ status, reason }</code></span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/applications/:id/timeline</span>
+      <span class="endpoint-desc">Get full event timeline (status changes, agent actions, emails)</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+  </div>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Agents</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/agents/tailor-resume</span>
+      <span class="endpoint-desc">Queue resume tailoring — body: <code>{ resumeId, jobId }</code> → returns <code>{ taskId }</code></span>
+      <span class="endpoint-auth">JWT · 20/hr</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/agents/generate-cover-letter</span>
+      <span class="endpoint-desc">Generate cover letter — body: <code>{ applicationId, tone?, length? }</code></span>
+      <span class="endpoint-auth">JWT · 20/hr</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/agents/answer-question</span>
+      <span class="endpoint-desc">Answer application form question — body: <code>{ question, context, jobId }</code></span>
+      <span class="endpoint-auth">JWT · 50/hr</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/agents/status/:taskId</span>
+      <span class="endpoint-desc">Poll agent task status — returns <code>{ status, progress, result? }</code></span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/agents/approve/:taskId</span>
+      <span class="endpoint-desc">Human approval for tasks at WAITING_APPROVAL checkpoint</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+  </div>
+
+  <div class="endpoint-group">
+    <div class="endpoint-group-title">Analytics</div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/analytics/funnel</span>
+      <span class="endpoint-desc">Application funnel — counts per status stage, conversion rates</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/analytics/performance</span>
+      <span class="endpoint-desc">Response rate, interview rate, offer rate by job source and role type</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/analytics/agent-metrics</span>
+      <span class="endpoint-desc">Agent latency, error rate, token usage, cost per action</span>
+      <span class="endpoint-auth">JWT</span>
+    </div>
+  </div>
+
+  <h4 class="sub4-heading">Key TypeScript Interfaces</h4>
+<pre><code><span class="code-comment">// Shared response envelope — all API responses</span>
+<span class="code-keyword">interface</span> <span class="code-type">ApiResponse</span>&lt;T&gt; {
+  success: boolean
+  data: T
+  error?: { code: string; message: string }
+  meta?: { page: number; total: number; limit: number }
+}
+
+<span class="code-comment">// POST /api/agents/tailor-resume</span>
+<span class="code-keyword">interface</span> <span class="code-type">TailorResumeRequest</span> { resumeId: string; jobId: string }
+<span class="code-keyword">interface</span> <span class="code-type">TailorResumeResponse</span> { taskId: string; estimatedSeconds: number }
+
+<span class="code-comment">// GET /api/agents/status/:taskId</span>
+<span class="code-keyword">interface</span> <span class="code-type">AgentStatusResponse</span> {
+  taskId: string
+  status: <span class="code-string">'PENDING'</span> | <span class="code-string">'RUNNING'</span> | <span class="code-string">'WAITING_APPROVAL'</span> | <span class="code-string">'COMPLETE'</span> | <span class="code-string">'FAILED'</span>
+  progress: number      <span class="code-comment">// 0–100</span>
+  result?: ResumeVersion | CoverLetterVersion
+  checkpoint?: { message: string; approvalRequired: boolean }
+  error?: string
+}
+
+<span class="code-comment">// GET /api/analytics/funnel</span>
+<span class="code-keyword">interface</span> <span class="code-type">FunnelStage</span> {
+  status: ApplicationStatus
+  count: number
+  conversionRate: number   <span class="code-comment">// % from previous stage</span>
+}
+<span class="code-keyword">type</span> <span class="code-type">FunnelResponse</span> = FunnelStage[]</code></pre>
+</div>
+
+<!-- AUTH subsection -->
+<div id="sec-auth">
+  <h2 class="section-heading"><span class="section-num">2.4</span>Authentication Setup</h2>
+
+  <h3 class="subsection-heading"><span class="section-num">2.4.1</span>NextAuth.js Configuration</h3>
+<pre><code><span class="code-comment">// apps/web/app/api/auth/[...nextauth]/route.ts</span>
+<span class="code-keyword">import</span> NextAuth <span class="code-keyword">from</span> <span class="code-string">'next-auth'</span>
+<span class="code-keyword">import</span> GoogleProvider <span class="code-keyword">from</span> <span class="code-string">'next-auth/providers/google'</span>
+<span class="code-keyword">import</span> GitHubProvider <span class="code-keyword">from</span> <span class="code-string">'next-auth/providers/github'</span>
+<span class="code-keyword">import</span> LinkedInProvider <span class="code-keyword">from</span> <span class="code-string">'next-auth/providers/linkedin'</span>
+<span class="code-keyword">import</span> CredentialsProvider <span class="code-keyword">from</span> <span class="code-string">'next-auth/providers/credentials'</span>
+
+<span class="code-keyword">export const</span> authOptions = {
+  providers: [
+    <span class="code-func">GoogleProvider</span>({ clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! }),
+    <span class="code-func">GitHubProvider</span>({ clientId: process.env.GITHUB_CLIENT_ID!, clientSecret: process.env.GITHUB_CLIENT_SECRET! }),
+    <span class="code-func">LinkedInProvider</span>({ clientId: process.env.LINKEDIN_CLIENT_ID!, clientSecret: process.env.LINKEDIN_CLIENT_SECRET! }),
+    <span class="code-func">CredentialsProvider</span>({
+      name: <span class="code-string">'credentials'</span>,
+      credentials: { email: { type: <span class="code-string">'email'</span> }, password: { type: <span class="code-string">'password'</span> } },
+      <span class="code-keyword">async</span> <span class="code-func">authorize</span>(credentials) {
+        <span class="code-keyword">const</span> res = <span class="code-keyword">await</span> <span class="code-func">fetch</span>(<span class="code-string">`${process.env.API_URL}/api/auth/login`</span>, {
+          method: <span class="code-string">'POST'</span>, body: <span class="code-func">JSON.stringify</span>(credentials),
+          headers: { <span class="code-string">'Content-Type'</span>: <span class="code-string">'application/json'</span> }
+        })
+        <span class="code-keyword">const</span> data = <span class="code-keyword">await</span> res.<span class="code-func">json</span>()
+        <span class="code-keyword">return</span> res.ok ? data.user : <span class="code-keyword">null</span>
+      }
+    })
+  ],
+  session: { strategy: <span class="code-string">'jwt'</span>, maxAge: 30 * 24 * 60 * 60 },
+  callbacks: {
+    <span class="code-keyword">async</span> <span class="code-func">jwt</span>({ token, user }) {
+      <span class="code-keyword">if</span> (user) { token.userId = user.id; token.role = user.role }
+      <span class="code-keyword">return</span> token
+    },
+    <span class="code-keyword">async</span> <span class="code-func">session</span>({ session, token }) {
+      session.user.id = token.userId <span class="code-keyword">as</span> <span class="code-type">string</span>
+      <span class="code-keyword">return</span> session
+    }
+  }
+}</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">2.4.2</span>JWT Structure</h3>
+<pre><code><span class="code-comment">// JWT payload — issued by FastAPI, verified by Next.js middleware</span>
+{
+  <span class="code-string">"sub"</span>: <span class="code-string">"cuid_user_id"</span>,
+  <span class="code-string">"email"</span>: <span class="code-string">"vikram@example.com"</span>,
+  <span class="code-string">"role"</span>: <span class="code-string">"user"</span>,
+  <span class="code-string">"iat"</span>: 1720000000,
+  <span class="code-string">"exp"</span>: 1720086400,    <span class="code-comment">// 24h access token</span>
+  <span class="code-string">"jti"</span>: <span class="code-string">"unique_token_id"</span>  <span class="code-comment">// for revocation</span>
+}
+
+<span class="code-comment">// Environment variables required</span>
+NEXTAUTH_SECRET=<span class="code-string">"min-32-char-secret"</span>
+NEXTAUTH_URL=<span class="code-string">"http://localhost:3000"</span>
+JWT_SECRET=<span class="code-string">"same-secret-used-in-fastapi"</span>
+ACCESS_TOKEN_EXPIRE_MINUTES=<span class="code-num">1440</span>
+REFRESH_TOKEN_EXPIRE_DAYS=<span class="code-num">30</span></code></pre>
+
+  <div class="callout warning">
+    <div class="callout-title">LinkedIn OAuth Note</div>
+    <p>LinkedIn OAuth v2 requires the <code>r_liteprofile</code> and <code>r_emailaddress</code> scopes. The callback URL must be registered in the LinkedIn Developer Portal as <code>{NEXTAUTH_URL}/api/auth/callback/linkedin</code>. LinkedIn profile sync for job discovery requires a separate <code>w_member_social</code> scope and must be requested explicitly in the OAuth consent flow.</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3: PHASE 2 ==================== -->
+<div class="section-break" id="sec-phase2">
+  <div class="phase-header">
+    <div class="phase-label">Section 03 · Phase 2 · Weeks 5–8</div>
+    <div class="phase-title">Agent Implementation</div>
+    <div class="phase-subtitle">LangGraph framework, 20 agent specifications, and orchestration workflows</div>
+  </div>
+  <h2 class="section-heading" id="sec-agent-framework"><span class="section-num">3.1</span>Agent Framework Setup</h2>
+  <p>All agents are built on <strong>LangGraph</strong> — a graph-based orchestration framework that enables stateful, multi-step agent workflows with first-class support for human-in-the-loop checkpoints. Each agent is a directed graph: nodes are Python functions, edges are conditional routing logic.</p>
+
+  <h3 class="subsection-heading"><span class="section-num">3.1.1</span>Core State Schema</h3>
+<pre><code><span class="code-comment"># packages/agents/schemas/base.py</span>
+<span class="code-keyword">from</span> typing <span class="code-keyword">import</span> TypedDict, Optional, List, Annotated
+<span class="code-keyword">from</span> langgraph.graph <span class="code-keyword">import</span> add_messages
+
+<span class="code-keyword">class</span> <span class="code-type">AgentState</span>(TypedDict):
+    messages:        Annotated[list, add_messages]
+    job_id:          str
+    application_id:  Optional[str]
+    resume_id:       Optional[str]
+    context:         dict            <span class="code-comment"># Vikram's profile, skills, achievements</span>
+    tool_results:    List[dict]
+    current_step:    str
+    approval_needed: bool
+    error:           Optional[str]
+    trace_id:        Optional[str]   <span class="code-comment"># Langfuse trace ID</span></code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">3.1.2</span>Graph Boilerplate</h3>
+<pre><code><span class="code-comment"># packages/agents/graphs/base_graph.py</span>
+<span class="code-keyword">from</span> langgraph.graph <span class="code-keyword">import</span> StateGraph, END
+<span class="code-keyword">from</span> langgraph.checkpoint.postgres <span class="code-keyword">import</span> PostgresSaver
+<span class="code-keyword">from</span> langfuse.langchain <span class="code-keyword">import</span> CallbackHandler
+<span class="code-keyword">import</span> os
+
+<span class="code-keyword">def</span> <span class="code-func">build_graph</span>(state_class, nodes: dict, edges: list, checkpoints=True):
+    graph = StateGraph(state_class)
+    <span class="code-keyword">for</span> name, fn <span class="code-keyword">in</span> nodes.items():
+        graph.<span class="code-func">add_node</span>(name, fn)
+    <span class="code-keyword">for</span> src, dst, condition <span class="code-keyword">in</span> edges:
+        <span class="code-keyword">if</span> condition:
+            graph.<span class="code-func">add_conditional_edges</span>(src, condition)
+        <span class="code-keyword">else</span>:
+            graph.<span class="code-func">add_edge</span>(src, dst)
+    checkpointer = PostgresSaver.<span class="code-func">from_conn_string</span>(
+        os.environ[<span class="code-string">"DATABASE_URL"</span>]
+    ) <span class="code-keyword">if</span> checkpoints <span class="code-keyword">else</span> None
+    <span class="code-keyword">return</span> graph.<span class="code-func">compile</span>(checkpointer=checkpointer, interrupt_before=[<span class="code-string">"human_review"</span>])
+
+<span class="code-comment"># Langfuse callback — attach to every LLM call</span>
+langfuse_handler = CallbackHandler(
+    public_key=os.environ[<span class="code-string">"LANGFUSE_PUBLIC_KEY"</span>],
+    secret_key=os.environ[<span class="code-string">"LANGFUSE_SECRET_KEY"</span>],
+    host=os.environ.get(<span class="code-string">"LANGFUSE_HOST"</span>, <span class="code-string">"https://cloud.langfuse.com"</span>)
+)</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">3.1.3</span>Tool Definition Pattern</h3>
+<pre><code><span class="code-comment"># packages/agents/tools/job_tools.py</span>
+<span class="code-keyword">from</span> langchain_core.tools <span class="code-keyword">import</span> tool
+<span class="code-keyword">from</span> pydantic <span class="code-keyword">import</span> BaseModel, Field
+
+<span class="code-keyword">class</span> <span class="code-type">SearchJobsInput</span>(BaseModel):
+    query:     str   = Field(description=<span class="code-string">"Job title or keyword"</span>)
+    location:  str   = Field(default=<span class="code-string">"Melbourne, VIC"</span>)
+    source:    str   = Field(default=<span class="code-string">"linkedin"</span>)
+    max_results: int = Field(default=<span class="code-num">20</span>)
+
+<span class="code-decorator">@tool</span>
+<span class="code-keyword">async def</span> <span class="code-func">search_jobs</span>(input: SearchJobsInput) -&gt; list[dict]:
+    <span class="code-string">"""Search job boards for matching positions."""</span>
+    <span class="code-comment"># Implementation: Playwright scraper → returns list of job dicts</span>
+    <span class="code-keyword">from</span> workers.scrapers <span class="code-keyword">import</span> get_scraper
+    scraper = <span class="code-func">get_scraper</span>(input.source)
+    <span class="code-keyword">return await</span> scraper.<span class="code-func">search</span>(input.query, input.location, input.max_results)</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">3.1.4</span>Error Handling Pattern</h3>
+<pre><code><span class="code-comment"># Standard error handling for all agent nodes</span>
+<span class="code-keyword">import</span> functools
+<span class="code-keyword">from</span> tenacity <span class="code-keyword">import</span> retry, stop_after_attempt, wait_exponential
+
+<span class="code-keyword">def</span> <span class="code-func">agent_node</span>(name: str):
+    <span class="code-keyword">def</span> <span class="code-func">decorator</span>(fn):
+        @<span class="code-func">retry</span>(stop=stop_after_attempt(<span class="code-num">3</span>), wait=wait_exponential(min=<span class="code-num">1</span>, max=<span class="code-num">10</span>))
+        @functools.<span class="code-func">wraps</span>(fn)
+        <span class="code-keyword">async def</span> <span class="code-func">wrapper</span>(state: AgentState) -&gt; AgentState:
+            <span class="code-keyword">try</span>:
+                result = <span class="code-keyword">await</span> <span class="code-func">fn</span>(state)
+                <span class="code-keyword">await</span> <span class="code-func">log_agent_action</span>(name, state[<span class="code-string">"trace_id"</span>], result)
+                <span class="code-keyword">return</span> result
+            <span class="code-keyword">except</span> Exception <span class="code-keyword">as</span> e:
+                <span class="code-keyword">await</span> <span class="code-func">log_error</span>(name, state, str(e))
+                <span class="code-keyword">return</span> {**state, <span class="code-string">"error"</span>: str(e), <span class="code-string">"current_step"</span>: <span class="code-string">"failed"</span>}
+        <span class="code-keyword">return</span> wrapper
+    <span class="code-keyword">return</span> decorator</code></pre>
+</div>
+
+<!-- Agent Specs subsection -->
+<div id="sec-agent-specs">
+  <h2 class="section-heading"><span class="section-num">3.2</span>Individual Agent Specifications (20 Agents)</h2>
+  <p>Each specification below defines the exact system prompt, input/output schema, tool list, and example invocation for every agent in the platform. All agents are housed in <code>packages/agents/graphs/</code> with corresponding prompt files in <code>packages/agents/prompts/</code>.</p>
+
+  <h3 class="subsection-heading"><span class="section-num">3.2.1</span>Tier 1 — Discovery &amp; Evaluation (Agents 1–4)</h3>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">1. Job Discovery Agent</div>
+      <span class="agent-tag">discovery_agent</span>
+    </div>
+    <p class="agent-desc">Scans LinkedIn, Seek, and Indeed every 30 minutes for roles matching Vikram's target profile. Scores raw listings and forwards above-threshold jobs to the Evaluation Agent.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>search_linkedin, search_seek, search_indeed, filter_by_criteria</span></span>
+      <span class="agent-meta-item">Trigger: <span>CRON every 30min</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """You are the Job Discovery Agent for Vikram Deshpande, a Melbourne-based
+Technical Delivery Lead and AI Solutions Architect (15+ years experience).
+
+TARGET ROLES: AI Solutions Architect | Senior Delivery Lead | Technical Product Owner
+  | Scrum Master | Platform Engineering Lead | AI/ML Program Manager
+TARGET COMPANIES: ANZ, NAB, Telstra, ATO, Westpac, Commonwealth Bank, Atlassian, Canva,
+  KPMG, Deloitte, Accenture, AWS, Microsoft, Google
+LOCATION: Melbourne, VIC (remote/hybrid acceptable)
+SALARY RANGE: AUD 180,000–230,000
+
+FILTERING RULES:
+1. Match score = weighted_sum(title_match * 0.35, skills_overlap * 0.30,
+   company_target * 0.20, location_match * 0.15)
+2. Forward to Evaluation Agent if match_score >= 0.75
+3. Flag NEEDS_APPROVAL if match_score 0.65–0.74
+4. SKIP if match_score < 0.65 or if role is purely individual-contributor (no leadership)
+5. SKIP duplicate postings (same role within 7 days at same company)
+
+OUTPUT: Return structured job objects with source, url, match_score, reasoning."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">2. Job Evaluation Agent</div>
+      <span class="agent-tag">evaluation_agent</span>
+    </div>
+    <p class="agent-desc">Deep-dives into a specific job posting to produce a comprehensive fit analysis, ATS keyword extraction, and application recommendation. Reads the full JD and cross-references against Vikram's profile.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>get_job_details, get_profile, compute_ats_score, get_similar_roles</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """You are the Job Evaluation Agent. Given a job description and Vikram
+Deshpande's profile, produce a detailed fit analysis.
+
+VIKRAM'S KEY DIFFERENTIATORS:
+- 92% automation efficiency gain at ATO (COBOL/mainframe test harness)
+- $5M+ portfolio management at ANZ with 100% compliance
+- Real-time telemetry (10k+ concurrent devices, P95 latency < 200ms)
+- LangChain/Langfuse LLM pipeline with 38% error reduction
+- 15+ years spanning government, finance, and telco
+- Multi-Agent Orchestrator (JARVIS) — GitHub: @Victordtesla24
+
+OUTPUT FORMAT:
+{
+  "overall_score": 0.0–1.0,
+  "ats_score": 0–100,
+  "key_matches": ["..."],
+  "gaps": ["..."],
+  "recommended_emphasis": ["..."],   // which achievements to highlight
+  "confidence_level": "AUTO_APPLY | NEEDS_APPROVAL | SKIP",
+  "reasoning": "..."
+}"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">3. ATS Optimization Agent</div>
+      <span class="agent-tag">ats_agent</span>
+    </div>
+    <p class="agent-desc">Runs the ATS scoring algorithm against a resume version and job description. Produces keyword injection recommendations and validates the final resume scores above threshold.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>extract_keywords, compare_embeddings, get_resume_text</span></span>
+    </div>
+<pre><code><span class="code-comment"># ATS scoring algorithm</span>
+<span class="code-keyword">def</span> <span class="code-func">calculate_ats_score</span>(resume_text: str, job_description: str) -&gt; dict:
+    <span class="code-comment"># 1. Hard keyword matching (exact + stemmed)</span>
+    jd_keywords   = <span class="code-func">extract_keywords</span>(job_description, top_n=<span class="code-num">50</span>)
+    resume_terms  = <span class="code-func">extract_keywords</span>(resume_text,    top_n=<span class="code-num">100</span>)
+    keyword_score = <span class="code-func">jaccard_similarity</span>(jd_keywords, resume_terms) * <span class="code-num">100</span>
+
+    <span class="code-comment"># 2. Semantic similarity (pgvector cosine distance)</span>
+    jd_vec        = <span class="code-func">embed_text</span>(job_description)
+    resume_vec    = <span class="code-func">embed_text</span>(resume_text)
+    semantic_score = (<span class="code-num">1</span> - <span class="code-func">cosine_distance</span>(jd_vec, resume_vec)) * <span class="code-num">100</span>
+
+    <span class="code-comment"># 3. Experience level match</span>
+    exp_score = <span class="code-func">evaluate_experience_match</span>(
+        resume_years=<span class="code-num">15</span>, required_years=<span class="code-func">parse_years_required</span>(job_description)
+    ) * <span class="code-num">100</span>
+
+    <span class="code-comment"># Weighted final score</span>
+    final = (<span class="code-num">0.45</span> * keyword_score + <span class="code-num">0.35</span> * semantic_score + <span class="code-num">0.20</span> * exp_score)
+    <span class="code-keyword">return</span> { <span class="code-string">"score"</span>: round(final, <span class="code-num">1</span>), <span class="code-string">"keyword"</span>: keyword_score,
+             <span class="code-string">"semantic"</span>: semantic_score, <span class="code-string">"experience"</span>: exp_score,
+             <span class="code-string">"missing_keywords"</span>: list(jd_keywords - resume_terms) }</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">4. Company Research Agent</div>
+      <span class="agent-tag">company_agent</span>
+    </div>
+    <p class="agent-desc">Researches a target company before application — culture, recent news, leadership, current tech stack, open headcount signals — to inform cover letter personalization.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>web_search, scrape_linkedin_company, get_glassdoor_reviews</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Research [company_name] for a job application by Vikram Deshpande.
+Focus on:
+1. Recent AI/digital transformation initiatives (last 12 months)
+2. Engineering culture and team structure
+3. Key pain points this role likely addresses
+4. Named executives and their LinkedIn presence
+5. Tech stack signals from job ads and engineering blogs
+
+Format as structured JSON for use by the Cover Letter Agent."""</code></pre>
+  </div>
+
+  <h3 class="subsection-heading"><span class="section-num">3.2.2</span>Tier 2 — Document Generation (Agents 5–9)</h3>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">5. Resume Tailoring Agent</div>
+      <span class="agent-tag">resume_tailor_agent</span>
+    </div>
+    <p class="agent-desc">The most critical agent. Tailors Vikram's base resume for a specific job while preserving the exact two-column, coral/orange-accented visual layout. Pipeline: parse → enrich → map → rewrite → validate → export.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>parse_resume_json, get_job_evaluation, reorder_bullets, validate_ats_score, export_pdf</span></span>
+      <span class="agent-meta-item">Checkpoint: <span>human_review</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """You are the Resume Tailoring Agent for Vikram Deshpande.
+
+CRITICAL FORMATTING RULES — NEVER VIOLATE:
+1. PRESERVE the two-column asymmetric layout (left sidebar 30%, main 70%)
+2. PRESERVE the coral/orange (#FF6B35) title box and section icons
+3. PRESERVE the Inter/Montserrat font hierarchy
+4. NEVER add new sections — only reorder, rephrase, and emphasize existing content
+5. MAX 15 content changes per tailoring pass (bullets reordered/reworded)
+6. NEVER fabricate metrics or achievements — only use what is in source_resume
+
+TAILORING STRATEGY:
+1. Move most-relevant experience to top of each section
+2. Mirror exact keywords from job description in first bullet of each role
+3. Quantify every achievement — use Vikram's actual metrics:
+   - ATO: 92% effort reduction, 3hrs → 15min, 95%+ completion rate
+   - ANZ: 30% delivery efficiency, 15% cost reduction, 10k+ devices, P95<200ms
+   - AI: 38% error reduction, $5M+ portfolio, 40+ resources, 100% compliance
+4. Ensure ATS score >= 70 before approving output
+5. If ATS score < 70 after 2 rewrites, flag NEEDS_HUMAN_REVIEW
+
+PIPELINE: parse_json → keyword_inject → reorder_bullets → validate_ats → export_pdf
+CHECKPOINT: Always interrupt for human_review before final PDF export."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">6. Cover Letter Agent</div>
+      <span class="agent-tag">cover_letter_agent</span>
+    </div>
+    <p class="agent-desc">Generates a personalised, compelling cover letter in Vikram's voice. Integrates company research, role context, and specific achievement evidence from the resume.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>get_company_research, get_job_evaluation, get_achievements_by_relevance</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Write a cover letter for Vikram Deshpande applying to [job_title] at
+[company_name]. Style: confident, data-driven, forward-looking. Tone: senior executive
+but personable. NOT generic — every paragraph must reference specifics.
+
+STRUCTURE (max 400 words, 4 paragraphs):
+1. Hook: Name the specific program/initiative at [company] that excites Vikram. Why now.
+2. Evidence: 2–3 most relevant quantified achievements (use actual numbers from profile)
+3. Insight: One specific technical or strategic insight about [company]'s challenge
+4. CTA: Clear next step, mention portfolio at https://forgotten-mistory.web.app
+
+VOICE RULES:
+- First person, active verbs
+- No "I am excited to apply" openers
+- Lead with impact, end with specificity
+- Reference Vikram's GitHub @Victordtesla24 for technical roles
+
+OUTPUT: Plain text, max 400 words. No HTML. No markdown formatting."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">7. Portfolio Sync Agent</div>
+      <span class="agent-tag">portfolio_agent</span>
+    </div>
+    <p class="agent-desc">Crawls <code>forgotten-mistory.web.app</code> and GitHub @Victordtesla24 to extract project updates, new metrics, and technology additions for use by the Resume and Cover Letter agents.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>scrape_portfolio_url, fetch_github_repos, update_portfolio_db</span></span>
+      <span class="agent-meta-item">Trigger: <span>CRON daily</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Extract structured project data from Vikram Deshpande's portfolio at
+https://forgotten-mistory.web.app and GitHub @Victordtesla24.
+
+For each project, extract:
+- name, description, tech_stack[], metrics[], github_url, demo_url
+- evidence_links[] (YouTube demos, documentation URLs)
+
+Known projects to update: JARVIS (telemetry/Jira), ATO Evidence Harness (COBOL),
+Vedic Astronomy Platform, Multi-Agent Orchestrator, AI Image Enhancer.
+Flag any new projects not in the database for manual review."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">8. Question Answering Agent</div>
+      <span class="agent-tag">qa_agent</span>
+    </div>
+    <p class="agent-desc">Answers free-text application questions (motivation questions, situational/behavioural prompts, salary expectations, availability) drawing exclusively from Vikram's verified profile data.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>get_profile_context, retrieve_similar_answers, get_achievements</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Answer the application question below as Vikram Deshpande.
+
+CONTEXT RULES:
+- Use ONLY verified data from Vikram's profile — never fabricate
+- For behavioural questions: use STAR format (Situation, Task, Action, Result)
+- For technical questions: reference specific projects from GitHub @Victordtesla24
+- For salary questions: respond "AUD 180,000–230,000 depending on total package"
+- For availability: respond "Available immediately / 2 weeks notice"
+- Max 250 words unless the question explicitly requires more
+- Match the tone of the question (formal, casual, technical)"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">9. Document Quality Agent</div>
+      <span class="agent-tag">quality_agent</span>
+    </div>
+    <p class="agent-desc">Final quality gate before submission. Checks resume and cover letter for grammar, ATS score, formatting integrity, factual accuracy (no hallucinated metrics), and completeness.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>grammar_check, validate_metrics_against_profile, compute_ats_score</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Perform quality assurance on the resume/cover letter before submission.
+
+MANDATORY CHECKS (ALL must pass):
+1. ATS score >= 70 (reject if lower — return to Resume Tailor Agent)
+2. Zero hallucinated metrics (validate every number against source profile)
+3. No formatting anomalies (2-column layout intact, fonts consistent)
+4. Cover letter < 400 words, resume <= 2 pages
+5. Contact details present: Melbourne location, LinkedIn, GitHub @Victordtesla24
+6. No generic phrases: "team player", "hard worker", "results-driven"
+
+OUTPUT: { "passed": bool, "issues": [], "ats_score": float, "word_count": int }
+If passed=false, list specific issues with suggested fixes."""</code></pre>
+  </div>
+
+  <h3 class="subsection-heading"><span class="section-num">3.2.3</span>Tier 3 — Submission &amp; Communication (Agents 10–14)</h3>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">10. Form Detection Agent</div>
+      <span class="agent-tag">form_agent</span>
+    </div>
+    <p class="agent-desc">Uses Playwright to analyze an application form structure — field labels, types, required/optional status — and generates a field mapping JSON for the Submission Agent.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>playwright_get_form, analyze_dom_structure, map_fields_to_profile</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Analyze the application form DOM structure and map each field to
+Vikram's profile data.
+
+FIELD MAPPING PRIORITY:
+1. Identify all required fields (look for *, 'required', aria-required=true)
+2. Map standard fields: name, email, phone, location, resume upload, cover letter
+3. Detect custom questions — pass each to the QA Agent for answering
+4. Flag file upload fields — map to pre-generated resume/cover letter PDFs
+5. Detect work authorization questions: answer "Australian Citizen/PR"
+
+OUTPUT: { "fields": [{ "selector": "", "type": "", "mapped_value": "", "confidence": 0.0 }],
+          "custom_questions": [], "file_uploads": [] }"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">11. Application Submission Agent</div>
+      <span class="agent-tag">submission_agent</span>
+    </div>
+    <p class="agent-desc">Executes the automated form submission via Playwright. Fills fields, uploads files, clicks submit, and captures screenshot evidence. Verifies successful submission via confirmation page detection.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>playwright_fill_form, playwright_upload_file, playwright_screenshot, verify_confirmation</span></span>
+      <span class="agent-meta-item">Checkpoint: <span>human_review (confidence &lt; 0.85)</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Execute the job application form submission for Vikram Deshpande.
+
+SUBMISSION RULES:
+1. STOP and await human approval if confidence < 0.85 on any field mapping
+2. Take pre-fill screenshot (evidence of form state before submission)
+3. Fill fields in order: identity → contact → work history → documents → questions
+4. For file uploads: use pre-generated tailored resume PDF path
+5. Verify submission: look for confirmation text, order ID, or redirect to success page
+6. Take post-submit screenshot as evidence
+7. If submission fails: do NOT retry automatically — flag for human review
+8. Rate limit: max 10 applications per day, min 2 minute gap between submissions
+
+EVIDENCE: Store screenshot_url, confirmation_text, submitted_at in database."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">12. Email Classification Agent</div>
+      <span class="agent-tag">email_agent</span>
+    </div>
+    <p class="agent-desc">Monitors Vikram's inbox for application-related emails. Classifies each email (confirmation, rejection, interview request, recruiter outreach) and routes to the appropriate response agent.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>gmail_list_unread, classify_email, extract_calendar_invite, update_application_status</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Classify incoming emails related to job applications for Vikram Deshpande.
+
+CLASSIFICATION RULES:
+- APPLICATION_CONFIRMATION: automated receipt, "we have received your application"
+- REJECTION: "not moving forward", "other candidates", "unsuccessful"
+- INTERVIEW_REQUEST: scheduling language, Calendly links, proposed times
+- RECRUITER_OUTREACH: unsolicited recruiter contact with new opportunity
+- INFORMATION_REQUEST: additional documents or information needed
+- OFFER: compensation details, start date, contract attached
+- UNKNOWN: forward to human review
+
+OUTPUT: { "classification": "", "company": "", "role": "", "action_required": bool,
+          "suggested_response": "", "application_id": "" }"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">13. Email Response Agent</div>
+      <span class="agent-tag">email_response_agent</span>
+    </div>
+    <p class="agent-desc">Drafts responses to recruiter emails and interview requests in Vikram's voice. All responses require human approval before sending.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Checkpoint: <span>human_review (always)</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Draft an email response as Vikram Deshpande to [email_classification].
+
+TONE GUIDELINES:
+- Recruiter outreach: warm, direct, ask for specifics (company, salary, role)
+- Interview request: enthusiastic, confirm details, suggest times if asked
+- Information request: prompt, thorough, professional
+- NEVER auto-respond to offers without explicit human approval
+
+SIGN-OFF: "Kind regards, Vikram Deshpande | LinkedIn: vikramdeshpande.io"
+ALWAYS flag as NEEDS_HUMAN_APPROVAL before sending."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">14. Calendar Agent</div>
+      <span class="agent-tag">calendar_agent</span>
+    </div>
+    <p class="agent-desc">Extracts interview times from emails and calendar invites. Creates Interview records in the database and triggers the Interview Prep Agent. Detects conflicts with existing calendar events.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>extract_datetime_nlp, google_calendar_check, create_interview_record</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Extract interview scheduling details and create a calendar entry.
+
+EXTRACTION RULES:
+1. Parse natural language dates: "next Tuesday at 2pm AEST" → ISO 8601
+2. Detect interview type: phone, video (Zoom/Teams/Meet link present), on-site (address)
+3. Check Google Calendar for conflicts on that day
+4. Create Interview record: { scheduled_at, type, location/url, company, role }
+5. Auto-trigger Interview Prep Agent 24h before scheduled time"""</code></pre>
+  </div>
+
+  <h3 class="subsection-heading"><span class="section-num">3.2.4</span>Tier 4 — Interview &amp; Learning (Agents 15–20)</h3>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">15. Interview Prep Agent</div>
+      <span class="agent-tag">interview_prep_agent</span>
+    </div>
+    <p class="agent-desc">Generates 20–30 role-specific interview questions with structured STAR answers drawn from Vikram's profile. Covers technical, behavioural, and situational questions for the specific company and role.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>get_job_evaluation, get_company_research, get_achievements, get_past_prep_sessions</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Generate interview preparation materials for Vikram Deshpande
+interviewing for [job_title] at [company_name].
+
+QUESTION CATEGORIES (min 5 per category):
+1. Behavioural: STAR-format answers using specific ANZ/ATO/NAB achievements
+2. Technical: AI/ML architecture, LangGraph, Langfuse, Kubernetes, COBOL legacy
+3. Leadership: team of 40 at ANZ, $5M portfolio, PI planning at ATO
+4. Situational: "How would you handle..." scenarios specific to [company]'s context
+5. Questions to ask: 3 insightful questions that demonstrate research into [company]
+
+ANSWER FORMAT per question:
+{ "question": "", "category": "", "answer": { "S": "", "T": "", "A": "", "R": "" },
+  "key_metrics": [], "follow_up_risk": "" }"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">16. Outcome Tracking Agent</div>
+      <span class="agent-tag">outcome_agent</span>
+    </div>
+    <p class="agent-desc">Records application outcomes (response received, interview rate, offer rate) and links outcomes to the specific resume version, cover letter, and agent parameters used. Powers the learning pipeline.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>update_application_status, record_learning_outcome, compute_feature_vector</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Record and classify the outcome of job application [application_id].
+
+FEATURE EXTRACTION for learning:
+- ats_score, match_score, cover_letter_length, tailoring_changes_count
+- company_size, industry, job_source, days_since_posting
+- response_time_days (null if no response after 21 days = implicit rejection)
+- interview_achieved (bool), offer_achieved (bool)
+
+Store as LearningOutcome record for use by Strategy Adjustment Agent."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">17. Strategy Adjustment Agent</div>
+      <span class="agent-tag">strategy_agent</span>
+    </div>
+    <p class="agent-desc">Analyzes accumulated outcome data to identify which parameters are driving interview rates. Adjusts thresholds, prompts, and targeting parameters with statistical confidence gates.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Trigger: <span>CRON weekly + after 10 new outcomes</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Analyze application outcomes and recommend parameter adjustments.
+
+ANALYSIS REQUIREMENTS:
+- Minimum 20 applications before making threshold adjustments
+- Statistical significance: p < 0.05 using two-sample proportion test
+- Compare: high_ats (>=80) vs low_ats (70-79) interview rates
+- Compare: cover_letter_short (<300w) vs long (>300w) response rates
+- Segment by: job_source, company_size, role_type
+
+ADJUSTMENT LIMITS (never exceed):
+- min_match_score: floor 0.65, ceiling 0.90
+- auto_apply_confidence: floor 0.80, ceiling 0.95
+- min_ats_score: floor 65, ceiling 85
+
+OUTPUT: [{ "parameter": "", "current_value": "", "recommended_value": "",
+           "evidence": "", "expected_improvement": "" }]"""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">18. A/B Testing Agent</div>
+      <span class="agent-tag">ab_testing_agent</span>
+    </div>
+    <p class="agent-desc">Manages controlled experiments on resume variants and cover letter styles. Assigns applications to variant A or B, tracks outcomes separately, and reports statistical results.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>assign_variant, track_experiment_outcome, compute_significance</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Manage A/B experiments on application materials.
+
+CURRENT EXPERIMENTS:
+- EXP-001: Cover letter opening (hook vs achievement-first) — target n=30
+- EXP-002: Resume summary inclusion vs exclusion — target n=40
+- EXP-003: Skills section position (sidebar vs body) — target n=50
+
+ASSIGNMENT: Use consistent hashing on application_id for deterministic assignment.
+STOPPING: Stop experiment when target n reached or p < 0.05, whichever comes first.
+REPORT: Weekly summary with confidence intervals and recommendation."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">19. Network Intelligence Agent</div>
+      <span class="agent-tag">network_agent</span>
+    </div>
+    <p class="agent-desc">Identifies first- and second-degree LinkedIn connections at target companies. Suggests warm outreach messages and tracks referral potential before or during application processes.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o</span></span>
+      <span class="agent-meta-item">Tools: <span>search_linkedin_connections, get_company_employees, draft_connection_message</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Identify network connections at [company_name] for Vikram Deshpande.
+
+SEARCH STRATEGY:
+1. First-degree: direct connections at [company] (via LinkedIn API)
+2. Second-degree: connections of connections
+3. Alumni: Monash University (MCom 2010), University of Melbourne (BEng 2007)
+4. Past employers: ANZ, NAB, Microsoft, Telstra, ATO — look for shared alumni
+
+OUTREACH TEMPLATE: Personal, specific, non-transactional. Reference shared context.
+Flag: human_review_required = true for all outreach messages."""</code></pre>
+  </div>
+
+  <div class="agent-card">
+    <div class="agent-card-header">
+      <div class="agent-name">20. Dashboard Analytics Agent</div>
+      <span class="agent-tag">analytics_agent</span>
+    </div>
+    <p class="agent-desc">Aggregates platform-wide metrics for the Next.js dashboard. Computes funnel conversion rates, agent performance metrics, source effectiveness, and provides weekly summary digests.</p>
+    <div class="agent-meta">
+      <span class="agent-meta-item">Model: <span>gpt-4o-mini</span></span>
+      <span class="agent-meta-item">Tools: <span>query_analytics_db, compute_conversion_funnel, generate_weekly_digest</span></span>
+      <span class="agent-meta-item">Trigger: <span>CRON daily 06:00 AEST</span></span>
+    </div>
+<pre><code>SYSTEM_PROMPT = """Generate analytics summary for Vikram's job search dashboard.
+
+METRICS TO COMPUTE:
+- Total discovered → evaluated → applied → responded → interviewed → offered
+- Conversion rate at each funnel stage
+- Best performing: job_source, company_size, role_type, cover_letter_style
+- Agent performance: avg latency per agent, error rate, token cost/application
+- Time to response (mean, median, P90) by company and source
+- Active applications by status with age indicators (>14 days = stale)
+
+OUTPUT: Structured JSON for /api/analytics/* endpoints."""</code></pre>
+  </div>
+</div>
+
+<!-- Orchestration subsection -->
+<div id="sec-orchestration">
+  <h2 class="section-heading"><span class="section-num">3.3</span>Orchestration Graph</h2>
+  <p>The Master Orchestration Graph coordinates all 20 agents. It is triggered by the Job Discovery Agent's output and routes jobs through the full application pipeline with conditional branching at each decision point.</p>
+<pre><code><span class="code-comment"># packages/agents/graphs/orchestration.py</span>
+<span class="code-keyword">from</span> langgraph.graph <span class="code-keyword">import</span> StateGraph, END
+<span class="code-keyword">from</span> .agents <span class="code-keyword">import</span> *
+
+<span class="code-keyword">def</span> <span class="code-func">build_orchestration_graph</span>():
+    graph = StateGraph(AgentState)
+
+    <span class="code-comment"># Nodes</span>
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"evaluate"</span>,         evaluation_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"research_company"</span>,  company_research_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"tailor_resume"</span>,    resume_tailoring_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"generate_cl"</span>,      cover_letter_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"quality_check"</span>,    quality_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"human_review"</span>,     human_review_node)    <span class="code-comment"># interrupt point</span>
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"detect_form"</span>,      form_detection_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"submit"</span>,           submission_agent)
+    graph.<span class="code-func">add_node</span>(<span class="code-string">"track_outcome"</span>,    outcome_tracking_agent)
+
+    <span class="code-comment"># Entry point</span>
+    graph.<span class="code-func">set_entry_point</span>(<span class="code-string">"evaluate"</span>)
+
+    <span class="code-comment"># Conditional routing after evaluation</span>
+    <span class="code-keyword">def</span> <span class="code-func">route_after_evaluation</span>(state):
+        level = state[<span class="code-string">"confidence_level"</span>]
+        <span class="code-keyword">if</span> level == <span class="code-string">"AUTO_APPLY"</span>:   <span class="code-keyword">return</span> <span class="code-string">"research_company"</span>
+        <span class="code-keyword">if</span> level == <span class="code-string">"NEEDS_APPROVAL"</span>: <span class="code-keyword">return</span> <span class="code-string">"human_review"</span>
+        <span class="code-keyword">return</span> END  <span class="code-comment"># SKIP</span>
+
+    graph.<span class="code-func">add_conditional_edges</span>(<span class="code-string">"evaluate"</span>, route_after_evaluation,
+        { <span class="code-string">"research_company"</span>: <span class="code-string">"research_company"</span>,
+          <span class="code-string">"human_review"</span>: <span class="code-string">"human_review"</span>, END: END })
+
+    <span class="code-comment"># Sequential pipeline: research → tailor → cover letter → quality</span>
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"research_company"</span>, <span class="code-string">"tailor_resume"</span>)
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"tailor_resume"</span>,    <span class="code-string">"generate_cl"</span>)
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"generate_cl"</span>,      <span class="code-string">"quality_check"</span>)
+
+    <span class="code-comment"># Quality gate routing</span>
+    <span class="code-keyword">def</span> <span class="code-func">route_after_quality</span>(state):
+        <span class="code-keyword">if</span> state[<span class="code-string">"quality_passed"</span>] <span class="code-keyword">and</span> state[<span class="code-string">"confidence_level"</span>] == <span class="code-string">"AUTO_APPLY"</span>:
+            <span class="code-keyword">return</span> <span class="code-string">"detect_form"</span>
+        <span class="code-keyword">return</span> <span class="code-string">"human_review"</span>   <span class="code-comment"># anything else needs eyes on it</span>
+
+    graph.<span class="code-func">add_conditional_edges</span>(<span class="code-string">"quality_check"</span>, route_after_quality,
+        { <span class="code-string">"detect_form"</span>: <span class="code-string">"detect_form"</span>, <span class="code-string">"human_review"</span>: <span class="code-string">"human_review"</span> })
+
+    <span class="code-comment"># After human approval, resume at detect_form</span>
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"human_review"</span>,    <span class="code-string">"detect_form"</span>)
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"detect_form"</span>,     <span class="code-string">"submit"</span>)
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"submit"</span>,           <span class="code-string">"track_outcome"</span>)
+    graph.<span class="code-func">add_edge</span>(<span class="code-string">"track_outcome"</span>,   END)
+
+    <span class="code-keyword">return</span> graph.<span class="code-func">compile</span>(
+        checkpointer=PostgresSaver.<span class="code-func">from_conn_string</span>(os.environ[<span class="code-string">"DATABASE_URL"</span>]),
+        interrupt_before=[<span class="code-string">"human_review"</span>]
+    )</code></pre>
+
+  <div class="callout info">
+    <div class="callout-title">Parallel Execution</div>
+    <p>Company Research and ATS scoring run in parallel using LangGraph's <code>Send()</code> API. Both complete before the Resume Tailoring Agent begins. This cuts per-application latency by ~40% for the document preparation phase. Implement with: <code>graph.add_node("parallel_prep", RunnableParallel({"company": company_research_agent, "ats": ats_agent}))</code>.</p>
+  </div>
+</div>
+
+<!-- ==================== SECTION 4: PHASE 3 ==================== -->
+<div class="section-break" id="sec-phase3">
+  <div class="phase-header">
+    <div class="phase-label">Section 04 · Phase 3 · Weeks 9–12</div>
+    <div class="phase-title">Automation</div>
+    <div class="phase-subtitle">Job board integration, application submission, and email handling</div>
+  </div>
+  <h2 class="section-heading" id="sec-scraping"><span class="section-num">4.1</span>Job Board Integration</h2>
+  <p>Job board integration uses Playwright running in headless Chromium. Each scraper is a class implementing the <code>JobBoardScraper</code> interface. Rate limiting, session rotation, and anti-detection are handled by the <code>ScraperManager</code>.</p>
+
+  <h3 class="subsection-heading"><span class="section-num">4.1.1</span>LinkedIn Scraping Strategy</h3>
+<pre><code><span class="code-comment"># apps/api/workers/scrapers/linkedin.py</span>
+<span class="code-keyword">from</span> playwright.async_api <span class="code-keyword">import</span> async_playwright
+<span class="code-keyword">import</span> asyncio, random
+
+<span class="code-keyword">class</span> <span class="code-type">LinkedInScraper</span>:
+    BASE_URL = <span class="code-string">"https://www.linkedin.com/jobs/search/"</span>
+    MIN_DELAY = <span class="code-num">3.0</span>    <span class="code-comment"># seconds between requests</span>
+    MAX_DELAY = <span class="code-num">8.0</span>
+
+    <span class="code-keyword">async def</span> <span class="code-func">search</span>(self, query: str, location: str, max_results: int) -&gt; list[dict]:
+        <span class="code-keyword">async with</span> async_playwright() <span class="code-keyword">as</span> p:
+            browser = <span class="code-keyword">await</span> p.chromium.<span class="code-func">launch</span>(
+                headless=True,
+                args=[<span class="code-string">"--disable-blink-features=AutomationControlled"</span>,
+                      <span class="code-string">"--user-agent=Mozilla/5.0 ..."</span>]
+            )
+            context = <span class="code-keyword">await</span> browser.<span class="code-func">new_context</span>(
+                viewport={<span class="code-string">"width"</span>: <span class="code-num">1366</span>, <span class="code-string">"height"</span>: <span class="code-num">768</span>},
+                locale=<span class="code-string">"en-AU"</span>
+            )
+            page = <span class="code-keyword">await</span> context.<span class="code-func">new_page</span>()
+            <span class="code-keyword">await</span> page.<span class="code-func">goto</span>(self.<span class="code-func">_build_url</span>(query, location))
+            jobs = []
+            <span class="code-keyword">while</span> len(jobs) &lt; max_results:
+                items = <span class="code-keyword">await</span> page.<span class="code-func">query_selector_all</span>(<span class="code-string">".job-search-card"</span>)
+                <span class="code-keyword">for</span> item <span class="code-keyword">in</span> items[:max_results - len(jobs)]:
+                    job = <span class="code-keyword">await</span> self.<span class="code-func">_parse_card</span>(item)
+                    <span class="code-keyword">if</span> job: jobs.<span class="code-func">append</span>(job)
+                <span class="code-keyword">if not</span> <span class="code-keyword">await</span> self.<span class="code-func">_has_next_page</span>(page): <span class="code-keyword">break</span>
+                <span class="code-keyword">await</span> asyncio.<span class="code-func">sleep</span>(random.<span class="code-func">uniform</span>(self.MIN_DELAY, self.MAX_DELAY))
+                <span class="code-keyword">await</span> self.<span class="code-func">_click_next</span>(page)
+            <span class="code-keyword">await</span> browser.<span class="code-func">close</span>()
+            <span class="code-keyword">return</span> jobs</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">4.1.2</span>Rate Limiting and Anti-Detection</h3>
+  <table>
+    <caption data-label="Table 4.1">Scraper safety parameters per source</caption>
+    <thead><tr><th>Job Board</th><th>Min Delay</th><th>Max Requests/hr</th><th>Session Rotation</th><th>Approach</th></tr></thead>
+    <tbody>
+      <tr><td>LinkedIn</td><td>3–8s</td><td>30</td><td>Every 20 requests</td><td>Playwright + cookies</td></tr>
+      <tr><td>Seek</td><td>2–5s</td><td>60</td><td>Every 50 requests</td><td>Direct HTTP (Seek has public API)</td></tr>
+      <tr><td>Indeed</td><td>4–10s</td><td>20</td><td>Every 15 requests</td><td>Playwright + residential proxy</td></tr>
+      <tr><td>RSS Feeds</td><td>60s</td><td>60/hr per feed</td><td>N/A</td><td>aiohttp + feedparser</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-heading" id="sec-submission"><span class="section-num">4.2</span>Application Submission</h2>
+<pre><code><span class="code-comment"># apps/api/workers/submission/form_filler.py</span>
+<span class="code-keyword">class</span> <span class="code-type">FormFiller</span>:
+    <span class="code-keyword">async def</span> <span class="code-func">fill_and_submit</span>(self, page, field_mapping: dict, files: dict) -&gt; dict:
+        evidence = {}
+        <span class="code-comment"># Pre-fill screenshot</span>
+        evidence[<span class="code-string">"pre_fill"</span>] = <span class="code-keyword">await</span> self.<span class="code-func">screenshot</span>(page, <span class="code-string">"pre_fill"</span>)
+
+        <span class="code-comment"># Fill text fields</span>
+        <span class="code-keyword">for</span> field <span class="code-keyword">in</span> field_mapping[<span class="code-string">"fields"</span>]:
+            <span class="code-keyword">if</span> field[<span class="code-string">"type"</span>] == <span class="code-string">"text"</span>:
+                <span class="code-keyword">await</span> page.<span class="code-func">fill</span>(field[<span class="code-string">"selector"</span>], field[<span class="code-string">"mapped_value"</span>])
+            <span class="code-keyword">elif</span> field[<span class="code-string">"type"</span>] == <span class="code-string">"select"</span>:
+                <span class="code-keyword">await</span> page.<span class="code-func">select_option</span>(field[<span class="code-string">"selector"</span>], field[<span class="code-string">"mapped_value"</span>])
+            <span class="code-keyword">elif</span> field[<span class="code-string">"type"</span>] == <span class="code-string">"file"</span>:
+                <span class="code-keyword">await</span> page.<span class="code-func">set_input_files</span>(field[<span class="code-string">"selector"</span>], files[field[<span class="code-string">"file_type"</span>]])
+            <span class="code-keyword">await</span> asyncio.<span class="code-func">sleep</span>(<span class="code-num">0.3</span>)  <span class="code-comment"># human-like typing pace</span>
+
+        <span class="code-comment"># Submit and verify</span>
+        <span class="code-keyword">await</span> page.<span class="code-func">click</span>(<span class="code-string">"[type=submit], button:has-text('Apply')"</span>)
+        <span class="code-keyword">await</span> page.<span class="code-func">wait_for_load_state</span>(<span class="code-string">"networkidle"</span>, timeout=<span class="code-num">15000</span>)
+        evidence[<span class="code-string">"post_submit"</span>] = <span class="code-keyword">await</span> self.<span class="code-func">screenshot</span>(page, <span class="code-string">"post_submit"</span>)
+        evidence[<span class="code-string">"confirmed"</span>] = <span class="code-keyword">await</span> self.<span class="code-func">detect_confirmation</span>(page)
+        <span class="code-keyword">return</span> evidence</code></pre>
+
+  <h2 class="section-heading" id="sec-email"><span class="section-num">4.3</span>Email Integration</h2>
+<pre><code><span class="code-comment"># apps/api/services/email_service.py — Gmail API integration</span>
+<span class="code-keyword">from</span> google.oauth2.credentials <span class="code-keyword">import</span> Credentials
+<span class="code-keyword">from</span> googleapiclient.discovery <span class="code-keyword">import</span> build
+
+<span class="code-keyword">class</span> <span class="code-type">EmailService</span>:
+    SCOPES = [<span class="code-string">"https://www.googleapis.com/auth/gmail.readonly"</span>,
+              <span class="code-string">"https://www.googleapis.com/auth/gmail.send"</span>]
+
+    <span class="code-keyword">def</span> <span class="code-func">get_unread_job_emails</span>(self, max_results: int = <span class="code-num">50</span>) -&gt; list[dict]:
+        service = build(<span class="code-string">"gmail"</span>, <span class="code-string">"v1"</span>, credentials=self.creds)
+        query = <span class="code-string">"is:unread (subject:application OR subject:interview OR subject:offer)"</span>
+        results = service.users().messages().<span class="code-func">list</span>(
+            userId=<span class="code-string">"me"</span>, q=query, maxResults=max_results
+        ).<span class="code-func">execute</span>()
+        <span class="code-keyword">return</span> [self.<span class="code-func">_parse_message</span>(service, m[<span class="code-string">"id"</span>])
+                <span class="code-keyword">for</span> m <span class="code-keyword">in</span> results.get(<span class="code-string">"messages"</span>, [])]</code></pre>
+</div>
+
+<!-- ==================== SECTION 5: PHASE 4 ==================== -->
+<div class="section-break" id="sec-phase4">
+  <div class="phase-header">
+    <div class="phase-label">Section 05 · Phase 4 · Weeks 13–16</div>
+    <div class="phase-title">Learning &amp; Scale</div>
+    <div class="phase-subtitle">Outcome tracking, strategy adjustment, and analytics implementation</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">5.1</span>Learning Pipeline</h2>
+  <p>The learning pipeline closes the feedback loop between application outcomes and agent behaviour. Every submitted application generates a <code>LearningOutcome</code> record with a feature vector that the Strategy Adjustment Agent analyzes weekly.</p>
+
+  <h3 class="subsection-heading"><span class="section-num">5.1.1</span>Feature Extraction</h3>
+<pre><code><span class="code-comment"># packages/agents/services/learning.py</span>
+<span class="code-keyword">def</span> <span class="code-func">extract_features</span>(application: JobApplication) -&gt; dict:
+    <span class="code-keyword">return</span> {
+        <span class="code-string">"ats_score"</span>:           application.resume.versions[-<span class="code-num">1</span>].ats_score,
+        <span class="code-string">"match_score"</span>:         application.job.match_score,
+        <span class="code-string">"cl_word_count"</span>:       application.cover_letter.versions[-<span class="code-num">1</span>].content.split().__len__(),
+        <span class="code-string">"tailoring_changes"</span>:   application.resume.versions[-<span class="code-num">1</span>].tailoring_changes_count,
+        <span class="code-string">"job_source"</span>:          application.job.source,
+        <span class="code-string">"days_since_posted"</span>:   (application.applied_at - application.job.posted_at).days,
+        <span class="code-string">"company_size_tier"</span>:   <span class="code-func">classify_company_size</span>(application.job.company),
+        <span class="code-string">"role_seniority"</span>:      <span class="code-func">extract_seniority</span>(application.job.title),
+        <span class="code-string">"ab_variant"</span>:         application.ab_variant or <span class="code-string">"control"</span>
+    }</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">5.1.2</span>Strategy Adjustment Algorithm</h3>
+<pre><code><span class="code-comment"># packages/agents/services/strategy.py</span>
+<span class="code-keyword">from</span> scipy <span class="code-keyword">import</span> stats
+<span class="code-keyword">import</span> numpy <span class="code-keyword">as</span> np
+
+<span class="code-keyword">def</span> <span class="code-func">evaluate_ats_threshold</span>(outcomes: list[LearningOutcome]) -&gt; StrategyRecommendation:
+    high_ats = [o <span class="code-keyword">for</span> o <span class="code-keyword">in</span> outcomes <span class="code-keyword">if</span> o.features[<span class="code-string">"ats_score"</span>] &gt;= <span class="code-num">80</span>]
+    low_ats  = [o <span class="code-keyword">for</span> o <span class="code-keyword">in</span> outcomes <span class="code-keyword">if</span> <span class="code-num">70</span> &lt;= o.features[<span class="code-string">"ats_score"</span>] &lt; <span class="code-num">80</span>]
+
+    rate_high = np.<span class="code-func">mean</span>([o.interview_rate <span class="code-keyword">for</span> o <span class="code-keyword">in</span> high_ats]) <span class="code-keyword">if</span> high_ats <span class="code-keyword">else</span> <span class="code-num">0</span>
+    rate_low  = np.<span class="code-func">mean</span>([o.interview_rate <span class="code-keyword">for</span> o <span class="code-keyword">in</span> low_ats]) <span class="code-keyword">if</span> low_ats  <span class="code-keyword">else</span> <span class="code-num">0</span>
+
+    _, p_value = stats.<span class="code-func">proportions_ztest</span>(
+        [<span class="code-func">sum</span>(o.interview_rate <span class="code-keyword">for</span> o <span class="code-keyword">in</span> high_ats), <span class="code-func">sum</span>(o.interview_rate <span class="code-keyword">for</span> o <span class="code-keyword">in</span> low_ats)],
+        [len(high_ats), len(low_ats)]
+    )
+    <span class="code-keyword">if</span> p_value &lt; <span class="code-num">0.05</span> <span class="code-keyword">and</span> rate_high &gt; rate_low * <span class="code-num">1.2</span>:
+        <span class="code-keyword">return</span> StrategyRecommendation(
+            parameter=<span class="code-string">"min_ats_score"</span>, current=<span class="code-num">70</span>, recommended=<span class="code-num">75</span>,
+            evidence=<span class="code-string">f"High-ATS rate={rate_high:.2%} vs Low-ATS={rate_low:.2%}, p={p_value:.4f}"</span>
+        )</code></pre>
+
+  <h2 class="section-heading"><span class="section-num">5.2</span>Analytics Implementation</h2>
+  <p>Analytics data is aggregated by the Analytics Agent and served through FastAPI endpoints. All queries use materialized views refreshed hourly to avoid performance degradation on the main transactional tables.</p>
+
+  <table>
+    <caption data-label="Table 5.1">Key analytics queries</caption>
+    <thead><tr><th>Metric</th><th>SQL Approach</th><th>Refresh Rate</th><th>Alert Threshold</th></tr></thead>
+    <tbody>
+      <tr><td>Funnel conversion</td><td>COUNT GROUP BY status</td><td>Real-time</td><td>Response rate &lt; 10%</td></tr>
+      <tr><td>Interview rate</td><td>% INTERVIEW_SCHEDULED / SUBMITTED</td><td>Daily</td><td>&lt; 15%</td></tr>
+      <tr><td>Agent error rate</td><td>COUNT FAILED / COUNT total by agent</td><td>Hourly</td><td>&gt; 5% per agent</td></tr>
+      <tr><td>Token cost/app</td><td>SUM tokens × price from AgentLog</td><td>Daily</td><td>&gt; AUD 2.00/app</td></tr>
+      <tr><td>Stale applications</td><td>WHERE status=SUBMITTED AND appliedAt &lt; NOW()-21d</td><td>Daily</td><td>Any stale app</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== SECTION 6: CONFIGURATION ==================== -->
+<div class="section-break" id="sec-config">
+  <div class="phase-header">
+    <div class="phase-label">Section 06</div>
+    <div class="phase-title">Configuration Specification</div>
+    <div class="phase-subtitle">Complete platform configuration file with all threshold and tuning parameters</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">6.</span>Configuration Specification</h2>
+  <p>Save this file as <code>config/platform.yaml</code> at the repository root. Load it in all services via the <code>ConfigService</code> singleton which validates all values against defined ranges on startup.</p>
+
+<pre><code><span class="code-decorator">platform</span>:
+  name: <span class="code-string">"AI Career Agent"</span>
+  version: <span class="code-string">"1.0.0"</span>
+  owner: <span class="code-string">"Vikram Deshpande"</span>
+  timezone: <span class="code-string">"Australia/Melbourne"</span>
+  environment: <span class="code-string">"production"</span>  <span class="code-comment"># development | staging | production</span>
+
+<span class="code-decorator">profile</span>:
+  full_name: <span class="code-string">"Vikram Deshpande"</span>
+  location: <span class="code-string">"Melbourne, VIC, Australia"</span>
+  portfolio_url: <span class="code-string">"https://forgotten-mistory.web.app"</span>
+  github_handle: <span class="code-string">"@Victordtesla24"</span>
+  linkedin_url: <span class="code-string">"https://vikramdeshpande.io"</span>
+  salary_range:
+    min_aud: 180000
+    max_aud: 230000
+
+<span class="code-decorator">thresholds</span>:
+  min_match_score: <span class="code-num">0.75</span>         <span class="code-comment"># Forward to evaluation agent</span>
+  approval_threshold: <span class="code-num">0.65</span>       <span class="code-comment"># Flag NEEDS_APPROVAL (0.65–0.74)</span>
+  min_ats_score: <span class="code-num">70</span>              <span class="code-comment"># Minimum ATS score before submission</span>
+  auto_apply_confidence: <span class="code-num">0.85</span>    <span class="code-comment"># Submit without human review</span>
+  human_approval_required: <span class="code-num">0.70</span>  <span class="code-comment"># Always pause for review below this</span>
+  duplicate_window_days: <span class="code-num">7</span>        <span class="code-comment"># Skip same role at same company</span>
+  stale_application_days: <span class="code-num">21</span>     <span class="code-comment"># Mark as implicit rejection</span>
+
+<span class="code-decorator">agents</span>:
+  max_concurrent: <span class="code-num">5</span>              <span class="code-comment"># Max parallel agent tasks</span>
+  timeout_seconds: <span class="code-num">300</span>           <span class="code-comment"># Per-agent execution timeout</span>
+  retry_max: <span class="code-num">3</span>                    <span class="code-comment"># Max retry attempts on failure</span>
+  retry_backoff_base: <span class="code-num">2</span>           <span class="code-comment"># Exponential backoff base (seconds)</span>
+  checkpoint_ttl_hours: <span class="code-num">48</span>       <span class="code-comment"># State checkpoint retention</span>
+  default_llm: <span class="code-string">"gpt-4o"</span>
+  fast_llm: <span class="code-string">"gpt-4o-mini"</span>
+  embedding_model: <span class="code-string">"text-embedding-3-small"</span>
+  embedding_dimensions: <span class="code-num">1536</span>
+
+<span class="code-decorator">job_discovery</span>:
+  scan_interval_minutes: <span class="code-num">30</span>
+  max_results_per_scan: <span class="code-num">50</span>
+  sources:
+    - linkedin
+    - seek
+    - indeed
+  target_roles:
+    - <span class="code-string">"AI Solutions Architect"</span>
+    - <span class="code-string">"Senior Delivery Lead"</span>
+    - <span class="code-string">"Technical Product Owner"</span>
+    - <span class="code-string">"Platform Engineering Lead"</span>
+    - <span class="code-string">"AI/ML Program Manager"</span>
+    - <span class="code-string">"Scrum Master"</span>
+  target_companies:
+    - ANZ
+    - NAB
+    - Telstra
+    - ATO
+    - Westpac
+    - <span class="code-string">"Commonwealth Bank"</span>
+    - Atlassian
+    - Canva
+    - AWS
+    - Microsoft
+
+<span class="code-decorator">resume</span>:
+  preserve_formatting: true
+  max_tailoring_changes: <span class="code-num">15</span>
+  required_ats_score: <span class="code-num">70</span>
+  max_rewrite_attempts: <span class="code-num">2</span>
+  base_resume_path: <span class="code-string">"s3://platform-assets/resumes/base/Vik_Resume_Final.pdf"</span>
+
+<span class="code-decorator">submission</span>:
+  max_applications_per_day: <span class="code-num">10</span>
+  min_gap_between_submissions_minutes: <span class="code-num">2</span>
+  evidence_storage: <span class="code-string">"s3://platform-assets/evidence/"</span>
+  screenshot_format: <span class="code-string">"png"</span>
+
+<span class="code-decorator">email</span>:
+  check_interval_minutes: <span class="code-num">15</span>
+  auto_classify: true
+  auto_respond: false           <span class="code-comment"># Always require human approval</span>
+  label_prefix: <span class="code-string">"job-platform"</span>
+
+<span class="code-decorator">learning</span>:
+  min_applications_for_adjustment: <span class="code-num">20</span>
+  strategy_review_schedule: <span class="code-string">"0 6 * * 1"</span>  <span class="code-comment"># Monday 6am AEST</span>
+  significance_threshold: <span class="code-num">0.05</span>
+  adjustment_bounds:
+    min_match_score:        { floor: <span class="code-num">0.65</span>, ceiling: <span class="code-num">0.90</span> }
+    auto_apply_confidence:  { floor: <span class="code-num">0.80</span>, ceiling: <span class="code-num">0.95</span> }
+    min_ats_score:          { floor: <span class="code-num">65</span>,   ceiling: <span class="code-num">85</span>   }
+
+<span class="code-decorator">monitoring</span>:
+  langfuse_enabled: true
+  prometheus_port: <span class="code-num">9090</span>
+  log_level: <span class="code-string">"INFO"</span>            <span class="code-comment"># DEBUG | INFO | WARNING | ERROR</span>
+  alert_email: <span class="code-string">"vikram@example.com"</span>
+  alert_slack_webhook: <span class="code-string">"${SLACK_WEBHOOK_URL}"</span></code></pre>
+</div>
+
+<!-- ==================== SECTION 7: TESTING ==================== -->
+<div class="section-break" id="sec-testing">
+  <div class="phase-header">
+    <div class="phase-label">Section 07</div>
+    <div class="phase-title">Testing Strategy</div>
+    <div class="phase-subtitle">Unit, integration, and E2E test patterns plus CI/CD pipeline definition</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">7.</span>Testing Strategy</h2>
+
+  <h3 class="subsection-heading"><span class="section-num">7.1</span>Unit Test Patterns (pytest)</h3>
+<pre><code><span class="code-comment"># tests/unit/agents/test_ats_agent.py</span>
+<span class="code-keyword">import</span> pytest
+<span class="code-keyword">from</span> unittest.mock <span class="code-keyword">import</span> AsyncMock, patch
+<span class="code-keyword">from</span> agents.ats_agent <span class="code-keyword">import</span> calculate_ats_score
+
+<span class="code-keyword">class</span> <span class="code-type">TestATSScoring</span>:
+    <span class="code-keyword">def</span> <span class="code-func">test_high_overlap_returns_high_score</span>(self):
+        resume = <span class="code-string">"LangChain Langfuse Python Kubernetes Docker TypeScript AI/ML"</span>
+        jd     = <span class="code-string">"LangChain Langfuse Python Kubernetes Docker TypeScript AI/ML"</span>
+        result = calculate_ats_score(resume, jd)
+        <span class="code-keyword">assert</span> result[<span class="code-string">"score"</span>] &gt;= <span class="code-num">80</span>
+
+    <span class="code-keyword">def</span> <span class="code-func">test_missing_keywords_are_reported</span>(self):
+        resume = <span class="code-string">"Python Docker TypeScript"</span>
+        jd     = <span class="code-string">"Kubernetes Terraform ArgoCD Python"</span>
+        result = calculate_ats_score(resume, jd)
+        <span class="code-keyword">assert</span> <span class="code-string">"Kubernetes"</span> <span class="code-keyword">in</span> result[<span class="code-string">"missing_keywords"</span>]
+
+    <span class="code-keyword">def</span> <span class="code-func">test_zero_overlap_returns_low_score</span>(self):
+        result = calculate_ats_score(<span class="code-string">"Marketing Sales"</span>, <span class="code-string">"Kubernetes Python LangGraph"</span>)
+        <span class="code-keyword">assert</span> result[<span class="code-string">"score"</span>] &lt; <span class="code-num">30</span></code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">7.2</span>Integration Test Scenarios</h3>
+  <table>
+    <caption data-label="Table 7.1">Integration test scenarios</caption>
+    <thead><tr><th>Scenario</th><th>Test File</th><th>Pass Condition</th></tr></thead>
+    <tbody>
+      <tr><td>Full discovery → evaluation pipeline</td><td><code>test_discovery_pipeline.py</code></td><td>Job stored in DB with match_score</td></tr>
+      <tr><td>Resume tailor → ATS score &gt;= 70</td><td><code>test_resume_tailoring.py</code></td><td>ResumeVersion.atsScore &gt;= 70</td></tr>
+      <tr><td>Cover letter generated &lt; 400 words</td><td><code>test_cover_letter.py</code></td><td>word_count &lt;= 400</td></tr>
+      <tr><td>Agent checkpoint triggers WAITING_APPROVAL</td><td><code>test_orchestration.py</code></td><td>AgentAction.status == WAITING_APPROVAL</td></tr>
+      <tr><td>Email classified correctly</td><td><code>test_email_classifier.py</code></td><td>classification matches ground truth set</td></tr>
+      <tr><td>Form fill on mock HTML page</td><td><code>test_form_filler.py</code></td><td>All required fields filled, screenshot saved</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="subsection-heading"><span class="section-num">7.3</span>GitHub Actions CI/CD Pipeline</h3>
+<pre><code><span class="code-comment"># .github/workflows/ci.yml</span>
+name: CI Pipeline
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_PASSWORD: test, POSTGRES_DB: platform_test }
+      redis:
+        image: redis:7-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pnpm install
+      - run: pnpm prisma migrate deploy
+        env: { DATABASE_URL: postgresql://postgres:test@localhost/platform_test }
+      - run: pnpm turbo run lint test build
+      - run: pip install -r apps/api/requirements.txt
+      - run: pytest apps/api/tests/ -v --cov=apps/api --cov-report=xml
+      - uses: codecov/codecov-action@v4
+
+  deploy-staging:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-2
+      - run: |
+          aws eks update-kubeconfig --name platform-eks --region ap-southeast-2
+          kubectl apply -f infra/k8s/staging/
+          kubectl rollout status deployment/platform-api -n staging</code></pre>
+</div>
+
+<!-- ==================== SECTION 8: DEPLOYMENT ==================== -->
+<div class="section-break" id="sec-deploy">
+  <div class="phase-header">
+    <div class="phase-label">Section 08</div>
+    <div class="phase-title">Deployment Specification</div>
+    <div class="phase-subtitle">Docker Compose, Kubernetes manifests, Terraform modules, and environment catalog</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">8.</span>Deployment Specification</h2>
+
+  <h3 class="subsection-heading"><span class="section-num">8.1</span>Kubernetes Manifests</h3>
+<pre><code><span class="code-comment"># infra/k8s/production/deployment-api.yaml</span>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-api
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: platform-api }
+  template:
+    metadata:
+      labels: { app: platform-api }
+    spec:
+      containers:
+        - name: api
+          image: &lt;ACCOUNT&gt;.dkr.ecr.ap-southeast-2.amazonaws.com/platform-api:latest
+          ports: [{ containerPort: 8000 }]
+          resources:
+            requests: { cpu: 500m, memory: 512Mi }
+            limits:   { cpu: 2000m, memory: 2Gi }
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef:    { name: platform-secrets }
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-api-svc
+  namespace: production
+spec:
+  selector: { app: platform-api }
+  ports: [{ port: 80, targetPort: 8000 }]
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: platform-api-hpa
+  namespace: production
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: platform-api }
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">8.2</span>Terraform AWS Modules</h3>
+<pre><code><span class="code-comment"># infra/terraform/main.tf</span>
+module <span class="code-string">"eks"</span> {
+  source          = <span class="code-string">"terraform-aws-modules/eks/aws"</span>
+  cluster_name    = <span class="code-string">"platform-eks"</span>
+  cluster_version = <span class="code-string">"1.29"</span>
+  vpc_id          = module.vpc.vpc_id
+  subnet_ids      = module.vpc.private_subnets
+  eks_managed_node_groups = {
+    general = {
+      instance_types = [<span class="code-string">"t3.xlarge"</span>]
+      min_size = <span class="code-num">2</span>; max_size = <span class="code-num">8</span>; desired_size = <span class="code-num">3</span>
+    }
+  }
+}
+
+module <span class="code-string">"rds"</span> {
+  source              = <span class="code-string">"terraform-aws-modules/rds/aws"</span>
+  engine              = <span class="code-string">"postgres"</span>
+  engine_version      = <span class="code-string">"16.1"</span>
+  instance_class      = <span class="code-string">"db.t3.large"</span>
+  allocated_storage   = <span class="code-num">50</span>
+  db_name             = <span class="code-string">"career_platform"</span>
+  username            = <span class="code-string">"platform"</span>
+  password            = var.db_password
+  multi_az            = true
+  deletion_protection = true
+}
+
+resource <span class="code-string">"aws_s3_bucket"</span> <span class="code-string">"platform_assets"</span> {
+  bucket = <span class="code-string">"platform-assets-${var.environment}"</span>
+}
+
+resource <span class="code-string">"aws_sqs_queue"</span> <span class="code-string">"agent_tasks"</span> {
+  name                      = <span class="code-string">"platform-agent-tasks"</span>
+  visibility_timeout_seconds = <span class="code-num">360</span>
+  message_retention_seconds  = <span class="code-num">86400</span>
+}</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">8.3</span>Environment Variable Catalog</h3>
+  <table>
+    <caption data-label="Table 8.1">Required environment variables</caption>
+    <thead><tr><th>Variable</th><th>Service</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>DATABASE_URL</code></td><td>All</td><td>PostgreSQL connection string</td></tr>
+      <tr><td><code>REDIS_URL</code></td><td>API, Workers</td><td>Redis connection string</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td>All agents</td><td>OpenAI API key (gpt-4o, embeddings)</td></tr>
+      <tr><td><code>LANGFUSE_PUBLIC_KEY</code></td><td>All agents</td><td>Langfuse observability public key</td></tr>
+      <tr><td><code>LANGFUSE_SECRET_KEY</code></td><td>All agents</td><td>Langfuse observability secret key</td></tr>
+      <tr><td><code>NEXTAUTH_SECRET</code></td><td>Web</td><td>NextAuth.js JWT secret (min 32 chars)</td></tr>
+      <tr><td><code>JWT_SECRET</code></td><td>API</td><td>FastAPI JWT secret (must match NEXTAUTH)</td></tr>
+      <tr><td><code>GOOGLE_CLIENT_ID/SECRET</code></td><td>Web</td><td>Google OAuth credentials</td></tr>
+      <tr><td><code>GITHUB_CLIENT_ID/SECRET</code></td><td>Web</td><td>GitHub OAuth credentials</td></tr>
+      <tr><td><code>LINKEDIN_CLIENT_ID/SECRET</code></td><td>Web</td><td>LinkedIn OAuth credentials</td></tr>
+      <tr><td><code>GMAIL_CLIENT_ID/SECRET</code></td><td>API</td><td>Gmail API OAuth for email monitoring</td></tr>
+      <tr><td><code>AWS_ACCESS_KEY_ID</code></td><td>API</td><td>AWS credentials for S3 evidence storage</td></tr>
+      <tr><td><code>S3_BUCKET</code></td><td>API</td><td>Evidence and document storage bucket</td></tr>
+      <tr><td><code>SLACK_WEBHOOK_URL</code></td><td>API</td><td>Alert notifications (optional)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== SECTION 9: MONITORING ==================== -->
+<div class="section-break" id="sec-monitoring">
+  <div class="phase-header">
+    <div class="phase-label">Section 09</div>
+    <div class="phase-title">Monitoring &amp; Observability</div>
+    <div class="phase-subtitle">Langfuse tracing, Prometheus metrics, Grafana dashboards, and alert rules</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">9.</span>Monitoring &amp; Observability</h2>
+
+  <h3 class="subsection-heading"><span class="section-num">9.1</span>Langfuse Agent Tracing</h3>
+  <p>Every LLM call is wrapped with the Langfuse handler. Traces are enriched with <code>userId</code>, <code>sessionId</code> (application_id), and <code>metadata</code> (agent_name, job_id) for full context on every span.</p>
+<pre><code><span class="code-comment"># Pattern for every agent LLM call</span>
+<span class="code-keyword">from</span> langfuse.langchain <span class="code-keyword">import</span> CallbackHandler
+
+trace = langfuse.<span class="code-func">trace</span>(
+    name=<span class="code-string">f"{agent_name}_run"</span>,
+    user_id=user_id,
+    session_id=application_id,
+    metadata={<span class="code-string">"job_id"</span>: job_id, <span class="code-string">"agent"</span>: agent_name}
+)
+handler = CallbackHandler(trace_id=trace.id)
+response = <span class="code-keyword">await</span> llm.<span class="code-func">ainvoke</span>(prompt, config={<span class="code-string">"callbacks"</span>: [handler]})</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">9.2</span>Prometheus Metrics</h3>
+<pre><code><span class="code-comment"># apps/api/metrics.py</span>
+<span class="code-keyword">from</span> prometheus_client <span class="code-keyword">import</span> Counter, Histogram, Gauge
+
+agent_runs_total      = Counter(<span class="code-string">"agent_runs_total"</span>, <span class="code-string">"Total agent runs"</span>, [<span class="code-string">"agent"</span>, <span class="code-string">"status"</span>])
+agent_latency_seconds = Histogram(<span class="code-string">"agent_latency_seconds"</span>, <span class="code-string">"Agent execution latency"</span>, [<span class="code-string">"agent"</span>])
+applications_total    = Counter(<span class="code-string">"applications_total"</span>, <span class="code-string">"Total applications submitted"</span>)
+ats_score_gauge       = Gauge(<span class="code-string">"ats_score_current"</span>, <span class="code-string">"Current ATS score of last tailored resume"</span>)
+active_jobs_gauge     = Gauge(<span class="code-string">"active_jobs_discovered"</span>, <span class="code-string">"Jobs pending evaluation"</span>)
+token_cost_counter    = Counter(<span class="code-string">"llm_tokens_total"</span>, <span class="code-string">"Total LLM tokens used"</span>, [<span class="code-string">"agent"</span>, <span class="code-string">"model"</span>])</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">9.3</span>Structured JSON Logging</h3>
+<pre><code><span class="code-comment"># apps/api/logging_config.py — structlog configuration</span>
+<span class="code-keyword">import</span> structlog
+
+structlog.<span class="code-func">configure</span>(
+    processors=[
+        structlog.contextvars.<span class="code-func">merge_contextvars</span>,
+        structlog.processors.<span class="code-func">TimeStamper</span>(fmt=<span class="code-string">"iso"</span>),
+        structlog.processors.<span class="code-func">JSONRenderer</span>()
+    ]
+)
+<span class="code-comment"># Usage in agents:</span>
+log = structlog.<span class="code-func">get_logger</span>()
+log.<span class="code-func">info</span>(<span class="code-string">"agent_started"</span>, agent=<span class="code-string">"resume_tailor"</span>, job_id=job_id, trace_id=trace_id)</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">9.4</span>Alert Rules</h3>
+  <table>
+    <caption data-label="Table 9.1">Critical alert thresholds</caption>
+    <thead><tr><th>Alert Name</th><th>Condition</th><th>Severity</th><th>Channel</th></tr></thead>
+    <tbody>
+      <tr><td>HighAgentErrorRate</td><td>agent error rate &gt; 5% over 5min</td><td>Critical</td><td>Slack + email</td></tr>
+      <tr><td>LowInterviewRate</td><td>interview rate &lt; 10% over 7 days</td><td>Warning</td><td>Email</td></tr>
+      <tr><td>TokenCostSpike</td><td>cost/application &gt; AUD 2.00</td><td>Warning</td><td>Slack</td></tr>
+      <tr><td>PendingApprovalsStale</td><td>WAITING_APPROVAL &gt; 12 hours</td><td>Info</td><td>Email</td></tr>
+      <tr><td>DatabaseLatency</td><td>DB query P95 &gt; 500ms</td><td>Critical</td><td>Slack</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== SECTION 10: QUICK REFERENCE ==================== -->
+<div class="section-break" id="sec-quickref">
+  <div class="phase-header">
+    <div class="phase-label">Section 10</div>
+    <div class="phase-title">Quick Reference</div>
+    <div class="phase-subtitle">Command cheatsheet, environment checklist, and dependency versions matrix</div>
+  </div>
+  <h2 class="section-heading"><span class="section-num">10.</span>Quick Reference</h2>
+
+  <h3 class="subsection-heading"><span class="section-num">10.1</span>Command Cheatsheet</h3>
+<pre><code><span class="code-comment"># ── DEVELOPMENT ───────────────────────────────────────────────</span>
+pnpm install                          <span class="code-comment"># Install all dependencies</span>
+docker compose up -d                  <span class="code-comment"># Start local stack (DB, Redis)</span>
+pnpm dev                              <span class="code-comment"># Start all dev servers (Turbo)</span>
+pnpm --filter @platform/web dev       <span class="code-comment"># Start only Next.js frontend</span>
+pnpm --filter @platform/api dev       <span class="code-comment"># Start only FastAPI backend</span>
+
+<span class="code-comment"># ── DATABASE ──────────────────────────────────────────────────</span>
+pnpm prisma migrate dev               <span class="code-comment"># Create and apply migration</span>
+pnpm prisma generate                  <span class="code-comment"># Regenerate Prisma client</span>
+pnpm prisma studio                    <span class="code-comment"># Open DB browser at localhost:5555</span>
+pnpm prisma db seed                   <span class="code-comment"># Seed with Vikram's profile data</span>
+
+<span class="code-comment"># ── TESTING ───────────────────────────────────────────────────</span>
+pnpm test                             <span class="code-comment"># Run all tests</span>
+pnpm test:unit                        <span class="code-comment"># Unit tests only</span>
+pnpm test:e2e                         <span class="code-comment"># Playwright E2E tests</span>
+pytest apps/api/tests/ -v             <span class="code-comment"># Python tests (activate venv first)</span>
+pytest -k "test_ats" --pdb            <span class="code-comment"># Run specific test with debugger</span>
+
+<span class="code-comment"># ── BUILDING ──────────────────────────────────────────────────</span>
+pnpm build                            <span class="code-comment"># Build all packages and apps</span>
+docker build -t platform-api ./apps/api
+docker build -t platform-web ./apps/web
+
+<span class="code-comment"># ── DEPLOYMENT ────────────────────────────────────────────────</span>
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform plan
+terraform -chdir=infra/terraform apply
+kubectl apply -f infra/k8s/production/
+kubectl rollout status deployment/platform-api -n production
+kubectl logs -n production deploy/platform-api --tail=100 -f
+
+<span class="code-comment"># ── AGENT DEBUGGING ───────────────────────────────────────────</span>
+python -m agents.cli run discovery_agent --dry-run
+python -m agents.cli run resume_tailor --job-id=JOB_ID --resume-id=RESUME_ID
+python -m agents.cli inspect-state --thread-id=THREAD_ID</code></pre>
+
+  <h3 class="subsection-heading"><span class="section-num">10.2</span>Dependency Versions Matrix</h3>
+  <table>
+    <caption data-label="Table 10.1">Pinned dependency versions</caption>
+    <thead><tr><th>Package</th><th>Version</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>next</td><td>14.2.x</td><td>Frontend App Router</td></tr>
+      <tr><td>fastapi</td><td>0.111.x</td><td>Backend REST API</td></tr>
+      <tr><td>langgraph</td><td>0.2.x</td><td>Agent orchestration</td></tr>
+      <tr><td>langchain</td><td>0.2.x</td><td>LLM toolchain</td></tr>
+      <tr><td>langfuse</td><td>2.x</td><td>Agent observability</td></tr>
+      <tr><td>prisma</td><td>5.x</td><td>Database ORM</td></tr>
+      <tr><td>@prisma/client</td><td>5.x</td><td>DB client (TypeScript)</td></tr>
+      <tr><td>bullmq</td><td>5.x</td><td>Job queues</td></tr>
+      <tr><td>playwright</td><td>1.44.x</td><td>Browser automation</td></tr>
+      <tr><td>next-auth</td><td>4.x</td><td>Authentication</td></tr>
+      <tr><td>@trpc/server</td><td>11.x</td><td>Type-safe API layer</td></tr>
+      <tr><td>openai</td><td>1.x</td><td>OpenAI Python SDK</td></tr>
+      <tr><td>pydantic</td><td>2.x</td><td>Data validation</td></tr>
+      <tr><td>pgvector</td><td>0.3.x</td><td>Vector similarity search</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="subsection-heading"><span class="section-num">10.3</span>Environment Setup Checklist</h3>
+  <ul>
+    <li>Node.js 20 LTS installed (<code>node --version</code> shows v20.x)</li>
+    <li>pnpm 8.x installed (<code>pnpm --version</code>)</li>
+    <li>Python 3.11+ installed (<code>python3 --version</code>)</li>
+    <li>Docker Desktop running (<code>docker compose ps</code>)</li>
+    <li><code>.env</code> file created from <code>.env.example</code> with all required variables</li>
+    <li>PostgreSQL 16 + pgvector extension enabled</li>
+    <li>Prisma migrations applied: <code>pnpm prisma migrate deploy</code></li>
+    <li>Langfuse project created — public + secret keys in <code>.env</code></li>
+    <li>OpenAI API key with gpt-4o access provisioned</li>
+    <li>LinkedIn, Google, GitHub OAuth apps registered with correct redirect URIs</li>
+    <li>Gmail API enabled in Google Cloud Console with OAuth consent</li>
+    <li>AWS credentials configured for S3 bucket access</li>
+    <li><code>pnpm dev</code> starts without errors — all 4 services healthy</li>
+    <li>Seed data loaded: Vikram's profile, base resume, skills visible in Prisma Studio</li>
+  </ul>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var observer = new MutationObserver(function(mutations, obs) {
+    var pagedContent = document.querySelector('.pagedjs_pages');
+    if (pagedContent) { obs.disconnect(); setTimeout(resolvePageNumbers, 500); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  function resolvePageNumbers() {
+    document.querySelectorAll('.page-ref').forEach(function(ref) {
+      var href = ref.getAttribute('data-href');
+      var target = document.getElementById(href.replace('#', ''));
+      if (target) {
+        var page = target.closest('.pagedjs_page');
+        if (page) ref.textContent = page.getAttribute('data-page-number') || '?';
+      }
+    });
+  }
+});
+</script>
+</body>
+</html>

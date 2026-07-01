@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);}
+  .glass-raised{background:rgba(255,255,255,0.05);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.10);}
+</style>
+</head>
+<body class="w-[1440px] min-h-[900px] bg-[#0A0A0F] text-white" style="background-image:radial-gradient(circle at 15% 0%,rgba(79,70,229,0.10),transparent 40%),radial-gradient(circle at 85% 10%,rgba(255,107,53,0.08),transparent 45%);">
+<div class="flex">
+  <!-- Sidebar -->
+  <aside data-design-id="sidebar-sb01" class="w-64 shrink-0 min-h-[900px] border-r border-white/8 px-4 py-6 flex flex-col gap-6">
+    <div class="flex items-center gap-2.5 px-2">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <span class="text-lg font-bold tracking-tight">Aether</span>
+    </div>
+    <nav data-design-id="nav-primary-sb02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-book-bookmark w-4 text-[#FF6B35]"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+    <div class="mt-auto glass rounded-xl p-3 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#A78BFA] flex items-center justify-center text-xs font-semibold">VD</div>
+      <div class="leading-tight"><div class="text-sm font-medium">Vikram D.</div><div class="text-[11px] text-[#A0A0B8]">Senior TPM</div></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main data-design-id="main-sb03" class="flex-1 px-8 py-7">
+    <header data-design-id="header-sb04" class="flex items-start justify-between mb-7">
+      <div>
+        <div class="flex items-center gap-2 text-[13px] text-[#A0A0B8] mb-1"><i class="fa-solid fa-book-bookmark text-[#FF6B35]"></i>Story Bank</div>
+        <h1 class="text-2xl font-bold">Achievement & Narrative Library</h1>
+        <p class="text-sm text-[#A0A0B8] mt-1">Reusable STAR+R evidence blocks that power your resumes, cover letters and interview answers.</p>
+      </div>
+      <button data-design-id="add-story-sb05" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-sm font-semibold"><i class="fa-solid fa-plus"></i>New Story</button>
+    </header>
+
+    <!-- Stat strip -->
+    <section data-design-id="story-stats-sb06" class="grid grid-cols-4 gap-4 mb-7">
+      <div class="glass rounded-2xl p-4"><div class="text-[11px] text-[#A0A0B8] mb-1">Total Stories</div><div class="text-2xl font-bold mono">24</div></div>
+      <div class="glass rounded-2xl p-4"><div class="text-[11px] text-[#A0A0B8] mb-1">Quantified w/ Metrics</div><div class="text-2xl font-bold mono text-[#34D399]">19</div></div>
+      <div class="glass rounded-2xl p-4"><div class="text-[11px] text-[#A0A0B8] mb-1">Used This Month</div><div class="text-2xl font-bold mono">11</div></div>
+      <div class="glass rounded-2xl p-4"><div class="text-[11px] text-[#A0A0B8] mb-1">Voice Match Avg</div><div class="text-2xl font-bold mono text-[#A78BFA]">94%</div></div>
+    </section>
+
+    <div class="flex gap-6">
+      <!-- Story cards -->
+      <section data-design-id="story-list-sb07" class="flex-1 space-y-4">
+        <div class="flex items-center gap-2 mb-1">
+          <button data-design-id="filter-all-sb08" type="button" class="px-3 py-1.5 rounded-lg bg-white/8 text-white text-xs font-medium">All</button>
+          <button data-design-id="filter-lead-sb09" type="button" class="px-3 py-1.5 rounded-lg text-[#A0A0B8] hover:bg-white/5 text-xs">Leadership</button>
+          <button data-design-id="filter-deliv-sb10" type="button" class="px-3 py-1.5 rounded-lg text-[#A0A0B8] hover:bg-white/5 text-xs">Delivery</button>
+          <button data-design-id="filter-tech-sb11" type="button" class="px-3 py-1.5 rounded-lg text-[#A0A0B8] hover:bg-white/5 text-xs">Technical</button>
+          <button data-design-id="filter-risk-sb12" type="button" class="px-3 py-1.5 rounded-lg text-[#A0A0B8] hover:bg-white/5 text-xs">Risk & Compliance</button>
+        </div>
+
+        <article data-design-id="story-card-sb13" class="glass-raised rounded-2xl p-5 border-l-2 border-[#FF6B35]">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="flex items-center gap-2 mb-1"><span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-[#FF6B35]/15 text-[#FF6B35] font-semibold">Delivery</span><span class="text-[10px] px-2 py-0.5 rounded bg-[#34D399]/15 text-[#34D399] mono">92% impact</span></div>
+              <h3 class="text-base font-semibold">Reduced ATO test automation effort by 92%</h3>
+            </div>
+            <div class="flex items-center gap-2 text-[#A0A0B8]"><i class="fa-regular fa-star text-[#FBBF24]"></i><i class="fa-solid fa-ellipsis"></i></div>
+          </div>
+          <div class="grid grid-cols-4 gap-3 text-[13px]">
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Situation</div><p class="text-[#C7C7D6]">ATO regression suite was manual, ~3 weeks per release.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Task</div><p class="text-[#C7C7D6]">Lead automation strategy across 5 squads.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Action</div><p class="text-[#C7C7D6]">Built CI-driven framework, upskilled 40 engineers.</p></div>
+            <div><div class="text-[10px] uppercase text-[#34D399] font-semibold mb-1">Result</div><p class="text-[#C7C7D6]">92% effort reduction, releases cut to 2 days.</p></div>
+          </div>
+          <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/6">
+            <div class="flex items-center gap-3 text-[11px] text-[#A0A0B8]"><span><i class="fa-solid fa-link mr-1"></i>Used in 6 resumes</span><span><i class="fa-solid fa-microphone-lines mr-1"></i>3 interview answers</span></div>
+            <div class="flex items-center gap-2"><span class="text-[11px] text-[#A78BFA] mono">Voice 96%</span><button data-design-id="insert-story-sb14" type="button" class="px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/12 text-xs">Insert</button></div>
+          </div>
+        </article>
+
+        <article data-design-id="story-card-sb15" class="glass-raised rounded-2xl p-5 border-l-2 border-[#4F46E5]">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="flex items-center gap-2 mb-1"><span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-[#4F46E5]/20 text-[#818CF8] font-semibold">Leadership</span><span class="text-[10px] px-2 py-0.5 rounded bg-[#34D399]/15 text-[#34D399] mono">30% gain</span></div>
+              <h3 class="text-base font-semibold">Drove 30% delivery efficiency at ANZ</h3>
+            </div>
+            <div class="flex items-center gap-2 text-[#A0A0B8]"><i class="fa-solid fa-star text-[#FBBF24]"></i><i class="fa-solid fa-ellipsis"></i></div>
+          </div>
+          <div class="grid grid-cols-4 gap-3 text-[13px]">
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Situation</div><p class="text-[#C7C7D6]">Cross-squad delivery misaligned, missed milestones.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Task</div><p class="text-[#C7C7D6]">Own delivery for a $5M+ program.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Action</div><p class="text-[#C7C7D6]">Introduced quarterly planning & unified metrics.</p></div>
+            <div><div class="text-[10px] uppercase text-[#34D399] font-semibold mb-1">Result</div><p class="text-[#C7C7D6]">30% efficiency lift across 5 squads.</p></div>
+          </div>
+          <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/6">
+            <div class="flex items-center gap-3 text-[11px] text-[#A0A0B8]"><span><i class="fa-solid fa-link mr-1"></i>Used in 4 resumes</span><span><i class="fa-solid fa-microphone-lines mr-1"></i>5 interview answers</span></div>
+            <div class="flex items-center gap-2"><span class="text-[11px] text-[#A78BFA] mono">Voice 93%</span><button data-design-id="insert-story-sb16" type="button" class="px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/12 text-xs">Insert</button></div>
+          </div>
+        </article>
+
+        <article data-design-id="story-card-sb17" class="glass-raised rounded-2xl p-5 border-l-2 border-[#A78BFA]">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="flex items-center gap-2 mb-1"><span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-[#A78BFA]/20 text-[#A78BFA] font-semibold">Risk & Compliance</span></div>
+              <h3 class="text-base font-semibold">Led risk & compliance uplift at NAB</h3>
+            </div>
+            <div class="flex items-center gap-2 text-[#A0A0B8]"><i class="fa-regular fa-star"></i><i class="fa-solid fa-ellipsis"></i></div>
+          </div>
+          <div class="grid grid-cols-4 gap-3 text-[13px]">
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Situation</div><p class="text-[#C7C7D6]">Regulatory gaps flagged in audit.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Task</div><p class="text-[#C7C7D6]">Remediate controls under tight deadline.</p></div>
+            <div><div class="text-[10px] uppercase text-[#818CF8] font-semibold mb-1">Action</div><p class="text-[#C7C7D6]">Mapped controls, aligned engineering & risk.</p></div>
+            <div><div class="text-[10px] uppercase text-[#34D399] font-semibold mb-1">Result</div><p class="text-[#C7C7D6]">Zero audit findings next cycle.</p></div>
+          </div>
+          <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/6">
+            <div class="flex items-center gap-3 text-[11px] text-[#A0A0B8]"><span><i class="fa-solid fa-link mr-1"></i>Used in 2 resumes</span></div>
+            <div class="flex items-center gap-2"><span class="text-[11px] text-[#FBBF24] mono">Voice 88%</span><button data-design-id="insert-story-sb18" type="button" class="px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/12 text-xs">Insert</button></div>
+          </div>
+        </article>
+
+        <!-- Empty state (rendered when the library has no achievements yet) -->
+        <div class="flex items-center gap-2 pt-2"><span class="h-px flex-1 bg-white/8"></span><span class="text-[10px] uppercase tracking-wide text-[#6B6B82]">Empty state · no achievements yet</span><span class="h-px flex-1 bg-white/8"></span></div>
+        <article data-design-id="story-empty-sb23" class="rounded-2xl border border-dashed border-white/15 p-10 text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-[#FF6B35]/12 border border-[#FF6B35]/25 flex items-center justify-center mb-4"><i class="fa-solid fa-book-bookmark text-[#FF6B35] text-xl"></i></div>
+          <h3 class="text-base font-semibold mb-1.5">Your Story Bank is empty</h3>
+          <p class="text-sm text-[#A0A0B8] max-w-md mx-auto mb-5">Import achievements from your resume and portfolio to build your interview arsenal. Aether will auto-extract STAR+R stories you can reuse everywhere.</p>
+          <div class="flex items-center justify-center gap-2.5">
+            <button data-design-id="empty-import-resume-sb24" type="button" class="px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-sm font-semibold"><i class="fa-solid fa-file-import mr-1.5"></i>Import from Resume</button>
+            <button data-design-id="empty-import-portfolio-sb25" type="button" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-medium"><i class="fa-solid fa-briefcase mr-1.5"></i>Import from Portfolio</button>
+            <button data-design-id="empty-add-manual-sb26" type="button" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-medium"><i class="fa-solid fa-plus mr-1.5"></i>Add Manually</button>
+          </div>
+        </article>
+      </section>
+
+      <!-- Right: interview question mapper + gap -->
+      <aside data-design-id="story-side-sb19" class="w-80 shrink-0 space-y-4">
+        <section data-design-id="question-mapper-sb20" class="glass rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-diagram-project text-[#FF6B35]"></i><h3 class="text-sm font-semibold">Interview Question Mapper</h3></div>
+          <p class="text-[11px] text-[#A0A0B8] mb-4">Which stories answer common questions.</p>
+          <div class="space-y-3 text-[13px]">
+            <div class="glass-raised rounded-xl p-3"><div class="text-[#C7C7D6] mb-1">“Tell me about a time you improved a process.”</div><div class="text-[11px] text-[#FF6B35]"><i class="fa-solid fa-arrow-right-long mr-1"></i>ATO 92% automation</div></div>
+            <div class="glass-raised rounded-xl p-3"><div class="text-[#C7C7D6] mb-1">“Describe leading a large team.”</div><div class="text-[11px] text-[#818CF8]"><i class="fa-solid fa-arrow-right-long mr-1"></i>ANZ 30% delivery</div></div>
+            <div class="glass-raised rounded-xl p-3"><div class="text-[#C7C7D6] mb-1">“A time you handled compliance risk.”</div><div class="text-[11px] text-[#A78BFA]"><i class="fa-solid fa-arrow-right-long mr-1"></i>NAB risk uplift</div></div>
+          </div>
+        </section>
+        <section data-design-id="gap-analysis-sb21" class="glass rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-triangle-exclamation text-[#FBBF24]"></i><h3 class="text-sm font-semibold">Coverage Gaps</h3></div>
+          <div class="space-y-2 text-[13px] text-[#C7C7D6]">
+            <div class="flex items-center justify-between"><span>Conflict resolution</span><span class="text-[11px] text-[#F87171]">No story</span></div>
+            <div class="flex items-center justify-between"><span>Failure / lessons learned</span><span class="text-[11px] text-[#F87171]">No story</span></div>
+            <div class="flex items-center justify-between"><span>Stakeholder influence</span><span class="text-[11px] text-[#FBBF24]">Thin</span></div>
+          </div>
+          <button data-design-id="gen-gap-sb22" type="button" class="w-full mt-4 px-3 py-2 rounded-xl bg-[#4F46E5] hover:bg-[#5b52ea] transition text-xs font-semibold"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Draft missing stories</button>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>

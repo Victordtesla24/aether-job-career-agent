@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.045);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(255,107,53,0.35);}70%{box-shadow:0 0 0 8px rgba(255,107,53,0);}100%{box-shadow:0 0 0 0 rgba(255,107,53,0);}}
+  .live-dot{animation:pulse-ring 2s infinite;}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), radial-gradient(1000px 500px at -5% 10%, rgba(255,107,53,0.08), transparent 55%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <!-- Sidebar -->
+  <aside data-design-id="sidebar-main-a1b2c3" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-d4e5f6" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-gauge-high w-4 text-[#FF6B35]"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+    <div class="mt-auto glass-raised rounded-2xl p-4 border border-white/8">
+      <div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 rounded-full bg-[#34D399] live-dot"></span><span class="text-xs font-medium text-[#34D399]">Agents Active</span></div>
+      <p class="text-[11px] text-[#6B6B82] leading-relaxed">4 agents running · 12 tasks in queue</p>
+      <button data-design-id="btn-manage-agents-9a8b7c" class="mt-3 w-full text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition">Manage Agents</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- Top bar -->
+    <header data-design-id="topbar-g7h8i9" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div>
+        <h1 class="text-[15px] font-semibold">Good morning, Vikram</h1>
+        <p class="text-xs text-[#6B6B82] mono">Wed, Jul 1 · Your agents worked through the night</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="relative w-72">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6B82] text-sm"></i>
+          <input type="text" placeholder="Search jobs, applications, agents…" class="w-full bg-white/5 border border-white/8 rounded-xl pl-10 pr-4 py-2.5 text-sm placeholder:text-[#6B6B82] focus:outline-none focus:border-[#4F46E5]/50 transition">
+        </div>
+        <button data-design-id="btn-notif-j1k2l3" class="relative w-10 h-10 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition flex items-center justify-center"><i class="fa-regular fa-bell text-[#A0A0B8]"></i><span class="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-[#FF6B35]"></span></button>
+        <div class="flex items-center gap-2.5 pl-3 border-l border-white/8">
+          <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-sm font-semibold">VD</div>
+          <div class="leading-tight"><div class="text-[13px] font-medium">Vikram D.</div><div class="text-[11px] text-[#6B6B82]">Pro plan</div></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main data-design-id="main-content-m4n5o6" class="flex-1 px-8 py-7 overflow-hidden">
+      <!-- Stats row -->
+      <section data-design-id="stats-row-p7q8r9" class="grid grid-cols-4 gap-5 mb-7">
+        <div class="glass rounded-2xl border border-white/8 p-5 hover:border-white/15 transition">
+          <div class="flex items-center justify-between mb-3"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Active Applications</span><i class="fa-solid fa-paper-plane text-[#FF6B35] text-sm"></i></div>
+          <div class="mono text-3xl font-bold">37</div>
+          <div class="text-xs text-[#34D399] mt-2 flex items-center gap-1"><i class="fa-solid fa-arrow-up text-[10px]"></i>+8 this week</div>
+        </div>
+        <div class="glass rounded-2xl border border-white/8 p-5 hover:border-white/15 transition">
+          <div class="flex items-center justify-between mb-3"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Interview Rate</span><i class="fa-solid fa-comments text-[#4F46E5] text-sm"></i></div>
+          <div class="mono text-3xl font-bold">24<span class="text-lg text-[#6B6B82]">%</span></div>
+          <div class="text-xs text-[#34D399] mt-2 flex items-center gap-1"><i class="fa-solid fa-arrow-up text-[10px]"></i>+3.2% vs avg</div>
+        </div>
+        <div class="glass rounded-2xl border border-white/8 p-5 hover:border-white/15 transition">
+          <div class="flex items-center justify-between mb-3"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Offers</span><i class="fa-solid fa-award text-[#F59E0B] text-sm"></i></div>
+          <div class="mono text-3xl font-bold">3</div>
+          <div class="text-xs text-[#A0A0B8] mt-2">2 pending decision</div>
+        </div>
+        <div class="glass rounded-2xl border border-white/8 p-5 hover:border-white/15 transition relative overflow-hidden">
+          <div class="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-[#FF6B35]/10 blur-2xl"></div>
+          <div class="flex items-center justify-between mb-3"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">AI Confidence</span><i class="fa-solid fa-brain text-[#FF6B35] text-sm"></i></div>
+          <div class="mono text-3xl font-bold">91<span class="text-lg text-[#6B6B82]">%</span></div>
+          <div class="text-xs text-[#A0A0B8] mt-2">avg match quality</div>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-3 gap-6">
+        <!-- Left 2/3 -->
+        <div class="col-span-2 flex flex-col gap-6">
+          <!-- Agent activity feed -->
+          <section data-design-id="agent-feed-s1t2u3" class="glass rounded-2xl border border-white/8 p-6">
+            <div class="flex items-center justify-between mb-5">
+              <div class="flex items-center gap-2.5"><span class="w-2 h-2 rounded-full bg-[#34D399] live-dot"></span><h2 class="text-[15px] font-semibold">Agent Activity</h2><span class="text-[11px] text-[#6B6B82] mono">live</span></div>
+              <a href="#" class="text-xs text-[#A0A0B8] hover:text-white transition">View all</a>
+            </div>
+            <div class="flex flex-col gap-3.5">
+              <div class="flex items-start gap-3.5">
+                <div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 border border-[#4F46E5]/25 flex items-center justify-center shrink-0"><i class="fa-solid fa-magnifying-glass text-[#818CF8] text-xs"></i></div>
+                <div class="flex-1 min-w-0"><p class="text-sm"><span class="font-medium">Discovery Agent</span> found a strong match — <span class="text-white">Senior ML Engineer</span> at Canva</p><p class="text-[11px] text-[#6B6B82] mono mt-1">2 min ago · match 94%</p></div>
+                <span class="text-[10px] font-medium px-2 py-1 rounded-md bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/20">Discovered</span>
+              </div>
+              <div class="flex items-start gap-3.5">
+                <div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 border border-[#FF6B35]/25 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-pen text-[#FF6B35] text-xs"></i></div>
+                <div class="flex-1 min-w-0"><p class="text-sm"><span class="font-medium">Tailoring Agent</span> customized your resume for <span class="text-white">Staff Engineer</span> at Atlassian</p><p class="text-[11px] text-[#6B6B82] mono mt-1">14 min ago · ATS 96</p></div>
+                <span class="text-[10px] font-medium px-2 py-1 rounded-md bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/20">Tailored</span>
+              </div>
+              <div class="flex items-start gap-3.5">
+                <div class="w-8 h-8 rounded-lg bg-[#34D399]/15 border border-[#34D399]/25 flex items-center justify-center shrink-0"><i class="fa-solid fa-check text-[#34D399] text-xs"></i></div>
+                <div class="flex-1 min-w-0"><p class="text-sm"><span class="font-medium">Submission Agent</span> applied to <span class="text-white">Backend Lead</span> at Airtree</p><p class="text-[11px] text-[#6B6B82] mono mt-1">38 min ago · via LinkedIn</p></div>
+                <span class="text-[10px] font-medium px-2 py-1 rounded-md bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/20">Submitted</span>
+              </div>
+              <div class="flex items-start gap-3.5">
+                <div class="w-8 h-8 rounded-lg bg-[#FBBF24]/15 border border-[#FBBF24]/25 flex items-center justify-center shrink-0"><i class="fa-solid fa-hourglass-half text-[#FBBF24] text-xs"></i></div>
+                <div class="flex-1 min-w-0"><p class="text-sm"><span class="font-medium">Learning Agent</span> flagged a cover letter for your review — <span class="text-white">Product Engineer</span> at Linktree</p><p class="text-[11px] text-[#6B6B82] mono mt-1">1 hr ago · needs approval</p></div>
+                <span class="text-[10px] font-medium px-2 py-1 rounded-md bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/20">Waiting</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Today's opportunities -->
+          <section data-design-id="opportunities-v4w5x6" class="glass rounded-2xl border border-white/8 p-6">
+            <div class="flex items-center justify-between mb-5">
+              <h2 class="text-[15px] font-semibold">Today’s Opportunities</h2>
+              <a href="#" class="text-xs text-[#A0A0B8] hover:text-white transition">Browse all jobs</a>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+              <article data-design-id="opp-card-1-y7z8a9" class="glass-raised rounded-xl border border-white/8 p-4 hover:border-[#FF6B35]/30 transition group">
+                <div class="flex items-center justify-between mb-3"><div class="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold">CV</div><span class="mono text-xs font-semibold text-[#34D399]">94%</span></div>
+                <h3 class="text-sm font-semibold leading-snug">Senior ML Engineer</h3>
+                <p class="text-xs text-[#A0A0B8] mt-0.5">Canva · Sydney</p>
+                <p class="mono text-xs text-[#6B6B82] mt-2">$180k – $220k</p>
+                <button data-design-id="btn-apply-1-b1c2d3" class="mt-3 w-full text-xs font-medium py-2 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition">Tailor & Apply</button>
+              </article>
+              <article data-design-id="opp-card-2-e4f5g6" class="glass-raised rounded-xl border border-white/8 p-4 hover:border-[#FF6B35]/30 transition group">
+                <div class="flex items-center justify-between mb-3"><div class="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold">AT</div><span class="mono text-xs font-semibold text-[#34D399]">89%</span></div>
+                <h3 class="text-sm font-semibold leading-snug">Staff Engineer</h3>
+                <p class="text-xs text-[#A0A0B8] mt-0.5">Atlassian · Remote</p>
+                <p class="mono text-xs text-[#6B6B82] mt-2">$210k – $250k</p>
+                <button data-design-id="btn-apply-2-h7i8j9" class="mt-3 w-full text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition">Review Match</button>
+              </article>
+              <article data-design-id="opp-card-3-k1l2m3" class="glass-raised rounded-xl border border-white/8 p-4 hover:border-[#FF6B35]/30 transition group">
+                <div class="flex items-center justify-between mb-3"><div class="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold">SP</div><span class="mono text-xs font-semibold text-[#FBBF24]">82%</span></div>
+                <h3 class="text-sm font-semibold leading-snug">Backend Lead</h3>
+                <p class="text-xs text-[#A0A0B8] mt-0.5">Spotify · Hybrid</p>
+                <p class="mono text-xs text-[#6B6B82] mt-2">$195k – $230k</p>
+                <button data-design-id="btn-apply-3-n4o5p6" class="mt-3 w-full text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition">Review Match</button>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <!-- Right 1/3 -->
+        <div class="col-span-1 flex flex-col gap-6">
+          <!-- Funnel -->
+          <section data-design-id="funnel-q7r8s9" class="glass rounded-2xl border border-white/8 p-6">
+            <h2 class="text-[15px] font-semibold mb-5">Application Funnel</h2>
+            <div class="flex flex-col gap-3">
+              <div><div class="flex justify-between text-xs mb-1.5"><span class="text-[#A0A0B8]">Discovered</span><span class="mono font-medium">847</span></div><div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]" style="width:100%"></div></div></div>
+              <div><div class="flex justify-between text-xs mb-1.5"><span class="text-[#A0A0B8]">Evaluated</span><span class="mono font-medium">412</span></div><div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]/80" style="width:49%"></div></div></div>
+              <div><div class="flex justify-between text-xs mb-1.5"><span class="text-[#A0A0B8]">Applied</span><span class="mono font-medium">156</span></div><div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]" style="width:32%"></div></div></div>
+              <div><div class="flex justify-between text-xs mb-1.5"><span class="text-[#A0A0B8]">Interviewing</span><span class="mono font-medium">23</span></div><div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#F59E0B]" style="width:14%"></div></div></div>
+              <div><div class="flex justify-between text-xs mb-1.5"><span class="text-[#A0A0B8]">Offered</span><span class="mono font-medium">4</span></div><div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#34D399]" style="width:6%"></div></div></div>
+            </div>
+          </section>
+
+          <!-- Story Bank quick access -->
+          <section data-design-id="story-bank-quick-db10" class="glass rounded-2xl border border-white/8 p-6 hover:border-[#4F46E5]/30 transition">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#4F46E5]/15 border border-[#4F46E5]/25 flex items-center justify-center"><i class="fa-solid fa-book-bookmark text-[#818CF8] text-xs"></i></div><h2 class="text-[15px] font-semibold">Story Bank</h2></div>
+              <a href="#" class="text-xs text-[#818CF8] hover:text-white transition flex items-center gap-1">Open <i class="fa-solid fa-arrow-right text-[9px]"></i></a>
+            </div>
+            <p class="text-sm text-[#C8C8DC] mb-4"><span class="mono font-bold text-white">12</span> STAR achievements ready to deploy</p>
+            <p class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-semibold mb-2.5">Recently used</p>
+            <div class="flex flex-col gap-2">
+              <div class="flex items-center justify-between glass-raised rounded-lg border border-white/8 px-3 py-2"><span class="text-xs text-[#C8C8DC] truncate">Reduced test automation effort 92%</span><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/15 text-[#FF6B35] shrink-0 ml-2">8 maps</span></div>
+              <div class="flex items-center justify-between glass-raised rounded-lg border border-white/8 px-3 py-2"><span class="text-xs text-[#C8C8DC] truncate">30% delivery efficiency at ANZ</span><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/15 text-[#FF6B35] shrink-0 ml-2">6 maps</span></div>
+              <div class="flex items-center justify-between glass-raised rounded-lg border border-white/8 px-3 py-2"><span class="text-xs text-[#C8C8DC] truncate">Led CI/CD transformation, 5 squads</span><span class="mono text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B35]/15 text-[#FF6B35] shrink-0 ml-2">4 maps</span></div>
+            </div>
+          </section>
+
+          <!-- Recruiter CRM summary -->
+          <section data-design-id="crm-summary-db11" class="glass rounded-2xl border border-white/8 p-6 hover:border-[#FF6B35]/30 transition">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-[#FF6B35]/15 border border-[#FF6B35]/25 flex items-center justify-center"><i class="fa-solid fa-handshake text-[#FF6B35] text-xs"></i></div><h2 class="text-[15px] font-semibold">Recruiter CRM</h2></div>
+              <a href="#" class="text-xs text-[#FF6B35] hover:text-white transition flex items-center gap-1">Open <i class="fa-solid fa-arrow-right text-[9px]"></i></a>
+            </div>
+            <div class="flex flex-col gap-2.5">
+              <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-[#34D399]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-comments text-[#34D399] text-xs"></i></div><p class="text-sm text-[#C8C8DC]"><span class="mono font-semibold text-white">5</span> active recruiter conversations</p></div>
+              <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-[#FBBF24]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-clock text-[#FBBF24] text-xs"></i></div><p class="text-sm text-[#C8C8DC]"><span class="mono font-semibold text-white">2</span> follow-ups due today</p></div>
+              <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-[#4F46E5]/12 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-plus text-[#818CF8] text-xs"></i></div><p class="text-sm text-[#C8C8DC]"><span class="mono font-semibold text-white">1</span> warm intro pending</p></div>
+            </div>
+          </section>
+
+          <!-- Approvals -->
+          <section data-design-id="approvals-t1u2v3" class="glass rounded-2xl border border-white/8 p-6 flex-1">
+            <div class="flex items-center gap-2 mb-4"><i class="fa-solid fa-shield-halved text-[#FBBF24] text-sm"></i><h2 class="text-[15px] font-semibold">Needs Approval</h2><span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FBBF24]/15 text-[#FBBF24]">2</span></div>
+            <div class="flex flex-col gap-3">
+              <div class="glass-raised rounded-xl border border-white/8 p-4">
+                <p class="text-sm font-medium">Submit application</p>
+                <p class="text-xs text-[#A0A0B8] mt-0.5">Product Engineer · Linktree</p>
+                <p class="text-[11px] text-[#6B6B82] mono mt-2">confidence 88% · auto-apply off</p>
+                <div class="flex gap-2 mt-3">
+                  <button data-design-id="btn-approve-1-w4x5y6" class="flex-1 text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition">Approve</button>
+                  <button data-design-id="btn-reject-1-z7a8b9" class="flex-1 text-xs font-medium py-2 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 hover:bg-white/10 transition">Reject</button>
+                </div>
+              </div>
+              <div class="glass-raised rounded-xl border border-white/8 p-4">
+                <p class="text-sm font-medium">Send cover letter</p>
+                <p class="text-xs text-[#A0A0B8] mt-0.5">Senior ML Engineer · Canva</p>
+                <p class="text-[11px] text-[#6B6B82] mono mt-2">confidence 91% · tone: confident</p>
+                <div class="flex gap-2 mt-3">
+                  <button data-design-id="btn-approve-2-c1d2e3" class="flex-1 text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition">Approve</button>
+                  <button data-design-id="btn-reject-2-f4g5h6" class="flex-1 text-xs font-medium py-2 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8 hover:bg-white/10 transition">Reject</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Market Intelligence -->
+      <section data-design-id="market-intel-mi01" class="glass rounded-2xl border border-white/8 p-6 mt-7 relative overflow-hidden">
+        <div class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-[#4F46E5]/8 blur-3xl pointer-events-none"></div>
+        <div class="flex items-center justify-between mb-6 relative">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2 h-2 rounded-full bg-[#4F46E5] live-dot"></span>
+            <h2 class="text-[15px] font-semibold">Market Intelligence</h2>
+            <span class="text-[11px] text-[#6B6B82] mono">Hiring &amp; recruitment trends · AU + US</span>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-[#6B6B82] mono"><i class="fa-solid fa-circle text-[6px] text-[#34D399]"></i>updated 4 min ago</div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-5 relative">
+          <!-- Demand heatmap -->
+          <div class="col-span-2 glass-raised rounded-xl border border-white/8 p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-xs uppercase tracking-wide text-[#6B6B82] font-semibold">Demand Heatmap by Role</h3>
+              <div class="flex items-center gap-3 text-[10px] text-[#A0A0B8]"><span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#FF6B35]"></span>AU</span><span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#4F46E5]"></span>US</span></div>
+            </div>
+            <div class="flex flex-col gap-3.5">
+              <div class="grid grid-cols-[180px_1fr] items-center gap-3">
+                <span class="text-xs text-[#C8C8DC]">AI / ML Engineer</span>
+                <div class="flex flex-col gap-1.5">
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]" style="width:88%"></div></div>
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]" style="width:96%"></div></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-[180px_1fr] items-center gap-3">
+                <span class="text-xs text-[#C8C8DC]">DevOps Engineer</span>
+                <div class="flex flex-col gap-1.5">
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]" style="width:74%"></div></div>
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]" style="width:82%"></div></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-[180px_1fr] items-center gap-3">
+                <span class="text-xs text-[#C8C8DC]">Technical Program Manager</span>
+                <div class="flex flex-col gap-1.5">
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]" style="width:68%"></div></div>
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]" style="width:71%"></div></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-[180px_1fr] items-center gap-3">
+                <span class="text-xs text-[#C8C8DC]">Solutions Architect</span>
+                <div class="flex flex-col gap-1.5">
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]" style="width:62%"></div></div>
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]" style="width:70%"></div></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-[180px_1fr] items-center gap-3">
+                <span class="text-xs text-[#C8C8DC]">Scrum Master</span>
+                <div class="flex flex-col gap-1.5">
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#FF6B35]/70" style="width:41%"></div></div>
+                  <div class="h-2 rounded-full bg-white/6"><div class="h-2 rounded-full bg-[#4F46E5]/70" style="width:38%"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right column: remote index + hot sectors -->
+          <div class="col-span-1 flex flex-col gap-5">
+            <div class="glass-raised rounded-xl border border-white/8 p-5">
+              <h3 class="text-xs uppercase tracking-wide text-[#6B6B82] font-semibold mb-4">Remote Work Index</h3>
+              <div class="flex items-center justify-around">
+                <div class="text-center">
+                  <div class="relative w-16 h-16 mx-auto"><svg class="w-16 h-16 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#FF6B35" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="63.3" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-sm font-bold">35%</span></div>
+                  <p class="text-[11px] text-[#A0A0B8] mt-2">🇦🇺 Australia</p>
+                </div>
+                <div class="text-center">
+                  <div class="relative w-16 h-16 mx-auto"><svg class="w-16 h-16 -rotate-90" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#4F46E5" stroke-width="3" stroke-dasharray="97.4" stroke-dashoffset="53.6" stroke-linecap="round"/></svg><span class="absolute inset-0 flex items-center justify-center mono text-sm font-bold">45%</span></div>
+                  <p class="text-[11px] text-[#A0A0B8] mt-2">🌏 United States</p>
+                </div>
+              </div>
+              <p class="text-[11px] text-[#6B6B82] mt-3 text-center">share of remote-friendly senior roles</p>
+            </div>
+            <div class="glass-raised rounded-xl border border-white/8 p-5 flex-1">
+              <h3 class="text-xs uppercase tracking-wide text-[#6B6B82] font-semibold mb-3.5">Hot Sectors</h3>
+              <div class="flex flex-wrap gap-2">
+                <span class="text-[11px] px-2.5 py-1.5 rounded-lg bg-[#FF6B35]/12 text-[#FF6B35] border border-[#FF6B35]/25 flex items-center gap-1.5"><i class="fa-solid fa-fire text-[9px]"></i>Financial Services</span>
+                <span class="text-[11px] px-2.5 py-1.5 rounded-lg bg-[#4F46E5]/12 text-[#818CF8] border border-[#4F46E5]/25">Government / Defence</span>
+                <span class="text-[11px] px-2.5 py-1.5 rounded-lg bg-[#4F46E5]/12 text-[#818CF8] border border-[#4F46E5]/25">Healthcare AI</span>
+                <span class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8">Cloud Infrastructure</span>
+                <span class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 text-[#A0A0B8] border border-white/8">Fintech</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-5 mt-5 relative">
+          <!-- Salary trends -->
+          <div class="glass-raised rounded-xl border border-white/8 p-5">
+            <h3 class="text-xs uppercase tracking-wide text-[#6B6B82] font-semibold mb-4">Salary Trends</h3>
+            <div class="flex flex-col gap-4">
+              <div>
+                <div class="flex items-center justify-between mb-1.5"><span class="text-xs text-[#C8C8DC]">TPM</span><span class="mono text-[10px] text-[#34D399]"><i class="fa-solid fa-arrow-trend-up mr-1"></i>+6%</span></div>
+                <div class="flex items-center justify-between text-[11px]"><span class="mono text-[#FF6B35]">AU $180–220K</span><span class="mono text-[#818CF8]">US $160–200K</span></div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1.5"><span class="text-xs text-[#C8C8DC]">AI / ML Engineer</span><span class="mono text-[10px] text-[#34D399]"><i class="fa-solid fa-arrow-trend-up mr-1"></i>+18%</span></div>
+                <div class="flex items-center justify-between text-[11px]"><span class="mono text-[#FF6B35]">AU $160–200K</span><span class="mono text-[#818CF8]">US $150–250K</span></div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1.5"><span class="text-xs text-[#C8C8DC]">DevOps Engineer</span><span class="mono text-[10px] text-[#34D399]"><i class="fa-solid fa-arrow-trend-up mr-1"></i>+9%</span></div>
+                <div class="flex items-center justify-between text-[11px]"><span class="mono text-[#FF6B35]">AU $150–190K</span><span class="mono text-[#818CF8]">US $118–174K</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Best time to apply -->
+          <div class="glass-raised rounded-xl border border-[#4F46E5]/25 p-5">
+            <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-clock text-[#818CF8] text-sm"></i><h3 class="text-xs uppercase tracking-wide text-[#818CF8] font-semibold">Best Time to Apply</h3></div>
+            <div class="flex items-baseline gap-2 mb-2"><span class="mono text-2xl font-bold text-white">+23%</span><span class="text-xs text-[#A0A0B8]">response rate</span></div>
+            <p class="text-xs text-[#A0A0B8] leading-relaxed">Applications submitted <span class="text-white font-medium">Mon–Wed morning</span> earn 23% higher response rates than the weekly average.</p>
+            <div class="grid grid-cols-7 gap-1 mt-4">
+              <div class="h-6 rounded bg-[#FF6B35]/70"></div><div class="h-6 rounded bg-[#FF6B35]"></div><div class="h-6 rounded bg-[#FF6B35]/85"></div><div class="h-6 rounded bg-white/8"></div><div class="h-6 rounded bg-white/8"></div><div class="h-6 rounded bg-white/5"></div><div class="h-6 rounded bg-white/5"></div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 mt-1 text-[9px] text-[#6B6B82] text-center"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          </div>
+
+          <!-- Where to focus AI rec -->
+          <div class="glass-raised rounded-xl border border-[#FF6B35]/25 p-5 relative overflow-hidden">
+            <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-[#FF6B35]/10 blur-2xl"></div>
+            <div class="flex items-center gap-2 mb-3 relative"><i class="fa-solid fa-brain text-[#FF6B35] text-sm"></i><h3 class="text-xs uppercase tracking-wide text-[#FF6B35] font-semibold">Where to Focus</h3></div>
+            <p class="text-xs text-[#C8C8DC] leading-relaxed relative">Your profile matches strongly for <span class="text-white font-medium">TPM roles in Financial Services</span>. Consider expanding to <span class="text-white font-medium">US remote opportunities</span>, where demand is <span class="mono text-[#FF6B35]">40% higher</span>.</p>
+            <button data-design-id="btn-focus-explore-mi02" class="mt-4 w-full text-xs font-medium py-2 rounded-lg bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/25 hover:bg-[#FF6B35]/25 transition relative">Explore matching roles</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>

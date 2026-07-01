@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  .noscroll::-webkit-scrollbar{height:8px;}
+  .noscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:8px;}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <aside data-design-id="sidebar-main-at01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-at02" class="flex flex-col gap-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-file-lines w-4"></i>Resume Studio</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-paper-plane w-4 text-[#FF6B35]"></i>Applications</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header data-design-id="topbar-at03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div><h1 class="text-[15px] font-semibold">Application Tracker</h1><p class="text-xs text-[#6B6B82] mono">37 active applications across 8 stages</p></div>
+      <div class="flex items-center gap-3">
+        <div class="flex bg-white/5 border border-white/8 rounded-lg p-0.5">
+          <button data-design-id="btn-view-board-at04" class="text-xs font-medium px-3 py-1.5 rounded-md bg-[#FF6B35]/15 text-[#FF6B35]">Board View</button>
+          <button data-design-id="btn-view-sankey-at40" class="text-xs font-medium px-3 py-1.5 rounded-md text-[#A0A0B8] hover:text-white transition"><i class="fa-solid fa-diagram-project text-[10px] mr-1.5"></i>Sankey Flow</button>
+          <button data-design-id="btn-view-timeline-at05" class="text-xs font-medium px-3 py-1.5 rounded-md text-[#A0A0B8] hover:text-white transition">Timeline</button>
+        </div>
+        <button data-design-id="btn-filter-at06" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-filter text-[10px]"></i>Filter</button>
+        <button data-design-id="btn-sort-at07" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-arrow-down-wide-short text-[10px]"></i>Sort</button>
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-sm font-semibold">VD</div>
+      </div>
+    </header>
+
+    <div class="px-8 pt-4"><div class="flex items-start gap-3 rounded-xl border border-[#FBBF24]/25 bg-[#FBBF24]/8 px-4 py-3"><i class="fa-solid fa-shield-halved text-[#FBBF24] mt-0.5"></i><p class="text-xs text-[#C7C7D6] leading-relaxed"><span class="font-semibold text-[#FBBF24]">Auto-apply is a high-risk action.</span> Only applications with <span class="mono text-white">Match Score &gt; 85%</span> and your explicit approval will be submitted. Auto-apply is currently <span class="text-white font-medium">off</span>.</p></div></div>
+
+    <main data-design-id="kanban-at08" class="flex-1 px-8 py-6 overflow-x-auto noscroll">
+      <div class="flex gap-4 h-full" style="width:max-content;">
+
+        <!-- Column: Discovered -->
+        <section data-design-id="col-discovered-at09" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#4F46E5]"></span><span class="text-xs font-semibold">Discovered</span></div><span class="mono text-[11px] text-[#6B6B82]">12</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at10" class="glass rounded-xl border border-white/8 p-3.5 hover:border-white/15 transition"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">CV</div><span class="mono text-[11px] font-semibold text-[#34D399]">94</span></div><div class="w-5 h-5 rounded-full bg-[#4F46E5]/20 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass text-[9px] text-[#818CF8]"></i></div></div><h4 class="text-xs font-semibold mt-2.5">Senior ML Engineer</h4><p class="text-[11px] text-[#6B6B82]">Canva</p><p class="text-[10px] text-[#6B6B82] mono mt-2">2 min ago</p></article>
+            <article data-design-id="card-at11" class="glass rounded-xl border border-white/8 p-3.5 hover:border-white/15 transition"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">FG</div><span class="mono text-[11px] font-semibold text-[#FBBF24]">81</span></div><div class="w-5 h-5 rounded-full bg-[#4F46E5]/20 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass text-[9px] text-[#818CF8]"></i></div></div><h4 class="text-xs font-semibold mt-2.5">Platform Engineer</h4><p class="text-[11px] text-[#6B6B82]">Figma</p><p class="text-[10px] text-[#6B6B82] mono mt-2">18 min ago</p></article>
+          </div>
+        </section>
+
+        <!-- Column: Evaluating -->
+        <section data-design-id="col-evaluating-at12" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#818CF8]"></span><span class="text-xs font-semibold">Evaluating</span></div><span class="mono text-[11px] text-[#6B6B82]">6</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at13" class="glass rounded-xl border border-white/8 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">SP</div><span class="mono text-[11px] font-semibold text-[#FBBF24]">82</span></div><div class="w-5 h-5 rounded-full bg-[#818CF8]/20 flex items-center justify-center"><i class="fa-solid fa-scale-balanced text-[9px] text-[#818CF8]"></i></div></div><h4 class="text-xs font-semibold mt-2.5">Backend Lead</h4><p class="text-[11px] text-[#6B6B82]">Spotify</p><div class="mt-2 h-1 rounded-full bg-white/8"><div class="h-1 rounded-full bg-[#818CF8]" style="width:60%"></div></div></article>
+          </div>
+        </section>
+
+        <!-- Column: Tailoring -->
+        <section data-design-id="col-tailoring-at14" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#FF6B35]"></span><span class="text-xs font-semibold">Tailoring</span></div><span class="mono text-[11px] text-[#6B6B82]">3</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at15" class="glass rounded-xl border border-[#FF6B35]/25 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">AT</div><span class="mono text-[11px] font-semibold text-[#34D399]">89</span></div><div class="w-5 h-5 rounded-full bg-[#FF6B35]/20 flex items-center justify-center"><i class="fa-solid fa-file-pen text-[9px] text-[#FF6B35]"></i></div></div><h4 class="text-xs font-semibold mt-2.5">Staff Engineer</h4><p class="text-[11px] text-[#6B6B82]">Atlassian</p><p class="text-[10px] text-[#FF6B35] mono mt-2">tailoring resume…</p></article>
+          </div>
+        </section>
+
+        <!-- Column: Ready -->
+        <section data-design-id="col-ready-at16" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#F59E0B]"></span><span class="text-xs font-semibold">Ready to Apply</span></div><span class="mono text-[11px] text-[#6B6B82]">4</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at17" class="glass rounded-xl border border-white/8 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">LT</div><span class="mono text-[11px] font-semibold text-[#34D399]">87</span></div><div class="w-5 h-5 rounded-full bg-[#F59E0B]/20 flex items-center justify-center"><i class="fa-solid fa-clock text-[9px] text-[#F59E0B]"></i></div></div><h4 class="text-xs font-semibold mt-2.5">Product Engineer</h4><p class="text-[11px] text-[#6B6B82]">Linktree</p><span class="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-md bg-[#FBBF24]/15 text-[#FBBF24]">needs approval</span></article>
+          </div>
+        </section>
+
+        <!-- Column: Submitted -->
+        <section data-design-id="col-submitted-at18" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#60A5FA]"></span><span class="text-xs font-semibold">Submitted</span></div><span class="mono text-[11px] text-[#6B6B82]">5</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at19" class="glass rounded-xl border border-white/8 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">AR</div><span class="mono text-[11px] font-semibold text-[#34D399]">91</span></div><i class="fa-solid fa-check text-[9px] text-[#60A5FA]"></i></div><h4 class="text-xs font-semibold mt-2.5">Backend Lead</h4><p class="text-[11px] text-[#6B6B82]">Airtree</p><div class="flex items-center gap-1.5 mt-2 text-[10px] text-[#34D399]"><i class="fa-solid fa-clock text-[9px]"></i>Follow-up sent ✓</div></article>
+          </div>
+        </section>
+
+        <!-- Column: In Review -->
+        <section data-design-id="col-review-at20" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#A78BFA]"></span><span class="text-xs font-semibold">In Review</span></div><span class="mono text-[11px] text-[#6B6B82]">4</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at21" class="glass rounded-xl border border-white/8 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">NB</div><span class="mono text-[11px] font-semibold text-[#34D399]">88</span></div><i class="fa-solid fa-eye text-[9px] text-[#A78BFA]"></i></div><h4 class="text-xs font-semibold mt-2.5">Senior SWE</h4><p class="text-[11px] text-[#6B6B82]">Notion</p><div class="flex items-center gap-1.5 mt-2 text-[10px] text-[#FBBF24]"><i class="fa-solid fa-clock text-[9px]"></i>Auto follow-up in 3 days</div></article>
+          </div>
+        </section>
+
+        <!-- Column: Interview -->
+        <section data-design-id="col-interview-at22" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#F59E0B]"></span><span class="text-xs font-semibold">Interview</span></div><span class="mono text-[11px] text-[#6B6B82]">2</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at23" class="glass rounded-xl border border-[#F59E0B]/25 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">ST</div><span class="mono text-[11px] font-semibold text-[#34D399]">92</span></div><i class="fa-solid fa-comments text-[9px] text-[#F59E0B]"></i></div><h4 class="text-xs font-semibold mt-2.5">Staff Engineer</h4><p class="text-[11px] text-[#6B6B82]">Stripe</p><span class="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-md bg-[#F59E0B]/15 text-[#F59E0B]">round 2 · Jul 3</span></article>
+          </div>
+        </section>
+
+        <!-- Column: Offer -->
+        <section data-design-id="col-offer-at24" class="w-[260px] shrink-0">
+          <div class="flex items-center justify-between mb-3 px-1"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#34D399]"></span><span class="text-xs font-semibold">Offer</span></div><span class="mono text-[11px] text-[#6B6B82]">3</span></div>
+          <div class="flex flex-col gap-2.5">
+            <article data-design-id="card-at25" class="glass-raised rounded-xl border border-[#34D399]/30 p-3.5"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center text-[10px] font-bold">VC</div><span class="mono text-[11px] font-semibold text-[#34D399]">95</span></div><i class="fa-solid fa-award text-[9px] text-[#34D399]"></i></div><h4 class="text-xs font-semibold mt-2.5">Senior Engineer</h4><p class="text-[11px] text-[#6B6B82]">Vercel</p><p class="mono text-[10px] text-[#34D399] mt-2">$225k · decide by Jul 8</p></article>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Sankey Flow view -->
+    <section data-design-id="sankey-view-at41" class="border-t border-white/8 px-8 py-6">
+      <div class="flex items-center gap-2.5 mb-1"><i class="fa-solid fa-diagram-project text-[#818CF8] text-sm"></i><h2 class="text-[15px] font-semibold">Sankey Flow</h2><span class="text-[11px] text-[#6B6B82]">application flow &amp; drop-off across stages</span></div>
+      <div class="glass rounded-2xl border border-white/8 p-6 mt-4 overflow-x-auto">
+        <svg viewBox="0 0 1120 380" class="w-full min-w-[1000px]" style="font-family:'Inter',sans-serif;">
+          <defs>
+            <linearGradient id="f1" x1="0" x2="1"><stop offset="0" stop-color="#4F46E5" stop-opacity="0.5"/><stop offset="1" stop-color="#818CF8" stop-opacity="0.4"/></linearGradient>
+            <linearGradient id="f2" x1="0" x2="1"><stop offset="0" stop-color="#818CF8" stop-opacity="0.45"/><stop offset="1" stop-color="#FF6B35" stop-opacity="0.4"/></linearGradient>
+            <linearGradient id="f3" x1="0" x2="1"><stop offset="0" stop-color="#FF6B35" stop-opacity="0.45"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0.4"/></linearGradient>
+            <linearGradient id="f4" x1="0" x2="1"><stop offset="0" stop-color="#A78BFA" stop-opacity="0.45"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0.45"/></linearGradient>
+            <linearGradient id="f5" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B" stop-opacity="0.5"/><stop offset="1" stop-color="#34D399" stop-opacity="0.5"/></linearGradient>
+          </defs>
+          <!-- flows -->
+          <path d="M54,30 C147,30 147,60 240,60 L240,300 C147,300 147,270 54,270 Z" fill="url(#f1)"/>
+          <path d="M254,60 C347,60 347,112.5 440,112.5 L440,247.5 C347,247.5 347,195 254,195 Z" fill="url(#f2)"/>
+          <path d="M454,112.5 C547,112.5 547,135 640,135 L640,225 C547,225 547,202.5 454,202.5 Z" fill="url(#f3)"/>
+          <path d="M654,135 C747,135 747,162 840,162 L840,198 C747,198 747,171 654,171 Z" fill="url(#f4)"/>
+          <path d="M854,162 C947,162 947,175.5 1040,175.5 L1040,184.5 C947,184.5 947,171 854,171 Z" fill="url(#f5)"/>
+          <!-- nodes -->
+          <rect x="40" y="30" width="14" height="300" rx="3" fill="#4F46E5"/>
+          <rect x="240" y="60" width="14" height="240" rx="3" fill="#818CF8"/>
+          <rect x="440" y="112.5" width="14" height="135" rx="3" fill="#FF6B35"/>
+          <rect x="640" y="135" width="14" height="90" rx="3" fill="#A78BFA"/>
+          <rect x="840" y="162" width="14" height="36" rx="3" fill="#F59E0B"/>
+          <rect x="1040" y="175.5" width="14" height="9" rx="3" fill="#34D399"/>
+          <!-- labels -->
+          <text x="47" y="20" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Discovered</text><text x="47" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">847</text>
+          <text x="247" y="50" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Evaluated</text><text x="247" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">412</text>
+          <text x="447" y="102" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Applied</text><text x="447" y="348" fill="#FF6B35" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">156</text>
+          <text x="647" y="125" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">In Review</text><text x="647" y="348" fill="#A78BFA" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">89</text>
+          <text x="847" y="152" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Interview</text><text x="847" y="348" fill="#F59E0B" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">23</text>
+          <text x="1047" y="165" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Offer</text><text x="1047" y="348" fill="#34D399" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">4</text>
+          <!-- drop-offs with reasons -->
+          <text x="147" y="312" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−435 · below match threshold</text>
+          <text x="347" y="282" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−256 · skipped / low fit</text>
+          <text x="547" y="242" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−67 · no response</text>
+          <text x="747" y="212" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−66 · screened out</text>
+          <text x="947" y="197" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−19 · not selected</text>
+        </svg>
+        <p class="text-[11px] text-[#6B6B82] mt-4 text-center">Biggest drop-off at <span class="text-[#F87171] font-medium">Applied → In Review (−67, no response)</span> — improve application quality and follow-up timing rather than raising the threshold.</p>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

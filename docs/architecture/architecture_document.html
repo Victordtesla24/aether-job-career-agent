@@ -1,0 +1,3433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomous AI Job Application Platform — Enterprise Architecture Package v1.0</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      background: '#1a1f2e',
+      primaryColor: '#FF6B35',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#FF6B35',
+      lineColor: '#94a3b8',
+      secondaryColor: '#1e2a3a',
+      tertiaryColor: '#252d3d',
+      noteBkgColor: '#1e2a3a',
+      noteTextColor: '#e2e8f0',
+      activationBkgColor: '#FF6B35',
+      sequenceNumberColor: '#FF6B35'
+    }
+  });
+</script>
+<style>
+/* ============================================================
+   PAGE SETUP — A4 LANDSCAPE
+   ============================================================ */
+@page {
+  size: A4 landscape;
+  margin: 1.5cm 2cm;
+  @top-center {
+    content: string(doctitle);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 8pt;
+    color: #64748b;
+    letter-spacing: 0.5px;
+  }
+  @bottom-left {
+    content: "Autonomous AI Job Application Platform — Enterprise Architecture v1.0";
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 7.5pt;
+    color: #64748b;
+  }
+  @bottom-right {
+    content: counter(page);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 8pt;
+    color: #FF6B35;
+  }
+}
+@page :first { margin: 0; @top-center { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
+
+/* ============================================================
+   GLOBAL BASE
+   ============================================================ */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 0;
+  background: #0a0e1a;
+  color: #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10pt;
+  line-height: 1.65;
+  string-set: doctitle "";
+}
+
+h1 { string-set: doctitle content(); }
+h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }
+
+/* ============================================================
+   OVERFLOW PREVENTION (MANDATORY)
+   ============================================================ */
+pre, table, figure, img, svg, .mermaid, blockquote, .equation, code {
+  max-width: 100%; box-sizing: border-box; overflow-wrap: break-word;
+}
+pre { overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+figure img, figure svg { max-width: 80%; max-height: 40vh; height: auto; }
+a { word-break: break-all; color: #FF6B35; text-decoration: none; }
+.katex-display { overflow-x: auto; }
+
+/* ============================================================
+   MERMAID DIAGRAM CONTAINERS
+   ============================================================ */
+.diagram-wrap {
+  background: rgba(26,31,46,0.95);
+  border: 1px solid rgba(255,107,53,0.25);
+  border-radius: 10px;
+  padding: 20px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.diagram-wrap .mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.diagram-wrap .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  max-height: 32vh;
+}
+.diagram-label {
+  font-size: 8.5pt;
+  color: #64748b;
+  text-align: center;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+.cover {
+  page: cover;
+  width: 297mm;
+  height: 210mm;
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  background: linear-gradient(135deg, #050810 0%, #0d1b3e 25%, #1a1435 50%, #0a1628 75%, #050810 100%);
+  color: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-grid-overlay {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,107,53,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,107,53,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.cover-glow-1 {
+  position: absolute; top: -60px; right: -80px;
+  width: 400px; height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,107,53,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover-glow-2 {
+  position: absolute; bottom: -80px; left: -60px;
+  width: 350px; height: 350px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(78,205,196,0.10) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.cover-inner {
+  position: relative;
+  text-align: center;
+  padding: 0 60px;
+  z-index: 2;
+}
+
+.cover-badge {
+  display: inline-block;
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.45);
+  color: #FF6B35;
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  padding: 5px 18px;
+  border-radius: 20px;
+  margin-bottom: 22px;
+}
+
+.cover h1 {
+  font-size: 26pt;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+  margin: 0 0 10px 0;
+  padding: 0 10px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  text-shadow: 0 2px 20px rgba(255,107,53,0.3);
+  string-set: doctitle "";
+}
+
+.cover-subtitle {
+  font-size: 13pt;
+  color: #FF6B35;
+  font-weight: 600;
+  margin: 0 0 30px 0;
+  letter-spacing: 1px;
+}
+
+.cover-accent-line {
+  width: 120px; height: 3px;
+  background: linear-gradient(90deg, transparent, #FF6B35, transparent);
+  margin: 0 auto 30px;
+}
+
+.cover-meta-grid {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.cover-meta-item {
+  text-align: center;
+}
+.cover-meta-item .label {
+  font-size: 7.5pt;
+  color: #64748b;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 4px;
+}
+.cover-meta-item .value {
+  font-size: 10pt;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.cover-bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #FF6B35, #4ECDC4, #FF6B35, transparent);
+}
+
+/* ============================================================
+   TOC
+   ============================================================ */
+.toc-page {
+  page-break-before: always;
+  padding: 30px 0;
+}
+.toc-title {
+  font-size: 20pt;
+  font-weight: 700;
+  color: #FF6B35;
+  margin-bottom: 6px;
+  border-bottom: none;
+}
+.toc-subtitle {
+  font-size: 9pt;
+  color: #64748b;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,107,53,0.2);
+}
+.toc-columns {
+  column-count: 2;
+  column-gap: 2cm;
+}
+.toc-list { list-style: none; padding: 0; margin: 0; column-count: 2; column-gap: 0.6cm; }
+.toc-list li {
+  display: flex; align-items: baseline;
+  padding: 4px 0;
+  break-inside: avoid;
+}
+.toc-list li a {
+  display: flex; align-items: baseline;
+  width: 100%; text-decoration: none;
+  color: #e2e8f0;
+}
+.toc-list .toc-h2 .toc-text {
+  font-weight: 700; font-size: 10.5pt;
+  color: #f8fafc;
+}
+.toc-list .toc-h3 {
+  padding-left: 18px;
+}
+.toc-list .toc-h3 .toc-text {
+  font-weight: 400; font-size: 9.5pt;
+  color: #94a3b8;
+}
+.toc-section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.3);
+  border-radius: 4px;
+  font-size: 8pt;
+  color: #FF6B35;
+  font-weight: 700;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.toc-text { white-space: nowrap; flex-shrink: 0; }
+.toc-dots {
+  flex: 1; margin: 0 6px;
+  border-bottom: 1.5px dotted rgba(255,107,53,0.3);
+  min-width: 30px;
+  position: relative; top: -3px;
+}
+.toc-page-num {
+  flex-shrink: 0; text-align: right;
+  min-width: 24px; font-size: 9.5pt;
+  color: #FF6B35; font-weight: 600;
+}
+
+/* ============================================================
+   SECTION LAYOUT
+   ============================================================ */
+.section {
+  page-break-before: always;
+  padding: 0;
+}
+.section-header { page-break-after: avoid; }
+
+.section-header {
+  margin-bottom: 24px;
+}
+
+.section-number-badge {
+  display: inline-block;
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.35);
+  color: #FF6B35;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.section h1 {
+  font-size: 22pt;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.section-rule {
+  height: 3px;
+  background: linear-gradient(90deg, #FF6B35, rgba(255,107,53,0.2), transparent);
+  border: none;
+  margin: 12px 0 24px 0;
+  border-radius: 2px;
+}
+
+/* Two-column layout for content */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* ============================================================
+   CARDS & GLASS COMPONENTS
+   ============================================================ */
+.card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,107,53,0.18);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #FF6B35, rgba(255,107,53,0.2), transparent);
+}
+
+.card-accent {
+  border-color: rgba(255,107,53,0.4);
+  background: rgba(255,107,53,0.06);
+}
+.card-teal {
+  border-color: rgba(78,205,196,0.3);
+  background: rgba(78,205,196,0.04);
+}
+.card-teal::before { background: linear-gradient(90deg, #4ECDC4, rgba(78,205,196,0.2), transparent); }
+.card-purple {
+  border-color: rgba(167,139,250,0.3);
+  background: rgba(167,139,250,0.04);
+}
+.card-purple::before { background: linear-gradient(90deg, #A78BFA, rgba(167,139,250,0.2), transparent); }
+
+.card h3 {
+  font-size: 12pt;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 10px 0;
+}
+.card h4 {
+  font-size: 10pt;
+  font-weight: 700;
+  color: #FF6B35;
+  margin: 12px 0 6px 0;
+}
+.card p {
+  margin: 0 0 8px 0;
+  color: #cbd5e1;
+  font-size: 9.5pt;
+}
+.card ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.card ul li {
+  color: #94a3b8;
+  font-size: 9pt;
+  margin-bottom: 3px;
+}
+
+/* ============================================================
+   AGENT CARDS
+   ============================================================ */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.agent-card {
+  background: rgba(17,24,39,0.9);
+  border: 1px solid rgba(255,107,53,0.2);
+  border-radius: 10px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  break-inside: avoid;
+}
+
+.agent-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--agent-color, #FF6B35);
+}
+
+.agent-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.agent-number {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8.5pt;
+  font-weight: 800;
+  color: #FF6B35;
+  flex-shrink: 0;
+}
+
+.agent-title-block { flex: 1; }
+.agent-title {
+  font-size: 10.5pt;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 2px 0;
+  line-height: 1.2;
+}
+.agent-tagline {
+  font-size: 8pt;
+  color: #64748b;
+  font-style: italic;
+}
+
+.agent-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.agent-field {
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.agent-field .field-label {
+  font-size: 7pt;
+  color: #FF6B35;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 2px;
+}
+.agent-field .field-val {
+  font-size: 8.5pt;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+.agent-field-full {
+  grid-column: span 2;
+}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 9.5pt;
+}
+.data-table thead tr {
+  background: rgba(255,107,53,0.12);
+  border-bottom: 2px solid rgba(255,107,53,0.35);
+}
+.data-table thead th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 700;
+  color: #FF6B35;
+  font-size: 9pt;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.data-table tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.data-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.02);
+}
+.data-table tbody td {
+  padding: 9px 14px;
+  color: #cbd5e1;
+  vertical-align: top;
+}
+.data-table tbody td:first-child {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* ============================================================
+   KPIS / METRIC TILES
+   ============================================================ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: 16px 0;
+}
+.kpi-tile {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,107,53,0.2);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.kpi-tile .kpi-value {
+  font-size: 20pt;
+  font-weight: 800;
+  color: #FF6B35;
+  display: block;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.kpi-tile .kpi-label {
+  font-size: 8pt;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   INFO BOXES
+   ============================================================ */
+.info-box {
+  border-left: 3px solid #FF6B35;
+  background: rgba(255,107,53,0.07);
+  padding: 12px 16px;
+  margin: 14px 0;
+  border-radius: 0 8px 8px 0;
+}
+.info-box.teal { border-color: #4ECDC4; background: rgba(78,205,196,0.07); }
+.info-box.purple { border-color: #A78BFA; background: rgba(167,139,250,0.07); }
+.info-box.blue { border-color: #60A5FA; background: rgba(96,165,250,0.07); }
+
+.info-box p { margin: 0; font-size: 9.5pt; color: #cbd5e1; }
+.info-box strong { color: #FF6B35; }
+
+/* ============================================================
+   TAGS / BADGES
+   ============================================================ */
+.tag {
+  display: inline-block;
+  background: rgba(255,107,53,0.12);
+  border: 1px solid rgba(255,107,53,0.3);
+  color: #FF6B35;
+  font-size: 7.5pt;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin: 2px;
+}
+.tag.teal { background: rgba(78,205,196,0.12); border-color: rgba(78,205,196,0.3); color: #4ECDC4; }
+.tag.purple { background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.3); color: #A78BFA; }
+.tag.green { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.3); color: #34D399; }
+.tag.yellow { background: rgba(251,191,36,0.12); border-color: rgba(251,191,36,0.3); color: #FBBF24; }
+.tag.red { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.3); color: #F87171; }
+
+/* ============================================================
+   SUBSECTION HEADINGS
+   ============================================================ */
+.section h2 {
+  font-size: 14pt;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 26px 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,107,53,0.25);
+}
+.section h3 {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #FF6B35;
+  margin: 18px 0 8px 0;
+}
+.section h4 {
+  font-size: 10pt;
+  font-weight: 700;
+  color: #4ECDC4;
+  margin: 12px 0 6px 0;
+}
+.section p {
+  margin: 0 0 10px 0;
+  color: #cbd5e1;
+  text-align: justify;
+  text-align-last: left;
+}
+.section ul, .section ol {
+  margin: 6px 0 12px 0;
+  padding-left: 20px;
+}
+.section ul li, .section ol li {
+  color: #94a3b8;
+  margin-bottom: 5px;
+  font-size: 9.5pt;
+}
+.section strong { color: #f8fafc; }
+
+/* ============================================================
+   CODE BLOCKS
+   ============================================================ */
+code {
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 8.5pt;
+  background: rgba(255,255,255,0.07);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #FF6B35;
+}
+pre {
+  background: rgba(17,24,39,0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 8pt;
+  color: #e2e8f0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin: 12px 0;
+}
+
+/* ============================================================
+   PAGE BREAK RULES (NO large containers)
+   ============================================================ */
+figure { page-break-inside: avoid; max-height: 70vh; height: auto; width: 100%; object-fit: contain; }
+tr, li { page-break-inside: avoid; }
+.agent-card { break-inside: avoid; }
+.kpi-tile { break-inside: avoid; }
+.card { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     COVER PAGE
+     ============================================================ -->
+<div class="cover">
+  <div class="cover-grid-overlay"></div>
+  <div class="cover-glow-1"></div>
+  <div class="cover-glow-2"></div>
+  <div class="cover-inner">
+    <div class="cover-badge">Enterprise Architecture Package</div>
+    <h1>Autonomous AI Job Application Platform</h1>
+    <div class="cover-subtitle">Architecture &amp; Design Reference v1.0</div>
+    <div class="cover-accent-line"></div>
+    <div class="cover-meta-grid">
+      <div class="cover-meta-item">
+        <span class="label">Author</span>
+        <span class="value">Vikram Deshpande</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Role</span>
+        <span class="value">Sr. TPM / AI Solutions Architect</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Date</span>
+        <span class="value">July 2026</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Version</span>
+        <span class="value">v1.0 — Initial Release</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Classification</span>
+        <span class="value">Internal — Confidential</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Status</span>
+        <span class="value">Architecture Review Draft</span>
+      </div>
+    </div>
+  </div>
+  <div class="cover-bottom-bar"></div>
+</div>
+
+<!-- ============================================================
+     TABLE OF CONTENTS
+     ============================================================ -->
+<div class="toc-page">
+  <h2 class="toc-title">Table of Contents</h2>
+  <div class="toc-subtitle">Autonomous AI Job Application Platform — Enterprise Architecture Package v1.0 | Vikram Deshpande | July 2026</div>
+  <div class="toc-columns">
+    <ul class="toc-list">
+      <li class="toc-h2">
+        <a href="#sec-exec">
+          <span class="toc-section-badge">2</span>
+          <span class="toc-text">Executive Summary</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-exec"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-vision">
+          <span class="toc-section-badge">3</span>
+          <span class="toc-text">Product Vision &amp; Strategy</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-vision"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-c4">
+          <span class="toc-section-badge">4</span>
+          <span class="toc-text">Enterprise Architecture — C4 Model</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-c4"></span></span>
+        </a>
+      </li>
+      <li class="toc-h3">
+        <a href="#sec-c4">
+          <span class="toc-text">Context, Container, Component, Deployment</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-c4"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-agents">
+          <span class="toc-section-badge">5</span>
+          <span class="toc-text">AI Agent Architecture (20 Agents)</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-agents"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-orchestration">
+          <span class="toc-section-badge">6</span>
+          <span class="toc-text">Multi-Agent Orchestration</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-orchestration"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-sequences">
+          <span class="toc-section-badge">7</span>
+          <span class="toc-text">Sequence Diagrams</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-sequences"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-pipeline">
+          <span class="toc-section-badge">8</span>
+          <span class="toc-text">Resume Tailoring Pipeline</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-pipeline"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-ats">
+          <span class="toc-section-badge">9</span>
+          <span class="toc-text">ATS Optimization Engine</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-ats"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-datamodel">
+          <span class="toc-section-badge">10</span>
+          <span class="toc-text">Data Model &amp; ERD</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-datamodel"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-memory">
+          <span class="toc-section-badge">11</span>
+          <span class="toc-text">AI Memory Architecture</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-memory"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-kg">
+          <span class="toc-section-badge">12</span>
+          <span class="toc-text">Knowledge Graph</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-kg"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-security">
+          <span class="toc-section-badge">13</span>
+          <span class="toc-text">Security Architecture</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-security"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-errors">
+          <span class="toc-section-badge">14</span>
+          <span class="toc-text">Error Handling &amp; Recovery</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-errors"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-analytics">
+          <span class="toc-section-badge">15</span>
+          <span class="toc-text">Analytics &amp; KPIs</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-analytics"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-techstack">
+          <span class="toc-section-badge">16</span>
+          <span class="toc-text">Technology Stack Recommendations</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-techstack"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-roadmap">
+          <span class="toc-section-badge">17</span>
+          <span class="toc-text">Implementation Roadmap</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-roadmap"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-decisions">
+          <span class="toc-section-badge">18</span>
+          <span class="toc-text">Decision Trees</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-decisions"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-statemachines">
+          <span class="toc-section-badge">19</span>
+          <span class="toc-text">State Machines</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-statemachines"></span></span>
+        </a>
+      </li>
+      <li class="toc-h2">
+        <a href="#sec-appendix">
+          <span class="toc-section-badge">20</span>
+          <span class="toc-text">Appendix</span>
+          <span class="toc-dots"></span>
+          <span class="toc-page-num"><span class="page-ref" data-href="#sec-appendix"></span></span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 2: EXECUTIVE SUMMARY
+     ============================================================ -->
+<div class="section" id="sec-exec">
+  <div class="section-header">
+    <div class="section-number-badge">Section 02</div>
+    <h1>Executive Summary</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Vision Statement</h2>
+      <p>The <strong>Autonomous AI Job Application Platform</strong> is an intelligent career agent system that continuously discovers, evaluates, tailors, applies, and learns — acting as a tireless professional advocate for its user. Built for the modern AI-first job market, it transforms what is currently an exhausting, manual, and largely ineffective process into a precision-engineered pipeline that delivers measurable outcomes: more interviews, higher offer rates, and dramatically less time spent on administrative job-search mechanics.</p>
+      <p>This platform is not a simple automation script. It is a sophisticated multi-agent orchestration system combining state-of-the-art LLMs, semantic search, browser automation, and continuous reinforcement learning into a coherent, auditable, and responsible product. Every action is grounded in evidence from the user's verified portfolio, every claim is traceable to a source of record, and every submission meets a quantifiable quality bar before it leaves the system.</p>
+
+      <h2>Problem Statement</h2>
+      <p>Job searching at a senior technical level is paradoxically inefficient. A candidate of Vikram Deshpande's calibre — 15+ years of delivery leadership, AI/ML architecture, and enterprise program management across ATO, ANZ, NAB, MYOB, Microsoft, and Telstra — should be spending time on high-value activities: preparing for interviews, networking strategically, and evaluating opportunities. Instead, the reality is:</p>
+      <ul>
+        <li>Manually tailoring resumes for each application takes 45-90 minutes per submission</li>
+        <li>ATS systems reject up to 75% of qualified candidates for keyword mismatch rather than capability gaps</li>
+        <li>Cover letter generation is repetitive, yet each must be evidence-specific and company-aware</li>
+        <li>Tracking applications across LinkedIn, SEEK, Indeed, and direct portals requires constant context switching</li>
+        <li>Recruiter follow-up and calendar management create an additional cognitive load</li>
+        <li>Without analytics, there is no feedback loop to improve the application strategy over time</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Solution Overview</h2>
+      <p>The platform addresses every problem in the job-search lifecycle through a modular multi-agent architecture. The system operates as follows: a <strong>Job Discovery Agent</strong> continuously monitors job boards and APIs; a <strong>Planner Agent</strong> evaluates fit against the user's profile; a <strong>Resume Tailoring Agent</strong> produces ATS-optimised resumes without changing a single pixel of the source formatting; a <strong>Cover Letter Agent</strong> generates evidence-backed, company-specific letters; an <strong>Application Agent</strong> submits the package via browser automation with human approval gates; and a <strong>Learning Agent</strong> continuously refines the strategy based on outcomes. Every step is monitored by a <strong>Compliance Agent</strong> that guarantees no fabrication, no PII leakage, and full audit trail.</p>
+
+      <h2>Business Goals</h2>
+      <ul>
+        <li>Reduce active job-search time from 20+ hours per week to fewer than 4 hours</li>
+        <li>Increase interview conversion rate from typical 2-3% to 8-12% (3x improvement)</li>
+        <li>Submit 5-10 high-quality applications per day versus 1-2 manually</li>
+        <li>Achieve 85%+ ATS pass rate for every submitted resume</li>
+        <li>Build a continuously improving application strategy that compounds over time</li>
+        <li>Maintain 100% factual accuracy — zero fabricated achievements or skills</li>
+      </ul>
+
+      <h2>ROI Analysis</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Manual Baseline</th>
+            <th>Platform Target</th>
+            <th>Improvement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Applications per day</td><td>1-2</td><td>5-10</td><td>5x</td></tr>
+          <tr><td>Hours per application</td><td>1.5 hrs</td><td>8 min</td><td>92% reduction</td></tr>
+          <tr><td>ATS pass rate</td><td>25-40%</td><td>85%+</td><td>3x</td></tr>
+          <tr><td>Interview conversion</td><td>2-3%</td><td>8-12%</td><td>4x</td></tr>
+          <tr><td>Time-to-first-interview</td><td>4-6 weeks</td><td>1-2 weeks</td><td>75% faster</td></tr>
+          <tr><td>Weekly active search hours</td><td>20+ hrs</td><td>4 hrs</td><td>80% reduction</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Key Performance Indicators</h2>
+  <div class="kpi-grid">
+    <div class="kpi-tile">
+      <span class="kpi-value">5-10</span>
+      <span class="kpi-label">Applications / Day</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">85%+</span>
+      <span class="kpi-label">ATS Pass Rate</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">3x</span>
+      <span class="kpi-label">Interview Rate</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">80%</span>
+      <span class="kpi-label">Time Saved</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">92%</span>
+      <span class="kpi-label">Effort Reduction (apply)</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">100%</span>
+      <span class="kpi-label">Factual Accuracy</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">20</span>
+      <span class="kpi-label">Specialised AI Agents</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">16wk</span>
+      <span class="kpi-label">Build Roadmap</span>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <p><strong>Future Roadmap Summary:</strong> Phase 1 (Weeks 1-4) delivers core infrastructure and resume pipeline. Phase 2 (Weeks 5-8) adds full agent intelligence and ATS optimization. Phase 3 (Weeks 9-12) delivers end-to-end automation including application submission and interview scheduling. Phase 4 (Weeks 13-16) completes the Learning Agent, Analytics Dashboard, and production hardening. The platform is designed to scale from single-user to enterprise team deployment.</p>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 3: PRODUCT VISION
+     ============================================================ -->
+<div class="section" id="sec-vision">
+  <div class="section-header">
+    <div class="section-number-badge">Section 03</div>
+    <h1>Product Vision &amp; Strategy</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Mission</h2>
+      <p>To empower elite technical professionals with an AI career agent that competes on their behalf — matching their genuine capabilities to the right opportunities with precision, evidence, and integrity. The platform acts as an always-on career partner that knows the user's portfolio deeply, speaks their professional language fluently, and never overstates or fabricates.</p>
+
+      <h2>Vision</h2>
+      <p>To become the definitive autonomous career management platform for senior technical professionals in AI, engineering, and program management — where the days of manually tailoring resumes, chasing job boards, and drafting cover letters are replaced by a platform that handles the mechanics while the human focuses on the strategic and relational aspects of career advancement.</p>
+
+      <h2>Core Values</h2>
+      <div class="card card-accent">
+        <h4>Evidence-Grounded</h4>
+        <p>Every claim, every achievement, every skill assertion is traceable to a verifiable source: GitHub repositories, portfolio projects, performance metrics, or employment records. No fabrication, ever.</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Portfolio-Integrated</h4>
+        <p>The system treats the user's portfolio website, GitHub profile, and LinkedIn as primary data sources. Applications are enriched with real project evidence, quantifiable metrics, and live demonstration links.</p>
+      </div>
+      <div class="card card-purple">
+        <h4>Human-in-the-Loop</h4>
+        <p>High-confidence decisions are automated; ambiguous situations escalate to the human. The user maintains ultimate control over every submission, with a clear approval workflow and full audit trail.</p>
+      </div>
+      <div class="card">
+        <h4>Continuous Learning</h4>
+        <p>The platform learns from every interaction, outcome, and feedback signal. Application strategies improve over time through reinforcement from interview rates, recruiter responses, and offer outcomes.</p>
+      </div>
+    </div>
+    <div>
+      <h2>Target Audience</h2>
+      <p>The primary audience is <strong>senior technical professionals</strong> with 10-20+ years of experience who are actively or passively seeking roles. Specifically:</p>
+      <ul>
+        <li><strong>Technical Program Managers</strong> (TPM, SRTPM) managing multi-million dollar portfolios</li>
+        <li><strong>AI/ML Solutions Architects</strong> transitioning from delivery to design roles</li>
+        <li><strong>Senior Delivery Leads</strong> at Tier 1 financial institutions and government agencies</li>
+        <li><strong>Scrum Masters and Agile Practitioners</strong> with deep technical domains</li>
+        <li><strong>Polyglot Engineers</strong> with rare cross-functional expertise (e.g., Mainframe + AI)</li>
+      </ul>
+
+      <h2>Competitive Differentiation</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>What It Does</th>
+            <th>Our Advantage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Teal HQ</td>
+            <td>Job tracking and basic tailoring suggestions</td>
+            <td>Full autonomous submission, 20 specialised agents, evidence-grounded</td>
+          </tr>
+          <tr>
+            <td>Jobscan</td>
+            <td>ATS keyword scoring and optimisation</td>
+            <td>End-to-end pipeline from discovery through to offer; ATS is just one component</td>
+          </tr>
+          <tr>
+            <td>LazyApply</td>
+            <td>Mass auto-apply with static resume</td>
+            <td>Quality over quantity — every application is tailored, verified, and evidence-backed</td>
+          </tr>
+          <tr>
+            <td>Simplify.jobs</td>
+            <td>Autofill job forms and track applications</td>
+            <td>Semantic resume tailoring, portfolio integration, multi-agent orchestration</td>
+          </tr>
+          <tr>
+            <td>Resume.io / Kickresume</td>
+            <td>Resume templates and AI suggestions</td>
+            <td>Format preservation, portfolio-sourced evidence, dynamic ATS scoring per JD</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Unique Selling Proposition</h2>
+      <div class="info-box">
+        <p><strong>Evidence-Grounded, Portfolio-Integrated, Never Fabricates.</strong> Unlike mass-apply tools that blast the same static resume to hundreds of jobs, this platform tailors every application with verified, specific achievements drawn directly from the user's portfolio, GitHub repositories, and employment history. The ATS Optimization Engine ensures every submission meets a quantifiable quality bar. The Compliance Agent enforces zero-fabrication at every stage. The result: fewer applications, higher quality, dramatically better outcomes.</p>
+      </div>
+
+      <div class="info-box teal">
+        <p><strong>The 92% Efficiency Precedent:</strong> Vikram's own ATO work — achieving 92% effort reduction in test-evidence automation — is the proof of concept for this platform's design philosophy. The same principles (structured evidence capture, automated pipeline orchestration, quality validation gates) are now applied to the job application domain.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 4: ENTERPRISE ARCHITECTURE — C4 MODEL
+     ============================================================ -->
+<div class="section" id="sec-c4">
+  <div class="section-header">
+    <div class="section-number-badge">Section 04</div>
+    <h1>Enterprise Architecture — C4 Model</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The C4 model (Context, Container, Component, Deployment) provides a hierarchical, layered view of the platform architecture at increasing levels of detail. This section presents all four levels, each intended for a different audience: executives (Context), architects (Container), developers (Component), and DevOps engineers (Deployment).</p>
+
+  <h2>Level 1 — System Context Diagram</h2>
+  <p>The System Context diagram shows the platform as a single cohesive system and its relationships with the external actors and systems it interacts with. The user interacts with the platform via a web dashboard; the platform in turn interacts with all external services on the user's behalf.</p>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart LR
+    U([User\nVikram Deshpande]):::person
+    P[["AI Job Application\nPlatform"]]:::system
+    JB[(Job Boards\nLinkedIn/SEEK/Indeed)]:::ext
+    GH[(GitHub\n@Victordtesla24)]:::ext
+    PORT[(Portfolio Site\nforgotten-mistory)]:::ext
+    EMAIL[(Email Service\nGmail/Outlook)]:::ext
+    CAL[(Calendar\nGoogle/O365)]:::ext
+    ATS[(ATS Systems\nWorkday/Greenhouse)]:::ext
+    REC[(Recruiter Portals\nDirect Apply)]:::ext
+
+    U -->|Reviews & approves| P
+    P -->|Discovers jobs| JB
+    P -->|Reads repositories| GH
+    P -->|Scrapes evidence| PORT
+    P -->|Sends/receives| EMAIL
+    P -->|Books interviews| CAL
+    P -->|Submits applications| ATS
+    P -->|Auto-fills forms| REC
+
+    classDef person fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef system fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef ext fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+    </div>
+    <div class="diagram-label">Figure 1 — C4 Level 1: System Context. The platform acts as autonomous intermediary between the user and all external career systems.</div>
+  </div>
+
+  <h2>Level 2 — Container Diagram</h2>
+  <p>The Container diagram decomposes the platform into its major deployable units. Containers communicate via REST APIs, GraphQL subscriptions, and the message queue. The Agent Orchestration Engine is the intelligence hub; all specialized agents run as workers pulling tasks from the queue.</p>
+
+  <div class="two-col">
+    <div>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    FE["Next.js Frontend\n(Dashboard/Studio/Tracker)"]:::fe
+    GW["API Gateway\n(FastAPI + Node.js)"]:::api
+    AOE["Agent Orchestration\nEngine (LangGraph)"]:::agent
+    JDS["Job Discovery\nService"]:::svc
+    RTS["Resume Tailoring\nService"]:::svc
+    CLS["Cover Letter\nService"]:::svc
+    ASS["Application Submission\nService (Playwright)"]:::svc
+
+    FE -->|REST/GraphQL| GW
+    GW --> AOE
+    AOE --> JDS
+    AOE --> RTS
+    AOE --> CLS
+    AOE --> ASS
+
+    classDef fe fill:#1a1f2e,color:#FF6B35,stroke:#FF6B35
+    classDef api fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
+    classDef agent fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef svc fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+        </div>
+        <div class="diagram-label">Figure 2a — Application & Service Layer</div>
+      </div>
+    </div>
+    <div>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    AOE["Agent Orchestration\nEngine"]:::agent
+    MQ["Message Queue\n(Redis + BullMQ)"]:::infra
+    KB["Knowledge Base\n(PostgreSQL + pgvector)"]:::data
+    VS["Vector Store\n(Pinecone/Weaviate)"]:::data
+    OS["Object Storage\n(AWS S3)"]:::data
+    MON["Monitoring Stack\n(Langfuse + Grafana)"]:::mon
+
+    AOE <-->|Tasks/Results| MQ
+    AOE <-->|Reads/Writes| KB
+    AOE <-->|Semantic search| VS
+    AOE -->|Stores documents| OS
+    AOE -->|Traces/Metrics| MON
+
+    classDef agent fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef infra fill:#1a2a6c,color:#e2e8f0,stroke:#A78BFA
+    classDef data fill:#0d1b3e,color:#e2e8f0,stroke:#4ECDC4,stroke-width:2px
+    classDef mon fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
+        </div>
+        <div class="diagram-label">Figure 2b — Data & Infrastructure Layer</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Level 3 — Component Diagram (Agent Orchestration Engine)</h2>
+  <p>The Agent Orchestration Engine is the cognitive core of the platform. It contains the Supervisor, Planner, and Executor components plus the supporting infrastructure for memory, tools, workflow, and human oversight.</p>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart LR
+    SUP["Supervisor Agent\n(Goal Management)"]:::sup
+    PLAN["Planner Agent\n(Execution Plans)"]:::plan
+    EXEC["Executor Pool\n(20 Agents)"]:::exec
+    MEM["Memory Manager\n(Short/Long-term)"]:::mem
+    TR["Tool Registry\n(Playwright/LLM/APIs)"]:::tool
+    WF["Workflow Engine\n(LangGraph)"]:::wf
+    HAG["Human Approval\nGateway"]:::human
+    AL["Audit Logger\n(Immutable)"]:::audit
+
+    SUP --> PLAN
+    PLAN --> WF
+    WF --> EXEC
+    EXEC <--> MEM
+    EXEC <--> TR
+    EXEC -->|Escalation| HAG
+    EXEC --> AL
+    SUP --> AL
+
+    classDef sup fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef plan fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
+    classDef exec fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+    classDef mem fill:#0d1b3e,color:#e2e8f0,stroke:#A78BFA
+    classDef tool fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
+    classDef wf fill:#252d3d,color:#e2e8f0,stroke:#FF6B35
+    classDef human fill:#FF6B35,color:#fff,stroke:#fff,stroke-width:2px
+    classDef audit fill:#1a1f2e,color:#94a3b8,stroke:#64748b
+    </div>
+    <div class="diagram-label">Figure 3 — C4 Level 3: Component Diagram of the Agent Orchestration Engine.</div>
+  </div>
+
+  <h2>Level 4 — Deployment Diagram</h2>
+  <p>The platform is deployed on AWS using Kubernetes (EKS) with separate namespaces for each logical layer. The CI/CD pipeline automates all deployments from GitHub commits through to production, with environment promotion gates.</p>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart LR
+    CDN["AWS CloudFront CDN"]:::infra
+    LB["Load Balancer\n(ALB)"]:::infra
+    K8S["EKS Kubernetes Cluster"]:::cluster
+    subgraph K8S
+      NS_APP["Namespace: app\nNext.js + API pods"]:::ns
+      NS_AGENT["Namespace: agents\nLangGraph workers"]:::ns
+      NS_QUEUE["Namespace: queue\nRedis + workers"]:::ns
+    end
+    DB["RDS PostgreSQL\n(Multi-AZ)"]:::data
+    S3["S3 Bucket\n(Documents)"]:::data
+    CICD["GitHub Actions\nCI/CD Pipeline"]:::cicd
+
+    CDN --> LB
+    LB --> NS_APP
+    NS_APP --> NS_AGENT
+    NS_AGENT <--> NS_QUEUE
+    NS_AGENT <--> DB
+    NS_AGENT <--> S3
+    CICD -->|Deploy| K8S
+
+    classDef infra fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
+    classDef cluster fill:#0d1b3e,color:#e2e8f0,stroke:#FF6B35,stroke-width:2px
+    classDef ns fill:#1e2a3a,color:#e2e8f0,stroke:#94a3b8
+    classDef data fill:#252d3d,color:#e2e8f0,stroke:#A78BFA
+    classDef cicd fill:#FF6B35,color:#fff,stroke:#FF6B35
+    </div>
+    <div class="diagram-label">Figure 4 — C4 Level 4: Deployment Diagram on AWS EKS with namespaced Kubernetes workloads.</div>
+  </div>
+
+  <h2>Architecture Principles</h2>
+  <div class="three-col">
+    <div class="card">
+      <h3>Separation of Concerns</h3>
+      <p>Each agent has a single, well-defined responsibility. The Supervisor orchestrates; it does not execute. The Resume Tailoring Agent tailors; it does not submit. This prevents tight coupling and enables independent scaling and testing of each agent.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Event-Driven Messaging</h3>
+      <p>All inter-agent communication flows through the Redis message queue. Agents subscribe to task queues and publish results as events. This decouples producers from consumers, enables async processing, and provides natural dead-letter queue support for failure handling.</p>
+    </div>
+    <div class="card card-purple">
+      <h3>Immutable Audit Trail</h3>
+      <p>Every agent action — read, write, decision, or escalation — is logged to an immutable audit store. This enables full forensic replay of any application history, supports compliance verification, and provides the training data for the Learning Agent.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 5: AI AGENT ARCHITECTURE
+     ============================================================ -->
+<div class="section" id="sec-agents">
+  <div class="section-header">
+    <div class="section-number-badge">Section 05</div>
+    <h1>AI Agent Architecture</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The platform comprises <strong>20 specialised AI agents</strong>, each with a clearly defined responsibility, input/output contract, tool access, memory scope, decision logic, and failure handling strategy. Agents communicate asynchronously via the Redis message queue and share state through the PostgreSQL knowledge base. All agents are implemented as LangGraph nodes within a directed acyclic graph workflow, enabling parallel execution, conditional branching, and human-in-the-loop gates.</p>
+
+  <div class="info-box">
+    <p><strong>Agent Design Principles:</strong> Single Responsibility — one agent, one function. Verifiable Outputs — every agent produces a confidence score alongside its output. Human Escalation — any confidence below threshold triggers an approval gate. Idempotent Execution — agents can be retried safely without side effects. Full Audit — every invocation is logged with inputs, outputs, timestamps, and reasoning.</p>
+  </div>
+
+  <h2>Core Execution Agents (1-7)</h2>
+  <div class="agents-grid">
+
+    <div class="agent-card" style="--agent-color: #FF6B35">
+      <div class="agent-header">
+        <div class="agent-number">01</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Job Discovery Agent</div>
+          <div class="agent-tagline">Continuous job board surveillance and ranking</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Crawls job boards (LinkedIn, SEEK, Indeed), RSS feeds, and company careers APIs on a configurable schedule. De-duplicates listings. Scores relevance against user profile.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Search criteria, keyword filters, salary range, location, seniority level, excluded companies</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Ranked job list with relevance score, JD text, company metadata, application URL, posting date</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Playwright (browser), LinkedIn API, SEEK API, Indeed RSS, web scraper</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Memory Scope</span>
+          <span class="field-val">Long-term: previously seen jobs, applied companies. Short-term: current crawl session</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Decision Logic</span>
+          <span class="field-val">Relevance score &gt; 70%: queue for evaluation. 50-70%: human review. &lt;50%: discard with reason logged.</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Failure Handling</span>
+          <span class="field-val">Retry with exponential backoff (3 attempts). If API rate-limited, switch to RSS fallback. Alert on consecutive failures exceeding 5.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #4ECDC4">
+      <div class="agent-header">
+        <div class="agent-number">02</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Resume Tailoring Agent</div>
+          <div class="agent-tagline">JD-specific resume optimisation with format preservation</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Tailors resume content to match the job description using semantic skill mapping and keyword insertion. Preserves exact source formatting — typography, spacing, columns, and margins unchanged.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Base resume (PDF), job description text, portfolio evidence library, keyword priority list</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Tailored resume PDF, ATS score, diff report showing changes, confidence score</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">PyMuPDF (parser), python-docx, LLM (GPT-4o), ATS Scorer, python-docx formatter</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Decision Logic</span>
+          <span class="field-val">Only proceed to submission if ATS score &gt; 75%. Below threshold: escalate to human with gap report.</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Failure Handling</span>
+          <span class="field-val">If formatting breaks, revert to base resume and flag for manual tailoring. Log all formatting violations. Never submit a resume with layout corruption.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #A78BFA">
+      <div class="agent-header">
+        <div class="agent-number">03</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Cover Letter Agent</div>
+          <div class="agent-tagline">Evidence-backed, company-specific letter generation</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Generates personalised cover letters anchored to portfolio evidence. Researches company context, culture, and recent news to create compelling narrative.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">JD text, tailored resume, company research summary, portfolio evidence, tone preference</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Cover letter (Word + PDF), evidence citations, authenticity score</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LLM (Claude 3.5 Sonnet), web researcher, company news scraper, python-docx</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Memory Scope</span>
+          <span class="field-val">Portfolio evidence library, previously written letters (for style consistency)</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Compliance Agent validates every output before release — any unverifiable claim is removed or flagged. If evidence insufficient, escalate to human for additional context.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FBBF24">
+      <div class="agent-header">
+        <div class="agent-number">04</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Portfolio Agent</div>
+          <div class="agent-tagline">Evidence library construction from portfolio and GitHub</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Crawls portfolio website (forgotten-mistory.web.app) and GitHub (@Victordtesla24) to build a structured evidence library. Extracts metrics, project descriptions, technologies, and verifiable outcomes.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Portfolio URL, GitHub username, crawl depth, update frequency</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Structured evidence library: projects, metrics, technologies, source URLs, screenshots</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Playwright, GitHub API v4 (GraphQL), web scraper, content extractor, image capturer</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Memory Scope</span>
+          <span class="field-val">Long-term semantic store; updates triggered by portfolio changes or GitHub pushes</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Reconciles new evidence with existing store. Flags conflicting metrics for human review. On scrape failure: use cached version with staleness flag and schedule retry.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #34D399">
+      <div class="agent-header">
+        <div class="agent-number">05</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Application Agent</div>
+          <div class="agent-tagline">Autonomous form submission with human approval gates</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Submits job applications via browser automation. Fills multi-page ATS forms, uploads documents, handles custom fields, and captures submission confirmation.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Approved application package (tailored resume, cover letter), application URL, form field mappings, user credentials vault reference</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Submission confirmation (screenshot + reference ID), application status record, time-stamp</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Playwright, form field detector, credential vault (HashiCorp Vault), screenshot capturer</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Decision Logic</span>
+          <span class="field-val">ALWAYS requires explicit human approval before submission. Never submits autonomously without approved package.</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Failure Handling</span>
+          <span class="field-val">On form error: capture screenshot and error text, escalate immediately. Never retry submission without human review — double submission risk. Dead-letter queue for failed submissions.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #F87171">
+      <div class="agent-header">
+        <div class="agent-number">06</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Question Answering Agent</div>
+          <div class="agent-tagline">Intelligent response to application screening questions</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Answers free-text and multiple-choice questions in ATS application forms. Retrieves supporting evidence from portfolio and resume. Computes confidence score per answer.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Question text, question type, context (JD + resume), portfolio evidence library</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Answer text with confidence score (0-100), supporting evidence references, flagged concerns</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LLM (GPT-4o), semantic search (pgvector), evidence retriever, RAG pipeline</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Decision Logic</span>
+          <span class="field-val">Confidence &gt;= 80%: auto-populate. 60-79%: surface to human for approval. &lt;60%: mandatory human input. Salary questions: always escalate to human.</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Failure Handling</span>
+          <span class="field-val">If evidence retrieval fails: flag question as unresolvable and route to human. Never fabricate — unanswerable questions get blank + human flag.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #60A5FA">
+      <div class="agent-header">
+        <div class="agent-number">07</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Interview Coach Agent</div>
+          <div class="agent-tagline">Preparation materials for every interview opportunity</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Generates comprehensive interview preparation packs upon interview invitation. Includes predicted questions, STAR-format answers using portfolio evidence, company research, and key talking points.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Job description, company name, interview type (technical/behavioural/panel), portfolio evidence</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Interview prep pack (PDF): Q&amp;A, STAR examples, company brief, talking points, questions to ask</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LLM (Claude 3.5), web researcher, company news scraper, PDF generator (WeasyPrint)</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Triggered automatically on interview confirmation. On insufficient company data: use public information only and flag gaps. Output always reviewed by human before use.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FB923C">
+      <div class="agent-header">
+        <div class="agent-number">08</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Email Agent</div>
+          <div class="agent-tagline">Email monitoring, triage, and draft generation</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Monitors inbox for recruiter communications, application status updates, and interview invitations. Classifies emails, extracts structured data, and drafts appropriate responses.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Email thread, application context, user tone preferences, previous correspondence</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Classified email (intent, urgency, action required), draft response, extracted entities (date, company, role)</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Gmail/Outlook API, LLM (GPT-4o), NER extractor, classification model</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Urgency &gt; HIGH: immediate notification. Never sends email without human approval. On API failure: queue emails for manual review with original content preserved.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>Intelligence & Support Agents (9-15)</h2>
+  <div class="agents-grid">
+
+    <div class="agent-card" style="--agent-color: #4ECDC4">
+      <div class="agent-header">
+        <div class="agent-number">09</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Calendar Agent</div>
+          <div class="agent-tagline">Automated interview scheduling and availability management</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Manages interview scheduling by checking availability, proposing times, confirming bookings, and adding calendar events with prep reminders and meeting links.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Calendar availability, interview request details, timezone, buffer time preferences</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Proposed time slots, confirmed event with meeting link, 24hr and 1hr reminders, prep pack trigger</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Google Calendar API, Outlook Calendar API, timezone resolver, conflict detector</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Only confirms bookings after user reviews proposed times. Never double-books. On calendar API failure: email candidate with manual scheduling link.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #A78BFA">
+      <div class="agent-header">
+        <div class="agent-number">10</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Recruiter Intelligence Agent</div>
+          <div class="agent-tagline">Company and recruiter profiling for strategic engagement</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Builds intelligence dossiers on recruiters and hiring companies. Researches culture, hiring patterns, tech stack, recent news, and decision-maker profiles to inform strategic application targeting.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Company name, recruiter name, LinkedIn URL, job listing metadata, industry sector</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Intelligence report: culture signals, tech stack, average tenure, recent news, engagement strategy recommendation</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LinkedIn scraper, Glassdoor API, web search, news aggregator, company database</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Minimum 3 independent data sources required for a reliable dossier. On insufficient data: partial report with confidence rating. Never publishes speculation as fact.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FF6B35">
+      <div class="agent-header">
+        <div class="agent-number">11</div>
+        <div class="agent-title-block">
+          <div class="agent-title">ATS Optimization Agent</div>
+          <div class="agent-tagline">Keyword extraction, scoring and gap analysis</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Performs deep ATS analysis: extracts keywords from JD, computes TF-IDF importance weights, compares against resume embeddings, identifies gaps, and generates specific optimisation recommendations.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Resume text, job description text, ATS system type (Workday/Greenhouse/Lever), scoring weights</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">ATS score (0-100), keyword match matrix, gap list with priority, specific insertion recommendations</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">NLP pipeline (spaCy), TF-IDF scorer, embedding model (text-embedding-3-large), semantic matcher</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Score &gt;= 85: green light. 75-84: optimise further with provided recommendations. &lt;75: block application, escalate with full gap analysis.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #34D399">
+      <div class="agent-header">
+        <div class="agent-number">12</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Learning Agent</div>
+          <div class="agent-tagline">Outcome-driven strategy improvement via reinforcement</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Continuously analyzes application outcomes (responses, interviews, offers, rejections) to identify patterns and update strategies. Adjusts keyword weights, application targeting, and timing parameters.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Application history, outcome labels, ATS scores, interview results, rejection reasons (where available)</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Updated strategy parameters, keyword weight adjustments, targeting recommendations, performance trend report</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Statistical analysis, embedding comparison, A/B strategy tracker, recommendation engine</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Minimum 10 outcomes required before making strategy updates. All changes are proposed to human for review — never autonomously modifies core profile data. Maintains version history of all strategy states.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #F87171">
+      <div class="agent-header">
+        <div class="agent-number">13</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Compliance Agent</div>
+          <div class="agent-tagline">Zero-fabrication enforcement and PII protection</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Validates all generated content against the evidence library. Detects hallucinations, unsupported claims, PII leakage, and policy violations. Acts as the last gate before any external communication.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Generated content (resume, cover letter, answers), evidence library, compliance rules, PII patterns</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Compliance report: PASS/FAIL, violation list with severity, suggested corrections, evidence citations</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Hallucination detector, PII scanner (presidio), fact-checker, evidence retriever</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Any CRITICAL violation: hard block — content never leaves system until remediated. HIGH violations: flag and escalate. Compliance check logs are append-only and immutable. Cannot be bypassed.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FBBF24">
+      <div class="agent-header">
+        <div class="agent-number">14</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Analytics Agent</div>
+          <div class="agent-tagline">Real-time metrics, funnel analysis, and performance insights</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Continuously aggregates application data into dashboards and reports. Tracks funnel conversion, ATS pass rates, agent performance, cost metrics, and time-to-outcome.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Application records, outcome events, agent execution logs, timestamp data, cost ledger</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Live dashboard metrics, weekly performance reports, anomaly alerts, funnel conversion rates</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Grafana API, PostgreSQL aggregation queries, Langfuse traces, alerting engine</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Anomalies (sudden drop in ATS scores, zero applications in 48hrs) trigger immediate alerts. On data pipeline failure: uses last-known-good snapshot with staleness flag.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #60A5FA">
+      <div class="agent-header">
+        <div class="agent-number">15</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Supervisor Agent</div>
+          <div class="agent-tagline">Goal management and orchestration coordinator</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">The highest-level orchestrator. Receives user goals, decomposes them into sub-goals, assigns tasks to the Planner Agent, monitors overall progress, resolves conflicts between agents, and enforces system-wide policies.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">User goals (job type, criteria, urgency), system state snapshot, active task queue, policy configuration</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Goal decomposition plan, task assignments, priority queue update, escalation decisions, system health report</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LangGraph state machine, task queue manager, conflict resolver, health monitor</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Conflict resolution: priority-based with human override capability. On critical system failure: safe-mode activation — freeze all submissions, alert user, preserve state. Never loses task context on restart.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FB923C">
+      <div class="agent-header">
+        <div class="agent-number">16</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Planner Agent</div>
+          <div class="agent-tagline">Step-by-step execution planning per job opportunity</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Creates detailed, sequenced execution plans for each job opportunity. Determines which agents to invoke, in what order, with what parameters, and with what conditional branches based on outcomes.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Job opportunity metadata, user constraints (time, budget, energy), agent capability registry, historical success patterns</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Execution DAG (directed acyclic graph), agent invocation sequence, decision points, estimated timeline</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">LangGraph DAG builder, agent registry, historical pattern retriever, timeline estimator</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Plan validation: check for circular dependencies, resource conflicts, and constraint violations before execution. On plan failure: incremental re-planning from last successful checkpoint.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>System & Infrastructure Agents (17-20)</h2>
+  <div class="agents-grid">
+
+    <div class="agent-card" style="--agent-color: #4ECDC4">
+      <div class="agent-header">
+        <div class="agent-number">17</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Verifier Agent</div>
+          <div class="agent-tagline">Output validation and accuracy verification</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Independent validator that checks all agent outputs against the source evidence. Verifies factual accuracy, logical consistency, formatting integrity, and completeness before downstream processing.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Generated content, source evidence library, validation rules, previous version (for diff)</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Verification report with pass/fail per check, confidence score, specific violations, evidence citations</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Semantic similarity scorer, fact extractor, evidence retriever, diff engine</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Independent of the originating agent — uses separate LLM call for verification (prevents self-hallucination). On verification failure: block output, log discrepancy, route to Compliance Agent for secondary review.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #A78BFA">
+      <div class="agent-header">
+        <div class="agent-number">18</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Memory Agent</div>
+          <div class="agent-tagline">Unified memory management across all agents</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Manages the multi-tier memory hierarchy: working memory (current task context), session memory, long-term semantic memory (PostgreSQL + pgvector), episodic memory (application history), and procedural memory (learned strategies).</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Agent interactions, query context, memory type, recency/relevance weights, retrieval request</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Relevant context window, memory update confirmations, decay/consolidation reports</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">pgvector similarity search, Redis session cache, memory consolidation scheduler, embedding updater</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Memory consolidation runs nightly — moves short-term working memories to long-term store via embedding compression. On retrieval failure: fallback to keyword search. Memory is never deleted, only deprecated with versioning.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #FF6B35">
+      <div class="agent-header">
+        <div class="agent-number">19</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Reflection Agent</div>
+          <div class="agent-tagline">Periodic meta-analysis for systemic improvement</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Performs periodic (weekly) reflective analysis of the entire system's performance. Identifies blind spots, strategy stagnation, bias patterns, and improvement opportunities that individual agent metrics miss.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Application history (30-day window), agent performance logs, outcome outcomes, strategy version history</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Reflection report: top 3 improvement recommendations, strategy hypotheses, A/B test proposals</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Statistical analyzer, LLM (Claude 3.5 for reasoning), pattern detector, hypothesis generator</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Triggered weekly or on significant outcome drop (&gt;20% decline in any KPI). All recommendations require human approval before implementation. Reflection reports are preserved in episodic memory for meta-learning.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-card" style="--agent-color: #F87171">
+      <div class="agent-header">
+        <div class="agent-number">20</div>
+        <div class="agent-title-block">
+          <div class="agent-title">Error Recovery Agent</div>
+          <div class="agent-tagline">Intelligent failure handling and system resilience</div>
+        </div>
+      </div>
+      <div class="agent-fields">
+        <div class="agent-field">
+          <span class="field-label">Responsibilities</span>
+          <span class="field-val">Monitors all agent executions for failures, classifies error types (transient/permanent/partial), selects and executes the appropriate recovery strategy, and escalates to human when automated recovery is not possible.</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Inputs</span>
+          <span class="field-val">Error context (agent ID, error type, stack trace, input state), retry history, circuit breaker state</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Outputs</span>
+          <span class="field-val">Recovery action (retry/fallback/escalate), incident report, circuit breaker state update, postmortem trigger</span>
+        </div>
+        <div class="agent-field">
+          <span class="field-label">Tools</span>
+          <span class="field-val">Circuit breaker (Resilience4j pattern), retry scheduler, dead-letter queue manager, alerting system</span>
+        </div>
+        <div class="agent-field agent-field-full">
+          <span class="field-label">Decision Logic + Failure</span>
+          <span class="field-val">Transient errors: exponential backoff (1s, 2s, 4s, 8s, 16s). Permanent errors: immediate escalation + task archival. Partial failures: complete safe portions, human input for remainder. Circuit breaker opens after 5 consecutive failures within 60s.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 6: MULTI-AGENT ORCHESTRATION
+     ============================================================ -->
+<div class="section" id="sec-orchestration">
+  <div class="section-header">
+    <div class="section-number-badge">Section 06</div>
+    <h1>Multi-Agent Orchestration</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The orchestration layer is the nervous system of the platform. It coordinates the 20 agents through a <strong>Supervisor → Planner → Executor → Reviewer → Verifier</strong> hierarchy, using LangGraph to define the execution DAG and Redis BullMQ as the asynchronous task bus. The design supports parallel execution of independent tasks, conditional branching on outcomes, and deterministic human escalation at defined quality gates.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Orchestration Flow Diagram</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    S([User Goal]):::start
+    SUP["Supervisor Agent\nGoal Management"]:::sup
+    PLAN["Planner Agent\nDAG Construction"]:::plan
+    subgraph EXEC["Parallel Executor Pool"]
+      E1["Job Discovery"]:::exec
+      E2["Resume Tailor"]:::exec
+      E3["Cover Letter"]:::exec
+      E4["Portfolio Scan"]:::exec
+    end
+    REV["Verifier Agent\nOutput Review"]:::rev
+    COMP["Compliance Agent\nFinal Gate"]:::comp
+    HAG{{"Human Approval\nGateway"}}:::human
+    APP["Application Agent\nSubmission"]:::app
+    LEARN["Learning Agent\nOutcome Feedback"]:::learn
+
+    S --> SUP --> PLAN
+    PLAN --> EXEC
+    E1 & E2 & E3 & E4 --> REV
+    REV --> COMP --> HAG
+    HAG -->|Approved| APP
+    HAG -->|Revision| PLAN
+    APP --> LEARN
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef sup fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef plan fill:#0d1b3e,color:#e2e8f0,stroke:#4ECDC4
+    classDef exec fill:#1e2a3a,color:#e2e8f0,stroke:#94a3b8
+    classDef rev fill:#252d3d,color:#e2e8f0,stroke:#A78BFA
+    classDef comp fill:#1a1f2e,color:#F87171,stroke:#F87171
+    classDef human fill:#FF6B35,color:#fff,stroke:#fff,stroke-width:2px
+    classDef app fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef learn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
+        </div>
+        <div class="diagram-label">Figure 5 — Orchestration Architecture: Supervisor to Learning feedback loop with Human Approval Gateway.</div>
+      </div>
+
+      <h2>Communication Patterns</h2>
+      <table class="data-table">
+        <thead><tr><th>Pattern</th><th>Used For</th><th>Technology</th></tr></thead>
+        <tbody>
+          <tr><td>Request/Reply</td><td>Synchronous agent calls</td><td>FastAPI REST</td></tr>
+          <tr><td>Pub/Sub Events</td><td>Outcome notifications</td><td>Redis Pub/Sub</td></tr>
+          <tr><td>Task Queue</td><td>Async agent work units</td><td>BullMQ (Redis)</td></tr>
+          <tr><td>Streaming</td><td>LLM output tokens</td><td>SSE / WebSocket</td></tr>
+          <tr><td>Broadcast</td><td>System state updates</td><td>LangGraph state</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Coordination Protocol</h2>
+      <div class="card card-accent">
+        <h4>Task Lifecycle</h4>
+        <p>Tasks are published to typed queues (job-discovery, resume-tailor, etc.) by the Planner. Agents consume tasks, update shared state via the LangGraph StateGraph, and publish completion events. Downstream agents subscribe to relevant completion events to trigger their own execution.</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Conflict Resolution</h4>
+        <p>The Supervisor Agent maintains a global goal registry. When two agents produce conflicting outputs (e.g., different ATS scores for the same resume), the Supervisor invokes a tiebreaker: prefer the higher-confidence result, flag the discrepancy, and log both for audit. Persistent conflicts escalate to human.</p>
+      </div>
+      <div class="card card-purple">
+        <h4>Human-in-the-Loop Gates</h4>
+        <p>Four mandatory escalation points: (1) Job approval — user confirms which discovered jobs to pursue. (2) Application approval — user approves tailored resume + cover letter bundle before submission. (3) Low-confidence Q&amp;A — user provides answers to questions below threshold. (4) Strategy changes — user approves Learning Agent recommendations.</p>
+      </div>
+      <div class="card">
+        <h4>Parallel Execution Model</h4>
+        <p>Once a job is approved for application, the Portfolio Agent, ATS Optimization Agent, and Recruiter Intelligence Agent execute in parallel. Resume Tailoring and Cover Letter generation are serialized (Cover Letter depends on tailored resume). This hybrid model achieves maximum throughput while respecting data dependencies.</p>
+      </div>
+
+      <h2>State Management</h2>
+      <div class="info-box">
+        <p><strong>LangGraph StateGraph</strong> maintains a typed state object per job application instance. State includes: current stage, all agent outputs, human decisions, error counts, and audit trail. State is persisted to PostgreSQL with every transition — crash recovery always resumes from the last committed state checkpoint.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 7: SEQUENCE DIAGRAMS
+     ============================================================ -->
+<div class="section" id="sec-sequences">
+  <div class="section-header">
+    <div class="section-number-badge">Section 07</div>
+    <h1>Sequence Diagrams</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>Sequence diagrams illuminate the temporal interactions between system components for key workflows. Each diagram shows the exact message flow, decision points, and failure paths for critical platform capabilities.</p>
+
+  <h2>Sequence 1 — Job Discovery and Ranking Flow</h2>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant SUP as Supervisor
+    participant JDA as Job Discovery
+    participant ATS as ATS Scorer
+    participant DB as Knowledge Base
+
+    SUP->>JDA: Start discovery (criteria)
+    JDA->>JDA: Crawl LinkedIn/SEEK/Indeed
+    JDA->>DB: Check seen jobs (dedup)
+    DB-->>JDA: Known job IDs
+    JDA->>ATS: Score new listings
+    ATS-->>JDA: Relevance scores
+    JDA->>DB: Persist ranked list
+    JDA-->>SUP: Discovery complete (N jobs)
+    SUP-->>U: Review dashboard updated
+    U->>SUP: Approve selected jobs
+    SUP->>DB: Mark jobs as approved
+    </div>
+    <div class="diagram-label">Figure 6 — Job Discovery to Human Approval sequence.</div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Sequence 2 — Resume Tailoring Flow</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    participant P as Planner
+    participant RTA as Resume Tailor
+    participant ATS as ATS Optimizer
+    participant VER as Verifier
+    participant COMP as Compliance
+    participant DB as Store
+
+    P->>RTA: Tailor(base_resume, JD)
+    RTA->>DB: Fetch portfolio evidence
+    DB-->>RTA: Evidence library
+    RTA->>RTA: Semantic mapping + rewrite
+    RTA->>ATS: Score tailored resume
+    ATS-->>RTA: Score + gaps
+    alt Score >= 75
+      RTA->>VER: Verify output
+      VER-->>RTA: Verified
+      RTA->>COMP: Compliance check
+      COMP-->>RTA: PASS
+      RTA->>DB: Store tailored version
+    else Score < 75
+      RTA-->>P: Escalate with gap report
+    end
+        </div>
+        <div class="diagram-label">Figure 7 — Resume Tailoring with ATS gate and verification.</div>
+      </div>
+    </div>
+    <div>
+      <h2>Sequence 3 — Question Answering Flow</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    participant APP as App Agent
+    participant QA as Q&A Agent
+    participant MEM as Memory Agent
+    participant VER as Verifier
+    participant U as User
+
+    APP->>QA: Answer(question, context)
+    QA->>MEM: Retrieve(question)
+    MEM-->>QA: Relevant evidence
+    QA->>QA: Generate answer + confidence
+    alt Confidence >= 80%
+      QA->>VER: Verify answer
+      VER-->>QA: Verified
+      QA-->>APP: Answer (auto-fill)
+    else 60-79%
+      QA-->>U: Review answer?
+      U-->>QA: Approved / Edited
+      QA-->>APP: Final answer
+    else < 60%
+      QA-->>U: Needs your input
+      U-->>QA: User provided answer
+      QA-->>APP: User answer
+    end
+        </div>
+        <div class="diagram-label">Figure 8 — Q&A Agent with tiered confidence escalation.</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Sequence 4 — Full Application Lifecycle</h2>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant SUP as Supervisor
+    participant JDA as Discovery
+    participant RTA as Resume Tailor
+    participant CLA as Cover Letter
+    participant COMP as Compliance
+    participant APP as Application
+    participant LEARN as Learning
+
+    U->>SUP: Set job search criteria
+    SUP->>JDA: Discover jobs
+    JDA-->>SUP: Ranked job list
+    SUP-->>U: Jobs for review
+    U->>SUP: Approve target jobs
+    SUP->>RTA: Tailor resume (parallel)
+    SUP->>CLA: Generate cover letter (after resume)
+    RTA-->>SUP: Tailored resume + ATS score
+    CLA-->>SUP: Cover letter
+    SUP->>COMP: Compliance check all
+    COMP-->>SUP: PASS
+    SUP-->>U: Application bundle for approval
+    U->>SUP: Approved
+    SUP->>APP: Submit application
+    APP-->>SUP: Submission confirmed
+    SUP->>LEARN: Record outcome
+    </div>
+    <div class="diagram-label">Figure 9 — Full Application Lifecycle from discovery through to submission and learning feedback.</div>
+  </div>
+
+  <h2>Sequence 5 — Continuous Learning Loop</h2>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant LA as Learning Agent
+    participant RA as Reflection Agent
+    participant DB as Knowledge Base
+    participant SUP as Supervisor
+
+    DB->>LA: New outcome (response/rejection)
+    LA->>LA: Analyse patterns (N>=10)
+    LA->>DB: Update strategy parameters
+    LA-->>U: Strategy update proposed
+    U->>LA: Approved
+    LA->>SUP: Apply new parameters
+    RA->>DB: Weekly reflection query
+    DB-->>RA: 30-day history
+    RA->>RA: Meta-analysis
+    RA-->>U: Improvement recommendations
+    U->>RA: Approved recommendations
+    RA->>SUP: Implement changes
+    </div>
+    <div class="diagram-label">Figure 10 — Continuous Learning Loop: Learning Agent and Reflection Agent improve strategy over time with human oversight.</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 8: RESUME TAILORING PIPELINE
+     ============================================================ -->
+<div class="section" id="sec-pipeline">
+  <div class="section-header">
+    <div class="section-number-badge">Section 08</div>
+    <h1>Resume Tailoring Pipeline</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The resume tailoring pipeline is the most critical and technically demanding component of the platform. It must produce ATS-optimised, evidence-backed resumes that match the job description — while preserving the source document's formatting with pixel-perfect fidelity. Typography, column layout, spacing, font sizes, and margins must remain identical to the original. Only content changes are permitted.</p>
+
+  <div class="info-box">
+    <p><strong>Format Preservation Constraint (Non-Negotiable):</strong> The tailoring pipeline operates at the content layer only. It never modifies the structural XML of the DOCX file, never changes CSS styles, never adjusts paragraph spacing, never alters font selections, and never shifts page margins. Vikram's resume uses a two-column asymmetric layout with coral/orange accent icons — this design must be preserved verbatim in every tailored version.</p>
+  </div>
+
+  <h2>Pipeline Architecture Diagram</h2>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart LR
+    IN([Input\nBase Resume + JD]):::start
+    PARSE["PDF/DOCX\nParsing"]:::step
+    PORT["Portfolio\nEnrichment"]:::step
+    JDA["JD Analysis\nKeyword Extraction"]:::step
+    MAP["Skill\nMapping"]:::step
+    SEM["Semantic\nMatching"]:::step
+    ACH["Achievement\nRewriting"]:::step
+    KWD["Keyword\nOptimization"]:::step
+    FMT["Format\nPreservation Check"]:::gate
+    GRAM["Grammar &amp;\nTone Check"]:::step
+    ATS["ATS Validation\nScore >= 75?"]:::gate
+    EXP["Export\nPDF + DOCX"]:::step
+    VER["Verifier Agent\nFinal Check"]:::gate
+    OUT([Output\nTailored Resume]):::end
+
+    IN --> PARSE --> PORT --> JDA --> MAP --> SEM --> ACH --> KWD --> FMT --> GRAM --> ATS
+    ATS -->|Pass| EXP --> VER --> OUT
+    ATS -->|Fail| MAP
+    FMT -->|Violation| PARSE
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef step fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+    classDef gate fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    </div>
+    <div class="diagram-label">Figure 11 — Resume Tailoring Pipeline: 12-stage processing from input to verified tailored output.</div>
+  </div>
+
+  <h2>Pipeline Stage Details</h2>
+  <div class="two-col">
+    <div>
+      <table class="data-table">
+        <thead><tr><th>Stage</th><th>Process</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td>1. PDF/DOCX Parsing</td><td>Extract structured content using PyMuPDF and pdfplumber. Preserve paragraph structure, style references, and layout zones.</td><td>Structured document model with style map</td></tr>
+          <tr><td>2. Portfolio Enrichment</td><td>Retrieve current evidence from portfolio library — metrics, projects, achievements — to supplement resume facts.</td><td>Enriched evidence context</td></tr>
+          <tr><td>3. JD Analysis</td><td>Extract required skills, experience, keywords, responsibilities, and culture signals using NLP pipeline (spaCy + LLM).</td><td>Weighted keyword list, JD summary</td></tr>
+          <tr><td>4. Skill Mapping</td><td>Map JD requirements against candidate's skill inventory using semantic similarity. Identify primary matches, secondary matches, and gaps.</td><td>Match matrix with confidence scores</td></tr>
+          <tr><td>5. Semantic Matching</td><td>Compute embedding similarity between JD requirements and resume sections. Score each section's relevance to the role.</td><td>Section relevance scores, reorder recommendations</td></tr>
+          <tr><td>6. Achievement Rewriting</td><td>Reframe existing achievements using JD language. Emphasise most-relevant metrics. Use STAR format where possible.</td><td>Rewritten bullet points with evidence citations</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <table class="data-table">
+        <thead><tr><th>Stage</th><th>Process</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td>7. Keyword Optimization</td><td>Insert missing high-priority keywords naturally into existing bullet points. Never keyword-stuff — must read naturally to a human reviewer.</td><td>Keyword-enhanced content with insertion log</td></tr>
+          <tr><td>8. Format Preservation Check</td><td>Verify that no structural changes have been introduced. Compare paragraph styles, font sizes, and layout dimensions against source template.</td><td>Format compliance report (PASS/FAIL)</td></tr>
+          <tr><td>9. Grammar and Tone Check</td><td>Proofread tailored content for grammatical consistency, active voice, appropriate professional tone, and tense uniformity (past tense for completed roles).</td><td>Corrected content with change log</td></tr>
+          <tr><td>10. ATS Validation</td><td>Run full ATS Optimization Engine scoring against the JD. Gate: score must meet threshold (default 75%) to proceed.</td><td>ATS score (0-100), pass/fail, gap list</td></tr>
+          <tr><td>11. Export</td><td>Render to PDF and DOCX using original template styles. Validate output files for corruption, page count, and visual integrity.</td><td>Tailored resume PDF + DOCX artifacts</td></tr>
+          <tr><td>12. Verification</td><td>Independent Verifier Agent cross-checks tailored content against evidence library. Compliance Agent performs final gate check.</td><td>Verification report, compliance certificate</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Critical Constraints</h2>
+  <div class="three-col">
+    <div class="card card-accent">
+      <h3>Zero Layout Mutation</h3>
+      <p>The pipeline operates on the text content layer only. Column widths, margins (2cm left sidebar, ~70% main column), font families, and inter-paragraph spacing are read-only. Any proposed change that would affect layout is rejected at Stage 8 and triggers a rewrite from Stage 4.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Evidence-Only Rewriting</h3>
+      <p>Every rewritten bullet point must be traceable to at least one evidence source: a GitHub repository, portfolio project entry, employment record, or certified metric. The Verifier Agent validates this traceability chain for every modified sentence.</p>
+    </div>
+    <div class="card card-purple">
+      <h3>Version Lineage</h3>
+      <p>Every tailored version is stored with full lineage: base resume version, JD hash, evidence snapshot, keyword list used, ATS score, and operator decision log. This supports A/B analysis of which tailoring strategies produce the highest interview conversion rates.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 9: ATS OPTIMIZATION ENGINE
+     ============================================================ -->
+<div class="section" id="sec-ats">
+  <div class="section-header">
+    <div class="section-number-badge">Section 09</div>
+    <h1>ATS Optimization Engine</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The ATS Optimization Engine is a multi-stage scoring and recommendation system that quantifies how well a tailored resume will perform against an Applicant Tracking System's automated screening. Unlike simple keyword counters, the engine uses semantic embeddings, experience scoring models, and machine-learned ATS-system-specific weights to produce an 0-100 confidence score.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Scoring Architecture</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    IN(["Resume + JD"]):::start
+    KE["Keyword Extraction\n(TF-IDF + NER)"]:::step
+    SM["Semantic Matching\n(Embeddings)"]:::step
+    ES["Experience Scoring\n(Seniority + Duration)"]:::step
+    SKG["Skill Gap\nDetection"]:::step
+    AO["Achievement\nOptimization"]:::step
+    CS["Confidence Score\nComposition"]:::step
+    OUT(["Score (0-100)\n+ Recommendations"]):::end
+
+    IN --> KE --> SM --> ES --> SKG --> AO --> CS --> OUT
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef step fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+        </div>
+        <div class="diagram-label">Figure 12 — ATS Engine internal scoring stages.</div>
+      </div>
+
+      <h2>Score Composition</h2>
+      <table class="data-table">
+        <thead><tr><th>Component</th><th>Weight</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>Keyword Match</td><td>35%</td><td>Exact and stemmed keyword presence vs JD required terms</td></tr>
+          <tr><td>Semantic Similarity</td><td>25%</td><td>Embedding cosine similarity between resume sections and JD</td></tr>
+          <tr><td>Experience Match</td><td>20%</td><td>Years of experience, seniority level, industry match</td></tr>
+          <tr><td>Skill Coverage</td><td>12%</td><td>Required vs present skills, with must-have vs nice-to-have weighting</td></tr>
+          <tr><td>Achievement Quality</td><td>8%</td><td>Quantified metrics, action verbs, STAR format compliance</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Keyword Extraction Algorithm</h2>
+      <p>The keyword extraction process uses a three-stage pipeline applied to each job description:</p>
+      <ol>
+        <li><strong>TF-IDF Analysis:</strong> Compute term frequency-inverse document frequency across a corpus of 10,000+ job descriptions to identify high-signal keywords. Common filler terms are filtered out; role-specific technical terms are upweighted.</li>
+        <li><strong>Named Entity Recognition:</strong> spaCy NER pipeline identifies technologies (PRODUCT), organizations (ORG), and skills (custom entity type). These receive higher priority in matching regardless of TF-IDF score.</li>
+        <li><strong>Dependency Parsing:</strong> Identify requirement phrases (e.g., "must have 5+ years of Python") to extract structured requirement slots: skill, level, duration, and importance qualifier (required/preferred).</li>
+      </ol>
+
+      <h2>Threshold Configuration</h2>
+      <table class="data-table">
+        <thead><tr><th>Score Range</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>90-100</td><td>Exceptional</td><td>Proceed immediately, flag as high-priority application</td></tr>
+          <tr><td>85-89</td><td>Strong</td><td>Proceed to submission workflow</td></tr>
+          <tr><td>75-84</td><td>Good</td><td>Apply further optimisations from recommendation list, then proceed</td></tr>
+          <tr><td>65-74</td><td>Marginal</td><td>Escalate to human — show gap analysis, request manual enhancement</td></tr>
+          <tr><td>Below 65</td><td>Insufficient</td><td>Block application. Return to Planner for strategy revision.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Skill Gap Detection</h2>
+      <p>The skill gap detector classifies each JD requirement into one of four states:</p>
+      <ul>
+        <li><strong>Direct Match</strong> — Exact keyword present in resume with evidence</li>
+        <li><strong>Semantic Match</strong> — Semantically equivalent skill (e.g., "LangChain" vs "LLM frameworks") — partial credit</li>
+        <li><strong>Portfolio Match</strong> — Skill demonstrated in portfolio but not explicitly stated in resume — recommendation to add</li>
+        <li><strong>True Gap</strong> — Skill absent from resume and portfolio — reported as gap with severity (critical/major/minor)</li>
+      </ul>
+
+      <div class="info-box teal">
+        <p><strong>Portfolio Integration Advantage:</strong> Vikram's portfolio at forgotten-mistory.web.app contains verified evidence for LangChain, Langfuse, React, pgvector, and COBOL/Mainframe. The ATS Engine queries the evidence library before classifying any skill as a "True Gap" — this significantly reduces false-gap reporting compared to resume-only analysis.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 10: DATA MODEL
+     ============================================================ -->
+<div class="section" id="sec-datamodel">
+  <div class="section-header">
+    <div class="section-number-badge">Section 10</div>
+    <h1>Data Model &amp; Entity Relationship Diagram</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The platform uses PostgreSQL as its primary relational store, augmented with the pgvector extension for semantic similarity search. The data model supports the full application lifecycle, from user profile through to learning outcomes, with comprehensive audit trails at every stage.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Core Domain ERD</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+erDiagram
+    USER ||--o{ PROFILE : has
+    USER ||--o{ RESUME : owns
+    RESUME ||--o{ RESUME_VERSION : versioned_as
+    USER ||--o{ JOB_APPLICATION : submits
+    JOB_APPLICATION }o--|| JOB : targets
+    JOB_APPLICATION ||--o| COVER_LETTER : includes
+    JOB_APPLICATION ||--o| RESUME_VERSION : uses
+    USER ||--|| PORTFOLIO : has
+    PORTFOLIO ||--o{ PROJECT : contains
+    PROJECT ||--o{ ACHIEVEMENT : documents
+    USER ||--o{ SKILL : has
+    JOB }o--|| COMPANY : posted_by
+    COMPANY ||--o{ RECRUITER : employs
+        </div>
+        <div class="diagram-label">Figure 13 — Core Domain ERD: User and Application entities.</div>
+      </div>
+    </div>
+    <div>
+      <h2>Agent and Audit ERD</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+erDiagram
+    JOB_APPLICATION ||--o{ AGENT_ACTION : tracked_via
+    AGENT_ACTION ||--|| AUDIT_LOG : recorded_in
+    USER ||--o{ INTERVIEW : schedules
+    INTERVIEW }o--|| JOB_APPLICATION : for
+    USER ||--o{ COMMUNICATION : receives
+    COMMUNICATION }o--|| JOB_APPLICATION : about
+    JOB_APPLICATION ||--o{ LEARNING_OUTCOME : produces
+    LEARNING_OUTCOME ||--o{ AGENT_ACTION : improves
+        </div>
+        <div class="diagram-label">Figure 14 — Agent and Audit ERD: Action tracking and learning loop.</div>
+      </div>
+
+      <h2>Key Database Design Decisions</h2>
+      <table class="data-table">
+        <thead><tr><th>Table</th><th>Key Indexes</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>resume_version</td><td>user_id, ats_score, created_at</td><td>Stores embedding vector for semantic search</td></tr>
+          <tr><td>job</td><td>company_id, posted_at, relevance_score</td><td>Full-text search on description column</td></tr>
+          <tr><td>job_application</td><td>user_id, status, submitted_at</td><td>Partitioned by month for analytics</td></tr>
+          <tr><td>agent_action</td><td>agent_id, job_application_id, timestamp</td><td>Immutable — no UPDATE/DELETE allowed</td></tr>
+          <tr><td>audit_log</td><td>entity_type, entity_id, created_at</td><td>Append-only, replicated to S3</td></tr>
+          <tr><td>learning_outcome</td><td>application_id, outcome_type, recorded_at</td><td>Triggers Learning Agent via event</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Entity Descriptions</h2>
+  <div class="three-col">
+    <div class="card">
+      <h3>Core Entities</h3>
+      <ul>
+        <li><strong>User</strong> — Platform account, preferences, API credentials</li>
+        <li><strong>Profile</strong> — Professional profile, target roles, salary expectations</li>
+        <li><strong>Resume</strong> — Base resume document with style metadata</li>
+        <li><strong>ResumeVersion</strong> — JD-specific tailored version with ATS score and embedding vector</li>
+        <li><strong>Portfolio</strong> — Link to portfolio site, crawl status, last updated</li>
+        <li><strong>Project</strong> — Individual portfolio project with evidence data</li>
+        <li><strong>Achievement</strong> — Quantified metric linked to a project and employment record</li>
+        <li><strong>Skill</strong> — Tagged skill with proficiency level and evidence count</li>
+      </ul>
+    </div>
+    <div class="card card-teal">
+      <h3>Application Entities</h3>
+      <ul>
+        <li><strong>Job</strong> — Scraped job listing with JD, URL, company, salary, posting date</li>
+        <li><strong>JobApplication</strong> — Application record linking user, job, resume version, and status</li>
+        <li><strong>CoverLetter</strong> — Generated letter with evidence citations and authenticity score</li>
+        <li><strong>Company</strong> — Company profile with tech stack, culture signals, recruiter contacts</li>
+        <li><strong>Recruiter</strong> — Individual recruiter with contact history and intelligence dossier</li>
+        <li><strong>Interview</strong> — Scheduled interview with type, date, prep pack, and outcome</li>
+        <li><strong>Communication</strong> — Email thread or message linked to an application</li>
+      </ul>
+    </div>
+    <div class="card card-purple">
+      <h3>System Entities</h3>
+      <ul>
+        <li><strong>AgentAction</strong> — Immutable record of every agent invocation with inputs, outputs, and confidence</li>
+        <li><strong>AuditLog</strong> — Append-only compliance log for all data changes</li>
+        <li><strong>LearningOutcome</strong> — Outcome signal (interview/rejection/offer) linked to application for reinforcement learning</li>
+        <li><strong>StrategyVersion</strong> — Versioned application strategy parameters updated by Learning Agent</li>
+        <li><strong>EvidenceCache</strong> — Cached portfolio evidence with embedding vectors and staleness flags</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 11: AI MEMORY ARCHITECTURE
+     ============================================================ -->
+<div class="section" id="sec-memory">
+  <div class="section-header">
+    <div class="section-number-badge">Section 11</div>
+    <h1>AI Memory Architecture</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The memory architecture provides the platform's cognitive continuity across sessions, agents, and time. Inspired by human memory research, it is structured into five distinct tiers: Working, Short-term, Long-term Semantic, Episodic, and Procedural. Each tier serves different temporal and functional needs, with the Memory Agent managing transitions between tiers and serving retrieval requests.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Memory Hierarchy Diagram</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    WM["Working Memory\nCurrent Task Context\n(In-process, ephemeral)"]:::wm
+    SM["Short-term Memory\nSession + Conversation\n(Redis, 24hr TTL)"]:::stm
+    LTM["Long-term Semantic Memory\nPostgreSQL + pgvector\n(Persistent, searchable)"]:::ltm
+    EM["Episodic Memory\nApplication History + Outcomes\n(PostgreSQL, immutable)"]:::em
+    PROC["Procedural Memory\nLearned Strategies\n(PostgreSQL, versioned)"]:::proc
+
+    WM -->|Consolidate on task end| SM
+    SM -->|Nightly consolidation| LTM
+    LTM <-->|Evidence retrieval| EM
+    EM -->|Pattern extraction| PROC
+    PROC -->|Strategy retrieval| WM
+
+    classDef wm fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef stm fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
+    classDef ltm fill:#0d1b3e,color:#e2e8f0,stroke:#A78BFA,stroke-width:2px
+    classDef em fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
+    classDef proc fill:#252d3d,color:#e2e8f0,stroke:#34D399
+        </div>
+        <div class="diagram-label">Figure 15 — Five-tier AI Memory Architecture with consolidation pathways.</div>
+      </div>
+    </div>
+    <div>
+      <h2>Memory Tier Specifications</h2>
+      <table class="data-table">
+        <thead><tr><th>Tier</th><th>Storage</th><th>Capacity</th><th>Retrieval</th></tr></thead>
+        <tbody>
+          <tr><td>Working</td><td>LangGraph state (in-process)</td><td>Current task context window (128k tokens)</td><td>Direct access, millisecond</td></tr>
+          <tr><td>Short-term</td><td>Redis cache</td><td>Last 50 interactions per session</td><td>Key lookup, sub-millisecond</td></tr>
+          <tr><td>Long-term Semantic</td><td>PostgreSQL + pgvector</td><td>All historical content as embeddings (1536-dim)</td><td>Cosine similarity search</td></tr>
+          <tr><td>Episodic</td><td>PostgreSQL (application_events)</td><td>All application history, outcomes, emails</td><td>SQL query + full-text search</td></tr>
+          <tr><td>Procedural</td><td>PostgreSQL (strategy_versions)</td><td>Versioned strategy parameters</td><td>Latest version read, history available</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Memory Consolidation Process</h2>
+      <div class="card card-accent">
+        <h4>Nightly Consolidation</h4>
+        <p>A scheduled process runs at 02:00 AEST nightly. It scans Redis for Short-term memories older than 6 hours, computes embeddings using text-embedding-3-large, and inserts them into the pgvector store with appropriate metadata tags (agent_id, timestamp, context_type). Redis entries are then expired.</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Retrieval Augmented Context</h4>
+        <p>When an agent begins a task, the Memory Agent performs a semantic search across all memory tiers using the task context as query. The top-K most relevant memories are injected into the agent's working context window, enabling continuity across sessions without manual re-prompting.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 12: KNOWLEDGE GRAPH
+     ============================================================ -->
+<div class="section" id="sec-kg">
+  <div class="section-header">
+    <div class="section-number-badge">Section 12</div>
+    <h1>Knowledge Graph</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The Knowledge Graph provides a connected representation of all entities in the platform — linking the user's identity through their skills, projects, technologies, achievements, companies, and job applications into a coherent, traversable graph. This enables evidence tracing (portfolio project → achievement → resume bullet point → application), skill inference, and strategic career path analysis.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Core Knowledge Graph</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart LR
+    U([Vikram\nDeshpande]):::person
+    SK[Skills\nPython/AI/Agile]:::node
+    PROJ[Projects\nJARVIS/ATO/JARVIS]:::node
+    TECH[Technologies\nLangChain/K8s]:::node
+    ACH[Achievements\n92%/30%/38%]:::node
+    COMP[Companies\nATO/ANZ/NAB]:::node
+    IND[Industries\nGovt/Finance/Tech]:::node
+    JOB[Target Jobs\nSr TPM / Architect]:::node
+    REC[Recruiters\nLinkedIn contacts]:::node
+
+    U --> SK --> PROJ --> TECH
+    PROJ --> ACH --> COMP --> IND
+    IND --> JOB --> REC
+    SK --> JOB
+    ACH --> JOB
+
+    classDef person fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef node fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+        </div>
+        <div class="diagram-label">Figure 16 — Knowledge Graph: Entity interconnections from user identity to target roles.</div>
+      </div>
+    </div>
+    <div>
+      <h2>Evidence Trace Example</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart LR
+    PF["Portfolio\nforgotten-mistory"]:::source
+    GH["GitHub\n@Victordtesla24"]:::source
+    JARVIS["Project: JARVIS\nReal-time analytics"]:::proj
+    ACH["Achievement:\n92% effort reduction"]:::ach
+    SKILL["Skill:\nLangChain + Python"]:::skill
+    RES["Resume Bullet:\n'Reduced test effort by 92%'"]:::resume
+    APP["Application\nATO TPM Role"]:::app
+
+    PF --> JARVIS --> ACH --> RES --> APP
+    GH --> JARVIS
+    JARVIS --> SKILL --> APP
+
+    classDef source fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef proj fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
+    classDef ach fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
+    classDef skill fill:#A78BFA,color:#fff,stroke:#A78BFA
+    classDef resume fill:#4ECDC4,color:#0a0e1a,stroke:#4ECDC4
+    classDef app fill:#34D399,color:#0a0e1a,stroke:#34D399
+        </div>
+        <div class="diagram-label">Figure 17 — Evidence Trace: From portfolio source through achievement to application submission.</div>
+      </div>
+
+      <h2>Graph Query Examples</h2>
+      <p>The knowledge graph enables powerful cross-entity queries that would be impossible with a flat relational model:</p>
+      <ul>
+        <li><strong>"Find all achievements linked to roles requiring Kubernetes"</strong> — traverses Skills → Projects → Achievements → Returns quantified outcomes for container orchestration work</li>
+        <li><strong>"Which companies in Vikram's target industries are currently hiring?"</strong> — traverses Industries → Companies → Jobs → Returns filtered, ranked opportunities</li>
+        <li><strong>"What evidence supports the claim of AI/ML expertise?"</strong> — traverses Skills(AI/ML) → Projects → Achievements → Portfolio evidence → Returns verifiable proof chain</li>
+        <li><strong>"Identify skill gaps for a Senior AI Architect role"</strong> — compares required skills subgraph against current skills subgraph, returns delta with portfolio coverage indicators</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 13: SECURITY ARCHITECTURE
+     ============================================================ -->
+<div class="section" id="sec-security">
+  <div class="section-header">
+    <div class="section-number-badge">Section 13</div>
+    <h1>Security Architecture</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The platform handles sensitive personal and professional data including resumes, employment history, contact details, credentials, and application communications. Security is implemented using a Zero Trust model — every request is authenticated, every action is authorised, every data access is logged, and no component implicitly trusts any other. The architecture is designed for compliance with the <strong>Australian Privacy Act 1988</strong> and GDPR.</p>
+
+  <div class="two-col">
+    <div>
+      <h2>Authentication &amp; Authorisation</h2>
+      <div class="card card-accent">
+        <h4>OAuth2 + JWT Authentication</h4>
+        <p>All user-facing APIs require a valid JWT Bearer token obtained via OAuth2 PKCE flow (NextAuth.js). Tokens expire after 1 hour. Refresh tokens are rotated on every use and stored in HttpOnly cookies. API-to-API communication between services uses short-lived machine tokens (15-minute TTL).</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Role-Based Access Control (RBAC)</h4>
+        <p>Three roles: <strong>Owner</strong> (full access, can modify profile and approve submissions), <strong>Reviewer</strong> (read-only access to applications and reports, cannot approve submissions), and <strong>System</strong> (internal service accounts with scoped permissions per agent type). Permissions are checked on every API call via middleware — never assumed.</p>
+      </div>
+
+      <h2>Encryption</h2>
+      <table class="data-table">
+        <thead><tr><th>Data Layer</th><th>Encryption</th><th>Key Management</th></tr></thead>
+        <tbody>
+          <tr><td>In Transit</td><td>TLS 1.3 for all connections (API, DB, queue)</td><td>ACM certificates, auto-renewed</td></tr>
+          <tr><td>At Rest (DB)</td><td>AES-256 via RDS encryption</td><td>AWS KMS, customer-managed key</td></tr>
+          <tr><td>At Rest (S3)</td><td>SSE-KMS per object</td><td>AWS KMS, separate key per environment</td></tr>
+          <tr><td>PII Fields</td><td>Field-level encryption (AES-256-GCM)</td><td>Application-layer key, rotated quarterly</td></tr>
+          <tr><td>Credentials</td><td>HashiCorp Vault (AES-256)</td><td>Vault unsealing via AWS KMS</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>PII Handling &amp; Data Privacy</h2>
+      <div class="card card-purple">
+        <h4>PII Identification and Masking</h4>
+        <p>Microsoft Presidio scans all outbound content (emails, cover letters, Q&amp;A answers) for PII patterns: phone numbers, email addresses, passport numbers, tax file numbers (TFN), and bank accounts. Detected PII is masked in logs, replaced with tokens in audit trails, and only rendered in the approved UI context.</p>
+      </div>
+      <div class="card">
+        <h4>Data Retention and Right to Erasure</h4>
+        <p>Application data is retained for 24 months by default. Users can request full data export or deletion via the dashboard. Deletion anonymises the record (replaces PII with hashed identifiers) rather than hard-deleting, preserving aggregate analytics while removing personal data. Audit logs retain anonymised event records indefinitely.</p>
+      </div>
+
+      <h2>Threat Model Summary</h2>
+      <table class="data-table">
+        <thead><tr><th>Threat</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Credential theft</td><td>HashiCorp Vault, no secrets in env vars or code, Vault agent injection</td></tr>
+          <tr><td>Prompt injection</td><td>Input sanitisation, templated prompts, output validation by Compliance Agent</td></tr>
+          <tr><td>Data exfiltration</td><td>Egress filtering, PII masking, audit logging of all external API calls</td></tr>
+          <tr><td>Unauthorized submission</td><td>Mandatory human approval gate, RBAC on submit action, immutable audit log</td></tr>
+          <tr><td>Bot detection by job sites</td><td>Playwright stealth mode, rate limiting, randomised delays, ethical crawling headers</td></tr>
+          <tr><td>LLM hallucination</td><td>Compliance Agent, Verifier Agent, evidence-only rewriting constraint</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Zero Trust Principles</h2>
+      <ul>
+        <li><strong>Verify explicitly</strong> — All requests authenticated via JWT; no implicit trust between services</li>
+        <li><strong>Least privilege access</strong> — Agent service accounts scoped to minimum required permissions</li>
+        <li><strong>Assume breach</strong> — All actions logged; alert on anomalous patterns; blast radius minimised through namespace isolation</li>
+        <li><strong>Micro-segmentation</strong> — Kubernetes NetworkPolicies restrict pod-to-pod communication to declared routes only</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 14: ERROR HANDLING & RECOVERY
+     ============================================================ -->
+<div class="section" id="sec-errors">
+  <div class="section-header">
+    <div class="section-number-badge">Section 14</div>
+    <h1>Error Handling &amp; Recovery</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Failure Taxonomy</h2>
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Definition</th><th>Examples</th><th>Strategy</th></tr></thead>
+        <tbody>
+          <tr><td>Transient</td><td>Temporary failure likely to self-resolve</td><td>Network timeout, API rate limit, LLM latency spike</td><td>Exponential backoff with jitter (3-5 retries)</td></tr>
+          <tr><td>Permanent</td><td>Failure that cannot resolve without intervention</td><td>Invalid credentials, missing required data, ATS score below threshold</td><td>Immediate escalation + task archival</td></tr>
+          <tr><td>Partial</td><td>Some subtasks succeeded, others failed</td><td>Resume tailored but cover letter failed; 3 of 5 form fields submitted</td><td>Complete safe portions; human input for remainder</td></tr>
+          <tr><td>Data</td><td>Input or output data quality failure</td><td>Corrupt PDF, empty JD, hallucinated content detected</td><td>Reject input, notify, request clean input</td></tr>
+          <tr><td>Security</td><td>Policy or compliance violation</td><td>PII detected in output, fabricated claim found</td><td>Hard block, alert, audit log, never retry without human review</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Retry Strategy</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart LR
+    ERR([Error Detected]):::start
+    CLASS{Classify\nError Type}:::decision
+    TRANS["Transient:\nExponential Backoff\n1s, 2s, 4s, 8s, 16s"]:::action
+    PERM["Permanent:\nEscalate + Archive"]:::block
+    PART["Partial:\nComplete Safe Parts\nHuman Input Rest"]:::warn
+    CB{Circuit\nBreaker Open?}:::decision
+    DLQ["Dead Letter Queue\n+ Alert"]:::block
+    OK([Resolved]):::end
+
+    ERR --> CLASS
+    CLASS -->|Transient| TRANS --> CB
+    CLASS -->|Permanent| PERM
+    CLASS -->|Partial| PART
+    CB -->|Closed| OK
+    CB -->|Open| DLQ
+
+    classDef start fill:#F87171,color:#fff,stroke:#F87171
+    classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef decision fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef action fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+    classDef block fill:#1a1f2e,color:#F87171,stroke:#F87171
+    classDef warn fill:#1e2a3a,color:#FBBF24,stroke:#FBBF24
+        </div>
+        <div class="diagram-label">Figure 18 — Error classification and recovery flow with circuit breaker pattern.</div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Circuit Breaker Configuration</h2>
+      <table class="data-table">
+        <thead><tr><th>Agent/Service</th><th>Open Threshold</th><th>Half-Open After</th><th>Close Threshold</th></tr></thead>
+        <tbody>
+          <tr><td>Job Discovery</td><td>5 failures in 60s</td><td>30s</td><td>2 successes</td></tr>
+          <tr><td>Resume Tailor</td><td>3 failures in 120s</td><td>60s</td><td>1 success</td></tr>
+          <tr><td>Application Submit</td><td>1 failure</td><td>Manual reset</td><td>Human approval</td></tr>
+          <tr><td>LLM API (OpenAI)</td><td>5 failures in 30s</td><td>15s (try Claude fallback)</td><td>2 successes</td></tr>
+          <tr><td>Email Agent</td><td>3 failures in 60s</td><td>120s</td><td>1 success</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Human Escalation Triggers</h2>
+      <div class="card card-accent">
+        <h4>Mandatory Escalation Events</h4>
+        <ul>
+          <li>ATS score below 65% after 2 optimisation attempts</li>
+          <li>Compliance Agent CRITICAL violation on any output</li>
+          <li>Application submission failure (any form error)</li>
+          <li>Q&amp;A confidence below 60% for any required field</li>
+          <li>Circuit breaker open on Application Submit agent</li>
+          <li>Security anomaly detected (unusual access pattern)</li>
+          <li>LLM hallucination detected by Verifier Agent</li>
+          <li>Salary range question in any application form</li>
+        </ul>
+      </div>
+
+      <h2>Dead Letter Queue (DLQ) Management</h2>
+      <p>Failed tasks that exhaust their retry budget are moved to the DLQ in Redis. Each DLQ entry contains: original task payload, error history, attempt count, and classification. The DLQ dashboard surfaces these to the user with recommended actions. Tasks expire from the DLQ after 7 days if not acted upon, with a final alert sent 24 hours before expiry.</p>
+
+      <h2>Recovery Workflows</h2>
+      <ul>
+        <li><strong>Format Corruption Recovery</strong>: Revert to base resume, re-run tailoring from Stage 4 with stricter format constraints. Log the violation pattern for ATS Engine improvement.</li>
+        <li><strong>LLM Provider Outage</strong>: Automatic failover — OpenAI GPT-4o → Claude 3.5 Sonnet → Gemini Pro. All models produce identical output contracts via standardised prompts.</li>
+        <li><strong>Database Connection Lost</strong>: Write queue buffers mutations. On reconnection, replay mutations in order. Read requests serve from Redis cache with staleness flag displayed to user.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 15: ANALYTICS & KPIs
+     ============================================================ -->
+<div class="section" id="sec-analytics">
+  <div class="section-header">
+    <div class="section-number-badge">Section 15</div>
+    <h1>Analytics &amp; KPIs</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The Analytics Engine aggregates every platform event — from job discovery through to offer outcomes — into a real-time dashboard and weekly performance reports. Metrics are tracked at three levels: funnel conversion, agent performance, and strategic effectiveness. The Analytics Agent (Agent 14) maintains these metrics and triggers alerts on anomalous patterns.</p>
+
+  <h2>Application Funnel Metrics</h2>
+  <div class="kpi-grid">
+    <div class="kpi-tile">
+      <span class="kpi-value">Discovered</span>
+      <span class="kpi-label">Jobs found (daily)</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Evaluated</span>
+      <span class="kpi-label">Scored above 70% relevance</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Approved</span>
+      <span class="kpi-label">Human-approved for application</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Applied</span>
+      <span class="kpi-label">Successfully submitted</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Responded</span>
+      <span class="kpi-label">Recruiter or ATS response received</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Interview</span>
+      <span class="kpi-label">Interview invitation received</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Offer</span>
+      <span class="kpi-label">Formal offer received</span>
+    </div>
+    <div class="kpi-tile">
+      <span class="kpi-value">Accepted</span>
+      <span class="kpi-label">Offer accepted by user</span>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Key Performance Indicators</h2>
+      <table class="data-table">
+        <thead><tr><th>KPI</th><th>Target</th><th>Alert Threshold</th><th>Measurement</th></tr></thead>
+        <tbody>
+          <tr><td>Applications per day</td><td>5-10</td><td>Below 2 for 48hrs</td><td>Count of submitted applications</td></tr>
+          <tr><td>ATS pass rate</td><td>85%+</td><td>Below 70%</td><td>% submissions with ATS score &gt;= 75</td></tr>
+          <tr><td>Interview conversion</td><td>8-12%</td><td>Below 4%</td><td>Interviews / Applications (rolling 30 days)</td></tr>
+          <tr><td>Time-to-apply</td><td>&lt; 10 min</td><td>&gt; 30 min</td><td>Approval timestamp - Job discovery timestamp</td></tr>
+          <tr><td>Resume effectiveness</td><td>&gt; 80%</td><td>Below 65%</td><td>Composite ATS score across all tailored versions</td></tr>
+          <tr><td>Compliance pass rate</td><td>100%</td><td>Any FAIL</td><td>% outputs passing Compliance Agent gate</td></tr>
+          <tr><td>Agent success rate</td><td>&gt; 95%</td><td>Below 90%</td><td>Successful agent executions / Total invocations</td></tr>
+          <tr><td>Cost per application</td><td>&lt; A$0.50</td><td>&gt; A$2.00</td><td>LLM API costs + infra / Applications submitted</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Agent Performance Metrics</h2>
+      <table class="data-table">
+        <thead><tr><th>Agent</th><th>Primary Metric</th><th>Secondary Metric</th></tr></thead>
+        <tbody>
+          <tr><td>Job Discovery</td><td>Jobs found per crawl</td><td>Deduplication rate</td></tr>
+          <tr><td>Resume Tailor</td><td>Average ATS score delta</td><td>Format violation rate</td></tr>
+          <tr><td>Cover Letter</td><td>Authenticity score</td><td>Human edit rate</td></tr>
+          <tr><td>ATS Optimizer</td><td>Score accuracy vs outcome</td><td>Keyword gap recall</td></tr>
+          <tr><td>Compliance</td><td>False positive rate</td><td>Processing latency</td></tr>
+          <tr><td>Learning</td><td>Strategy improvement rate</td><td>Recommendation acceptance rate</td></tr>
+          <tr><td>Error Recovery</td><td>Recovery success rate</td><td>Time-to-recovery</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Reporting Schedule</h2>
+      <div class="card">
+        <h4>Real-time Dashboard (Grafana)</h4>
+        <p>Live counters for applications in flight, agent health, queue depth, and ATS scores. Updated every 30 seconds. Accessible via Next.js dashboard with role-based visibility.</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Weekly Performance Report (Auto-generated PDF)</h4>
+        <p>Generated every Monday at 07:00 AEST. Includes: applications submitted, funnel conversion rates, top-performing resume versions, keyword trends, and strategic recommendations from the Reflection Agent. Delivered by email and available in dashboard.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 16: TECHNOLOGY STACK
+     ============================================================ -->
+<div class="section" id="sec-techstack">
+  <div class="section-header">
+    <div class="section-number-badge">Section 16</div>
+    <h1>Technology Stack Recommendations</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>Every technology choice in this stack was selected for three criteria: (1) alignment with the platform's multi-agent AI architecture, (2) demonstrated reliability at production scale, and (3) direct leverage of Vikram's existing expertise — specifically LangChain, Langfuse, Python, TypeScript, React, PostgreSQL, Kubernetes, and cloud-native tooling already validated in the JARVIS and ATO Evidence Harness projects.</p>
+
+  <div class="two-col">
+    <div>
+      <table class="data-table">
+        <thead><tr><th>Layer</th><th>Technology</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>Frontend</td><td>Next.js 14 + TypeScript + Tailwind + shadcn/ui</td><td>SSR for dashboard performance; App Router for complex layouts; Tailwind for rapid consistent styling matching existing portfolio design</td></tr>
+          <tr><td>Backend API</td><td>FastAPI (Python) + Node.js (TypeScript)</td><td>FastAPI for AI/ML agent orchestration (native Python LangChain integration); Node.js for real-time WebSocket events and email webhooks</td></tr>
+          <tr><td>Agent Framework</td><td>LangGraph + LangChain</td><td>LangGraph provides deterministic DAG execution with state persistence — critical for multi-agent coordination and crash recovery. Matches existing Vikram expertise.</td></tr>
+          <tr><td>Primary Database</td><td>PostgreSQL + pgvector</td><td>PostgreSQL proven at Vikram's ANZ telemetry scale (10k+ concurrent). pgvector enables semantic memory search without a separate vector database for most use cases.</td></tr>
+          <tr><td>Vector Store</td><td>Pinecone (primary) / Weaviate (fallback)</td><td>Pinecone for high-performance semantic search at scale; Weaviate as self-hosted fallback for cost optimisation in development environments</td></tr>
+          <tr><td>Queue / Cache</td><td>Redis + BullMQ</td><td>Sub-millisecond latency for session cache; BullMQ provides typed job queues with retry/DLQ built-in. Industry standard for Node.js agent task buses.</td></tr>
+          <tr><td>Search</td><td>Elasticsearch</td><td>Full-text search across job descriptions, application history, and portfolio content. Faceted filtering for the job discovery dashboard.</td></tr>
+          <tr><td>Auth</td><td>NextAuth.js + OAuth2</td><td>Handles Google, LinkedIn, and Microsoft social login out of the box. PKCE flow for secure token exchange. Integrates natively with Next.js.</td></tr>
+          <tr><td>Monitoring</td><td>Langfuse + Grafana + Prometheus</td><td>Langfuse provides LLM trace visibility, hallucination scoring, and prompt versioning — Vikram already uses this in production. Grafana for system metrics. Matches existing toolchain.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <table class="data-table">
+        <thead><tr><th>Layer</th><th>Technology</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>AI Models (LLM)</td><td>GPT-4o (primary), Claude 3.5 Sonnet (creative), Gemini Pro (fallback)</td><td>GPT-4o for structured output and JSON mode; Claude 3.5 for long-form cover letters with nuanced tone; Gemini Pro as cost-optimised fallback</td></tr>
+          <tr><td>Embeddings</td><td>text-embedding-3-large (OpenAI)</td><td>1536-dimensional embeddings with state-of-the-art semantic retrieval accuracy. Essential for portfolio evidence matching and ATS semantic scoring.</td></tr>
+          <tr><td>Browser Automation</td><td>Playwright (Python + Node.js)</td><td>Cross-browser support for all major ATS systems (Workday, Greenhouse, Lever, SmartRecruiters). Stealth mode for bot detection avoidance. Native async support.</td></tr>
+          <tr><td>Document Generation</td><td>python-docx + WeasyPrint</td><td>python-docx for content-layer DOCX manipulation (format preservation); WeasyPrint for pixel-perfect PDF generation from HTML templates</td></tr>
+          <tr><td>Resume Parsing</td><td>PyMuPDF + pdfplumber</td><td>PyMuPDF for fast text extraction with position data; pdfplumber for table and column detection in multi-column resume layouts</td></tr>
+          <tr><td>Cloud</td><td>AWS (EKS, RDS, S3, SQS, KMS)</td><td>AWS ap-southeast-2 (Sydney) for Australian data residency compliance. EKS for Kubernetes orchestration. RDS for managed PostgreSQL with Multi-AZ failover.</td></tr>
+          <tr><td>CI/CD</td><td>GitHub Actions</td><td>Native integration with GitHub (@Victordtesla24). Matrix testing across Python versions. Docker image build + ECR push + EKS rolling deploy in one workflow.</td></tr>
+          <tr><td>IaC</td><td>Terraform + Pulumi</td><td>Terraform for stable AWS infrastructure (VPC, RDS, EKS); Pulumi for dynamic resource provisioning in agent worker scaling policies</td></tr>
+          <tr><td>Secret Management</td><td>HashiCorp Vault</td><td>Vault agent injection for Kubernetes pods — no secrets in environment variables or container images. Dynamic secrets for database credentials with 1-hour TTL.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 17: IMPLEMENTATION ROADMAP
+     ============================================================ -->
+<div class="section" id="sec-roadmap">
+  <div class="section-header">
+    <div class="section-number-badge">Section 17</div>
+    <h1>Implementation Roadmap</h1>
+    <hr class="section-rule">
+  </div>
+
+  <p>The 16-week implementation roadmap is structured as four sequential phases, each delivering a vertical slice of production-ready capability. Each phase produces a shippable increment — Phase 1 alone is useful without Phase 2. Dependencies are explicit; phases do not begin until the prior phase's acceptance criteria are verified.</p>
+
+  <div class="two-col">
+    <div>
+      <div class="card card-accent">
+        <h3>Phase 1 (Weeks 1-4): Foundation</h3>
+        <p><strong>Goal:</strong> Core infrastructure, database, authentication, and MVP resume pipeline.</p>
+        <ul>
+          <li>AWS EKS cluster provisioning (Terraform)</li>
+          <li>PostgreSQL RDS + pgvector extension deployment</li>
+          <li>Redis cluster for caching and queues</li>
+          <li>NextAuth.js authentication with OAuth2 (Google + LinkedIn)</li>
+          <li>Resume upload and PDF parsing (PyMuPDF + pdfplumber)</li>
+          <li>Basic resume tailoring pipeline (Stages 1-7)</li>
+          <li>Portfolio scraper MVP (forgotten-mistory.web.app)</li>
+          <li>Dashboard skeleton with application tracker</li>
+          <li>Langfuse integration and basic monitoring</li>
+        </ul>
+      </div>
+
+      <div class="card card-teal">
+        <h3>Phase 2 (Weeks 5-8): Intelligence</h3>
+        <p><strong>Goal:</strong> Full agent architecture, ATS Engine, and cover letter automation.</p>
+        <ul>
+          <li>LangGraph multi-agent framework deployment</li>
+          <li>Supervisor + Planner + Executor agent framework</li>
+          <li>ATS Optimization Engine (full scoring pipeline)</li>
+          <li>Cover Letter Agent with company research integration</li>
+          <li>Job Discovery Agent (LinkedIn + SEEK + Indeed crawlers)</li>
+          <li>Question Answering Agent with RAG pipeline</li>
+          <li>Compliance Agent with hallucination detection</li>
+          <li>Human approval workflow UI</li>
+          <li>Vector store integration (Pinecone)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="card card-purple">
+        <h3>Phase 3 (Weeks 9-12): Automation</h3>
+        <p><strong>Goal:</strong> End-to-end application submission, email, calendar, and interview prep.</p>
+        <ul>
+          <li>Application Agent (Playwright browser automation)</li>
+          <li>ATS form detection and field mapping</li>
+          <li>Email Agent with Gmail/Outlook integration</li>
+          <li>Calendar Agent with Google Calendar + O365</li>
+          <li>Interview Coach Agent with prep pack generation</li>
+          <li>Recruiter Intelligence Agent</li>
+          <li>HashiCorp Vault credential management</li>
+          <li>Full audit logging and compliance reporting</li>
+          <li>Production security hardening</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Phase 4 (Weeks 13-16): Learning &amp; Scale</h3>
+        <p><strong>Goal:</strong> Learning agent, analytics dashboard, knowledge graph, and production optimisation.</p>
+        <ul>
+          <li>Learning Agent with outcome-based strategy updates</li>
+          <li>Reflection Agent (weekly meta-analysis)</li>
+          <li>Analytics dashboard (Grafana + custom Next.js views)</li>
+          <li>Knowledge Graph implementation (PostgreSQL graph queries)</li>
+          <li>Memory Agent with five-tier hierarchy</li>
+          <li>Error Recovery Agent with full circuit breaker suite</li>
+          <li>Load testing and performance optimisation</li>
+          <li>DR testing and runbook documentation</li>
+          <li>Go-live and post-launch monitoring</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2>Gantt Chart</h2>
+  <div class="diagram-wrap">
+    <div class="mermaid">
+gantt
+    title Implementation Roadmap — 16 Weeks
+    dateFormat  YYYY-MM-DD
+    section Phase 1: Foundation
+    Infrastructure (EKS, RDS, Redis)      :p1a, 2026-07-07, 1w
+    Authentication + Dashboard Shell      :p1b, after p1a, 1w
+    Resume Parser + Portfolio Scraper     :p1c, after p1b, 1w
+    Basic Tailoring Pipeline              :p1d, after p1c, 1w
+    section Phase 2: Intelligence
+    LangGraph Framework + Agents          :p2a, 2026-08-04, 2w
+    ATS Engine + Cover Letter             :p2b, after p2a, 1w
+    Job Discovery + QA + Compliance       :p2c, after p2b, 1w
+    section Phase 3: Automation
+    Application Agent (Playwright)        :p3a, 2026-09-01, 2w
+    Email + Calendar + Interview Coach    :p3b, after p3a, 1w
+    Security Hardening + Vault            :p3c, after p3b, 1w
+    section Phase 4: Learning & Scale
+    Learning + Reflection Agents          :p4a, 2026-09-29, 1w
+    Analytics Dashboard + Knowledge Graph :p4b, after p4a, 1w
+    Performance + DR Testing              :p4c, after p4b, 1w
+    Go-live                               :milestone, 2026-10-26, 0d
+    </div>
+    <div class="diagram-label">Figure 19 — 16-Week Implementation Gantt Chart. Each phase builds on the prior, delivering shippable increments.</div>
+  </div>
+
+  <h2>Risk Register</h2>
+  <table class="data-table">
+    <thead><tr><th>Risk</th><th>Probability</th><th>Impact</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>ATS bot detection blocks Playwright automation</td><td>Medium</td><td>High</td><td>Playwright stealth mode, randomised delays, rate limiting, manual fallback UI</td></tr>
+      <tr><td>LLM hallucination reaches application output</td><td>Low</td><td>Critical</td><td>Verifier Agent + Compliance Agent dual-gate; evidence-only rewriting constraint</td></tr>
+      <tr><td>Resume formatting corruption on tailoring</td><td>Medium</td><td>High</td><td>Format preservation check Stage 8, automatic revert to base, never submit corrupt output</td></tr>
+      <tr><td>LinkedIn/SEEK rate limiting breaks discovery</td><td>High</td><td>Medium</td><td>Multi-source fallback (RSS, direct APIs, Google Jobs scraper), circuit breaker, caching</td></tr>
+      <tr><td>LLM provider outage (OpenAI)</td><td>Low</td><td>Medium</td><td>Multi-provider failover: GPT-4o → Claude 3.5 → Gemini Pro with identical prompt contracts</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================================================
+     SECTION 18: DECISION TREES
+     ============================================================ -->
+<div class="section" id="sec-decisions">
+  <div class="section-header">
+    <div class="section-number-badge">Section 18</div>
+    <h1>Decision Trees</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Apply / Don't Apply Decision</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    START([New Job Discovered]):::start
+    REL{Relevance\nScore?}:::decision
+    EXCL{Excluded\nCompany?}:::decision
+    DUPE{Already\nApplied?}:::decision
+    ATS{ATS Score\nafter Tailor?}:::decision
+    HUMAN{Human\nApproval?}:::decision
+    APPLY([Apply]):::apply
+    SKIP([Skip / Archive]):::skip
+    REVISE([Return for\nRevision]):::warn
+
+    START --> REL
+    REL -->|Above 70%| EXCL
+    REL -->|Below 70%| SKIP
+    EXCL -->|Not excluded| DUPE
+    EXCL -->|Excluded| SKIP
+    DUPE -->|Not applied| ATS
+    DUPE -->|Already applied| SKIP
+    ATS -->|75+ proceed| HUMAN
+    ATS -->|65-74 marginal| HUMAN
+    ATS -->|Below 65| REVISE
+    HUMAN -->|Approved| APPLY
+    HUMAN -->|Rejected| SKIP
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef skip fill:#1a1f2e,color:#94a3b8,stroke:#64748b
+    classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+        </div>
+        <div class="diagram-label">Figure 20 — Apply/Don't Apply Decision Tree.</div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Escalation Decision Tree</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    START([Agent Output\nReady]):::start
+    CONF{Confidence\nScore?}:::decision
+    COMP{Compliance\nCheck?}:::decision
+    VER{Verifier\nCheck?}:::decision
+    SAFE{Safety\nCritical?}:::decision
+    AUTO([Auto-Proceed]):::apply
+    REVIEW([Human Review\nRequested]):::warn
+    BLOCK([Hard Block\n+ Alert]):::block
+
+    START --> CONF
+    CONF -->|Above 80%| COMP
+    CONF -->|60-79%| REVIEW
+    CONF -->|Below 60%| REVIEW
+    COMP -->|PASS| VER
+    COMP -->|FAIL critical| BLOCK
+    COMP -->|FAIL high| REVIEW
+    VER -->|Verified| SAFE
+    VER -->|Failed| REVIEW
+    SAFE -->|Not critical| AUTO
+    SAFE -->|Safety critical| REVIEW
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
+    classDef block fill:#F87171,color:#fff,stroke:#F87171
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+        </div>
+        <div class="diagram-label">Figure 21 — Escalation Decision Tree: Confidence, Compliance, and Verification gates.</div>
+      </div>
+
+      <h2>Resume Tailoring Depth Decision</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TB
+    START([Job Opportunity]):::start
+    MATCH{Skill Match\nRate?}:::decision
+    DEEP["Deep Tailoring\nAll sections\nrewrote"]:::action
+    MED["Medium Tailoring\nAchievements +\nSummary only"]:::action
+    LIGHT["Light Tailoring\nKeyword injection\nonly"]:::action
+    SCORE{ATS Score\nPost-tailoring?}:::decision
+    PASS([Proceed to\nCover Letter]):::apply
+    ITER([Re-tailor\nwith guidance]):::warn
+
+    START --> MATCH
+    MATCH -->|Below 50% match| DEEP
+    MATCH -->|50-70% match| MED
+    MATCH -->|Above 70%| LIGHT
+    DEEP & MED & LIGHT --> SCORE
+    SCORE -->|75+| PASS
+    SCORE -->|Below 75| ITER
+
+    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
+    classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
+    classDef action fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+        </div>
+        <div class="diagram-label">Figure 22 — Tailoring Depth Decision: matched to skill overlap rate.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 19: STATE MACHINES
+     ============================================================ -->
+<div class="section" id="sec-statemachines">
+  <div class="section-header">
+    <div class="section-number-badge">Section 19</div>
+    <h1>State Machines</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Application Lifecycle State Machine</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> Discovered
+    Discovered --> Evaluating: Relevance score computed
+    Evaluating --> Approved: Human approves
+    Evaluating --> Discarded: Below threshold
+    Approved --> Tailoring: Planner starts pipeline
+    Tailoring --> Reviewing: ATS score >= 75
+    Tailoring --> Blocked: ATS score < 65
+    Blocked --> Tailoring: Human revises criteria
+    Reviewing --> Submitting: Human approves bundle
+    Reviewing --> Revising: Human requests changes
+    Revising --> Reviewing: Re-tailored
+    Submitting --> Submitted: Confirmation received
+    Submitting --> Failed: Submission error
+    Failed --> Submitting: Human resolves and retries
+    Submitted --> Tracking: Awaiting response
+    Tracking --> Interviewing: Interview invited
+    Tracking --> Rejected: No response / rejected
+    Interviewing --> Offered: Offer received
+    Interviewing --> Rejected: Post-interview rejection
+    Offered --> Accepted: User accepts
+    Offered --> Declined: User declines
+    Accepted --> [*]
+    Rejected --> [*]
+    Declined --> [*]
+    Discarded --> [*]
+        </div>
+        <div class="diagram-label">Figure 23 — Application Lifecycle: Full state machine from discovery through to resolution.</div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Agent Lifecycle State Machine</h2>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Planning: Task received from queue
+    Planning --> Executing: Plan validated
+    Planning --> Failed: Plan invalid
+    Executing --> Reviewing: Execution complete
+    Executing --> Error: Execution failed
+    Error --> Executing: Transient error, retry
+    Error --> Failed: Max retries exceeded
+    Error --> Escalated: Safety or compliance error
+    Reviewing --> Complete: Output verified
+    Reviewing --> Executing: Verification failed, re-execute
+    Escalated --> Idle: Human resolved
+    Complete --> Idle: Task returned to Supervisor
+    Failed --> Idle: Task archived to DLQ
+        </div>
+        <div class="diagram-label">Figure 24 — Agent Lifecycle State Machine: Handles error recovery, escalation, and normal completion paths.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 20: APPENDIX
+     ============================================================ -->
+<div class="section" id="sec-appendix">
+  <div class="section-header">
+    <div class="section-number-badge">Section 20</div>
+    <h1>Appendix</h1>
+    <hr class="section-rule">
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h2>Glossary of Terms</h2>
+      <table class="data-table">
+        <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td>ATS</td><td>Applicant Tracking System — software used by employers to manage job applications and screen candidates</td></tr>
+          <tr><td>C4 Model</td><td>Context, Container, Component, Code — a hierarchical software architecture documentation framework</td></tr>
+          <tr><td>Circuit Breaker</td><td>Design pattern that prevents repeated calls to a failing service by opening the circuit after a threshold of failures</td></tr>
+          <tr><td>DAG</td><td>Directed Acyclic Graph — a workflow graph with nodes (tasks) and directed edges (dependencies), with no cycles</td></tr>
+          <tr><td>DLQ</td><td>Dead Letter Queue — a queue holding messages that failed processing after maximum retry attempts</td></tr>
+          <tr><td>Embedding</td><td>A numerical vector representation of text, enabling semantic similarity comparison via cosine distance</td></tr>
+          <tr><td>Evidence Library</td><td>Structured store of verified professional evidence from portfolio, GitHub, and employment records</td></tr>
+          <tr><td>Human-in-the-Loop</td><td>System design pattern requiring human approval at critical decision points before autonomous action</td></tr>
+          <tr><td>JD</td><td>Job Description — the employer's documented requirements, responsibilities, and qualifications for a role</td></tr>
+          <tr><td>LangGraph</td><td>Python library for building stateful multi-agent workflows as directed graphs with LLM nodes</td></tr>
+          <tr><td>pgvector</td><td>PostgreSQL extension adding vector data types and similarity search operators (cosine, L2, inner product)</td></tr>
+          <tr><td>PII</td><td>Personally Identifiable Information — data that can identify an individual (name, phone, TFN, etc.)</td></tr>
+          <tr><td>PKCE</td><td>Proof Key for Code Exchange — OAuth2 extension preventing authorization code interception attacks</td></tr>
+          <tr><td>RAG</td><td>Retrieval-Augmented Generation — LLM pattern combining document retrieval with generation for grounded responses</td></tr>
+          <tr><td>RBAC</td><td>Role-Based Access Control — permission model assigning capabilities based on user roles</td></tr>
+          <tr><td>STAR Format</td><td>Situation, Task, Action, Result — structured method for framing professional achievements in interviews</td></tr>
+          <tr><td>TF-IDF</td><td>Term Frequency-Inverse Document Frequency — statistical measure of keyword importance in a document corpus</td></tr>
+          <tr><td>Zero Trust</td><td>Security model requiring verification of every request regardless of network origin or user identity</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Portfolio Evidence Catalog</h2>
+      <p>The following verified evidence assets are available in Vikram Deshpande's portfolio and GitHub, forming the foundation of the evidence library that powers every application:</p>
+
+      <table class="data-table">
+        <thead><tr><th>Project</th><th>Source</th><th>Key Evidence</th></tr></thead>
+        <tbody>
+          <tr><td>JARVIS — Jira Analytics Dashboard</td><td>GitHub + Portfolio</td><td>Real-time LangChain pipeline; Python, TypeScript, Next.js, Supabase; live telemetry at 60 FPS</td></tr>
+          <tr><td>ATO Evidence Harness</td><td>Portfolio + LinkedIn</td><td>92% effort reduction (3hrs to 15min); COBOL/REXX automation; PCOMM, SDSF, PowerShell; ATO Payday Super program</td></tr>
+          <tr><td>Multi-Agent Orchestrator</td><td>GitHub</td><td>3-tier plan/execute/verify architecture; LangGraph; Python + React; demonstrates this document's design in miniature</td></tr>
+          <tr><td>Vedic Astronomy Platform</td><td>Portfolio + YouTube</td><td>AI/ML birth time rectifier; 3D celestial sphere simulations; GLSL shaders; WebSockets</td></tr>
+          <tr><td>AI Image Enhancer</td><td>GitHub</td><td>ML super-resolution; 2x scale detail restoration; Python; computer vision pipeline</td></tr>
+          <tr><td>LLM Evaluation Stack</td><td>Portfolio + Langfuse</td><td>38% error budget reduction; Langfuse + Phoenix; hallucination scoring; real production LLM pipeline</td></tr>
+          <tr><td>Cloud Modernisation (ANZ)</td><td>Resume / LinkedIn</td><td>30% delivery efficiency gain; 15% infrastructure cost reduction; Azure core banking; $5M+ portfolio; 40+ resources</td></tr>
+          <tr><td>WebSocket Telemetry (ANZ)</td><td>Resume + Portfolio</td><td>10,000+ concurrent devices; P95 latency &lt;200ms; real-time performance monitoring at scale</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Document Revision History</h2>
+      <table class="data-table">
+        <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Changes</th></tr></thead>
+        <tbody>
+          <tr><td>v1.0</td><td>July 2026</td><td>Vikram Deshpande</td><td>Initial release — complete architecture package for review board</td></tr>
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <p><strong>Document Authority:</strong> This architecture document is authored by Vikram Deshpande (Senior TPM / AI Solutions Architect) for internal review and planning purposes. All referenced portfolio projects, metrics, and achievements are verifiable through the sources cited in the Portfolio Evidence Catalog above. For verification, visit forgotten-mistory.web.app or GitHub @Victordtesla24.</p>
+      </div>
+
+      <h2>Contact</h2>
+      <table class="data-table">
+        <thead><tr><th>Channel</th><th>Address</th></tr></thead>
+        <tbody>
+          <tr><td>Portfolio</td><td>forgotten-mistory.web.app</td></tr>
+          <tr><td>GitHub</td><td>@Victordtesla24</td></tr>
+          <tr><td>LinkedIn</td><td>vikramdeshpande.io</td></tr>
+          <tr><td>YouTube</td><td>@vicd0ct</td></tr>
+          <tr><td>Location</td><td>Melbourne, VIC, Australia</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TOC Page Number Resolver -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var observer = new MutationObserver(function(mutations, obs) {
+    var pagedContent = document.querySelector('.pagedjs_pages');
+    if (pagedContent) { obs.disconnect(); setTimeout(resolvePageNumbers, 800); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  function resolvePageNumbers() {
+    document.querySelectorAll('.page-ref').forEach(function(ref) {
+      var href = ref.getAttribute('data-href');
+      var target = document.getElementById(href.replace('#', ''));
+      if (target) {
+        var page = target.closest('.pagedjs_page');
+        if (page) ref.textContent = page.getAttribute('data-page-number') || '?';
+      }
+    });
+  }
+});
+</script>
+
+</body>
+</html>
