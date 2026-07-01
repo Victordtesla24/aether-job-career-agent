@@ -75,8 +75,14 @@ These exact numbers must be used everywhere funnel data appears. Analytics is al
 - `apps/web`: TypeScript + **Vitest** for unit tests (`__tests__/health.test.ts`).
 - `apps/api`: Python 3.11 + **pytest** (`tests/test_health.py`).
 - Root: pnpm workspace (`pnpm-workspace.yaml`), shared scripts.
-- CI (`.github/workflows/ci.yml`): install → lint → type-check → unit tests → build, on
+- CI (`ci/github-actions-ci.yml`): install → lint → type-check → unit tests → build, on
   **Node 20** and **Python 3.11**, with dependency caching.
 
 **Consequences.** Later slices extend these apps rather than re-scaffolding. Vitest chosen over
 Jest for speed and zero-config ESM/TS support; it is swappable without changing slice contracts.
+
+**Update (D-0005 cross-ref).** The CI workflow is stored at `ci/github-actions-ci.yml` (an inert
+template) rather than `.github/workflows/ci.yml`, so branches push and merge to `main` without
+requiring the GitHub App `workflows` permission. Activation instructions live in `ci/README.md`.
+This keeps CI-CD simple with no permission friction; the workflow is copied into
+`.github/workflows/` only when the team chooses to switch CI on.
