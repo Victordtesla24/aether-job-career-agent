@@ -86,3 +86,34 @@ template) rather than `.github/workflows/ci.yml`, so branches push and merge to 
 requiring the GitHub App `workflows` permission. Activation instructions live in `ci/README.md`.
 This keeps CI-CD simple with no permission friction; the workflow is copied into
 `.github/workflows/` only when the team chooses to switch CI on.
+
+---
+
+## D-0006 — Auth: framework-free JWT session layer now, NextAuth route wiring in P1-S06
+**Date:** 2026-07-02 · **Author:** Aether Delivery Agent (Session 2) · **Status:** Adopted
+
+**Context.** P1-S03 delivers authentication, but Next.js itself is not introduced until the
+dashboard shell (P1-S06). NextAuth.js requires `next`/`react` as peer dependencies and its route
+handler cannot run without a Next.js app. Pulling those heavy peers a slice early — purely to host a
+handler that has nothing to serve yet — would add fragility with no functional payoff.
+
+**Decision.** In P1-S03 we implement the security-critical core as framework-agnostic,
+fully-unit-tested TypeScript in `apps/web/src/lib/auth/`:
+- `jwt.ts` — sign/verify session tokens via `jose` (the same library NextAuth uses internally), so
+  the token format matches what NextAuth will issue later.
+- `session.ts` — session model + forgiving token→session resolution.
+- `require-auth.ts` — a `requireAuth` guard that reads a Bearer header or the session cookie and
+  returns a discriminated result; works with the Fetch `Request` used by Next.js route handlers /
+  middleware and with plain test doubles.
+- `credentials.ts` — `authorizeCredentials`, the Credentials-provider callback, written with its
+  data-access and password-verification dependencies injected (wired to `UserRepository` + a real
+  hash comparison in P1-S06). The returned user never carries the password hash.
+- `options.ts` — `authConfig`, a NextAuth-shaped config object (Credentials provider + stateless
+  JWT session strategy) ready to hand to `NextAuth(authConfig)`.
+- `test-helpers.ts` — token/session factories shared by unit tests and future E2E setup.
+
+**Consequences.** The auth contract is provable without booting a framework and the suite stays
+green offline. When P1-S06 adds Next.js, the NextAuth route handler
+(`app/api/auth/[...nextauth]/route.ts`) simply consumes `authConfig` + the `jose` helpers and the
+Credentials `authorize` delegates to `authorizeCredentials`. Signing secret is read from
+`NEXTAUTH_SECRET` (already in `.env.example`) and is never logged.

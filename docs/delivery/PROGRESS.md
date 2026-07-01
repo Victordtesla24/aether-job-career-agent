@@ -14,7 +14,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-env  | OpenRouter connectivity validation script        | ✅     | green | `f0b7f8a` |
 | P1-S01  | Monorepo scaffolding: shared/agents/queue + turbo | ✅     | green | `67b82fb` |
 | P1-S02  | Prisma schema (pgvector + all models) + repos     | ✅     | green | `fff6c15` |
-| P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ⬜     | -     | -         |
+| P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ✅     | green | `d00ae4a` |
 | P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ⬜     | -     | -         |
 | P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ⬜     | -     | -         |
 | P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ⬜     | -     | -         |
@@ -38,6 +38,16 @@ repositories (Job/Resume/Application/User) built on `import type` from `@prisma/
 run without a generated client or live DB. Tests: 13 green (5 schema-structure + 8 repository). A
 package-scoped `turbo.json` wires `prisma:generate` ahead of build/type-check via `extends: ["//"]`.
 `prisma generate` runs offline; `migrate dev` is deferred until `DATABASE_URL` is provisioned.
+
+**P1-S03 detail:** `apps/web/src/lib/auth` — framework-agnostic auth core: `jwt.ts` (sign/verify
+session tokens via `jose`, the library NextAuth uses internally), `session.ts` (session model +
+token→session resolution), `require-auth.ts` (`requireAuth` guard reading Bearer header or session
+cookie, returning a discriminated result), `credentials.ts` (`authorizeCredentials` provider
+callback with injected user-lookup + password-verify; never leaks the hash), `options.ts`
+(`authConfig`, a NextAuth-shaped Credentials + stateless-JWT config), plus `test-helpers.ts`. Tests:
+18 green (5 JWT + 6 guard + 7 credentials/config). NextAuth route-handler wiring is deferred to
+P1-S06 when Next.js lands — see DECISIONS D-0006. Secret comes from `NEXTAUTH_SECRET` (already in
+`.env.example`); it is never logged.
 
 ---
 
