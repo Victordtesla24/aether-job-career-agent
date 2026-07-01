@@ -13,3 +13,11 @@ python-jose[cryptography]>=3.3
 # Database access — raw SQL over the Prisma-migrated schema (D-0013)
 psycopg2-binary>=2.9
 cuid>=0.4  # Prisma-compatible id generation for raw inserts
+# ATS scoring engine (P2-S03) — deterministic, no LLM.
+# scikit-learn provides TF-IDF keyword coverage; sentence-transformers provides
+# the all-MiniLM-L6-v2 semantic-similarity embeddings (a pinned public checkpoint,
+# downloaded once to SENTENCE_TRANSFORMERS_HOME). torch (CPU) is pulled in
+# transitively by sentence-transformers.
+numpy>=1.26
+scikit-learn>=1.4
+sentence-transformers>=2.7
