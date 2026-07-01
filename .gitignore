@@ -36,3 +36,7 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+
+# Auto-generated previews for design docs (do not commit)
+design/*.pdf
+design/*.docx

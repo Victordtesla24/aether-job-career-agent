@@ -4,6 +4,7 @@
     {"screen_id": "dashboard", "frame_kind": "desktop", "label": "Main Dashboard"},
     {"screen_id": "job-discovery", "frame_kind": "desktop", "label": "Job Discovery Feed"},
     {"screen_id": "resume-studio", "frame_kind": "desktop", "label": "Resume Tailoring Studio"},
+    {"screen_id": "cover-letter-studio", "frame_kind": "desktop", "label": "Cover Letter Studio"},
     {"screen_id": "story-bank", "frame_kind": "desktop", "label": "Story Bank & Achievement Memory"},
     {"screen_id": "application-tracker", "frame_kind": "desktop", "label": "Application Tracker"},
     {"screen_id": "interview-center", "frame_kind": "desktop", "label": "Interview Command Center"},

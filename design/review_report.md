@@ -599,3 +599,43 @@ The Aether platform design is **ambitious, well-conceived, and genuinely differe
 However, the design suffers from **inconsistency debt** that would be catastrophic in production. The navigation schema split, the data contradictions across screens, and the profile mismatches suggest the screens were designed in two separate batches without a shared design system or data model. The platform also lacks critical safety rails for its most powerful features — auto-apply, auto-reply, and bulk actions could cause real harm to a job seeker's reputation if triggered incorrectly.
 
 The strongest recommendation is to **freeze feature development and fix the foundation**: standardize navigation, create a single data model, reconcile all numbers, and add confirmation dialogs for every irreversible action. Then proceed with the missing flows (onboarding, error recovery, offer acceptance) before adding any new features.
+
+
+
+---
+
+## Phase 0 Wireframe Resolution Log (branch `phase-0/wireframes`)
+
+**Session:** Aether Delivery Agent · Session 1 · 1 July 2026
+**Scope of this pass:** Address the highest-severity, wireframe-level findings above through small, test-backed slices. Each slice is one conventional commit on `phase-0/wireframes`. Backend/data-model, mobile, and net-new flow work are explicitly deferred to later phases and tracked below.
+
+### Resolved in this pass
+
+| # | Finding (from audit above) | Severity | Resolution | Slice · Commit |
+|---|---|---|---|---|
+| R1 | **Navigation inconsistency** — Schema A/B split, phantom "Cover Letters" item, reordering, logo/gradient drift | BLOCKER | All primary app screens now carry the identical **12-item Schema A** sidebar; cross-screen `href` links wired between related screens so spatial memory holds | P0-S06 · `a4f41b9` |
+| R2 | **Funnel data contradiction** — Application Tracker used a 6-stage Sankey (Discovered/Evaluated/Applied/In-Review/Interview/Offer) conflicting with the 5-stage funnel elsewhere | HIGH | Reconciled every funnel to the **canonical 5-stage** model — Jobs Found 847 → Applied 412 → Screened 156 → Interviewed 23 → Offers 4 — across Analytics, Dashboard and Application Tracker | P0-S05 · `ccdd166` |
+| R3 | **No "Save for later" on job cards** | MEDIUM | Added a **Saved tab** to Job Discovery with a saved-jobs count badge, a saved-jobs view, and an empty-state fallback | P0-S10 · `3c05f2e` |
+| R4 | **Missing safety rails on high-stakes actions** — bulk/auto apply and auto-send email with no confirmation | HIGH | Email Center now has a **send confirmation gate**; Job Discovery apply is a deliberate **two-step Tailor → Review & Apply** flow with a submit confirmation dialog | P0-S01 · `1faef5f`, P0-S02 · `9a0cbc8` |
+| R5 | **Integration status inconsistency** between Job Discovery and Settings | MEDIUM | Settings now surfaces **per-board integration status indicators** consistent with the Job Discovery source bar | P0-S03 · `3bd50f5` |
+| R6 | **Empty states missing** on Networking (CRM) and Offer Comparison | MEDIUM | Added first-run/empty states to both screens | P0-S04 · `e054778` |
+| R7 | **Analytics lacked a time-range control** | LOW | Added **time-range pills** to Analytics | P0-S05 · `ccdd166` |
+| R8 | **Resume Studio version history not comparable** — v1/v2/v3 chips with no diff | MEDIUM | Added a **version comparison modal** (pick two versions, see the change list, restore/keep) | P0-S07 · `669f249` |
+| R9 | **Interview Center Live Assist unfinished; recording/consent unaddressed** | HIGH | Added a dismissible **recording-consent compliance banner** (linking to Settings) and a **Mute Mode** toggle on Live Assist | P0-S08 · `d457964` |
+| R10 | **No way to test an individual agent or preview its cost** | MEDIUM | Added a **Test Run modal** to the Agents screen (per-agent dry-run with estimated + actual cost) and an avg-cost-per-run figure on the spend stat | P0-S09 · `b16676a` |
+| R11 | **Phantom "Cover Letters" nav item had no screen; Resume Studio had no cover-letter companion** | MEDIUM | Built a new **Cover Letter Studio** screen (Schema A sidebar, Evidence Trace grounding, Voice DNA controls, JD keyword coverage, Email Center hand-off). It is a sub-feature of Resume Studio, not a new top-level nav item — consistent with the audit recommendation | P3 · `13b7966` |
+
+### Deferred (out of scope for Phase 0 wireframes)
+
+These remain valid findings from the audit and are intentionally **not** addressed in this branch; they belong to later phases (data model, backend wiring, mobile, and net-new flows):
+
+- **Single data model / source-of-truth reconciliation** (role names, profile data, currency prefixes, source-vs-connected inconsistencies). This pass reconciled the funnel; a full data-model document is a Phase 1 task.
+- **Onboarding / first-run flow** (profile setup, resume upload, board connection, agent config).
+- **Resume upload → Story Bank auto-extraction flow.**
+- **Interview scheduling flow** and **offer-acceptance wind-down flow.**
+- **Error-recovery flows** (agent failure, expired API key, dropped board connection).
+- **Mobile approval cover-letter preview** and broader mobile parity.
+- **Dashboard upcoming-interview countdown** and **offer-deadline countdowns.**
+- **"Rejected / Withdrawn" tracking** in the Application Tracker.
+
+> Guardrails honoured throughout: no résumé content was fabricated, `assets/resume/Vik_Resume_Final.pdf` was left untouched, no secrets/`.env` were committed, and the `main` branch was not modified. All work is on `phase-0/wireframes`.
