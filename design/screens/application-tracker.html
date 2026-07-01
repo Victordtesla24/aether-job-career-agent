@@ -136,38 +136,33 @@
           <defs>
             <linearGradient id="f1" x1="0" x2="1"><stop offset="0" stop-color="#4F46E5" stop-opacity="0.5"/><stop offset="1" stop-color="#818CF8" stop-opacity="0.4"/></linearGradient>
             <linearGradient id="f2" x1="0" x2="1"><stop offset="0" stop-color="#818CF8" stop-opacity="0.45"/><stop offset="1" stop-color="#FF6B35" stop-opacity="0.4"/></linearGradient>
-            <linearGradient id="f3" x1="0" x2="1"><stop offset="0" stop-color="#FF6B35" stop-opacity="0.45"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0.4"/></linearGradient>
-            <linearGradient id="f4" x1="0" x2="1"><stop offset="0" stop-color="#A78BFA" stop-opacity="0.45"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0.45"/></linearGradient>
-            <linearGradient id="f5" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B" stop-opacity="0.5"/><stop offset="1" stop-color="#34D399" stop-opacity="0.5"/></linearGradient>
+            <linearGradient id="f3" x1="0" x2="1"><stop offset="0" stop-color="#FF6B35" stop-opacity="0.45"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0.45"/></linearGradient>
+            <linearGradient id="f4" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B" stop-opacity="0.5"/><stop offset="1" stop-color="#34D399" stop-opacity="0.5"/></linearGradient>
           </defs>
-          <!-- flows -->
-          <path d="M54,30 C147,30 147,60 240,60 L240,300 C147,300 147,270 54,270 Z" fill="url(#f1)"/>
-          <path d="M254,60 C347,60 347,112.5 440,112.5 L440,247.5 C347,247.5 347,195 254,195 Z" fill="url(#f2)"/>
-          <path d="M454,112.5 C547,112.5 547,135 640,135 L640,225 C547,225 547,202.5 454,202.5 Z" fill="url(#f3)"/>
-          <path d="M654,135 C747,135 747,162 840,162 L840,198 C747,198 747,171 654,171 Z" fill="url(#f4)"/>
-          <path d="M854,162 C947,162 947,175.5 1040,175.5 L1040,184.5 C947,184.5 947,171 854,171 Z" fill="url(#f5)"/>
+          <!-- flows (5-stage canonical funnel: 847 → 412 → 156 → 23 → 4) -->
+          <path d="M54,30 C172,30 172,80 290,80 L290,280 C172,280 172,330 54,330 Z" fill="url(#f1)"/>
+          <path d="M304,80 C422,80 422,125 540,125 L540,235 C422,235 422,280 304,280 Z" fill="url(#f2)"/>
+          <path d="M554,125 C672,125 672,160 790,160 L790,200 C672,200 672,235 554,235 Z" fill="url(#f3)"/>
+          <path d="M804,160 C922,160 922,174 1040,174 L1040,186 C922,186 922,200 804,200 Z" fill="url(#f4)"/>
           <!-- nodes -->
           <rect x="40" y="30" width="14" height="300" rx="3" fill="#4F46E5"/>
-          <rect x="240" y="60" width="14" height="240" rx="3" fill="#818CF8"/>
-          <rect x="440" y="112.5" width="14" height="135" rx="3" fill="#FF6B35"/>
-          <rect x="640" y="135" width="14" height="90" rx="3" fill="#A78BFA"/>
-          <rect x="840" y="162" width="14" height="36" rx="3" fill="#F59E0B"/>
-          <rect x="1040" y="175.5" width="14" height="9" rx="3" fill="#34D399"/>
+          <rect x="290" y="80" width="14" height="200" rx="3" fill="#818CF8"/>
+          <rect x="540" y="125" width="14" height="110" rx="3" fill="#FF6B35"/>
+          <rect x="790" y="160" width="14" height="40" rx="3" fill="#F59E0B"/>
+          <rect x="1040" y="174" width="14" height="12" rx="3" fill="#34D399"/>
           <!-- labels -->
-          <text x="47" y="20" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Discovered</text><text x="47" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">847</text>
-          <text x="247" y="50" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Evaluated</text><text x="247" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">412</text>
-          <text x="447" y="102" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Applied</text><text x="447" y="348" fill="#FF6B35" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">156</text>
-          <text x="647" y="125" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">In Review</text><text x="647" y="348" fill="#A78BFA" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">89</text>
-          <text x="847" y="152" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Interview</text><text x="847" y="348" fill="#F59E0B" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">23</text>
-          <text x="1047" y="165" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Offer</text><text x="1047" y="348" fill="#34D399" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">4</text>
+          <text x="47" y="20" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Jobs Found</text><text x="47" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">847</text>
+          <text x="297" y="70" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Applied</text><text x="297" y="348" fill="#818CF8" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">412</text>
+          <text x="547" y="115" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Screened</text><text x="547" y="348" fill="#FF6B35" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">156</text>
+          <text x="797" y="150" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Interviewed</text><text x="797" y="348" fill="#F59E0B" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">23</text>
+          <text x="1047" y="164" fill="#F4F4F8" font-size="12" font-weight="600" text-anchor="middle">Offers</text><text x="1047" y="348" fill="#34D399" font-size="13" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">4</text>
           <!-- drop-offs with reasons -->
-          <text x="147" y="312" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−435 · below match threshold</text>
-          <text x="347" y="282" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−256 · skipped / low fit</text>
-          <text x="547" y="242" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−67 · no response</text>
-          <text x="747" y="212" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−66 · screened out</text>
-          <text x="947" y="197" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−19 · not selected</text>
+          <text x="172" y="312" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−435 · below match threshold</text>
+          <text x="422" y="282" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−256 · not shortlisted</text>
+          <text x="672" y="232" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−133 · no response / screened out</text>
+          <text x="922" y="197" fill="#F87171" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono">−19 · not selected</text>
         </svg>
-        <p class="text-[11px] text-[#6B6B82] mt-4 text-center">Biggest drop-off at <span class="text-[#F87171] font-medium">Applied → In Review (−67, no response)</span> — improve application quality and follow-up timing rather than raising the threshold.</p>
+        <p class="text-[11px] text-[#6B6B82] mt-4 text-center">Biggest drop-off at <span class="text-[#F87171] font-medium">Jobs Found → Applied (−435, below match threshold)</span> — most sourced roles fall below the match threshold; refine sourcing filters to surface higher-fit roles earlier.</p>
       </div>
     </section>
   </div>
