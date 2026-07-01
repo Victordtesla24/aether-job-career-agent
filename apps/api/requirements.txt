@@ -1,0 +1,2 @@
+# Runtime dependencies for the Aether API.
+pdfplumber>=0.11
