@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NAV_ITEMS } from "../src/lib/navigation";
+import { NAV_ITEMS, findNavItemByHref } from "../src/lib/navigation";
 
 /**
  * Contract test for the 12-item primary sidebar (Schema A).
@@ -47,5 +47,34 @@ describe("dashboard navigation contract (P1-S06)", () => {
 
   it("routes Dashboard to /dashboard", () => {
     expect(NAV_ITEMS[0]).toMatchObject({ label: "Dashboard", href: "/dashboard" });
+  });
+});
+
+/**
+ * Resolver used by the dashboard shell to (a) highlight the active sidebar item
+ * from the current pathname and (b) title the graceful placeholder shown for
+ * dashboard sections whose page has not been built yet (P1-S12). Every nav
+ * route must resolve to its item so no navigation click lands on a bare 404.
+ */
+describe("findNavItemByHref resolver (P1-S12)", () => {
+  it("resolves every canonical nav href to its own item", () => {
+    for (const item of NAV_ITEMS) {
+      expect(findNavItemByHref(item.href)?.label).toBe(item.label);
+    }
+  });
+
+  it("resolves a nested sub-route to its section (prefix match)", () => {
+    expect(findNavItemByHref("/dashboard/jobs/123")?.label).toBe("Jobs");
+    expect(findNavItemByHref("/dashboard/resume/v2")?.label).toBe("Resume Studio");
+  });
+
+  it("prefers the most specific section over the /dashboard root", () => {
+    expect(findNavItemByHref("/dashboard/analytics")?.label).toBe("Analytics");
+    expect(findNavItemByHref("/dashboard")?.label).toBe("Dashboard");
+  });
+
+  it("returns undefined for an unknown dashboard route", () => {
+    expect(findNavItemByHref("/dashboard/does-not-exist")).toBeUndefined();
+    expect(findNavItemByHref("/totally/other")).toBeUndefined();
   });
 });

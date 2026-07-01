@@ -1,13 +1,19 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/navigation";
 
 /**
  * Primary application sidebar. It renders straight from the NAV_ITEMS contract
  * (see src/lib/navigation.ts) so the ordering asserted by the navigation
- * contract test is exactly what ships. The `activeHref` prop highlights the
- * current section; matching is prefix-based for nested routes.
+ * contract test is exactly what ships. The active section is resolved from the
+ * live pathname (prefix-based for nested routes); `activeHref` can override it
+ * for tests/stories.
  */
-export function Sidebar({ activeHref }: { activeHref: string }) {
+export function Sidebar({ activeHref }: { activeHref?: string }) {
+  const pathname = usePathname();
+  const currentHref = activeHref ?? pathname ?? "/dashboard";
   return (
     <aside className="w-[248px] shrink-0 border-r border-white/10 glass flex flex-col px-4 py-6">
       <div className="flex items-center gap-3 px-2 mb-8">
@@ -24,8 +30,8 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
         {NAV_ITEMS.map((item) => {
           const isActive =
             item.href === "/dashboard"
-              ? activeHref === "/dashboard"
-              : activeHref.startsWith(item.href);
+              ? currentHref === "/dashboard"
+              : currentHref === item.href || currentHref.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}

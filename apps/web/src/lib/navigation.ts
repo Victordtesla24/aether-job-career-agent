@@ -36,3 +36,29 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Offers", href: "/dashboard/offers", icon: "fa-solid fa-scale-balanced" },
   { label: "Settings", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
 ];
+
+/**
+ * Resolve a pathname to the nav item that "owns" it.
+ *
+ * Used by the sidebar to highlight the active section from the current
+ * pathname, and by the graceful placeholder shown for dashboard sections whose
+ * page has not been built yet (P1-S12). Matching is prefix-based so nested
+ * routes (e.g. `/dashboard/jobs/123`) resolve to their section, and the most
+ * specific match wins so `/dashboard/analytics` never collapses to Dashboard.
+ * Returns `undefined` for a path that maps to no known section.
+ */
+export function findNavItemByHref(href: string): NavItem | undefined {
+  const specific = NAV_ITEMS.filter((item) => item.href !== "/dashboard")
+    .filter((item) => href === item.href || href.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length);
+
+  if (specific.length > 0) {
+    return specific[0];
+  }
+
+  if (href === "/dashboard") {
+    return NAV_ITEMS[0];
+  }
+
+  return undefined;
+}
