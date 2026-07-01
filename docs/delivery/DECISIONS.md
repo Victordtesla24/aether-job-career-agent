@@ -158,3 +158,57 @@ pass offline. Build tooling added to `@aether/web`: `next`, `react`, `react-dom`
 removed). `unrs-resolver` was added to `pnpm-workspace.yaml`'s allowed build scripts (a native
 dependency of `eslint-config-next`). **Reversible?** Yes — fonts could later move to `next/font` with
 a self-hosted/offline cache without touching the navigation contract or auth wiring.
+
+
+## D-0008 — Activate CI at `.github/workflows/ci.yml` (mirror retained; staged push)
+
+**Date:** 2026-07-02 · **Author:** Aether Delivery Agent (Session 2) · **Status:** Adopted
+
+**Context.** Phase 1 needs a live CI gate. Through Phase 0 the workflow was parked as an inert
+template at `ci/github-actions-ci.yml` (D-0004) because the Abacus GitHub App is not guaranteed the
+`workflows` permission, and a push that touches `.github/workflows/**` is rejected without it. Slice
+P1-S11 also introduced offline LLM fixtures that CI must exercise deterministically.
+
+**Decision.**
+- **Activate** the pipeline at `.github/workflows/ci.yml`, and keep `ci/github-actions-ci.yml` as a
+  **verbatim mirror** (kept identical on every edit via `cp`). The mirror guarantees the exact
+  workflow stays reviewable/tracked even if the workflow push is rejected.
+- **Pipeline shape.** Four PR/push jobs — `security` (fails if `.env` is tracked or a real-looking
+  `sk-or-v1-<32+ alnum>` key appears in source), `node` (Node 20: install → **`@aether/db`
+  `prisma:generate`** → lint → type-check → unit tests → build, all recursive across the workspace,
+  with `AETHER_LLM_MODE=replay`), `api` (Python 3.11: ruff → mypy → pytest), and `e2e` (Playwright
+  chromium smoke, `needs: node`). One schedule/dispatch-only job — `live-openrouter` — is
+  `continue-on-error` (non-blocking), skips when `OPENROUTER_API_KEY` is unset, and never gates PRs.
+- **Prisma generate precedes type-check/build** because the web app and repositories type-check
+  against `@prisma/client`; without a generated client the Node job would fail.
+- **Key-scan regex requires a long tail** (`{32,}`) so clearly-synthetic placeholders (the
+  `redactSecrets` unit test's short `sk-or-v1-abcdef…`, and the fixtures README's `sk-...`) are not
+  false-positives, while real 64-hex keys are still caught. The pattern does not match itself in the
+  workflow file (it is followed by `[`).
+- **Push structure (workflows permission).** The Abacus GitHub App installation lacks the `workflows`
+  permission, so GitHub rejects any push that creates/updates a file under `.github/workflows/**`
+  (confirmed empirically — the first attempt to push a commit containing `.github/workflows/ci.yml`
+  was `remote rejected`). Crucially, the byte-identical **mirror** `ci/github-actions-ci.yml` lives
+  *outside* `.github/workflows/` and pushes without any special permission. The slice is therefore
+  split so everything lands on the remote except the one genuinely-blocked file:
+  1. `f109757` — the full pipeline as the tracked mirror `ci/github-actions-ci.yml` + `ci/README.md`.
+  2. a `docs(progress)` commit recording the slice (+ this ADR + the Phase 1 self-review).
+  3. a final commit that drops the identical file into `.github/workflows/ci.yml` to activate it.
+  Commits 1–2 are pushed normally; commit 3 is the only thing that can be rejected. **To finish
+  activation**, either grant the app the `workflows` permission
+  (<https://github.com/apps/abacusai/installations/select_target>) and re-push, or copy
+  `ci/github-actions-ci.yml` into `.github/workflows/ci.yml` via the GitHub web editor (a UI commit is
+  authored as the user, not the app, so no extra permission is needed). See `ci/README.md`.
+
+**Alternatives.** Keep CI inert (rejected: Phase 1 wants a live gate); split web from packages into
+separate jobs (rejected: one recursive Node job is simpler and covers every package's tests, which the
+old web-only job missed); add a coverage-threshold gate now (deferred: `@vitest/coverage-v8` is not yet
+a dependency — wiring coverage + per-package thresholds is its own slice, and adding an unconfigured
+gate would break the green pipeline).
+
+**Consequences.** Every gate was verified locally before commit: recursive lint / type-check / build
+exit 0, 63 unit tests green, API 22 pytest + ruff + mypy clean, Playwright smoke green, and both
+security checks behave correctly. Coverage enforcement (directive target ≥85% on
+`agents`/`db`/`shared` + API handlers) remains a tracked follow-up. **Reversible?** Yes — the workflow
+can be reverted to inert-template-only by deleting `.github/workflows/ci.yml`; the mirror and harness
+remain.
