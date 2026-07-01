@@ -49,6 +49,7 @@
       <div><h1 class="text-[15px] font-semibold">Manage Agents</h1><p class="text-xs text-[#6B6B82] mono">20 agents · 6 AI providers · configure models &amp; connections</p></div>
       <div class="flex items-center gap-3">
         <button data-design-id="btn-add-provider-ag04" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-plus text-[10px]"></i>Add Provider</button>
+        <button data-design-id="btn-test-ag16" onclick="openTestRun()" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-vial text-[10px] text-[#818CF8]"></i>Test Run</button>
         <button data-design-id="btn-run-all-ag05" class="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-play text-[10px]"></i>Run All</button>
       </div>
     </header>
@@ -343,7 +344,7 @@
 
       <!-- Bottom quick stats -->
       <section data-design-id="quick-stats-ag15" class="grid grid-cols-4 gap-4">
-        <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">API Spend (Month)</span><i class="fa-solid fa-dollar-sign text-[#FF6B35] text-sm"></i></div><div class="mono text-2xl font-bold">$48.72</div><p class="text-[11px] text-[#6B6B82] mt-1">across 6 providers</p></div>
+        <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">API Spend (Month)</span><i class="fa-solid fa-dollar-sign text-[#FF6B35] text-sm"></i></div><div class="mono text-2xl font-bold">$48.72</div><p class="text-[11px] text-[#6B6B82] mt-1">across 6 providers · <span class="mono text-[#A0A0B8]">~$0.049</span> avg / run</p></div>
         <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Tokens Used</span><i class="fa-solid fa-coins text-[#818CF8] text-sm"></i></div><div class="mono text-2xl font-bold">3.42M</div><p class="text-[11px] text-[#6B6B82] mt-1">2.1M in · 1.3M out</p></div>
         <div class="glass rounded-2xl border border-white/8 p-5"><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Most Active Agent</span><i class="fa-solid fa-file-pen text-[#FF6B35] text-sm"></i></div><div class="text-lg font-bold">Resume Tailoring</div><p class="text-[11px] text-[#6B6B82] mt-1 mono">142 tasks</p></div>
         <div class="glass rounded-2xl border border-white/8 p-5 relative overflow-hidden"><div class="absolute -right-6 -top-6 w-20 h-20 rounded-full bg-[#34D399]/10 blur-2xl"></div><div class="flex items-center justify-between mb-2"><span class="text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium">Success Rate</span><i class="fa-solid fa-circle-check text-[#34D399] text-sm"></i></div><div class="mono text-2xl font-bold text-[#34D399]">94.2%</div><p class="text-[11px] text-[#6B6B82] mt-1">last 1,000 tasks</p></div>
@@ -351,5 +352,84 @@
     </main>
   </div>
 </div>
+
+<!-- Test Run modal -->
+<div data-design-id="test-run-ag17" id="testRunModal" class="fixed inset-0 z-50 hidden items-center justify-center px-6">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeTestRun()"></div>
+  <div class="relative glass-raised rounded-2xl border border-[#FF6B35]/40 w-full max-w-lg p-6 shadow-2xl">
+    <div class="flex items-start justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-[#818CF8]/15 flex items-center justify-center"><i class="fa-solid fa-vial text-[#818CF8] text-sm"></i></div>
+        <div><h3 class="text-sm font-semibold">Test Run — Single Agent</h3><p class="text-[11px] text-[#6B6B82]">Dry-run one agent and preview its estimated cost before spending credits.</p></div>
+      </div>
+      <button data-design-id="btn-close-test-ag20" onclick="closeTestRun()" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 flex items-center justify-center transition"><i class="fa-solid fa-xmark text-[#A0A0B8] text-xs"></i></button>
+    </div>
+
+    <label class="block text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium mb-1.5">Select agent</label>
+    <select data-design-id="select-agent-ag18" id="testAgentSelect" onchange="updateTestEstimate()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-xs text-white mb-4 focus:outline-none focus:border-[#FF6B35]/50">
+      <option value="resume|claude-sonnet-4|0.032">Resume Tailoring Agent · claude-sonnet-4</option>
+      <option value="jobmatch|gpt-4o|0.058">Job Match Agent · gpt-4o</option>
+      <option value="story|claude-sonnet-4|0.041">Story Extraction Agent · claude-sonnet-4</option>
+      <option value="email|gpt-4o-mini|0.006">Email Drafting Agent · gpt-4o-mini</option>
+      <option value="reference|gpt-4o-mini|0.005">Reference Agent · gpt-4o-mini</option>
+      <option value="orchestration|claude-sonnet-4|0.048">Orchestration Agent · claude-sonnet-4</option>
+    </select>
+
+    <div class="grid grid-cols-3 gap-3 mb-4">
+      <div class="glass rounded-xl border border-white/8 p-3"><p class="text-[10px] uppercase tracking-wide text-[#6B6B82]">Model</p><p id="testModel" class="text-[11px] font-semibold mono text-[#818CF8] mt-1">claude-sonnet-4</p></div>
+      <div class="glass rounded-xl border border-white/8 p-3"><p class="text-[10px] uppercase tracking-wide text-[#6B6B82]">Est. tokens</p><p id="testTokens" class="text-[11px] font-semibold mono mt-1">~4.2K</p></div>
+      <div class="glass rounded-xl border border-[#FF6B35]/25 p-3"><p class="text-[10px] uppercase tracking-wide text-[#6B6B82]">Est. cost / run</p><p id="testCost" class="text-sm font-bold mono text-[#FF6B35] mt-0.5">~$0.032</p></div>
+    </div>
+
+    <div id="testResult" class="hidden glass rounded-xl border border-[#34D399]/25 p-4 mb-4">
+      <div class="flex items-center gap-2 mb-1.5"><i class="fa-solid fa-circle-check text-[#34D399] text-xs"></i><p class="text-xs font-semibold text-[#34D399]">Dry-run complete</p></div>
+      <p class="text-[11px] text-[#A0A0B8] leading-relaxed">Agent responded in <span class="mono text-white">1.8s</span>. Actual cost <span class="mono text-white" id="testActualCost">$0.031</span> · <span class="mono text-white">4,180</span> tokens. No credits were charged for this preview.</p>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-[10px] text-[#6B6B82] leading-relaxed">Estimates use the provider's published per-token pricing.</p>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="closeTestRun()" class="text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Cancel</button>
+        <button data-design-id="btn-run-test-ag19" onclick="runTest()" class="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-play text-[10px]"></i>Run Test</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function updateTestEstimate() {
+    const sel = document.getElementById('testAgentSelect');
+    const parts = sel.value.split('|');
+    const model = parts[1];
+    const cost = parseFloat(parts[2]);
+    document.getElementById('testModel').textContent = model;
+    document.getElementById('testCost').textContent = '~$' + cost.toFixed(3);
+    // rough token estimate scaled from cost
+    const tokens = Math.round(cost * 130) / 10;
+    document.getElementById('testTokens').textContent = '~' + tokens.toFixed(1) + 'K';
+    document.getElementById('testResult').classList.add('hidden');
+  }
+  function openTestRun() {
+    document.getElementById('testResult').classList.add('hidden');
+    updateTestEstimate();
+    const m = document.getElementById('testRunModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+  }
+  function closeTestRun() {
+    const m = document.getElementById('testRunModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+  }
+  function runTest() {
+    const parts = document.getElementById('testAgentSelect').value.split('|');
+    const cost = parseFloat(parts[2]);
+    // simulate an actual cost slightly under the estimate
+    const actual = (cost * 0.97).toFixed(3);
+    document.getElementById('testActualCost').textContent = '$' + actual;
+    document.getElementById('testResult').classList.remove('hidden');
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeTestRun();
+  });
+</script>
 </body>
 </html>
