@@ -1,7 +1,38 @@
 # Aether Delivery Progress
-Last updated: 2026-07-02 by Aether Delivery Agent Session 1
-Current phase: Phase 0 — Wireframes  |  Current slice: phase review + merge to `main`
-Branch: phase-0/wireframes  |  CI: harness green; workflow stored as inert template at `ci/github-actions-ci.yml` (see `ci/README.md`)
+Last updated: 2026-07-02 by Aether Delivery Agent Session 2
+Current phase: Phase 1 — Foundation  |  Current slice: monorepo scaffolding + core packages (in progress)
+Branch: phase-1/foundation  |  CI: to be activated at `.github/workflows/ci.yml` this phase (slice P1-S10)
+
+## Phase 1 — Foundation (in progress)
+Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
+`phase-1/foundation`. `main` is untouched this phase (branch pushed only). No secrets committed; the
+résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modified.
+
+### Phase 1 Slice Ledger
+| ID      | Title                                            | Status | Tests | Commit    |
+|---------|--------------------------------------------------|--------|-------|-----------|
+| P1-env  | OpenRouter connectivity validation script        | ✅     | green | `f0b7f8a` |
+| P1-S01  | Monorepo scaffolding: shared/agents/queue + turbo | ✅     | green | `67b82fb` |
+| P1-S02  | Prisma schema (pgvector + all models) + repos     | ⬜     | -     | -         |
+| P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ⬜     | -     | -         |
+| P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ⬜     | -     | -         |
+| P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ⬜     | -     | -         |
+| P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ⬜     | -     | -         |
+| P1-S09  | FastAPI skeleton + `/health`                      | ⬜     | -     | -         |
+| P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ⬜     | -     | -         |
+| P1-S11  | LLM fixture record-replay infra                   | ⬜     | -     | -         |
+
+**P1-S01 detail:** `packages/shared` (VERSION, Result utils, secret-redacting logger, zod validation,
+domain types), `packages/agents` (BaseAgent, ToolRegistry, LangGraph-compatible `AetherAgentState`),
+`packages/queue` (BullMQ client + typed discovery/tailoring/application jobs), `turbo.json` (tasks:
+build/test/lint/type-check/dev) and root scripts. Tests: shared 4 + agents 7 + queue 7, all green;
+build/type-check/lint pass across the workspace. Note: Turbo 2.x uses `tasks` (not the deprecated
+`pipeline` key); nav label standardized as "Resume Studio" per DECISIONS D-0002 (spec's "Résumé
+Studio" reconciled to the repo's canonical no-accent label).
+
+---
+
+## Phase 0 — Wireframes (complete, merged to `main`)
 
 ## Workflow (per user directive)
 One branch per phase. Work stays on that single branch until the phase is complete, then:
@@ -43,8 +74,16 @@ All **Priority 1 (mandatory)** slices are complete, plus **Priority 2** (S07–S
 
 ## Environment State
 - `.env.example` present; `.env` holds `OPENROUTER_API_KEY` locally and is git-ignored (never committed).
-- OpenRouter: key stored locally, not exercised in this wireframe-only phase.
-- Services running locally: none (static HTML wireframes only).
+- **OpenRouter (validated P1-env):** REACHABLE & AUTHENTICATED — key is valid. Free models are
+  currently rate-limited (HTTP 429), so `scripts/validate-openrouter.mjs` treats a 429 from any
+  candidate free model as a PASS (proves connectivity + auth); 401/403 would be a hard fail. The API
+  key value is never logged, printed, or committed. Default light model:
+  `meta-llama/llama-3.2-3b-instruct:free` (`AETHER_MODEL_LIGHT`); heavy model configurable via
+  `AETHER_MODEL_HEAVY`.
+- Toolchain: Node v22 / pnpm 11.9.0 / Python 3.12 locally (CI pins Node 20 + Python 3.11).
+- Postgres/Redis: not running locally. Prisma work uses `prisma generate` only (no `migrate dev`);
+  DB-dependent integration tests are gated on `DATABASE_URL` / `DATABASE_URL_TEST` and skipped when absent.
+- Services running locally: none.
 - Known flaky tests / quarantines: none.
 
 ## Next session
