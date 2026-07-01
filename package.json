@@ -1,0 +1,16 @@
+{
+  "name": "aether",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aether — Autonomous AI Career Agent Platform (monorepo root)",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "lint": "pnpm --filter @aether/web lint",
+    "type-check": "pnpm --filter @aether/web type-check",
+    "test": "pnpm --filter @aether/web test",
+    "build": "pnpm --filter @aether/web build"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
