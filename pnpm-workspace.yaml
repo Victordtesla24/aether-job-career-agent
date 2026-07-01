@@ -5,11 +5,19 @@ packages:
 # pnpm v11 blocks dependency install/build scripts by default. We explicitly
 # decide, per dependency, whether its build script may run:
 #   - esbuild (pulled in by Vitest) is trusted and needs its build script.
+#   - prisma / @prisma/client / @prisma/engines are trusted (first-party Prisma)
+#     and their postinstall downloads the query engine + generates the client.
 #   - msgpackr-extract (optional native accel for msgpackr, via BullMQ) is left
 #     unbuilt; msgpackr transparently falls back to its pure-JS codec, so we
 #     avoid running an untrusted native build with no functional loss.
 onlyBuiltDependencies:
   - esbuild
+  - "@prisma/client"
+  - "@prisma/engines"
+  - prisma
 allowBuilds:
   esbuild: true
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
   msgpackr-extract: false

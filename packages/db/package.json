@@ -1,0 +1,36 @@
+{
+  "name": "@aether/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "prisma": {
+    "schema": "src/schema.prisma"
+  },
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "prisma:generate": "prisma generate --schema=src/schema.prisma",
+    "prisma:format": "prisma format --schema=src/schema.prisma"
+  },
+  "dependencies": {
+    "@aether/shared": "workspace:*",
+    "@prisma/client": "^6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "prisma": "^6.1.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.8"
+  }
+}
