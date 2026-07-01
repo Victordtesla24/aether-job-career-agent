@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: all planned Phase 1 slices complete (pending review)
+Current phase: Phase 1 — Foundation  |  Current slice: all planned Phase 1 slices complete + deployed & verified (P1-S12 shell polish added during verification)
 Branch: phase-1/foundation  |  CI: pipeline defined + pushed at `ci/github-actions-ci.yml`; the identical `.github/workflows/ci.yml` activation commit is pending the app's `workflows` permission (see `ci/README.md`)
 
 ## Phase 1 — Foundation (in progress)
@@ -21,6 +21,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S09  | FastAPI skeleton + `/health`                      | ✅     | green | `3a04703` |
 | P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ✅     | green | `f109757` |
 | P1-S11  | LLM fixture record-replay infra                   | ✅     | green | `4029787` |
+| P1-S12  | Graceful placeholder + active-nav (unbuilt routes)| ✅     | green | `610614b` |
 
 **P1-S01 detail:** `packages/shared` (VERSION, Result utils, secret-redacting logger, zod validation,
 domain types), `packages/agents` (BaseAgent, ToolRegistry, LangGraph-compatible `AetherAgentState`),
@@ -131,6 +132,32 @@ this docs commit records it; and a final commit drops the byte-identical file in
 granting the app the `workflows` permission and pushing, or by copying the mirror into
 `.github/workflows/ci.yml` via the GitHub UI (a UI commit is made as the user, bypassing the app
 restriction). See `ci/README.md`.
+
+**P1-S12 detail:** Deployment-hardening for the shell, added while deploying + verifying Phase 1. Every
+sidebar route except `/dashboard` previously fell through to a bare Next.js 404 (the feature pages are
+later phases). `src/lib/navigation.ts` gains a pure `findNavItemByHref(href)` resolver (prefix-based,
+most-specific-wins, `undefined` for unknown routes); the `Sidebar` becomes a client component using
+`usePathname()` so the correct item highlights on *any* route (removing the hard-coded `activeHref` in
+the dashboard layout — closes the "active item resolved in a later slice" TODO from P1-S06); and a
+catch-all `app/dashboard/[...slug]/page.tsx` renders the section title inside the existing shell with an
+honest "planned for a later phase" panel (unknown routes get a generic placeholder, still 200 not 404).
+Tests: +4 resolver unit tests (web 25 → 29) and +1 Playwright smoke (clicking a nav section shows the
+placeholder with correct `aria-current`, not a 404). Verified on the live deployment — all 12 nav routes
+return 200. See DECISIONS D-0009.
+
+### Deployment & end-to-end verification (2026-07-02)
+
+Phase 1 was deployed and verified end-to-end on the Abacus supercomputer:
+- **Live URL:** `https://5cb5f0620.abacusai.cloud` (Next.js production `next start` behind nginx via a
+  per-host vhost + `aether-web.service` systemd unit; root `/` → 307 → `/dashboard`).
+- **Web tests:** 71 Node unit tests green (shared 4, web 29, db 13, agents 18, queue 7); Playwright smoke
+  3/3 green; recursive lint + type-check + `next build` all exit 0.
+- **API:** FastAPI runs (`GET /health` → `{"status":"ok","version":"0.1.0"}`, OpenAPI at `/docs`); 22
+  pytest green; ruff + mypy clean (11 files).
+- **CI security gates (run locally):** `.env` untracked ✅; no real `sk-or-v1-<32+>` key in source ✅.
+- **Wireframe fidelity:** the deployed dashboard matches `design/screens/dashboard.html` (dark
+  glassmorphism, coral `#FF6B35`, 12-item Schema-A sidebar, topbar, stat cards). Full requirement→
+  implementation matrix and adversarial review in `docs/delivery/PHASE-1-VERIFICATION.md`.
 
 ### Phase 1 — Adversarial self-review (pre-independent-review)
 

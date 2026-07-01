@@ -212,3 +212,36 @@ security checks behave correctly. Coverage enforcement (directive target ≥85% 
 `agents`/`db`/`shared` + API handlers) remains a tracked follow-up. **Reversible?** Yes — the workflow
 can be reverted to inert-template-only by deleting `.github/workflows/ci.yml`; the mirror and harness
 remain.
+
+---
+
+## D-0009 — Graceful placeholder + pathname-aware sidebar for unbuilt dashboard routes (P1-S12)
+
+**Context.** Deploying Phase 1 exposed a UX gap: the 12-item Schema-A sidebar links to a route per
+section, but only `/dashboard` has a page (the feature workspaces are later phases). On the live
+deployment, clicking any of the other 11 nav items returned a bare Next.js 404, and the dashboard
+layout hard-coded `activeHref="/dashboard"` (a TODO deferred in P1-S06), so the active highlight never
+tracked the current route.
+
+**Decision.** Harden the shell so it degrades gracefully instead of shipping dead links:
+- Add a pure `findNavItemByHref(href)` resolver in `apps/web/src/lib/navigation.ts` — prefix-based,
+  most-specific-match-wins, returning `undefined` for a path that maps to no known section. It is
+  React/Next-free so it unit-tests in plain Node (as the rest of the nav contract does).
+- Make `Sidebar` a client component that reads `usePathname()` and highlights the owning section on
+  *any* route (`activeHref` remains an optional override for tests/stories). The dashboard layout no
+  longer passes a hard-coded value — this closes the P1-S06 "active item resolved in a later slice" TODO.
+- Add a catch-all `app/dashboard/[...slug]/page.tsx` that renders the resolved section title inside the
+  existing shell with an honest "planned for a later phase" panel; unknown routes fall back to a generic
+  placeholder. Every route now returns 200, not 404.
+
+**Alternatives.** (a) Leave the 404s and document them (rejected: a deployed foundation demo where 11/12
+nav clicks 404 misrepresents readiness and invites reviewer noise). (b) Build stub *feature* pages
+(rejected: that is later-phase scope and risks fabricating functionality the wireframes imply but Phase 1
+does not yet deliver — the placeholder is explicit that the workspace is not built). (c) A single
+`not-found.tsx` (rejected: it cannot title the section or keep the correct nav active, and still reads as
+an error rather than a roadmap state).
+
+**Consequences.** +4 resolver unit tests (web 25 → 29) and +1 Playwright smoke; full suite green; verified
+on the live deployment (all 12 nav routes 200). The placeholder is deliberately honest about scope, so it
+does not overstate Phase 1. **Reversible?** Yes — deleting the catch-all route restores the prior
+behaviour; the resolver is additive and independently useful for future active-nav needs.
