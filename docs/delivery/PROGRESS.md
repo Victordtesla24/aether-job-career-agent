@@ -1,44 +1,44 @@
 # Aether Delivery Progress
-Last updated: 2026-07-01T14:00:00Z by Aether Delivery Agent Session 1
-Current phase: Phase 0 — Wireframes  |  Current slice: P0-S01
-Branch: phase-0/wireframes  |  Last green CI: N/A
+Last updated: 2026-07-01T18:30:00Z by Aether Delivery Agent Session 1
+Current phase: Phase 0 — Wireframes  |  Current slice: session wrap-up (push + PR)
+Branch: phase-0/wireframes  |  CI: skeleton committed (`f88e4d6`); GitHub Actions runs on push
+
+## Summary
+All **Priority 1 (mandatory)** slices are complete, plus **Priority 2** (S07–S10) and one **Priority 3** new screen (Cover Letter Studio). Every slice is a single conventional commit on `phase-0/wireframes`. `main` is untouched, no secrets committed, and the résumé PDF was not modified. Wireframe slices were validated structurally (tag balance, identical 12-item Schema A sidebar, unique `data-design-id`s, cross-link targets exist, design-system tokens present).
 
 ## Slice Ledger
-| ID     | Title                              | Status | Tests | Commit/PR | Notes |
-|--------|------------------------------------|--------|-------|-----------|-------|
-| P0-S01 | Email Center confirm gate          | ⬜     | -     | -         |       |
-| P0-S02 | Job Discovery tailor/apply split   | ⬜     | -     | -         |       |
-| P0-S03 | Settings integration status sync   | ⬜     | -     | -         |       |
-| P0-S04 | Empty states: Networking & Offers  | ⬜     | -     | -         |       |
-| P0-S05 | Analytics time-period selector     | ⬜     | -     | -         |       |
-| P0-S06 | Cross-screen contextual links      | ⬜     | -     | -         |       |
-| P0-S07 | Resume Studio version comparison   | ⬜     | -     | -         |       |
-| P0-S08 | Interview Center compliance banner | ⬜     | -     | -         |       |
-| P0-S09 | Manage Agents test button          | ⬜     | -     | -         |       |
-| P0-S10 | Job Discovery Saved tab            | ⬜     | -     | -         |       |
-| P0-S11 | Mobile Dashboard badge counts      | ⬜     | -     | -         |       |
-| P0-S12 | Mobile Approval swipe gestures     | ⬜     | -     | -         |       |
-| P0-S13 | Onboarding Wizard (new screen)     | ⬜     | -     | -         |       |
-| P0-S14 | Cover Letter Studio (new screen)   | ⬜     | -     | -         |       |
-| P0-S15 | Notification Center (new screen)   | ⬜     | -     | -         |       |
-| P1-S00 | Test harness + CI skeleton         | ⬜     | -     | -         |       |
+| ID     | Title                              | Status | Tests    | Commit    | Notes |
+|--------|------------------------------------|--------|----------|-----------|-------|
+| P1-S00 | Test harness + CI skeleton         | ✅     | green    | `f88e4d6` | pnpm/vitest + pytest + GitHub Actions; esbuild build-gate resolved via pnpm-workspace allowBuilds |
+| P0-S01 | Email Center confirm gate          | ✅     | struct ✓ | `1faef5f` | Send requires confirmation modal |
+| P0-S02 | Job Discovery tailor/apply split   | ✅     | struct ✓ | `9a0cbc8` | Two-step Tailor → Review & Apply + submit gate |
+| P0-S03 | Settings integration status sync   | ✅     | struct ✓ | `3bd50f5` | Per-board status indicators mirror Job Discovery |
+| P0-S04 | Empty states: Networking & Offers  | ✅     | struct ✓ | `e054778` | First-run empty states + CTAs |
+| P0-S05 | Analytics time-period selector     | ✅     | struct ✓ | `ccdd166` | Time-range pills + canonical funnel (847→412→156→23→4) across Analytics/Dashboard/Tracker |
+| P0-S06 | Cross-screen contextual links      | ✅     | struct ✓ | `a4f41b9` | Story Bank / CRM / Email Thread links between related screens |
+| P0-S07 | Resume Studio version comparison   | ✅     | struct ✓ | `669f249` | Compare modal (pick 2 versions, change list, restore/keep) |
+| P0-S08 | Interview Center compliance banner | ✅     | struct ✓ | `d457964` | Recording-consent banner + Live Assist Mute Mode |
+| P0-S09 | Manage Agents test button + cost   | ✅     | struct ✓ | `b16676a` | Test Run modal (per-agent est. + actual cost) + avg-cost/run stat |
+| P0-S10 | Job Discovery Saved tab            | ✅     | struct ✓ | `3c05f2e` | Saved tab w/ count badge, saved view + empty state |
+| P0-S14 | Cover Letter Studio (new screen)   | ✅     | struct ✓ | `13b7966` | New screen; resolves phantom "Cover Letters" nav item; Schema A sidebar, Evidence Trace, Voice DNA, Email hand-off |
+| —      | canvas.json + review_report log    | ✅     | valid    | `4feb76f` | Registered new screen; Phase 0 resolution log added |
+| P0-S11 | Mobile Dashboard badge counts      | ⬜ deferred | -   | -         | Mobile parity — later phase |
+| P0-S12 | Mobile Approval swipe gestures     | ⬜ deferred | -   | -         | Mobile parity — later phase |
+| P0-S13 | Onboarding Wizard (new screen)     | ⬜ deferred | -   | -         | Net-new flow — later phase |
+| P0-S15 | Notification Center (new screen)   | ⬜ deferred | -   | -         | Net-new flow — later phase |
 
-## Next Up (ordered)
-1. P0-S01 — Email Center confirm gate — Given user clicks "Send Reply", When confirmation modal appears, Then user must confirm before email sends
-2. P0-S02 — Job Discovery tailor/apply split — Given a job card, When user clicks action, Then two distinct steps: "Tailor Résumé →" then "Review & Apply →"
-3. P0-S03 — Settings integration status sync — Given Job Discovery shows N sources, When user opens Settings → Integrations, Then the same N sources appear with live status badges + Sync Now
-4. P0-S04 — Empty states — Given a user with no connections/offers, When they open Networking / Offer Comparison, Then a meaningful empty state with onboarding CTAs is shown
-5. P0-S05 — Analytics time-period selector — Given the Analytics screen, When user picks 7d/30d/90d/All, Then funnel numbers align to the canonical set 847→412→156→23→4
-6. P0-S06 — Cross-screen contextual links — Given a job card / application row / tailoring view, When rendered, Then "View in CRM →", "View Email Thread →", "Pull from Story Bank →" links appear
-7. P0-S07 — Resume Studio version comparison
-8. P0-S08 — Interview Center compliance banner + Mute Mode
-9. P0-S09 — Manage Agents test button + cost
-10. P0-S10 — Job Discovery Saved tab
-11. P0-S13 — Onboarding Wizard (new screen)
-12. P0-S14 — Cover Letter Studio (new screen)
-13. P0-S15 — Notification Center (new screen)
+## Deferred to later phases (tracked in design/review_report.md)
+- Single data-model / source-of-truth reconciliation (role names, profile data, currency prefixes, source-vs-connected).
+- Onboarding / first-run flow; resume → Story Bank auto-extraction.
+- Interview scheduling flow; offer-acceptance wind-down; error-recovery flows.
+- Mobile parity (dashboard badges, approval swipe/cover-letter preview); dashboard/offer countdowns; "Rejected/Withdrawn" tracking.
 
 ## Environment State
-- OpenRouter: Not yet validated
-- Services running locally: None yet
-- Known flaky tests / quarantines: None
+- `.env.example` present; `.env` holds `OPENROUTER_API_KEY` locally and is git-ignored (never committed).
+- OpenRouter: key stored locally, not exercised in this wireframe-only phase.
+- Services running locally: none (static HTML wireframes only).
+- Known flaky tests / quarantines: none.
+
+## Next session
+1. Push `phase-0/wireframes` to origin (done at end of Session 1) and open a PR against `main` for review — do not auto-merge.
+2. Begin Phase 0 mobile parity (P0-S11/S12) or move deferred data-model reconciliation into Phase 1 planning.
