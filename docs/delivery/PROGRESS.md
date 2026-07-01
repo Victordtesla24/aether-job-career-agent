@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: CI activation (P1-S10, next)
+Current phase: Phase 1 — Foundation  |  Current slice: CI activation (P1-S10, final slice)
 Branch: phase-1/foundation  |  CI: to be activated at `.github/workflows/ci.yml` this phase (slice P1-S10)
 
 ## Phase 1 — Foundation (in progress)
@@ -20,7 +20,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ✅     | green | `95c34a2` |
 | P1-S09  | FastAPI skeleton + `/health`                      | ✅     | green | `3a04703` |
 | P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ⬜     | -     | -         |
-| P1-S11  | LLM fixture record-replay infra                   | ⬜     | -     | -         |
+| P1-S11  | LLM fixture record-replay infra                   | ✅     | green | `4029787` |
 
 **P1-S01 detail:** `packages/shared` (VERSION, Result utils, secret-redacting logger, zod validation,
 domain types), `packages/agents` (BaseAgent, ToolRegistry, LangGraph-compatible `AetherAgentState`),
@@ -91,6 +91,23 @@ Tests: `tests/test_main.py` (5, via `fastapi.testclient.TestClient`) assert the 
 alignment with config, OpenAPI metadata/route exposure, and a 404 for unknown paths. Full API suite =
 22 pytest green; ruff + mypy clean. Runtime deps (`fastapi`, `uvicorn[standard]`, `pydantic`,
 `pydantic-settings`, `httpx`) added to `pyproject.toml` + `requirements.txt`.
+
+**P1-S11 detail:** `packages/agents/src/llm` — a deterministic, offline-first LLM seam so agent tests
+and CI never touch the network or need an API key. `types.ts` defines a provider-neutral contract
+(`LLMMessage`/`LLMRequest`/`LLMResponse`/`LLMClient`). `fixture-store.ts` derives a stable
+`fixtureKey` = SHA-256 of the *canonicalised* request (model + messages + `temperature` + `maxTokens`);
+`FixtureStore` reads/writes one `<key>.json` per request and throws a helpful `No LLM fixture…` error
+when a recording is missing. `record-replay-client.ts` (`RecordReplayLLMClient`) has three modes —
+`replay` (default, offline, serves only committed fixtures), `record` (calls the injected live client
+and persists the response), and `auto` (replay-if-present-else-record); the mode is overridable via
+`AETHER_LLM_MODE`, and `record`/`auto` require an injected live client (constructor throws otherwise).
+`openrouter-client.ts` (`OpenRouterClient`) is the live transport with an injectable `fetch`; the API
+key is never logged, echoed, or serialised. A committed sample fixture plus
+`tests/fixtures/llm/README.md` document the record→commit→replay workflow, and `AETHER_LLM_MODE` is
+mirrored into `.env.example` (default `replay`). Tests: 11 new (key stability + model/message
+sensitivity + 64-hex shape, store `has`/`load`, replay serves fixture with zero live calls, missing
+fixture throws, record persists + becomes replayable, auto records-then-replays, record without a live
+client throws). Full agents suite = 18 green; workspace = 63 unit tests green; type-check + lint clean.
 
 ---
 
