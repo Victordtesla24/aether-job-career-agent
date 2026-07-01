@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: FastAPI skeleton + `/health` (P1-S09, next)
+Current phase: Phase 1 — Foundation  |  Current slice: CI activation (P1-S10, next)
 Branch: phase-1/foundation  |  CI: to be activated at `.github/workflows/ci.yml` this phase (slice P1-S10)
 
 ## Phase 1 — Foundation (in progress)
@@ -18,7 +18,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ✅     | green | `28f991b` |
 | P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ✅     | green | `be54f16` |
 | P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ✅     | green | `95c34a2` |
-| P1-S09  | FastAPI skeleton + `/health`                      | ⬜     | -     | -         |
+| P1-S09  | FastAPI skeleton + `/health`                      | ✅     | green | `3a04703` |
 | P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ⬜     | -     | -         |
 | P1-S11  | LLM fixture record-replay infra                   | ⬜     | -     | -         |
 
@@ -80,6 +80,17 @@ Tooling: `next build`, `tsc --noEmit`, and `next lint` all pass; Vitest = 25 web
 smoke (`e2e/dashboard.spec.ts`, 2 tests) verifies the 12 nav items render and the root redirect. See
 DECISIONS D-0007. Orphaned `tsconfig.build.json`/`.eslintrc.cjs` removed; `unrs-resolver` added to the
 pnpm allowed-build list.
+
+**P1-S09 detail:** `apps/api` becomes a real FastAPI app. A `create_app()` factory (`app/main.py`)
+mounts routers and CORS (dev origins `localhost:3000`/`127.0.0.1:3000`); module-level `app` is what
+`uvicorn app.main:app` serves. `app/config.py` holds pydantic-settings `Settings` (env-driven,
+`extra="ignore"` so the shared root `.env` is reusable; `OPENROUTER_API_KEY` declared but optional and
+never logged) plus `API_VERSION = "0.1.0"`. `app/deps.py` exposes a typed `SettingsDep` for injection.
+`app/routers/health.py` serves the canonical `GET /health` → `{"status":"ok","version":"0.1.0"}`.
+Tests: `tests/test_main.py` (5, via `fastapi.testclient.TestClient`) assert the payload, version
+alignment with config, OpenAPI metadata/route exposure, and a 404 for unknown paths. Full API suite =
+22 pytest green; ruff + mypy clean. Runtime deps (`fastapi`, `uvicorn[standard]`, `pydantic`,
+`pydantic-settings`, `httpx`) added to `pyproject.toml` + `requirements.txt`.
 
 ---
 
