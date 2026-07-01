@@ -1,7 +1,42 @@
 # Aether Delivery Progress
-Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: all planned Phase 1 slices complete + deployed & verified (P1-S12 shell polish added during verification)
-Branch: phase-1/foundation  |  CI: pipeline defined + pushed at `ci/github-actions-ci.yml`; the identical `.github/workflows/ci.yml` activation commit is pending the app's `workflows` permission (see `ci/README.md`)
+Last updated: 2026-07-02 by Aether Delivery Agent Session 3 (Phase 2)
+Current phase: Phase 2 — Intelligence (in progress)  |  Current slice: P2-S01 complete; P2-S02 next
+Branch: phase-2/intelligence  |  CI: unchanged from Phase 1 (`.github/workflows/ci.yml` mirror at `ci/github-actions-ci.yml`)
+
+## Phase 2 — Intelligence (in progress)
+Strict TDD (RED → GREEN → REFACTOR), small vertical backend slices, conventional commits per slice on
+`phase-2/intelligence`, pushed to `origin` after each slice. `main` is untouched. No secrets committed;
+the résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modified — its
+`format_hash` prefix `0700d1aa` is pinned and must never change.
+
+> **Branch base (important).** The Phase 2 spec assumed Phase 1 was merged to `main`, but it was not —
+> `main` still holds only Phase 0 (wireframes). The Phase 1 foundation lives on the unmerged remote
+> branch `phase-1/foundation`. Accordingly `phase-2/intelligence` was branched **from
+> `phase-1/foundation`, not from `main`**, so Phase 2 builds on the real foundation. See DECISIONS
+> D-0010. Phase 1 should still be reviewed & merged to `main` on its own track; the eventual Phase 2 PR
+> will target `main` once Phase 1 lands (or be retargeted/rebased as directed).
+
+### Phase 2 Slice Ledger
+| ID      | Title                                       | Status | Tests    | Commit    | Notes |
+|---------|---------------------------------------------|--------|----------|-----------|-------|
+| P2-env  | Prisma baseline migration (Phase 1 schema)  | ✅     | n/a      | `368493c` | phase-1/foundation had schema.prisma but no committed migration; baseline added so DB provisions reproducibly (all P1 tables + pgvector) |
+| P2-S01  | User repo + real auth (bcrypt + JWT)        | ✅     | 7/7 (py) | `4d1c166` | `/auth/register` (bcrypt, 201, no hash leak, 409 dup, 422 weak) + `/auth/login` (JWT userId/email/iat/exp 24h) + `get_current_user` Bearer guard; protected `GET /jobs`; web NextAuth wired to real backend; TS `UserRepository.create` |
+| P2-S02  | Job discovery adapters + persistence        | ⬜     | —        | —         | seek/linkedin/indeed adapters + JobRepository + jobs router |
+| P2-S03  | ATS scoring engine (TF-IDF + embeddings)    | ⬜     | —        | —         | deterministic 0–100 |
+| P2-S04  | FitScorer agent                             | ⬜     | —        | —         | wires ATS engine to Job rows |
+| P2-S05  | Resume tailoring agent (LLM + guard)        | ⬜     | —        | —         | evidence-traced; replay-mode until real key |
+
+### Phase 2 Environment State
+- Postgres 17 + pgvector 0.8.3 running locally (databases `aether` + `aether_test`); Prisma migrations
+  applied to both. Python services use raw `psycopg2` over the Prisma-migrated schema (DECISIONS D-0013).
+- `.env` present locally and git-ignored (never committed); `.env.example` updated with Phase 2 vars.
+- **OpenRouter: PENDING A REAL KEY.** No live `OPENROUTER_API_KEY` was available in this session
+  (`.env` holds a placeholder), so `scripts/validate-openrouter.mjs` reports "not set" and live LLM
+  calls cannot be exercised here. Phase 2 LLM work (P2-S05+) therefore runs in **replay mode**
+  (`AETHER_LLM_MODE=replay`) against recorded/deterministic fixtures, and the fabrication guardrails are
+  enforced in code (independent of any model output) so correctness does not depend on the key. **Action
+  for the user:** provide a valid OpenRouter key to run the online record pass + connectivity validation.
+- Auth deps pinned: `bcrypt==4.0.1` (passlib 1.7.x is incompatible with bcrypt ≥4.1).
 
 ## Phase 1 — Foundation (in progress)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on

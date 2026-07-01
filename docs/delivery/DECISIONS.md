@@ -245,3 +245,59 @@ an error rather than a roadmap state).
 on the live deployment (all 12 nav routes 200). The placeholder is deliberately honest about scope, so it
 does not overstate Phase 1. **Reversible?** Yes — deleting the catch-all route restores the prior
 behaviour; the resolver is additive and independently useful for future active-nav needs.
+
+
+
+---
+
+## D-0013 — Prisma schema is the single DB source of truth (Python uses raw SQL)
+
+**Date:** 2026-07-02 (Phase 2, P2-S01) · **Author:** Aether Delivery Agent (Session 3) · **Status:** Adopted
+
+**Context.** Phase 2 introduces a Python (FastAPI) data layer alongside the existing TypeScript
+persistence (Prisma). Two ORMs describing the same tables would inevitably drift, and the résumé/job
+schema (with a pgvector column) is already authored and migrated by Prisma in
+`packages/db/src/schema.prisma`.
+
+**Decision.** Prisma remains the *only* schema authority. The Python services read and write the
+Prisma-migrated tables directly with raw `psycopg2` (parameterised SQL) — **no parallel SQLAlchemy
+models**. Client-side Prisma concerns (`@default(cuid())`, `@updatedAt`) are reproduced in Python: ids
+are generated with the `cuid` package and `updatedAt` is set explicitly on insert. Repositories
+(`app/repositories/*.py`) own their SQL and commit their writes; a request-scoped connection is provided
+by the `get_db` FastAPI dependency (overridden to `aether_test` in tests).
+
+**Alternatives.** SQLAlchemy models mirroring the schema (rejected: duplicate source of truth, drift
+risk); SQLAlchemy with `reflect=True` (viable, but adds a heavy dependency for what is currently simple
+CRUD — revisit if query complexity grows).
+
+**Consequences.** No schema drift between the TS and Python layers; tests run against the genuine
+migrated schema in `aether_test`. The trade-off is hand-written SQL and manual id/timestamp handling.
+**Reversible?** Yes — repositories are a thin seam; swapping in SQLAlchemy later touches only
+`app/repositories/*` and `app/db.py`.
+
+---
+
+## D-0014 — Phase 2 branches from `phase-1/foundation`, not `main`
+
+**Date:** 2026-07-02 (Phase 2, start-of-session) · **Author:** Aether Delivery Agent (Session 3) · **Status:** Adopted
+
+**Context.** The Phase 2 spec assumed Phase 1 had been reviewed and merged to `main`. On inspection,
+`main` still contains only Phase 0 (wireframes): the entire Phase 1 foundation (Prisma schema, auth
+primitives, FastAPI skeleton, resume parser, LLM record-replay infra, dashboard shell) lives on the
+**unmerged** remote branch `phase-1/foundation`. Branching Phase 2 from `main` would have discarded the
+foundation Phase 2 is defined to build upon.
+
+**Decision.** Create and work `phase-2/intelligence` **from `phase-1/foundation`**. Phase 1 is left to
+be reviewed and merged to `main` on its own track. When Phase 1 lands on `main`, the Phase 2 PR targets
+`main` (fast-forward/rebase as needed); until then, Phase 2 commits sit on top of the real foundation.
+A one-off `chore(db)` commit added the Prisma **baseline migration** that `phase-1/foundation` was
+missing, so the database provisions reproducibly for Phase 2 (and, later, CI).
+
+**Alternatives.** Branch from `main` and re-create the foundation (rejected: duplicates Phase 1 work and
+guarantees divergence); wait for a human to merge Phase 1 first (rejected: blocks all Phase 2 progress
+and the merge is out of this session's scope).
+
+**Consequences.** Phase 2 is unblocked and builds on the intended base. The eventual Phase 2 → `main`
+PR must account for Phase 1 (either Phase 1 merges first, or the PR includes the Phase 1 diff for a
+combined review) — this is called out in PROGRESS.md and must be surfaced to the user. **Reversible?**
+Yes — the branch can be rebased onto `main` once Phase 1 is merged.
