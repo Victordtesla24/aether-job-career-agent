@@ -94,4 +94,20 @@ describe('UserRepository', () => {
       update: { name: 'A' },
     });
   });
+
+  it('finds a user by id', async () => {
+    const user = makeDelegate();
+    const repo = new UserRepository({ user } as unknown as PrismaClient);
+    await repo.findById('u1');
+    expect(user.findUnique).toHaveBeenCalledWith({ where: { id: 'u1' } });
+  });
+
+  it('creates a user with an email + password hash', async () => {
+    const user = makeDelegate();
+    const repo = new UserRepository({ user } as unknown as PrismaClient);
+    await repo.create({ email: 'a@b.com', passwordHash: 'bcrypt$hash' });
+    expect(user.create).toHaveBeenCalledWith({
+      data: { email: 'a@b.com', passwordHash: 'bcrypt$hash' },
+    });
+  });
 });
