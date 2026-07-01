@@ -16,7 +16,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 | P1-S02  | Prisma schema (pgvector + all models) + repos     | ✅     | green | `fff6c15` |
 | P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ✅     | green | `d00ae4a` |
 | P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ✅     | green | `28f991b` |
-| P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ⬜     | -     | -         |
+| P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ✅     | green | `be54f16` |
 | P1-S06  | Dashboard shell (12-item Schema-A sidebar)        | ⬜     | -     | -         |
 | P1-S09  | FastAPI skeleton + `/health`                      | ⬜     | -     | -         |
 | P1-S10  | CI activation (`.github/workflows/ci.yml`)        | ⬜     | -     | -         |
@@ -58,6 +58,14 @@ LLM tailoring in Phase 2). Tests: 10 green, asserting against the *real* content
 `0700d1aa…0768a25`. Runtime dep `pdfplumber` added to `pyproject.toml` + `requirements.txt`;
 `requirements-dev.txt` now `-r requirements.txt` so CI installs runtime deps too. The resume asset is
 byte-for-byte unchanged. Uses the repo's existing `app/` package (not the spec's `api/`).
+
+**P1-S05 detail:** `apps/api/app/services/portfolio_scraper.py` — `scrape_github_profile(username,
+fixture=None)` normalises a GitHub profile into the portfolio-card shape (identity, follower/repo
+counts, `total_stars`, `top_languages` ranked by frequency, `top_repos` sorted by stars). Fixture
+mode (`fixture=`) runs fully offline for tests; live mode fetches the public GitHub REST API via the
+stdlib `urllib` (no new dependency ahead of the FastAPI/httpx slice). Deterministic, clearly-synthetic
+fixtures live in `tests/fixtures/github_fixture.py`. Tests: 5 green (normalisation, star-sort,
+language aggregation, empty-profile, blank-username guard).
 
 ---
 
