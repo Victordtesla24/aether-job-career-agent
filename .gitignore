@@ -1,0 +1,49 @@
+# ---- Secrets & environment (NEVER commit real keys) ----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ---- Node / JS ----
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ---- Test / build artifacts ----
+playwright-report/
+test-results/
+.coverage
+htmlcov/
+
+# ---- LLM live-run logs (fixtures ARE committed; raw live logs are not) ----
+tests/fixtures/llm/_live/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---- Abacus internal ----
+*.donotdelete
