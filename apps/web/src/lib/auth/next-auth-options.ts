@@ -1,33 +1,20 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import {
-  authorizeCredentials,
-  type StoredUser,
-  SESSION_MAX_AGE_SECONDS,
-} from "./index";
+import { SESSION_MAX_AGE_SECONDS } from "./index";
+import { loginWithCredentials } from "../api/auth";
 
 /**
- * Live NextAuth options (P1-S06) — this file wires the framework-free auth
- * contract from P1-S03 into the actual `next-auth` runtime, fulfilling
- * DECISIONS D-0006.
+ * Live NextAuth options (P1-S06, wired to real auth in P2-S01) — this file
+ * connects the sign-in route to the FastAPI backend, fulfilling DECISIONS
+ * D-0006.
  *
- * The credentials provider delegates to `authorizeCredentials` with its data
- * dependencies injected. Until the user store is seeded (Phase 2, backed by
- * UserRepository + a real password hash comparison), `lookupUser` returns null
- * and `verifyPassword` returns false, so no credentials can succeed yet — but
- * the sign-in route, JWT session strategy, and callbacks are fully functional
- * and testable.
+ * The credentials provider delegates verification to the backend's
+ * `/auth/login` endpoint (see {@link loginWithCredentials}). The backend owns
+ * the bcrypt hashes and never returns them, so the hash never crosses the auth
+ * boundary. The pure `authorizeCredentials` primitive (P1-S03) remains the
+ * unit-tested contract for the underlying decision, while runtime credential
+ * checks are performed server-side where the hashes live.
  */
-
-// Placeholder dependencies until the persistence layer is wired in Phase 2.
-async function lookupUser(_email: string): Promise<StoredUser | null> {
-  return null;
-}
-
-async function verifyPassword(_plain: string, _hash: string): Promise<boolean> {
-  return false;
-}
-
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   pages: { signIn: "/login" },
@@ -44,10 +31,9 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
-        const user = await authorizeCredentials(
-          { email: credentials.email, password: credentials.password },
-          lookupUser,
-          verifyPassword,
+        const user = await loginWithCredentials(
+          credentials.email,
+          credentials.password,
         );
         return user ? { id: user.id, email: user.email, name: user.name } : null;
       },

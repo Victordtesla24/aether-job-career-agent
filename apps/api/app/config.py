@@ -34,11 +34,17 @@ class Settings(BaseSettings):
     api_version: str = API_VERSION
     # Optional integrations — absent in unit tests / offline runs.
     database_url: str | None = None
+    database_url_test: str | None = None
     redis_url: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Present only at runtime; never logged. Left optional so the app boots
     # without it (agent calls that need it fail loudly at call time instead).
     openrouter_api_key: str | None = None
+    # Symmetric secret used to sign/verify the API's own session JWTs. Shared
+    # with the web layer (NextAuth) so both trust the same tokens. A dev-only
+    # default keeps the app bootable offline; production always supplies its own
+    # via the environment. Never logged.
+    nextauth_secret: str = "aether-dev-secret-change-me-in-prod"
 
 
 @lru_cache

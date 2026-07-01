@@ -6,6 +6,14 @@ export interface UpsertUserInput {
   image?: string;
 }
 
+/** Input for creating a credentials-backed user (P2-S01). */
+export interface CreateUserInput {
+  email: string;
+  /** A pre-computed bcrypt hash — never a plaintext password. */
+  passwordHash: string;
+  name?: string;
+}
+
 /** Data-access for user identity (backing NextAuth). */
 export class UserRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -16,6 +24,11 @@ export class UserRepository {
 
   findByEmail(email: string) {
     return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  /** Create a credentials-backed user. Stores only the bcrypt hash. */
+  create(input: CreateUserInput) {
+    return this.prisma.user.create({ data: input });
   }
 
   /** Create-or-update a user keyed by email (idempotent sign-in). */
