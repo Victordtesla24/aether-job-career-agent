@@ -48,10 +48,26 @@
         <h1 class="text-2xl font-bold">Offer Comparison</h1>
         <p class="text-sm text-[#A0A0B8] mt-1">Weighted decision analysis across your live offers.</p>
       </div>
-      <button data-design-id="add-offer-of05" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-sm font-semibold"><i class="fa-solid fa-plus"></i>Add Offer</button>
+      <div class="flex items-center gap-2">
+        <button data-design-id="toggle-empty-of14" type="button" onclick="toggleOfEmpty()" class="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition text-xs font-medium text-[#A0A0B8]"><i class="fa-solid fa-eye"></i><span id="ofToggleLabel">Preview empty state</span></button>
+        <button data-design-id="add-offer-of05" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-sm font-semibold"><i class="fa-solid fa-plus"></i>Add Offer</button>
+      </div>
     </header>
 
-    <div class="grid grid-cols-3 gap-6">
+    <!-- P0-S04 · EMPTY STATE (hidden by default — toggle in header to preview) -->
+    <div data-design-id="empty-state-of15" id="ofEmpty" class="hidden">
+      <div class="glass rounded-2xl border border-dashed border-white/12 py-16 px-8 flex flex-col items-center text-center">
+        <div class="w-16 h-16 rounded-2xl bg-[#FF6B35]/12 border border-[#FF6B35]/25 flex items-center justify-center mb-5"><i class="fa-solid fa-scale-balanced text-[#FF6B35] text-2xl"></i></div>
+        <h2 class="text-lg font-bold mb-1.5">No offers to compare</h2>
+        <p class="text-sm text-[#A0A0B8] max-w-md mb-6">When you receive an offer, add it here to run a weighted decision analysis across compensation, growth, culture and more — and get negotiation coaching tailored to your priorities.</p>
+        <div class="flex items-center gap-3">
+          <button data-design-id="empty-add-offer-of16" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-sm font-semibold"><i class="fa-solid fa-plus"></i>Add Offer</button>
+        </div>
+        <div class="mt-6 flex items-center gap-2 text-[11px] text-[#6B6B82]"><i class="fa-solid fa-lightbulb text-[#FBBF24]"></i>Tip: Add at least two offers to unlock side-by-side scoring and counter-offer suggestions.</div>
+      </div>
+    </div>
+
+    <div id="ofPopulated" class="grid grid-cols-3 gap-6">
       <!-- Offer cards -->
       <section data-design-id="offers-grid-of06" class="col-span-2 grid grid-cols-3 gap-4">
         <article data-design-id="offer-card-of07" class="glass-raised rounded-2xl p-5 border-t-2 border-[#34D399]">
@@ -114,8 +130,21 @@
           <button data-design-id="draft-counter-of13" type="button" class="w-full mt-4 px-3 py-2 rounded-xl bg-[#4F46E5] hover:bg-[#5b52ea] transition text-xs font-semibold"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Draft counter email</button>
         </section>
       </aside>
-    </div>
+    </div><!-- /#ofPopulated -->
   </main>
 </div>
+
+<script>
+  // P0-S04 — toggle between populated offers and the empty state for review
+  function toggleOfEmpty(){
+    var empty = document.getElementById('ofEmpty');
+    var pop = document.getElementById('ofPopulated');
+    var label = document.getElementById('ofToggleLabel');
+    var isEmptyHidden = empty.classList.contains('hidden');
+    empty.classList.toggle('hidden', !isEmptyHidden);
+    pop.classList.toggle('hidden', isEmptyHidden);
+    label.textContent = isEmptyHidden ? 'Show populated offers' : 'Preview empty state';
+  }
+</script>
 </body>
 </html>

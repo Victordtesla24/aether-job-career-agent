@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .glass{background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+  .glass-raised{background:rgba(255,255,255,0.045);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  .page-shadow{box-shadow:0 20px 60px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4);}
+</style>
+</head>
+<body class="w-[1440px] bg-[#0A0A0F] text-[#F4F4F8]" style="background:radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,0.10), transparent 60%), linear-gradient(180deg,#0A0A0F 0%, #12121C 100%);">
+<div class="flex min-h-[900px]">
+
+  <!-- ===================== SIDEBAR (Schema A · 12 items) ===================== -->
+  <aside data-design-id="sidebar-main-cl01" class="w-[248px] shrink-0 border-r border-white/8 glass flex flex-col px-4 py-6">
+    <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#F59E0B] flex items-center justify-center shadow-lg shadow-[#FF6B35]/30"><i class="fa-solid fa-bolt text-white text-sm"></i></div>
+      <div><div class="font-bold text-[15px] leading-none">Aether</div><div class="text-[11px] text-[#6B6B82] mt-1">Career Agent</div></div>
+    </div>
+    <nav data-design-id="nav-primary-cl02" class="flex flex-col gap-1">
+      <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gauge-high w-4"></i>Dashboard</a>
+      <a href="job-discovery.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-magnifying-glass w-4"></i>Jobs</a>
+      <a href="resume-studio.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FF6B35]/12 text-white border border-[#FF6B35]/20 text-sm font-medium"><i class="fa-solid fa-file-lines w-4 text-[#FF6B35]"></i>Resume Studio</a>
+      <a href="story-bank.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-book-bookmark w-4"></i>Story Bank</a>
+      <a href="application-tracker.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-paper-plane w-4"></i>Applications</a>
+      <a href="interview-center.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-microphone-lines w-4"></i>Interview Center</a>
+      <a href="networking.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-handshake w-4"></i>Networking</a>
+      <a href="email-center.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-envelope w-4"></i>Email Center</a>
+      <a href="agents.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-robot w-4"></i>Agents</a>
+      <a href="analytics.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-chart-line w-4"></i>Analytics</a>
+      <a href="offer-comparison.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-scale-balanced w-4"></i>Offers</a>
+      <a href="settings.html" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#A0A0B8] hover:bg-white/5 hover:text-white transition text-sm"><i class="fa-solid fa-gear w-4"></i>Settings</a>
+    </nav>
+    <div class="mt-auto glass-raised rounded-2xl p-4 border border-white/8">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center text-sm font-semibold">VD</div>
+        <div class="leading-tight"><div class="text-xs font-semibold">Vikram D.</div><div class="text-[11px] text-[#6B6B82]">Senior TPM</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- ===================== TOP BAR ===================== -->
+    <header data-design-id="studio-topbar-cl03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
+      <div class="flex items-center gap-4">
+        <div>
+          <div class="flex items-center gap-2 text-[11px] text-[#6B6B82]"><a href="resume-studio.html" class="hover:text-white transition">Resume Studio</a><i class="fa-solid fa-chevron-right text-[8px]"></i><span class="text-[#A0A0B8]">Cover Letter</span></div>
+          <h1 class="text-[15px] font-semibold">Cover Letter Studio</h1>
+        </div>
+        <div data-design-id="target-chip-cl04" class="flex items-center gap-2 bg-white/5 border border-white/8 rounded-lg px-3 py-1.5"><span class="text-[11px] text-[#6B6B82]">Target</span><span class="text-xs font-medium">Senior TPM · Canva</span><i class="fa-solid fa-chevron-down text-[10px] text-[#6B6B82]"></i></div>
+      </div>
+      <div class="flex items-center gap-5">
+        <div class="flex items-center gap-2"><i class="fa-solid fa-shield-halved text-[#34D399]"></i><div class="leading-tight"><div class="text-[11px] text-[#6B6B82]">Voice DNA</div><div class="mono text-xs font-medium text-[#34D399]">95% authentic</div></div></div>
+        <div class="flex items-center gap-2 pl-4 border-l border-white/8"><i class="fa-solid fa-robot text-[#818CF8]"></i><div class="leading-tight"><div class="text-[11px] text-[#6B6B82]">AI Detection</div><div class="mono text-xs font-medium text-[#34D399]">3% · Safe</div></div></div>
+      </div>
+    </header>
+
+    <div class="flex-1 flex min-h-0">
+      <!-- ===================== LETTER PREVIEW (left) ===================== -->
+      <main data-design-id="letter-preview-cl05" class="flex-1 px-8 py-6 overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2"><i class="fa-solid fa-file-lines text-[#FF6B35] text-sm"></i><h2 class="text-sm font-semibold">Cover Letter — Draft</h2><span class="text-[10px] px-2 py-0.5 rounded-md bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25">AI-generated · editable</span></div>
+          <div class="flex items-center gap-2 text-[11px] text-[#6B6B82]"><span class="mono">312 words</span><span>·</span><span>1 page</span></div>
+        </div>
+
+        <!-- The letter "page" -->
+        <div class="mx-auto max-w-[720px] bg-[#F7F7FB] text-[#1A1A24] rounded-xl page-shadow p-10 leading-relaxed">
+          <div class="mb-6">
+            <p class="font-semibold text-[15px]">Vikram Deshpande</p>
+            <p class="text-[12px] text-[#4A4A5A]">Senior Technical Program Manager · Melbourne, AU</p>
+            <p class="text-[12px] text-[#4A4A5A] mono">sarkar.vikram@gmail.com</p>
+          </div>
+          <p class="text-[12px] text-[#4A4A5A] mb-5">1 July 2026</p>
+          <p class="text-[13px] mb-4">Dear Hiring Team at Canva,</p>
+          <p class="text-[13px] mb-3">I'm writing to express my strong interest in the <span class="bg-[#FF6B35]/20 rounded px-1">Senior Technical Program Manager</span> role. Delivering complex, cross-functional programs in fast-moving product environments is where I do my best work, and Canva's scale and design-led culture is exactly the kind of environment where I can add value from day one.</p>
+          <p class="text-[13px] mb-3">Across my career I've led <span class="bg-[#34D399]/25 rounded px-1">large program delivery</span> spanning engineering, data and cloud teams — coordinating dependencies, de-risking timelines and keeping stakeholders aligned on outcomes rather than output. I'm equally comfortable operating at the strategic and the hands-on level, whether that means shaping a delivery roadmap or unblocking a team mid-sprint.</p>
+          <p class="text-[13px] mb-3">What draws me to this role specifically is the emphasis on <span class="bg-[#FF6B35]/20 rounded px-1">AI delivery</span> and platform thinking. I've spent the last few years bringing AI/ML initiatives from proof-of-concept to production, with a focus on governance, measurable impact and sustainable delivery practices.</p>
+          <p class="text-[13px] mb-4">I would welcome the opportunity to discuss how my background in program delivery leadership can support Canva's goals. Thank you for your consideration.</p>
+          <p class="text-[13px]">Warm regards,</p>
+          <p class="text-[13px] font-semibold">Vikram Deshpande</p>
+        </div>
+      </main>
+
+      <!-- ===================== CONTROL PANEL (right) ===================== -->
+      <aside data-design-id="control-panel-cl06" class="w-[380px] shrink-0 border-l border-white/8 px-6 py-6 overflow-y-auto flex flex-col gap-5">
+
+        <!-- Evidence trace / grounding -->
+        <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2"><i class="fa-solid fa-link text-[#34D399] text-sm"></i><h3 class="text-sm font-semibold">Evidence Trace</h3></div>
+            <a data-design-id="link-story-bank-cl07" href="story-bank.html" class="inline-flex items-center gap-1.5 text-[11px] text-[#818CF8] hover:text-white transition font-medium">Pull from Story Bank<i class="fa-solid fa-arrow-right text-[9px]"></i></a>
+          </div>
+          <p class="text-[11px] text-[#A0A0B8] leading-relaxed mb-3">Every highlighted claim is grounded in a Story Bank entry — nothing is invented. Review the source before you send.</p>
+          <div class="space-y-2">
+            <div class="flex items-start gap-2 text-[11px]"><i class="fa-solid fa-circle-check text-[#34D399] mt-0.5"></i><span class="text-[#C8C8DC]">"large program delivery" → <span class="text-white">Story: Program Delivery Leadership</span></span></div>
+            <div class="flex items-start gap-2 text-[11px]"><i class="fa-solid fa-circle-check text-[#34D399] mt-0.5"></i><span class="text-[#C8C8DC]">"AI delivery" → <span class="text-white">Story: AI/ML Production Rollout</span></span></div>
+            <div class="flex items-start gap-2 text-[11px]"><i class="fa-solid fa-triangle-exclamation text-[#FBBF24] mt-0.5"></i><span class="text-[#C8C8DC]">"platform thinking" → <span class="text-[#FBBF24]">no source yet — add or soften</span></span></div>
+          </div>
+        </div>
+
+        <!-- Voice DNA controls -->
+        <div class="glass rounded-2xl border border-white/8 p-5">
+          <div class="flex items-center gap-2 mb-4"><i class="fa-solid fa-sliders text-[#818CF8] text-sm"></i><h3 class="text-sm font-semibold">Voice DNA</h3></div>
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-1.5"><span class="text-[11px] text-[#A0A0B8]">Tone</span><span class="text-[11px] mono text-[#818CF8]">Warm · Professional</span></div>
+            <input data-design-id="slider-tone-cl08" type="range" min="0" max="100" value="60" class="w-full accent-[#FF6B35]">
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1.5"><span class="text-[11px] text-[#A0A0B8]">Formality</span><span class="text-[11px] mono text-[#818CF8]">Balanced</span></div>
+            <input data-design-id="slider-formality-cl09" type="range" min="0" max="100" value="55" class="w-full accent-[#FF6B35]">
+          </div>
+        </div>
+
+        <!-- JD keyword coverage -->
+        <div class="glass rounded-2xl border border-white/8 p-5">
+          <div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><i class="fa-solid fa-list-check text-[#FF6B35] text-sm"></i><h3 class="text-sm font-semibold">JD Keyword Coverage</h3></div><span class="mono text-xs font-bold text-[#34D399]">8 / 10</span></div>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Program delivery</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">AI delivery</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Cross-functional</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Stakeholders</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Cloud</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Governance</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Roadmap</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/20">Delivery practices</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#FBBF24]/12 text-[#FBBF24] border border-[#FBBF24]/20">SAFe (missing)</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-[#FBBF24]/12 text-[#FBBF24] border border-[#FBBF24]/20">OKRs (missing)</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="glass-raised rounded-2xl border border-white/8 p-5">
+          <button data-design-id="btn-regenerate-cl10" onclick="regenerate()" class="w-full flex items-center justify-center gap-2 text-sm font-semibold py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25 mb-2.5"><i class="fa-solid fa-wand-magic-sparkles text-[12px]"></i>Regenerate</button>
+          <div class="grid grid-cols-2 gap-2.5 mb-2.5">
+            <button data-design-id="btn-request-changes-cl11" class="flex items-center justify-center gap-2 text-xs font-medium py-2.5 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-comment-dots text-[11px] text-[#818CF8]"></i>Request Changes</button>
+            <button data-design-id="btn-export-cl12" class="flex items-center justify-center gap-2 text-xs font-medium py-2.5 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-file-arrow-down text-[11px] text-[#818CF8]"></i>Export PDF</button>
+          </div>
+          <a data-design-id="link-email-center-cl13" href="email-center.html" class="w-full flex items-center justify-center gap-2 text-xs font-medium py-2.5 rounded-xl bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition"><i class="fa-solid fa-paper-plane text-[11px]"></i>Attach &amp; send via Email Center<i class="fa-solid fa-arrow-right text-[9px]"></i></a>
+        </div>
+
+        <!-- Version history -->
+        <div class="glass rounded-2xl border border-white/8 p-5">
+          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-clock-rotate-left text-[#818CF8] text-sm"></i><h3 class="text-sm font-semibold">Versions</h3></div>
+          <div class="flex items-center gap-2">
+            <button data-design-id="ver-v1-cl14" class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition mono">v1</button>
+            <button data-design-id="ver-v2-cl15" class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition mono">v2</button>
+            <button data-design-id="ver-v3-cl16" class="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/25 mono">v3 · current</button>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Cover Letter Studio — lightweight regenerate affordance (wireframe stub).
+  function regenerate(){
+    var btn = document.getElementById('btn-regenerate-cl10');
+    var orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-[12px]"></i>Regenerating…';
+    btn.disabled = true;
+    setTimeout(function(){ btn.innerHTML = orig; btn.disabled = false; }, 1400);
+  }
+</script>
+</body>
+</html>

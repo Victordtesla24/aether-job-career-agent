@@ -285,7 +285,7 @@
           </div>
           <!-- actions -->
           <div class="flex items-center gap-2 mt-4">
-            <button data-design-id="send-em35" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-[13px] font-semibold"><i class="fa-solid fa-paper-plane"></i>Send Reply</button>
+            <button data-design-id="send-em35" type="button" onclick="openSendGate()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-[13px] font-semibold"><i class="fa-solid fa-shield-halved text-[12px]"></i><i class="fa-solid fa-paper-plane"></i>Send Reply</button>
             <button data-design-id="edit-em36" type="button" class="flex items-center gap-2 px-3 py-2.5 rounded-xl glass-raised hover:border-white/20 transition text-[13px]"><i class="fa-solid fa-pen"></i>Edit Draft</button>
             <button data-design-id="preview-em37" type="button" class="flex items-center gap-2 px-3 py-2.5 rounded-xl glass-raised hover:border-white/20 transition text-[13px]"><i class="fa-solid fa-eye"></i>Preview</button>
             <button data-design-id="regen-em38" type="button" class="flex items-center gap-2 px-3 py-2.5 rounded-xl glass-raised hover:border-white/20 transition text-[13px]"><i class="fa-solid fa-rotate"></i>Regenerate</button>
@@ -373,5 +373,61 @@
   <span class="flex items-center gap-1.5"><i class="fa-solid fa-clock-rotate-left text-[#60A5FA]"></i>Follow-up engine: 3 scheduled, 0 pending approval</span>
   <span class="flex items-center gap-1.5 ml-auto"><i class="fa-solid fa-shield-halved text-[#F87171]"></i>Spam filter: 8 auto-trashed today</span>
 </footer>
+
+<!-- ============================================================= -->
+<!-- P0-S01 · SEND CONFIRMATION GATE (two-step) -->
+<!-- ============================================================= -->
+<div data-design-id="send-gate-em48" id="sendGate" class="fixed inset-0 z-50 hidden items-center justify-center">
+  <!-- backdrop -->
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeSendGate()"></div>
+  <!-- dialog -->
+  <div role="dialog" aria-modal="true" aria-labelledby="sendGateTitle" class="relative w-[520px] max-w-[92vw] glass-raised rounded-2xl border border-[#FF6B35]/40 p-6 shadow-2xl shadow-black/60">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl bg-[#FBBF24]/15 border border-[#FBBF24]/30 flex items-center justify-center shrink-0"><i class="fa-solid fa-triangle-exclamation text-[#FBBF24]"></i></div>
+      <div class="flex-1">
+        <h3 id="sendGateTitle" class="text-base font-semibold leading-snug">Send this reply to <span class="text-[#FF6B35]">Sarah Chen</span>?</h3>
+        <p class="text-[12px] text-[#A0A0B8] mt-1">This email will be sent from <span class="mono text-[#C7C7D6]">sarkar.vikram@gmail.com</span> to <span class="mono text-[#C7C7D6]">Sarah Chen — Atlassian</span>. Please confirm — this action cannot be undone.</p>
+      </div>
+      <button type="button" onclick="closeSendGate()" class="text-[#A0A0B8] hover:text-white transition"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- email preview -->
+    <div class="mt-4 rounded-xl bg-black/25 border border-white/8 p-3.5">
+      <div class="flex items-center justify-between text-[11px] text-[#A0A0B8] mb-2 pb-2 border-b border-white/8">
+        <span><span class="text-[#6B6B82]">To:</span> Sarah Chen &lt;s.chen@atlassian.com&gt;</span>
+        <span class="mono">Re: Senior TPM — Cloud Infrastructure</span>
+      </div>
+      <div class="text-[12px] text-[#C7C7D6] leading-relaxed max-h-32 overflow-y-auto space-y-1.5">
+        <p>Dear Sarah,</p>
+        <p>Thank you for reaching out about the Senior TPM role at Atlassian — it's a team and mission I've followed closely. My experience leading cloud infrastructure delivery at the ATO, where we achieved a 92% reduction in manual testing effort, aligns well with what you've described. I'd genuinely welcome a conversation.</p>
+        <p>I'm available for an intro call Wednesday or Thursday afternoon (AEST) — happy to work around your calendar.</p>
+        <p>Warm regards,<br>Vikram Deshpande</p>
+      </div>
+      <div class="flex items-center gap-2 mt-2 pt-2 border-t border-white/8 text-[11px]">
+        <i class="fa-solid fa-fingerprint text-[#34D399]"></i>
+        <span class="text-[#A0A0B8]">Voice DNA authenticity <span class="mono text-[#34D399] font-semibold">96%</span> — no AI-typical patterns detected</span>
+      </div>
+    </div>
+
+    <!-- actions -->
+    <div class="flex items-center justify-end gap-2 mt-5">
+      <button data-design-id="gate-cancel-em49" type="button" onclick="closeSendGate()" class="px-4 py-2.5 rounded-xl glass-raised hover:border-white/20 transition text-[13px]">Cancel</button>
+      <button data-design-id="gate-confirm-em50" type="button" onclick="confirmSend()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B35] hover:bg-[#ff7d4d] transition text-[13px] font-semibold"><i class="fa-solid fa-paper-plane"></i>Confirm Send</button>
+    </div>
+
+    <!-- sent state (revealed after confirm) -->
+    <div id="sentState" class="hidden mt-4 rounded-xl bg-[#34D399]/10 border border-[#34D399]/25 px-3.5 py-2.5 flex items-center gap-2 text-[12px]">
+      <i class="fa-solid fa-circle-check text-[#34D399]"></i><span>Reply sent to Sarah Chen. <span class="text-[#A0A0B8]">Follow-up scheduled in 5 days if no response.</span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // P0-S01 — two-step send confirmation gate. The email only "sends" after explicit confirm.
+  function openSendGate(){ var g=document.getElementById('sendGate'); g.classList.remove('hidden'); g.classList.add('flex'); document.getElementById('sentState').classList.add('hidden'); }
+  function closeSendGate(){ var g=document.getElementById('sendGate'); g.classList.add('hidden'); g.classList.remove('flex'); }
+  function confirmSend(){ document.getElementById('sentState').classList.remove('hidden'); setTimeout(closeSendGate, 1400); }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeSendGate(); });
+</script>
 </body>
 </html>

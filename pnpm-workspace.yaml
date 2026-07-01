@@ -1,0 +1,9 @@
+packages:
+  - "apps/web"
+
+# Allow esbuild (pulled in by Vitest) to run its install build script.
+# pnpm v11 blocks dependency build scripts by default; this allow-lists the one we trust.
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true
