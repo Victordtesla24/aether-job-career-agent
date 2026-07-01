@@ -13,7 +13,7 @@ résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modif
 |---------|--------------------------------------------------|--------|-------|-----------|
 | P1-env  | OpenRouter connectivity validation script        | ✅     | green | `f0b7f8a` |
 | P1-S01  | Monorepo scaffolding: shared/agents/queue + turbo | ✅     | green | `67b82fb` |
-| P1-S02  | Prisma schema (pgvector + all models) + repos     | ⬜     | -     | -         |
+| P1-S02  | Prisma schema (pgvector + all models) + repos     | ✅     | green | `fff6c15` |
 | P1-S03  | NextAuth.js + JWT + requireAuth middleware        | ⬜     | -     | -         |
 | P1-S04  | Resume parser (pdfplumber, format-preserving hash)| ⬜     | -     | -         |
 | P1-S05  | Portfolio/GitHub scraper MVP (fixture-backed)     | ⬜     | -     | -         |
@@ -29,6 +29,15 @@ build/test/lint/type-check/dev) and root scripts. Tests: shared 4 + agents 7 + q
 build/type-check/lint pass across the workspace. Note: Turbo 2.x uses `tasks` (not the deprecated
 `pipeline` key); nav label standardized as "Resume Studio" per DECISIONS D-0002 (spec's "Résumé
 Studio" reconciled to the repo's canonical no-accent label).
+
+**P1-S02 detail:** `packages/db` (`@aether/db`) — full Prisma schema (`src/schema.prisma`) with the
+`vector` PostgreSQL extension (pgvector) for `JobEmbedding.embedding` (`vector(1536)`), all domain
+models (User, Job, JobEmbedding, Resume with `formatHash` + self-referential version lineage,
+Application, ApprovalRequest, Contact, EmailThread, StoryEntry, AgentRun) and enums. Typed
+repositories (Job/Resume/Application/User) built on `import type` from `@prisma/client` so unit tests
+run without a generated client or live DB. Tests: 13 green (5 schema-structure + 8 repository). A
+package-scoped `turbo.json` wires `prisma:generate` ahead of build/type-check via `extends: ["//"]`.
+`prisma generate` runs offline; `migrate dev` is deferred until `DATABASE_URL` is provisioned.
 
 ---
 
