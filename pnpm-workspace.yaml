@@ -10,14 +10,19 @@ packages:
 #   - msgpackr-extract (optional native accel for msgpackr, via BullMQ) is left
 #     unbuilt; msgpackr transparently falls back to its pure-JS codec, so we
 #     avoid running an untrusted native build with no functional loss.
+#   - unrs-resolver (napi-rs native module resolver used by eslint-config-next's
+#     import resolver) is trusted; its install script fetches the prebuilt
+#     platform binary so ESLint can resolve module paths.
 onlyBuiltDependencies:
   - esbuild
   - "@prisma/client"
   - "@prisma/engines"
   - prisma
+  - unrs-resolver
 allowBuilds:
   esbuild: true
   "@prisma/client": true
   "@prisma/engines": true
   prisma: true
   msgpackr-extract: false
+  unrs-resolver: true

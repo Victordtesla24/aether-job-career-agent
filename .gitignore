@@ -16,6 +16,13 @@ coverage/
 *.tsbuildinfo
 .turbo/
 
+# ---- Next.js / Playwright ----
+next-env.d.ts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
