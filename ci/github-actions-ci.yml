@@ -5,6 +5,10 @@ on:
     branches: [main, "phase-*/**"]
   pull_request:
     branches: [main]
+  # Nightly live-OpenRouter fixture refresh (non-blocking) + manual runs.
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
 
 # Cancel superseded runs on the same ref.
 concurrency:
@@ -13,11 +17,48 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Web app — Next.js / TypeScript (Node 20)
+  # Security — fast fail-fast gate (no build needed)
+  #   * `.env` must never be tracked.
+  #   * No real OpenRouter key (sk-or-v1-<long>) may appear anywhere in source.
+  #     The regex requires a long alphanumeric tail so short, clearly-synthetic
+  #     test/doc placeholders (e.g. redaction tests) are not flagged.
   # ---------------------------------------------------------------------------
-  web:
-    name: web (Node 20)
+  security:
+    name: security scan
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure .env is not committed
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env is tracked by git — secrets must never be committed."
+            exit 1
+          fi
+          echo "OK: .env is not tracked."
+
+      - name: Scan for leaked API keys
+        run: |
+          if git grep -nI -E "sk-or-v1-[A-Za-z0-9]{32,}" -- .; then
+            echo "::error::A real-looking OpenRouter API key was found in source."
+            exit 1
+          fi
+          echo "OK: no API-key-like strings in source."
+
+  # ---------------------------------------------------------------------------
+  # Node workspace — Next.js web app + TS packages (Node 20)
+  #   Prisma client is generated before type-check/build because the web app and
+  #   repositories type-check against @prisma/client.
+  # ---------------------------------------------------------------------------
+  node:
+    name: node workspace (Node 20)
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Agent tests replay committed fixtures — never call the network.
+      AETHER_LLM_MODE: replay
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,17 +78,20 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm --filter @aether/db run prisma:generate
+
       - name: Lint
-        run: pnpm --filter @aether/web lint
+        run: pnpm -r run lint
 
       - name: Type-check
-        run: pnpm --filter @aether/web type-check
+        run: pnpm -r run type-check
 
       - name: Unit tests
-        run: pnpm --filter @aether/web test
+        run: pnpm -r run test
 
       - name: Build
-        run: pnpm --filter @aether/web build
+        run: pnpm -r run build
 
   # ---------------------------------------------------------------------------
   # API app — FastAPI / Python (3.11)
@@ -80,3 +124,81 @@ jobs:
 
       - name: Unit tests (pytest)
         run: python -m pytest -q
+
+  # ---------------------------------------------------------------------------
+  # End-to-end smoke — Playwright against the built web app (Node 20)
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: e2e smoke (Playwright)
+    runs-on: ubuntu-latest
+    needs: node
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @aether/db run prisma:generate
+
+      - name: Install Playwright browser (chromium)
+        run: pnpm --filter @aether/web exec playwright install --with-deps chromium
+
+      - name: Run E2E smoke tests
+        run: pnpm --filter @aether/web e2e
+
+  # ---------------------------------------------------------------------------
+  # Nightly live OpenRouter check — refreshes fixtures against real models.
+  # NON-BLOCKING: only runs on schedule/manual dispatch, never gates PRs.
+  # Requires the OPENROUTER_API_KEY secret; skipped automatically if unset.
+  # ---------------------------------------------------------------------------
+  live-openrouter:
+    name: live OpenRouter (nightly, non-blocking)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate OpenRouter connectivity
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "OPENROUTER_API_KEY not configured — skipping live check."
+            exit 0
+          fi
+          printf 'OPENROUTER_API_KEY=%s\n' "$OPENROUTER_API_KEY" > .env
+          node scripts/validate-openrouter.mjs
