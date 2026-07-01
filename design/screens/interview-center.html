@@ -58,6 +58,13 @@
       <button data-design-id="tab-debrief-ic08" type="button" class="px-4 py-2 rounded-lg text-[#A0A0B8] hover:text-white text-sm"><i class="fa-solid fa-clipboard-check mr-2"></i>Debrief</button>
     </nav>
 
+    <!-- Compliance & consent banner [P0-S08] -->
+    <div data-design-id="compliance-banner-ic17" id="complianceBanner" class="mb-6 flex items-start gap-3 glass rounded-xl border border-[#FBBF24]/30 px-4 py-3" style="background:rgba(251,191,36,0.05);">
+      <i class="fa-solid fa-shield-halved text-[#FBBF24] mt-0.5"></i>
+      <div class="flex-1 text-[12px] text-[#C7C7D6] leading-relaxed"><span class="font-semibold text-[#FBBF24]">Compliance &amp; consent</span> — Live Assist is a private coaching aid shown only to you. Recording or transcribing an interview may require the interviewer's consent under local law. Aether never joins the call or streams verbatim answers. <a data-design-id="link-consent-settings-ic17c" href="settings.html" class="text-[#818CF8] hover:text-white">Review consent settings →</a></div>
+      <button data-design-id="btn-dismiss-compliance-ic17b" type="button" onclick="document.getElementById('complianceBanner').remove()" class="text-[#6B6B82] hover:text-white shrink-0"><i class="fa-solid fa-xmark text-xs"></i></button>
+    </div>
+
     <div class="grid grid-cols-3 gap-6">
       <!-- Left col: company brief + predicted -->
       <section data-design-id="prep-main-ic09" class="col-span-2 space-y-5">
@@ -93,13 +100,17 @@
       <!-- Right col: Live assist preview + debrief snapshot -->
       <aside data-design-id="prep-side-ic13" class="space-y-5">
         <section data-design-id="live-assist-ic14" class="glass rounded-2xl p-5">
-          <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-headset text-[#34D399]"></i><h3 class="text-sm font-semibold">Live Assist (preview)</h3></div>
-          <div class="space-y-3">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2"><i class="fa-solid fa-headset text-[#34D399]"></i><h3 class="text-sm font-semibold">Live Assist (preview)</h3></div>
+            <button data-design-id="btn-mute-ic18" id="muteBtn" type="button" data-muted="false" onclick="toggleMute()" class="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/8 hover:bg-white/12 transition"><i id="muteIcon" class="fa-solid fa-microphone text-[#34D399] text-[10px]"></i><span id="muteLabel">Listening</span></button>
+          </div>
+          <div id="liveMetrics" class="space-y-3">
             <div class="flex items-center justify-between text-[13px]"><span class="text-[#A0A0B8]">Filler words</span><span class="mono text-[#FBBF24]">7 <span class="text-[11px] text-[#A0A0B8]">/ min</span></span></div>
             <div class="flex items-center justify-between text-[13px]"><span class="text-[#A0A0B8]">Speaking pace</span><span class="mono text-[#34D399]">142 wpm</span></div>
             <div class="flex items-center justify-between text-[13px]"><span class="text-[#A0A0B8]">Talk / listen</span><span class="mono">62 / 38</span></div>
             <div class="p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/20 text-[12px] text-[#C7C7D6]"><i class="fa-solid fa-wave-square text-[#34D399] mr-1"></i>Real-time coaching cue: “Add the 92% metric now.”</div>
           </div>
+          <div id="mutedNote" class="hidden mt-3 p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/25 text-[12px] text-[#F8B4B4]"><i class="fa-solid fa-microphone-slash mr-1"></i>Live Assist muted — no audio is being captured or analysed.</div>
         </section>
         <section data-design-id="debrief-snap-ic15" class="glass rounded-2xl p-5">
           <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-clipboard-check text-[#A78BFA]"></i><h3 class="text-sm font-semibold">Last Debrief</h3></div>
@@ -115,5 +126,28 @@
     </div>
   </main>
 </div>
+<script>
+  function toggleMute(){
+    var btn=document.getElementById('muteBtn');
+    var icon=document.getElementById('muteIcon');
+    var label=document.getElementById('muteLabel');
+    var metrics=document.getElementById('liveMetrics');
+    var note=document.getElementById('mutedNote');
+    var muted=btn.getAttribute('data-muted')==='true';
+    if(muted){
+      btn.setAttribute('data-muted','false');
+      icon.className='fa-solid fa-microphone text-[#34D399] text-[10px]';
+      label.textContent='Listening';
+      metrics.classList.remove('opacity-40','pointer-events-none');
+      note.classList.add('hidden');
+    } else {
+      btn.setAttribute('data-muted','true');
+      icon.className='fa-solid fa-microphone-slash text-[#F87171] text-[10px]';
+      label.textContent='Muted';
+      metrics.classList.add('opacity-40','pointer-events-none');
+      note.classList.remove('hidden');
+    }
+  }
+</script>
 </body>
 </html>
