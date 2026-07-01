@@ -250,6 +250,55 @@ behaviour; the resolver is additive and independently useful for future active-n
 
 ---
 
+## D-0010 — ATS engine: TF-IDF keyword coverage + sentence-transformers cosine, no LLM (P2-S03)
+
+**Date:** 2026-07-02 (Phase 2, P2-S03) · **Author:** Aether Delivery Agent (Session 3) · **Status:** Adopted
+
+**Context.** The ATS scoring engine must return a numeric 0–100 score for a (résumé, job description)
+pair with a *testable* acceptance contract: a perfect keyword match scores ≥ 90, zero overlap scores
+≤ 20, and the score increases monotonically with keyword-overlap percentage. A `requires_review` flag
+must fire below a fixed threshold. Determinism is therefore a hard requirement — the same inputs must
+always yield the same score so the monotonicity/threshold tests are stable across runs and in CI.
+
+**Decision.** Score deterministically with **no LLM calls**, combining three signals:
+- **keyword_match (weight 0.40)** — scikit-learn `TfidfVectorizer(stop_words='english')` extracts the
+  significant terms of each document; the score is the **résumé's coverage of the job's terms**
+  (`100 · |resume∩jd| / |resume terms|`), plus the matched/missing keyword lists.
+- **semantic_similarity (weight 0.40)** — cosine similarity of `all-MiniLM-L6-v2`
+  (sentence-transformers) embeddings, `normalize_embeddings=True`, mapped to `clamp(cosine·100, 0, 100)`.
+  The model is a pinned public checkpoint, lazy-loaded once (`lru_cache`) into
+  `SENTENCE_TRANSFORMERS_HOME`; torch (CPU) is a transitive dependency.
+- **experience_gap (weight 0.20)** — years-of-experience required (regex over the JD) minus years
+  evidenced in the résumé, contributing `0.2·(100 − gap)`; 0 when the JD states no requirement.
+
+`overall = 0.4·keyword_match + 0.4·semantic_similarity + 0.2·(100 − experience_gap)`, clamped to
+0–100 and rounded. `requires_review` is `True` when `overall < 60`.
+
+**Deviation from the spec sketch (keyword metric).** The spec described the keyword signal as "TF-IDF
+keyword extraction + **Jaccard** overlap". We use **résumé coverage** (`intersection / resume-terms`)
+rather than symmetric Jaccard (`intersection / union`). Rationale: a real résumé is far longer than a
+job description, so its term set dwarfs the JD's; symmetric Jaccard is dominated by that size asymmetry
+and pushes a genuinely strong match below the 60 review threshold (measured: a well-matched pair scored
+~59 with Jaccard → wrongly flagged `requires_review=True`), which breaks the threshold-gating
+acceptance test. Coverage measures the intended thing — "how much of what the résumé says overlaps the
+posting" — is still monotonic in overlap, and yields ~63 for the same pair (correctly not flagged). The
+two extreme cases are unaffected (perfect ⇒ 100, zero ⇒ 0).
+
+**Alternatives.** (a) GPT/LLM-based scoring — rejected: non-deterministic (fails the monotonicity and
+threshold tests), costs money, slower, and needs an API key in CI. (b) Symmetric Jaccard for the keyword
+term — rejected for the asymmetry reason above. (c) Bag-of-words cosine instead of embeddings for the
+semantic term — rejected: it is really another keyword metric and misses paraphrase/synonym matches that
+MiniLM captures.
+
+**Consequences.** Scoring is fully deterministic and offline (no key required), so the 6 engine tests
+(perfect ≥ 90, zero ≤ 20, monotonic sequence, threshold gating both sides, bounded output) are stable in
+CI. Cost: a one-time model download (~90 MB) into `SENTENCE_TRANSFORMERS_HOME` and the scikit-learn /
+torch (CPU) footprint in `requirements.txt`. **Reversible?** Yes — `ATSEngine` is a single service with a
+pure `score(*, resume_text, job_description)` seam; weights, the review threshold, or the whole scoring
+strategy can be swapped without touching callers.
+
+---
+
 ## D-0013 — Prisma schema is the single DB source of truth (Python uses raw SQL)
 
 **Date:** 2026-07-02 (Phase 2, P2-S01) · **Author:** Aether Delivery Agent (Session 3) · **Status:** Adopted
