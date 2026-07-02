@@ -1,0 +1,283 @@
+// Aether Prisma schema — Phase 1 Foundation.
+// pgvector is enabled via the postgresqlExtensions preview feature. Embeddings
+// are stored as a native `vector(1536)` column (Unsupported: not queryable via
+// the JS client, populated/queried through raw SQL in the matching pipeline).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum JobStatus {
+  discovered
+  screening
+  matched
+  tailoring
+  ready
+  applied
+  archived
+  rejected
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  screening
+  interview
+  offer
+  rejected
+  withdrawn
+}
+
+enum ApprovalType {
+  application_submit
+  email_send
+  offer_response
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ContactStage {
+  identified
+  contacted
+  responded
+  meeting
+  referral
+}
+
+enum AgentRunStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Core identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs             Job[]
+  resumes          Resume[]
+  applications     Application[]
+  approvalRequests ApprovalRequest[]
+  contacts         Contact[]
+  emailThreads     EmailThread[]
+  storyEntries     StoryEntry[]
+  agentRuns        AgentRun[]
+}
+
+// ---------------------------------------------------------------------------
+// Jobs + embeddings
+// ---------------------------------------------------------------------------
+
+model Job {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String
+  company      String
+  location     String?
+  remote       Boolean   @default(false)
+  salaryMin    Int?
+  salaryMax    Int?
+  currency     String?
+  description  String
+  requirements Json?
+  source       String
+  sourceUrl    String?
+  status       JobStatus @default(discovered)
+  fitScore     Float?
+  atsScore     Float?
+  saved        Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  embedding       JobEmbedding?
+  applications    Application[]
+  tailoredResumes Resume[]      @relation("JobTailoredResumes")
+
+  @@index([userId])
+  @@index([status])
+}
+
+model JobEmbedding {
+  id        String                       @id @default(cuid())
+  jobId     String                       @unique
+  vector    Unsupported("vector(1536)")?
+  model     String
+  createdAt DateTime                      @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Resumes (versioned, tailored)
+// ---------------------------------------------------------------------------
+
+model Resume {
+  id          String   @id @default(cuid())
+  userId      String
+  version     Int      @default(1)
+  label       String?
+  sections    Json
+  sourceJobId String?
+  parentId    String?
+  formatHash  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceJob Job?     @relation("JobTailoredResumes", fields: [sourceJobId], references: [id])
+  parent    Resume?  @relation("ResumeVersions", fields: [parentId], references: [id])
+  children  Resume[] @relation("ResumeVersions")
+
+  applications Application[]
+
+  @@index([userId])
+  @@index([userId, formatHash])
+}
+
+// ---------------------------------------------------------------------------
+// Applications + approval gates
+// ---------------------------------------------------------------------------
+
+model Application {
+  id          String            @id @default(cuid())
+  userId      String
+  jobId       String
+  resumeId    String
+  status      ApplicationStatus @default(draft)
+  coverLetter String?
+  answers     Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume           Resume            @relation(fields: [resumeId], references: [id])
+  approvalRequests ApprovalRequest[]
+  emailThreads     EmailThread[]
+
+  @@index([userId])
+  @@index([jobId])
+}
+
+model ApprovalRequest {
+  id            String         @id @default(cuid())
+  userId        String
+  applicationId String?
+  type          ApprovalType
+  status        ApprovalStatus @default(pending)
+  payload       Json
+  createdAt     DateTime       @default(now())
+  resolvedAt    DateTime?
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application?  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Networking + email
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String
+  title       String?
+  company     String?
+  stage       ContactStage @default(identified)
+  email       String?
+  linkedinUrl String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailThreads EmailThread[]
+
+  @@index([userId])
+}
+
+model EmailThread {
+  id             String   @id @default(cuid())
+  userId         String
+  applicationId  String?
+  contactId      String?
+  subject        String
+  messages       Json
+  classification String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Story bank + agent runs
+// ---------------------------------------------------------------------------
+
+model StoryEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  situation String
+  task      String
+  action    String
+  result    String
+  metrics   Json?
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AgentRun {
+  id          String         @id @default(cuid())
+  userId      String
+  agentName   String
+  status      AgentRunStatus @default(queued)
+  input       Json?
+  output      Json?
+  error       String?
+  costUsd     Decimal?       @db.Decimal(10, 4)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}

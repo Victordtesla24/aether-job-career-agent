@@ -1,0 +1,15 @@
+{
+  "request": {
+    "model": "meta-llama/llama-3.1-8b-instruct:free",
+    "messages": [
+      { "role": "system", "content": "You are a deterministic test oracle." },
+      { "role": "user", "content": "Reply with exactly: pong" }
+    ],
+    "temperature": 0,
+    "maxTokens": 16
+  },
+  "response": {
+    "model": "meta-llama/llama-3.1-8b-instruct:free",
+    "content": "pong"
+  }
+}
