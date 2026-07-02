@@ -10,3 +10,7 @@ passlib[bcrypt]>=1.7
 PyJWT>=2.8
 pydantic[email]>=2.7
 beautifulsoup4>=4.12
+scikit-learn>=1.4
+# Optional/heavy: embedding-based semantic similarity for the ATS engine
+# (see requirements-ml.txt). The engine degrades gracefully to a deterministic
+# TF-IDF/token-overlap fallback when it (or its cached model) is unavailable.
