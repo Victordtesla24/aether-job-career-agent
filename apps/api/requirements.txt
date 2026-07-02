@@ -9,3 +9,4 @@ psycopg2-binary>=2.9
 passlib[bcrypt]>=1.7
 PyJWT>=2.8
 pydantic[email]>=2.7
+beautifulsoup4>=4.12
