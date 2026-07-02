@@ -1,0 +1,28 @@
+{
+  "elements": [
+    {
+      "entityUrn": "urn:li:jobPosting:4056231877",
+      "title": "Staff Backend Engineer",
+      "companyDetails": { "name": "SafetyCulture" },
+      "formattedLocation": "Sydney, New South Wales, Australia",
+      "workplaceType": "Hybrid",
+      "description": {
+        "text": "SafetyCulture is scaling its workplace-operations platform. You will lead design of high-throughput APIs in Go and Python, mentor a squad of six, and own reliability targets. Requirements: 8+ years backend experience, gRPC, Kubernetes, PostgreSQL, and a track record of leading incident reviews."
+      },
+      "listedAt": 1782463500000,
+      "jobPostingUrl": "https://www.linkedin.com/jobs/view/4056231877"
+    },
+    {
+      "entityUrn": "urn:li:jobPosting:4058812340",
+      "title": "Data Platform Engineer",
+      "companyDetails": { "name": "REA Group" },
+      "formattedLocation": "Melbourne, Victoria, Australia",
+      "workplaceType": "Remote",
+      "description": {
+        "text": "Join realestate.com.au's data platform team building streaming pipelines on Kafka and dbt models on Snowflake. Requirements: 4+ years data engineering, strong SQL and Python, Airflow orchestration, and experience with infrastructure-as-code (Terraform)."
+      },
+      "listedAt": 1782636300000,
+      "jobPostingUrl": "https://www.linkedin.com/jobs/view/4058812340"
+    }
+  ]
+}

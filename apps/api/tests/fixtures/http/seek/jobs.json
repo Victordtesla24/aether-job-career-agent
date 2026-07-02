@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "id": "82650341",
+      "title": "Senior Software Engineer (Python)",
+      "advertiser": { "description": "Canva" },
+      "location": "Sydney NSW",
+      "workArrangements": { "displayText": "Hybrid" },
+      "teaser": "Build the backend platform powering design collaboration for 200M+ users.",
+      "bulletPoints": [
+        "5+ years building production Python services",
+        "Deep PostgreSQL and Redis experience",
+        "Experience with event-driven architectures (Kafka/SQS)"
+      ],
+      "salary": "$160,000 - $190,000 + equity",
+      "listingDate": "2026-06-28T04:12:00Z",
+      "shareLink": "https://www.seek.com.au/job/82650341"
+    },
+    {
+      "id": "82655902",
+      "title": "Machine Learning Engineer",
+      "advertiser": { "description": "Atlassian" },
+      "location": "Melbourne VIC",
+      "workArrangements": { "displayText": "Remote" },
+      "teaser": "Ship LLM-powered features across the Jira and Confluence product suite.",
+      "bulletPoints": [
+        "3+ years of applied ML experience",
+        "Strong Python, PyTorch and MLOps fundamentals",
+        "Experience deploying models on AWS at scale"
+      ],
+      "salary": "$150,000 - $180,000",
+      "listingDate": "2026-06-30T22:45:00Z",
+      "shareLink": "https://www.seek.com.au/job/82655902"
+    }
+  ]
+}

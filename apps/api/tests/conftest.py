@@ -77,10 +77,14 @@ def _truncate_tables() -> None:
 
 @pytest.fixture()
 def db_session() -> Iterator:
-    """A raw psycopg2 connection to the TEST database, cleaned before use."""
+    """A raw psycopg2 connection to the TEST database.
+
+    Cleanup note: table truncation happens in the ``client`` fixture (which
+    every DB-touching test uses) so that ``db_session`` can be requested
+    *after* ``auth_headers`` without wiping the just-registered user.
+    """
     from app.db import get_connection
 
-    _truncate_tables()
     with get_connection() as conn:
         yield conn
 
