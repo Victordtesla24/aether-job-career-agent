@@ -71,12 +71,15 @@ enum AgentRunStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  image     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  // bcrypt hash for credentials auth (P2-S01). Nullable: OAuth-only users
+  // have no local password.
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   jobs             Job[]
   resumes          Resume[]
@@ -118,6 +121,9 @@ model Job {
   applications    Application[]
   tailoredResumes Resume[]      @relation("JobTailoredResumes")
 
+  // Idempotent discovery: the same posting (per user) is upserted, never
+  // duplicated (P2-S02). NULL sourceUrls are exempt per SQL semantics.
+  @@unique([userId, sourceUrl])
   @@index([userId])
   @@index([status])
 }
