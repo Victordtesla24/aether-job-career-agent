@@ -1,6 +1,6 @@
 # Aether Delivery Progress
 Last updated: 2026-07-02 by Aether Delivery Agent Session 3
-Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: session setup complete, first Phase 2 slice pending
+Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: P2-S03 complete; next P2-S04
 Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
 
 ## Phase 2 — Intelligence (session started 2026-07-02)
@@ -22,6 +22,25 @@ branched from the merged `main`. Session-setup checklist:
 - **OpenRouter**: `scripts/validate-openrouter.mjs` passed — key authenticated; free models
   transiently rate-limited (HTTP 429), treated as reachable.
 - **Baseline**: all Phase 1 tests re-run green on `phase-2/intelligence` (see verification below).
+
+### Phase 2 Slice Ledger
+
+| Slice  | Title                                        | Status | Tests | Notes |
+|--------|----------------------------------------------|--------|-------|-------|
+| P2-S01 | User repository + real auth (bcrypt + JWT)   | ✅     | 10 py | `POST /auth/register` (201, policy: ≥8 chars + digit, 409 on dup email, hash never exposed), `POST /auth/login` (JWT HS256, 24h exp, userId/email/iat/exp claims), `get_current_user` bearer dependency guards `/jobs`. `UserRepository` = raw psycopg2 over the Prisma `User` table (new nullable `passwordHash` column, `prisma db push` applied to `aether` + `aether_test`). |
+| P2-S02 | Job discovery: adapters + persistence        | ✅     | 7 py + 6 ts | `BaseAdapter` (fixture mode primary; live HTTP intentionally `NotImplementedError` — never fake live data) + Seek/LinkedIn/Indeed adapters + registry. `JobRepository` upserts on new unique `(userId, sourceUrl)` (idempotent re-scouting). `ScoutAgent` fans out over all sources. Routes: `GET /jobs` (status/source/saved/sort filters), `GET /jobs/{id}`, `POST /jobs/{id}/save`, `DELETE /jobs/{id}` (soft archive), `POST /agents/scout/run` → 202. Web: `src/lib/api/jobs.ts` typed client with zod validation (zod added to apps/web). Fixtures: `apps/api/tests/fixtures/http/{seek,linkedin,indeed}/jobs.json` (2 realistic AU tech jobs each). |
+| P2-S03 | ATS scoring engine (0–100, deterministic)    | ✅     | 7 py | `ATSEngine.score(resume, jd) -> ATSScore` — 0.4·keyword_match (TF-IDF-ranked JD keywords → resume coverage) + 0.4·semantic_similarity (sentence-transformers all-MiniLM-L6-v2 iff installed AND cached in `SENTENCE_TRANSFORMERS_HOME=/tmp/aether_models`; deterministic token-overlap fallback otherwise — never downloads at scoring time) + 0.2·experience score (regex years parsing, pro-rated gap). `requires_review=True` below 60. scikit-learn in requirements.txt; sentence-transformers optional in `requirements-ml.txt` (heavy torch dep kept out of CI). |
+
+**Test infrastructure (P2-S01):** `apps/api/tests/conftest.py` — points the app at
+`DATABASE_URL_TEST` (schema `aether_test`) before import, `client` (TestClient, truncates
+`Job`/`User` per test), `db_session` (raw psycopg2), `auth_headers` (register+login fixture user).
+`app/db.py` translates Prisma-style `?schema=` URLs into psycopg2 `search_path` options;
+connections are short-lived (hosted PG caps at 25 concurrent).
+
+**Verification after P2-S03:** API 46/46 pytest green (22 Phase 1 + 24 new), ruff + mypy clean;
+Node 76/76 green across workspaces (shared 4, web 35, agents 18, db 12, queue 7); web lint +
+type-check clean. `.env` `NEXTAUTH_SECRET` rotated from the `change-me` placeholder to a random
+64-hex secret (JWT signing uses `JWT_SECRET` || `NEXTAUTH_SECRET`).
 
 ## Phase 1 — Foundation (complete — merged to main 2026-07-02)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
