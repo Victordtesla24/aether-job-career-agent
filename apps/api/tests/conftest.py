@@ -63,7 +63,15 @@ os.environ["AETHER_DISCOVERY_FIXTURE_DIR"] = str(FIXTURE_DIR)
 # ---------------------------------------------------------------------------
 
 #: Tables owned by the suites that write to the DB, truncated between tests.
-_TABLES_TO_CLEAN = ('"Job"', '"User"')
+_TABLES_TO_CLEAN = (
+    '"AgentRun"',
+    '"ApprovalRequest"',
+    '"Application"',
+    '"StoryEntry"',
+    '"Resume"',
+    '"Job"',
+    '"User"',
+)
 
 
 def _truncate_tables() -> None:

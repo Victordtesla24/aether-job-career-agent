@@ -245,3 +245,89 @@ an error rather than a roadmap state).
 on the live deployment (all 12 nav routes 200). The placeholder is deliberately honest about scope, so it
 does not overstate Phase 1. **Reversible?** Yes — deleting the catch-all route restores the prior
 behaviour; the resolver is additive and independently useful for future active-nav needs.
+
+
+
+## D-0010 — Cover letters live on the `Application` row (no new Prisma model)
+
+**Date.** 2026-07-02 (P2-S07)
+
+**Context.** The Prisma schema has no `CoverLetter` model, but P2-S07 needs to persist drafts,
+list them, and route them through the approval gate. Adding a model means a schema migration on
+the shared hosted Postgres mid-phase.
+
+**Decision.** Store each draft on an `Application` row (`coverLetter` column, `status=draft`);
+the cover-letter id *is* the application id. `ApprovalRequest.type` only enumerates
+`application_submit | email_send | offer_response`, so cover-letter approvals use
+`application_submit` with `payload.kind = "cover_letter"` as the discriminator.
+
+**Alternatives.** (a) New `CoverLetter` model + migration (rejected for now: schema churn mid-slice
+on a shared DB; the Application row is the natural owner since a letter exists only in service of an
+application). (b) Extend the `ApprovalType` enum (rejected: Postgres enum migration for a value the
+payload can express losslessly).
+
+**Consequences.** Zero schema changes; drafts appear in both `/cover-letters` and the applications
+kanban (`draft` column) for free. **Reversible?** Yes — a later `CoverLetter` model can be backfilled
+from `Application.coverLetter`.
+
+## D-0011 — Record-replay LLM client; CI and tests never call a model
+
+**Date.** 2026-07-02 (P2-S04..S08)
+
+**Context.** Fit scoring, tailoring, cover letters and story extraction all need LLM output, but
+tests must be deterministic, free, and offline; and generated claims must never outrun the resume.
+
+**Decision.** `LLMClient` with `AETHER_LLM_MODE=record|replay` (default **replay**): replay reads
+fixtures from `apps/api/tests/fixtures/llm/<prompt_name>/<key>.json`; record mode (opt-in, live key)
+writes them. Model tiers resolve from `AETHER_MODEL_<TIER>` env vars. Fixture content policy: every
+number/entity in a fixture must exist in the real base resume, because the fabrication guard and
+token-subset validators run on replayed output exactly as they would on live output.
+
+**Alternatives.** Mock at the HTTP layer per test (rejected: N copies of the same canned payloads,
+and no path to "flip one env var and go live"). Skip validation in tests (rejected: the guard *is*
+the product).
+
+**Consequences.** 74 API tests run hermetically; live mode is a config change, not a code change.
+**Reversible?** Yes — the client is a thin seam; swapping in a provider SDK touches one module.
+
+## D-0012 — Web API access: nginx `/api/` proxy + demo auto-login client
+
+**Date.** 2026-07-02 (P2 frontend + deployment)
+
+**Context.** The Next.js app (:3000) and FastAPI (:8000) sit behind one nginx vhost
+(`5cb5f0620.abacusai.cloud`). Browser code needs a same-origin API base (no CORS) and a bearer
+token, but the demo deployment has no interactive login UI yet.
+
+**Decision.** nginx routes `location /api/ { proxy_pass http://127.0.0.1:8000/; }` (prefix
+stripped) ahead of the catch-all `/` → :3000. `src/lib/api/client.ts` resolves the base URL
+(env override → `/api` in the browser → `localhost:8000` for SSR/tests), auto-logs-in with the
+seeded demo user on first request, caches the JWT in `localStorage`, and retries once on 401.
+Both services run under systemd (`aether-api.service`, `aether-web.service`).
+
+**Alternatives.** Next.js rewrites to :8000 (rejected: couples deploy topology into app config and
+double-proxies). Cookie session via NextAuth against FastAPI (deferred: real login UX is a later
+slice; the client seam already accepts an injected token).
+
+**Consequences.** Same-origin API calls, zero CORS config, demo works logged-out; swapping
+auto-login for real auth only touches `getToken()`. **Reversible?** Yes.
+
+## D-0013 — Orchestration: LangGraph `StateGraph` with an inspectable per-node seam
+
+**Date.** 2026-07-02 (P2-S10)
+
+**Context.** Phase 2 needs the supervisor → scout → matcher → tailor → coverLetter flow expressed
+as a real graph (the Phase-3 runtime target) while staying unit-testable without network or model
+calls, and while honouring the approval gate.
+
+**Decision.** `AetherGraph` builds a compiled `@langchain/langgraph` `StateGraph` over an
+`Annotation`-typed state, *and* exposes `runNode(name, state)` — a direct, synchronous seam that
+records a `GraphRunRecord` per invocation. Approval-gated nodes (`tailor`, `coverLetter`) return
+`pending_approval` and halt the chain rather than acting. Tests exercise both the node seam and the
+compiled graph.
+
+**Alternatives.** Hand-rolled async pipeline (rejected: throws away LangGraph checkpointing and
+interrupts we want in Phase 3). Only testing the compiled graph (rejected: per-node assertions and
+run auditing get much noisier).
+
+**Consequences.** +6 TS tests; `@langchain/langgraph` + `@langchain/core` added to
+`packages/agents`. **Reversible?** Yes — nodes are plain functions; the graph wiring is one file.

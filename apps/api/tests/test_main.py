@@ -14,7 +14,7 @@ client = TestClient(app)
 def test_health_returns_canonical_payload() -> None:
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "version": "0.1.0"}
+    assert resp.json() == {"status": "ok", "version": "0.2.0"}
 
 
 def test_health_version_matches_config() -> None:

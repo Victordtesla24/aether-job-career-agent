@@ -1,0 +1,106 @@
+"""P2-S10 — Analytics endpoint tests (funnel, periods, agent ROI)."""
+from __future__ import annotations
+
+import pytest
+
+from app.db import get_connection, new_id
+from app.repositories.user import UserRepository
+
+
+@pytest.fixture()
+def user_id(client, auth_headers) -> str:
+    user = UserRepository().get_by_email("fixture-user@example.com")
+    assert user is not None
+    return user["id"]
+
+
+def _seed_funnel(user_id: str, jobs: int, statuses: list[str], days_ago: int = 0) -> None:
+    """Insert ``jobs`` jobs and one application per status, in a single txn."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            job_ids = []
+            for i in range(jobs):
+                jid = new_id()
+                job_ids.append(jid)
+                cur.execute(
+                    '''
+                    INSERT INTO "Job" ("id", "userId", "title", "company",
+                        "description", "source", "sourceUrl", "atsScore",
+                        "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                        NOW() - make_interval(days => %s), NOW())
+                    ''',
+                    (jid, user_id, f"Job {i}", "Acme", "desc", "seek",
+                     f"https://example.com/{jid}", 40 + i * 7 % 60, days_ago),
+                )
+            cur.execute(
+                '''
+                INSERT INTO "Resume" ("id", "userId", "sections", "formatHash", "updatedAt")
+                VALUES (%s, %s, '{}', 'seedhash', NOW()) RETURNING "id"
+                ''',
+                (new_id(), user_id),
+            )
+            resume_id = cur.fetchone()[0]
+            for i, app_status in enumerate(statuses):
+                cur.execute(
+                    '''
+                    INSERT INTO "Application" ("id", "userId", "jobId", "resumeId",
+                        "status", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, %s::"ApplicationStatus",
+                        NOW() - make_interval(days => %s), NOW())
+                    ''',
+                    (new_id(), user_id, job_ids[i % len(job_ids)], resume_id,
+                     app_status, days_ago),
+                )
+        conn.commit()
+
+
+class TestAnalytics:
+    def test_funnel_aggregates_match_seeded_data(self, client, auth_headers, user_id):
+        _seed_funnel(
+            user_id,
+            jobs=8,
+            statuses=["submitted", "submitted", "screening", "interview", "offer", "draft"],
+        )
+        data = client.get("/analytics/funnel?period=all", headers=auth_headers).json()
+        assert data["jobs_found"] == 8
+        assert data["applied"] == 5      # everything except draft
+        assert data["screened"] == 3     # screening + interview + offer
+        assert data["interviewed"] == 2  # interview + offer
+        assert data["offers"] == 1
+
+    def test_time_period_filter_works(self, client, auth_headers, user_id):
+        _seed_funnel(user_id, jobs=3, statuses=["submitted"], days_ago=0)
+        _seed_funnel(user_id, jobs=2, statuses=["submitted"], days_ago=40)
+
+        for period, expected_jobs in (("7d", 3), ("30d", 3), ("90d", 5), ("all", 5)):
+            data = client.get(
+                f"/analytics/funnel?period={period}", headers=auth_headers
+            ).json()
+            assert data["jobs_found"] == expected_jobs, period
+
+        bad = client.get("/analytics/funnel?period=1y", headers=auth_headers)
+        assert bad.status_code == 422
+
+    def test_agent_roi_includes_cost_and_time(self, client, auth_headers):
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        roi = client.get("/analytics/agent-roi", headers=auth_headers).json()
+        assert roi["total_runs"] >= 1
+        assert isinstance(roi["total_cost_usd"], float)
+        assert roi["avg_duration_ms"] >= 0
+
+    def test_ats_distribution_histogram(self, client, auth_headers, user_id):
+        _seed_funnel(user_id, jobs=5, statuses=["draft"])
+        dist = client.get("/analytics/ats-distribution", headers=auth_headers).json()
+        assert len(dist["buckets"]) == 10
+        assert dist["total"] == 5
+
+    def test_conversion_rates(self, client, auth_headers, user_id):
+        _seed_funnel(user_id, jobs=4, statuses=["submitted", "offer"])
+        conv = client.get("/analytics/conversion", headers=auth_headers).json()
+        assert conv["found_to_applied"] == 50.0  # 2 of 4

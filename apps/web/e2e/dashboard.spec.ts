@@ -43,16 +43,16 @@ test("root route redirects to the dashboard", async ({ page }) => {
 test("un-built nav sections render a graceful placeholder, not a 404 (P1-S12)", async ({
   page,
 }) => {
-  await page.goto("/dashboard/jobs");
+  await page.goto("/dashboard/interviews");
 
   // The shell stays intact and the section is titled from the nav contract.
-  const heading = page.getByRole("heading", { name: "Jobs", level: 2 });
+  const heading = page.getByRole("heading", { name: "Interview Center", level: 2 });
   await expect(heading).toBeVisible();
   await expect(page.getByText(/planned workspace/i)).toBeVisible();
 
   // The correct sidebar item is marked active for the current pathname.
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await expect(nav.getByRole("link", { name: "Jobs" })).toHaveAttribute(
+  await expect(nav.getByRole("link", { name: "Interview Center" })).toHaveAttribute(
     "aria-current",
     "page",
   );

@@ -22,3 +22,12 @@ export {
   type RecordReplayOptions,
   type OpenRouterOptions,
 } from './llm/index.js';
+export {
+  AetherGraph,
+  APPROVAL_GATED_NODES,
+  createInitialGraphState,
+  NODE_NAMES,
+  type GraphRunRecord,
+  type GraphState,
+  type NodeName,
+} from './graph/aether-graph.js';

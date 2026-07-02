@@ -19,7 +19,9 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@aether/shared": "workspace:*"
+    "@aether/shared": "workspace:*",
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

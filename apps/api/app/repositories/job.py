@@ -93,6 +93,7 @@ class JobRepository:
         order_column = {
             "createdAt": '"createdAt"',
             "fitScore": '"fitScore"',
+            "fit_score": '"fitScore"',
             "title": '"title"',
             "company": '"company"',
         }.get(sort, '"createdAt"')
