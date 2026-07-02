@@ -1,9 +1,29 @@
 # Aether Delivery Progress
-Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: all planned Phase 1 slices complete + deployed & verified (P1-S12 shell polish added during verification)
-Branch: phase-1/foundation  |  CI: pipeline defined + pushed at `ci/github-actions-ci.yml`; the identical `.github/workflows/ci.yml` activation commit is pending the app's `workflows` permission (see `ci/README.md`)
+Last updated: 2026-07-02 by Aether Delivery Agent Session 3
+Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: session setup complete, first Phase 2 slice pending
+Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
 
-## Phase 1 — Foundation (in progress)
+## Phase 2 — Intelligence (session started 2026-07-02)
+`phase-1/foundation` was merged into `main` (merge commit `969643e`) and `phase-2/intelligence` was
+branched from the merged `main`. Session-setup checklist:
+
+- **Environment**: `.env` extended with Phase 2 model tiers (`AETHER_MODEL_REASONING`,
+  `AETHER_MODEL_FAST`, `AETHER_MODEL_STRUCTURED`, `AETHER_MODEL_LIGHT`), `AETHER_LLM_MODE=auto`,
+  `DATABASE_URL` / `DATABASE_URL_TEST` (hosted PostgreSQL), `REDIS_URL`, job-board base URLs
+  (`SEEK_BASE_URL`, `LINKEDIN_BASE_URL`, `INDEED_BASE_URL`), and NLP settings
+  (`SENTENCE_TRANSFORMERS_HOME`, `SPACY_MODEL`). `.env.example` updated with matching placeholders.
+- **Database**: Abacus.AI hosted PostgreSQL (single database granted; no `CREATEDB` privilege), so
+  dev/test isolation uses dedicated schemas `aether` and `aether_test` via Prisma's `?schema=`
+  URL parameter. `prisma db push` applied the full Phase 1 schema to both (10 tables each).
+  The hosted server does not ship pgvector, so `JobEmbedding.vector` was changed from
+  `Unsupported("vector(1536)")` to a portable `Float[]` (see schema comment; cosine similarity is
+  computed application-side, Pinecone remains the optional external vector store).
+- **Redis**: `redis-server` installed and running locally (`redis://localhost:6379`, PONG verified).
+- **OpenRouter**: `scripts/validate-openrouter.mjs` passed — key authenticated; free models
+  transiently rate-limited (HTTP 429), treated as reachable.
+- **Baseline**: all Phase 1 tests re-run green on `phase-2/intelligence` (see verification below).
+
+## Phase 1 — Foundation (complete — merged to main 2026-07-02)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
 `phase-1/foundation`. `main` is untouched this phase (branch pushed only). No secrets committed; the
 résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modified.
