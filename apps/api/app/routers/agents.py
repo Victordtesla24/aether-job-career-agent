@@ -230,15 +230,29 @@ class PipelineRunRequest(BaseModel):
     location: str = "Australia"
 
 
+#: Canonical pipeline plan, mirroring packages/agents LangGraph node order.
+_PIPELINE_PLAN = ["scout", "fitScorer", "matcher", "tailor", "coverLetter"]
+
+
 @router.post("/pipeline/run")
 def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Full pipeline: scout → fitScorer → tailor → coverLetter (top job).
+    """Full pipeline: supervisor → scout → fitScorer → matcher → tailor → coverLetter.
 
-    Mirrors the LangGraph orchestration in packages/agents; the pipeline halts
-    with ``approvalRequired=True`` after generating tailored artefacts.
+    Mirrors the LangGraph orchestration in packages/agents. Every node —
+    including the supervisor (planning) and matcher (top-job selection) —
+    is recorded as an AgentRun row so the Agents console reflects real
+    activity for all seven registered agents. The pipeline halts with
+    ``approvalRequired=True`` after generating tailored artefacts.
     """
     user_id = current_user["id"]
     steps: list[dict[str, Any]] = []
+
+    # Supervisor node: plans the run (audit-recorded, defect fix — the card
+    # previously showed "Never run" because the pipeline skipped this node).
+    sup_out = _record_run(
+        user_id, "supervisor", body.model_dump(), lambda: {"plan": list(_PIPELINE_PLAN)}
+    )
+    steps.append({"agent": "supervisor", "output": sup_out})
 
     scout_out = _dispatch(user_id, "scout", body.model_dump())
     steps.append({"agent": "scout", "output": scout_out})
@@ -248,6 +262,23 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
     from app.repositories.job import JobRepository
 
     jobs = JobRepository().list_by_user(user_id, sort="fitScore")
+
+    # Matcher node: ranks scored jobs and selects the top match (audit-recorded).
+    def _match() -> dict[str, Any]:
+        if not jobs:
+            return {"matched": 0, "top_job_id": None}
+        top = jobs[0]
+        return {
+            "matched": len(jobs),
+            "top_job_id": top["id"],
+            "top_job_title": top.get("title"),
+            "top_company": top.get("company"),
+            "top_fit_score": top.get("fitScore"),
+        }
+
+    match_out = _record_run(user_id, "matcher", {}, _match)
+    steps.append({"agent": "matcher", "output": match_out})
+
     if not jobs:
         return {"status": "completed", "steps": steps, "approvalRequired": False}
 

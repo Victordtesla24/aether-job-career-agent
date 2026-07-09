@@ -113,14 +113,43 @@ runtime evidence was gathered from the `AgentRun` DB table and live reproduction
   (`shots/reverify-D9-analytics.png`).
 - **Tests:** 2 new vitest cases (valid payload parses; malformed payload rejected).
 
+## D10 — Agents console: "Run Full Pipeline" perceived dead + silent long-running calls — **HIGH**
+
+- **Before (root cause):** the button was *not* dead — Playwright network capture showed the click
+  fires `POST /agents/pipeline/run` — but the endpoint is a single synchronous 25–120 s call and
+  the UI gave zero feedback until it returned, so it looked frozen. Three genuine wiring defects
+  were hiding behind it: (1) **supervisor and matcher were never executed or recorded** by the
+  FastAPI pipeline (registry-only → permanent "Never run" cards) despite being canonical nodes in
+  `aether-graph.ts`; (2) the per-agent **Tailor/CoverLetter Run buttons sent `{}`** →
+  guaranteed 422 (actually-dead buttons); (3) failures surfaced as raw errors with no guidance.
+- **Fix (API, `routers/agents.py`):** pipeline now records a real `supervisor` AgentRun (the
+  execution plan) and a real `matcher` AgentRun (top-job selection incl. `top_job_title`/
+  `top_company`), in canonical order supervisor → scout → fitScorer → matcher → tailor →
+  coverLetter; empty-job runs record `matcher(matched=0)`. New `tests/test_pipeline.py` (2 tests).
+- **Fix (web, `lib/agents-feedback.ts` + `agents/page.tsx`):** pure, unit-tested notice helpers —
+  immediate "Pipeline started — Scout is discovering jobs…" banner + disabled button + spinner on
+  click; 3 s polling of `/agents/runs` drives a live "step X of 6: …" progress banner and
+  refreshes RECENT RUNS + agent cards mid-run; completion banner summarises matched/scored/
+  changes/letter and links to Approvals (or Jobs when nothing matched); errors map to action:
+  503 → "model busy / budget exceeded — retry", 422 → "run Scout first", 401 → "reload to sign in".
+  Tailor/CoverLetter Run buttons now resolve the top job by fit score before dispatching;
+  supervisor/matcher cards state they execute inside the full pipeline.
+- **After (production):** notice appears <1 s after click, progress advanced through steps 5→6,
+  completion banner with Approvals CTA at ~27 s, supervisor/matcher cards show fresh `last_run`
+  with matching DB `AgentRun` rows, per-agent Tailor run succeeds (8 changes), 0 console errors
+  (`reverify-pipeline-ux.txt`, `shots/reverify-pipeline-ux.png`, `shots/reverify-tailor-button.png`).
+- **Tests:** +2 pytest (pipeline step recording), +15 vitest (`agents-feedback.test.ts`);
+  brittle hardcoded `applied=412` funnel assertion in `e2e/analytics.spec.ts` replaced with a
+  live-API comparison (pipeline runs legitimately create draft applications).
+
 ---
 
 ## Quality gates (post-fix)
 
 | Gate | Result |
 |---|---|
-| pytest (apps/api) | **104 passed** (99 → 104; +5 new), coverage **89%** (floor 86%) |
+| pytest (apps/api) | **112 passed** (99 → 112; +13 new), coverage **91%** (floor 86%) |
 | ruff / mypy | clean (48 source files) |
-| vitest (apps/web) | **47 passed** (38 → 47; +9 new) |
+| vitest (apps/web) | **62 passed** (38 → 62; +24 new) |
 | next lint / tsc --noEmit / next build | clean |
 | Playwright e2e | **24 passed** |
