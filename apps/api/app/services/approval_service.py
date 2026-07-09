@@ -56,42 +56,12 @@ class ApprovalService:
                 f"Approval expired (> {EXPIRY_HOURS}h old); re-run the agent",
             )
         resolver = self._repo.approve if decision == "approved" else self._repo.reject
-        resolved = resolver(approval_id)
+        # Fixes defect D2 (Phase-2 audit, journey J4): the repository resolves
+        # the approval and syncs the linked Application in one transaction, so
+        # the Applications kanban can never diverge from the approval queue.
+        resolved = resolver(approval_id, user_id)
         assert resolved is not None  # existence verified above
-        self._sync_application(resolved, user_id)
         return resolved
-
-    @staticmethod
-    def _sync_application(approval: dict[str, Any], user_id: str) -> None:
-        """Propagate an application_submit decision to the linked Application.
-
-        Fixes defect D2 (Phase-2 audit, journey J4): approving/rejecting an
-        approval left the tracked application stuck in ``draft``, so the
-        Applications kanban never reflected the decision. Approve → the
-        application moves to ``submitted``; reject → ``rejected`` (ADR D-0016).
-        Only ``draft`` applications are touched so a decision can never
-        regress an application that already advanced (e.g. to ``interview``).
-        """
-        if approval.get("type") != "application_submit":
-            return
-        application_id = approval.get("applicationId")
-        if not application_id:
-            return
-        new_status = "submitted" if approval["status"] == "approved" else "rejected"
-        from app.db import get_connection
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    '''
-                    UPDATE "Application"
-                    SET "status" = %s::"ApplicationStatus", "updatedAt" = NOW()
-                    WHERE "id" = %s AND "userId" = %s
-                      AND "status" = 'draft'::"ApplicationStatus"
-                    ''',
-                    (new_status, application_id, user_id),
-                )
-            conn.commit()
 
     def assert_action_allowed(self, approval_id: str, user_id: str) -> dict[str, Any]:
         """Gate a high-risk action: requires an approved, unexpired approval."""

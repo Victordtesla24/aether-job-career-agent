@@ -42,7 +42,8 @@ export default function ApplicationsPage() {
     try {
       setPendingCount((await fetchApprovals("pending")).length);
     } catch {
-      setPendingCount(0);
+      // Keep the last known count: zeroing it here is indistinguishable from
+      // an empty queue and would hide the banner while approvals still exist.
     }
   }, []);
 
