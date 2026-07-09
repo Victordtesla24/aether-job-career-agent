@@ -20,12 +20,15 @@ OpenRouter free-tier model ids are volatile (see ADR D-0014).
 """
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
 import json
 import logging
 import os
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,32 @@ _DEFAULT_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures
 
 #: Last-resort model retried once when the primary model 404s / 429s (D-0014).
 FALLBACK_MODEL = "openai/gpt-oss-20b:free"
+
+
+def get_fallback_model() -> str:
+    """Fallback model id, overridable so non-OpenRouter providers can set one."""
+    return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
+
+
+#: Shared wall-clock deadline (monotonic) for multi-agent orchestrations.
+#: When set (via :func:`shared_budget`), every LLMClient in the current
+#: context honours ONE deadline instead of arming its own — this is what
+#: keeps the pipeline (tailor + coverLetter) inside a single budget so the
+#: HTTP edge (~100 s) never returns a 524 (defect D1, audit 2026-07-09).
+_shared_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "aether_llm_shared_deadline", default=None
+)
+
+
+@contextmanager
+def shared_budget(seconds: float | None = None) -> Iterator[None]:
+    """Bound ALL live LLM calls made inside the block by one wall-clock budget."""
+    deadline = time.monotonic() + (seconds if seconds is not None else get_budget_seconds())
+    token = _shared_deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _shared_deadline.reset(token)
 
 #: Per-call HTTP timeouts (seconds). OpenRouter free tier can stall for
 #: minutes; a single call must never hold a request hostage.
@@ -92,7 +121,14 @@ class LLMClient:
         self._deadline: float | None = None
 
     def _remaining_budget(self) -> float:
-        """Seconds left in the live-call budget (arms the deadline lazily)."""
+        """Seconds left in the live-call budget (arms the deadline lazily).
+
+        A context-level shared deadline (see :func:`shared_budget`) takes
+        precedence so multi-agent orchestrations share ONE budget.
+        """
+        shared = _shared_deadline.get()
+        if shared is not None:
+            return shared - time.monotonic()
         if self._deadline is None:
             self._deadline = time.monotonic() + get_budget_seconds()
         return self._deadline - time.monotonic()
@@ -217,7 +253,8 @@ class LLMClient:
     @staticmethod
     def _model_chain(primary: str) -> list[str]:
         """Primary model, then one retry with the fallback model."""
-        return [primary] if primary == FALLBACK_MODEL else [primary, FALLBACK_MODEL]
+        fallback = get_fallback_model()
+        return [primary] if primary == fallback else [primary, fallback]
 
     def _fixture_path(self, prompt_name: str, key: str) -> Path:
         return self.fixture_dir / prompt_name / f"{key}.json"
@@ -263,16 +300,31 @@ class LLMClient:
         temperature: float,
         max_seconds: float | None = None,
     ) -> str:
-        """Single live chat-completion call with strict per-call timeouts.
+        """Single live chat-completion call with a HARD wall-clock cap.
 
-        ``max_seconds`` (remaining wall-clock budget) further caps the read
-        timeout so a call started near the deadline cannot overshoot it.
+        httpx read timeouts are *per-chunk*: a provider that trickles bytes
+        can keep a "30 s read timeout" call alive for minutes (observed
+        133–157 s coverLetter runs → edge 524s, defect D1). The request is
+        therefore executed in a worker thread and abandoned outright once
+        ``max_seconds`` elapses, so the caller can move on to the fallback
+        model / fixture while still inside the budget.
+
+        Provider selection (OpenAI-compatible chat completions):
+        - ``AETHER_LLM_BASE_URL`` / ``AETHER_LLM_API_KEY`` take precedence,
+          allowing e.g. Anthropic's OpenAI-compat endpoint
+          (``https://api.anthropic.com/v1``) with a Claude model id.
+        - Otherwise ``OPENROUTER_BASE_URL`` / ``OPENROUTER_API_KEY`` (default).
         """
         import httpx
 
-        api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("ABACUS_API_KEY")
-        base_url = os.environ.get(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+        api_key = (
+            os.environ.get("AETHER_LLM_API_KEY")
+            or os.environ.get("OPENROUTER_API_KEY")
+            or os.environ.get("ABACUS_API_KEY")
+        )
+        base_url = (
+            os.environ.get("AETHER_LLM_BASE_URL")
+            or os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         ).rstrip("/")
         if not api_key:
             raise RuntimeError("No LLM API key configured for live mode")
@@ -282,22 +334,42 @@ class LLMClient:
             connect = max(1.0, min(connect, max_seconds))
             read = max(1.0, min(read, max_seconds))
         timeout = httpx.Timeout(connect=connect, read=read, write=10.0, pool=10.0)
-        resp = httpx.post(
-            f"{base_url}/chat/completions",
-            json={
-                "model": model or get_model("REASONING"),
-                "temperature": temperature,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            },
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=timeout,
-        )
+
+        def _do_request() -> httpx.Response:
+            return httpx.post(
+                f"{base_url}/chat/completions",
+                json={
+                    "model": model or get_model("REASONING"),
+                    "temperature": temperature,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                },
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=timeout,
+            )
+
+        if max_seconds is None:
+            resp = _do_request()
+        else:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
+                future = executor.submit(_do_request)
+                try:
+                    resp = future.result(timeout=max_seconds)
+                except concurrent.futures.TimeoutError as exc:
+                    future.cancel()
+                    raise RuntimeError(
+                        f"LLM call exceeded hard budget of {max_seconds:.1f}s"
+                    ) from exc
+            finally:
+                # Don't block on a straggling request thread; let it finish
+                # in the background and be reaped when the response arrives.
+                executor.shutdown(wait=False)
         if resp.status_code >= 400:
             raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.json()

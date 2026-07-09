@@ -18,6 +18,7 @@ from app.services.llm_client import (
     LLMClient,
     LLMUnavailableError,
     get_budget_seconds,
+    shared_budget,
 )
 
 
@@ -121,6 +122,71 @@ class TestTimeBudget:
         assert get_budget_seconds() == 60.0
         monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "not-a-number")
         assert get_budget_seconds() == 60.0
+
+
+class TestHardWallClockCap:
+    """D1 regression (Phase-2 audit): trickling provider responses used to
+    outlive the budget by minutes (httpx read timeouts are per-chunk), causing
+    edge 524s on /agents/cover-letter/run and /agents/pipeline/run."""
+
+    def test_trickling_live_call_is_abandoned_at_hard_cap(self, monkeypatch):
+        import httpx
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+        def _slow_post(*a, **k):  # simulates a response trickling past any read timeout
+            time.sleep(2.0)
+            raise AssertionError("request should have been abandoned")
+
+        monkeypatch.setattr(httpx, "post", _slow_post)
+        llm = LLMClient(mode="live")
+        start = time.monotonic()
+        with pytest.raises(RuntimeError, match="hard budget"):
+            llm._call_live("sys", "usr", model="m", temperature=0.0, max_seconds=0.2)
+        assert time.monotonic() - start < 1.5  # cut off, not held hostage
+
+    def test_shared_budget_bounds_all_clients_in_scope(self, tmp_path, monkeypatch):
+        """The pipeline shares ONE budget across tailor + coverLetter clients."""
+        fixture = tmp_path / "shared_prompt" / "default.json"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_text(json.dumps({"content": "canned"}))
+
+        def _no_live(self, *a, **k):
+            raise AssertionError("live call attempted after shared budget expired")
+
+        monkeypatch.setattr(LLMClient, "_call_live", _no_live)
+        with shared_budget(0.0):  # already exhausted
+            for _ in range(2):  # fresh clients, as the pipeline constructs them
+                llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+                assert llm.complete("shared_prompt", "sys", "usr") == "canned"
+
+    def test_provider_base_url_is_configurable(self, monkeypatch):
+        """AETHER_LLM_BASE_URL/API_KEY allow any OpenAI-compatible provider
+        (e.g. Anthropic's compat endpoint) without a code change."""
+        import httpx
+
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-test")
+        seen: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {"choices": [{"message": {"content": "hello"}}]}
+
+        def _capture(url, **kwargs):
+            seen["url"] = url
+            seen["auth"] = kwargs["headers"]["Authorization"]
+            return _Resp()
+
+        monkeypatch.setattr(httpx, "post", _capture)
+        llm = LLMClient(mode="live")
+        out = llm._call_live("sys", "usr", model="claude-test", temperature=0.0)
+        assert out == "hello"
+        assert seen["url"] == "https://api.anthropic.com/v1/chat/completions"
+        assert seen["auth"] == "Bearer sk-ant-test"
 
 
 class TestGracefulDegradation:

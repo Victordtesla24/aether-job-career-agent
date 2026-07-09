@@ -248,10 +248,16 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
         return {"status": "completed", "steps": steps, "approvalRequired": False}
 
     top_job_id = jobs[0]["id"]
-    tailor_out = _dispatch(user_id, "tailor", {"job_id": top_job_id})
-    steps.append({"agent": "tailor", "output": tailor_out})
-    letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
-    steps.append({"agent": "coverLetter", "output": letter_out})
+    # One shared wall-clock budget across BOTH LLM-backed steps: without it
+    # tailor and coverLetter each armed their own 60 s budget, so the pipeline
+    # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
+    from app.services.llm_client import shared_budget
+
+    with shared_budget():
+        tailor_out = _dispatch(user_id, "tailor", {"job_id": top_job_id})
+        steps.append({"agent": "tailor", "output": tailor_out})
+        letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
+        steps.append({"agent": "coverLetter", "output": letter_out})
 
     return {
         "status": "awaiting_approval",
