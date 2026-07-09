@@ -43,6 +43,32 @@ def get_fallback_model() -> str:
     return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
 
 
+def _extra_headers() -> dict[str, str]:
+    """Provider-specific extra HTTP headers from ``AETHER_LLM_EXTRA_HEADERS``.
+
+    Some OpenAI-compatible endpoints require additional headers on every
+    request — e.g. Anthropic's compat endpoint needs
+    ``anthropic-version: 2023-06-01`` and (for OAuth tokens)
+    ``anthropic-beta: oauth-2025-04-20``. Set the env var to a JSON object,
+    e.g.::
+
+        AETHER_LLM_EXTRA_HEADERS={"anthropic-version": "2023-06-01"}
+
+    Malformed or non-object JSON is ignored (returns ``{}``) so a bad env
+    value can never take the LLM layer down; values are coerced to str.
+    """
+    raw = os.environ.get("AETHER_LLM_EXTRA_HEADERS", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): str(v) for k, v in parsed.items()}
+
+
 #: Shared wall-clock deadline (monotonic) for multi-agent orchestrations.
 #: When set (via :func:`shared_budget`), every LLMClient in the current
 #: context honours ONE deadline instead of arming its own — this is what
@@ -349,6 +375,7 @@ class LLMClient:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
+                    **_extra_headers(),
                 },
                 timeout=timeout,
             )

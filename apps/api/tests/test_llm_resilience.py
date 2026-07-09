@@ -188,6 +188,56 @@ class TestHardWallClockCap:
         assert seen["url"] == "https://api.anthropic.com/v1/chat/completions"
         assert seen["auth"] == "Bearer sk-ant-test"
 
+    def test_extra_headers_env_injected_into_live_calls(self, monkeypatch):
+        """AETHER_LLM_EXTRA_HEADERS (JSON object) is merged into every live
+        request — required by Anthropic's OpenAI-compat endpoint, which needs
+        anthropic-version + (for OAuth tokens) anthropic-beta headers."""
+        import httpx
+
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-test")
+        monkeypatch.setenv(
+            "AETHER_LLM_EXTRA_HEADERS",
+            json.dumps(
+                {
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "oauth-2025-04-20",
+                }
+            ),
+        )
+        seen: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {"choices": [{"message": {"content": "hello"}}]}
+
+        def _capture(url, **kwargs):
+            seen["headers"] = kwargs["headers"]
+            return _Resp()
+
+        monkeypatch.setattr(httpx, "post", _capture)
+        llm = LLMClient(mode="live")
+        assert llm._call_live("sys", "usr", model="claude-test", temperature=0.0) == "hello"
+        headers = seen["headers"]
+        assert isinstance(headers, dict)
+        assert headers["anthropic-version"] == "2023-06-01"
+        assert headers["anthropic-beta"] == "oauth-2025-04-20"
+        assert headers["Authorization"] == "Bearer sk-ant-test"
+
+    def test_extra_headers_malformed_json_is_ignored(self, monkeypatch):
+        """A malformed AETHER_LLM_EXTRA_HEADERS value must never break calls."""
+        from app.services.llm_client import _extra_headers
+
+        monkeypatch.setenv("AETHER_LLM_EXTRA_HEADERS", "{not json")
+        assert _extra_headers() == {}
+        monkeypatch.setenv("AETHER_LLM_EXTRA_HEADERS", '["a", "b"]')
+        assert _extra_headers() == {}
+        monkeypatch.delenv("AETHER_LLM_EXTRA_HEADERS")
+        assert _extra_headers() == {}
+
 
 class TestGracefulDegradation:
     """Malformed live output and missing retry fixtures degrade, never 500."""
