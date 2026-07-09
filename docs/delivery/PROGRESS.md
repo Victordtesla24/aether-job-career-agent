@@ -21,6 +21,23 @@ proof) and `docs/delivery/DEFECTS-PHASE-2-AUDIT.md` (defects D1–D9 with before
 - **Gates:** pytest 104 passed / coverage 89%; ruff+mypy clean; vitest 47 passed; lint,
   type-check, build clean; Playwright e2e 24 passed.
 
+## Section C — BA resume built, registered & tailored (2026-07-10)
+
+- **PDF:** `assets/resume/Vik_Resume_BA_Final.pdf` (3 pages) — Senior Business Analyst / Product
+  Owner variant, rebuilt programmatically (`scripts/generate_ba_resume.py`, reportlab) in the
+  **identical visual format** of `assets/resume/Vik_Resume_Final.pdf` (two-column, left rail,
+  peach title panel, coral accents; format spec measured from the original with PyMuPDF). Every
+  claim traces to `Vik_Resume_BA.pdf` / `Vik_Resume_Final.pdf` only — no fabrication.
+  `Vik_Resume_Final.pdf` untouched (md5 `16b856c0f3f4ec0d801fdde6d084452c` verified before/after).
+- **Registered via the app's own API:** new `POST /resumes` ingestion endpoint +
+  `scripts/ingest_ba_resume.py` → production root resume id `c57a44d136100943494554143`
+  (version 15). `GET /api/resumes` now returns **15 resumes / 2 roots** (BA + demo seed); visible
+  in Resume Studio (screenshot `reverify-C-resume-studio.png` in the evidence archive).
+- **Tailoring against it:** `POST /agents/tailor/run` with new optional `resume_id` →
+  **20 accepted changes**, child resume `c39cbf4a6e6d1b3b2fe37787d` parented to the BA root with
+  the same `formatHash` (`2df88344d04efe30`). ADR **D-0018**.
+- **Gates after changes:** pytest **108 passed** / coverage **89%**; ruff + mypy clean.
+
 ## Production defect fixes (2026-07-10)
 
 Live-environment defects found on https://5cb5f0620.abacusai.cloud, all fixed and verified live:

@@ -444,3 +444,33 @@ audit scope).
 pipeline in ≈62 s — no 524s. The abandoned worker thread may linger until the provider closes the
 socket (bounded, no user impact). +3 pytest in `test_llm_resilience.py`.
 **Reversible?** Yes — env vars default to previous behaviour; the cap is one executor block.
+
+
+## D-0018 — Root-resume ingestion endpoint + explicit resume selection for tailoring
+
+**Context.** Section C of the Phase-2 audit required registering a second base resume (the BA/PO
+variant, `assets/resume/Vik_Resume_BA_Final.pdf`) in the app so it appears in Resume Studio,
+persists in the DB, and is tailorable. The API previously had no way to create a resume — the only
+root resume was the demo-seeded one — and `TailoringAgent.run()` always tailored against
+`ensure_base_resume()`, ignoring any other root.
+
+**Decision.** Two additive API changes:
+1. **`POST /resumes`** (`routers/resumes.py`) — creates a new **root** resume (no `parentId`) from
+   `{label, raw_text, contact?, format_hash?}`. Sections are built server-side (`raw_text`,
+   bullets via `extract_bullets`, contact); `format_hash` defaults to `sha256(raw_text)[:16]`;
+   version comes from `repo.next_version(user_id)`. Returns 201 with the stored resume.
+2. **`resume_id` selection** — `TailoringAgent.run(user_id, job_id, resume_id=None)`: when a
+   `resume_id` is supplied (via the existing `POST /agents/tailor/run` body, whose
+   `JobTargetRequest` gained an optional `resume_id`), the agent tailors against that resume
+   (`get_by_id`, unknown id → 404); otherwise behaviour is unchanged (base resume).
+
+**Alternatives.** Multipart PDF upload with server-side parsing (rejected for audit scope: heavier
+surface, the PDF already lives in the repo and `scripts/ingest_ba_resume.py` extracts its text
+deterministically); a `is_default` flag switch on resumes (rejected: changes existing tailor
+semantics; explicit per-run selection is safer and reversible).
+
+**Consequences.** BA resume registered on production as a root resume (id
+`c57a44d136100943494554143`, version 15); a live tailoring run against it produced **20 accepted
+changes** with a child resume inheriting the parent's `formatHash`. +4 pytest in
+`tests/test_resume_ingest.py` (create, 422 validation, tailor-with-resume_id, 404 unknown id).
+**Reversible?** Yes — both changes are additive; omitting `resume_id` reproduces prior behaviour.
