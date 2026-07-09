@@ -230,7 +230,7 @@ class TestRouter503Mapping:
         job = _seed_job(client, auth_headers)
         from app.agents import tailor_agent as tailor_module
 
-        def _boom(self, user_id, job_id):
+        def _boom(self, user_id, job_id, resume_id=None):
             raise LLMUnavailableError("LLM backend unavailable: simulated outage")
 
         monkeypatch.setattr(tailor_module.TailoringAgent, "run", _boom)
@@ -244,7 +244,7 @@ class TestRouter503Mapping:
         job = _seed_job(client, auth_headers)
         from app.agents import cover_letter_agent as cl_module
 
-        def _boom(self, user_id, job_id):
+        def _boom(self, user_id, job_id, resume_id=None):
             raise LLMUnavailableError("LLM backend unavailable: simulated outage")
 
         monkeypatch.setattr(cl_module.CoverLetterAgent, "run", _boom)

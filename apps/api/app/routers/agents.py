@@ -85,7 +85,10 @@ def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]
 
         job_id = _require_job_id(params)
         return _record_run(
-            user_id, "tailor", params, lambda: TailoringAgent().run(user_id, job_id)
+            user_id,
+            "tailor",
+            params,
+            lambda: TailoringAgent().run(user_id, job_id, params.get("resume_id")),
         )
     if name in ("coverLetter", "cover-letter"):
         from app.agents.cover_letter_agent import CoverLetterAgent
@@ -172,6 +175,7 @@ def run_fit_scorer(current_user: CurrentUser, rescore: bool = False) -> dict[str
 
 class JobTargetRequest(BaseModel):
     job_id: str = Field(min_length=1)
+    resume_id: str | None = None
 
 
 @router.post("/tailor/run")

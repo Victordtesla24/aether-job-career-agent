@@ -52,12 +52,18 @@ class TailoringAgent:
             user_id, sections, parsed["format_hash"], label="Base resume", version=1
         )
 
-    def run(self, user_id: str, job_id: str) -> TailorRunResult:
+    def run(self, user_id: str, job_id: str, resume_id: str | None = None) -> TailorRunResult:
         job = self._jobs.get_by_id(job_id, user_id)
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
 
-        base = self.ensure_base_resume(user_id)
+        if resume_id:
+            # Tailor against an explicitly selected resume (e.g. the BA variant).
+            base = self._resumes.get_by_id(resume_id, user_id)
+            if base is None:
+                raise LookupError(f"Resume {resume_id} not found for user")
+        else:
+            base = self.ensure_base_resume(user_id)
         resume_text = base["sections"].get("raw_text") or parse_resume_pdf(
             get_base_resume_path()
         )["raw_text"]
