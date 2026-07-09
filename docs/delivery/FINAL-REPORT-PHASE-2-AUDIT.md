@@ -124,7 +124,7 @@ Commits pushed to `phase-2/intelligence` (chronological, from `09bc302`):
 | `5b5036d` | docs: TRACEABILITY-MATRIX.md + DEFECTS-PHASE-2-AUDIT.md; ADRs D-0016/D-0017; .env.example provider vars |
 | `5b5bde0` | fix: atomic approval-application sync + preserve pending count on fetch failure |
 | `afddce0` | feat(resume): BA resume PDF, generator, POST /resumes ingestion, tailor resume_id selection (+4 pytest) |
-| *(this commit)* | docs: Section C/D closeout — ADR D-0018, PROGRESS update, final report |
+| `ba1133a` | docs: Section C/D closeout — ADR D-0018, PROGRESS update, final report |
 
 ## 6. Not verified — exact blockers
 
