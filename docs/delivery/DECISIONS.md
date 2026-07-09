@@ -395,3 +395,52 @@ guard to "reject only numbers" (rejected: would admit fabricated skills/tools).
 `changes: 22` with 3 genuinely-novel bullets rejected) while all negative fabrication tests still
 pass. +11 pytest (`test_guard_normalization.py`) pin the accept/reject contract.
 **Reversible?** Yes — the normalization pipeline is three pure functions in `resume_tailor.py`.
+
+
+## D-0016 — Approval resolution propagates to the linked Application
+
+**Context.** Phase-2 audit journey J4: approving or rejecting an `application_submit` approval
+flipped only the `ApprovalRequest` row. The linked `Application` (FK `applicationId`) stayed in
+`draft` forever, so the Applications kanban never reflected any decision (defect D2).
+
+**Decision.** `ApprovalService.resolve()` now synchronises the linked application in the same
+operation: **approve → `submitted`**, **reject → `rejected`**. The update is guarded with
+`WHERE status = 'draft'` (and the owning `userId`) so a late decision can never regress an
+application that already advanced (e.g. to `interview`), and approvals without an
+`applicationId` are untouched.
+
+**Alternatives.** A DB trigger (rejected: hides business logic in the schema); doing it in the
+router (rejected: the service is the single resolution path and is also used by tests/agents);
+an async job (rejected: adds a queue dependency for a two-row transaction).
+
+**Consequences.** Approve/reject now has a visible, verified effect on the tracker — confirmed on
+production with DB before/after snapshots (draft→submitted and draft→rejected). +2 pytest in
+`test_approvals.py` pin the contract. **Reversible?** Yes — one static method call in `resolve()`.
+
+
+## D-0017 — Hard wall-clock LLM budget, shared pipeline deadline, and provider override
+
+**Context.** Phase-2 audit defect D1: cover-letter and pipeline runs hit the edge's ~100 s cut-off
+(524). `AgentRun` rows recorded coverLetter calls of 133–157 s despite a declared 60 s budget —
+httpx's read timeout is **per chunk**, so a model that keeps trickling tokens never times out.
+In the pipeline, each agent's own `LLMClient` had an independent budget, so budgets stacked.
+
+**Decision.** Three changes in `llm_client.py`:
+1. **Hard cap** — live calls execute in a worker thread; `future.result(timeout=…)` abandons any
+   call that exceeds the wall-clock budget, regardless of streaming behaviour.
+2. **`shared_budget()`** — a contextvar-based deadline; the pipeline wraps its tailor+coverLetter
+   dispatches so all LLM clients in scope share one budget instead of adding theirs up.
+3. **Provider override** — `AETHER_LLM_BASE_URL`/`AETHER_LLM_API_KEY` point the agent layer at any
+   OpenAI-compatible endpoint (e.g. Anthropic's `/v1` with Claude model ids via `AETHER_MODEL_*`),
+   and `AETHER_MODEL_FALLBACK` makes the fallback model configurable. OpenRouter remains the
+   default when unset.
+
+**Alternatives.** Raising the edge timeout (rejected: not under our control and hides the bug);
+async cancellation of the httpx stream (rejected: cancellation points depend on the server
+yielding); background jobs + polling (valid future work, but a UX/API contract change out of
+audit scope).
+
+**Consequences.** On production, cover-letter runs complete in ≈60 s (HTTP 200) and the full
+pipeline in ≈62 s — no 524s. The abandoned worker thread may linger until the provider closes the
+socket (bounded, no user impact). +3 pytest in `test_llm_resilience.py`.
+**Reversible?** Yes — env vars default to previous behaviour; the cap is one executor block.

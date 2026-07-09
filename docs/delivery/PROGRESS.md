@@ -3,6 +3,24 @@ Last updated: 2026-07-10 by Aether Delivery Agent Session 4
 Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: P2-S10 complete; Phase 2 deployed (frontend + API live)
 Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
 
+## Phase-2 adversarial audit + fix loop (2026-07-09)
+
+Full wireframe↔backend wiring audit against production (17 wireframes, 37 API routes, journeys
+J1–J7). Deliverables: `docs/delivery/TRACEABILITY-MATRIX.md` (per-wireframe verdicts with live
+proof) and `docs/delivery/DEFECTS-PHASE-2-AUDIT.md` (defects D1–D9 with before/after evidence).
+
+- **Fixed & verified on production:** D1 524-timeout on cover-letter/pipeline (hard wall-clock LLM
+  cap + shared pipeline budget + provider override, ADR D-0017 — now 200 in ≈60–62 s); D2
+  approve/reject now moves the linked application draft→submitted/rejected (ADR D-0016); D3
+  contaminated cover-letter retry fixture neutralised; D4 per-job "Tailor Resume" deep link; D5
+  resume Download with graceful 501 note; D6 Story Bank create/edit STAR form; D7 application
+  detail panel + pending-approvals banner; D8 approval expiry badge + disabled actions; D9
+  stage-conversion rates rendered on analytics.
+- **New env vars** (`.env.example`): `AETHER_MODEL_FALLBACK`, `AETHER_LLM_BASE_URL`,
+  `AETHER_LLM_API_KEY` (any OpenAI-compatible provider, e.g. Anthropic Claude).
+- **Gates:** pytest 104 passed / coverage 89%; ruff+mypy clean; vitest 47 passed; lint,
+  type-check, build clean; Playwright e2e 24 passed.
+
 ## Production defect fixes (2026-07-10)
 
 Live-environment defects found on https://5cb5f0620.abacusai.cloud, all fixed and verified live:
