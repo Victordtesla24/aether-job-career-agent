@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchApplication,
   fetchApplications,
+  submitApplication,
   type Application,
   type ApplicationStatus,
 } from "../../../lib/api/applications";
@@ -29,6 +30,7 @@ export default function ApplicationsPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [detail, setDetail] = useState<Application | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -56,6 +58,19 @@ export default function ApplicationsPage() {
       setDetail(await fetchApplication(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load application");
+    }
+  };
+
+  const markSubmitted = async (app: Application) => {
+    setSubmitting(true);
+    try {
+      const updated = await submitApplication(app.id, app.applyUrl ?? null);
+      setDetail(updated);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to mark as submitted");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -111,6 +126,30 @@ export default function ApplicationsPage() {
             >
               ✕
             </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {detail.applyUrl && !detail.applyUrl.includes("demo.aether.dev") ? (
+              <a
+                href={detail.applyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="application-apply-link"
+                className="rounded-lg border border-aether-green/40 px-3 py-1.5 text-sm font-semibold text-aether-green transition hover:bg-aether-green/10"
+              >
+                Apply on company site ↗
+              </a>
+            ) : null}
+            {detail.status === "draft" ? (
+              <button
+                type="button"
+                data-testid="mark-submitted-btn"
+                onClick={() => void markSubmitted(detail)}
+                disabled={submitting}
+                className="rounded-lg bg-aether-coral px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {submitting ? "Saving..." : "Mark as submitted"}
+              </button>
+            ) : null}
           </div>
           {detail.coverLetter ? (
             <div className="mt-3">

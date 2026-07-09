@@ -1,0 +1,47 @@
+{
+  "boards": [
+    {
+      "token": "eucalyptus",
+      "jobs": [
+        {
+          "id": 4709366005,
+          "title": "Lead Product Manager",
+          "company_name": "Careers at Eucalyptus",
+          "location": {
+            "name": "AU - HQ - NSW"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/eucalyptus/jobs/4709366005",
+          "updated_at": "2026-06-26T00:32:50-04:00",
+          "content": "Eucalyptus is building digital healthcare programs. As Lead Product Manager you will own the roadmap for our AU clinics platform, working with delivery leads and analysts."
+        }
+      ]
+    },
+    {
+      "token": "gitlab",
+      "jobs": [
+        {
+          "id": 8564957002,
+          "title": "Principal Product Manager, AI Custom Models",
+          "company_name": "GitLab",
+          "location": {
+            "name": "Remote, Canada; Remote, US"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8564957002",
+          "updated_at": "2026-06-05T16:18:10-04:00",
+          "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;GitLab is the intelligent orchestration platform for DevSecOps. GitLab enables organizations to increase developer productivity, improve operational efficiency, reduce security and compliance risk, and accelerate digital transformation. More than 50 million registered users and more than 50% of the Fortune 100* trust GitLab to ship better, more secure software faster.&lt;/p&gt;\n&lt;p&gt;The same principles built into our products are reflected in how our team works: we embrace AI as a core productivity multiplier, with all team members expect"
+        },
+        {
+          "id": 8565469002,
+          "title": "AI Engineer",
+          "company_name": "GitLab",
+          "location": {
+            "name": "Remote, US"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8565469002",
+          "updated_at": "2026-06-05T16:18:10-04:00",
+          "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;GitLab is the intelligent orchestration platform for DevSecOps. GitLab enables organizations to increase developer productivity, improve operational efficiency, reduce security and compliance risk, and accelerate digital transformation. More than 50 million registered users and more than 50% of the Fortune 100* trust GitLab to ship better, more secure software faster.&lt;/p&gt;\n&lt;p&gt;The same principles built into our products are reflected in how our team works: we embrace AI as a core productivity multiplier, with all team members expect"
+        }
+      ]
+    }
+  ]
+}

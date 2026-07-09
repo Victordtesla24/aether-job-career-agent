@@ -20,7 +20,16 @@ const STATUS_FILTERS: Array<JobStatus | "all"> = [
   "archived",
 ];
 
-const SOURCE_FILTERS = ["all", "seek", "linkedin", "indeed"] as const;
+const SOURCE_FILTERS = [
+  "all",
+  "greenhouse",
+  "lever",
+  "remotive",
+  "remoteok",
+  "seek",
+  "linkedin",
+  "indeed",
+] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
 
 export default function JobsPage() {
@@ -56,7 +65,10 @@ export default function JobsPage() {
     try {
       await apiRequest("/agents/scout/run", {
         method: "POST",
-        body: { query: "software engineer", location: "Australia" },
+        body: {
+          query: "delivery lead, product owner, business analyst, program manager",
+          location: "Melbourne, Australia",
+        },
       });
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       await load();
@@ -190,10 +202,21 @@ export default function JobsPage() {
                 ) : (
                   <span>unscored</span>
                 )}
+                {job.sourceUrl && !job.sourceUrl.includes("demo.aether.dev") ? (
+                  <a
+                    href={job.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="apply-link"
+                    className="ml-auto rounded-lg border border-aether-green/40 px-2.5 py-1 font-semibold text-aether-green transition hover:bg-aether-green/10"
+                  >
+                    Apply on company site ↗
+                  </a>
+                ) : null}
                 <Link
                   href={`/dashboard/resume?job=${job.id}`}
                   data-testid="tailor-job-link"
-                  className="ml-auto rounded-lg border border-aether-coral/40 px-2.5 py-1 font-semibold text-aether-coral transition hover:bg-aether-coral/10"
+                  className="rounded-lg border border-aether-coral/40 px-2.5 py-1 font-semibold text-aether-coral transition hover:bg-aether-coral/10"
                 >
                   Tailor Resume →
                 </Link>

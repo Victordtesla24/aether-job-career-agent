@@ -1,0 +1,46 @@
+{
+  "companies": [
+    {
+      "company": "deputy",
+      "postings": [
+        {
+          "id": "048fd02d-10e1-497e-b355-cfb8293cce11",
+          "text": "GRC Program Manager",
+          "categories": {
+            "commitment": "Full Time",
+            "department": "Core Ops",
+            "location": "Sydney",
+            "team": "Security",
+            "allLocations": [
+              "Sydney"
+            ]
+          },
+          "hostedUrl": "https://jobs.lever.co/deputy/048fd02d-10e1-497e-b355-cfb8293cce11",
+          "applyUrl": "https://jobs.lever.co/deputy/048fd02d-10e1-497e-b355-cfb8293cce11/apply",
+          "workplaceType": "hybrid",
+          "createdAt": 1780463584223,
+          "descriptionPlain": "Deputy is a global SaaS workforce management company with hubs in Sydney, Melbourne, San Francisco and London, plus team members working remotely across the United States.\u00a0Our platform serves over 1.5 million workers and 375,000 workplaces across 100+ countries. We are backed by top global investors and recently achieved Unicorn status.\u00a0\n\u00a0\nAt Deputy, we\u2019re improving the world of work, one shift at a time, for 80% of the world\u2019s workforce: hourly workers. These are the dedicated employees who keep our world running \u2013 from baristas to nurses, cleaners to delivery drivers, florists to factory wor"
+        },
+        {
+          "id": "ed279491-acff-4d4b-89a0-7a2e91b22803",
+          "text": "Account Manager",
+          "categories": {
+            "commitment": "Full Time",
+            "department": "Sales",
+            "location": "Sydney",
+            "team": "Account Management",
+            "allLocations": [
+              "Sydney",
+              "Melbourne"
+            ]
+          },
+          "hostedUrl": "https://jobs.lever.co/deputy/ed279491-acff-4d4b-89a0-7a2e91b22803",
+          "applyUrl": "https://jobs.lever.co/deputy/ed279491-acff-4d4b-89a0-7a2e91b22803/apply",
+          "workplaceType": "hybrid",
+          "createdAt": 1783396802647,
+          "descriptionPlain": "Deputy is a global SaaS workforce management company with hubs in Sydney, Melbourne, San Francisco and London, plus team members working remotely across the United States.\u00a0Our platform serves over 1.5 million workers and 375,000 workplaces across 100+ countries. We are backed by top global investors and recently achieved Unicorn status.\u00a0\n\u00a0\nAt Deputy, we\u2019re improving the world of work, one shift at a time, for 80% of the world\u2019s workforce: hourly workers. These are the dedicated employees who keep our world running \u2013 from baristas to nurses, cleaners to delivery drivers, florists to factory wor"
+        }
+      ]
+    }
+  ]
+}

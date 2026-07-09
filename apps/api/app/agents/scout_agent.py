@@ -32,6 +32,8 @@ class ScoutAgent:
 
     def run(self, user_id: str, query: str, location: str) -> ScoutResult:
         result = ScoutResult()
+        # Cross-source dedupe within a run: (company, title, apply URL).
+        seen: set[tuple[str, str, str]] = set()
         for source, adapter_cls in ADAPTERS.items():
             try:
                 jobs = adapter_cls().fetch(query=query, location=location)
@@ -46,6 +48,14 @@ class ScoutAgent:
             for job in jobs:
                 if not job.get("sourceUrl"):
                     continue
+                key = (
+                    job["company"].strip().lower(),
+                    job["title"].strip().lower(),
+                    job["sourceUrl"].strip(),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
                 self._repository.create(user_id, job)
                 result.persisted += 1
         return result

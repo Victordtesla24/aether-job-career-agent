@@ -11,6 +11,7 @@ export const ApplicationSchema = z.object({
   coverLetter: z.string().nullish(),
   jobTitle: z.string(),
   company: z.string(),
+  applyUrl: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -28,4 +29,19 @@ export async function fetchApplication(
   options: RequestOptions = {},
 ): Promise<Application> {
   return ApplicationSchema.parse(await apiRequest<unknown>(`/applications/${id}`, options));
+}
+
+/** Mark a draft application as submitted, recording the real apply URL used. */
+export async function submitApplication(
+  id: string,
+  appliedUrl?: string | null,
+  options: RequestOptions = {},
+): Promise<Application> {
+  return ApplicationSchema.parse(
+    await apiRequest<unknown>(`/applications/${id}/submit`, {
+      ...options,
+      method: "POST",
+      body: { applied_url: appliedUrl ?? null },
+    }),
+  );
 }

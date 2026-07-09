@@ -21,6 +21,10 @@ from app.services.llm_client import LLMUnavailableError
 
 router = APIRouter()
 
+#: Default discovery targets — Vikram's roles from Melbourne, Australia.
+_DEFAULT_QUERY = "delivery lead, product owner, business analyst, program manager"
+_DEFAULT_LOCATION = "Melbourne, Australia"
+
 #: Canonical agent registry (mirrors the LangGraph node names in
 #: packages/agents/src/graph/aether-graph.ts).
 AGENT_NAMES = (
@@ -68,8 +72,8 @@ def _record_run(
 
 def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
     if name == "scout":
-        query = params.get("query", "software engineer")
-        location = params.get("location", "Australia")
+        query = params.get("query", _DEFAULT_QUERY)
+        location = params.get("location", _DEFAULT_LOCATION)
         return _record_run(
             user_id, "scout", params, lambda: ScoutAgent().run(user_id, query, location)
         )
@@ -226,8 +230,8 @@ def run_story_extractor(current_user: CurrentUser) -> dict[str, Any]:
 
 
 class PipelineRunRequest(BaseModel):
-    query: str = "software engineer"
-    location: str = "Australia"
+    query: str = _DEFAULT_QUERY
+    location: str = _DEFAULT_LOCATION
 
 
 #: Canonical pipeline plan, mirroring packages/agents LangGraph node order.

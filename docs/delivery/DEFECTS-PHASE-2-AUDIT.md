@@ -1,4 +1,4 @@
-# Phase-2 Audit — Defect Log (D1–D9)
+# Phase-2 Audit — Defect Log (D1–D11)
 
 **Date:** 2026-07-09 · **Branch:** `phase-2/intelligence` · **Production:** https://5cb5f0620.abacusai.cloud
 All defects were found by the adversarial live audit (see `TRACEABILITY-MATRIX.md`), fixed on this
@@ -144,12 +144,45 @@ runtime evidence was gathered from the `AgentRun` DB table and live reproduction
 
 ---
 
+## D11 — Scout produced only demo-seeded jobs — no real discovery — **CRITICAL**
+
+- **Before (root cause):** every "discovered" job on production was fabricated. The three
+  registered adapters (seek/linkedin/indeed) had `_fetch_live()` → `NotImplementedError`, and
+  production has no `AETHER_DISCOVERY_FIXTURE_DIR`, so *every* scout/pipeline run skipped all
+  sources and persisted **0** jobs. The 847 jobs (and 412 applications) in the DB came from
+  `scripts/seed_demo.py` with fake `https://demo.aether.dev/jobs/{i}` URLs — nothing was
+  applyable. The Jobs UI also had no apply link, and the tracker had no way to mark a real
+  submission.
+- **Fix (API):** four new **keyless live sources** under `app/services/discovery/`:
+  `greenhouse_adapter.py` (Greenhouse boards API; default boards cultureamp, octopusdeploy,
+  eucalyptus, easygo, prospa, montu, gitlab, stripe — override via `AETHER_GREENHOUSE_BOARDS`),
+  `lever_adapter.py` (Lever postings API; `AETHER_LEVER_COMPANIES`, default immutable, deputy,
+  atlassian), `remotive_adapter.py` and `remoteok_adapter.py` (public remote-job APIs). Shared
+  `relevance.py` keeps only the user's **target roles** (delivery lead/manager, program/project
+  manager, product owner/manager, business analyst, scrum master, agile coach, TPM, …) that are
+  **applicable from Melbourne** (AU/NZ/APAC locations first, then remote roles not locked to
+  another region); every job stores the **real apply URL** as `sourceUrl` plus title, company,
+  location and a description snippet — zero fabrication. `live_http.py` adds 15 s timeouts;
+  per-board/company failures are skipped, and the scout dedupes cross-source by
+  (company, title, apply URL). Demo rows purged via `scripts/purge_demo_jobs.py`.
+- **Fix (web):** job cards show a prominent **"Apply on company site ↗"** link (new tab, real
+  URL only — hidden for any `demo.aether.dev` leftovers); source filter lists the live sources;
+  Run Discovery targets the user's roles/location. Applications detail panel gets the same apply
+  link plus a **"Mark as submitted"** button → new `POST /applications/{id}/submit` records
+  `answers.appliedUrl`/`submittedAt` and moves draft → submitted (idempotent).
+- **Tests:** +20 pytest (`tests/test_scout_live_sources.py` — adapters run on fixtures captured
+  from the real APIs, never live HTTP; relevance filter; cross-source dedupe; submit endpoint),
+  +4 vitest (`application-submit.test.ts`). Hardcoded `847` funnel assertion in
+  `e2e/analytics.spec.ts` replaced with a live-API comparison.
+
+---
+
 ## Quality gates (post-fix)
 
 | Gate | Result |
 |---|---|
-| pytest (apps/api) | **112 passed** (99 → 112; +13 new), coverage **91%** (floor 86%) |
-| ruff / mypy | clean (48 source files) |
-| vitest (apps/web) | **62 passed** (38 → 62; +24 new) |
+| pytest (apps/api) | **133 passed** (112 → 133; +21 new), coverage **90%** (floor 86%) |
+| ruff / mypy | clean (54 source files) |
+| vitest (apps/web) | **66 passed** (62 → 66; +4 new) |
 | next lint / tsc --noEmit / next build | clean |
 | Playwright e2e | **24 passed** |
