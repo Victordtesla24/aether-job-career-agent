@@ -58,6 +58,30 @@ queue 7); web lint + type-check + `next build` clean (13 routes). **Deployed:**
 demo data seeded and the live funnel verified end-to-end with the demo login. `.env` `NEXTAUTH_SECRET` rotated from the `change-me` placeholder to a random
 64-hex secret (JWT signing uses `JWT_SECRET` || `NEXTAUTH_SECRET`).
 
+**Post-review hardening (2026-07-09):** an independent review found 3 genuine defects — all fixed:
+1. **TS type-check failure** in `packages/agents/src/graph/aether-graph.ts` (7 errors): the
+   LangGraph `StateGraph` was built with un-chained `addNode` calls, so `addEdge` only knew
+   `__start__`/`__end__`. Fixed with the chained builder pattern (each `.addNode()` widens the
+   node-name union) — no `as any`. `pnpm -r run type-check` → exit 0.
+2. **Live 500s on LLM agent endpoints**: 3 of 4 configured OpenRouter free-tier model ids had been
+   retired upstream (404). Model ids refreshed in `.env`/`.env.example`; `LLMClient` `auto` mode now
+   has a resilience chain (primary model → one retry with `openai/gpt-oss-20b:free` → recorded
+   fixture → typed `LLMUnavailableError` mapped to HTTP **503**, never a 500). See ADR **D-0014**.
+   Live-verified: `POST /agents/tailor/run`, `/agents/cover-letter/run`, `/agents/story-extractor/run`
+   all return 200 through real OpenRouter calls. Also hardened: `FabricationGuard` no longer
+   false-positives on sentence-initial title-case words; cover-letter agent gained a corrective
+   drafting loop (≤3 attempts feeding flagged terms back to the model).
+3. **Playwright e2e gap** (3 tests → **21 passing**): new specs for jobs, resume, analytics,
+   agents, approvals, stories, applications and cover-letters run against the production build with
+   the live API (`next.config.mjs` now mirrors the nginx `/api` → :8000 rewrite for standalone
+   `next start`).
+
+**Verification after post-review hardening (2026-07-09):** API **81/81** pytest green (74 + 7 new
+`test_llm_resilience.py`); ruff + mypy clean (48 files). Node **85/85** vitest green;
+`pnpm -r run type-check` + lint clean; `next build` clean (13 routes). Playwright **21/21** e2e
+green. Redeployed and live-verified: dashboard → 200, `/api/health` → 0.2.0, canonical funnel
+847/412/156/23/4, all three LLM agent runs → 200.
+
 ## Phase 1 — Foundation (complete — merged to main 2026-07-02)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
 `phase-1/foundation`. `main` is untouched this phase (branch pushed only). No secrets committed; the

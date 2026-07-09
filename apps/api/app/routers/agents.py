@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.agents.scout_agent import ScoutAgent
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
+from app.services.llm_client import LLMUnavailableError
 
 router = APIRouter()
 
@@ -48,6 +49,12 @@ def _record_run(
     except HTTPException:
         runs.finish(run["id"], "failed", error="http error")
         raise
+    except LLMUnavailableError as exc:
+        # Live LLM failed and no fixture fallback exists — clean 503, never 500.
+        runs.finish(run["id"], "failed", error=str(exc))
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
+        ) from exc
     except Exception as exc:
         runs.finish(run["id"], "failed", error=str(exc))
         raise

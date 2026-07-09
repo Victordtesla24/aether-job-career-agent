@@ -112,24 +112,40 @@ export class AetherGraph {
     }
   }
 
-  /** Build the compiled LangGraph pipeline (supervisor → … → coverLetter). */
+  /**
+   * Create the LangGraph node function for a named agent node.
+   * Records the run in the audit trail and appends the node to `visited`.
+   */
+  private makeNode(name: NodeName) {
+    return (state: typeof GraphAnnotation.State) => {
+      const startedAt = Date.now();
+      const update = this.nodeImpls[name](state as GraphState);
+      this.record(name, 'completed', startedAt);
+      return { ...update, visited: [name] as NodeName[] };
+    };
+  }
+
+  /**
+   * Build the compiled LangGraph pipeline (supervisor → … → coverLetter).
+   *
+   * The `addNode` calls are chained: each call widens the graph's node-name
+   * union type, so `addEdge` accepts the literal node names without casts.
+   */
   buildGraph() {
-    const graph = new StateGraph(GraphAnnotation);
-    for (const name of NODE_NAMES) {
-      graph.addNode(name, (state) => {
-        const startedAt = Date.now();
-        const update = this.nodeImpls[name](state as GraphState);
-        this.record(name, 'completed', startedAt);
-        return { ...update, visited: [name] };
-      });
-    }
-    graph.addEdge(START, 'supervisor');
-    graph.addEdge('supervisor', 'scout');
-    graph.addEdge('scout', 'matcher');
-    graph.addEdge('matcher', 'fitScorer');
-    graph.addEdge('fitScorer', 'tailor');
-    graph.addEdge('tailor', 'coverLetter');
-    graph.addEdge('coverLetter', END);
+    const graph = new StateGraph(GraphAnnotation)
+      .addNode('supervisor', this.makeNode('supervisor'))
+      .addNode('scout', this.makeNode('scout'))
+      .addNode('matcher', this.makeNode('matcher'))
+      .addNode('fitScorer', this.makeNode('fitScorer'))
+      .addNode('tailor', this.makeNode('tailor'))
+      .addNode('coverLetter', this.makeNode('coverLetter'))
+      .addEdge(START, 'supervisor')
+      .addEdge('supervisor', 'scout')
+      .addEdge('scout', 'matcher')
+      .addEdge('matcher', 'fitScorer')
+      .addEdge('fitScorer', 'tailor')
+      .addEdge('tailor', 'coverLetter')
+      .addEdge('coverLetter', END);
     return graph.compile();
   }
 

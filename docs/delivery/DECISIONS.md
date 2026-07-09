@@ -331,3 +331,34 @@ run auditing get much noisier).
 
 **Consequences.** +6 TS tests; `@langchain/langgraph` + `@langchain/core` added to
 `packages/agents`. **Reversible?** Yes — nodes are plain functions; the graph wiring is one file.
+
+## D-0014 — Volatile OpenRouter free-tier model ids: env-configured with automatic fallback chain
+
+**Date.** 2026-07-09 (post-review hardening)
+
+**Context.** An independent review found the live LLM agent endpoints returning 500: three of the
+four configured OpenRouter free-tier model ids (`deepseek/deepseek-chat-v3-0324:free`,
+`qwen/qwen-2.5-72b-instruct:free`, `meta-llama/llama-3.1-8b-instruct:free`) had been retired
+upstream (HTTP 404). OpenRouter's free-tier catalogue is volatile — ids appear and disappear
+without notice — so any hard-coded id will eventually rot.
+
+**Decision.** Model ids stay configuration (`AETHER_MODEL_REASONING/STRUCTURED/FAST/LIGHT` env
+vars, refreshed to currently-live ids: `openai/gpt-oss-120b:free`,
+`qwen/qwen3-next-80b-a3b-instruct:free`, `meta-llama/llama-3.3-70b-instruct:free`,
+`meta-llama/llama-3.2-3b-instruct:free`) and `LLMClient` gains a resilience chain in `auto` mode:
+1. call the configured model; 2. on any failure (404/429/5xx/network/empty content) retry once
+with `openai/gpt-oss-20b:free`; 3. fall back to the recorded fixture if one exists; 4. otherwise
+raise a typed `LLMUnavailableError`, which the agents router maps to a clean **HTTP 503
+"LLM backend unavailable"** — never an unhandled 500. Successful live calls record a fixture only
+when none exists, so curated replay fixtures are never clobbered by variable live output. CI and
+tests remain in `replay` mode.
+
+**Alternatives.** Pinning to paid models (rejected: cost for a demo); querying the OpenRouter
+`/models` catalogue at startup (rejected: adds a network dependency to boot and still races
+mid-flight retirements); hiding failures by always serving fixtures (rejected: masks real outages).
+
+**Consequences.** +7 pytest (`test_llm_resilience.py`) covering the fallback chain, fixture
+fallback and the 503 contract; `FabricationGuard` no longer false-positives on sentence-initial
+title-case words; the cover-letter agent gained a corrective drafting loop (≤3 attempts, feeding
+flagged terms back to the model). **Reversible?** Yes — model ids are env vars; the fallback chain
+is one method.

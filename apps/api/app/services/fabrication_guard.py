@@ -38,18 +38,38 @@ def _tokens(text: str) -> set[str]:
     return {_norm(t) for t in _TOKEN_RE.findall(text)}
 
 
+#: Characters that terminate a sentence — a title-case word right after one of
+#: these is ordinary sentence case, not an entity name.
+_SENTENCE_ENDERS = ".!?:;\n\r\"'"
+
+
+def _is_sentence_start(text: str, start: int) -> bool:
+    """True when the token at ``start`` begins the text or follows a sentence end."""
+    i = start - 1
+    while i >= 0 and text[i] in " \t":
+        i -= 1
+    return i < 0 or text[i] in _SENTENCE_ENDERS
+
+
 def find_unsupported_entities(generated: str, evidence_corpus: str) -> list[str]:
     """Return entities/metrics in ``generated`` that lack evidence support."""
     evidence = _tokens(evidence_corpus)
     flagged: list[str] = []
-    for raw in _TOKEN_RE.findall(generated):
+    for match in _TOKEN_RE.finditer(generated):
+        raw = match.group()
         lower = _norm(raw)
         if not lower:
             continue
         if lower in _EXEMPT or lower in evidence:
             continue
-        is_capitalized = raw[0].isupper()
         has_number = bool(_NUMBER_RE.search(raw))
+        is_capitalized = raw[0].isupper()
+        # Sentence-initial Title-case words ("Throughout my career…") are
+        # ordinary sentence case, not entities. All-caps acronyms (GCP, AWS)
+        # and number-bearing tokens are still flagged wherever they appear.
+        is_title_case = is_capitalized and raw[1:].islower() if len(raw) > 1 else False
+        if is_title_case and _is_sentence_start(generated, match.start()):
+            is_capitalized = False
         if is_capitalized or has_number:
             if raw not in flagged:
                 flagged.append(raw)

@@ -62,34 +62,61 @@ class CoverLetterAgent:
         self._approvals = approvals or ApprovalRepository()
         self._jobs = jobs or JobRepository()
 
-    def run(self, user_id: str, job_id: str) -> CoverLetterResult:
-        job = self._jobs.get_by_id(job_id, user_id)
-        if job is None:
-            raise LookupError(f"Job {job_id} not found for user")
-
-        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+    def _draft(
+        self, prompt: str, job: dict[str, Any], corpus: str, *, fixture_key: str
+    ) -> tuple[str, list[str]]:
+        """Draft a letter and run it through the FabricationGuard."""
         raw = self._llm.complete_json(
             "cover_letter",
             SYSTEM_PROMPT,
-            f"Target role: {job['title']} at {job['company']}.\n"
-            f"Job description: {job.get('description', '')}\n\n"
-            f"Candidate resume:\n{resume_text}",
+            prompt,
             model=get_model("REASONING"),
             temperature=0.0,
+            fixture_key=fixture_key,
         )
         body = (raw.get("body") or "").strip()
-
         letter = (
             f"Dear Hiring Team at {job['company']},\n\n"
             f"I am writing to express my interest in the {job['title']} "
             f"position at {job['company']}.\n\n{body}\n\n"
             f"Thank you for your consideration.\n"
         )
+        return letter, self._guard.check(letter, corpus)
 
+    def run(self, user_id: str, job_id: str) -> CoverLetterResult:
+        job = self._jobs.get_by_id(job_id, user_id)
+        if job is None:
+            raise LookupError(f"Job {job_id} not found for user")
+
+        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        base_prompt = (
+            f"Target role: {job['title']} at {job['company']}.\n"
+            f"Job description: {job.get('description', '')}\n\n"
+            f"Candidate resume:\n{resume_text}"
+        )
         corpus = " ".join(
             [resume_text, job["title"], job["company"], job.get("description", "")]
         )
-        flagged = self._guard.check(letter, corpus)
+
+        # Corrective drafting loop: each retry feeds the accumulated list of
+        # guard-flagged terms back to the model so unsupported claims are
+        # removed rather than replaced with new ones. Fails loudly (422) if
+        # the guard still flags after the final attempt.
+        letter, flagged = self._draft(base_prompt, job, corpus, fixture_key="default")
+        all_flagged: list[str] = list(flagged)
+        for attempt in ("retry", "retry2"):
+            if not flagged:
+                break
+            retry_prompt = (
+                f"{base_prompt}\n\nIMPORTANT: your previous draft mentioned terms "
+                f"with no evidence in the resume or job description: {all_flagged}. "
+                "Rewrite the letter WITHOUT those terms. Use ONLY words, exact "
+                "spellings and numbers that appear verbatim in the resume or job "
+                "description above (e.g. never abbreviate or restate a metric). "
+                "Do not introduce any other skill, tool, company or figure."
+            )
+            letter, flagged = self._draft(retry_prompt, job, corpus, fixture_key=attempt)
+            all_flagged.extend(t for t in flagged if t not in all_flagged)
         if flagged:
             raise FabricationError(flagged)
 
