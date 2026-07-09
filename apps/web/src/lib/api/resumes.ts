@@ -51,6 +51,23 @@ export interface TailorRunResult {
   rejected: string[];
 }
 
+/**
+ * Request a PDF export for a resume version (audit defect D5).
+ *
+ * The backend intentionally answers 501 until PDF regeneration ships in
+ * Phase 3 — callers should catch ApiError(status=501) and show a friendly
+ * "coming soon" message rather than a failure.
+ */
+export async function downloadResume(
+  id: string,
+  options: RequestOptions = {},
+): Promise<{ detail: string; resume_id: string }> {
+  return apiRequest<{ detail: string; resume_id: string }>(`/resumes/${id}/download`, {
+    ...options,
+    method: "POST",
+  });
+}
+
 export async function runTailorAgent(jobId: string, options: RequestOptions = {}): Promise<TailorRunResult> {
   return apiRequest<TailorRunResult>("/agents/tailor/run", {
     ...options,

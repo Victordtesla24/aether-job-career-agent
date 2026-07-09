@@ -6,9 +6,10 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { apiRequest } from "../../../lib/api/client";
+import { ApiError, apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import {
+  downloadResume,
   fetchResumeDiff,
   fetchResumes,
   runTailorAgent,
@@ -24,6 +25,7 @@ export default function ResumePage() {
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadNote, setDownloadNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -41,6 +43,14 @@ export default function ResumePage() {
     void load();
   }, [load]);
 
+  // Deep link from the Jobs board: /dashboard/resume?job=<id> preselects the
+  // target job in the tailor dropdown (audit defect D4).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const jobParam = new URLSearchParams(window.location.search).get("job");
+    if (jobParam) setSelectedJob(jobParam);
+  }, []);
+
   const runTailor = async () => {
     if (!selectedJob) return;
     setRunning(true);
@@ -55,9 +65,24 @@ export default function ResumePage() {
     }
   };
 
+  const download = async (resumeId: string) => {
+    setDownloadNote(null);
+    try {
+      await downloadResume(resumeId);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 501) {
+        // Contract-honest 501: PDF regeneration lands in Phase 3 (D5).
+        setDownloadNote("PDF export is coming in Phase 3 — this version is safely stored.");
+        return;
+      }
+      setDownloadNote(e instanceof Error ? e.message : "Download failed");
+    }
+  };
+
   const openResume = async (resume: Resume) => {
     setSelected(resume);
     setDiff(null);
+    setDownloadNote(null);
     try {
       setDiff(await fetchResumeDiff(resume.id));
     } catch {
@@ -163,10 +188,28 @@ export default function ResumePage() {
           {selected ? (
             <>
               <div className="glass rounded-2xl border border-white/10 p-5">
-                <h2 className="font-semibold">
-                  Version {selected.version}
-                  {selected.label ? ` — ${selected.label}` : ""}
-                </h2>
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-semibold">
+                    Version {selected.version}
+                    {selected.label ? ` — ${selected.label}` : ""}
+                  </h2>
+                  <button
+                    type="button"
+                    data-testid="download-resume-btn"
+                    onClick={() => void download(selected.id)}
+                    className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted transition hover:border-white/30 hover:text-white"
+                  >
+                    Download
+                  </button>
+                </div>
+                {downloadNote ? (
+                  <p
+                    data-testid="download-note"
+                    className="mt-2 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-xs text-aether-amber"
+                  >
+                    {downloadNote}
+                  </p>
+                ) : null}
                 <ul className="mt-3 space-y-2 text-sm text-aether-muted">
                   {bullets(selected).map((text, i) => (
                     <li key={i} className="flex gap-2">

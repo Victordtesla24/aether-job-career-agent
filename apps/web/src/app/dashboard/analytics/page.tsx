@@ -9,9 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchAgentRoi,
   fetchAtsDistribution,
+  fetchConversion,
   fetchFunnel,
   type AgentRoi,
   type AtsDistribution,
+  type Conversion,
   type Funnel,
   type Period,
 } from "../../../lib/api/analytics";
@@ -23,18 +25,21 @@ export default function AnalyticsPage() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [ats, setAts] = useState<AtsDistribution | null>(null);
   const [roi, setRoi] = useState<AgentRoi | null>(null);
+  const [conversion, setConversion] = useState<Conversion | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [funnelData, atsData, roiData] = await Promise.all([
+      const [funnelData, atsData, roiData, conversionData] = await Promise.all([
         fetchFunnel(period),
         fetchAtsDistribution(),
         fetchAgentRoi(),
+        fetchConversion(period),
       ]);
       setFunnel(funnelData);
       setAts(atsData);
       setRoi(roiData);
+      setConversion(conversionData);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
@@ -115,6 +120,31 @@ export default function AnalyticsPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="glass rounded-2xl border border-white/10 p-5" data-testid="conversion-rates">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+          Stage conversion ({period})
+        </h2>
+        {conversion === null ? (
+          <div className="mt-4 h-24 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
+        ) : (
+          <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {(
+              [
+                ["Found → Applied", conversion.found_to_applied],
+                ["Applied → Screened", conversion.applied_to_screened],
+                ["Screened → Interview", conversion.screened_to_interview],
+                ["Interview → Offer", conversion.interview_to_offer],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
+                <dd className="mono text-2xl font-bold text-aether-violet">{value}%</dd>
+                <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
+              </div>
+            ))}
+          </dl>
         )}
       </section>
 

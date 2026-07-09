@@ -31,3 +31,30 @@ export async function runStoryExtractor(
 export async function deleteStory(id: string, options: RequestOptions = {}): Promise<void> {
   await apiRequest<void>(`/stories/${id}`, { ...options, method: "DELETE" });
 }
+
+/** Manual story creation payload (POST /stories) — audit defect D6. */
+export interface StoryInput {
+  title: string;
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+  metrics?: Record<string, unknown> | null;
+  tags?: string[];
+}
+
+export async function createStory(input: StoryInput, options: RequestOptions = {}): Promise<Story> {
+  return StorySchema.parse(
+    await apiRequest<unknown>("/stories", { ...options, method: "POST", body: input }),
+  );
+}
+
+export async function updateStory(
+  id: string,
+  input: Partial<StoryInput>,
+  options: RequestOptions = {},
+): Promise<Story> {
+  return StorySchema.parse(
+    await apiRequest<unknown>(`/stories/${id}`, { ...options, method: "PUT", body: input }),
+  );
+}

@@ -21,3 +21,11 @@ export type ApplicationStatus = Application["status"];
 export async function fetchApplications(options: RequestOptions = {}): Promise<Application[]> {
   return z.array(ApplicationSchema).parse(await apiRequest<unknown>("/applications", options));
 }
+
+/** Single application detail — resume version + cover letter (audit defect D7). */
+export async function fetchApplication(
+  id: string,
+  options: RequestOptions = {},
+): Promise<Application> {
+  return ApplicationSchema.parse(await apiRequest<unknown>(`/applications/${id}`, options));
+}

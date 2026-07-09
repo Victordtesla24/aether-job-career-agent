@@ -4,6 +4,7 @@
  * Jobs workspace — live wiring to GET /jobs, POST /agents/scout/run and
  * POST /jobs/{id}/save (P2 frontend).
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { apiRequest } from "../../../lib/api/client";
@@ -189,6 +190,13 @@ export default function JobsPage() {
                 ) : (
                   <span>unscored</span>
                 )}
+                <Link
+                  href={`/dashboard/resume?job=${job.id}`}
+                  data-testid="tailor-job-link"
+                  className="ml-auto rounded-lg border border-aether-coral/40 px-2.5 py-1 font-semibold text-aether-coral transition hover:bg-aether-coral/10"
+                >
+                  Tailor Resume →
+                </Link>
               </div>
             </article>
           ))}

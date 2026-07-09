@@ -15,6 +15,17 @@ import {
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
+/** Server-side expiry window (see apps/api approval_service.EXPIRY_HOURS). */
+const EXPIRY_HOURS = 48;
+
+/** Pending approvals older than 48h are void — the API answers 409 (D8). */
+function isExpired(approval: Approval): boolean {
+  return (
+    approval.status === "pending" &&
+    Date.now() - new Date(approval.createdAt).getTime() > EXPIRY_HOURS * 3600 * 1000
+  );
+}
+
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("pending");
@@ -124,6 +135,15 @@ export default function ApprovalsPage() {
                     >
                       {approval.status}
                     </span>
+                    {isExpired(approval) ? (
+                      <span
+                        data-testid="expired-badge"
+                        className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+                        title={`Older than ${EXPIRY_HOURS}h — re-run the agent to get a fresh request`}
+                      >
+                        expired
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-xs text-aether-muted-dim">
                     {approval.type} · requested {new Date(approval.createdAt).toLocaleString()}
@@ -143,7 +163,7 @@ export default function ApprovalsPage() {
                       type="button"
                       data-testid="approve-btn"
                       onClick={() => void decide(approval.id, "approve")}
-                      disabled={busy === approval.id}
+                      disabled={busy === approval.id || isExpired(approval)}
                       className="rounded-xl bg-aether-green/80 px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
                     >
                       Approve
@@ -152,7 +172,7 @@ export default function ApprovalsPage() {
                       type="button"
                       data-testid="reject-btn"
                       onClick={() => void decide(approval.id, "reject")}
-                      disabled={busy === approval.id}
+                      disabled={busy === approval.id || isExpired(approval)}
                       className="rounded-xl border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                     >
                       Reject

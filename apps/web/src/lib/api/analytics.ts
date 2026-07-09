@@ -42,3 +42,23 @@ export async function fetchAtsDistribution(options: RequestOptions = {}): Promis
 export async function fetchAgentRoi(options: RequestOptions = {}): Promise<AgentRoi> {
   return AgentRoiSchema.parse(await apiRequest<unknown>("/analytics/agent-roi", options));
 }
+
+/** Stage-to-stage conversion rates (audit defect D9 — endpoint had no UI consumer). */
+export const ConversionSchema = z.object({
+  period: z.string(),
+  found_to_applied: z.number(),
+  applied_to_screened: z.number(),
+  screened_to_interview: z.number(),
+  interview_to_offer: z.number(),
+});
+
+export type Conversion = z.infer<typeof ConversionSchema>;
+
+export async function fetchConversion(
+  period: Period = "all",
+  options: RequestOptions = {},
+): Promise<Conversion> {
+  return ConversionSchema.parse(
+    await apiRequest<unknown>(`/analytics/conversion?period=${period}`, options),
+  );
+}
