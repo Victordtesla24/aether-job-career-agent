@@ -1,7 +1,44 @@
 # Aether Delivery Progress
-Last updated: 2026-07-02 by Aether Delivery Agent Session 3
+Last updated: 2026-07-10 by Aether Delivery Agent Session 4
 Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: P2-S10 complete; Phase 2 deployed (frontend + API live)
 Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
+
+## Production defect fixes (2026-07-10)
+
+Live-environment defects found on https://5cb5f0620.abacusai.cloud, all fixed and verified live:
+
+1. **Cover-letter agent hang (>120 s, then 502).** Root cause: `_call_live` used urllib with a
+   120 s per-call timeout and the corrective drafting loop (≤3 drafts × 2-model fallback chain)
+   had **no overall budget** — worst case 6 live OpenRouter calls ≈ 720 s while the free tier
+   stalls. Fix (`llm_client.py`): httpx with strict per-call timeouts (connect 10 s / read 30 s)
+   plus a client-wide wall-clock budget (`AETHER_LLM_BUDGET_SECONDS`, default 60 s) spanning the
+   whole fallback chain; once exhausted, requests degrade to fixture replay or a typed 503 —
+   never a hang. Two extra graceful-degradation paths: malformed/truncated live JSON falls back
+   to the fixture (was an unhandled 500), and a missing per-attempt fixture key (`retry`/`retry2`)
+   degrades to the `default` fixture (was a spurious 503). Live verification: cover-letter run for
+   the previously-hanging job returned **HTTP 200 in ~94 s** (bounded; was infinite) with a real
+   draft + pending approval.
+2. **Tailoring guard rejected every rewrite (`changes: 0`).** Raw-verbatim token matching flagged
+   unicode punctuation, inflections and number formats as fabrication. Fixed with a normalized
+   evidence index (unicode folding + stemming + number-value equivalence + stopword exemption) —
+   see **ADR D-0015**. Live verification: tailor run returned `changes: 22` with 3 genuinely
+   novel bullets rejected; `/resumes/{id}/diff` shows evidence-linked before/after entries.
+3. **`/login` 404.** Real login page added (`apps/web/src/app/login/page.tsx`): demo credentials
+   prefilled, POSTs `/api/auth/login`, stores the JWT under the `aether_token` localStorage key,
+   redirects to `/dashboard`; wrong credentials show an inline alert. Covered by 3 Playwright specs.
+4. **nginx proxy timeout.** `/api/` location on the live vhost now has
+   `proxy_connect_timeout 10s; proxy_send_timeout 30s; proxy_read_timeout 180s` (server-side
+   config only — not a repo file).
+5. **Wireframe sweep (design/screens/*.html as contract).** Two rendered-but-unwired controls with
+   real backend support were wired: Jobs page **source filter** (Seek/LinkedIn/Indeed →
+   `GET /jobs?source=`) and Cover-letter studio **Regenerate** button (re-runs the cover-letter
+   agent for that letter's job). Controls without backend support (kanban drag, topbar search,
+   approval edit-and-approve, analytics export) were intentionally left as-is.
+6. **Test determinism.** `tests/conftest.py` now forces `AETHER_LLM_MODE=replay` (matching CI) so
+   a developer `.env` with `auto` can never make the suite hit the rate-limited live backend.
+
+Verification (2026-07-10): **99 pytest**, **85 vitest**, **24 Playwright** — all green; ruff +
+mypy + eslint + tsc clean; `pnpm build` clean; all dashboard routes + `/login` return 200 live.
 
 ## Phase 2 — Intelligence (session started 2026-07-02)
 `phase-1/foundation` was merged into `main` (merge commit `969643e`) and `phase-2/intelligence` was

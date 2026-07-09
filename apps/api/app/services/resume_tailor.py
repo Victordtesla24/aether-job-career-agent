@@ -32,9 +32,106 @@ SYSTEM_PROMPT = (
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _BULLET_MARKERS = ("•", "●", "▪", "- ")
 
+# ---------------------------------------------------------------------------
+# Evidence normalization (ADR D-0015).
+#
+# The anti-fabrication check compares *content* tokens of a rewritten bullet
+# against the source resume. Before comparison both sides are normalized:
+# unicode punctuation folding, case folding, inflectional suffix stripping,
+# and number-format equivalence. Stopwords / function words are ignored.
+# A bullet is rejected iff it contains a content token (skill, tool, employer,
+# metric, claim) with no normalized match in the evidence.
+# ---------------------------------------------------------------------------
+
+#: Unicode punctuation folded to ASCII equivalents before tokenizing so
+#: "end‑to‑end" (U+2011) matches "end-to-end" and "≈92%" matches "~92%".
+_UNICODE_FOLD = str.maketrans({
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-",
+    "\u2014": "-", "\u2015": "-", "\u2212": "-",
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u2248": "~", "\u223c": "~", "\uff05": "%",
+    "\u00a0": " ", "\u2009": " ", "\u202f": " ", "\u200b": "",
+    "\u2026": "...", "\u00d7": "x",
+})
+
+#: Function words / connectives that carry no factual claim — ignored by the
+#: novelty check. Deliberately excludes domain nouns (skills, tools, titles).
+_STOPWORDS = frozenset(
+    """
+    a an and are as at be been being but by can could did do does doing for
+    from had has have having he her hers him his how i if in into is it its
+    itself me more most my no nor not of off on once only or other our ours
+    out over own she so some such than that the their theirs them then there
+    these they this those through to too under until up very was we were what
+    when where which while who whom why will with would you your yours
+    across within during between among around about after before both each
+    per via using toward towards ensuring enabling driving delivering
+    including also well highly strong proven key new
+    percent percentage approximately approx roughly nearly almost
+    """.split()
+)
+
+_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _fold(text: str) -> str:
+    """Unicode-punctuation fold + case fold."""
+    return text.translate(_UNICODE_FOLD).lower()
+
+
+def _stem(token: str) -> str:
+    """Cheap inflectional-suffix stripper (both sides use it, so it only
+    needs to be consistent — not linguistically perfect)."""
+    if len(token) > 4 and token.endswith("ies"):
+        token = token[:-3] + "y"
+    else:
+        for suffix in ("ingly", "ing", "edly", "ed", "ers", "er", "est", "es", "ly", "s"):
+            if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+                token = token[: len(token) - len(suffix)]
+                break
+    # Fold trailing 'e' so manage/managed and deliver/delivery converge.
+    if len(token) > 3 and token[-1] in ("e", "y"):
+        token = token[:-1]
+    return token
+
 
 def _tokens(text: str) -> set[str]:
-    return set(_TOKEN_RE.findall(text.lower()))
+    return set(_TOKEN_RE.findall(_fold(text)))
+
+
+def _evidence_index(text: str) -> tuple[set[str], set[str]]:
+    """(normalized token+stem set, number set) for the evidence corpus."""
+    tokens = _tokens(text)
+    stems = tokens | {_stem(t) for t in tokens}
+    numbers = set(_NUMBER_RE.findall(_fold(text).replace(",", "")))
+    return stems, numbers
+
+
+def unsupported_tokens(
+    text: str, evidence_stems: set[str], evidence_numbers: set[str]
+) -> list[str]:
+    """Content tokens in ``text`` with no normalized match in the evidence.
+
+    Number-bearing tokens match when their numeric value appears anywhere in
+    the evidence (so "92%", "≈92%" and "92 percent" are equivalent); word
+    tokens match by exact or stem equality; stopwords are ignored.
+    """
+    novel: list[str] = []
+    for tok in _TOKEN_RE.findall(_fold(text)):
+        if tok in _STOPWORDS:
+            continue
+        if any(ch.isdigit() for ch in tok):
+            nums = _NUMBER_RE.findall(tok.replace(",", ""))
+            if nums and all(n in evidence_numbers for n in nums):
+                continue
+            if tok in evidence_stems:  # e.g. mixed tokens like "24x7"
+                continue
+            novel.append(tok)
+            continue
+        if tok in evidence_stems or _stem(tok) in evidence_stems:
+            continue
+        novel.append(tok)
+    return novel
 
 
 def extract_bullets(raw_text: str) -> list[str]:
@@ -66,7 +163,6 @@ class ResumeTailorService:
 
     def tailor(self, resume_text: str, job_description: str) -> TailorResult:
         bullets = extract_bullets(resume_text)
-        original_tokens = _tokens(resume_text)
         user_prompt = (
             "Job description:\n" + job_description + "\n\nOriginal bullets:\n"
             + "\n".join(f"bullet-{i}: {b}" for i, b in enumerate(bullets))
@@ -78,11 +174,12 @@ class ResumeTailorService:
             model=get_model("REASONING"),
             temperature=0.0,
         )
-        return self._validate(raw, bullets, original_tokens)
+        return self._validate(raw, bullets, resume_text)
 
     def _validate(
-        self, raw: Any, originals: list[str], original_tokens: set[str]
+        self, raw: Any, originals: list[str], resume_text: str
     ) -> TailorResult:
+        evidence_stems, evidence_numbers = _evidence_index(resume_text)
         result = TailorResult()
         by_ref = {f"bullet-{i}": b for i, b in enumerate(originals)}
         for item in raw.get("bullets", []):
@@ -91,8 +188,9 @@ class ResumeTailorService:
             if not text or not ref or ref not in by_ref:
                 result.rejected.append(text or "<empty>")
                 continue
-            if not _tokens(text) <= original_tokens:
-                # Fabrication guard: invented token → keep the original bullet.
+            if unsupported_tokens(text, evidence_stems, evidence_numbers):
+                # Fabrication guard (D-0015): a content token with no
+                # normalized evidence match → keep the original bullet.
                 result.rejected.append(text)
                 text = by_ref[ref]
             result.bullets.append({"text": text, "evidenceRef": ref})

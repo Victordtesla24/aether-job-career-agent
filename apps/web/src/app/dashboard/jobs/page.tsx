@@ -19,9 +19,13 @@ const STATUS_FILTERS: Array<JobStatus | "all"> = [
   "archived",
 ];
 
+const SOURCE_FILTERS = ["all", "seek", "linkedin", "indeed"] as const;
+type SourceFilter = (typeof SOURCE_FILTERS)[number];
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<JobStatus | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [savedOnly, setSavedOnly] = useState(false);
   const [sort, setSort] = useState<"createdAt" | "fitScore">("fitScore");
   const [running, setRunning] = useState(false);
@@ -31,6 +35,7 @@ export default function JobsPage() {
     try {
       const params = new URLSearchParams({ sort });
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (sourceFilter !== "all") params.set("source", sourceFilter);
       if (savedOnly) params.set("saved", "true");
       const data = await apiRequest<Job[]>(`/jobs?${params.toString()}`);
       setJobs(data);
@@ -39,7 +44,7 @@ export default function JobsPage() {
       setError(e instanceof Error ? e.message : "Failed to load jobs");
       setJobs([]);
     }
-  }, [sort, statusFilter, savedOnly]);
+  }, [sort, statusFilter, sourceFilter, savedOnly]);
 
   useEffect(() => {
     void load();
@@ -95,6 +100,18 @@ export default function JobsPage() {
           {STATUS_FILTERS.map((s) => (
             <option key={s} value={s} className="bg-black">
               {s === "all" ? "All statuses" : s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+          data-testid="job-source-filter"
+          className="glass rounded-lg border border-white/10 bg-transparent px-3 py-1.5 text-sm"
+        >
+          {SOURCE_FILTERS.map((s) => (
+            <option key={s} value={s} className="bg-black">
+              {s === "all" ? "All sources" : s}
             </option>
           ))}
         </select>

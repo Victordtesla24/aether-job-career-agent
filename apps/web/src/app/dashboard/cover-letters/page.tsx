@@ -20,6 +20,7 @@ export default function CoverLettersPage() {
   const [selectedJob, setSelectedJob] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -49,6 +50,20 @@ export default function CoverLettersPage() {
       setError(e instanceof Error ? e.message : "Cover letter run failed");
     } finally {
       setRunning(false);
+    }
+  };
+
+  // Wireframe action (cover-letter-studio): re-draft a letter for its job.
+  const regenerate = async (letter: CoverLetter) => {
+    setRegenerating(letter.id);
+    try {
+      await runCoverLetterAgent(letter.jobId);
+      await load();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regenerate failed");
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -130,13 +145,24 @@ export default function CoverLettersPage() {
                       {letter.status} · {new Date(letter.createdAt).toLocaleString()}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : letter.id)}
-                    className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30"
-                  >
-                    {isOpen ? "Collapse" : "Read draft"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="regenerate-letter-btn"
+                      onClick={() => void regenerate(letter)}
+                      disabled={regenerating === letter.id}
+                      className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30 disabled:opacity-50"
+                    >
+                      {regenerating === letter.id ? "Redrafting…" : "Regenerate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(isOpen ? null : letter.id)}
+                      className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30"
+                    >
+                      {isOpen ? "Collapse" : "Read draft"}
+                    </button>
+                  </div>
                 </div>
                 {isOpen && letter.coverLetter ? (
                   <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 font-sans text-sm text-aether-muted">

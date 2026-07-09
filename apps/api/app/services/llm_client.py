@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,27 @@ _DEFAULT_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures
 
 #: Last-resort model retried once when the primary model 404s / 429s (D-0014).
 FALLBACK_MODEL = "openai/gpt-oss-20b:free"
+
+#: Per-call HTTP timeouts (seconds). OpenRouter free tier can stall for
+#: minutes; a single call must never hold a request hostage.
+CONNECT_TIMEOUT = 10.0
+READ_TIMEOUT = 30.0
+
+#: Minimum useful remaining budget — below this we skip live attempts and go
+#: straight to fixture replay / typed error instead of firing a doomed call.
+_MIN_ATTEMPT_SECONDS = 5.0
+
+
+def get_budget_seconds() -> float:
+    """Overall wall-clock budget for ALL live LLM calls in one client's life.
+
+    One :class:`LLMClient` instance is created per agent run, so this bounds
+    the whole fallback chain (primary + fallback model x corrective retries).
+    """
+    try:
+        return float(os.environ.get("AETHER_LLM_BUDGET_SECONDS", "60"))
+    except ValueError:
+        return 60.0
 
 
 class LLMFixtureMissingError(RuntimeError):
@@ -65,6 +87,15 @@ class LLMClient:
     def __init__(self, mode: str | None = None, fixture_dir: Path | None = None) -> None:
         self.mode = mode or get_mode()
         self.fixture_dir = fixture_dir or get_fixture_dir()
+        #: Wall-clock deadline for live calls; armed on the first live attempt
+        #: so the whole fallback chain shares one budget (see get_budget_seconds).
+        self._deadline: float | None = None
+
+    def _remaining_budget(self) -> float:
+        """Seconds left in the live-call budget (arms the deadline lazily)."""
+        if self._deadline is None:
+            self._deadline = time.monotonic() + get_budget_seconds()
+        return self._deadline - time.monotonic()
 
     def complete(
         self,
@@ -91,14 +122,40 @@ class LLMClient:
         return content
 
     def complete_json(self, prompt_name: str, system: str, user: str, **kwargs: Any) -> Any:
-        """Like :meth:`complete` but parses the response as JSON."""
+        """Like :meth:`complete` but parses the response as JSON.
+
+        In ``auto`` mode a malformed/truncated live response (e.g. the model
+        hit its token limit mid-object) falls back to the recorded fixture
+        instead of surfacing an unhandled ``JSONDecodeError`` as a 500.
+        """
         raw = self.complete(prompt_name, system, user, **kwargs)
-        # Tolerate markdown fences around JSON payloads.
+        try:
+            return json.loads(self._strip_fences(raw))
+        except json.JSONDecodeError:
+            if self.mode != "auto":
+                raise
+        fixture_key = str(kwargs.get("fixture_key", "default"))
+        logger.warning(
+            "LLM returned malformed JSON for prompt '%s'; falling back to fixture",
+            prompt_name,
+        )
+        try:
+            fixture_raw = self._replay_with_default(prompt_name, fixture_key)
+            return json.loads(self._strip_fences(fixture_raw))
+        except (LLMFixtureMissingError, json.JSONDecodeError) as exc:
+            raise LLMUnavailableError(
+                f"LLM backend unavailable: live call for '{prompt_name}' returned "
+                "malformed JSON and no valid fixture exists"
+            ) from exc
+
+    @staticmethod
+    def _strip_fences(raw: str) -> str:
+        """Tolerate markdown fences around JSON payloads."""
         text = raw.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1] if "\n" in text else text
             text = text.rsplit("```", 1)[0]
-        return json.loads(text)
+        return text
 
     # ------------------------------------------------------------------
     def _auto(
@@ -111,14 +168,29 @@ class LLMClient:
         temperature: float,
         fixture_key: str,
     ) -> str:
-        """Live-first with model fallback, then fixture fallback (D-0014)."""
+        """Live-first with model fallback, then fixture fallback (D-0014).
+
+        Every live attempt is bounded by per-call HTTP timeouts AND the
+        client-wide wall-clock budget; once the budget is exhausted we stop
+        making live calls and fall straight to fixture replay / typed error
+        instead of hanging the request.
+        """
         primary = model or get_model("REASONING")
         for attempt_model in self._model_chain(primary):
+            remaining = self._remaining_budget()
+            if remaining < _MIN_ATTEMPT_SECONDS:
+                logger.warning(
+                    "LLM budget exhausted before model %s (prompt=%s); "
+                    "falling back to fixture",
+                    attempt_model, prompt_name,
+                )
+                break
             try:
                 content = self._call_live(
-                    system, user, model=attempt_model, temperature=temperature
+                    system, user, model=attempt_model, temperature=temperature,
+                    max_seconds=remaining,
                 )
-            except Exception as exc:  # 404/429/5xx/network/parse — try next
+            except Exception as exc:  # 404/429/5xx/network/timeout/parse — try next
                 logger.warning(
                     "LLM live call failed (model=%s, prompt=%s): %s",
                     attempt_model, prompt_name, exc,
@@ -131,7 +203,7 @@ class LLMClient:
             return content
         # All live attempts failed — fall back to the recorded fixture.
         try:
-            content = self._replay(prompt_name, fixture_key)
+            content = self._replay_with_default(prompt_name, fixture_key)
         except LLMFixtureMissingError as exc:
             raise LLMUnavailableError(
                 "LLM backend unavailable: live call failed for "
@@ -150,6 +222,25 @@ class LLMClient:
     def _fixture_path(self, prompt_name: str, key: str) -> Path:
         return self.fixture_dir / prompt_name / f"{key}.json"
 
+    def _replay_with_default(self, prompt_name: str, key: str) -> str:
+        """Replay ``key``; if missing, degrade to the ``default`` fixture.
+
+        Corrective-retry prompts use per-attempt fixture keys (``retry``,
+        ``retry2``) that may never have been recorded — the default fixture is
+        still a valid, guard-checked response for the prompt, so serving it is
+        strictly better than a 503.
+        """
+        try:
+            return self._replay(prompt_name, key)
+        except LLMFixtureMissingError:
+            if key == "default":
+                raise
+            logger.warning(
+                "LLM fixture '%s/%s' missing; degrading to default fixture",
+                prompt_name, key,
+            )
+            return self._replay(prompt_name, "default")
+
     def _replay(self, prompt_name: str, key: str) -> str:
         path = self._fixture_path(prompt_name, key)
         if not path.is_file():
@@ -164,9 +255,20 @@ class LLMClient:
         path.write_text(json.dumps({"content": content}, indent=2))
 
     def _call_live(
-        self, system: str, user: str, *, model: str | None, temperature: float
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str | None,
+        temperature: float,
+        max_seconds: float | None = None,
     ) -> str:
-        import urllib.request
+        """Single live chat-completion call with strict per-call timeouts.
+
+        ``max_seconds`` (remaining wall-clock budget) further caps the read
+        timeout so a call started near the deadline cannot overshoot it.
+        """
+        import httpx
 
         api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("ABACUS_API_KEY")
         base_url = os.environ.get(
@@ -174,26 +276,31 @@ class LLMClient:
         ).rstrip("/")
         if not api_key:
             raise RuntimeError("No LLM API key configured for live mode")
-        payload = json.dumps(
-            {
+        connect = CONNECT_TIMEOUT
+        read = READ_TIMEOUT
+        if max_seconds is not None:
+            connect = max(1.0, min(connect, max_seconds))
+            read = max(1.0, min(read, max_seconds))
+        timeout = httpx.Timeout(connect=connect, read=read, write=10.0, pool=10.0)
+        resp = httpx.post(
+            f"{base_url}/chat/completions",
+            json={
                 "model": model or get_model("REASONING"),
                 "temperature": temperature,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-            }
-        ).encode()
-        req = urllib.request.Request(
-            f"{base_url}/chat/completions",
-            data=payload,
+            },
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
+            timeout=timeout,
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = json.loads(resp.read().decode())
+        if resp.status_code >= 400:
+            raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
+        body = resp.json()
         if "error" in body:
             raise RuntimeError(f"LLM provider error: {body['error']}")
         content = body["choices"][0]["message"]["content"]

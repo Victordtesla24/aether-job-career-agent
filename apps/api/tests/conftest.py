@@ -58,6 +58,13 @@ os.environ.setdefault("NEXTAUTH_SECRET", _root_env.get("NEXTAUTH_SECRET", "test-
 # Discovery adapters run in fixture mode during tests: no live HTTP.
 os.environ["AETHER_DISCOVERY_FIXTURE_DIR"] = str(FIXTURE_DIR)
 
+# LLM calls replay committed fixtures during tests (matches CI): a developer
+# ``.env`` with AETHER_LLM_MODE=auto must never make the suite hit the live
+# backend — rate limits / truncation would make results nondeterministic.
+# Suites that exercise live/auto behaviour construct LLMClient(mode=...) or
+# monkeypatch the env explicitly.
+os.environ["AETHER_LLM_MODE"] = "replay"
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

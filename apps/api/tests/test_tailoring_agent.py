@@ -1,16 +1,9 @@
 """P2-S05 — Resume tailoring agent tests (LLM record-replay mode)."""
 from __future__ import annotations
 
-import re
-
 from app.agents.fit_scorer import get_base_resume_path
 from app.services.resume_parser import compute_format_hash, parse_resume_pdf
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
-
-def _tokens(text: str) -> set[str]:
-    return set(_TOKEN_RE.findall(text.lower()))
+from app.services.resume_tailor import _evidence_index, unsupported_tokens
 
 
 def _seed_job(client, auth_headers) -> dict:
@@ -34,13 +27,14 @@ def _run_tailor(client, auth_headers) -> dict:
 
 class TestTailoring:
     def test_tailoring_does_not_invent_skills(self, client, auth_headers):
+        """Every accepted bullet is fully evidence-traced (D-0015 semantics)."""
         body = _run_tailor(client, auth_headers)
         resume = client.get(f"/resumes/{body['resume_id']}", headers=auth_headers).json()
-        original_tokens = _tokens(parse_resume_pdf(get_base_resume_path())["raw_text"])
+        raw_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        stems, numbers = _evidence_index(raw_text)
         for bullet in resume["sections"]["bullets"]:
-            assert _tokens(bullet["text"]) <= original_tokens, (
-                f"invented tokens: {_tokens(bullet['text']) - original_tokens}"
-            )
+            novel = unsupported_tokens(bullet["text"], stems, numbers)
+            assert not novel, f"invented tokens: {novel}"
 
     def test_every_changed_bullet_has_evidence_ref(self, client, auth_headers):
         body = _run_tailor(client, auth_headers)

@@ -362,3 +362,36 @@ fallback and the 503 contract; `FabricationGuard` no longer false-positives on s
 title-case words; the cover-letter agent gained a corrective drafting loop (≤3 attempts, feeding
 flagged terms back to the model). **Reversible?** Yes — model ids are env vars; the fallback chain
 is one method.
+
+
+## D-0015 — Tailoring guard: evidence normalization instead of raw-verbatim token matching
+
+**Context.** In production the tailoring agent returned `changes: 0` on every run: the
+anti-fabrication validator in `resume_tailor.py` required every token of a rewritten bullet to
+appear *verbatim* in the original bullet set. Any legitimate rewording — a unicode hyphen
+(`e‑commerce` vs `e-commerce`), `≈92%` vs `92 percent`, `10,000` vs `10000`, `leading` vs `led`,
+or a harmless stopword ("the", "of") — was flagged as fabrication, so the guard reverted every
+bullet and the agent could never produce a tailored resume.
+
+**Decision.** Novelty is now judged against a *normalized evidence index* built from the full
+resume text (`_evidence_index` / `unsupported_tokens`):
+1. **Unicode folding** — hyphen/dash/minus variants → `-`, curly quotes → `'`, `≈`/`∼` → `~`,
+   `％` → `%`, nbsp/thin spaces → space, `…` → `...`, `×` → `x`;
+2. **Case folding + light stemming** — suffix stripping (`ing`, `ed`, `er`, `est`, `es`, `ly`,
+   `s`, `ies→y`) so inflectional variants of an evidenced word are accepted;
+3. **Number-format equivalence** — numeric tokens compare by value after comma/format stripping,
+   so `92%`, `≈92%` and `92 percent` are one fact;
+4. **Stopword exemption** — function words and numeric qualifiers (`percent`, `approximately`,
+   `roughly`, …) carry no factual claim and are never counted as novel.
+A bullet is rejected (and reverted to the original) **iff** it still contains a content token
+whose stem/value is absent from the resume evidence — new skills, tools, employers and metrics
+are still rejected exactly as before.
+
+**Alternatives.** Semantic-similarity scoring via the LLM (rejected: uses the very component the
+guard must not trust); whitelisting per-bullet diffs by hand (rejected: unscalable); loosening the
+guard to "reject only numbers" (rejected: would admit fabricated skills/tools).
+
+**Consequences.** Tailoring now yields real accepted changes in production (verified live:
+`changes: 22` with 3 genuinely-novel bullets rejected) while all negative fabrication tests still
+pass. +11 pytest (`test_guard_normalization.py`) pin the accept/reject contract.
+**Reversible?** Yes — the normalization pipeline is three pure functions in `resume_tailor.py`.
