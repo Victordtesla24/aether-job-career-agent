@@ -132,7 +132,7 @@ export default function NetworkingPage() {
 
           <div className="grid gap-6 xl:grid-cols-3">
             {/* Contact pipeline */}
-            <section className="xl:col-span-2" data-testid="contact-pipeline">
+            <section className="min-w-0 xl:col-span-2" data-testid="contact-pipeline">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
                 Contact Pipeline
               </h2>
@@ -142,7 +142,7 @@ export default function NetworkingPage() {
                     col.stage === "New" ? [...added, ...col.contacts] : col.contacts;
                   const count = col.stage === "New" ? col.count + added.length : col.count;
                   return (
-                    <div key={col.stage} data-testid={`pipeline-${col.stage.toLowerCase()}`}>
+                    <div key={col.stage} className="min-w-0" data-testid={`pipeline-${col.stage.toLowerCase()}`}>
                       <div className="mb-2 flex items-center justify-between px-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`h-2 w-2 rounded-full ${STAGE_ACCENT[col.stage] ?? "bg-white/40"}`} />
@@ -182,7 +182,7 @@ export default function NetworkingPage() {
             </section>
 
             {/* Right column */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-6">
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="outreach-queue">
                 <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
                 <div className="space-y-3">

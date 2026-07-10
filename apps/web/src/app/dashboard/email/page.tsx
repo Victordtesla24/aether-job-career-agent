@@ -185,7 +185,7 @@ export default function EmailCenterPage() {
 
       <div className="grid gap-5 xl:grid-cols-4">
         {/* Smart Inbox */}
-        <section className="glass rounded-2xl border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
+        <section className="glass min-w-0 rounded-2xl border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
           <h2 className="mb-3 text-[15px] font-semibold">Smart Inbox</h2>
           <div className="mb-3 flex flex-wrap gap-1.5">
             {CATEGORIES.map((c) => (
@@ -240,7 +240,7 @@ export default function EmailCenterPage() {
         </section>
 
         {/* Email detail + AI panel */}
-        <section className="space-y-4 xl:col-span-2" data-testid="email-detail">
+        <section className="min-w-0 space-y-4 xl:col-span-2" data-testid="email-detail">
           {selected ? (
             <>
               <div className="glass rounded-2xl border border-white/10 p-5">

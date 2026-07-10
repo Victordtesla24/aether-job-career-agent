@@ -80,11 +80,11 @@ export default function CoverLettersPage() {
             Drafts pass a fabrication guard — every claim traces to your resume.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
           <select
             value={selectedJob}
             onChange={(e) => setSelectedJob(e.target.value)}
-            className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm"
+            className="glass w-full min-w-0 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm sm:w-auto"
             data-testid="cover-letter-job-select"
           >
             <option value="" className="bg-black">
