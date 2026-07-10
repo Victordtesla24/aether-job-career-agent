@@ -31,6 +31,7 @@ export default function ApprovalsPage() {
   const [filter, setFilter] = useState<StatusFilter>("pending");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trustAgent, setTrustAgent] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -98,6 +99,36 @@ export default function ApprovalsPage() {
           {error}
         </p>
       ) : null}
+
+      {/* Approval gate rationale (wireframe approval-modal.html) */}
+      <section
+        data-testid="approval-explainer"
+        className="glass rounded-2xl border border-aether-amber/30 p-5"
+      >
+        <h2 className="text-[15px] font-semibold">
+          <i className="fa-solid fa-shield-halved mr-2 text-aether-amber" aria-hidden="true" />
+          Approval Needed
+        </h2>
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+            Why approval is needed
+          </p>
+          <p className="mt-1 text-sm text-aether-muted">
+            This role sits above your salary target and the cover letter references a project
+            outside your verified portfolio. Your approval gate for high-stakes applications is on.
+          </p>
+        </div>
+        <label className="mt-3 flex items-center gap-2.5 text-sm text-aether-muted">
+          <input
+            type="checkbox"
+            checked={trustAgent}
+            data-testid="trust-agent-checkbox"
+            onChange={(e) => setTrustAgent(e.target.checked)}
+            className="h-4 w-4 rounded accent-[#FF6B35]"
+          />
+          Trust this agent for similar decisions going forward
+        </label>
+      </section>
 
       {approvals === null ? (
         <div className="space-y-3" aria-busy="true">

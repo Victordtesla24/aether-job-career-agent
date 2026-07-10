@@ -67,7 +67,9 @@ export default function MarketPulse() {
       </div>
 
       {/* Trend indicator tiles */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4" data-testid="trend-indicators">
+      <div data-testid="trend-indicators">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Trend Indicators</h3>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {data.trendIndicators.map((t) => (
           <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
             <div className="flex items-center justify-between">
@@ -87,6 +89,7 @@ export default function MarketPulse() {
             </svg>
           </div>
         ))}
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -152,7 +155,7 @@ export default function MarketPulse() {
         {/* Job Probability Score */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="probability-score">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            {data.probability.label}
+            Your Job Probability Score
           </h3>
           <div className="flex items-center gap-5">
             <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" role="img" aria-label={`Probability ${data.probability.score}%`}>
@@ -193,7 +196,7 @@ export default function MarketPulse() {
         {/* Activity heatmap */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="activity-heatmap">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Activity Heatmap
+            Weekly Activity
           </h3>
           <div className="grid grid-cols-7 gap-1.5">
             {data.activityHeatmap.flatMap((week, wi) =>
@@ -243,7 +246,7 @@ export default function MarketPulse() {
         {/* Recruiter trends */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="recruiter-trends">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Recruiter Trends
+            Recruiter Activity
           </h3>
           <svg viewBox="0 0 120 36" className="h-16 w-full" aria-hidden="true">
             <polyline
@@ -267,7 +270,7 @@ export default function MarketPulse() {
         {/* Market vs you */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="market-vs-you">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Market vs You
+            Market vs. Your Performance
           </h3>
           <div className="space-y-4">
             {data.marketVsYou.comparisons.map((c) => {

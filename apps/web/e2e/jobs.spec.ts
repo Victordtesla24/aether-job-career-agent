@@ -9,7 +9,7 @@ test.describe("Jobs page", () => {
   test("renders job cards from the API", async ({ page }) => {
     await page.goto("/dashboard/jobs");
 
-    await expect(page.getByRole("heading", { name: "Jobs", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Job Discovery", level: 1 })).toBeVisible();
     const cards = page.getByTestId("job-card");
     await expect(cards.first()).toBeVisible({ timeout: 20_000 });
     expect(await cards.count()).toBeGreaterThan(0);

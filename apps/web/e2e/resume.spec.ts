@@ -9,7 +9,7 @@ test.describe("Resume studio", () => {
     await page.goto("/dashboard/resume");
 
     await expect(page.getByRole("heading", { name: "Resume", level: 1 })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Versions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Versions", exact: true })).toBeVisible();
     await expect(page.getByTestId("tailor-job-select")).toBeVisible();
     await expect(page.getByTestId("run-tailor-btn")).toBeVisible();
   });

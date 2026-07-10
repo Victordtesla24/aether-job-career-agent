@@ -15,7 +15,7 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
   const pathname = usePathname();
   const currentHref = activeHref ?? pathname ?? "/dashboard";
   return (
-    <aside className="w-[248px] shrink-0 border-r border-white/10 glass flex flex-col px-4 py-6">
+    <aside className="w-[248px] shrink-0 border-r border-white/10 glass hidden lg:flex flex-col px-4 py-6">
       <div className="flex items-center gap-3 px-2 mb-8">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-aether-coral to-aether-amber flex items-center justify-center shadow-lg shadow-aether-coral/30">
           <i className="fa-solid fa-bolt text-white text-sm" />
@@ -39,7 +39,7 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
               aria-current={isActive ? "page" : undefined}
               className={
                 isActive
-                  ? "flex items-center gap-3 px-3 py-2.5 rounded-xl bg-aether-coral/12 text-white border border-aether-coral/20 text-sm font-medium"
+                  ? "flex items-center gap-3 px-3 py-2.5 rounded-xl bg-aether-coral/12 text-aether-coral border border-aether-coral/20 text-sm font-medium"
                   : "flex items-center gap-3 px-3 py-2.5 rounded-xl text-aether-muted hover:bg-white/5 hover:text-white transition text-sm"
               }
             >

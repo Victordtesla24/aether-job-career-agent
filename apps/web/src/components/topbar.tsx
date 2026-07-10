@@ -29,6 +29,7 @@ export function Topbar({
         <button
           type="button"
           aria-label="Notifications"
+          data-design-id="m-notif-md02"
           className="relative w-10 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center justify-center"
         >
           <i className="fa-regular fa-bell text-aether-muted" />
@@ -40,7 +41,7 @@ export function Topbar({
           </div>
           <div className="leading-tight">
             <div className="text-[13px] font-medium">Vikram D.</div>
-            <div className="text-[11px] text-aether-muted-dim">Pro plan</div>
+            <div className="text-[11px] text-aether-muted-dim">Senior TPM</div>
           </div>
         </div>
       </div>

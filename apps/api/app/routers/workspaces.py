@@ -236,7 +236,7 @@ _EMAILS: dict[str, Any] = {
             "from": "Sarah Chen",
             "fromEmail": "schen@atlassian.com",
             "company": "Atlassian",
-            "subject": "Staff Engineer — next steps",
+            "subject": "Senior Technical Program Manager — Cloud Infrastructure",
             "preview": "Hi Vikram, great news — the panel would like to move you forward to…",
             "category": "priority",
             "score": 82,

@@ -206,6 +206,11 @@ function LiveAssistCard({
           {muted ? "🔇 Muted — click to enable" : "🎙 Live — click to mute"}
         </button>
       </div>
+      {muted ? (
+        <p className="mb-3 rounded-lg border border-white/10 bg-white/5 p-2.5 text-xs text-aether-muted-dim" data-testid="muted-notice">
+          Live Assist muted — no audio is being captured or analysed.
+        </p>
+      ) : null}
       <div className="grid grid-cols-3 gap-3">
         <Metric label="Filler words" value={`${liveAssist.fillerWordsPerMin}/min`} />
         <Metric label="Pace" value={`${liveAssist.wordsPerMin} wpm`} />

@@ -10,7 +10,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
+import { fetchAgentRuns, type AgentRun } from "../../lib/api/agents";
 import { fetchFunnel, type Funnel } from "../../lib/api/analytics";
+import { fetchApprovals, type Approval } from "../../lib/api/approvals";
 import { apiRequest } from "../../lib/api/client";
 import type { Job } from "../../lib/api/jobs";
 import { fetchNetworkingSummary, type NetworkingSummary } from "../../lib/api/workspaces";
@@ -22,6 +24,28 @@ const FUNNEL_STAGES: Array<{ key: keyof Funnel & string; label: string; color: s
   { key: "interviewed", label: "Interviewed", color: "bg-aether-amber" },
   { key: "offers", label: "Offers", color: "bg-aether-green" },
 ];
+
+/** Feed badge per run (wireframe feed: Discovered / Tailored / Submitted / Waiting). */
+function runBadge(run: AgentRun): { label: string; cls: string } {
+  if (run.status === "queued" || run.status === "running") {
+    return { label: "Waiting", cls: "border-aether-amber/30 text-aether-amber" };
+  }
+  if (run.status === "failed") {
+    return { label: "Failed", cls: "border-red-500/30 text-red-300" };
+  }
+  const byAgent: Record<string, string> = {
+    scout: "Discovered",
+    tailor: "Tailored",
+    submission: "Submitted",
+    coverLetter: "Drafted",
+  };
+  return {
+    label: byAgent[run.agentName] ?? "Completed",
+    cls: "border-aether-green/30 text-aether-green",
+  };
+}
+
+const FEED_FILTERS = ["All", "Discovered", "Tailored", "Submitted", "Waiting"] as const;
 
 function initials(company: string) {
   return company
@@ -36,9 +60,14 @@ export default function DashboardPage() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [crm, setCrm] = useState<NetworkingSummary["crmSummary"] | null>(null);
+  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [pending, setPending] = useState<Approval[]>([]);
+  const [feedFilter, setFeedFilter] = useState<(typeof FEED_FILTERS)[number]>("All");
 
   useEffect(() => {
     fetchFunnel("all").then(setFunnel).catch(() => setFunnel(null));
+    fetchAgentRuns().then(setRuns).catch(() => setRuns([]));
+    fetchApprovals("pending").then(setPending).catch(() => setPending([]));
     apiRequest<Job[]>("/jobs?sort=fitScore")
       .then((list) => setJobs(list.slice(0, 3)))
       .catch(() => setJobs([]));
@@ -55,20 +84,70 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-7 xl:col-span-2">
         <DashboardStats />
 
-        <section className="glass rounded-2xl border border-white/10 p-6">
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="w-2 h-2 rounded-full bg-aether-green live-dot" />
-            <h2 className="text-[15px] font-semibold">Agent Activity</h2>
-            <span className="text-[11px] text-aether-muted-dim mono">live</span>
+        <section className="glass rounded-2xl border border-white/10 p-6" data-testid="agent-feed">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-aether-green live-dot" />
+              <h2 className="text-[15px] font-semibold">Agent Activity</h2>
+              <span className="text-[11px] text-aether-muted-dim mono">live</span>
+            </div>
+            <Link href="/dashboard/agents" className="text-xs text-aether-coral transition hover:text-white">
+              View all
+            </Link>
           </div>
-          <p className="text-sm text-aether-muted">
-            Head to the{" "}
-            <Link href="/dashboard/agents" className="text-aether-coral underline underline-offset-2">
-              Agents workspace
-            </Link>{" "}
-            to trigger runs, review recent activity, and launch the full discovery → tailoring
-            pipeline. Anything that leaves the system waits for your approval first.
-          </p>
+          <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Feed filters">
+            {FEED_FILTERS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={feedFilter === f}
+                onClick={() => setFeedFilter(f)}
+                className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+                  feedFilter === f
+                    ? "border-aether-coral/50 bg-aether-coral/15 font-semibold text-aether-coral"
+                    : "border-white/10 text-aether-muted hover:text-white"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          {runs.length === 0 ? (
+            <p className="text-sm text-aether-muted">
+              No agent activity yet — head to the{" "}
+              <Link href="/dashboard/agents" className="text-aether-coral underline underline-offset-2">
+                Agents workspace
+              </Link>{" "}
+              to launch the discovery → tailoring pipeline. Anything that leaves the system waits
+              for your approval first.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {runs
+                .filter((r) => feedFilter === "All" || runBadge(r).label === feedFilter)
+                .slice(0, 5)
+                .map((r) => {
+                  const badge = runBadge(r);
+                  return (
+                    <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm">
+                          <span className="font-semibold capitalize">{r.agentName}</span>{" "}
+                          <span className="text-aether-muted">agent run {r.status}</span>
+                        </p>
+                        <p className="mono text-[11px] text-aether-muted-dim">
+                          {r.startedAt ? new Date(r.startedAt).toLocaleString() : "queued"}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
         </section>
 
         {/* Today's opportunities */}
@@ -153,6 +232,41 @@ export default function DashboardPage() {
           )}
         </section>
 
+        {/* Needs Approval widget (wireframe dashboard.html) */}
+        <section className="glass rounded-2xl border border-aether-amber/25 p-6" data-testid="needs-approval-widget">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[15px] font-semibold">Needs Approval</h2>
+            <Link href="/dashboard/approvals" className="flex items-center gap-1 text-xs text-aether-coral transition hover:text-white">
+              Review <i className="fa-solid fa-arrow-right text-[9px]" aria-hidden="true" />
+            </Link>
+          </div>
+          {pending.length === 0 ? (
+            <p className="text-sm text-aether-muted-dim">
+              Queue clear — nothing is waiting on you right now.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {pending.slice(0, 3).map((a) => {
+                const payload = a.payload as { kind?: string; job_title?: string; company?: string };
+                return (
+                  <li key={a.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-sm font-medium">
+                      {payload.kind === "cover_letter" ? "Cover letter" : "Application"}
+                      {payload.job_title ? ` — ${payload.job_title}` : ""}
+                    </p>
+                    <p className="mono mt-0.5 text-[11px] text-aether-muted-dim">
+                      {payload.company ?? a.type} · {new Date(a.createdAt).toLocaleString()}
+                    </p>
+                  </li>
+                );
+              })}
+              {pending.length > 3 ? (
+                <li className="text-center text-xs text-aether-muted-dim">+{pending.length - 3} more waiting</li>
+              ) : null}
+            </ul>
+          )}
+        </section>
+
         {/* Recruiter CRM summary (DEF-015) */}
         <section
           className="glass rounded-2xl border border-white/10 p-6 transition hover:border-aether-coral/30"
@@ -180,6 +294,125 @@ export default function DashboardPage() {
           )}
         </section>
       </div>
+
+      {/* Market Intelligence (wireframe dashboard.html — static market snapshot) */}
+      <section className="glass rounded-2xl border border-white/10 p-6 xl:col-span-3" data-testid="market-intelligence">
+        <div className="mb-5 flex flex-wrap items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-aether-violet live-dot" />
+          <h2 className="text-[15px] font-semibold">Market Intelligence</h2>
+          <span className="mono text-[11px] text-aether-muted-dim">Hiring &amp; recruitment trends · AU + US</span>
+        </div>
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+              Demand Heatmap by Role
+            </h3>
+            <div className="mb-1.5 flex justify-end gap-4 pr-1 text-[10px] text-aether-muted-dim">
+              <span>AU</span>
+              <span>US</span>
+            </div>
+            <div className="space-y-2">
+              {[
+                { role: "AI / ML Engineer", au: 4, us: 4 },
+                { role: "DevOps Engineer", au: 3, us: 3 },
+                { role: "Technical Program Manager", au: 3, us: 4 },
+                { role: "Solutions Architect", au: 2, us: 3 },
+                { role: "Scrum Master", au: 1, us: 1 },
+              ].map((r) => (
+                <div key={r.role} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs text-aether-muted">{r.role}</span>
+                  <span className="flex shrink-0 gap-2">
+                    {[r.au, r.us].map((v, i) => (
+                      <span
+                        key={i}
+                        className={`h-4 w-6 rounded ${
+                          v >= 4 ? "bg-aether-coral" : v === 3 ? "bg-aether-coral/60" : v === 2 ? "bg-aether-coral/30" : "bg-white/10"
+                        }`}
+                      />
+                    ))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+                Remote Work Index
+              </h3>
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="mono text-xl font-bold">35%</p>
+                  <p className="text-[11px] text-aether-muted">🇦🇺 Australia</p>
+                </div>
+                <div>
+                  <p className="mono text-xl font-bold">45%</p>
+                  <p className="text-[11px] text-aether-muted">🌏 United States</p>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-aether-muted-dim">share of remote-friendly senior roles</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Hot Sectors</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {["Financial Services", "Government / Defence", "Healthcare AI", "Cloud Infrastructure", "Fintech"].map((sName) => (
+                  <span key={sName} className="rounded-md border border-aether-violet/25 bg-aether-violet/10 px-2 py-0.5 text-[10px] text-aether-violet">
+                    {sName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Salary Trends</h3>
+            <div className="space-y-3">
+              {[
+                { role: "TPM", delta: "+6%", au: "AU $180–220K", us: "US $160–200K" },
+                { role: "AI / ML Engineer", delta: "+18%", au: "AU $160–200K", us: "US $150–250K" },
+                { role: "DevOps Engineer", delta: "+9%", au: "AU $150–190K", us: "US $118–174K" },
+              ].map((r) => (
+                <div key={r.role}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{r.role}</span>
+                    <span className="mono font-semibold text-aether-green">{r.delta}</span>
+                  </div>
+                  <p className="mono text-[10px] text-aether-muted-dim">
+                    {r.au} · {r.us}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+                Best Time to Apply
+              </h3>
+              <p className="mono text-sm font-bold text-aether-green">+23% response rate</p>
+              <p className="mt-1 text-[11px] text-aether-muted">
+                Applications submitted Mon–Wed morning earn 23% higher response rates than the
+                weekly average.
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+                Where to Focus
+              </h3>
+              <p className="text-[11px] text-aether-muted">
+                Your profile matches strongly for <span className="font-semibold text-white">TPM roles in Financial Services</span>.
+                Consider expanding to <span className="font-semibold text-white">US remote opportunities</span>, where demand is{" "}
+                <span className="font-semibold text-aether-green">40% higher</span>.
+              </p>
+              <Link href="/dashboard/jobs" className="mt-2 inline-block text-[11px] font-semibold text-aether-coral hover:underline">
+                Explore matching roles →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

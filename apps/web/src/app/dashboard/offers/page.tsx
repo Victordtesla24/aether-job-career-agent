@@ -15,6 +15,14 @@ export default function OffersPage() {
   const [error, setError] = useState<string | null>(null);
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [counterDraft, setCounterDraft] = useState(false);
+  const [demoEmpty, setDemoEmpty] = useState(false);
+
+  // ?demo=empty → render the real empty-state branch (state variant preview).
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "empty") {
+      setDemoEmpty(true);
+    }
+  }, []);
 
   useEffect(() => {
     fetchOffers()
@@ -44,7 +52,7 @@ export default function OffersPage() {
     );
   }
 
-  const isEmpty = data.offers.length === 0;
+  const isEmpty = data.offers.length === 0 || demoEmpty;
 
   return (
     <div className="space-y-6" data-testid="offer-comparison">
@@ -66,8 +74,19 @@ export default function OffersPage() {
       {isEmpty ? (
         <div className="glass rounded-2xl border border-white/10 p-12 text-center" data-testid="offers-empty-state">
           <p className="text-lg font-semibold">No offers to compare</p>
-          <p className="mt-1 text-sm text-aether-muted">
-            When offers land they&apos;ll appear here, scored against your priority weights.
+          <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
+            When you receive an offer, add it here to run a weighted decision analysis across
+            compensation, growth, culture and more — and get negotiation coaching tailored to
+            your priorities.
+          </p>
+          <button
+            type="button"
+            className="mt-4 rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Add Offer
+          </button>
+          <p className="mt-3 text-xs text-aether-muted-dim">
+            Tip: Add at least two offers to unlock side-by-side scoring and counter-offer suggestions.
           </p>
         </div>
       ) : (

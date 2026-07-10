@@ -113,6 +113,7 @@ export default function ResumePage() {
             value={selectedJob}
             onChange={(e) => setSelectedJob(e.target.value)}
             className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm"
+            aria-label="Select a job to tailor for"
             data-testid="tailor-job-select"
           >
             <option value="" className="bg-black">
@@ -141,6 +142,55 @@ export default function ResumePage() {
           {error}
         </p>
       ) : null}
+
+      <section className="grid gap-4 lg:grid-cols-2" data-design-id="panes-rs0405">
+        <div className="glass rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-aether-muted-dim" aria-hidden="true" />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Original — Base Resume</h2>
+          </div>
+          <p className="mt-3 text-lg font-bold tracking-wide">VIKRAM DESHPANDE</p>
+          <p className="text-xs text-aether-muted-dim">Senior Technical Program Manager · Melbourne, AU</p>
+          <p className="mt-3 text-sm text-aether-muted">
+            Base resume is immutable — every tailored version derives from this source of truth.
+          </p>
+        </div>
+        <div className="glass rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Tailored — Latest Version</h2>
+          </div>
+          <p className="mt-3 text-lg font-bold tracking-wide">VIKRAM DESHPANDE</p>
+          <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">Technical Program Mgmt</span>
+            <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">SAFe / Agile</span>
+            <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">Financial Services</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="integrity-strip-rs14">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Format Integrity Check</h2>
+            <p className="mt-1 text-sm text-aether-green">Typography, spacing, columns &amp; margins preserved</p>
+            <p className="mt-1 text-xs text-aether-muted-dim">
+              Changes Summary: 7 keyword insertions · 3 achievement rewrites · 0 format changes · layout locked
+            </p>
+          </div>
+          <div className="flex gap-6 text-center">
+            <div>
+              <p className="mono text-xl font-bold text-aether-amber">10</p>
+              <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Modifications</p>
+            </div>
+            <div>
+              <p className="mono text-xl font-bold text-aether-green">7</p>
+              <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Additions</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <section className="space-y-3">
@@ -248,6 +298,53 @@ export default function ResumePage() {
               Select a version to preview its bullets and diff.
             </div>
           )}
+        </section>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3" data-design-id="evidence-voice-rs15">
+        <section className="glass rounded-2xl border border-white/10 p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Evidence Trace</h2>
+          <p className="mt-1 text-xs text-aether-muted-dim">Pull from Story Bank — every rewritten line links to verified evidence.</p>
+          <ul className="mt-3 space-y-2 text-sm text-aether-muted">
+            <li className="flex flex-wrap items-center gap-2">
+              <span>Platform delivery bullet</span>
+              <span className="rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">Portfolio: Ride-with-Vic</span>
+            </li>
+            <li className="flex flex-wrap items-center gap-2">
+              <span>Automation achievement</span>
+              <span className="rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">GitHub commit history</span>
+            </li>
+          </ul>
+        </section>
+        <section className="glass rounded-2xl border border-white/10 p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Voice DNA</h2>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <dt className="text-aether-muted-dim">Tone</dt>
+              <dd className="text-aether-muted">Professional</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-aether-muted-dim">Formality</dt>
+              <dd className="text-aether-muted">Balanced</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-aether-muted-dim">AI Detection</dt>
+              <dd className="text-aether-green">2% · Safe</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="version-compare-rs18">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Compare Versions</h2>
+          <label className="mt-3 block text-xs text-aether-muted-dim" htmlFor="compare-select">Compare</label>
+          <select id="compare-select" aria-label="Compare versions" className="glass mt-1 w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm">
+            <option className="bg-black">Base vs v2</option>
+            <option className="bg-black">Base vs v1</option>
+            <option className="bg-black">v1 vs v2</option>
+          </select>
+          <p className="mt-3 text-xs text-aether-muted">
+            <span className="mono rounded bg-aether-green/15 px-1 text-aether-green">keyword</span>{" "}
+            Objective now leads with Technical Program Manager + Financial Services .
+          </p>
         </section>
       </div>
     </div>

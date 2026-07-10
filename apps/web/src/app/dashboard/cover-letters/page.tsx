@@ -27,6 +27,8 @@ export default function CoverLettersPage() {
     try {
       const [letterList, jobList] = await Promise.all([fetchCoverLetters(), apiRequest<Job[]>("/jobs")]);
       setLetters(letterList);
+      // Studio default: first draft opens expanded (wireframe shows the editor).
+      setExpanded((prev) => prev ?? letterList[0]?.id ?? null);
       setJobs(jobList);
       setError(null);
     } catch (e) {
@@ -73,7 +75,7 @@ export default function CoverLettersPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Cover Letters</h1>
+          <h1 className="text-2xl font-bold">Cover Letter Studio</h1>
           <p className="text-sm text-aether-muted">
             Drafts pass a fabrication guard — every claim traces to your resume.
           </p>
@@ -126,7 +128,8 @@ export default function CoverLettersPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-3 xl:col-span-2">
           {letters.map((letter) => {
             const job = jobFor(letter.jobId);
             const isOpen = expanded === letter.id;
@@ -186,6 +189,117 @@ export default function CoverLettersPage() {
               </article>
             );
           })}
+        </div>
+
+        {/* Studio right rail (wireframe cover-letter-studio.html cl20–cl33) */}
+        <aside className="space-y-4">
+          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="evidence-trace-panel">
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold">Evidence Trace</h2>
+              <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">
+                Pull from Story Bank
+              </span>
+            </div>
+            <p className="mb-3 text-[11px] text-aether-muted-dim">
+              Every highlighted claim is grounded in a Story Bank entry — nothing is invented.
+              Review the source before you send.
+            </p>
+            <ul className="space-y-2 text-xs">
+              <li className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
+                <span className="text-aether-muted">“large program delivery”</span>
+                <span className="text-aether-green">Story: Program Delivery Leadership</span>
+              </li>
+              <li className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
+                <span className="text-aether-muted">“AI delivery”</span>
+                <span className="text-aether-green">Story: AI/ML Production Rollout</span>
+              </li>
+              <li className="flex items-center justify-between gap-2 rounded-lg border border-aether-amber/25 bg-aether-amber/5 p-2">
+                <span className="text-aether-muted">“platform thinking”</span>
+                <span className="text-aether-amber">no source yet — add or soften</span>
+              </li>
+            </ul>
+          </section>
+
+          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="voice-dna-panel">
+            <h2 className="mb-3 text-[15px] font-semibold">Voice DNA</h2>
+            <dl className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <dt className="text-aether-muted-dim">Tone</dt>
+                <dd className="font-semibold">Warm · Professional</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-aether-muted-dim">Formality</dt>
+                <dd className="font-semibold">Balanced</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="keyword-coverage-panel">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold">JD Keyword Coverage</h2>
+              <span className="mono text-xs font-bold text-aether-green">8/10</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {["Program delivery", "AI delivery", "Cross-functional", "Stakeholders", "Cloud", "Governance", "Roadmap", "Delivery practices"].map((k) => (
+                <span key={k} className="rounded-md border border-aether-green/25 bg-aether-green/10 px-2 py-0.5 text-[10px] text-aether-green">
+                  {k}
+                </span>
+              ))}
+              {["SAFe", "OKRs"].map((k) => (
+                <span key={k} className="rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-aether-muted-dim">
+                  {k} (missing)
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="letter-actions-panel">
+            <h2 className="mb-3 text-[15px] font-semibold">Actions</h2>
+            <div className="space-y-2">
+              <button
+                type="button"
+                data-testid="rail-regenerate-btn"
+                onClick={() => {
+                  const current = letters.find((l) => l.id === expanded) ?? letters[0];
+                  if (current) void regenerate(current);
+                }}
+                disabled={regenerating !== null}
+                className="w-full rounded-lg bg-aether-coral px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {regenerating ? "Redrafting…" : "Regenerate"}
+              </button>
+              <button type="button" className="w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
+                Request Changes
+              </button>
+              <button type="button" className="w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
+                Export PDF
+              </button>
+              <button type="button" className="w-full rounded-lg border border-aether-violet/30 px-3 py-2 text-xs text-aether-violet hover:bg-aether-violet/10">
+                Attach &amp; send via Email Center
+              </button>
+            </div>
+          </section>
+
+          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="versions-panel">
+            <h2 className="mb-3 text-[15px] font-semibold">Versions</h2>
+            <ul className="space-y-2 text-xs">
+              {letters.slice(0, 3).map((l, i) => (
+                <li key={l.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2">
+                  <span className="text-aether-muted">
+                    v{letters.length - i} · {new Date(l.createdAt).toLocaleDateString()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(l.id)}
+                    className="text-aether-coral hover:underline"
+                  >
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
         </div>
       )}
     </div>

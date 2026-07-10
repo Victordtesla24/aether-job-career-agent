@@ -128,6 +128,13 @@ export default function StoryBankPage() {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoEmpty, setDemoEmpty] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("demo=empty")) {
+      setDemoEmpty(true);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -178,7 +185,7 @@ export default function StoryBankPage() {
         <div>
           <h1 className="text-2xl font-bold">Story Bank</h1>
           <p className="text-sm text-aether-muted">
-            STAR stories mined from your resume — metrics must trace to evidence.
+            Achievement & Narrative Library — reusable STAR+R evidence blocks that power your resumes, cover letters and interview answers.
           </p>
         </div>
         <div className="flex gap-2">
@@ -231,12 +238,24 @@ export default function StoryBankPage() {
             <div key={i} className="glass h-48 animate-pulse rounded-2xl border border-white/10" />
           ))}
         </div>
-      ) : stories.length === 0 ? (
+      ) : stories.length === 0 || demoEmpty ? (
         <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="stories-empty-state">
-          <p className="text-lg font-semibold">No stories yet</p>
-          <p className="mt-1 text-sm text-aether-muted">
-            Run the Story Extractor to mine STAR stories from your resume.
+          <p className="text-lg font-semibold">Your Story Bank is empty</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
+            Import achievements from your resume and portfolio to build your interview arsenal.
+            Aether will auto-extract STAR+R stories you can reuse everywhere.
           </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={() => void extract()} className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Import from Resume
+            </button>
+            <button type="button" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white">
+              Import from Portfolio
+            </button>
+            <button type="button" onClick={() => setCreating(true)} className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white">
+              Add Manually
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -322,6 +341,48 @@ export default function StoryBankPage() {
           ))}
         </div>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="mapper-sb28">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Interview Question Mapper</h2>
+          <p className="mt-1 text-xs text-aether-muted-dim">Common questions mapped to your strongest stories.</p>
+          <ul className="mt-3 space-y-3 text-sm">
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-aether-muted">&ldquo;Tell me about a time you improved a process.&rdquo;</span>
+              <span className="mono rounded-full border border-aether-green/30 px-2 py-0.5 text-xs text-aether-green">ATO 92% automation</span>
+            </li>
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-aether-muted">&ldquo;Describe leading a large team.&rdquo;</span>
+              <span className="mono rounded-full border border-aether-green/30 px-2 py-0.5 text-xs text-aether-green">ANZ 30% delivery</span>
+            </li>
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-aether-muted">&ldquo;A time you handled compliance risk.&rdquo;</span>
+              <span className="mono rounded-full border border-aether-green/30 px-2 py-0.5 text-xs text-aether-green">NAB risk uplift</span>
+            </li>
+          </ul>
+        </section>
+        <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="gaps-sb32">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Coverage Gaps</h2>
+          <p className="mt-1 text-xs text-aether-muted-dim">Interview themes with weak or missing evidence.</p>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li className="flex items-center justify-between gap-2">
+              <span className="text-aether-muted">Conflict resolution</span>
+              <span className="rounded-full border border-red-500/30 px-2 py-0.5 text-xs text-red-300">No story</span>
+            </li>
+            <li className="flex items-center justify-between gap-2">
+              <span className="text-aether-muted">Failure / lessons learned</span>
+              <span className="rounded-full border border-red-500/30 px-2 py-0.5 text-xs text-red-300">No story</span>
+            </li>
+            <li className="flex items-center justify-between gap-2">
+              <span className="text-aether-muted">Stakeholder influence</span>
+              <span className="rounded-full border border-aether-amber/30 px-2 py-0.5 text-xs text-aether-amber">Thin</span>
+            </li>
+          </ul>
+          <button type="button" onClick={() => setCreating(true)} className="mt-4 rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white">
+            Draft missing stories
+          </button>
+        </section>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ test.describe("Cover Letters page", () => {
     await page.goto("/dashboard/cover-letters");
 
     await expect(
-      page.getByRole("heading", { name: "Cover Letters", level: 1 }),
+      page.getByRole("heading", { name: "Cover Letter Studio", level: 1 }),
     ).toBeVisible();
     const card = page.getByTestId("cover-letter-card").first();
     const empty = page.getByTestId("cover-letters-empty-state");

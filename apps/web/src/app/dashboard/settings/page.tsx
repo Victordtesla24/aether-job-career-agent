@@ -15,6 +15,7 @@ const SECTIONS = [
   { id: "portfolio", label: "Portfolio Sync" },
   { id: "agents", label: "Agent Configuration" },
   { id: "integrations", label: "Integrations" },
+  { id: "notifications", label: "Notifications" },
   { id: "privacy", label: "Privacy & Compliance" },
 ] as const;
 
@@ -106,7 +107,7 @@ export default function SettingsPage() {
     <div className="space-y-6" data-testid="settings-page">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="text-2xl font-bold">Settings &amp; Profile</h1>
           <p className="text-sm text-aether-muted">Profile, agent behaviour and integrations.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -214,6 +215,7 @@ export default function SettingsPage() {
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-portfolio">
                 <h2 className="mb-3 text-[15px] font-semibold">Portfolio Sync</h2>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <p className="mb-1 text-[11px] text-aether-muted-dim">Portfolio URL</p>
                   <p className="mono text-xs">{data.portfolio.url}</p>
                   <p className="mt-1 text-[11px] text-aether-muted-dim">
                     Sync cadence: {data.portfolio.cadence} · last synced {data.portfolio.lastSynced}
@@ -269,6 +271,20 @@ export default function SettingsPage() {
             </section>
           )}
 
+          {active === "notifications" && (
+            <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-notifications">
+              <h2 className="mb-4 text-[15px] font-semibold">Notifications</h2>
+              <div className="space-y-4">
+                <Toggle label="Approval requests" description="Notify me when an agent needs my approval"
+                  value={true} testId="toggle-notif-approvals" onChange={() => undefined} />
+                <Toggle label="Application updates" description="Status changes, recruiter views and responses"
+                  value={true} testId="toggle-notif-apps" onChange={() => undefined} />
+                <Toggle label="Weekly digest" description="Summary of agent activity every Monday morning"
+                  value={false} testId="toggle-notif-digest" onChange={() => undefined} />
+              </div>
+            </section>
+          )}
+
           {(active === "integrations" || active === "profile") && (
             <>
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-integrations">
@@ -314,12 +330,11 @@ export default function SettingsPage() {
                   {data.connectedAccounts.map((a) => (
                     <div key={a.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
                       <div>
-                        <p className="text-xs font-semibold">{a.name}</p>
-                        <p className="mono text-[11px] text-aether-muted-dim">{a.detail}</p>
+                        <p className="text-xs font-semibold">
+                          {a.name} <span className="ml-1 rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
+                        </p>
+                        <p className="mono mt-1 text-[11px] text-aether-muted-dim">{a.detail}</p>
                       </div>
-                      <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">
-                        connected
-                      </span>
                     </div>
                   ))}
                 </div>

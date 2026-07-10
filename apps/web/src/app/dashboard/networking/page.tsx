@@ -38,6 +38,14 @@ export default function NetworkingPage() {
   const [formError, setFormError] = useState<string | null>(null);
   // Locally-added contacts land in the "New" stage (demo scope).
   const [added, setAdded] = useState<NetworkingContact[]>([]);
+  const [demoEmpty, setDemoEmpty] = useState(false);
+
+  // ?demo=empty → render the real empty-state branch (state variant preview).
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "empty") {
+      setDemoEmpty(true);
+    }
+  }, []);
 
   useEffect(() => {
     fetchNetworkingSummary()
@@ -77,7 +85,7 @@ export default function NetworkingPage() {
   }
 
   const totalContacts = data.stats.contacts + added.length;
-  const isEmpty = totalContacts === 0;
+  const isEmpty = totalContacts === 0 || demoEmpty;
 
   return (
     <div className="space-y-6" data-testid="networking-crm">
@@ -98,9 +106,10 @@ export default function NetworkingPage() {
 
       {isEmpty ? (
         <div className="glass rounded-2xl border border-white/10 p-12 text-center" data-testid="networking-empty-state">
-          <p className="text-lg font-semibold">No contacts yet</p>
-          <p className="mt-1 text-sm text-aether-muted">
-            Add your first recruiter or referral contact — or import your network.
+          <p className="text-lg font-semibold">No connections yet</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
+            Start building your recruiter &amp; referral network. Import your LinkedIn connections
+            to auto-populate the CRM, or add a contact manually to begin tracking outreach.
           </p>
           <button
             type="button"

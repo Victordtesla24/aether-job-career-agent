@@ -187,8 +187,8 @@ _MARKET_PULSE: dict[str, Any] = {
         "summary": "You're applying 87% more than the market average and converting interviews at 1.75× the median.",
     },
     "trendIndicators": [
-        {"label": "TPM openings", "delta": "+22%", "direction": "up", "series": [4, 6, 5, 8, 9, 11, 12]},
-        {"label": "AI delivery roles", "delta": "+9%", "direction": "up", "series": [7, 7, 8, 8, 9, 9, 10]},
+        {"label": "Demand for your skills", "delta": "+22%", "direction": "up", "series": [4, 6, 5, 8, 9, 11, 12]},
+        {"label": "Salary movement", "delta": "+9%", "direction": "up", "series": [7, 7, 8, 8, 9, 9, 10]},
         {"label": "Avg base salary", "delta": "+14%", "direction": "up", "series": [3, 4, 6, 5, 7, 8, 9]},
         {"label": "Time-to-hire", "delta": "-11%", "direction": "down", "series": [9, 8, 8, 7, 6, 6, 5]},
     ],

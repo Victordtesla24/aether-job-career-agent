@@ -248,7 +248,15 @@ export default function EmailCenterPage() {
                   <div>
                     <h2 className="text-[15px] font-semibold">{selected.subject}</h2>
                     <p className="mt-0.5 text-xs text-aether-muted">
-                      {selected.from} &lt;{selected.fromEmail}&gt; · {selected.receivedAt}
+                      {selected.from} &lt;{selected.fromEmail}&gt; · {selected.receivedAt} ·{" "}
+                      <a
+                        href="https://www.linkedin.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-aether-coral hover:underline"
+                      >
+                        LinkedIn Profile
+                      </a>
                     </p>
                   </div>
                   <span className={`mono flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${scoreColor(selected.score)}`}>
@@ -288,6 +296,9 @@ export default function EmailCenterPage() {
                     <h3 className="text-[15px] font-semibold">AI Draft Reply</h3>
                     <div className="flex items-center gap-2">
                       <span className="mono text-[11px] text-aether-green">Voice DNA {selected.voiceDna}%</span>
+                      <span className="rounded-md border border-aether-violet/25 bg-aether-violet/10 px-2 py-0.5 text-[10px] text-aether-violet">
+                        Expert · Humble · Professional
+                      </span>
                       <div className="flex rounded-lg border border-white/10 p-0.5">
                         {TONES.map((t) => (
                           <button

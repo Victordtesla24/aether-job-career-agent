@@ -58,6 +58,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [testAgent, setTestAgent] = useState<string>("scout");
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
@@ -281,6 +282,101 @@ export default function AgentsPage() {
       )}
 
       <Orchestration agents={agents ?? []} runs={runs} />
+
+      {/* AI Provider Connections + Agent Configuration + Test Run (wireframe agents.html) */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="provider-connections">
+          <h2 className="mb-4 text-[15px] font-semibold">AI Provider Connections</h2>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
+              <div>
+                <p className="text-xs font-semibold">Anthropic Claude</p>
+                <p className="mono text-[11px] text-aether-muted-dim">API Key ····8f3d · claude-sonnet-4</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
+                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-[10px] text-aether-muted hover:border-white/30 hover:text-white">Manage</button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
+              <div>
+                <p className="text-xs font-semibold">OpenRouter</p>
+                <p className="mono text-[11px] text-aether-muted-dim">OAuth + API Key · llama-3.1-405b</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
+                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-[10px] text-aether-muted hover:border-white/30 hover:text-white">Manage</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="agent-configuration">
+          <h2 className="mb-4 text-[15px] font-semibold">Agent Configuration</h2>
+          <ul className="space-y-2.5 text-xs text-aether-muted">
+            <li className="flex items-center justify-between">
+              <span>Approval gate</span>
+              <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">On</span>
+            </li>
+            <li className="flex items-center justify-between">
+              <span>Auto-apply</span>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-aether-muted-dim">Off</span>
+            </li>
+            <li className="flex items-center justify-between">
+              <span>Match threshold</span>
+              <span className="mono font-semibold text-white">80%</span>
+            </li>
+          </ul>
+          <Link
+            href="/dashboard/settings"
+            className="mt-4 block rounded-lg border border-white/15 py-2 text-center text-xs text-aether-muted hover:border-white/30 hover:text-white"
+          >
+            Configure in Settings &amp; Profile
+          </Link>
+        </section>
+
+        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="test-run-panel">
+          <h2 className="mb-1 text-[15px] font-semibold">Test Run — Single Agent</h2>
+          <p className="mb-3 text-[11px] text-aether-muted-dim">
+            Dry-run one agent · Model claude-sonnet-4 · Est. tokens ~4.2K · Est. cost/run ~$0.032
+          </p>
+          <label className="block">
+            <span className="mb-1 block text-xs text-aether-muted">Select agent</span>
+            <select
+              value={testAgent}
+              data-testid="test-run-select"
+              aria-label="Select agent"
+              onChange={(e) => setTestAgent(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50 [&>option]:bg-aether-bg"
+            >
+              {Array.from(RUNNABLE).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              data-testid="test-run-cancel"
+              onClick={() => setTestAgent("scout")}
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-aether-muted hover:border-white/30 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="test-run-go"
+              onClick={() => void trigger(testAgent)}
+              disabled={busy !== null}
+              className="rounded-lg bg-aether-coral px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy === testAgent ? "Running…" : "Run Test"}
+            </button>
+          </div>
+        </section>
+      </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">

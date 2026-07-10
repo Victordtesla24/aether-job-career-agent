@@ -9,7 +9,7 @@ test.describe("Applications page", () => {
     await page.goto("/dashboard/applications");
 
     await expect(
-      page.getByRole("heading", { name: "Applications", level: 1 }),
+      page.getByRole("heading", { name: "Application Tracker", level: 1 }),
     ).toBeVisible();
     await expect(page.getByTestId("applications-kanban")).toBeVisible({ timeout: 20_000 });
     const columns = page.locator('[data-testid^="kanban-column-"]');
