@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * Story Bank — STAR stories extracted from the base resume with evidence-backed
- * metrics. Backed by GET/POST/PUT/DELETE /stories and
- * POST /agents/story-extractor/run. Manual creation + inline editing added for
- * audit defect D6 (journey J5 requires the creation flow to work end-to-end).
+ * Story Bank — STAR+R achievement library. Reusable evidence blocks that power
+ * resumes, cover letters and interview answers.
+ *
+ * Backed by GET/POST/PUT/DELETE /stories and POST /agents/story-extractor/run.
+ * Every card, stat, question-mapping and coverage-gap is derived from live API
+ * data (see components/stories/story-utils.ts) — no hardcoded fixtures and no
+ * fabricated metrics. Mirrors design/screens/story-bank.html.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createStory,
@@ -17,108 +20,30 @@ import {
   type Story,
   type StoryInput,
 } from "../../../lib/api/stories";
+import { EMPTY_STORY_FORM, StoryForm } from "../../../components/stories/StoryForm";
+import { StoryCard } from "../../../components/stories/StoryCard";
+import { StoryInsights } from "../../../components/stories/StoryInsights";
+import {
+  STORY_FILTERS,
+  type StoryFilter,
+  computeStats,
+  matchesFilter,
+} from "../../../components/stories/story-utils";
 
-const EMPTY_FORM: StoryInput = {
-  title: "",
-  situation: "",
-  task: "",
-  action: "",
-  result: "",
-  tags: [],
-};
-
-interface StoryFormProps {
-  initial: StoryInput;
-  submitLabel: string;
-  onSubmit: (input: StoryInput) => Promise<void>;
-  onCancel: () => void;
-}
-
-function StoryForm({ initial, submitLabel, onSubmit, onCancel }: StoryFormProps) {
-  const [form, setForm] = useState<StoryInput>(initial);
-  const [tagsText, setTagsText] = useState((initial.tags ?? []).join(", "));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const set = (key: keyof StoryInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await onSubmit({
-        ...form,
-        tags: tagsText
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save story");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const fieldCls =
-    "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-aether-muted-dim focus:border-aether-coral/60 focus:outline-none";
-
+function StatCard({
+  label,
+  value,
+  valueClass = "",
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
   return (
-    <form onSubmit={(e) => void submit(e)} className="space-y-3" data-testid="story-form">
-      {error ? <p className="text-xs text-red-300">{error}</p> : null}
-      <input
-        required
-        value={form.title}
-        onChange={set("title")}
-        placeholder="Title"
-        data-testid="story-form-title"
-        className={fieldCls}
-      />
-      {(
-        [
-          ["situation", "Situation"],
-          ["task", "Task"],
-          ["action", "Action"],
-          ["result", "Result"],
-        ] as const
-      ).map(([key, label]) => (
-        <textarea
-          key={key}
-          required
-          value={form[key] as string}
-          onChange={set(key)}
-          placeholder={label}
-          rows={2}
-          data-testid={`story-form-${key}`}
-          className={fieldCls}
-        />
-      ))}
-      <input
-        value={tagsText}
-        onChange={(e) => setTagsText(e.target.value)}
-        placeholder="Tags (comma separated)"
-        data-testid="story-form-tags"
-        className={fieldCls}
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={saving}
-          data-testid="story-form-submit"
-          className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : submitLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-aether-muted hover:border-white/25"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+    <div className="glass rounded-2xl border border-white/10 p-4">
+      <div className="mb-1 text-[11px] text-aether-muted">{label}</div>
+      <div className={`mono text-2xl font-bold ${valueClass}`}>{value}</div>
+    </div>
   );
 }
 
@@ -127,6 +52,8 @@ export default function StoryBankPage() {
   const [running, setRunning] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StoryFilter>("All");
+  const [favourites, setFavourites] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -156,8 +83,12 @@ export default function StoryBankPage() {
   };
 
   const remove = async (id: string) => {
-    await deleteStory(id);
-    setStories((prev) => (prev ?? []).filter((s) => s.id !== id));
+    try {
+      await deleteStory(id);
+      setStories((prev) => (prev ?? []).filter((s) => s.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete story");
+    }
   };
 
   const create = async (input: StoryInput) => {
@@ -172,44 +103,86 @@ export default function StoryBankPage() {
     setEditingId(null);
   };
 
+  const openCreate = () => {
+    setCreating(true);
+    setEditingId(null);
+  };
+
+  const toggleFavourite = (id: string) =>
+    setFavourites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const stats = useMemo(() => computeStats(stories ?? []), [stories]);
+  const visible = useMemo(
+    () => (stories ?? []).filter((s) => matchesFilter(s, filter)),
+    [stories, filter],
+  );
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="space-y-7">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Story Bank</h1>
-          <p className="text-sm text-aether-muted">
-            STAR stories mined from your resume — metrics must trace to evidence.
+          <div className="mb-1 flex items-center gap-2 text-[13px] text-aether-muted">
+            <i className="fa-solid fa-book-bookmark text-aether-coral" aria-hidden="true" />
+            Story Bank
+          </div>
+          <h1 className="text-2xl font-bold">Achievement &amp; Narrative Library</h1>
+          <p className="mt-1 text-sm text-aether-muted">
+            Reusable STAR+R evidence blocks that power your resumes, cover letters and interview
+            answers.
           </p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
-            data-testid="add-story-btn"
-            onClick={() => {
-              setCreating((v) => !v);
-              setEditingId(null);
-            }}
-            className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white"
-          >
-            {creating ? "Close" : "Add Story"}
-          </button>
-          <button
-            type="button"
             data-testid="run-extractor-btn"
             onClick={() => void extract()}
             disabled={running}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-aether-muted transition hover:border-white/30 hover:text-white disabled:opacity-50"
           >
-            {running ? "Extracting..." : "Extract Stories"}
+            <i className="fa-solid fa-wand-magic-sparkles mr-1.5" aria-hidden="true" />
+            {running ? "Extracting…" : "Extract Stories"}
+          </button>
+          <button
+            type="button"
+            data-testid="add-story-btn"
+            onClick={() => (creating ? setCreating(false) : openCreate())}
+            className="rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <i className={`fa-solid ${creating ? "fa-xmark" : "fa-plus"} mr-1.5`} aria-hidden="true" />
+            {creating ? "Close" : "New Story"}
           </button>
         </div>
       </header>
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+        <p role="alert" className="rounded-xl border border-[#F87171]/30 bg-[#F87171]/10 p-3 text-sm text-[#F87171]">
           {error}
         </p>
       ) : null}
+
+      <section
+        data-testid="story-stats"
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        aria-label="Story bank statistics"
+      >
+        <StatCard label="Total Stories" value={String(stats.total)} />
+        <StatCard
+          label="Quantified w/ Metrics"
+          value={String(stats.quantified)}
+          valueClass="text-aether-green"
+        />
+        <StatCard label="Added This Month" value={String(stats.addedThisMonth)} />
+        <StatCard
+          label="Voice Match Avg"
+          value={stats.voiceAvg === null ? "—" : `${stats.voiceAvg}%`}
+          valueClass="text-[#A78BFA]"
+        />
+      </section>
 
       {creating ? (
         <div className="glass rounded-2xl border border-aether-coral/30 p-5" data-testid="create-story-panel">
@@ -217,7 +190,7 @@ export default function StoryBankPage() {
             New story
           </h2>
           <StoryForm
-            initial={EMPTY_FORM}
+            initial={EMPTY_STORY_FORM}
             submitLabel="Create Story"
             onSubmit={create}
             onCancel={() => setCreating(false)}
@@ -225,103 +198,107 @@ export default function StoryBankPage() {
         </div>
       ) : null}
 
-      {stories === null ? (
-        <div className="grid gap-4 md:grid-cols-2" aria-busy="true">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="glass h-48 animate-pulse rounded-2xl border border-white/10" />
-          ))}
-        </div>
-      ) : stories.length === 0 ? (
-        <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="stories-empty-state">
-          <p className="text-lg font-semibold">No stories yet</p>
-          <p className="mt-1 text-sm text-aether-muted">
-            Run the Story Extractor to mine STAR stories from your resume.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {stories.map((story) => (
-            <article
-              key={story.id}
-              data-testid="story-card"
-              className="glass rounded-2xl border border-white/10 p-5 transition hover:border-white/20"
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <section className="min-w-0 flex-1 space-y-4">
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter stories by category">
+            {STORY_FILTERS.map((chip) => {
+              const active = filter === chip;
+              return (
+                <button
+                  key={chip}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFilter(chip)}
+                  className={
+                    active
+                      ? "rounded-lg bg-white/8 px-3 py-1.5 text-xs font-medium text-white"
+                      : "rounded-lg px-3 py-1.5 text-xs text-aether-muted transition hover:bg-white/5"
+                  }
+                >
+                  {chip}
+                </button>
+              );
+            })}
+          </div>
+
+          {stories === null ? (
+            <div className="grid gap-4 md:grid-cols-2" aria-busy="true">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="glass h-48 animate-pulse rounded-2xl border border-white/10" />
+              ))}
+            </div>
+          ) : stories.length === 0 ? (
+            <div
+              data-testid="stories-empty-state"
+              className="rounded-2xl border border-dashed border-white/15 p-10 text-center"
             >
-              {editingId === story.id ? (
-                <StoryForm
-                  initial={{
-                    title: story.title,
-                    situation: story.situation,
-                    task: story.task,
-                    action: story.action,
-                    result: story.result,
-                    tags: story.tags,
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-aether-coral/25 bg-aether-coral/12">
+                <i className="fa-solid fa-book-bookmark text-xl text-aether-coral" aria-hidden="true" />
+              </div>
+              <h2 className="mb-1.5 text-base font-semibold">Your Story Bank is empty</h2>
+              <p className="mx-auto mb-5 max-w-md text-sm text-aether-muted">
+                Import achievements from your resume to build your interview arsenal. Aether will
+                auto-extract STAR+R stories you can reuse everywhere.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  data-testid="empty-import-resume"
+                  onClick={() => void extract()}
+                  disabled={running}
+                  className="rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <i className="fa-solid fa-file-import mr-1.5" aria-hidden="true" />
+                  {running ? "Extracting…" : "Import from Resume"}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="Portfolio import lands in a later phase"
+                  className="cursor-not-allowed rounded-xl border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium opacity-50"
+                >
+                  <i className="fa-solid fa-briefcase mr-1.5" aria-hidden="true" />
+                  Import from Portfolio
+                </button>
+                <button
+                  type="button"
+                  data-testid="empty-add-manual"
+                  onClick={openCreate}
+                  className="rounded-xl border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium transition hover:bg-white/12"
+                >
+                  <i className="fa-solid fa-plus mr-1.5" aria-hidden="true" />
+                  Add Manually
+                </button>
+              </div>
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="glass rounded-2xl border border-white/10 p-10 text-center text-sm text-aether-muted">
+              No stories in “{filter}”. Try another category.
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {visible.map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  isEditing={editingId === story.id}
+                  isFavourite={favourites.has(story.id)}
+                  onToggleFavourite={() => toggleFavourite(story.id)}
+                  onEdit={() => {
+                    setEditingId(story.id);
+                    setCreating(false);
                   }}
-                  submitLabel="Save Changes"
-                  onSubmit={(input) => saveEdit(story.id, input)}
-                  onCancel={() => setEditingId(null)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSaveEdit={(input) => saveEdit(story.id, input)}
+                  onDelete={() => void remove(story.id)}
                 />
-              ) : (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="font-semibold">{story.title}</h2>
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        data-testid="edit-story-btn"
-                        onClick={() => {
-                          setEditingId(story.id);
-                          setCreating(false);
-                        }}
-                        className="text-xs text-aether-muted-dim hover:text-aether-amber"
-                        title="Edit story"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void remove(story.id)}
-                        className="text-xs text-aether-muted-dim hover:text-red-300"
-                        title="Delete story"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                  <dl className="mt-3 space-y-2 text-sm">
-                    {(
-                      [
-                        ["Situation", story.situation],
-                        ["Task", story.task],
-                        ["Action", story.action],
-                        ["Result", story.result],
-                      ] as const
-                    ).map(([label, value]) => (
-                      <div key={label}>
-                        <dt className="text-xs uppercase tracking-wide text-aether-muted-dim">{label}</dt>
-                        <dd className="text-aether-muted">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    {story.tags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">
-                        {tag}
-                      </span>
-                    ))}
-                    {story.metrics
-                      ? Object.entries(story.metrics).map(([k, v]) => (
-                          <span key={k} className="mono rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
-                            {k}: {String(v)}
-                          </span>
-                        ))
-                      : null}
-                  </div>
-                </>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
+              ))}
+            </div>
+          )}
+        </section>
+
+        <StoryInsights stories={stories ?? []} onDraftMissing={openCreate} />
+      </div>
     </div>
   );
 }

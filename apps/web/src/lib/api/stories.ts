@@ -18,14 +18,24 @@ export const StorySchema = z.object({
 
 export type Story = z.infer<typeof StorySchema>;
 
+export const StoryExtractionResultSchema = z.object({
+  created: z.number(),
+  dropped: z.array(z.string()),
+  story_ids: z.array(z.string()).optional(),
+});
+
+export type StoryExtractionResult = z.infer<typeof StoryExtractionResultSchema>;
+
 export async function fetchStories(options: RequestOptions = {}): Promise<Story[]> {
   return z.array(StorySchema).parse(await apiRequest<unknown>("/stories", options));
 }
 
 export async function runStoryExtractor(
   options: RequestOptions = {},
-): Promise<{ created: number; dropped: string[] }> {
-  return apiRequest("/agents/story-extractor/run", { ...options, method: "POST" });
+): Promise<StoryExtractionResult> {
+  return StoryExtractionResultSchema.parse(
+    await apiRequest<unknown>("/agents/story-extractor/run", { ...options, method: "POST" }),
+  );
 }
 
 export async function deleteStory(id: string, options: RequestOptions = {}): Promise<void> {
