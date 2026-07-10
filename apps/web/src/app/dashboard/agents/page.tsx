@@ -22,6 +22,7 @@ import {
   type AgentSummary,
 } from "../../../lib/api/agents";
 import { apiRequest } from "../../../lib/api/client";
+import Orchestration from "../../../components/agents/Orchestration";
 import {
   agentSuccessNotice,
   pipelineCompletionNotice,
@@ -278,6 +279,8 @@ export default function AgentsPage() {
           ))}
         </div>
       )}
+
+      <Orchestration agents={agents ?? []} runs={runs} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">

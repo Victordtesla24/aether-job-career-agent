@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+import MarketPulse from "../../../components/analytics/MarketPulse";
 import {
   fetchAgentRoi,
   fetchAtsDistribution,
@@ -204,6 +205,8 @@ export default function AnalyticsPage() {
           )}
         </section>
       </div>
+
+      <MarketPulse />
     </div>
   );
 }

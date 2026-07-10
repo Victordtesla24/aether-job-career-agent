@@ -15,6 +15,28 @@ import {
   type ApplicationStatus,
 } from "../../../lib/api/applications";
 import { fetchApprovals } from "../../../lib/api/approvals";
+import { apiRequest } from "../../../lib/api/client";
+import type { Job } from "../../../lib/api/jobs";
+
+/** Company initials chip (wireframe card-at17). */
+function initials(company: string) {
+  return company
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+const STATUS_ICON: Record<ApplicationStatus, { icon: string; cls: string }> = {
+  draft: { icon: "fa-file-pen", cls: "text-aether-coral bg-aether-coral/20" },
+  submitted: { icon: "fa-check", cls: "text-aether-violet bg-aether-violet/20" },
+  screening: { icon: "fa-clock", cls: "text-aether-amber bg-aether-amber/20" },
+  interview: { icon: "fa-comments", cls: "text-aether-violet bg-aether-violet/20" },
+  offer: { icon: "fa-award", cls: "text-aether-green bg-aether-green/20" },
+  rejected: { icon: "fa-xmark", cls: "text-red-300 bg-red-500/20" },
+  withdrawn: { icon: "fa-ban", cls: "text-aether-muted-dim bg-white/10" },
+};
 
 const COLUMNS: Array<{ status: ApplicationStatus; label: string; accent: string }> = [
   { status: "draft", label: "Draft", accent: "border-white/20" },
@@ -27,6 +49,7 @@ const COLUMNS: Array<{ status: ApplicationStatus; label: string; accent: string 
 
 export default function ApplicationsPage() {
   const [apps, setApps] = useState<Application[] | null>(null);
+  const [jobFit, setJobFit] = useState<Record<string, number>>({});
   const [pendingCount, setPendingCount] = useState(0);
   const [detail, setDetail] = useState<Application | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +59,17 @@ export default function ApplicationsPage() {
     try {
       setApps(await fetchApplications());
       setError(null);
+      // Fit scores come from the underlying job (wireframe card-at17 chip).
+      try {
+        const jobs = await apiRequest<Job[]>("/jobs");
+        setJobFit(
+          Object.fromEntries(
+            jobs.filter((j) => j.fitScore != null).map((j) => [j.id, Math.round(Number(j.fitScore))]),
+          ),
+        );
+      } catch {
+        /* fit chips are progressive enhancement */
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load applications");
       setApps([]);
@@ -202,8 +236,31 @@ export default function ApplicationsPage() {
                         }}
                         className="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-aether-violet/50"
                       >
-                        <h3 className="text-sm font-semibold leading-tight">{app.jobTitle}</h3>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                              {initials(app.company)}
+                            </span>
+                            {jobFit[app.jobId] != null ? (
+                              <span className="mono text-[11px] font-semibold text-aether-green">
+                                {jobFit[app.jobId]}
+                              </span>
+                            ) : null}
+                          </div>
+                          <span
+                            className={`flex h-5 w-5 items-center justify-center rounded-full ${STATUS_ICON[app.status].cls}`}
+                            title={app.status}
+                          >
+                            <i className={`fa-solid ${STATUS_ICON[app.status].icon} text-[9px]`} aria-hidden="true" />
+                          </span>
+                        </div>
+                        <h3 className="mt-2.5 text-sm font-semibold leading-tight">{app.jobTitle}</h3>
                         <p className="mt-0.5 text-xs text-aether-muted">{app.company}</p>
+                        {app.status === "draft" ? (
+                          <span className="mt-2 inline-block rounded-md bg-aether-amber/15 px-2 py-0.5 text-[10px] text-aether-amber">
+                            needs approval
+                          </span>
+                        ) : null}
                         <p className="mono mt-1 text-[10px] text-aether-muted-dim">
                           {new Date(app.updatedAt).toLocaleDateString()}
                         </p>

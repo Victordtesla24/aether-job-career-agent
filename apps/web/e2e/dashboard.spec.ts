@@ -40,15 +40,13 @@ test("root route redirects to the dashboard", async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
-test("un-built nav sections render a graceful placeholder, not a 404 (P1-S12)", async ({
+test("nav sections render real workspaces; unknown routes get a graceful panel (P1-S12)", async ({
   page,
 }) => {
+  // Every nav section now has a dedicated workspace page.
   await page.goto("/dashboard/interviews");
-
-  // The shell stays intact and the section is titled from the nav contract.
-  const heading = page.getByRole("heading", { name: "Interview Center", level: 2 });
-  await expect(heading).toBeVisible();
-  await expect(page.getByText(/planned workspace/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Interview Center", level: 1 })).toBeVisible();
+  await expect(page.getByText(/planned workspace/i)).toHaveCount(0);
 
   // The correct sidebar item is marked active for the current pathname.
   const nav = page.getByRole("navigation", { name: "Primary" });
@@ -56,4 +54,9 @@ test("un-built nav sections render a graceful placeholder, not a 404 (P1-S12)", 
     "aria-current",
     "page",
   );
+
+  // Unknown routes still render an in-shell graceful panel, not a bare 404.
+  await page.goto("/dashboard/does-not-exist");
+  await expect(page.getByRole("heading", { name: "Section not found", level: 2 })).toBeVisible();
+  await expect(page.getByText(/unknown route/i)).toBeVisible();
 });

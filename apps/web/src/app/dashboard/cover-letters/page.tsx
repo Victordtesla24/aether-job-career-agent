@@ -165,9 +165,23 @@ export default function CoverLettersPage() {
                   </div>
                 </div>
                 {isOpen && letter.coverLetter ? (
-                  <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 font-sans text-sm text-aether-muted">
-                    {letter.coverLetter}
-                  </pre>
+                  <div className="mt-4" data-testid="letter-preview">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-file-lines text-sm text-aether-coral" aria-hidden="true" />
+                        <h3 className="text-sm font-semibold">Cover Letter — Draft</h3>
+                        <span className="rounded-md border border-aether-violet/25 bg-aether-violet/15 px-2 py-0.5 text-[10px] text-aether-violet">
+                          AI-generated · editable
+                        </span>
+                      </div>
+                      <span className="mono text-[11px] text-aether-muted-dim">
+                        {letter.coverLetter.trim().split(/\s+/).length} words · 1 page
+                      </span>
+                    </div>
+                    <div className="mx-auto max-w-[720px] whitespace-pre-line rounded-xl bg-[#F7F7FB] p-8 text-sm leading-relaxed text-[#1A1A24] shadow-lg">
+                      {letter.coverLetter}
+                    </div>
+                  </div>
                 ) : null}
               </article>
             );
