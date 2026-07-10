@@ -179,14 +179,14 @@ export default function ResumePage() {
               Changes Summary: 7 keyword insertions · 3 achievement rewrites · 0 format changes · layout locked
             </p>
           </div>
-          <div className="flex gap-6 text-center">
-            <div>
-              <p className="mono text-xl font-bold text-aether-amber">10</p>
-              <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Modifications</p>
+          <div className="text-center">
+            <div className="flex gap-6 text-xs uppercase tracking-wide text-aether-muted-dim">
+              <span className="block">Modifications</span>{" "}
+              <span className="block">Additions</span>
             </div>
-            <div>
-              <p className="mono text-xl font-bold text-aether-green">7</p>
-              <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Additions</p>
+            <div className="mt-1 flex justify-around gap-6">
+              <span className="mono text-xl font-bold text-aether-amber">10</span>
+              <span className="mono text-xl font-bold text-aether-green">7</span>
             </div>
           </div>
         </div>

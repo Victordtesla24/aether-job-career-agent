@@ -85,6 +85,7 @@ export default function CoverLettersPage() {
             value={selectedJob}
             onChange={(e) => setSelectedJob(e.target.value)}
             className="glass w-full min-w-0 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm sm:w-auto"
+            aria-label="Select a job to draft for"
             data-testid="cover-letter-job-select"
           >
             <option value="" className="bg-black">
@@ -264,17 +265,17 @@ export default function CoverLettersPage() {
                   if (current) void regenerate(current);
                 }}
                 disabled={regenerating !== null}
-                className="w-full rounded-lg bg-aether-coral px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="block w-full rounded-lg bg-aether-coral px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {regenerating ? "Redrafting…" : "Regenerate"}
               </button>
-              <button type="button" className="w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
+              <button type="button" className="block w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
                 Request Changes
               </button>
-              <button type="button" className="w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
+              <button type="button" className="block w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
                 Export PDF
               </button>
-              <button type="button" className="w-full rounded-lg border border-aether-violet/30 px-3 py-2 text-xs text-aether-violet hover:bg-aether-violet/10">
+              <button type="button" className="block w-full rounded-lg border border-aether-violet/30 px-3 py-2 text-xs text-aether-violet hover:bg-aether-violet/10">
                 Attach &amp; send via Email Center
               </button>
             </div>

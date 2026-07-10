@@ -318,6 +318,7 @@ export default function EmailCenterPage() {
                   </div>
                   <textarea
                     value={draft}
+                    aria-label="Draft reply"
                     data-testid="draft-textarea"
                     onChange={(e) => setDraft(e.target.value)}
                     rows={8}

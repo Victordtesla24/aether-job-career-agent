@@ -323,6 +323,9 @@ export default function JobsPage() {
                       : "Not scored yet — run the Fit Scorer agent to analyse this role against your resume."}
                   </p>
                 </div>
+                <p className="mt-2 text-[11px] text-aether-muted-dim">
+                  Benchmarked against your target role: Senior Technical Program Manager.
+                </p>
               </section>
 
               {/* Risk Signals */}
