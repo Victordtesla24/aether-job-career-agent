@@ -110,7 +110,7 @@
             <div class="flex items-center justify-between text-[13px]"><span class="text-[#A0A0B8]">Talk / listen</span><span class="mono">62 / 38</span></div>
             <div class="p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/20 text-[12px] text-[#C7C7D6]"><i class="fa-solid fa-wave-square text-[#34D399] mr-1"></i>Real-time coaching cue: “Add the 92% metric now.”</div>
           </div>
-          <div id="mutedNote" role="status" aria-live="polite" class="hidden mt-3 p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/25 text-[12px] text-[#F8B4B4]"><i class="fa-solid fa-microphone-slash mr-1" aria-hidden="true"></i>Live Assist muted — no audio is being captured or analysed.</div>
+          <div id="mutedNote" role="status" aria-live="polite" class="hidden mt-3 p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/25 text-[12px] text-[#F8B4B4]"></div>
         </section>
         <section data-design-id="debrief-snap-ic15" class="glass rounded-2xl p-5">
           <div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-clipboard-check text-[#A78BFA]"></i><h3 class="text-sm font-semibold">Last Debrief</h3></div>
@@ -142,6 +142,7 @@
       icon.setAttribute('aria-hidden','true');
       label.textContent='Listening';
       metrics.classList.remove('opacity-40','pointer-events-none');
+      note.innerHTML='';
       note.classList.add('hidden');
     } else {
       btn.setAttribute('data-muted','true');
@@ -151,6 +152,7 @@
       icon.setAttribute('aria-hidden','true');
       label.textContent='Muted';
       metrics.classList.add('opacity-40','pointer-events-none');
+      note.innerHTML='<i class="fa-solid fa-microphone-slash mr-1" aria-hidden="true"></i>Live Assist muted — no audio is being captured or analysed.';
       note.classList.remove('hidden');
     }
   }
