@@ -83,7 +83,7 @@ function toneFor(nodeId: string, status: string): { label: string; tone: NodeTon
     case "completed":
       return nodeId === "memory"
         ? { label: "synced", tone: "green", pulse: false }
-        : { label: "working", tone: "green", pulse: false };
+        : { label: "done", tone: "green", pulse: false };
     default:
       return { label: "idle", tone: "dim", pulse: false };
   }
@@ -165,9 +165,17 @@ export interface LogEntry {
   message: string;
 }
 
-/** Recent run outcomes as an operator-readable log, newest first. */
+/**
+ * Recent terminal run outcomes as an operator-readable log, newest first.
+ *
+ * Only completed/failed runs are surfaced: in-flight (running/queued) work
+ * belongs in the Task Queue, not the Error Log. Completions are logged as OK —
+ * gated agents (tailor/coverLetter) carry a persistent `approvalRequired` flag
+ * on every success, so it cannot be used to mean "approval still pending".
+ */
 export function deriveErrorLog(runs: AgentRun[], limit = 8): LogEntry[] {
-  return [...runs]
+  return runs
+    .filter((r) => r.status === "completed" || r.status === "failed")
     .sort((a, b) => tsOf(b.createdAt) - tsOf(a.createdAt))
     .slice(0, limit)
     .map((r) => {
@@ -175,21 +183,11 @@ export function deriveErrorLog(runs: AgentRun[], limit = 8): LogEntry[] {
       if (r.status === "failed") {
         return { id: r.id, level: "ERR", time, message: `${humanAgent(r.agentName)} — ${r.error ?? "run failed"}` };
       }
-      if (r.status === "completed" && approvalRequired(r)) {
-        return { id: r.id, level: "WRN", time, message: `${humanAgent(r.agentName)} output awaiting approval` };
-      }
-      if (r.status === "completed") {
-        return { id: r.id, level: "OK", time, message: `${humanAgent(r.agentName)} completed` };
-      }
-      return { id: r.id, level: "WRN", time, message: `${humanAgent(r.agentName)} ${r.status}` };
+      return { id: r.id, level: "OK", time, message: `${humanAgent(r.agentName)} completed` };
     });
 }
 
 // --- internals -------------------------------------------------------------
-
-function approvalRequired(run: AgentRun): boolean {
-  return Boolean(run.output && (run.output as Record<string, unknown>).approvalRequired);
-}
 
 function successRate(runs: AgentRun[]): string {
   const terminal = runs.filter((r) => r.status === "completed" || r.status === "failed");

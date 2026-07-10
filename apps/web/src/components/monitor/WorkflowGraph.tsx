@@ -8,7 +8,15 @@ const TONE: Record<NodeTone, { border: string; iconBg: string; icon: string; tex
   dim: { border: "border-white/12", iconBg: "bg-white/8", icon: "text-aether-muted", text: "text-aether-muted-dim" },
 };
 
-export function WorkflowGraph({ nodes, live }: { nodes: NodeState[]; live: boolean }) {
+export function WorkflowGraph({
+  nodes,
+  live,
+  paused,
+}: {
+  nodes: NodeState[];
+  live: boolean;
+  paused: boolean;
+}) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   return (
@@ -25,7 +33,7 @@ export function WorkflowGraph({ nodes, live }: { nodes: NodeState[]; live: boole
             className={`w-1.5 h-1.5 rounded-full ${live ? "bg-aether-green live-dot" : "bg-aether-muted-dim"}`}
             aria-hidden="true"
           />
-          {live ? "live data flow" : "paused"}
+          {paused ? "paused" : live ? "live data flow" : "idle"}
         </span>
       </div>
 

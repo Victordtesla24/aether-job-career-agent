@@ -42,13 +42,19 @@ export default function AgentMonitorPage() {
   const [error, setError] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Monotonic request id: overlapping loads (mount, poll ticks, retry) must not
+  // let a slower, older response overwrite a newer snapshot.
+  const requestSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     try {
       const [agents, runs] = await Promise.all([fetchAgents(), fetchAgentRuns({})]);
+      if (seq !== requestSeq.current) return;
       setData({ agents, runs });
       setError(null);
     } catch (e) {
+      if (seq !== requestSeq.current) return;
       setError(e instanceof Error ? e.message : "Failed to load orchestration data");
     }
   }, []);
@@ -97,11 +103,31 @@ export default function AgentMonitorPage() {
     <div className="flex flex-col gap-6">
       <MonitorHeader stats={stats} paused={paused} onTogglePause={() => setPaused((p) => !p)} />
 
+      {error && data !== null ? (
+        <section
+          role="alert"
+          className="glass flex items-center justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4"
+        >
+          <p className="text-sm text-red-300">
+            <i className="fa-solid fa-triangle-exclamation mr-2" aria-hidden="true" />
+            Live updates interrupted — showing last known state. {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="inline-flex shrink-0 items-center gap-2 text-xs font-medium py-2 px-3 rounded-lg bg-aether-coral/12 hover:bg-aether-coral/20 border border-aether-coral/20 text-white transition"
+          >
+            <i className="fa-solid fa-rotate-right" aria-hidden="true" />
+            Retry
+          </button>
+        </section>
+      ) : null}
+
       {data === null ? (
         <MonitorSkeleton />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <WorkflowGraph nodes={nodes} live={live} />
+          <WorkflowGraph nodes={nodes} live={live} paused={paused} />
           <div className="flex flex-col gap-5 xl:col-span-1">
             <TaskQueue items={deriveTaskQueue(data.runs)} />
             <PerformancePanel perf={derivePerformance(data.runs)} />

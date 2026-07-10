@@ -111,7 +111,7 @@ describe("derivePerformance", () => {
 });
 
 describe("deriveErrorLog", () => {
-  it("classifies failed→ERR, approval→WRN, completed→OK, newest first", () => {
+  it("classifies failed→ERR and completed→OK (incl. gated), newest first, ignoring in-flight runs", () => {
     const runs = [
       run({ id: "1", agentName: "scout", status: "completed", createdAt: "2026-07-10T08:00:00Z" }),
       run({ id: "2", agentName: "coverLetter", status: "failed", error: "boom", createdAt: "2026-07-10T10:00:00Z" }),
@@ -122,9 +122,11 @@ describe("deriveErrorLog", () => {
         output: { approvalRequired: true },
         createdAt: "2026-07-10T09:00:00Z",
       }),
+      run({ id: "4", agentName: "matcher", status: "running", createdAt: "2026-07-10T11:00:00Z" }),
     ];
     const log = deriveErrorLog(runs);
-    expect(log.map((e) => e.level)).toEqual(["ERR", "WRN", "OK"]);
+    expect(log.map((e) => e.id)).toEqual(["2", "3", "1"]);
+    expect(log.map((e) => e.level)).toEqual(["ERR", "OK", "OK"]);
     expect(log[0].message).toContain("boom");
   });
 
