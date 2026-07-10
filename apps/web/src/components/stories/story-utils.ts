@@ -66,7 +66,8 @@ export function voiceMatchOf(story: Story): number | null {
 /** First evidenced metric shown as the card impact badge, or null. */
 export function impactBadge(story: Story): string | null {
   if (!story.metrics) return null;
-  for (const [, value] of Object.entries(story.metrics)) {
+  for (const [key, value] of Object.entries(story.metrics)) {
+    if (/voice/i.test(key)) continue;
     const str = String(value);
     if (/\d/.test(str)) return str;
   }

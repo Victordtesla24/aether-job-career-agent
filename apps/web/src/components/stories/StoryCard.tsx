@@ -53,10 +53,9 @@ export function StoryCard({
   };
 
   const insert = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
     try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(storyToText(story));
-      }
+      await navigator.clipboard.writeText(storyToText(story));
       setInserted(true);
       setTimeout(() => setInserted(false), 1500);
     } catch {

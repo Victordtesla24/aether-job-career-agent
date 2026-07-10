@@ -116,6 +116,7 @@ export default function StoryBankPage() {
       return next;
     });
 
+  const loading = stories === null;
   const stats = useMemo(() => computeStats(stories ?? []), [stories]);
   const visible = useMemo(
     () => (stories ?? []).filter((s) => matchesFilter(s, filter)),
@@ -170,16 +171,16 @@ export default function StoryBankPage() {
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"
         aria-label="Story bank statistics"
       >
-        <StatCard label="Total Stories" value={String(stats.total)} />
+        <StatCard label="Total Stories" value={loading ? "—" : String(stats.total)} />
         <StatCard
           label="Quantified w/ Metrics"
-          value={String(stats.quantified)}
+          value={loading ? "—" : String(stats.quantified)}
           valueClass="text-aether-green"
         />
-        <StatCard label="Added This Month" value={String(stats.addedThisMonth)} />
+        <StatCard label="Added This Month" value={loading ? "—" : String(stats.addedThisMonth)} />
         <StatCard
           label="Voice Match Avg"
-          value={stats.voiceAvg === null ? "—" : `${stats.voiceAvg}%`}
+          value={loading || stats.voiceAvg === null ? "—" : `${stats.voiceAvg}%`}
           valueClass="text-[#A78BFA]"
         />
       </section>
@@ -208,7 +209,10 @@ export default function StoryBankPage() {
                   key={chip}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setFilter(chip)}
+                  onClick={() => {
+                    setFilter(chip);
+                    setEditingId(null);
+                  }}
                   className={
                     active
                       ? "rounded-lg bg-white/8 px-3 py-1.5 text-xs font-medium text-white"
@@ -297,7 +301,18 @@ export default function StoryBankPage() {
           )}
         </section>
 
-        <StoryInsights stories={stories ?? []} onDraftMissing={openCreate} />
+        {loading ? (
+          <aside
+            data-testid="story-insights"
+            className="w-full shrink-0 space-y-4 lg:w-80"
+            aria-busy="true"
+          >
+            <div className="glass h-64 animate-pulse rounded-2xl border border-white/10" />
+            <div className="glass h-56 animate-pulse rounded-2xl border border-white/10" />
+          </aside>
+        ) : (
+          <StoryInsights stories={stories} onDraftMissing={openCreate} />
+        )}
       </div>
     </div>
   );
