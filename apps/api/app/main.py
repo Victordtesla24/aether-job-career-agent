@@ -21,6 +21,7 @@ from app.routers import (
     jobs,
     resumes,
     stories,
+    workspaces,
 )
 
 
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(stories.router, prefix="/stories", tags=["stories"])
     app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
     app.include_router(applications.router, prefix="/applications", tags=["applications"])
+    app.include_router(workspaces.router, tags=["workspaces"])
 
     return app
 

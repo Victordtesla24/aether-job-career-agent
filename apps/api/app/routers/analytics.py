@@ -127,3 +127,75 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
         "screened_to_interview": rate(data["interviewed"], data["screened"]),
         "interview_to_offer": rate(data["offers"], data["interviewed"]),
     }
+
+
+# --------------------------------------------------------------------------
+# Real-Time Market Pulse (P3 build-out — fixture-backed market intelligence)
+# --------------------------------------------------------------------------
+
+_MARKET_PULSE: dict[str, Any] = {
+    "sources": [
+        {"label": "LinkedIn", "value": 49, "color": "#4F46E5"},
+        {"label": "Seek", "value": 30, "color": "#FF6B35"},
+        {"label": "Indeed", "value": 21, "color": "#34D399"},
+    ],
+    "sourcesTotal": 412,
+    "topSkills": [
+        {"skill": "Python", "demand": 86},
+        {"skill": "LLMs / GenAI", "demand": 71},
+        {"skill": "Kubernetes", "demand": 58},
+        {"skill": "React", "demand": 44},
+        {"skill": "Go", "demand": 39},
+    ],
+    # 5 weeks x 7 days activity intensity (0-4), most recent week last.
+    "activityHeatmap": [
+        [1, 0, 2, 3, 1, 0, 0],
+        [2, 3, 1, 4, 2, 1, 0],
+        [3, 2, 4, 3, 2, 0, 1],
+        [1, 4, 3, 2, 4, 2, 0],
+        [2, 3, 4, 4, 3, 1, 1],
+    ],
+    "probability": {
+        "score": 68,
+        "label": "Job Probability Score",
+        "note": "Likelihood of landing an offer in the next 60 days",
+        "factors": [
+            {"label": "Application volume", "value": 74},
+            {"label": "Interview conversion", "value": 61},
+            {"label": "Market demand", "value": 82},
+            {"label": "Skill match", "value": 55},
+        ],
+    },
+    "employerActivity": [
+        {"company": "ANZ", "event": "Viewed your application 3× this week", "when": "2h ago", "signal": "hot"},
+        {"company": "ATO", "event": "Posted 4 new Senior TPM roles", "when": "6h ago", "signal": "new"},
+        {"company": "Atlassian", "event": "Recruiter opened your profile", "when": "Yesterday", "signal": "warm"},
+        {"company": "Canva", "event": "Hiring freeze lifted on design platform org", "when": "2d ago", "signal": "new"},
+    ],
+    "recruiterTrends": {
+        "series": [12, 15, 11, 18, 22, 19, 26, 24, 31, 28, 35, 38],
+        "rows": [
+            {"label": "Recruiter InMails (AU tech)", "delta": "+18% this month"},
+            {"label": "Avg response time", "delta": "4.2h · improving"},
+        ],
+    },
+    "marketVsYou": {
+        "comparisons": [
+            {"label": "Applications / month", "market": 15, "you": 28},
+            {"label": "Interview rate", "market": 8, "you": 14, "unit": "%"},
+        ],
+        "summary": "You're applying 87% more than the market average and converting interviews at 1.75× the median.",
+    },
+    "trendIndicators": [
+        {"label": "TPM openings", "delta": "+22%", "direction": "up", "series": [4, 6, 5, 8, 9, 11, 12]},
+        {"label": "AI delivery roles", "delta": "+9%", "direction": "up", "series": [7, 7, 8, 8, 9, 9, 10]},
+        {"label": "Avg base salary", "delta": "+14%", "direction": "up", "series": [3, 4, 6, 5, 7, 8, 9]},
+        {"label": "Time-to-hire", "delta": "-11%", "direction": "down", "series": [9, 8, 8, 7, 6, 6, 5]},
+    ],
+}
+
+
+@router.get("/market-pulse")
+def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
+    """Real-time market pulse panels (fixture-backed market intelligence)."""
+    return _MARKET_PULSE
