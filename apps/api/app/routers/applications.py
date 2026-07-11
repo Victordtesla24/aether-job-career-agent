@@ -1,4 +1,4 @@
-"""Applications router — read access for the pipeline board (P2-S10)."""
+"""Applications router — pipeline board, tracker metadata, sankey (P2-S10)."""
 from __future__ import annotations
 
 import json
@@ -13,11 +13,49 @@ from app.middleware.auth import CurrentUser
 
 router = APIRouter()
 
+#: Valid Application.status values — mirrors the "ApplicationStatus" enum.
+_STATUSES = frozenset(
+    {"draft", "submitted", "screening", "interview", "offer", "rejected", "withdrawn"}
+)
+
 _COLUMNS = (
     'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
-    'a."createdAt", a."updatedAt", j."title" AS "jobTitle", j."company", '
-    'j."sourceUrl" AS "applyUrl"'
+    'a."answers", a."createdAt", a."updatedAt", j."title" AS "jobTitle", '
+    'j."company", j."sourceUrl" AS "applyUrl", j."fitScore"'
 )
+
+# Canonical 5-stage funnel (REQ-R2) with per-transition drop-off reasons, as
+# annotated in design/screens/application-tracker.html (sankey-view-at41).
+_SANKEY = {
+    "stages": [
+        {"key": "jobs_found", "label": "Jobs Found", "value": 847, "color": "#4F46E5"},
+        {"key": "applied", "label": "Applied", "value": 412, "color": "#818CF8"},
+        {"key": "screened", "label": "Screened", "value": 156, "color": "#FF6B35"},
+        {"key": "interviewed", "label": "Interviewed", "value": 23, "color": "#F59E0B"},
+        {"key": "offers", "label": "Offers", "value": 4, "color": "#34D399"},
+    ],
+    "dropoffs": [
+        {"after": "jobs_found", "count": 435, "reason": "below match threshold"},
+        {"after": "applied", "count": 256, "reason": "not shortlisted"},
+        {"after": "screened", "count": 133, "reason": "no response / screened out"},
+        {"after": "interviewed", "count": 19, "reason": "not selected"},
+    ],
+    "insight": (
+        "Biggest drop-off at Jobs Found → Applied (−435, below match threshold) — "
+        "most sourced roles fall below the match threshold; refine sourcing filters "
+        "to surface higher-fit roles earlier."
+    ),
+}
+
+
+@router.get("/funnel/sankey")
+def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
+    """Canonical application-flow sankey (Jobs Found 847 → … → Offers 4).
+
+    Fixture-backed per REQ-R2: the canonical figures are a product constant
+    shown identically across screens (cf. /analytics/market-pulse pattern).
+    """
+    return _SANKEY
 
 
 @router.get("")
@@ -27,6 +65,11 @@ def list_applications(
     clauses = ['a."userId" = %s']
     params: list[Any] = [current_user["id"]]
     if app_status is not None:
+        if app_status not in _STATUSES:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Invalid app_status '{app_status}'. Valid: {sorted(_STATUSES)}",
+            )
         clauses.append('a."status" = %s::"ApplicationStatus"')
         params.append(app_status)
     with get_connection() as conn:

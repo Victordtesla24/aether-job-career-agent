@@ -2,104 +2,238 @@
 
 /**
  * Application Tracker — canonical 8-stage pipeline (wireframe
- * application-tracker.html): Discovered / Evaluating / Tailoring / Ready /
- * Submitted / In Review / Interview / Offer.
+ * application-tracker.html): Discovered / Evaluating / Tailoring / Ready to
+ * Apply / Submitted / In Review / Interview / Offer.
  *
  * The first three stages are fed by the jobs pipeline (Job.status), the last
- * five by Application.status (draft→Ready, submitted→Submitted,
- * screening→In Review, interview→Interview, offer→Offer). Rejected /
- * withdrawn applications collapse into a compact "Closed" strip so drop-off
- * stays visible without cluttering the board. Backed by GET /applications
- * and GET /jobs. Views: Board / Sankey Flow / Timeline.
+ * five by Application.status. Tracker metadata (follow-ups, interview rounds,
+ * offer terms) rides in Application.answers. Rejected / withdrawn collapse
+ * into a compact "Closed" strip. Views: Board / Sankey Flow (canonical
+ * 847→412→156→23→4 funnel from GET /applications/funnel/sankey) / Timeline.
  */
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  fetchApplication,
-  fetchApplications,
-  submitApplication,
-  type Application,
-  type ApplicationStatus,
-} from "../../../lib/api/applications";
+import { submitApplication } from "../../../lib/api/applications";
 import { fetchApprovals } from "../../../lib/api/approvals";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
-
-/** Company initials chip (wireframe card-at17). */
-function initials(company: string) {
-  return company
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-const STATUS_ICON: Record<ApplicationStatus, { icon: string; cls: string }> = {
-  draft: { icon: "fa-file-pen", cls: "text-aether-coral bg-aether-coral/20" },
-  submitted: { icon: "fa-check", cls: "text-aether-violet bg-aether-violet/20" },
-  screening: { icon: "fa-clock", cls: "text-aether-amber bg-aether-amber/20" },
-  interview: { icon: "fa-comments", cls: "text-aether-violet bg-aether-violet/20" },
-  offer: { icon: "fa-award", cls: "text-aether-green bg-aether-green/20" },
-  rejected: { icon: "fa-xmark", cls: "text-red-300 bg-red-500/20" },
-  withdrawn: { icon: "fa-ban", cls: "text-aether-muted-dim bg-white/10" },
-};
-
-/** One card on the board — either a live application or a pipeline job. */
-type StageCard = {
-  id: string;
-  title: string;
-  company: string;
-  updatedAt: string;
-  fit?: number;
-  app?: Application;
-};
-
-type Stage = { key: string; label: string; accent: string; cards: StageCard[] };
-
-const STAGE_DEFS: Array<{ key: string; label: string; accent: string }> = [
-  { key: "discovered", label: "Discovered", accent: "border-white/20" },
-  { key: "evaluating", label: "Evaluating", accent: "border-aether-indigo/40" },
-  { key: "tailoring", label: "Tailoring", accent: "border-aether-amber/40" },
-  { key: "ready", label: "Ready", accent: "border-aether-coral/40" },
-  { key: "submitted", label: "Submitted", accent: "border-aether-violet/40" },
-  { key: "in-review", label: "In Review", accent: "border-aether-amber/40" },
-  { key: "interview", label: "Interview", accent: "border-aether-violet/40" },
-  { key: "offer", label: "Offer", accent: "border-aether-green/40" },
-];
-
-/** Application.status → canonical stage key. */
-const APP_STAGE: Partial<Record<ApplicationStatus, string>> = {
-  draft: "ready",
-  submitted: "submitted",
-  screening: "in-review",
-  interview: "interview",
-  offer: "offer",
-};
-
-/** Job.status → canonical stage key (pre-application pipeline stages). */
-const JOB_STAGE: Record<string, string> = {
-  discovered: "discovered",
-  screening: "evaluating",
-  matched: "evaluating",
-  tailoring: "tailoring",
-};
+import SankeyFlow from "../../../components/applications/SankeyFlow";
+import {
+  fetchAgentConfig,
+  fetchSankey,
+  fetchTrackerApplication,
+  fetchTrackerApplications,
+  type AgentConfig,
+  type SankeyData,
+  type TrackerApplication,
+} from "../../../components/applications/tracker-api";
+import {
+  FILTER_OPTIONS,
+  SORT_OPTIONS,
+  buildStages,
+  fitClass,
+  initials,
+  shortDate,
+  timeAgo,
+  viewStages,
+  type FilterKey,
+  type SortKey,
+  type StageCard,
+  type StageKey,
+} from "../../../components/applications/tracker-lib";
 
 type ViewMode = "board" | "sankey" | "timeline";
 
+/** Accessible dropdown for the header Filter / Sort controls. */
+function HeaderMenu<K extends string>({
+  icon,
+  label,
+  active,
+  options,
+  value,
+  onSelect,
+  testId,
+}: {
+  icon: string;
+  label: string;
+  active: boolean;
+  options: ReadonlyArray<{ key: K; label: string }>;
+  value: K;
+  onSelect: (key: K) => void;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const current = options.find((o) => o.key === value);
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        data-testid={testId}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-medium transition max-sm:min-h-[44px] ${
+          active
+            ? "border-aether-coral/30 bg-aether-coral/15 text-aether-coral"
+            : "border-white/10 bg-white/5 hover:bg-white/10"
+        }`}
+      >
+        <i className={`fa-solid ${icon} text-[10px]`} aria-hidden="true" />
+        {active && current ? `${label}: ${current.label}` : label}
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label={`${label} options`}
+          className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-white/10 bg-[#16161f] p-1 shadow-xl"
+        >
+          {options.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              role="menuitemradio"
+              aria-checked={o.key === value}
+              onClick={() => {
+                onSelect(o.key);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition max-sm:min-h-[44px] ${
+                o.key === value
+                  ? "bg-aether-coral/15 text-aether-coral"
+                  : "text-aether-muted hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {o.label}
+              {o.key === value ? <i className="fa-solid fa-check text-[9px]" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Stage-specific card footer line/badge (wireframe card-at13..at25). */
+function CardMeta({ card, stageKey }: { card: StageCard; stageKey: StageKey }) {
+  const { meta } = card;
+  switch (stageKey) {
+    case "evaluating":
+      return card.fit != null ? (
+        <div className="mt-2 h-1 rounded-full bg-white/10" aria-hidden="true">
+          <div
+            className="h-1 rounded-full bg-[#818CF8]"
+            style={{ width: `${Math.min(card.fit, 100)}%` }}
+          />
+        </div>
+      ) : null;
+    case "tailoring":
+      return <p className="mono mt-2 text-[10px] text-aether-coral">tailoring resume…</p>;
+    case "ready":
+      return (
+        <span className="mt-2 inline-block rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow">
+          needs approval
+        </span>
+      );
+    case "submitted":
+      return meta.followUpSentAt ? (
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
+          <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
+          Follow-up sent ✓
+        </div>
+      ) : null;
+    case "in-review":
+      return meta.autoFollowUpInDays != null ? (
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-yellow">
+          <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
+          Auto follow-up in {meta.autoFollowUpInDays} day{meta.autoFollowUpInDays === 1 ? "" : "s"}
+        </div>
+      ) : null;
+    case "interview":
+      return meta.interviewRound != null ? (
+        <span className="mt-2 inline-block rounded-md bg-aether-amber/15 px-2 py-0.5 text-[10px] text-aether-amber">
+          round {meta.interviewRound}
+          {meta.interviewDate ? ` · ${shortDate(meta.interviewDate)}` : ""}
+        </span>
+      ) : null;
+    case "offer":
+      return meta.offerAmount ? (
+        <p className="mono mt-2 text-[10px] text-aether-green">
+          {meta.offerAmount}
+          {meta.offerDeadline ? ` · decide by ${shortDate(meta.offerDeadline)}` : ""}
+        </p>
+      ) : null;
+    default:
+      return null;
+  }
+}
+
+/** Cross-links: email thread (Submitted / In Review), CRM (Interview / Offer). */
+function CardLink({ stageKey }: { stageKey: StageKey }) {
+  if (stageKey === "submitted" || stageKey === "in-review") {
+    return (
+      <Link
+        href="/dashboard/email"
+        onClick={(e) => e.stopPropagation()}
+        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+      >
+        <i className="fa-solid fa-envelope text-[9px]" aria-hidden="true" />
+        View Email Thread
+        <i className="fa-solid fa-arrow-right text-[8px]" aria-hidden="true" />
+      </Link>
+    );
+  }
+  if (stageKey === "interview" || stageKey === "offer") {
+    return (
+      <Link
+        href="/dashboard/networking"
+        onClick={(e) => e.stopPropagation()}
+        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+      >
+        <i className="fa-solid fa-address-book text-[9px]" aria-hidden="true" />
+        View in CRM
+        <i className="fa-solid fa-arrow-right text-[8px]" aria-hidden="true" />
+      </Link>
+    );
+  }
+  return null;
+}
+
 export default function ApplicationsPage() {
-  const [apps, setApps] = useState<Application[] | null>(null);
+  const [apps, setApps] = useState<TrackerApplication[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [detail, setDetail] = useState<Application | null>(null);
+  const [detail, setDetail] = useState<TrackerApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>("board");
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [sort, setSort] = useState<SortKey>("recent");
+  const [sankey, setSankey] = useState<SankeyData | null>(null);
+  const [sankeyError, setSankeyError] = useState<string | null>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setApps(await fetchApplications());
+      setApps(await fetchTrackerApplications());
       setError(null);
       try {
         setJobs(await apiRequest<Job[]>("/jobs"));
@@ -110,11 +244,17 @@ export default function ApplicationsPage() {
       setError(e instanceof Error ? e.message : "Failed to load applications");
       setApps([]);
     }
-    // Pending-approvals banner (audit defect D7) — non-fatal if it fails.
+    // Pending-approvals banner (REQ-TM-04) — non-fatal if it fails.
     try {
       setPendingCount((await fetchApprovals("pending")).length);
     } catch {
       // Keep the last known count.
+    }
+    // Auto-apply guardrail state — banner falls back to generic copy.
+    try {
+      setAgentConfig(await fetchAgentConfig());
+    } catch {
+      // Keep the last known config.
     }
   }, []);
 
@@ -122,19 +262,32 @@ export default function ApplicationsPage() {
     void load();
   }, [load]);
 
+  // Canonical sankey loads lazily the first time the view is opened.
+  useEffect(() => {
+    if (view !== "sankey" || sankey !== null) return;
+    fetchSankey()
+      .then((d) => {
+        setSankey(d);
+        setSankeyError(null);
+      })
+      .catch((e) => {
+        setSankeyError(e instanceof Error ? e.message : "Failed to load sankey data");
+      });
+  }, [view, sankey]);
+
   const openDetail = async (id: string) => {
     try {
-      setDetail(await fetchApplication(id));
+      setDetail(await fetchTrackerApplication(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load application");
     }
   };
 
-  const markSubmitted = async (app: Application) => {
+  const markSubmitted = async (app: TrackerApplication) => {
     setSubmitting(true);
     try {
-      const updated = await submitApplication(app.id, app.applyUrl ?? null);
-      setDetail(updated);
+      await submitApplication(app.id, app.applyUrl ?? null);
+      setDetail(await fetchTrackerApplication(app.id));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to mark as submitted");
@@ -143,80 +296,89 @@ export default function ApplicationsPage() {
     }
   };
 
-  // ---- Stage assembly -----------------------------------------------------
-  const jobFit: Record<string, number> = Object.fromEntries(
-    jobs.filter((j) => j.fitScore != null).map((j) => [j.id, Math.round(Number(j.fitScore))]),
-  );
-  const appJobIds = new Set((apps ?? []).map((a) => a.jobId));
-  const stages: Stage[] = STAGE_DEFS.map((d) => ({ ...d, cards: [] }));
-  const stageByKey = Object.fromEntries(stages.map((s) => [s.key, s]));
-
-  for (const j of jobs) {
-    const key = JOB_STAGE[j.status];
-    if (key && !appJobIds.has(j.id)) {
-      stageByKey[key].cards.push({
-        id: `job-${j.id}`,
-        title: j.title,
-        company: j.company,
-        updatedAt: j.updatedAt ?? j.createdAt ?? "",
-        fit: j.fitScore != null ? Math.round(Number(j.fitScore)) : undefined,
-      });
-    }
-  }
-  for (const a of apps ?? []) {
-    const key = APP_STAGE[a.status];
-    if (key) {
-      stageByKey[key].cards.push({
-        id: a.id,
-        title: a.jobTitle,
-        company: a.company,
-        updatedAt: a.updatedAt,
-        fit: jobFit[a.jobId],
-        app: a,
-      });
-    }
-  }
+  const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort);
   const closed = (apps ?? []).filter((a) => a.status === "rejected" || a.status === "withdrawn");
   const activeCount = stages.reduce((n, s) => n + s.cards.length, 0);
+  const autoApplyOn = agentConfig?.autoApply ?? false;
+  const threshold = agentConfig?.matchThreshold ?? 85;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Application Tracker</h1>
-          <p className="text-sm text-aether-muted">
-            {activeCount} active application{activeCount === 1 ? "" : "s"} across 8 stages — every
-            submission passed through human approval.
-          </p>
-          <p className="mt-1 text-xs text-aether-muted-dim">
-            <span className="rounded-md bg-aether-amber/15 px-1.5 py-0.5 text-aether-amber">needs approval</span>{" "}
-            drafts wait in Ready for your go-ahead before anything is sent.
+          <p className="mono mt-1 text-xs text-aether-muted-dim" data-testid="tracker-subtitle">
+            {activeCount} active application{activeCount === 1 ? "" : "s"} across 8 stages
           </p>
         </div>
-        <div className="flex rounded-xl border border-white/10 bg-white/5 p-1" role="tablist" aria-label="Tracker views">
-          {(
-            [
-              { key: "board", label: "Board View" },
-              { key: "sankey", label: "Sankey Flow" },
-              { key: "timeline", label: "Timeline" },
-            ] as Array<{ key: ViewMode; label: string }>
-          ).map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              role="tab"
-              aria-selected={view === v.key}
-              data-testid={`view-${v.key}`}
-              onClick={() => setView(v.key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                view === v.key ? "bg-aether-coral text-white" : "text-aether-muted hover:text-white"
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex rounded-lg border border-white/10 bg-white/5 p-0.5"
+            role="tablist"
+            aria-label="Tracker views"
+          >
+            {(
+              [
+                { key: "board", label: "Board View", icon: null },
+                { key: "sankey", label: "Sankey Flow", icon: "fa-diagram-project" },
+                { key: "timeline", label: "Timeline", icon: null },
+              ] as Array<{ key: ViewMode; label: string; icon: string | null }>
+            ).map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                role="tab"
+                aria-selected={view === v.key}
+                data-testid={`view-${v.key}`}
+                onClick={() => setView(v.key)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition max-sm:min-h-[44px] ${
+                  view === v.key
+                    ? "bg-aether-coral/15 text-aether-coral"
+                    : "text-aether-muted hover:text-white"
+                }`}
+              >
+                {v.icon ? (
+                  <i className={`fa-solid ${v.icon} mr-1.5 text-[10px]`} aria-hidden="true" />
+                ) : null}
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <HeaderMenu
+            icon="fa-filter"
+            label="Filter"
+            testId="filter-btn"
+            active={filter !== "all"}
+            options={FILTER_OPTIONS}
+            value={filter}
+            onSelect={setFilter}
+          />
+          <HeaderMenu
+            icon="fa-arrow-down-wide-short"
+            label="Sort"
+            testId="sort-btn"
+            active={sort !== "recent"}
+            options={SORT_OPTIONS}
+            value={sort}
+            onSelect={setSort}
+          />
         </div>
       </header>
+
+      <div
+        className="flex items-start gap-3 rounded-xl border border-aether-yellow/25 bg-aether-yellow/[0.08] px-4 py-3"
+        data-testid="auto-apply-banner"
+      >
+        <i className="fa-solid fa-shield-halved mt-0.5 text-aether-yellow" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-aether-muted">
+          <span className="font-semibold text-aether-yellow">
+            Auto-apply is a high-risk action.
+          </span>{" "}
+          Only applications with <span className="mono text-white">Match Score &gt; {threshold}%</span>{" "}
+          and your explicit approval will be submitted. Auto-apply is currently{" "}
+          <span className="font-medium text-white">{autoApplyOn ? "on" : "off"}</span>.
+        </p>
+      </div>
 
       {pendingCount > 0 ? (
         <Link
@@ -230,9 +392,16 @@ export default function ApplicationsPage() {
       ) : null}
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-          {error}
-        </p>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+          <p className="text-sm text-red-300">{error}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 max-sm:min-h-[44px]"
+          >
+            Retry
+          </button>
+        </div>
       ) : null}
 
       {detail ? (
@@ -253,10 +422,10 @@ export default function ApplicationsPage() {
             <button
               type="button"
               onClick={() => setDetail(null)}
-              className="text-xs text-aether-muted-dim hover:text-white"
-              title="Close detail"
+              aria-label="Close application details"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-aether-muted-dim transition hover:bg-white/10 hover:text-white max-sm:h-11 max-sm:w-11"
             >
-              ✕
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
             </button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -299,83 +468,104 @@ export default function ApplicationsPage() {
       ) : null}
 
       {apps === null ? (
-        <div className="grid gap-4 md:grid-cols-4" aria-busy="true">
-          {STAGE_DEFS.slice(0, 4).map((c) => (
-            <div key={c.key} className="glass h-64 animate-pulse rounded-2xl border border-white/10" />
+        <div className="grid gap-4 md:grid-cols-4" aria-busy="true" data-testid="board-skeleton">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="glass h-64 animate-pulse rounded-2xl border border-white/10" />
           ))}
         </div>
       ) : view === "board" ? (
         <>
           <div className="overflow-x-auto pb-2" data-testid="applications-kanban">
-            <div className="grid min-w-[1100px] grid-cols-8 gap-3">
+            <div className="flex w-max gap-4">
               {stages.map((stage) => (
                 <section
                   key={stage.key}
                   data-testid={`kanban-column-${stage.key}`}
-                  className={`glass rounded-2xl border ${stage.accent} p-3`}
+                  aria-label={`${stage.label} stage, ${stage.cards.length} cards`}
+                  className="w-[260px] shrink-0"
                 >
-                  <header className="flex items-center justify-between px-1 pb-2">
-                    <h2 className="text-sm font-semibold">{stage.label}</h2>
-                    <span className="mono text-xs text-aether-muted-dim">{stage.cards.length}</span>
+                  <header className="mb-3 flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} aria-hidden="true" />
+                      <h2 className="text-xs font-semibold">{stage.label}</h2>
+                    </div>
+                    <span className="mono text-[11px] text-aether-muted-dim">
+                      {stage.cards.length}
+                    </span>
                   </header>
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2.5">
                     {stage.cards.length === 0 ? (
-                      <p className="px-1 py-4 text-center text-xs text-aether-muted-dim">Empty</p>
+                      <p className="glass rounded-xl border border-dashed border-white/10 px-1 py-6 text-center text-xs text-aether-muted-dim">
+                        Empty
+                      </p>
                     ) : (
-                      stage.cards.slice(0, 25).map((card) => (
-                        <article
-                          key={card.id}
-                          data-testid="application-card"
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => (card.app ? void openDetail(card.app.id) : undefined)}
-                          onKeyDown={(e) => {
-                            if (card.app && (e.key === "Enter" || e.key === " ")) void openDetail(card.app.id);
-                          }}
-                          className={`rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-aether-violet/50 ${
-                            card.app ? "cursor-pointer" : ""
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
-                                {initials(card.company)}
-                              </span>
-                              {card.fit != null ? (
-                                <span className="mono text-[11px] font-semibold text-aether-green">{card.fit}</span>
-                              ) : null}
-                            </div>
-                            {card.app ? (
+                      stage.cards.slice(0, 25).map((card) => {
+                        const clickable = Boolean(card.app);
+                        return (
+                          <article
+                            key={card.id}
+                            data-testid="application-card"
+                            {...(clickable
+                              ? {
+                                  role: "button" as const,
+                                  tabIndex: 0,
+                                  "aria-label": `${card.title} at ${card.company}, open details`,
+                                }
+                              : {})}
+                            onClick={clickable ? () => void openDetail(card.app!.id) : undefined}
+                            onKeyDown={
+                              clickable
+                                ? (e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      void openDetail(card.app!.id);
+                                    }
+                                  }
+                                : undefined
+                            }
+                            className={`glass rounded-xl border p-3.5 transition ${
+                              stage.key === "tailoring"
+                                ? "border-aether-coral/25"
+                                : stage.key === "offer"
+                                  ? "border-aether-green/30 bg-white/[0.05]"
+                                  : stage.key === "interview"
+                                    ? "border-aether-amber/25"
+                                    : "border-white/10"
+                            } ${clickable ? "cursor-pointer hover:border-white/25" : "hover:border-white/15"}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                                  {initials(card.company)}
+                                </span>
+                                {card.fit != null ? (
+                                  <span className={`mono text-[11px] font-semibold ${fitClass(card.fit)}`}>
+                                    {card.fit}
+                                  </span>
+                                ) : null}
+                              </div>
                               <span
-                                className={`flex h-5 w-5 items-center justify-center rounded-full ${STATUS_ICON[card.app.status].cls}`}
-                                title={card.app.status}
+                                className={`flex h-5 w-5 items-center justify-center rounded-full ${stage.iconClass}`}
+                                title={stage.label}
                               >
                                 <i
-                                  className={`fa-solid ${STATUS_ICON[card.app.status].icon} text-[9px]`}
+                                  className={`fa-solid ${stage.icon} text-[9px]`}
                                   aria-hidden="true"
                                 />
                               </span>
-                            ) : (
-                              <span
-                                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-aether-muted-dim"
-                                title="agent pipeline"
-                              >
-                                <i className="fa-solid fa-robot text-[9px]" aria-hidden="true" />
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="mt-2.5 text-sm font-semibold leading-tight">{card.title}</h3>
-                          <p className="mt-0.5 text-xs text-aether-muted">{card.company}</p>
-                          {card.app?.status === "draft" ? (
-                            <span className="mt-2 inline-block rounded-md bg-aether-amber/15 px-2 py-0.5 text-[10px] text-aether-amber">
-                              needs approval
-                            </span>
-                          ) : null}
-                          <p className="mono mt-1 text-[10px] text-aether-muted-dim">
-                            {new Date(card.updatedAt).toLocaleDateString()}
-                          </p>
-                        </article>
-                      ))
+                            </div>
+                            <h3 className="mt-2.5 text-xs font-semibold leading-tight">
+                              {card.title}
+                            </h3>
+                            <p className="text-[11px] text-aether-muted-dim">{card.company}</p>
+                            <CardMeta card={card} stageKey={stage.key} />
+                            <CardLink stageKey={stage.key} />
+                            <p className="mono mt-2 text-[10px] text-aether-muted-dim">
+                              {timeAgo(card.updatedAt)}
+                            </p>
+                          </article>
+                        );
+                      })
                     )}
                     {stage.cards.length > 25 ? (
                       <p className="px-1 text-center text-xs text-aether-muted-dim">
@@ -398,7 +588,7 @@ export default function ApplicationsPage() {
                     key={a.id}
                     type="button"
                     onClick={() => void openDetail(a.id)}
-                    className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-aether-muted-dim hover:border-white/25 hover:text-white"
+                    className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-aether-muted-dim transition hover:border-white/25 hover:text-white max-sm:min-h-[44px]"
                   >
                     {a.jobTitle} · {a.company} · {a.status}
                   </button>
@@ -408,67 +598,68 @@ export default function ApplicationsPage() {
           ) : null}
         </>
       ) : view === "sankey" ? (
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="sankey-view">
-          <h2 className="text-[15px] font-semibold">Sankey Flow</h2>
-          <p className="mb-4 text-xs text-aether-muted-dim">
-            Application flow &amp; drop-off across stages
-          </p>
-          <div className="space-y-3">
-            {stages.map((stage) => {
-              const max = Math.max(...stages.map((s) => s.cards.length), 1);
-              return (
-                <div key={stage.key} className="flex items-center gap-3">
-                  <span className="w-24 shrink-0 text-xs text-aether-muted">{stage.label}</span>
-                  <div className="h-5 flex-1 rounded-full bg-white/5">
-                    <div
-                      className="h-5 rounded-full bg-gradient-to-r from-aether-indigo to-aether-coral"
-                      style={{ width: `${Math.max((stage.cards.length / max) * 100, stage.cards.length > 0 ? 6 : 0)}%` }}
-                    />
-                  </div>
-                  <span className="mono w-8 shrink-0 text-right text-xs">{stage.cards.length}</span>
-                </div>
-              );
-            })}
-            <div className="flex items-center gap-3">
-              <span className="w-24 shrink-0 text-xs text-red-300">Dropped</span>
-              <div className="h-5 flex-1 rounded-full bg-white/5">
-                <div
-                  className="h-5 rounded-full bg-red-500/40"
-                  style={{
-                    width: `${Math.max(
-                      (closed.length / Math.max(...stages.map((s) => s.cards.length), 1)) * 100,
-                      closed.length > 0 ? 6 : 0,
-                    )}%`,
-                  }}
-                />
-              </div>
-              <span className="mono w-8 shrink-0 text-right text-xs">{closed.length}</span>
-            </div>
+        <section data-testid="sankey-view">
+          <div className="flex items-center gap-2.5">
+            <i className="fa-solid fa-diagram-project text-sm text-[#818CF8]" aria-hidden="true" />
+            <h2 className="text-[15px] font-semibold">Sankey Flow</h2>
+            <span className="text-[11px] text-aether-muted-dim">
+              application flow &amp; drop-off across stages
+            </span>
           </div>
+          {sankey ? (
+            <SankeyFlow data={sankey} />
+          ) : sankeyError ? (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm text-red-300">{sankeyError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSankeyError(null);
+                  fetchSankey()
+                    .then(setSankey)
+                    .catch((e) =>
+                      setSankeyError(e instanceof Error ? e.message : "Failed to load sankey data"),
+                    );
+                }}
+                className="rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 max-sm:min-h-[44px]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div
+              className="glass mt-4 h-72 animate-pulse rounded-2xl border border-white/10"
+              aria-busy="true"
+            />
+          )}
         </section>
       ) : (
         <section className="glass rounded-2xl border border-white/10 p-5" data-testid="timeline-view">
           <h2 className="mb-4 text-[15px] font-semibold">Timeline</h2>
-          <ol className="space-y-3 border-l border-white/10 pl-4">
-            {[...(apps ?? [])]
-              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-              .map((a) => (
-                <li key={a.id} className="relative">
-                  <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-aether-coral" />
-                  <button
-                    type="button"
-                    onClick={() => void openDetail(a.id)}
-                    className="text-left text-sm hover:text-aether-coral"
-                  >
-                    <span className="font-semibold">{a.jobTitle}</span>{" "}
-                    <span className="text-aether-muted">@ {a.company}</span>
-                  </button>
-                  <p className="mono text-[11px] text-aether-muted-dim">
-                    {a.status} · {new Date(a.updatedAt).toLocaleString()}
-                  </p>
-                </li>
-              ))}
-          </ol>
+          {(apps ?? []).length === 0 ? (
+            <p className="text-sm text-aether-muted-dim">No applications yet.</p>
+          ) : (
+            <ol className="space-y-3 border-l border-white/10 pl-4">
+              {[...(apps ?? [])]
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                .map((a) => (
+                  <li key={a.id} className="relative">
+                    <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-aether-coral" />
+                    <button
+                      type="button"
+                      onClick={() => void openDetail(a.id)}
+                      className="rounded text-left text-sm transition hover:text-aether-coral"
+                    >
+                      <span className="font-semibold">{a.jobTitle}</span>{" "}
+                      <span className="text-aether-muted">@ {a.company}</span>
+                    </button>
+                    <p className="mono text-[11px] text-aether-muted-dim">
+                      {a.status} · {timeAgo(a.updatedAt)}
+                    </p>
+                  </li>
+                ))}
+            </ol>
+          )}
         </section>
       )}
     </div>

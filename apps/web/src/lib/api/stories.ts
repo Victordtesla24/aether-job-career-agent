@@ -14,12 +14,34 @@ export const StorySchema = z.object({
   tags: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // Display enrichment derived server-side from the persisted row (stable
+  // across refreshes). Optional so older payloads still parse.
+  category: z.string().optional(),
+  impact: z.string().nullish(),
+  voiceMatch: z.number().optional(),
+  usedInResumes: z.number().optional(),
+  interviewAnswers: z.number().optional(),
+  usedThisMonth: z.number().optional(),
+  starred: z.boolean().optional(),
 });
 
 export type Story = z.infer<typeof StorySchema>;
 
+export const StoryStatsSchema = z.object({
+  total: z.number(),
+  quantified: z.number(),
+  usedThisMonth: z.number(),
+  voiceMatchAvg: z.number(),
+});
+
+export type StoryStats = z.infer<typeof StoryStatsSchema>;
+
 export async function fetchStories(options: RequestOptions = {}): Promise<Story[]> {
   return z.array(StorySchema).parse(await apiRequest<unknown>("/stories", options));
+}
+
+export async function fetchStoryStats(options: RequestOptions = {}): Promise<StoryStats> {
+  return StoryStatsSchema.parse(await apiRequest<unknown>("/stories/stats", options));
 }
 
 export async function runStoryExtractor(
@@ -56,5 +78,19 @@ export async function updateStory(
 ): Promise<Story> {
   return StorySchema.parse(
     await apiRequest<unknown>(`/stories/${id}`, { ...options, method: "PUT", body: input }),
+  );
+}
+
+/**
+ * Persist the starred flag. The backend stores it inside the ``metrics`` JSON
+ * under a reserved key, so we merge the story's existing evidence metrics with
+ * the control flag to avoid clobbering the evidence numbers.
+ */
+export async function toggleStar(story: Story, options: RequestOptions = {}): Promise<Story> {
+  const evidence = (story.metrics ?? {}) as Record<string, unknown>;
+  return updateStory(
+    story.id,
+    { metrics: { ...evidence, __starred: !story.starred } },
+    options,
   );
 }

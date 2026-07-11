@@ -36,6 +36,7 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-current={isActive ? "page" : undefined}
               className={
                 isActive
@@ -61,12 +62,25 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
         <p className="text-[11px] text-aether-muted-dim leading-relaxed">
           4 agents running · 12 tasks in queue
         </p>
-        <button
-          type="button"
-          className="mt-3 w-full text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
+        <Link
+          href="/dashboard/agents"
+          prefetch={false}
+          className="mt-3 block w-full text-center text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
         >
           Manage Agents
-        </button>
+        </Link>
+      </div>
+
+      <div className="mt-4 px-2 flex gap-3 text-[11px] text-aether-muted-dim">
+        <Link
+          href="/privacy-policy"
+          prefetch={false}
+          className="hover:text-white transition"
+        >
+          Privacy Policy
+        </Link>
+        <span>·</span>
+        <span>© 2026 Aether</span>
       </div>
     </aside>
   );

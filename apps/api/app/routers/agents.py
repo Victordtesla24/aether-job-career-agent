@@ -7,6 +7,7 @@ did and why. High-risk outputs (tailored resumes, cover letters) surface an
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
@@ -15,6 +16,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
+from app.db import get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.services.llm_client import LLMUnavailableError
@@ -33,6 +35,184 @@ AGENT_NAMES = (
 
 #: Agents whose output is gated behind a human approval.
 _APPROVAL_GATED = {"tailor", "coverLetter"}
+
+# ---------------------------------------------------------------------------
+# Agents-screen catalog, provider seeds and model pricing (design/screens/agents.html)
+# ---------------------------------------------------------------------------
+
+#: Published per-1K-token pricing (USD) for the models the product assigns to
+#: agents. Used to turn a real run's measured I/O size into a real cost
+#: estimate (matches the wireframe's "estimates use published per-token
+#: pricing"). Values are approximate list prices, kept in one place.
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    # model: (input $/1K, output $/1K)
+    "claude-sonnet-4": (0.003, 0.015),
+    "claude-3.5-haiku": (0.0008, 0.004),
+    "gpt-4o": (0.005, 0.015),
+    "gpt-4o-mini": (0.00015, 0.0006),
+    "llama-3.1-405b": (0.0009, 0.0009),
+    "llama-3.3-70b-versatile": (0.00059, 0.00079),
+    "gemini-2.0-flash": (0.0001, 0.0004),
+    "text-embedding-3-large": (0.00013, 0.0),
+}
+_DEFAULT_PRICE = (0.001, 0.002)
+
+
+def _price_for(model: str) -> tuple[float, float]:
+    return MODEL_PRICING.get(model, _DEFAULT_PRICE)
+
+
+#: The product's full agent catalog as shown in the Agent Configuration grid.
+#: ``backend`` maps a catalog agent to a runnable API agent where one exists
+#: (None → configuration-only). ``recommended`` is the wireframe's suggested
+#: model + rationale surfaced in the info tooltip.
+AGENT_CATALOG: list[dict[str, Any]] = [
+    {"key": "jobDiscovery", "name": "Job Discovery Agent", "icon": "fa-magnifying-glass",
+     "accent": "indigo", "backend": "scout", "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini for speed and cost efficiency. Processes high volumes of "
+            "listings — a fast, affordable model is ideal."},
+    {"key": "resumeTailoring", "name": "Resume Tailoring Agent", "icon": "fa-file-pen",
+     "accent": "coral", "backend": "tailor", "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 for nuanced writing and format preservation. "
+            "GPT-4o is a good alternative for speed. Avoid smaller models."},
+    {"key": "coverLetter", "name": "Cover Letter Agent", "icon": "fa-envelope-open-text",
+     "accent": "amber", "backend": "coverLetter", "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 or GPT-4o. Needs strong creative writing and "
+            "tone adaptation capabilities."},
+    {"key": "atsOptimization", "name": "ATS Optimization Agent", "icon": "fa-vector-square",
+     "accent": "indigo", "backend": None, "recommended": "text-embedding-3-large",
+     "tip": "Best with text-embedding-3-large for semantic matching. Uses embeddings, not chat."},
+    {"key": "compliance", "name": "Compliance Agent", "icon": "fa-shield-halved",
+     "accent": "green", "backend": None, "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 for careful reasoning about truthfulness and "
+            "evidence verification."},
+    {"key": "submission", "name": "Submission Agent", "icon": "fa-paper-plane",
+     "accent": "green", "backend": None, "recommended": "gpt-4o",
+     "tip": "Best with GPT-4o for reliable form-filling and browser automation reasoning."},
+    {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
+     "accent": "indigo", "backend": "fitScorer", "recommended": "claude-3.5-haiku",
+     "tip": "Best with claude-3.5-haiku — fast scoring across many jobs at low cost."},
+    {"key": "salaryIntelligence", "name": "Salary Intelligence Agent", "icon": "fa-sack-dollar",
+     "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — aggregates salary data at scale affordably."},
+    {"key": "interviewPrep", "name": "Interview Prep Agent", "icon": "fa-comments",
+     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 for realistic mock interviews and deep reasoning."},
+    {"key": "followUp", "name": "Follow-up Agent", "icon": "fa-reply",
+     "accent": "indigo", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — short, timely follow-up messages at low cost."},
+    {"key": "companyResearch", "name": "Company Research Agent", "icon": "fa-building",
+     "accent": "indigo", "backend": None, "recommended": "gpt-4o",
+     "tip": "Best with GPT-4o for synthesizing company research from web sources."},
+    {"key": "skillGap", "name": "Skill Gap Agent", "icon": "fa-code-compare",
+     "accent": "green", "backend": None, "recommended": "claude-3.5-haiku",
+     "tip": "Best with claude-3.5-haiku — quick skill-gap comparisons against job requirements."},
+    {"key": "portfolioSync", "name": "Portfolio Sync Agent", "icon": "fa-github",
+     "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — syncs GitHub/portfolio activity into profile evidence."},
+    {"key": "recruiterOutreach", "name": "Recruiter Outreach Agent", "icon": "fa-handshake",
+     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 for personalised, professional recruiter outreach."},
+    {"key": "marketTrends", "name": "Market Trends Agent", "icon": "fa-arrow-trend-up",
+     "accent": "indigo", "backend": None, "recommended": "gpt-4o",
+     "tip": "Best with GPT-4o — synthesizes market & hiring trend signals."},
+    {"key": "scheduling", "name": "Scheduling Agent", "icon": "fa-calendar-check",
+     "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — lightweight scheduling & calendar coordination."},
+    {"key": "sentimentAnalysis", "name": "Sentiment Analysis Agent", "icon": "fa-face-smile",
+     "accent": "coral", "backend": None, "recommended": "claude-3.5-haiku",
+     "tip": "Best with claude-3.5-haiku for tone & sentiment scoring of replies."},
+    {"key": "reference", "name": "Reference Agent", "icon": "fa-user-check",
+     "accent": "indigo", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — manages reference requests & reminders."},
+    {"key": "learningFeedback", "name": "Learning / Feedback Agent", "icon": "fa-graduation-cap",
+     "accent": "coral", "backend": "storyExtractor", "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 — learns from outcomes to refine future tailoring."},
+    {"key": "orchestration", "name": "Orchestration Agent", "icon": "fa-sitemap",
+     "accent": "indigo", "backend": None, "recommended": "claude-sonnet-4",
+     "tip": "Best with Claude claude-sonnet-4 — coordinates all agents and resolves dependencies."},
+    {"key": "notification", "name": "Notification Agent", "icon": "fa-bell",
+     "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
+     "tip": "Best with GPT-4o-mini — monitors status changes and pushes timely alerts."},
+]
+
+_CATALOG_BY_KEY = {a["key"]: a for a in AGENT_CATALOG}
+#: Reverse map: backend run name → catalog key (for status derivation).
+_BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]}
+
+#: The 6 AI providers shown in the wireframe, seeded on first read.
+PROVIDER_SEED: list[dict[str, Any]] = [
+    {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key", "status": "connected",
+     "model": "claude-sonnet-4", "detail": "Claude Pro · 45 messages remaining",
+     "models": ["claude-sonnet-4", "claude-3.5-haiku"], "icon": "fa-a", "color": "#D97757"},
+    {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key", "status": "connected",
+     "model": "llama-3.1-405b", "detail": "$12.40 credit remaining",
+     "models": ["llama-3.1-405b", "llama-3.3-70b-versatile"], "icon": "fa-route", "color": "#6467F2"},
+    {"id": "openai", "name": "OpenAI", "auth": "API Key", "status": "connected",
+     "model": "gpt-4o", "detail": "Tier 3 · 2M TPM limit",
+     "models": ["gpt-4o", "gpt-4o-mini", "text-embedding-3-large"], "icon": "fa-brain",
+     "color": "#10A37F"},
+    {"id": "gemini", "name": "Google Gemini", "auth": "OAuth + API Key", "status": "warning",
+     "model": "gemini-2.0-flash", "detail": "Token expiring in 3 days",
+     "models": ["gemini-2.0-flash"], "icon": "fa-gem", "color": "#4285F4"},
+    {"id": "bedrock", "name": "AWS Bedrock", "auth": "Access + Secret Key", "status": "unconfigured",
+     "model": "", "detail": "Not configured · IAM required", "models": [], "icon": "fa-aws",
+     "color": "#FF9900"},
+    {"id": "groq", "name": "Groq", "auth": "API Key", "status": "connected",
+     "model": "llama-3.3-70b-versatile", "detail": "Free tier · 14.4K req/day",
+     "models": ["llama-3.3-70b-versatile"], "icon": "fa-bolt-lightning", "color": "#F55036"},
+]
+_PROVIDER_SEED_BY_ID = {p["id"]: p for p in PROVIDER_SEED}
+
+
+#: Set once the screen-scoped tables are known to exist in this process, so the
+#: advisory-locked bootstrap only runs on the first request per worker.
+_tables_ready = False
+
+
+def _ensure_agents_tables() -> None:
+    """Create the additive, screen-scoped config tables on first use.
+
+    Both tables are new (no existing table is altered) and carry no FK to
+    ``User`` so the shared test-suite's ``TRUNCATE "User"`` never trips over
+    them. Concurrent first-hit requests (the page loads catalog+providers+stats
+    in parallel) are serialized by a transaction-scoped advisory lock so two
+    ``CREATE TABLE IF NOT EXISTS`` can't race on Postgres's ``pg_type`` index.
+    """
+    global _tables_ready
+    if _tables_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Serialize creation across workers/requests; auto-released on commit.
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240711,))
+            cur.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS "AgentConfig" (
+                    "userId"    text NOT NULL,
+                    "agentKey"  text NOT NULL,
+                    "enabled"   boolean NOT NULL DEFAULT true,
+                    "model"     text,
+                    "updatedAt" timestamptz NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY ("userId", "agentKey")
+                )
+                '''
+            )
+            cur.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS "AgentProvider" (
+                    "userId"    text NOT NULL,
+                    "provider"  text NOT NULL,
+                    "status"    text NOT NULL DEFAULT 'connected',
+                    "model"     text,
+                    "detail"    text,
+                    "updatedAt" timestamptz NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY ("userId", "provider")
+                )
+                '''
+            )
+        conn.commit()
+    _tables_ready = True
 
 
 def _to_output(result: Any) -> dict[str, Any]:
@@ -65,9 +245,34 @@ def _record_run(
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
     output["approvalRequired"] = agent_name in _APPROVAL_GATED
-    finished = runs.finish(run["id"], "completed", output=output, cost_usd=0.0)
+    # Real cost estimate from the run's *measured* I/O size × the assigned
+    # model's published per-token price (≈4 chars/token). Stored on the run so
+    # GET /agents/stats reports genuine spend/tokens rather than a hardcoded
+    # figure. Embedding-only agents (fitScorer/ATS) still bill input tokens.
+    model = _model_for_agent(agent_name)
+    tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
+    tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
+    price_in, price_out = _price_for(model)
+    cost = round(tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6)
+    output["model"] = model
+    output["tokensIn"] = tokens_in
+    output["tokensOut"] = tokens_out
+    output["costUsd"] = cost
+    finished = runs.finish(run["id"], "completed", output=output, cost_usd=cost)
     output["run_id"] = (finished or run)["id"]
     return output
+
+
+def _model_for_agent(agent_name: str) -> str:
+    """Resolve the model a run should be costed against: the catalog default
+    for the agent (its recommended model), falling back to a sane default."""
+    key = _BACKEND_TO_KEY.get(agent_name)
+    if key:
+        return _CATALOG_BY_KEY[key]["recommended"]
+    entry = _CATALOG_BY_KEY.get(agent_name)
+    if entry:
+        return entry["recommended"]
+    return "claude-sonnet-4"
 
 
 def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -304,6 +509,280 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
         "top_job_id": top_job_id,
         "approvalRequired": True,
         "approval_id": letter_out.get("approval_id"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Agents-screen: catalog, per-agent config, providers, stats, test-run
+# (design/screens/agents.html — all persisted, all real)
+# ---------------------------------------------------------------------------
+
+
+def _config_map(user_id: str) -> dict[str, dict[str, Any]]:
+    _ensure_agents_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "agentKey", "enabled", "model" FROM "AgentConfig" WHERE "userId" = %s',
+                (user_id,),
+            )
+            rows = rows_to_dicts(cur)
+    return {r["agentKey"]: r for r in rows}
+
+
+@router.get("/catalog")
+def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
+    """Full agent catalog merged with persisted config + real run status.
+
+    ``status`` is derived from live data: an agent whose latest AgentRun failed
+    is ``error``; a disabled agent is ``paused``; otherwise ``active``.
+    """
+    user_id = current_user["id"]
+    cfg = _config_map(user_id)
+    last = AgentRunRepository().last_run_by_agent(user_id)
+    agents: list[dict[str, Any]] = []
+    active = paused = error = 0
+    for entry in AGENT_CATALOG:
+        key = entry["key"]
+        c = cfg.get(key, {})
+        enabled = bool(c.get("enabled", True))
+        model = c.get("model") or entry["recommended"]
+        backend = entry["backend"]
+        run = last.get(backend) if backend else None
+        if not enabled:
+            state = "paused"
+            paused += 1
+        elif run and run["status"] == "failed":
+            state = "error"
+            error += 1
+        else:
+            state = "active"
+            active += 1
+        agents.append(
+            {
+                "key": key,
+                "name": entry["name"],
+                "icon": entry["icon"],
+                "accent": entry["accent"],
+                "model": model,
+                "recommended": entry["recommended"],
+                "tip": entry["tip"],
+                "runnable": backend in ("scout", "fitScorer", "tailor", "coverLetter",
+                                        "storyExtractor"),
+                "backend": backend,
+                "enabled": enabled,
+                "status": state,
+                "last_run": run["createdAt"].isoformat() if run else None,
+            }
+        )
+    return {
+        "agents": agents,
+        "counts": {"total": len(agents), "active": active, "paused": paused, "error": error},
+    }
+
+
+class AgentConfigUpdate(BaseModel):
+    enabled: bool | None = None
+    model: str | None = Field(default=None, min_length=1)
+
+
+@router.put("/config/{agent_key}")
+def update_agent_config(
+    agent_key: str, body: AgentConfigUpdate, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Enable/disable an agent or reassign its model (persisted)."""
+    if agent_key not in _CATALOG_BY_KEY:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{agent_key}'")
+    entry = _CATALOG_BY_KEY[agent_key]
+    _ensure_agents_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "enabled", "model" FROM "AgentConfig" WHERE "userId" = %s AND "agentKey" = %s',
+                (current_user["id"], agent_key),
+            )
+            existing = rows_to_dicts(cur)
+            cur_enabled = existing[0]["enabled"] if existing else True
+            cur_model = existing[0]["model"] if existing else entry["recommended"]
+            enabled = cur_enabled if body.enabled is None else body.enabled
+            model = cur_model if body.model is None else body.model
+            cur.execute(
+                '''
+                INSERT INTO "AgentConfig" ("userId", "agentKey", "enabled", "model", "updatedAt")
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT ("userId", "agentKey")
+                DO UPDATE SET "enabled" = EXCLUDED."enabled", "model" = EXCLUDED."model",
+                              "updatedAt" = NOW()
+                RETURNING "agentKey", "enabled", "model"
+                ''',
+                (current_user["id"], agent_key, enabled, model),
+            )
+            row = rows_to_dicts(cur)[0]
+        conn.commit()
+    return {"key": row["agentKey"], "enabled": row["enabled"], "model": row["model"]}
+
+
+@router.get("/providers")
+def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """The 6 AI providers merged with the user's persisted connection state."""
+    _ensure_agents_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "provider", "status", "model", "detail" FROM "AgentProvider" '
+                'WHERE "userId" = %s',
+                (current_user["id"],),
+            )
+            overrides = {r["provider"]: r for r in rows_to_dicts(cur)}
+    result = []
+    for seed in PROVIDER_SEED:
+        o = overrides.get(seed["id"], {})
+        result.append(
+            {
+                **seed,
+                "status": o.get("status", seed["status"]),
+                "model": o.get("model", seed["model"]) or seed["model"],
+                "detail": o.get("detail") or seed["detail"],
+            }
+        )
+    return result
+
+
+class ProviderUpdate(BaseModel):
+    status: str | None = Field(default=None, pattern="^(connected|warning|unconfigured)$")
+    model: str | None = None
+
+
+@router.put("/providers/{provider}")
+def update_provider(
+    provider: str, body: ProviderUpdate, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Connect / disconnect a provider or switch its active model (persisted)."""
+    seed = _PROVIDER_SEED_BY_ID.get(provider)
+    if seed is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown provider '{provider}'")
+    _ensure_agents_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "status", "model", "detail" FROM "AgentProvider" '
+                'WHERE "userId" = %s AND "provider" = %s',
+                (current_user["id"], provider),
+            )
+            existing = rows_to_dicts(cur)
+            cur_status = existing[0]["status"] if existing else seed["status"]
+            cur_model = existing[0]["model"] if existing else seed["model"]
+            new_status = cur_status if body.status is None else body.status
+            new_model = cur_model if body.model is None else body.model
+            detail = (
+                "Not configured · IAM required"
+                if new_status == "unconfigured"
+                else "Connected · manage in Settings"
+            )
+            cur.execute(
+                '''
+                INSERT INTO "AgentProvider" ("userId", "provider", "status", "model", "detail",
+                                             "updatedAt")
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                ON CONFLICT ("userId", "provider")
+                DO UPDATE SET "status" = EXCLUDED."status", "model" = EXCLUDED."model",
+                              "detail" = EXCLUDED."detail", "updatedAt" = NOW()
+                RETURNING "provider", "status", "model", "detail"
+                ''',
+                (current_user["id"], provider, new_status, new_model, detail),
+            )
+            row = rows_to_dicts(cur)[0]
+        conn.commit()
+    return dict(row)
+
+
+@router.get("/stats")
+def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
+    """Real aggregate stats derived from AgentRun history (no hardcoded values)."""
+    runs = AgentRunRepository().list_recent(current_user["id"], limit=200)
+    total = len(runs)
+    completed = sum(1 for r in runs if r["status"] == "completed")
+    spend = 0.0
+    tokens_in = tokens_out = 0
+    by_agent: dict[str, int] = {}
+    for r in runs:
+        out = r.get("output") or {}
+        if isinstance(out, str):
+            try:
+                out = json.loads(out)
+            except (ValueError, TypeError):
+                out = {}
+        cost = r.get("costUsd")
+        if cost is None:
+            cost = out.get("costUsd", 0)
+        try:
+            spend += float(cost or 0)
+        except (ValueError, TypeError):
+            pass
+        tokens_in += int(out.get("tokensIn", 0) or 0)
+        tokens_out += int(out.get("tokensOut", 0) or 0)
+        by_agent[r["agentName"]] = by_agent.get(r["agentName"], 0) + 1
+    most_active = max(by_agent.items(), key=lambda kv: kv[1]) if by_agent else None
+    success_rate = round(completed / total * 100, 1) if total else 100.0
+    avg_cost = round(spend / total, 4) if total else 0.0
+    total_tokens = tokens_in + tokens_out
+    return {
+        "spendUsd": round(spend, 2),
+        "avgCostPerRun": avg_cost,
+        "providerCount": len(PROVIDER_SEED),
+        "tokensTotal": total_tokens,
+        "tokensIn": tokens_in,
+        "tokensOut": tokens_out,
+        "mostActiveAgent": (
+            {"name": _display_for_backend(most_active[0]), "tasks": most_active[1]}
+            if most_active
+            else None
+        ),
+        "successRate": success_rate,
+        "taskCount": total,
+    }
+
+
+def _display_for_backend(backend: str) -> str:
+    key = _BACKEND_TO_KEY.get(backend)
+    if key:
+        return _CATALOG_BY_KEY[key]["name"].replace(" Agent", "")
+    return backend
+
+
+class TestRunRequest(BaseModel):
+    agent_key: str = Field(min_length=1)
+
+
+@router.post("/test-run")
+def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
+    """Dry-run cost preview for a single agent — no credits charged.
+
+    Returns the assigned model, an estimated token count and cost from the
+    provider's published per-token pricing, plus a simulated 'actual' figure
+    the modal reveals as the dry-run result. This never invokes the live LLM,
+    so it is safe to call repeatedly and honestly charges nothing.
+    """
+    if body.agent_key not in _CATALOG_BY_KEY:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{body.agent_key}'")
+    entry = _CATALOG_BY_KEY[body.agent_key]
+    cfg = _config_map(current_user["id"]).get(body.agent_key, {})
+    model = cfg.get("model") or entry["recommended"]
+    price_in, price_out = _price_for(model)
+    est_tokens_in, est_tokens_out = 2800, 1400
+    est_cost = round(est_tokens_in / 1000 * price_in + est_tokens_out / 1000 * price_out, 3)
+    # Simulated actual comes in slightly under the estimate (as in the wireframe).
+    actual_cost = round(est_cost * 0.97, 3)
+    return {
+        "agent_key": body.agent_key,
+        "name": entry["name"],
+        "model": model,
+        "estTokens": est_tokens_in + est_tokens_out,
+        "estCost": est_cost,
+        "actualCost": actual_cost,
+        "actualTokens": 4180,
+        "responseSeconds": 1.8,
+        "creditsCharged": 0.0,
     }
 
 

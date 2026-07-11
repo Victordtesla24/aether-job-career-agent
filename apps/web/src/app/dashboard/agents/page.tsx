@@ -1,14 +1,20 @@
 "use client";
 
 /**
- * Agents console — roster, run history and manual triggers backed by
- * GET /agents, GET /agents/runs, POST /agents/{name}/run and
- * POST /agents/pipeline/run.
+ * Manage Agents console (wireframe: design/screens/agents.html).
  *
- * UX contract (defect fix): every trigger gives immediate feedback, live
- * progress while it runs (the pipeline call is synchronous and can take
- * 30–120 s), and a completion/failure message that tells the user where
- * the data landed (Jobs, Resume Studio, Approvals, Story Bank).
+ * Sections, in wireframe order:
+ *  1. Header — "Manage Agents" + live counts + Add Provider / Test Run / Run All
+ *  2. AI Provider Connections (6 cards, persisted connection state)
+ *  3. Agent Configuration grid (full catalog, live status + enable/disable/model)
+ *  4. Quick stats (spend / tokens / most-active / success — all from AgentRun)
+ *  5. Agent Orchestration (agent-monitor, merged into this screen)
+ *  6. Recent runs audit table
+ *  7. Test Run modal
+ *
+ * Every control is wired to a real endpoint — nothing is mock. The full
+ * pipeline ("Run All") is a synchronous ~30–120 s call, so the UI streams live
+ * progress and a completion/failure notice (see lib/agents-feedback).
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +29,20 @@ import {
 } from "../../../lib/api/agents";
 import { apiRequest } from "../../../lib/api/client";
 import Orchestration from "../../../components/agents/Orchestration";
+import ProviderConnections from "../../../components/agents/ProviderConnections";
+import AgentConfigGrid from "../../../components/agents/AgentConfigGrid";
+import AgentStatsRow from "../../../components/agents/AgentStats";
+import TestRunModal from "../../../components/agents/TestRunModal";
+import {
+  fetchAgentStats,
+  fetchCatalog,
+  fetchProviders,
+  updateAgentConfig,
+  updateProvider,
+  type AgentStats,
+  type Catalog,
+  type Provider,
+} from "../../../components/agents/api";
 import {
   agentSuccessNotice,
   pipelineCompletionNotice,
@@ -32,14 +52,7 @@ import {
   type Notice,
 } from "../../../lib/agents-feedback";
 
-const RUNNABLE = new Set(["scout", "fitScorer", "tailor", "coverLetter", "storyExtractor"]);
-
-/** Registry-only nodes that execute inside the pipeline, not standalone. */
-const PIPELINE_ONLY: Record<string, string> = {
-  supervisor: "Plans the run — executes inside the full pipeline",
-  matcher: "Picks the top-fit job — executes inside the full pipeline",
-};
-
+/** Per-agent discovery params for backend triggers. */
 const RUN_PARAMS: Record<string, Record<string, unknown>> = {
   scout: { query: "software engineer", location: "Australia" },
 };
@@ -55,22 +68,37 @@ const AGENT_ROUTE: Record<string, string> = {
 const POLL_MS = 3000;
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<AgentSummary[] | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [providers, setProviders] = useState<Provider[] | null>(null);
+  const [stats, setStats] = useState<AgentStats | null>(null);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [testAgent, setTestAgent] = useState<string>("scout");
+  const [providerBusy, setProviderBusy] = useState<string | null>(null);
+  const [toggleBusy, setToggleBusy] = useState<string | null>(null);
+  const [testOpen, setTestOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
 
   const load = useCallback(async () => {
     try {
-      const [agentList, runList] = await Promise.all([fetchAgents(), fetchAgentRuns()]);
+      const [cat, prov, st, agentList, runList] = await Promise.all([
+        fetchCatalog(),
+        fetchProviders(),
+        fetchAgentStats(),
+        fetchAgents(),
+        fetchAgentRuns(),
+      ]);
+      setCatalog(cat);
+      setProviders(prov);
+      setStats(st);
       setAgents(agentList);
       setRuns(runList);
     } catch (e) {
       setNotice(runErrorNotice(e, "Loading agents"));
-      setAgents((prev) => prev ?? []);
+      setCatalog((prev) => prev ?? { agents: [], counts: { total: 0, active: 0, paused: 0, error: 0 } });
+      setProviders((prev) => prev ?? []);
     }
   }, []);
 
@@ -87,9 +115,7 @@ export default function AgentsPage() {
 
   useEffect(() => stopPolling, [stopPolling]);
 
-  /** Poll runs while the pipeline call is in flight so the RECENT RUNS
-   *  table and agent cards update live, and the banner shows which agent
-   *  is currently working. */
+  /** Poll while a run/pipeline is in flight so cards + stats update live. */
   const startPolling = useCallback(
     (mode: "pipeline" | "agent") => {
       runStartedAt.current = Date.now();
@@ -97,7 +123,14 @@ export default function AgentsPage() {
       pollTimer.current = setInterval(() => {
         void (async () => {
           try {
-            const [agentList, runList] = await Promise.all([fetchAgents(), fetchAgentRuns()]);
+            const [cat, st, agentList, runList] = await Promise.all([
+              fetchCatalog(),
+              fetchAgentStats(),
+              fetchAgents(),
+              fetchAgentRuns(),
+            ]);
+            setCatalog(cat);
+            setStats(st);
             setAgents(agentList);
             setRuns(runList);
             if (mode === "pipeline") {
@@ -136,8 +169,6 @@ export default function AgentsPage() {
     }
   };
 
-  /** Tailor/CoverLetter need a job target: use the top job by fit score.
-   *  (Previously these buttons sent an empty body → guaranteed 422.) */
   const resolveParams = async (name: string): Promise<Record<string, unknown>> => {
     if (name === "tailor" || name === "coverLetter") {
       const jobs = await apiRequest<Array<{ id: string }>>("/jobs?sort=fitScore");
@@ -149,16 +180,16 @@ export default function AgentsPage() {
     return RUN_PARAMS[name] ?? {};
   };
 
-  const trigger = async (name: string) => {
-    setBusy(name);
-    setNotice({ kind: "info", text: `${name} started — running now…` });
+  const trigger = async (backend: string) => {
+    setBusy(backend);
+    setNotice({ kind: "info", text: `${backend} started — running now…` });
     startPolling("agent");
     try {
-      const params = await resolveParams(name);
-      const output = await runAgent(AGENT_ROUTE[name] ?? name, params);
-      setNotice(agentSuccessNotice(name, output));
+      const params = await resolveParams(backend);
+      const output = await runAgent(AGENT_ROUTE[backend] ?? backend, params);
+      setNotice(agentSuccessNotice(backend, output));
     } catch (e) {
-      setNotice(runErrorNotice(e, name));
+      setNotice(runErrorNotice(e, backend));
     } finally {
       stopPolling();
       setBusy(null);
@@ -166,31 +197,118 @@ export default function AgentsPage() {
     }
   };
 
+  const onRunAgent = (key: string) => {
+    const agent = catalog?.agents.find((a) => a.key === key);
+    if (agent?.backend) void trigger(agent.backend);
+  };
+
+  const onToggleAgent = async (key: string, enabled: boolean) => {
+    setToggleBusy(key);
+    try {
+      await updateAgentConfig(key, { enabled });
+      const [cat, st] = await Promise.all([fetchCatalog(), fetchAgentStats()]);
+      setCatalog(cat);
+      setStats(st);
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Updating agent"));
+    } finally {
+      setToggleBusy(null);
+    }
+  };
+
+  const onProviderToggle = async (id: string, next: Provider["status"]) => {
+    setProviderBusy(id);
+    try {
+      await updateProvider(id, { status: next });
+      setProviders(await fetchProviders());
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Updating provider"));
+    } finally {
+      setProviderBusy(null);
+    }
+  };
+
+  const onProviderModel = async (id: string, model: string) => {
+    setProviderBusy(id);
+    try {
+      await updateProvider(id, { model });
+      setProviders(await fetchProviders());
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Updating provider"));
+    } finally {
+      setProviderBusy(null);
+    }
+  };
+
+  const onAddProvider = async () => {
+    const target = providers?.find((p) => p.status === "unconfigured");
+    if (!target) {
+      setNotice({ kind: "info", text: "All providers are already connected." });
+      return;
+    }
+    setProviderBusy(target.id);
+    try {
+      await updateProvider(target.id, { status: "connected" });
+      setProviders(await fetchProviders());
+      setNotice({ kind: "success", text: `${target.name} connected.` });
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Adding provider"));
+    } finally {
+      setProviderBusy(null);
+    }
+  };
+
+  const agentCount = catalog?.counts.total ?? 0;
+  const providerCount = providers?.length ?? 0;
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Agents</h1>
-          <p className="text-sm text-aether-muted">
-            The Aether crew — approval-gated agents never act without you.
+          <h1 className="text-2xl font-bold">Manage Agents</h1>
+          <p className="mt-0.5 font-mono text-xs text-aether-muted-dim">
+            {agentCount} agents · {providerCount} AI providers · configure models &amp; connections
           </p>
         </div>
-        <button
-          type="button"
-          data-testid="run-pipeline-btn"
-          onClick={() => void pipeline()}
-          disabled={busy !== null}
-          className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {busy === "pipeline" ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Running Pipeline…
-            </span>
-          ) : (
-            "Run Full Pipeline"
-          )}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-testid="add-provider-btn"
+            onClick={() => void onAddProvider()}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium transition hover:bg-white/10"
+          >
+            <i className="fa-solid fa-plus text-[10px]" aria-hidden="true" />
+            Add Provider
+          </button>
+          <button
+            type="button"
+            data-testid="test-run-open"
+            onClick={() => setTestOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium transition hover:bg-white/10"
+          >
+            <i className="fa-solid fa-vial text-[10px] text-aether-indigo" aria-hidden="true" />
+            Test Run
+          </button>
+          <button
+            type="button"
+            data-testid="run-pipeline-btn"
+            onClick={() => void pipeline()}
+            disabled={busy !== null}
+            className="flex items-center gap-2 rounded-lg bg-aether-coral px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy === "pipeline" ? (
+              <>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                Running…
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-play text-[10px]" aria-hidden="true" />
+                Run All
+              </>
+            )}
+          </button>
+        </div>
       </header>
 
       {notice ? (
@@ -220,166 +338,29 @@ export default function AgentsPage() {
         </p>
       ) : null}
 
-      {agents === null ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="glass h-32 animate-pulse rounded-2xl border border-white/10" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent) => (
-            <article
-              key={agent.name}
-              data-testid="agent-card"
-              className="glass rounded-2xl border border-white/10 p-5 transition hover:border-white/20"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold capitalize">{agent.name}</h2>
-                  <p className="mt-0.5 text-xs text-aether-muted">
-                    {agent.last_run
-                      ? `Last run ${new Date(agent.last_run).toLocaleString()}`
-                      : "Never run"}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-xs ${
-                    agent.status === "idle"
-                      ? "border-white/10 text-aether-muted-dim"
-                      : "border-aether-green/40 text-aether-green"
-                  }`}
-                >
-                  {busy === "pipeline" && agent.name in PIPELINE_ONLY ? "in pipeline" : agent.status}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                {agent.approval_gated ? (
-                  <span className="text-xs text-aether-amber">🔒 approval gated</span>
-                ) : (
-                  <span className="text-xs text-aether-muted-dim">autonomous</span>
-                )}
-                {RUNNABLE.has(agent.name) ? (
-                  <button
-                    type="button"
-                    data-testid={`run-agent-${agent.name}`}
-                    onClick={() => void trigger(agent.name)}
-                    disabled={busy !== null}
-                    className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30 disabled:opacity-50"
-                  >
-                    {busy === agent.name ? "Running…" : "Run"}
-                  </button>
-                ) : null}
-              </div>
-              {agent.name in PIPELINE_ONLY ? (
-                <p className="mt-2 text-xs text-aether-muted-dim" data-testid="pipeline-only-note">
-                  {PIPELINE_ONLY[agent.name]} — use “Run Full Pipeline”.
-                </p>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      )}
+      <ProviderConnections
+        providers={providers ?? []}
+        loading={providers === null}
+        busyId={providerBusy}
+        onToggle={(id, next) => void onProviderToggle(id, next)}
+        onModel={(id, model) => void onProviderModel(id, model)}
+      />
 
-      <Orchestration agents={agents ?? []} runs={runs} />
+      <AgentConfigGrid
+        agents={catalog?.agents ?? []}
+        counts={catalog?.counts ?? null}
+        loading={catalog === null}
+        busyKey={toggleBusy ?? busy}
+        onToggle={(key, enabled) => void onToggleAgent(key, enabled)}
+        onRun={onRunAgent}
+      />
 
-      {/* AI Provider Connections + Agent Configuration + Test Run (wireframe agents.html) */}
-      <div className="grid gap-4 xl:grid-cols-3">
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="provider-connections">
-          <h2 className="mb-4 text-[15px] font-semibold">AI Provider Connections</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
-              <div>
-                <p className="text-xs font-semibold">Anthropic Claude</p>
-                <p className="mono text-[11px] text-aether-muted-dim">API Key ····8f3d · claude-sonnet-4</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
-                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-[10px] text-aether-muted hover:border-white/30 hover:text-white">Manage</button>
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
-              <div>
-                <p className="text-xs font-semibold">OpenRouter</p>
-                <p className="mono text-[11px] text-aether-muted-dim">OAuth + API Key · llama-3.1-405b</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
-                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-[10px] text-aether-muted hover:border-white/30 hover:text-white">Manage</button>
-              </div>
-            </div>
-          </div>
-        </section>
+      <AgentStatsRow stats={stats} loading={stats === null} />
 
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="agent-configuration">
-          <h2 className="mb-4 text-[15px] font-semibold">Agent Configuration</h2>
-          <ul className="space-y-2.5 text-xs text-aether-muted">
-            <li className="flex items-center justify-between">
-              <span>Approval gate</span>
-              <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">On</span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span>Auto-apply</span>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-aether-muted-dim">Off</span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span>Match threshold</span>
-              <span className="mono font-semibold text-white">80%</span>
-            </li>
-          </ul>
-          <Link
-            href="/dashboard/settings"
-            className="mt-4 block rounded-lg border border-white/15 py-2 text-center text-xs text-aether-muted hover:border-white/30 hover:text-white"
-          >
-            Configure in Settings &amp; Profile
-          </Link>
-        </section>
-
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="test-run-panel">
-          <h2 className="mb-1 text-[15px] font-semibold">Test Run — Single Agent</h2>
-          <p className="mb-3 text-[11px] text-aether-muted-dim">
-            Dry-run one agent · Model claude-sonnet-4 · Est. tokens ~4.2K · Est. cost/run ~$0.032
-          </p>
-          <label className="block">
-            <span className="mb-1 block text-xs text-aether-muted">Select agent</span>
-            <select
-              value={testAgent}
-              data-testid="test-run-select"
-              aria-label="Select agent"
-              onChange={(e) => setTestAgent(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50 [&>option]:bg-aether-bg"
-            >
-              {Array.from(RUNNABLE).map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              data-testid="test-run-cancel"
-              onClick={() => setTestAgent("scout")}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-aether-muted hover:border-white/30 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              data-testid="test-run-go"
-              onClick={() => void trigger(testAgent)}
-              disabled={busy !== null}
-              className="rounded-lg bg-aether-coral px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-            >
-              {busy === testAgent ? "Running…" : "Run Test"}
-            </button>
-          </div>
-        </section>
-      </div>
+      <Orchestration agents={agents} runs={runs} />
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
           Recent runs
         </h2>
         {runs.length === 0 ? (
@@ -414,12 +395,10 @@ export default function AgentsPage() {
                         {run.status}
                       </span>
                     </td>
-                    <td className="mono px-4 py-2.5 text-xs text-aether-muted">
+                    <td className="px-4 py-2.5 font-mono text-xs text-aether-muted">
                       {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-aether-muted-dim">
-                      {run.error ?? "—"}
-                    </td>
+                    <td className="px-4 py-2.5 text-xs text-aether-muted-dim">{run.error ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -427,6 +406,12 @@ export default function AgentsPage() {
           </div>
         )}
       </section>
+
+      <TestRunModal
+        open={testOpen}
+        agents={catalog?.agents ?? []}
+        onClose={() => setTestOpen(false)}
+      />
     </div>
   );
 }

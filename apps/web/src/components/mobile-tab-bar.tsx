@@ -33,6 +33,7 @@ export function MobileTabBar() {
           <Link
             key={t.href}
             href={t.href}
+            prefetch={false}
             aria-current={active ? "page" : undefined}
             className={`flex flex-col items-center justify-center gap-1 min-w-[56px] min-h-[56px] py-2 text-[11px] font-medium ${
               active ? "text-aether-coral" : "text-aether-muted"

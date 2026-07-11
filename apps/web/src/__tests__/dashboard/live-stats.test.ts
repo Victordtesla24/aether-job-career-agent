@@ -1,6 +1,8 @@
 /**
- * P2 — dashboard stats must come from GET /analytics/funnel, not hardcoded
- * placeholder values (the Phase 1 shell shipped with STATS = 37/24/3/91).
+ * P2/verification — dashboard stats must come from GET /analytics/funnel plus
+ * live job fit scores, never hardcoded placeholders (the Phase 1 shell shipped
+ * with STATS = 37/24/3/91). Card set per wireframe stats-row-p7q8r9: Active
+ * Applications / Interview Rate / Offers / AI Confidence.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -44,21 +46,41 @@ describe("dashboard live stats", () => {
     expect(funnel.offers).toBe(4);
   });
 
-  it("buildStatCards derives every card value from live funnel data", () => {
-    const cards = buildStatCards(FUNNEL_FIXTURE);
-    expect(cards).toHaveLength(4);
-    expect(cards.map((c) => c.value)).toEqual(["847", "412", "19", "4"]);
-
-    const zero = buildStatCards({ ...FUNNEL_FIXTURE, applied: 0, interviewed: 0 });
-    expect(zero[2]!.note).toContain("0%");
+  it("builds the wireframe card set with every value derived from live data", () => {
+    const cards = buildStatCards(FUNNEL_FIXTURE, { weeklyApplied: 8, avgFit: 91.2 });
+    expect(cards.map((c) => c.label)).toEqual([
+      "Active Applications",
+      "Interview Rate",
+      "Offers",
+      "AI Confidence",
+    ]);
+    // applied=412; rate=round(19/412*100)=5; offers=4; avgFit→91
+    expect(cards.map((c) => c.value)).toEqual(["412", "5", "4", "91"]);
+    expect(cards[0]!.note).toBe("+8 this week");
+    expect(cards[0]!.trendUp).toBe(true);
+    expect(cards[1]!.unit).toBe("%");
+    expect(cards[2]!.note).toContain("pending decision");
+    expect(cards[3]!.unit).toBe("%");
   });
 
-  it("dashboard page renders DashboardStats and has no hardcoded funnel numbers", () => {
-    const pageSource = readFileSync(
-      join(__dirname, "../../app/dashboard/page.tsx"),
-      "utf8",
+  it("degrades gracefully with zero/absent data instead of fabricating numbers", () => {
+    const zero = buildStatCards(
+      { ...FUNNEL_FIXTURE, applied: 0, interviewed: 0, offers: 0 },
+      { weeklyApplied: 0, avgFit: null },
     );
+    expect(zero[0]!.note).toBe("no new this week");
+    expect(zero[1]!.value).toBe("0");
+    expect(zero[1]!.note).toBe("no applications yet");
+    expect(zero[2]!.note).toContain("none yet");
+    expect(zero[3]!.value).toBe("—");
+    expect(zero[3]!.unit).toBeUndefined();
+  });
+
+  it("dashboard page fetches live data and has no hardcoded funnel numbers", () => {
+    const pageSource = readFileSync(join(__dirname, "../../app/dashboard/page.tsx"), "utf8");
     expect(pageSource).toContain("DashboardStats");
+    expect(pageSource).toContain("fetchFunnel");
+    expect(pageSource).toContain("fetchApprovals");
     // The Phase 1 placeholder values must be gone.
     expect(pageSource).not.toMatch(/value:\s*"(37|24|3|91)"/);
     expect(pageSource).not.toContain("const STATS");
@@ -67,7 +89,7 @@ describe("dashboard live stats", () => {
       join(__dirname, "../../components/dashboard/DashboardStats.tsx"),
       "utf8",
     );
-    expect(statsSource).toContain("fetchFunnel");
+    expect(statsSource).toContain("buildStatCards");
     expect(statsSource).toContain('"use client"');
   });
 });

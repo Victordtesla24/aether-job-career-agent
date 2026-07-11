@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Aether · Career Agent",
+  title: "Aether Career Agent",
   description:
-    "Aether autonomously discovers roles, tailors your resume, and manages applications end to end.",
+    "Aether Career Agent autonomously discovers roles, tailors your resume, and manages applications end to end.",
 };
 
 /**

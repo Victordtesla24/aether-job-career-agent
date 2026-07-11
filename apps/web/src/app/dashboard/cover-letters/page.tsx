@@ -1,11 +1,30 @@
 "use client";
 
 /**
- * Cover letters — evidence-guarded drafts backed by GET /cover-letters and
- * POST /agents/cover-letter/run. Every draft routes through the approval queue.
+ * Cover Letter Studio (wireframe cover-letter-studio.html) — evidence-guarded
+ * drafts backed by GET /cover-letters + POST /agents/cover-letter/run, with a
+ * real intelligence rail (GET /cover-letters/{id}/insights): evidence trace,
+ * Voice DNA, JD keyword coverage, versions, refine and PDF export.
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { ActionsPanel } from "../../../components/cover-letters/ActionsPanel";
+import { EvidenceTracePanel } from "../../../components/cover-letters/EvidenceTracePanel";
+import { KeywordCoveragePanel } from "../../../components/cover-letters/KeywordCoveragePanel";
+import { VersionsPanel } from "../../../components/cover-letters/VersionsPanel";
+import { VoiceDnaPanel } from "../../../components/cover-letters/VoiceDnaPanel";
+import {
+  downloadCoverLetterPdf,
+  fetchLetterInsights,
+  refineCoverLetter,
+  type LetterInsights,
+} from "../../../components/cover-letters/api";
+import {
+  highlightSegments,
+  parseApiDate,
+  wordCount,
+} from "../../../components/cover-letters/insights";
 import { apiRequest } from "../../../lib/api/client";
 import {
   fetchCoverLetters,
@@ -14,21 +33,36 @@ import {
 } from "../../../lib/api/coverLetters";
 import type { Job } from "../../../lib/api/jobs";
 
+const SEGMENT_CLASS = {
+  plain: "",
+  grounded: "rounded bg-[#34D399]/25 px-0.5",
+  ungrounded: "rounded bg-[#FBBF24]/30 px-0.5",
+} as const;
+
 export default function CoverLettersPage() {
   const [letters, setLetters] = useState<CoverLetter[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [insights, setInsights] = useState<LetterInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [tone, setTone] = useState(60);
+  const [formality, setFormality] = useState(55);
   const [running, setRunning] = useState(false);
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [refining, setRefining] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (selectId?: string) => {
     try {
-      const [letterList, jobList] = await Promise.all([fetchCoverLetters(), apiRequest<Job[]>("/jobs")]);
+      const [letterList, jobList] = await Promise.all([
+        fetchCoverLetters(),
+        apiRequest<Job[]>("/jobs"),
+      ]);
       setLetters(letterList);
-      // Studio default: first draft opens expanded (wireframe shows the editor).
-      setExpanded((prev) => prev ?? letterList[0]?.id ?? null);
+      // Studio default: newest draft opens expanded (wireframe shows the editor).
+      setExpanded((prev) => selectId ?? prev ?? letterList[0]?.id ?? null);
       setJobs(jobList);
       setError(null);
     } catch (e) {
@@ -41,12 +75,38 @@ export default function CoverLettersPage() {
     void load();
   }, [load]);
 
+  // The rail is driven by the selected (expanded) letter's insights.
+  useEffect(() => {
+    if (!expanded) {
+      setInsights(null);
+      return;
+    }
+    let cancelled = false;
+    setInsightsLoading(true);
+    fetchLetterInsights(expanded)
+      .then((data) => {
+        if (!cancelled) setInsights(data);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setInsights(null);
+          setError(e instanceof Error ? e.message : "Failed to load letter insights");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded]);
+
   const generate = async () => {
     if (!selectedJob) return;
     setRunning(true);
     try {
-      await runCoverLetterAgent(selectedJob);
-      await load();
+      const result = await runCoverLetterAgent(selectedJob);
+      await load(result.cover_letter_id);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cover letter run failed");
@@ -55,12 +115,12 @@ export default function CoverLettersPage() {
     }
   };
 
-  // Wireframe action (cover-letter-studio): re-draft a letter for its job.
+  // Full agent re-run for a letter's job (per-card Regenerate).
   const regenerate = async (letter: CoverLetter) => {
     setRegenerating(letter.id);
     try {
-      await runCoverLetterAgent(letter.jobId);
-      await load();
+      const result = await runCoverLetterAgent(letter.jobId);
+      await load(result.cover_letter_id);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Regenerate failed");
@@ -69,48 +129,131 @@ export default function CoverLettersPage() {
     }
   };
 
+  // Slider-steered redraft of the selected letter (rail Regenerate).
+  const regenerateSelected = async () => {
+    if (!selected) return;
+    setRegenerating(selected.id);
+    try {
+      const result = await refineCoverLetter(selected.id, { tone, formality });
+      await load(result.cover_letter_id);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regenerate failed");
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
+  const requestChanges = async (instructions: string): Promise<boolean> => {
+    if (!selected) return false;
+    setRefining(true);
+    try {
+      const result = await refineCoverLetter(selected.id, { instructions, tone, formality });
+      await load(result.cover_letter_id);
+      setError(null);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Change request failed");
+      return false;
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!selected) return;
+    setExporting(true);
+    try {
+      const job = jobFor(selected.jobId);
+      const hint = (job?.company ?? "letter").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      await downloadCoverLetterPdf(selected.id, hint);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const jobFor = (jobId: string) => jobs.find((j) => j.id === jobId);
+  const selected = letters?.find((l) => l.id === expanded) ?? null;
+  const selectedInsights = insights && insights.letterId === expanded ? insights : null;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-[11px] text-aether-muted-dim">
+            <Link href="/dashboard/resume" className="transition hover:text-white">
+              Resume Studio
+            </Link>
+            <i className="fa-solid fa-chevron-right text-[8px]" aria-hidden="true" />
+            <span className="text-aether-muted">Cover Letter</span>
+          </nav>
           <h1 className="text-2xl font-bold">Cover Letter Studio</h1>
           <p className="text-sm text-aether-muted">
             Drafts pass a fabrication guard — every claim traces to your resume.
           </p>
         </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-          <select
-            value={selectedJob}
-            onChange={(e) => setSelectedJob(e.target.value)}
-            className="glass w-full min-w-0 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm sm:w-auto"
-            aria-label="Select a job to draft for"
-            data-testid="cover-letter-job-select"
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-4 sm:w-auto">
+          <div className="flex items-center gap-2" data-testid="voice-authenticity-indicator">
+            <i className="fa-solid fa-shield-halved text-aether-green" aria-hidden="true" />
+            <div className="leading-tight">
+              <div className="text-[11px] text-aether-muted-dim">Voice DNA</div>
+              <div className="mono text-xs font-medium text-aether-green">
+                {selectedInsights ? `${selectedInsights.voice.authenticity}% authentic` : "—"}
+              </div>
+            </div>
+          </div>
+          <div
+            className="flex items-center gap-2 border-l border-white/10 pl-4"
+            data-testid="ai-detection-indicator"
           >
-            <option value="" className="bg-black">
-              Select a job…
-            </option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id} className="bg-black">
-                {job.title} · {job.company}
+            <i className="fa-solid fa-robot text-aether-violet" aria-hidden="true" />
+            <div className="leading-tight">
+              <div className="text-[11px] text-aether-muted-dim">AI Detection</div>
+              <div className="mono text-xs font-medium text-aether-green">
+                {selectedInsights
+                  ? `${selectedInsights.voice.aiDetectionRisk}% · ${selectedInsights.voice.aiDetectionLabel}`
+                  : "—"}
+              </div>
+            </div>
+          </div>
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+            <select
+              value={selectedJob}
+              onChange={(e) => setSelectedJob(e.target.value)}
+              className="glass min-h-[44px] w-full min-w-0 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm sm:w-auto"
+              aria-label="Select a job to draft for"
+              data-testid="cover-letter-job-select"
+            >
+              <option value="" className="bg-black">
+                Select a job…
               </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="run-cover-letter-btn"
-            onClick={() => void generate()}
-            disabled={running || !selectedJob}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {running ? "Drafting..." : "Generate Draft"}
-          </button>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id} className="bg-black">
+                  {job.title} · {job.company}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              data-testid="run-cover-letter-btn"
+              onClick={() => void generate()}
+              disabled={running || !selectedJob}
+              className="min-h-[44px] rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {running ? "Drafting..." : "Generate Draft"}
+            </button>
+          </div>
         </div>
       </header>
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+        <p
+          role="alert"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        >
           {error}
         </p>
       ) : null}
@@ -122,7 +265,10 @@ export default function CoverLettersPage() {
           ))}
         </div>
       ) : letters.length === 0 ? (
-        <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="cover-letters-empty-state">
+        <div
+          className="glass rounded-2xl border border-white/10 p-10 text-center"
+          data-testid="cover-letters-empty-state"
+        >
           <p className="text-lg font-semibold">No cover letters yet</p>
           <p className="mt-1 text-sm text-aether-muted">
             Select a job and generate a draft — it will land in the approval queue.
@@ -130,177 +276,125 @@ export default function CoverLettersPage() {
         </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-3 xl:col-span-2">
-          {letters.map((letter) => {
-            const job = jobFor(letter.jobId);
-            const isOpen = expanded === letter.id;
-            return (
-              <article
-                key={letter.id}
-                data-testid="cover-letter-card"
-                className="glass rounded-2xl border border-white/10 p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-semibold">
-                      {job ? `${job.title} · ${job.company}` : `Job ${letter.jobId.slice(0, 8)}`}
-                    </h2>
-                    <p className="mt-0.5 text-xs text-aether-muted-dim">
-                      {letter.status} · {new Date(letter.createdAt).toLocaleString()}
-                    </p>
+          <div className="space-y-3 xl:col-span-2">
+            {letters.map((letter) => {
+              const job = jobFor(letter.jobId);
+              const isOpen = expanded === letter.id;
+              const jobLabel = job
+                ? `${job.title} · ${job.company}`
+                : `Job ${letter.jobId.slice(0, 8)}`;
+              const segments =
+                isOpen && letter.coverLetter
+                  ? highlightSegments(letter.coverLetter, selectedInsights?.evidence ?? [])
+                  : [];
+              return (
+                <article
+                  key={letter.id}
+                  data-testid="cover-letter-card"
+                  className="glass rounded-2xl border border-white/10 p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-semibold">{jobLabel}</h2>
+                      <p className="mt-0.5 text-xs text-aether-muted-dim">
+                        {letter.status} · {parseApiDate(letter.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="regenerate-letter-btn"
+                        aria-label={`Regenerate letter for ${jobLabel}`}
+                        onClick={() => void regenerate(letter)}
+                        disabled={regenerating !== null}
+                        className="min-h-[44px] rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30 disabled:opacity-50"
+                      >
+                        {regenerating === letter.id ? "Redrafting…" : "Regenerate"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? "Collapse" : "Read"} draft for ${jobLabel}`}
+                        onClick={() => setExpanded(isOpen ? null : letter.id)}
+                        className="min-h-[44px] rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30"
+                      >
+                        {isOpen ? "Collapse" : "Read draft"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      data-testid="regenerate-letter-btn"
-                      onClick={() => void regenerate(letter)}
-                      disabled={regenerating === letter.id}
-                      className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30 disabled:opacity-50"
-                    >
-                      {regenerating === letter.id ? "Redrafting…" : "Regenerate"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExpanded(isOpen ? null : letter.id)}
-                      className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold hover:border-white/30"
-                    >
-                      {isOpen ? "Collapse" : "Read draft"}
-                    </button>
-                  </div>
-                </div>
-                {isOpen && letter.coverLetter ? (
-                  <div className="mt-4" data-testid="letter-preview">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <i className="fa-solid fa-file-lines text-sm text-aether-coral" aria-hidden="true" />
-                        <h3 className="text-sm font-semibold">Cover Letter — Draft</h3>
-                        <span className="rounded-md border border-aether-violet/25 bg-aether-violet/15 px-2 py-0.5 text-[10px] text-aether-violet">
-                          AI-generated · editable
+                  {isOpen && letter.coverLetter ? (
+                    <div className="mt-4" data-testid="letter-preview">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <i
+                            className="fa-solid fa-file-lines text-sm text-aether-coral"
+                            aria-hidden="true"
+                          />
+                          <h3 className="text-sm font-semibold">Cover Letter — Draft</h3>
+                          <span className="rounded-md border border-aether-indigo/25 bg-aether-indigo/15 px-2 py-0.5 text-[10px] text-aether-violet">
+                            AI-generated · editable
+                          </span>
+                        </div>
+                        <span className="mono text-[11px] text-aether-muted-dim" data-testid="word-count">
+                          {selectedInsights?.wordCount ?? wordCount(letter.coverLetter)} words · 1
+                          page
                         </span>
                       </div>
-                      <span className="mono text-[11px] text-aether-muted-dim">
-                        {letter.coverLetter.trim().split(/\s+/).length} words · 1 page
-                      </span>
+                      <div className="mx-auto max-w-[720px] whitespace-pre-line rounded-xl bg-[#F7F7FB] p-8 text-sm leading-relaxed text-[#1A1A24] shadow-lg">
+                        {segments.map((seg, i) =>
+                          seg.kind === "plain" ? (
+                            <span key={i}>{seg.text}</span>
+                          ) : (
+                            <mark
+                              key={i}
+                              data-testid={`highlight-${seg.kind}`}
+                              className={`${SEGMENT_CLASS[seg.kind]} text-[#1A1A24]`}
+                            >
+                              {seg.text}
+                            </mark>
+                          ),
+                        )}
+                      </div>
                     </div>
-                    <div className="mx-auto max-w-[720px] whitespace-pre-line rounded-xl bg-[#F7F7FB] p-8 text-sm leading-relaxed text-[#1A1A24] shadow-lg">
-                      {letter.coverLetter}
-                    </div>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
 
-        {/* Studio right rail (wireframe cover-letter-studio.html cl20–cl33) */}
-        <aside className="space-y-4">
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="evidence-trace-panel">
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">Evidence Trace</h2>
-              <span className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">
-                Pull from Story Bank
-              </span>
-            </div>
-            <p className="mb-3 text-[11px] text-aether-muted-dim">
-              Every highlighted claim is grounded in a Story Bank entry — nothing is invented.
-              Review the source before you send.
-            </p>
-            <ul className="space-y-2 text-xs">
-              <li className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-                <span className="text-aether-muted">“large program delivery”</span>
-                <span className="text-aether-green">Story: Program Delivery Leadership</span>
-              </li>
-              <li className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-                <span className="text-aether-muted">“AI delivery”</span>
-                <span className="text-aether-green">Story: AI/ML Production Rollout</span>
-              </li>
-              <li className="flex items-center justify-between gap-2 rounded-lg border border-aether-amber/25 bg-aether-amber/5 p-2">
-                <span className="text-aether-muted">“platform thinking”</span>
-                <span className="text-aether-amber">no source yet — add or soften</span>
-              </li>
-            </ul>
-          </section>
-
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="voice-dna-panel">
-            <h2 className="mb-3 text-[15px] font-semibold">Voice DNA</h2>
-            <dl className="space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <dt className="text-aether-muted-dim">Tone</dt>
-                <dd className="font-semibold">Warm · Professional</dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-aether-muted-dim">Formality</dt>
-                <dd className="font-semibold">Balanced</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="keyword-coverage-panel">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">JD Keyword Coverage</h2>
-              <span className="mono text-xs font-bold text-aether-green">8/10</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {["Program delivery", "AI delivery", "Cross-functional", "Stakeholders", "Cloud", "Governance", "Roadmap", "Delivery practices"].map((k) => (
-                <span key={k} className="rounded-md border border-aether-green/25 bg-aether-green/10 px-2 py-0.5 text-[10px] text-aether-green">
-                  {k}
-                </span>
-              ))}
-              {["SAFe", "OKRs"].map((k) => (
-                <span key={k} className="rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-aether-muted-dim">
-                  {k} (missing)
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="letter-actions-panel">
-            <h2 className="mb-3 text-[15px] font-semibold">Actions</h2>
-            <div className="space-y-2">
-              <button
-                type="button"
-                data-testid="rail-regenerate-btn"
-                onClick={() => {
-                  const current = letters.find((l) => l.id === expanded) ?? letters[0];
-                  if (current) void regenerate(current);
-                }}
-                disabled={regenerating !== null}
-                className="block w-full rounded-lg bg-aether-coral px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {regenerating ? "Redrafting…" : "Regenerate"}
-              </button>
-              <button type="button" className="block w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
-                Request Changes
-              </button>
-              <button type="button" className="block w-full rounded-lg border border-white/15 px-3 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white">
-                Export PDF
-              </button>
-              <button type="button" className="block w-full rounded-lg border border-aether-violet/30 px-3 py-2 text-xs text-aether-violet hover:bg-aether-violet/10">
-                Attach &amp; send via Email Center
-              </button>
-            </div>
-          </section>
-
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="versions-panel">
-            <h2 className="mb-3 text-[15px] font-semibold">Versions</h2>
-            <ul className="space-y-2 text-xs">
-              {letters.slice(0, 3).map((l, i) => (
-                <li key={l.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2">
-                  <span className="text-aether-muted">
-                    v{letters.length - i} · {new Date(l.createdAt).toLocaleDateString()}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(l.id)}
-                    className="text-aether-coral hover:underline"
-                  >
-                    Open
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </aside>
+          {/* Studio control panel (wireframe cl06–cl16) — driven by the selected letter */}
+          <aside className="space-y-4">
+            <EvidenceTracePanel
+              evidence={selectedInsights?.evidence ?? null}
+              loading={insightsLoading}
+            />
+            <VoiceDnaPanel
+              tone={tone}
+              formality={formality}
+              onToneChange={setTone}
+              onFormalityChange={setFormality}
+            />
+            <KeywordCoveragePanel
+              keywords={selectedInsights?.keywords ?? null}
+              loading={insightsLoading}
+            />
+            <ActionsPanel
+              disabled={!selected}
+              regenerating={regenerating !== null}
+              refining={refining}
+              exporting={exporting}
+              emailHref={selected ? `/dashboard/email?letter=${selected.id}` : "/dashboard/email"}
+              onRegenerate={() => void regenerateSelected()}
+              onRequestChanges={requestChanges}
+              onExport={() => void exportPdf()}
+            />
+            <VersionsPanel
+              versions={selectedInsights?.versions ?? null}
+              selectedId={expanded}
+              loading={insightsLoading}
+              onSelect={(id) => setExpanded(id)}
+            />
+          </aside>
         </div>
       )}
     </div>

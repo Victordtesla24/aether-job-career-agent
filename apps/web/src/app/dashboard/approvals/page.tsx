@@ -1,29 +1,28 @@
 "use client";
 
 /**
- * Approvals queue — the human-in-the-loop gate. Backed by GET /approvals,
- * POST /approvals/{id}/approve and POST /approvals/{id}/reject.
+ * Approvals queue — the human-in-the-loop gate (wireframe approval-modal.html).
+ *
+ * Queue backed by GET /approvals; reviewing a request opens the global
+ * ApprovalModal overlay (deep-linkable via ?review=<id> so any route can
+ * trigger it). Decisions POST /approvals/{id}/approve|reject and update the
+ * queue in place.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  approveRequest,
-  fetchApprovals,
-  rejectRequest,
-  type Approval,
-} from "../../../lib/api/approvals";
+import { ApprovalModal } from "../../../components/approvals/ApprovalModal";
+import { decideApproval, fetchApproval, type DecisionContext } from "../../../components/approvals/api";
+import { isExpired, parseApprovalPayload, summarize } from "../../../components/approvals/lib";
+import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
-/** Server-side expiry window (see apps/api approval_service.EXPIRY_HOURS). */
-const EXPIRY_HOURS = 48;
-
-/** Pending approvals older than 48h are void — the API answers 409 (D8). */
-function isExpired(approval: Approval): boolean {
-  return (
-    approval.status === "pending" &&
-    Date.now() - new Date(approval.createdAt).getTime() > EXPIRY_HOURS * 3600 * 1000
-  );
+/** Sync the ?review= deep-link param without a Next.js navigation. */
+function syncReviewParam(id: string | null) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("review", id);
+  else url.searchParams.delete("review");
+  window.history.replaceState(null, "", url.toString());
 }
 
 export default function ApprovalsPage() {
@@ -31,28 +30,70 @@ export default function ApprovalsPage() {
   const [filter, setFilter] = useState<StatusFilter>("pending");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [trustAgent, setTrustAgent] = useState(false);
+  const [reviewing, setReviewing] = useState<Approval | null>(null);
+  // Monotonic guard: a stale (slow) response must never overwrite a newer one.
+  const fetchSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     try {
-      setApprovals(await fetchApprovals(filter));
+      const rows = await fetchApprovals(filter);
+      if (seq !== fetchSeq.current) return;
+      setApprovals(rows);
       setError(null);
     } catch (e) {
+      if (seq !== fetchSeq.current) return;
       setError(e instanceof Error ? e.message : "Failed to load approvals");
       setApprovals([]);
     }
   }, [filter]);
 
   useEffect(() => {
+    setApprovals(null);
     void load();
   }, [load]);
 
-  const decide = async (id: string, decision: "approve" | "reject") => {
+  // Deep link: /dashboard/approvals?review=<id> opens the modal directly.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("review");
+    if (!id) return;
+    fetchApproval(id)
+      .then((approval) => setReviewing(approval))
+      .catch(() => {
+        syncReviewParam(null);
+        setError("The linked approval request could not be found.");
+      });
+  }, []);
+
+  const openReview = (approval: Approval) => {
+    setReviewing(approval);
+    syncReviewParam(approval.id);
+  };
+
+  const closeReview = () => {
+    setReviewing(null);
+    syncReviewParam(null);
+  };
+
+  /** Replace the decided row in place; drop it if it no longer matches the filter. */
+  const applyResolved = useCallback(
+    (resolved: Approval) => {
+      setApprovals((current) => {
+        if (!current) return current;
+        const keep = filter === "all" || resolved.status === filter;
+        return keep
+          ? current.map((a) => (a.id === resolved.id ? resolved : a))
+          : current.filter((a) => a.id !== resolved.id);
+      });
+    },
+    [filter],
+  );
+
+  const decideFromCard = async (id: string, decision: "approve" | "reject") => {
     setBusy(id);
     try {
-      if (decision === "approve") await approveRequest(id);
-      else await rejectRequest(id);
-      await load();
+      applyResolved(await decideApproval(id, decision));
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Decision failed");
     } finally {
@@ -60,14 +101,14 @@ export default function ApprovalsPage() {
     }
   };
 
-  const summarize = (approval: Approval): string => {
-    const payload = approval.payload as { kind?: string; job_title?: string; company?: string };
-    const kind = payload.kind === "cover_letter" ? "Cover letter" : "Application";
-    const target = payload.job_title
-      ? ` for ${payload.job_title}${payload.company ? ` @ ${payload.company}` : ""}`
-      : "";
-    return `${kind}${target}`;
+  const decideFromModal = async (decision: "approve" | "reject", context: DecisionContext) => {
+    if (!reviewing) return;
+    const resolved = await decideApproval(reviewing.id, decision, context);
+    applyResolved(resolved);
+    closeReview();
   };
+
+  const pendingCount = approvals?.filter((a) => a.status === "pending").length ?? null;
 
   return (
     <div className="space-y-6">
@@ -76,15 +117,25 @@ export default function ApprovalsPage() {
           <h1 className="text-2xl font-bold">Approvals</h1>
           <p className="text-sm text-aether-muted">
             Nothing is sent without your sign-off. Requests expire after 48h.
+            {pendingCount !== null && filter === "pending" ? (
+              <span className="ml-2 font-mono text-xs text-aether-muted-dim" data-testid="pending-count">
+                {pendingCount} pending
+              </span>
+            ) : null}
           </p>
         </div>
-        <div className="flex gap-1 rounded-xl border border-white/10 p-1">
+        <div
+          className="flex gap-1 rounded-xl border border-white/10 p-1"
+          role="group"
+          aria-label="Filter approvals by status"
+        >
           {(["pending", "approved", "rejected", "all"] as StatusFilter[]).map((s) => (
             <button
               key={s}
               type="button"
+              aria-pressed={filter === s}
               onClick={() => setFilter(s)}
-              className={`rounded-lg px-3 py-1 text-sm capitalize ${
+              className={`min-h-[44px] rounded-lg px-3 text-sm capitalize sm:min-h-0 sm:py-1 ${
                 filter === s ? "bg-aether-coral font-semibold text-white" : "text-aether-muted"
               }`}
             >
@@ -95,40 +146,13 @@ export default function ApprovalsPage() {
       </header>
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+        <p
+          role="alert"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        >
           {error}
         </p>
       ) : null}
-
-      {/* Approval gate rationale (wireframe approval-modal.html) */}
-      <section
-        data-testid="approval-explainer"
-        className="glass rounded-2xl border border-aether-amber/30 p-5"
-      >
-        <h2 className="text-[15px] font-semibold">
-          <i className="fa-solid fa-shield-halved mr-2 text-aether-amber" aria-hidden="true" />
-          Approval Needed
-        </h2>
-        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Why approval is needed
-          </p>
-          <p className="mt-1 text-sm text-aether-muted">
-            This role sits above your salary target and the cover letter references a project
-            outside your verified portfolio. Your approval gate for high-stakes applications is on.
-          </p>
-        </div>
-        <label className="mt-3 flex items-center gap-2.5 text-sm text-aether-muted">
-          <input
-            type="checkbox"
-            checked={trustAgent}
-            data-testid="trust-agent-checkbox"
-            onChange={(e) => setTrustAgent(e.target.checked)}
-            className="h-4 w-4 rounded accent-[#FF6B35]"
-          />
-          Trust this agent for similar decisions going forward
-        </label>
-      </section>
 
       {approvals === null ? (
         <div className="space-y-3" aria-busy="true">
@@ -137,7 +161,10 @@ export default function ApprovalsPage() {
           ))}
         </div>
       ) : approvals.length === 0 ? (
-        <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="approvals-empty-state">
+        <div
+          className="glass rounded-2xl border border-white/10 p-10 text-center"
+          data-testid="approvals-empty-state"
+        >
           <p className="text-lg font-semibold">Queue clear</p>
           <p className="mt-1 text-sm text-aether-muted">
             No {filter === "all" ? "" : `${filter} `}approval requests right now.
@@ -145,76 +172,99 @@ export default function ApprovalsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {approvals.map((approval) => (
-            <article
-              key={approval.id}
-              data-testid="approval-card"
-              className="glass rounded-2xl border border-white/10 p-5"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-semibold">{summarize(approval)}</h2>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-xs ${
-                        approval.status === "pending"
-                          ? "border-aether-amber/40 text-aether-amber"
-                          : approval.status === "approved"
-                            ? "border-aether-green/40 text-aether-green"
-                            : "border-red-500/40 text-red-300"
-                      }`}
-                    >
-                      {approval.status}
-                    </span>
-                    {isExpired(approval) ? (
+          {approvals.map((approval) => {
+            const details = parseApprovalPayload(approval);
+            const expired = isExpired(approval);
+            return (
+              <article
+                key={approval.id}
+                data-testid="approval-card"
+                className="glass rounded-2xl border border-white/10 p-5 transition hover:border-white/15"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-semibold">{summarize(approval)}</h2>
                       <span
-                        data-testid="expired-badge"
-                        className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
-                        title={`Older than ${EXPIRY_HOURS}h — re-run the agent to get a fresh request`}
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                          approval.status === "pending"
+                            ? "border-aether-amber/40 text-aether-amber"
+                            : approval.status === "approved"
+                              ? "border-aether-green/40 text-aether-green"
+                              : "border-red-500/40 text-red-300"
+                        }`}
                       >
-                        expired
+                        {approval.status}
                       </span>
+                      {details.confidence !== null ? (
+                        <span className="font-mono text-xs text-aether-green">
+                          {details.confidence}%
+                        </span>
+                      ) : null}
+                      {expired ? (
+                        <span
+                          data-testid="expired-badge"
+                          className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+                          title="Older than 48h — re-run the agent to get a fresh request"
+                        >
+                          expired
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-aether-muted-dim">
+                      {approval.type} · requested {new Date(approval.createdAt).toLocaleString()}
+                      {approval.resolvedAt
+                        ? ` · resolved ${new Date(approval.resolvedAt).toLocaleString()}`
+                        : ""}
+                    </p>
+                    {details.preview ? (
+                      <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-aether-muted">
+                        {details.preview}
+                      </p>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-xs text-aether-muted-dim">
-                    {approval.type} · requested {new Date(approval.createdAt).toLocaleString()}
-                    {approval.resolvedAt
-                      ? ` · resolved ${new Date(approval.resolvedAt).toLocaleString()}`
-                      : ""}
-                  </p>
-                  {typeof (approval.payload as { preview?: unknown }).preview === "string" ? (
-                    <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-aether-muted">
-                      {(approval.payload as { preview: string }).preview}
-                    </p>
-                  ) : null}
-                </div>
-                {approval.status === "pending" ? (
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     <button
                       type="button"
-                      data-testid="approve-btn"
-                      onClick={() => void decide(approval.id, "approve")}
-                      disabled={busy === approval.id || isExpired(approval)}
-                      className="rounded-xl bg-aether-green/80 px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                      data-testid="review-btn"
+                      onClick={() => openReview(approval)}
+                      className="min-h-[44px] rounded-xl border border-aether-indigo/40 px-4 text-sm font-semibold text-[#A5B4FC] hover:bg-aether-indigo/10 sm:min-h-0 sm:py-2"
                     >
-                      Approve
+                      {approval.status === "pending" ? "Review" : "View"}
                     </button>
-                    <button
-                      type="button"
-                      data-testid="reject-btn"
-                      onClick={() => void decide(approval.id, "reject")}
-                      disabled={busy === approval.id || isExpired(approval)}
-                      className="rounded-xl border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
+                    {approval.status === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          data-testid="approve-btn"
+                          onClick={() => void decideFromCard(approval.id, "approve")}
+                          disabled={busy === approval.id || expired}
+                          className="min-h-[44px] rounded-xl bg-aether-green/80 px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="reject-btn"
+                          onClick={() => void decideFromCard(approval.id, "reject")}
+                          disabled={busy === approval.id || expired}
+                          className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </article>
-          ))}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
+
+      {reviewing ? (
+        <ApprovalModal approval={reviewing} onClose={closeReview} onDecide={decideFromModal} />
+      ) : null}
     </div>
   );
 }
