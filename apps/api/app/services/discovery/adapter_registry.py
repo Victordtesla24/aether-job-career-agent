@@ -11,13 +11,13 @@ from app.services.discovery.remotive_adapter import RemotiveAdapter
 from app.services.discovery.seek_adapter import SeekAdapter
 
 ADAPTERS: dict[str, type[BaseAdapter]] = {
-    # Live, keyless sources (D11) — these fetch REAL postings in production.
+    # Live sources — these fetch REAL postings in production.
+    SeekAdapter.source: SeekAdapter,  # AU jobs via Firecrawl
     GreenhouseAdapter.source: GreenhouseAdapter,
     LeverAdapter.source: LeverAdapter,
     RemotiveAdapter.source: RemotiveAdapter,
     RemoteOkAdapter.source: RemoteOkAdapter,
     # Legacy fixture-only sources (no live mode; skipped in production).
-    SeekAdapter.source: SeekAdapter,
     LinkedInAdapter.source: LinkedInAdapter,
     IndeedAdapter.source: IndeedAdapter,
 }

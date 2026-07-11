@@ -146,9 +146,10 @@ PROVIDER_SEED: list[dict[str, Any]] = [
     {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key", "status": "connected",
      "model": "claude-sonnet-4", "detail": "Claude Pro · 45 messages remaining",
      "models": ["claude-sonnet-4", "claude-3.5-haiku"], "icon": "fa-a", "color": "#D97757"},
-    {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key", "status": "connected",
-     "model": "llama-3.1-405b", "detail": "$12.40 credit remaining",
-     "models": ["llama-3.1-405b", "llama-3.3-70b-versatile"], "icon": "fa-route", "color": "#6467F2"},
+    {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key",
+     "status": "connected", "model": "llama-3.1-405b", "detail": "$12.40 credit remaining",
+     "models": ["llama-3.1-405b", "llama-3.3-70b-versatile"],
+     "icon": "fa-route", "color": "#6467F2"},
     {"id": "openai", "name": "OpenAI", "auth": "API Key", "status": "connected",
      "model": "gpt-4o", "detail": "Tier 3 · 2M TPM limit",
      "models": ["gpt-4o", "gpt-4o-mini", "text-embedding-3-large"], "icon": "fa-brain",
@@ -156,9 +157,9 @@ PROVIDER_SEED: list[dict[str, Any]] = [
     {"id": "gemini", "name": "Google Gemini", "auth": "OAuth + API Key", "status": "warning",
      "model": "gemini-2.0-flash", "detail": "Token expiring in 3 days",
      "models": ["gemini-2.0-flash"], "icon": "fa-gem", "color": "#4285F4"},
-    {"id": "bedrock", "name": "AWS Bedrock", "auth": "Access + Secret Key", "status": "unconfigured",
-     "model": "", "detail": "Not configured · IAM required", "models": [], "icon": "fa-aws",
-     "color": "#FF9900"},
+    {"id": "bedrock", "name": "AWS Bedrock", "auth": "Access + Secret Key",
+     "status": "unconfigured", "model": "", "detail": "Not configured · IAM required",
+     "models": [], "icon": "fa-aws", "color": "#FF9900"},
     {"id": "groq", "name": "Groq", "auth": "API Key", "status": "connected",
      "model": "llama-3.3-70b-versatile", "detail": "Free tier · 14.4K req/day",
      "models": ["llama-3.3-70b-versatile"], "icon": "fa-bolt-lightning", "color": "#F55036"},
@@ -627,7 +628,8 @@ def update_agent_config(
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "enabled", "model" FROM "AgentConfig" WHERE "userId" = %s AND "agentKey" = %s',
+                'SELECT "enabled", "model" FROM "AgentConfig" '
+                'WHERE "userId" = %s AND "agentKey" = %s',
                 (current_user["id"], agent_key),
             )
             existing = rows_to_dicts(cur)

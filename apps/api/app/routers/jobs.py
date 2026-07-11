@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
@@ -92,7 +92,10 @@ def _requirements_list(job: dict[str, Any]) -> list[str]:
 
 
 def _job_text(job: dict[str, Any]) -> str:
-    return f"{job.get('title', '')} {job.get('description', '')} {' '.join(_requirements_list(job))}".strip()
+    title = job.get('title', '')
+    desc = job.get('description', '')
+    reqs = ' '.join(_requirements_list(job))
+    return f"{title} {desc} {reqs}".strip()
 
 
 def _is_au(job: dict[str, Any]) -> bool:
@@ -237,7 +240,10 @@ def _build_insights(job: dict[str, Any]) -> dict[str, Any]:
             f"{_round(overall)}% overall ATS fit for {title or 'this role'}."
         )
     else:
-        narrative = "Not scored yet — run the Fit Scorer agent to analyse this role against your resume."
+        narrative = (
+            "Not scored yet — run the Fit Scorer agent to analyse this role "
+            "against your resume."
+        )
 
     return {
         "jobId": job["id"],

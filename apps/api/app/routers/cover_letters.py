@@ -200,18 +200,18 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
         + [_story_corpus(s) for s in stories]
     )
     siblings = [
-        l for l in CoverLetterRepository().list_by_user(user_id)
-        if l["jobId"] == letter["jobId"]
+        lt for lt in CoverLetterRepository().list_by_user(user_id)
+        if lt["jobId"] == letter["jobId"]
     ]
-    siblings.sort(key=lambda l: l["createdAt"])
+    siblings.sort(key=lambda lt: lt["createdAt"])
     versions = [
         {
-            "id": l["id"],
+            "id": lt["id"],
             "version": i + 1,
-            "createdAt": l["createdAt"],
+            "createdAt": lt["createdAt"],
             "current": i == len(siblings) - 1,
         }
-        for i, l in enumerate(siblings)
+        for i, lt in enumerate(siblings)
     ]
     return {
         "letterId": letter["id"],

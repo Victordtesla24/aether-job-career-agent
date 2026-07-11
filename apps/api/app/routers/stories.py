@@ -31,7 +31,9 @@ _COVERAGE_THEMES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Failure / lessons learned", ("fail", "lesson", "mistake", "setback", "learned")),
     ("Stakeholder influence", ("stakeholder", "influence", "align", "buy-in", "persuad")),
     ("Leadership", ("lead", "led", "team", "mentor", "manage", "drove")),
-    ("Technical depth", ("architect", "platform", "ml", "llm", "devops", "data", "azure", "automation")),
+    ("Technical depth", (
+        "architect", "platform", "ml", "llm", "devops", "data", "azure", "automation"
+    )),
     ("Delivery impact", ("delivery", "deliver", "program", "project", "efficiency", "ship")),
 )
 
@@ -75,14 +77,17 @@ def _derive_category(story: dict[str, Any]) -> str:
     haystack = " ".join(
         [str(story.get("title", ""))] + [str(t) for t in (story.get("tags") or [])]
     ).lower()
-    if any(w in haystack for w in ("risk", "compliance", "audit", "regulat", "control", "governance")):
+    risk_words = ("risk", "compliance", "audit", "regulat", "control", "governance")
+    lead_words = ("lead", "led", "team", "mentor", "stakeholder", "manage", "drove", "align")
+    tech_words = (
+        "ml", "llm", "azure", "devops", "data", "platform", "automation",
+        "ci", "engineer", "analytics", "telemetry"
+    )
+    if any(w in haystack for w in risk_words):
         return "Risk & Compliance"
-    if any(w in haystack for w in ("lead", "led", "team", "mentor", "stakeholder", "manage", "drove", "align")):
+    if any(w in haystack for w in lead_words):
         return "Leadership"
-    if any(
-        w in haystack
-        for w in ("ml", "llm", "azure", "devops", "data", "platform", "automation", "ci", "engineer", "analytics", "telemetry")
-    ):
+    if any(w in haystack for w in tech_words):
         return "Technical"
     return "Delivery"
 

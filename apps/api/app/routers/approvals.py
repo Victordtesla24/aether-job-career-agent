@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status as http_status
+from fastapi import APIRouter, HTTPException
+from fastapi import status as http_status
 from pydantic import BaseModel, Field
 
 from app.db import get_connection
