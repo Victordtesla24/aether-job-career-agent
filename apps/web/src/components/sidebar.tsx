@@ -71,13 +71,21 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
         </Link>
       </div>
 
-      <div className="mt-4 px-2 flex gap-3 text-[11px] text-aether-muted-dim">
+      <div className="mt-4 px-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim">
         <Link
           href="/privacy-policy"
           prefetch={false}
           className="hover:text-white transition"
         >
           Privacy Policy
+        </Link>
+        <span>·</span>
+        <Link
+          href="/terms"
+          prefetch={false}
+          className="hover:text-white transition"
+        >
+          Terms
         </Link>
         <span>·</span>
         <span>© 2026 Aether</span>
