@@ -325,6 +325,14 @@ class SeekAdapter(BaseAdapter):
                 m in f"{location_str} {arrangement}".lower() for m in _REMOTE_MARKERS
             )
 
+            # Live scrapes carry numeric bands from ``_parse_job_from_html``;
+            # fixtures expose a raw ``salary`` label to parse as a fallback.
+            salary_min = item.get("salaryMin")
+            salary_max = item.get("salaryMax")
+            if salary_min is None and salary_max is None:
+                salary_min, salary_max = _parse_salary_label(str(item.get("salary") or ""))
+            currency = item.get("currency") or ("AUD" if salary_min is not None else None)
+
             jobs.append(
                 JobRaw(
                     title=item.get("title", ""),
@@ -338,6 +346,9 @@ class SeekAdapter(BaseAdapter):
                     source=self.source,
                     sourceUrl=item.get("sourceUrl") or item.get("shareLink", ""),
                     postedAt=item.get("postedAt") or item.get("listingDate"),
+                    salaryMin=salary_min,
+                    salaryMax=salary_max,
+                    currency=currency,
                 )
             )
         return jobs

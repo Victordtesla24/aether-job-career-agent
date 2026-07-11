@@ -321,11 +321,17 @@ export default function JobsPage() {
 
   // "Last synced" from the scout agent's real last run.
   const [lastSync, setLastSync] = useState<string | null>(null);
-  useEffect(() => {
-    apiRequest<{ name: string; last_run?: string | null }[]>("/agents")
-      .then((agents) => setLastSync(agents.find((a) => a.name === "scout")?.last_run ?? null))
-      .catch(() => setLastSync(null));
+  const loadLastSync = useCallback(async () => {
+    try {
+      const agents = await apiRequest<{ name: string; last_run?: string | null }[]>("/agents");
+      setLastSync(agents.find((a) => a.name === "scout")?.last_run ?? null);
+    } catch {
+      setLastSync(null);
+    }
   }, []);
+  useEffect(() => {
+    void loadLastSync();
+  }, [loadLastSync]);
 
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   const selectedInsights = selected ? insights[selected.id] : undefined;
@@ -342,6 +348,7 @@ export default function JobsPage() {
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       setInsights({});
       await load();
+      await loadLastSync();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Discovery run failed");
     } finally {

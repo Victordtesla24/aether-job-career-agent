@@ -113,6 +113,7 @@ model Job {
   fitScore     Float?
   atsScore     Float?
   saved        Boolean   @default(false)
+  postedAt     DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
