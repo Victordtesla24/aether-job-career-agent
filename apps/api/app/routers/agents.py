@@ -16,14 +16,15 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
-from app.db import get_connection, rows_to_dicts
+from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.services.llm_client import LLMUnavailableError
 
 router = APIRouter()
 
-#: Default discovery targets — Vikram's roles from Melbourne, Australia.
+#: Last-resort discovery targets used only when the user has NOT configured a
+#: target role/location on their profile (see ``_user_search_defaults``).
 _DEFAULT_QUERY = "delivery lead, product owner, business analyst, program manager"
 _DEFAULT_LOCATION = "Melbourne, Australia"
 
@@ -275,10 +276,38 @@ def _model_for_agent(agent_name: str) -> str:
     return "claude-sonnet-4"
 
 
+def _user_search_defaults(user_id: str) -> tuple[str, str]:
+    """Resolve the user's configured job-search targets from the DB.
+
+    Reads the profile ``targetRole``/``location`` columns and falls back to the
+    module-level defaults only when the user has not configured them. This keeps
+    scout runs targeted at the *user's* real goals rather than a hardcoded
+    persona.
+    """
+    query, location = _DEFAULT_QUERY, _DEFAULT_LOCATION
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "targetRole", "location" FROM "User" WHERE id = %s',
+                (user_id,),
+            )
+            rows = rows_to_dicts(cur)
+    if rows:
+        target_role = (rows[0].get("targetRole") or "").strip()
+        user_location = (rows[0].get("location") or "").strip()
+        if target_role:
+            query = target_role
+        if user_location:
+            location = user_location
+    return query, location
+
+
 def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
     if name == "scout":
-        query = params.get("query", _DEFAULT_QUERY)
-        location = params.get("location", _DEFAULT_LOCATION)
+        default_query, default_location = _user_search_defaults(user_id)
+        query = params.get("query") or default_query
+        location = params.get("location") or default_location
         return _record_run(
             user_id, "scout", params, lambda: ScoutAgent().run(user_id, query, location)
         )

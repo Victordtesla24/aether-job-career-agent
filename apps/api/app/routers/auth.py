@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
+from app.middleware.auth import CurrentUser
 from app.repositories.user import (
     DuplicateEmailError,
     UserRepository,
@@ -71,3 +74,27 @@ def login(body: LoginRequest) -> TokenResponse:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token(user["id"], user["email"])
     return TokenResponse(access_token=token, userId=user["id"], email=user["email"])
+
+
+@router.get("/me")
+def me(current_user: CurrentUser) -> dict[str, Any]:
+    """Return the authenticated user's profile."""
+    uid = current_user["id"]
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, email, name, "targetRole", "location" FROM "User" WHERE id = %s',
+                (uid,),
+            )
+            rows = rows_to_dicts(cur)
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    u = rows[0]
+    return {
+        "id": u["id"],
+        "email": u["email"],
+        "name": u.get("name") or "",
+        "targetRole": u.get("targetRole") or "",
+        "location": u.get("location") or "",
+    }

@@ -69,7 +69,7 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
           data-testid="counter-email-draft"
           className="mt-3 whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-3 text-[12px] text-aether-muted"
         >
-          {`Hi Emma,\n\nThank you for the offer — I'm genuinely excited about the role and the team.\n\nBased on my competing offers and the market band for Senior TPMs in Sydney, I'd like to discuss a base of $${counter.toLocaleString()}. I'm confident the AI delivery experience I bring maps directly to the roadmap we discussed.\n\nHappy to jump on a call this week.\n\nBest,\nVikram`}
+          {`Hi Emma,\n\nThank you for the offer — I'm genuinely excited about the role and the team.\n\nBased on my competing offers and the market band for Senior TPMs in Sydney, I'd like to discuss a base of $${counter.toLocaleString()}. I'm confident the AI delivery experience I bring maps directly to the roadmap we discussed.\n\nHappy to jump on a call this week.\n\nBest,\n[Your Name]`}
         </p>
       ) : null}
     </section>

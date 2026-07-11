@@ -60,3 +60,37 @@ def rows_to_dicts(cursor: Any) -> list[dict[str, Any]]:
     """Materialize all rows of a cursor as column-name dicts."""
     columns = [col.name for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+#: Guard so the additive ``User`` profile columns are only ensured once per
+#: worker process (see ``ensure_user_profile_columns``).
+_user_profile_columns_ready = False
+
+
+def ensure_user_profile_columns() -> None:
+    """Idempotently add the additive profile columns to ``User`` on first use.
+
+    ``targetRole``/``location``/``agentConfig`` were introduced after the
+    original Prisma migration and only ALTER-added to the production ``aether``
+    schema. The shared test schema (``aether_test``) predates them, so any
+    query that reads these columns would fail there with ``UndefinedColumn``.
+
+    ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS`` is a no-op where the columns
+    already exist (production) and safely backfills them everywhere else. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers so
+    the DDL can't race, mirroring the pattern used for the agent config tables.
+    ``TRUNCATE`` never drops columns, so this survives the test-suite teardown.
+    """
+    global _user_profile_columns_ready
+    if _user_profile_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240712,))
+            cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "targetRole" text')
+            cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "location" text')
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "agentConfig" jsonb'
+            )
+        conn.commit()
+    _user_profile_columns_ready = True
