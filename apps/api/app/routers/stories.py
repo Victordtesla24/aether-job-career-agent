@@ -1,17 +1,16 @@
 """Story bank router — CRUD over STAR entries + display enrichment (P2-S09).
 
 The persisted ``StoryEntry`` row carries the canonical STAR content, ``metrics``
-and ``tags``. The Story Bank screen additionally needs a handful of *display*
-attributes (category, impact badge, voice-match %, usage counts, starred flag).
-These are derived **deterministically from the real row** (so they are stable
-across refreshes and never "mock"): category from tags, impact from the largest
-evidenced metric, and voice/usage from a content hash. ``starred`` is the one
+and ``tags``. The Story Bank screen additionally needs a few *display*
+attributes (category, impact badge, starred flag), all derived from the real
+row: category from tags/title, impact from the largest evidenced percent
+metric. No usage or voice metrics are exposed — nothing tracks them yet, and
+invented numbers must never be presented as real. ``starred`` is the one
 mutable display attribute and is persisted inside the existing ``metrics`` JSON
 (``metrics.__starred``) so no schema change is required.
 """
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -58,13 +57,6 @@ class StoryUpdate(BaseModel):
     tags: list[str] | None = None
 
 
-def _stable_int(story: dict[str, Any], salt: str, lo: int, hi: int) -> int:
-    """Deterministic value in ``[lo, hi]`` from the row id (stable cross-process)."""
-    seed = f"{salt}:{story.get('id', '')}".encode()
-    digest = int(hashlib.md5(seed).hexdigest(), 16)  # noqa: S324 - non-crypto use
-    return lo + (digest % (hi - lo + 1))
-
-
 def _evidence_metrics(metrics: Any) -> dict[str, Any]:
     """Real evidence metrics only (control flags stripped)."""
     if not isinstance(metrics, dict):
@@ -93,11 +85,20 @@ def _derive_category(story: dict[str, Any]) -> str:
 
 
 def _derive_impact(story: dict[str, Any]) -> str | None:
-    """Largest evidenced percent metric rendered as an impact badge label."""
+    """Largest evidenced PERCENT metric rendered as an impact badge label.
+
+    Only values that are actually percentages qualify — either the value ends
+    with ``%`` or the metric key names a percentage. A "$5M" or "75 hours"
+    metric must never be rendered as "75% impact".
+    """
     best: float | None = None
-    for value in _evidence_metrics(story.get("metrics")).values():
+    for key, value in _evidence_metrics(story.get("metrics")).items():
+        text = str(value).strip()
+        key_is_pct = "percent" in key.lower() or "pct" in key.lower()
+        if not text.endswith("%") and not key_is_pct:
+            continue
         try:
-            num = float(str(value).rstrip("%"))
+            num = float(text.rstrip("%"))
         except (TypeError, ValueError):
             continue
         if best is None or num > best:
@@ -115,10 +116,6 @@ def _enrich(story: dict[str, Any]) -> dict[str, Any]:
     enriched["metrics"] = _evidence_metrics(metrics)
     enriched["category"] = _derive_category(story)
     enriched["impact"] = _derive_impact(story)
-    enriched["voiceMatch"] = _stable_int(story, "voice", 85, 98)
-    enriched["usedInResumes"] = _stable_int(story, "resumes", 0, 6)
-    enriched["interviewAnswers"] = _stable_int(story, "interviews", 0, 5)
-    enriched["usedThisMonth"] = _stable_int(story, "month", 0, 2)
     enriched["starred"] = starred
     return enriched
 
@@ -134,13 +131,13 @@ def story_stats(current_user: CurrentUser) -> dict[str, Any]:
     rows = [_enrich(r) for r in StoryRepository().list_by_user(current_user["id"])]
     total = len(rows)
     quantified = sum(1 for r in rows if r["metrics"])
-    used_this_month = sum(int(r["usedThisMonth"]) for r in rows)
-    voice_avg = round(sum(int(r["voiceMatch"]) for r in rows) / total) if total else 0
+    starred = sum(1 for r in rows if r["starred"])
+    categories = len({r["category"] for r in rows})
     return {
         "total": total,
         "quantified": quantified,
-        "usedThisMonth": used_this_month,
-        "voiceMatchAvg": voice_avg,
+        "starred": starred,
+        "categories": categories,
     }
 
 

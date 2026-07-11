@@ -141,6 +141,7 @@ def _parse_job_from_html(raw_html: str, job_url: str) -> dict[str, Any] | None:
     company = _apollo_field(job.get("advertiser") or {}, "name") or ""
     location = _apollo_field(job.get("location") or {}, "label") or ""
     posted_at = (job.get("listedAt") or {}).get("dateTimeUtc")
+    salary_min, salary_max = _parse_salary_label((job.get("salary") or {}).get("label") or "")
 
     content = _apollo_field(job, "content2") or ""
     requirements = [
@@ -163,7 +164,26 @@ def _parse_job_from_html(raw_html: str, job_url: str) -> dict[str, Any] | None:
         "requirements": requirements,
         "sourceUrl": job_url,
         "postedAt": posted_at,
+        "salaryMin": salary_min,
+        "salaryMax": salary_max,
+        "currency": "AUD" if salary_min is not None else None,
     }
+
+
+def _parse_salary_label(label: str) -> tuple[int | None, int | None]:
+    """Yearly salary band from a SEEK salary label, e.g.
+    ``"$140,000 – $150,000 per year plus super"`` → ``(140000, 150000)``.
+
+    Daily/hourly rates are not annualized — only per-year figures persist.
+    """
+    if not label or not re.search(r"year|annum|p\.?a\b", label, re.I):
+        return None, None
+    matches = re.findall(r"\$?\s*([\d]{2,3}(?:,\d{3})+|\d{5,7})", label)
+    numbers = [int(n.replace(",", "")) for n in matches]
+    numbers = [n for n in numbers if 30_000 <= n <= 1_000_000]
+    if not numbers:
+        return None, None
+    return min(numbers), max(numbers)
 
 
 def _strip_markdown_links(line: str) -> str:

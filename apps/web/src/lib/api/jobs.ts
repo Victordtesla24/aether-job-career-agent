@@ -36,6 +36,7 @@ export const JobSchema = z.object({
   fitScore: z.number().nullish(),
   atsScore: z.number().nullish(),
   saved: z.boolean(),
+  postedAt: z.string().nullish(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });

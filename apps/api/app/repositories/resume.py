@@ -52,6 +52,25 @@ class ResumeRepository:
             conn.commit()
         return rows[0]
 
+    def update_sections(
+        self, resume_id: str, user_id: str, sections: dict[str, Any], format_hash: str
+    ) -> dict[str, Any] | None:
+        """Replace a resume's sections/formatHash (used to heal empty bases)."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'''
+                    UPDATE "Resume"
+                    SET "sections" = %s, "formatHash" = %s, "updatedAt" = NOW()
+                    WHERE "id" = %s AND "userId" = %s
+                    RETURNING {_RESUME_COLUMNS}
+                    ''',
+                    (json.dumps(sections), format_hash, resume_id, user_id),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        return rows[0] if rows else None
+
     def get_by_id(self, resume_id: str, user_id: str) -> dict[str, Any] | None:
         with get_connection() as conn:
             with conn.cursor() as cur:

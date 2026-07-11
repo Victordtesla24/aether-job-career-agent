@@ -26,10 +26,6 @@ const ENRICHED_STORY = {
   updatedAt: "2026-07-01T00:00:00Z",
   category: "Delivery",
   impact: "92% impact",
-  voiceMatch: 96,
-  usedInResumes: 6,
-  interviewAnswers: 3,
-  usedThisMonth: 2,
   starred: false,
 };
 
@@ -52,14 +48,12 @@ describe("Story Bank client — enrichment", () => {
     const story = StorySchema.parse(ENRICHED_STORY);
     expect(story.category).toBe("Delivery");
     expect(story.impact).toBe("92% impact");
-    expect(story.voiceMatch).toBe(96);
     expect(story.starred).toBe(false);
   });
 
   it("StorySchema still parses a legacy payload without enrichment", () => {
-    const { category, impact, voiceMatch, usedInResumes, interviewAnswers, usedThisMonth, starred, ...legacy } =
-      ENRICHED_STORY;
-    void { category, impact, voiceMatch, usedInResumes, interviewAnswers, usedThisMonth, starred };
+    const { category, impact, starred, ...legacy } = ENRICHED_STORY;
+    void { category, impact, starred };
     const story = StorySchema.parse(legacy);
     expect(story.category).toBeUndefined();
     expect(story.title).toBe(ENRICHED_STORY.title);
@@ -77,13 +71,14 @@ describe("Story Bank client — enrichment", () => {
     const fetchMock = mockFetchOnce({
       total: 34,
       quantified: 30,
-      usedThisMonth: 11,
-      voiceMatchAvg: 92,
+      starred: 4,
+      categories: 3,
     });
     const stats = await fetchStoryStats({ token: "tok" });
     expect(stats.total).toBe(34);
     expect(stats.quantified).toBe(30);
-    expect(stats.voiceMatchAvg).toBe(92);
+    expect(stats.starred).toBe(4);
+    expect(stats.categories).toBe(3);
     expect(String(fetchMock.mock.calls[0]![0])).toContain("/stories/stats");
   });
 

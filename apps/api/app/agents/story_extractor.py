@@ -54,6 +54,12 @@ class StoryExtractorAgent:
             temperature=0.0,
         )
         resume_numbers = set(_NUMBER_RE.findall(resume_text))
+        # Dedupe against existing stories — re-running extraction must not
+        # re-insert the same stories.
+        existing_titles = {
+            str(s.get("title", "")).strip().lower()
+            for s in self._stories.list_by_user(user_id)
+        }
         result = StoryExtractionResult()
         for story in raw.get("stories", []):
             if not all((story.get(f) or "").strip() for f in _STAR_FIELDS):
@@ -62,6 +68,11 @@ class StoryExtractorAgent:
             if not self._metrics_evidenced(story.get("metrics") or {}, resume_numbers):
                 result.dropped.append(story.get("title", "<untitled>"))
                 continue
+            title_key = str(story.get("title", "")).strip().lower()
+            if title_key in existing_titles:
+                result.dropped.append(story.get("title", "<untitled>"))
+                continue
+            existing_titles.add(title_key)
             created = self._stories.create(user_id, story)
             result.story_ids.append(created["id"])
             result.created += 1

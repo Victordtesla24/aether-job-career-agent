@@ -18,10 +18,6 @@ export const StorySchema = z.object({
   // across refreshes). Optional so older payloads still parse.
   category: z.string().optional(),
   impact: z.string().nullish(),
-  voiceMatch: z.number().optional(),
-  usedInResumes: z.number().optional(),
-  interviewAnswers: z.number().optional(),
-  usedThisMonth: z.number().optional(),
   starred: z.boolean().optional(),
 });
 
@@ -30,8 +26,8 @@ export type Story = z.infer<typeof StorySchema>;
 export const StoryStatsSchema = z.object({
   total: z.number(),
   quantified: z.number(),
-  usedThisMonth: z.number(),
-  voiceMatchAvg: z.number(),
+  starred: z.number(),
+  categories: z.number(),
 });
 
 export type StoryStats = z.infer<typeof StoryStatsSchema>;

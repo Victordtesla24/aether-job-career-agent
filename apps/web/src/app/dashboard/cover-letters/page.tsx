@@ -199,9 +199,9 @@ export default function CoverLettersPage() {
           <div className="flex items-center gap-2" data-testid="voice-authenticity-indicator">
             <i className="fa-solid fa-shield-halved text-aether-green" aria-hidden="true" />
             <div className="leading-tight">
-              <div className="text-[11px] text-aether-muted-dim">Voice DNA</div>
+              <div className="text-[11px] text-aether-muted-dim">Evidence Grounding</div>
               <div className="mono text-xs font-medium text-aether-green">
-                {selectedInsights ? `${selectedInsights.voice.authenticity}% authentic` : "—"}
+                {selectedInsights ? `${selectedInsights.voice.authenticity}% grounded` : "—"}
               </div>
             </div>
           </div>
@@ -209,13 +209,11 @@ export default function CoverLettersPage() {
             className="flex items-center gap-2 border-l border-white/10 pl-4"
             data-testid="ai-detection-indicator"
           >
-            <i className="fa-solid fa-robot text-aether-violet" aria-hidden="true" />
+            <i className="fa-solid fa-shield text-aether-violet" aria-hidden="true" />
             <div className="leading-tight">
-              <div className="text-[11px] text-aether-muted-dim">AI Detection</div>
+              <div className="text-[11px] text-aether-muted-dim">Fabrication Guard</div>
               <div className="mono text-xs font-medium text-aether-green">
-                {selectedInsights
-                  ? `${selectedInsights.voice.aiDetectionRisk}% · ${selectedInsights.voice.aiDetectionLabel}`
-                  : "—"}
+                {selectedInsights ? selectedInsights.voice.aiDetectionLabel : "—"}
               </div>
             </div>
           </div>

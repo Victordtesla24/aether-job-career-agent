@@ -32,7 +32,10 @@ function bestStory(stories: Story[], categories: string[]): Story | null {
   const pool = stories.filter((s) => categories.includes(s.category ?? ""));
   const ranked = (pool.length ? pool : stories)
     .slice()
-    .sort((a, b) => (b.voiceMatch ?? 0) - (a.voiceMatch ?? 0));
+    .sort(
+      (a, b) =>
+        Object.keys(b.metrics ?? {}).length - Object.keys(a.metrics ?? {}).length,
+    );
   return ranked[0] ?? null;
 }
 

@@ -78,14 +78,10 @@ const SOURCE_LABEL: Record<string, string> = {
   workforce: "Workforce AU",
 };
 
-/** Job-board connection cards (wireframe jd24–jd28 source bar). */
-const SOURCE_CONNECTIONS = [
-  { badge: "SEEK", name: "Seek.com.au", state: "Connected · via Browser", action: "Playwright session", dot: "green" },
-  { badge: "in", name: "LinkedIn AU", state: "Connected · OAuth", action: "Manage", dot: "green" },
-  { badge: "WF", name: "Workforce AU", state: "MyGov login req.", action: "Connect via MyGov", dot: "amber" },
-  { badge: "Jora", name: "Jora", state: "Not connected", action: "Connect via Browser", dot: "grey" },
-  { badge: "in", name: "Indeed AU", state: "Not connected", action: "Connect via Browser", dot: "grey" },
-] as const;
+/** Badge initials for a job source key (wireframe jd24–jd28 source bar). */
+function sourceBadge(source: string): string {
+  return source.slice(0, 4).toUpperCase();
+}
 
 /** Location tokens classifying a posting as Australia-local (mirrors backend). */
 const AU_TOKENS = [
@@ -215,6 +211,9 @@ export default function JobsPage() {
 
   // Apply flow (per selected job) + submit gate.
   const [applyStep, setApplyStep] = useState<Record<string, "idle" | "tailoring" | "tailored">>({});
+  const [tailorResults, setTailorResults] = useState<
+    Record<string, { resume_id: string; changes: number; rejected: string[] }>
+  >({});
   const [gateOpen, setGateOpen] = useState(false);
   const [gateJobId, setGateJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -297,6 +296,12 @@ export default function JobsPage() {
     visible.slice(0, 12).forEach((j) => void fetchInsights(j.id));
   }, [visible, fetchInsights]);
 
+  // Always fetch insights for the selected job — selection isn't limited to
+  // the prefetched first 12.
+  useEffect(() => {
+    if (selectedId) void fetchInsights(selectedId);
+  }, [selectedId, fetchInsights]);
+
   const stats = useMemo(() => {
     const all = jobs ?? [];
     const dayAgo = Date.now() - 86400_000;
@@ -304,6 +309,23 @@ export default function JobsPage() {
     const sources = new Set(all.map((j) => j.source)).size;
     return { matches: all.length, newToday, sources };
   }, [jobs]);
+
+  // Source bar: real per-source counts from the loaded jobs, most jobs first.
+  const sourceCards = useMemo(() => {
+    const bySource = new Map<string, number>();
+    for (const j of jobs ?? []) bySource.set(j.source, (bySource.get(j.source) ?? 0) + 1);
+    return [...bySource.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, count]) => ({ source, count }));
+  }, [jobs]);
+
+  // "Last synced" from the scout agent's real last run.
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  useEffect(() => {
+    apiRequest<{ name: string; last_run?: string | null }[]>("/agents")
+      .then((agents) => setLastSync(agents.find((a) => a.name === "scout")?.last_run ?? null))
+      .catch(() => setLastSync(null));
+  }, []);
 
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   const selectedInsights = selected ? insights[selected.id] : undefined;
@@ -336,9 +358,19 @@ export default function JobsPage() {
     }
   };
 
-  const startTailoring = (jobId: string) => {
+  const startTailoring = async (jobId: string) => {
     setApplyStep((p) => ({ ...p, [jobId]: "tailoring" }));
-    window.setTimeout(() => setApplyStep((p) => ({ ...p, [jobId]: "tailored" })), 900);
+    try {
+      const out = await apiRequest<{ resume_id: string; changes: number; rejected: string[] }>(
+        "/agents/tailor/run",
+        { method: "POST", body: { job_id: jobId } },
+      );
+      setTailorResults((p) => ({ ...p, [jobId]: out }));
+      setApplyStep((p) => ({ ...p, [jobId]: "tailored" }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tailoring failed");
+      setApplyStep((p) => ({ ...p, [jobId]: "idle" }));
+    }
   };
   const resetTailoring = (jobId: string) => setApplyStep((p) => ({ ...p, [jobId]: "idle" }));
 
@@ -491,44 +523,31 @@ export default function JobsPage() {
           <span className="text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Connected Job Boards — {market === "intl" ? "International" : "Australia"}
           </span>
-          <span className="mono text-[11px] text-aether-muted-dim">Last synced: 2 hours ago</span>
+          <span className="mono text-[11px] text-aether-muted-dim">
+            {lastSync ? `Last synced: ${timeAgo(lastSync)}` : "Sync time unavailable"}
+          </span>
         </div>
         <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
-          {SOURCE_CONNECTIONS.map((s) => (
-            <div key={s.name} className="glass-raised w-52 shrink-0 rounded-xl border border-white/10 p-3.5">
+          {sourceCards.map((s) => (
+            <div key={s.source} className="glass-raised w-52 shrink-0 rounded-xl border border-white/10 p-3.5">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
-                    {s.badge}
+                    {sourceBadge(s.source)}
                   </span>
-                  <span className="text-xs font-semibold">{s.name}</span>
+                  <span className="text-xs font-semibold">{SOURCE_LABEL[s.source] ?? s.source}</span>
                 </div>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    s.dot === "green" ? "bg-aether-green" : s.dot === "amber" ? "bg-aether-yellow" : "bg-aether-muted-dim"
-                  }`}
-                  aria-hidden="true"
-                />
+                <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
               </div>
-              <p
-                className={`mb-2.5 text-[11px] ${
-                  s.dot === "green" ? "text-aether-green" : s.dot === "amber" ? "text-aether-yellow" : "text-aether-muted-dim"
-                }`}
-              >
-                {s.state}
+              <p className="mb-2.5 text-[11px] text-aether-green">
+                {s.count} live {s.count === 1 ? "job" : "jobs"} discovered
               </p>
-              <button
-                type="button"
-                className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 text-[11px] font-medium transition hover:bg-white/10"
-              >
-                {s.action}
-              </button>
             </div>
           ))}
           <div className="flex w-52 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 p-3.5 text-center">
             <p className="text-[11px] leading-relaxed text-aether-muted-dim">
-              Switch to <span className="text-white">🌏 International</span> for LinkedIn Global, Glassdoor, Dice,
-              ZipRecruiter, Wellfound &amp; USAJobs
+              Counts reflect live discovered jobs per source — run <span className="text-white">Sync Now</span> to
+              refresh from all connected boards
             </p>
           </div>
         </div>
@@ -658,7 +677,7 @@ export default function JobsPage() {
                   disabled={selectedIds.size === 0 || running}
                   className="rounded-lg bg-aether-coral px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-40"
                 >
-                  Tailor &amp; Apply ({selectedIds.size})
+                  Apply ({selectedIds.size})
                 </button>
                 <button
                   type="button"
@@ -780,7 +799,9 @@ export default function JobsPage() {
                           Sourced from {SOURCE_LABEL[selected.source] ?? selected.source}
                         </span>
                         <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-aether-muted">
-                          Posted {timeAgo(selected.createdAt) || "recently"}
+                          {selected.postedAt
+                            ? `Posted ${timeAgo(selected.postedAt)}`
+                            : `Discovered ${timeAgo(selected.createdAt) || "recently"}`}
                         </span>
                       </div>
                       <Link
@@ -898,15 +919,8 @@ export default function JobsPage() {
                   </p>
                 </section>
 
-                {/* Voice-Authentic + two-step apply (jd32–jd36) */}
-                <div className="mt-5 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-aether-green/25 bg-aether-green/[0.12] px-2.5 py-1 text-[11px] font-medium text-aether-green">
-                    ✓ Voice-Authentic
-                  </span>
-                  <span className="text-[11px] text-aether-muted-dim">Tailored output de-robotified · AI detection 2%</span>
-                </div>
-
-                <div className="mt-3 flex flex-col gap-3" data-testid="apply-flow">
+                {/* Two-step apply (jd32–jd36) */}
+                <div className="mt-5 flex flex-col gap-3" data-testid="apply-flow">
                   {/* step indicator */}
                   <div className="flex items-center gap-3 text-[11px]">
                     <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold ${
@@ -963,7 +977,16 @@ export default function JobsPage() {
                     <div className="flex flex-col gap-3" data-testid="apply-step2">
                       <div className="rounded-xl border border-aether-green/25 bg-aether-green/10 px-4 py-3">
                         <div className="flex items-center gap-2 text-[13px] text-[#C8C8DC]">
-                          ✓ Resume tailored · <span className="mono font-semibold text-aether-green">96%</span> Voice DNA · <span className="mono text-aether-green">2%</span> AI detection
+                          ✓ Resume tailored ·{" "}
+                          <span className="mono font-semibold text-aether-green">
+                            {tailorResults[selected.id]?.changes ?? 0}
+                          </span>{" "}
+                          changes applied
+                          {tailorResults[selected.id]?.rejected?.length ? (
+                            <span className="text-aether-muted-dim">
+                              · {tailorResults[selected.id].rejected.length} rejected by fabrication guard
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px]">
                           <Link href="/dashboard/story-bank" className="font-medium text-[#a5b4fc] transition hover:text-white">
@@ -1018,9 +1041,11 @@ export default function JobsPage() {
                   Submit application to <span className="text-aether-coral">{gateJob.company}</span>?
                 </h3>
                 <p className="mt-1 text-[12px] text-aether-muted">
-                  Your tailored resume for <span className="text-[#C7C7D6]">{gateJob.title}</span> will be submitted via{" "}
-                  <span className="mono text-[#C7C7D6]">{SOURCE_LABEL[gateJob.source] ?? gateJob.source}</span>.{" "}
-                  <span className="text-aether-yellow">This action cannot be undone.</span>
+                  Your application for <span className="text-[#C7C7D6]">{gateJob.title}</span> will be recorded as{" "}
+                  <span className="text-[#C7C7D6]">Applied</span> with your tailored resume attached.{" "}
+                  <span className="text-aether-yellow">
+                    Complete the submission on {SOURCE_LABEL[gateJob.source] ?? gateJob.source} via the job posting link.
+                  </span>
                 </p>
               </div>
               <button type="button" onClick={closeGate} aria-label="Close" className="text-aether-muted transition hover:text-white">✕</button>
@@ -1034,7 +1059,7 @@ export default function JobsPage() {
 
             {submitted ? (
               <div className="mt-4 flex items-center gap-2 rounded-xl border border-aether-green/25 bg-aether-green/10 px-3.5 py-2.5 text-[12px]" data-testid="submitted-state" role="status">
-                ✓ Application submitted to {gateJob.company}. <span className="text-aether-muted">Tracking in Applications · status: Applied.</span>
+                ✓ Application recorded for {gateJob.company}. <span className="text-aether-muted">Tracking in Applications · finish the submission on the job board.</span>
               </div>
             ) : (
               <div className="mt-5 flex items-center justify-end gap-2">
@@ -1098,7 +1123,7 @@ function SavedView({
           onClick={() => onApplyAll(jobs.map((j) => j.id))}
           className="flex items-center gap-2 rounded-lg bg-aether-coral px-4 py-2 text-xs font-semibold shadow-lg shadow-aether-coral/25 hover:opacity-90"
         >
-          ✦ Tailor &amp; Apply all ({jobs.length})
+          ✦ Apply to all ({jobs.length})
         </button>
       </div>
       <div className="grid gap-3 md:grid-cols-2">

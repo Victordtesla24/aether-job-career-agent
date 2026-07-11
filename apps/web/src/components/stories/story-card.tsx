@@ -52,8 +52,7 @@ export function StoryCard({
 }: StoryCardProps) {
   const [copied, setCopied] = useState(false);
   const style = CATEGORY_STYLE[story.category ?? ""] ?? DEFAULT_STYLE;
-  const voice = story.voiceMatch ?? 0;
-  const voiceCls = voice >= 90 ? "text-[#A78BFA]" : "text-[#FBBF24]";
+  const metricCount = Object.keys(story.metrics ?? {}).length;
 
   const insert = async () => {
     try {
@@ -174,16 +173,11 @@ export function StoryCard({
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-3">
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-aether-muted">
           <span>
-            <i className="fa-solid fa-link mr-1" aria-hidden="true" />
-            Used in {story.usedInResumes ?? 0} resumes
-          </span>
-          <span>
-            <i className="fa-solid fa-microphone-lines mr-1" aria-hidden="true" />
-            {story.interviewAnswers ?? 0} interview answers
+            <i className="fa-solid fa-chart-simple mr-1" aria-hidden="true" />
+            {metricCount} evidenced metric{metricCount === 1 ? "" : "s"}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`mono text-[11px] ${voiceCls}`}>Voice {voice}%</span>
           <button
             type="button"
             data-testid="insert-story-btn"

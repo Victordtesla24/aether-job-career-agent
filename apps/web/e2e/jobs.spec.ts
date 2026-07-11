@@ -22,19 +22,21 @@ test.describe("Jobs page", () => {
     await expect(page.getByTestId("job-filter-bar")).toBeVisible();
   });
 
-  test("save button toggles a job's saved state", async ({ page }) => {
+  test("detail-panel save button toggles the selected job's saved state", async ({ page }) => {
     await page.goto("/dashboard/jobs");
 
-    const firstSave = page.getByTestId("save-job-btn").first();
-    await expect(firstSave).toBeVisible({ timeout: 20_000 });
-    const before = (await firstSave.getAttribute("aria-pressed")) ?? "false";
+    // Selecting the first card opens the detail panel with its save toggle.
+    await page.getByTestId("job-card").first().click();
+    const save = page.getByTestId("detail-save");
+    await expect(save).toBeVisible({ timeout: 20_000 });
+    const before = (await save.getAttribute("aria-pressed")) ?? "false";
     const after = before === "true" ? "false" : "true";
 
-    await firstSave.click();
-    await expect(firstSave).toHaveAttribute("aria-pressed", after, { timeout: 15_000 });
+    await save.click();
+    await expect(save).toHaveAttribute("aria-pressed", after, { timeout: 15_000 });
 
-    // Toggle back so the test is idempotent against the seeded data.
-    await firstSave.click();
-    await expect(firstSave).toHaveAttribute("aria-pressed", before, { timeout: 15_000 });
+    // Toggle back so the test is idempotent against live data.
+    await save.click();
+    await expect(save).toHaveAttribute("aria-pressed", before, { timeout: 15_000 });
   });
 });

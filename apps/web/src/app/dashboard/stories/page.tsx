@@ -27,7 +27,7 @@ import {
 const FILTERS = ["All", "Leadership", "Delivery", "Technical", "Risk & Compliance"] as const;
 type Filter = (typeof FILTERS)[number];
 
-const ZERO_STATS: StoryStats = { total: 0, quantified: 0, usedThisMonth: 0, voiceMatchAvg: 0 };
+const ZERO_STATS: StoryStats = { total: 0, quantified: 0, starred: 0, categories: 0 };
 
 export default function StoryBankPage() {
   const [stories, setStories] = useState<Story[] | null>(null);
@@ -75,10 +75,8 @@ export default function StoryBankPage() {
     return {
       total: stories.length,
       quantified: stories.filter((s) => s.metrics && Object.keys(s.metrics).length > 0).length,
-      usedThisMonth: stories.reduce((n, s) => n + (s.usedThisMonth ?? 0), 0),
-      voiceMatchAvg: stories.length
-        ? Math.round(stories.reduce((n, s) => n + (s.voiceMatch ?? 0), 0) / stories.length)
-        : 0,
+      starred: stories.filter((s) => s.starred).length,
+      categories: new Set(stories.map((s) => s.category ?? "")).size,
     };
   }, [demoEmpty, stats, stories]);
 
@@ -181,8 +179,8 @@ export default function StoryBankPage() {
           [
             ["Total Stories", effectiveStats.total, ""],
             ["Quantified w/ Metrics", effectiveStats.quantified, "text-[#34D399]"],
-            ["Used This Month", effectiveStats.usedThisMonth, ""],
-            ["Voice Match Avg", `${effectiveStats.voiceMatchAvg}%`, "text-[#A78BFA]"],
+            ["Starred", effectiveStats.starred, "text-[#FBBF24]"],
+            ["Categories Covered", effectiveStats.categories, "text-[#A78BFA]"],
           ] as const
         ).map(([label, value, cls]) => (
           <div key={label} className="glass rounded-2xl border border-white/10 p-4">

@@ -16,7 +16,7 @@ import abc
 import json
 import os
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class JobRaw(TypedDict):
@@ -31,6 +31,9 @@ class JobRaw(TypedDict):
     source: str
     sourceUrl: str
     postedAt: str | None
+    salaryMin: NotRequired[int | None]
+    salaryMax: NotRequired[int | None]
+    currency: NotRequired[str | None]
 
 
 class BaseAdapter(abc.ABC):

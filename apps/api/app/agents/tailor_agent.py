@@ -37,7 +37,7 @@ class TailoringAgent:
 
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
-        if base:
+        if base and (base.get("sections") or {}).get("raw_text"):
             return base
         parsed = parse_resume_pdf(get_base_resume_path())
         sections = {
@@ -48,6 +48,14 @@ class TailoringAgent:
             ],
             "contact": parsed["contact"],
         }
+        if base:
+            # Base exists but was seeded with empty sections — heal it from
+            # the real PDF so diffs have genuine "before" content.
+            healed = self._resumes.update_sections(
+                base["id"], user_id, sections, parsed["format_hash"]
+            )
+            if healed:
+                return healed
         return self._resumes.create(
             user_id, sections, parsed["format_hash"], label="Base resume", version=1
         )

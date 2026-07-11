@@ -394,7 +394,7 @@ export default function DashboardPage() {
                   achievement{stories.data.length === 1 ? "" : "s"} ready to deploy
                 </p>
                 <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-aether-muted-dim">
-                  Recently used
+                  Latest stories
                 </p>
                 <ul className="flex flex-col gap-2">
                   {stories.data.slice(0, 3).map((s) => (
@@ -404,7 +404,7 @@ export default function DashboardPage() {
                     >
                       <span className="truncate text-xs text-[#C8C8DC]">{s.title}</span>
                       <span className="mono ml-2 shrink-0 rounded bg-aether-coral/15 px-1.5 py-0.5 text-[10px] text-aether-coral">
-                        {s.usedInResumes ?? 0} maps
+                        {Object.keys(s.metrics ?? {}).length} metrics
                       </span>
                     </li>
                   ))}

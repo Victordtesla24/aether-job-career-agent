@@ -163,9 +163,18 @@ export default function ResumePage() {
           <p className="mt-3 text-lg font-bold tracking-wide">VIKRAM DESHPANDE</p>
           <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">Technical Program Mgmt</span>
-            <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">SAFe / Agile</span>
-            <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">Financial Services</span>
+            {(() => {
+              const tailored = (resumes ?? []).find((r) => r.label?.startsWith("Tailored"));
+              return tailored ? (
+                <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
+                  {tailored.label}
+                </span>
+              ) : (
+                <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">
+                  No tailored version yet — run tailoring against a job
+                </span>
+              );
+            })()}
           </div>
         </div>
       </section>
@@ -176,7 +185,9 @@ export default function ResumePage() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Format Integrity Check</h2>
             <p className="mt-1 text-sm text-aether-green">Typography, spacing, columns &amp; margins preserved</p>
             <p className="mt-1 text-xs text-aether-muted-dim">
-              Changes Summary: 7 keyword insertions · 3 achievement rewrites · 0 format changes · layout locked
+              {diff
+                ? `Changes Summary: ${diff.changes.filter((c) => c.before).length} rewrites · ${diff.changes.filter((c) => !c.before).length} additions · layout locked (formatHash carried from base)`
+                : "Select a tailored version to see its change summary."}
             </p>
           </div>
           <div className="text-center">
@@ -185,8 +196,12 @@ export default function ResumePage() {
               <span className="block">Additions</span>
             </div>
             <div className="mt-1 flex justify-around gap-6">
-              <span className="mono text-xl font-bold text-aether-amber">10</span>
-              <span className="mono text-xl font-bold text-aether-green">7</span>
+              <span className="mono text-xl font-bold text-aether-amber">
+                {diff ? diff.changes.filter((c) => c.before).length : "—"}
+              </span>
+              <span className="mono text-xl font-bold text-aether-green">
+                {diff ? diff.changes.filter((c) => !c.before).length : "—"}
+              </span>
             </div>
           </div>
         </div>
@@ -301,50 +316,45 @@ export default function ResumePage() {
         </section>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3" data-design-id="evidence-voice-rs15">
+      <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">
         <section className="glass rounded-2xl border border-white/10 p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Evidence Trace</h2>
-          <p className="mt-1 text-xs text-aether-muted-dim">Pull from Story Bank — every rewritten line links to verified evidence.</p>
-          <ul className="mt-3 space-y-2 text-sm text-aether-muted">
-            <li className="flex flex-wrap items-center gap-2">
-              <span>Platform delivery bullet</span>
-              <span className="rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">Portfolio: Ride-with-Vic</span>
-            </li>
-            <li className="flex flex-wrap items-center gap-2">
-              <span>Automation achievement</span>
-              <span className="rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">GitHub commit history</span>
-            </li>
-          </ul>
-        </section>
-        <section className="glass rounded-2xl border border-white/10 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Voice DNA</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <dt className="text-aether-muted-dim">Tone</dt>
-              <dd className="text-aether-muted">Professional</dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-aether-muted-dim">Formality</dt>
-              <dd className="text-aether-muted">Balanced</dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-aether-muted-dim">AI Detection</dt>
-              <dd className="text-aether-green">2% · Safe</dd>
-            </div>
-          </dl>
+          <p className="mt-1 text-xs text-aether-muted-dim">
+            Every rewritten line links back to evidence in the base resume.
+          </p>
+          {diff && diff.changes.length > 0 ? (
+            <ul className="mt-3 space-y-2 text-sm text-aether-muted">
+              {diff.changes.slice(0, 4).map((change, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2">
+                  <span className="truncate">{(change.after || change.before).slice(0, 60)}</span>
+                  {change.evidenceRef ? (
+                    <span className="mono rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">
+                      {change.evidenceRef}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-aether-muted-dim">
+              Select a tailored version to trace its changes to evidence.
+            </p>
+          )}
         </section>
         <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="version-compare-rs18">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Compare Versions</h2>
-          <label className="mt-3 block text-xs text-aether-muted-dim" htmlFor="compare-select">Compare</label>
-          <select id="compare-select" aria-label="Compare versions" className="glass mt-1 w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm">
-            <option className="bg-black">Base vs v2</option>
-            <option className="bg-black">Base vs v1</option>
-            <option className="bg-black">v1 vs v2</option>
-          </select>
-          <p className="mt-3 text-xs text-aether-muted">
-            <span className="mono rounded bg-aether-green/15 px-1 text-aether-green">keyword</span>{" "}
-            Objective now leads with Technical Program Manager + Financial Services .
-          </p>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Version History</h2>
+          {resumes && resumes.length > 0 ? (
+            <ul className="mt-3 space-y-2 text-sm text-aether-muted">
+              {resumes.slice(0, 4).map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate">{r.label ?? `Version ${r.version}`}</span>
+                  <span className="mono shrink-0 text-xs text-aether-muted-dim">v{r.version}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-aether-muted-dim">No versions yet.</p>
+          )}
         </section>
       </div>
     </div>

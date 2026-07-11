@@ -10,7 +10,8 @@ from app.services.discovery.base_adapter import JobRaw
 _JOB_COLUMNS = (
     '"id", "userId", "title", "company", "location", "remote", "salaryMin", '
     '"salaryMax", "currency", "description", "requirements", "source", '
-    '"sourceUrl", "status", "fitScore", "atsScore", "saved", "createdAt", "updatedAt"'
+    '"sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", '
+    '"createdAt", "updatedAt"'
 )
 
 #: Statuses accepted by ``update_status`` (mirrors the Prisma JobStatus enum).
@@ -40,9 +41,10 @@ class JobRepository:
                     f'''
                     INSERT INTO "Job" (
                         "id", "userId", "title", "company", "location", "remote",
-                        "description", "requirements", "source", "sourceUrl", "updatedAt"
+                        "description", "requirements", "source", "sourceUrl",
+                        "salaryMin", "salaryMax", "currency", "postedAt", "updatedAt"
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET
                         "title" = EXCLUDED."title",
                         "company" = EXCLUDED."company",
@@ -50,6 +52,10 @@ class JobRepository:
                         "remote" = EXCLUDED."remote",
                         "description" = EXCLUDED."description",
                         "requirements" = EXCLUDED."requirements",
+                        "salaryMin" = COALESCE(EXCLUDED."salaryMin", "Job"."salaryMin"),
+                        "salaryMax" = COALESCE(EXCLUDED."salaryMax", "Job"."salaryMax"),
+                        "currency" = COALESCE(EXCLUDED."currency", "Job"."currency"),
+                        "postedAt" = COALESCE(EXCLUDED."postedAt", "Job"."postedAt"),
                         "updatedAt" = NOW()
                     RETURNING {_JOB_COLUMNS}
                     ''',
@@ -64,6 +70,10 @@ class JobRepository:
                         requirements,
                         job_raw["source"],
                         job_raw["sourceUrl"],
+                        job_raw.get("salaryMin"),
+                        job_raw.get("salaryMax"),
+                        job_raw.get("currency"),
+                        job_raw.get("postedAt"),
                     ),
                 )
                 rows = rows_to_dicts(cur)
