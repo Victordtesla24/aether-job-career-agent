@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { fetchAgents } from "@/lib/api/agents";
 import { NAV_ITEMS } from "@/lib/navigation";
+
+type AgentPulse = { running: number; total: number };
 
 /**
  * Primary application sidebar. It renders straight from the NAV_ITEMS contract
@@ -14,6 +18,33 @@ import { NAV_ITEMS } from "@/lib/navigation";
 export function Sidebar({ activeHref }: { activeHref?: string }) {
   const pathname = usePathname();
   const currentHref = activeHref ?? pathname ?? "/dashboard";
+  // undefined = loading, null = unavailable, otherwise live counts
+  const [pulse, setPulse] = useState<AgentPulse | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetchAgents()
+        .then((agents) => {
+          if (cancelled) return;
+          setPulse({
+            running: agents.filter((a) => a.status === "running").length,
+            total: agents.length,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setPulse(null);
+        });
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const running = pulse?.running ?? 0;
+  const agentsActive = running > 0;
   return (
     <aside className="w-[248px] shrink-0 border-r border-white/10 glass hidden lg:flex flex-col px-4 py-6">
       <div className="flex items-center gap-3 px-2 mb-8">
@@ -56,11 +87,31 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
 
       <div className="mt-auto glass-raised rounded-2xl p-4 border border-white/10">
         <div className="flex items-center gap-2 mb-2">
-          <span className="w-2 h-2 rounded-full bg-aether-green live-dot" />
-          <span className="text-xs font-medium text-aether-green">Agents Active</span>
+          <span
+            className={
+              agentsActive
+                ? "w-2 h-2 rounded-full bg-aether-green live-dot"
+                : "w-2 h-2 rounded-full bg-aether-muted-dim"
+            }
+          />
+          <span
+            className={
+              agentsActive
+                ? "text-xs font-medium text-aether-green"
+                : "text-xs font-medium text-aether-muted"
+            }
+          >
+            {agentsActive ? "Agents Active" : "Agents Idle"}
+          </span>
         </div>
         <p className="text-[11px] text-aether-muted-dim leading-relaxed">
-          4 agents running · 12 tasks in queue
+          {pulse === undefined
+            ? "Checking agent status…"
+            : pulse === null
+              ? "Agent status unavailable"
+              : agentsActive
+                ? `${running} of ${pulse.total} agents running`
+                : `${pulse.total} agents ready · none running`}
         </p>
         <Link
           href="/dashboard/agents"

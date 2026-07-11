@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
-import MarketIntelligence from "../../components/dashboard/MarketIntelligence";
+import MarketPulse from "../../components/analytics/MarketPulse";
 import {
   agentDisplayName,
   agentTile,
@@ -542,7 +542,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Market Intelligence (market-intel-mi01) */}
-      <MarketIntelligence />
+      <MarketPulse />
     </div>
   );
 }

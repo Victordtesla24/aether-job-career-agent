@@ -86,6 +86,20 @@ def ensure_user_profile_columns() -> None:
         return
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Lock-free fast path: even as a no-op, ALTER takes an ACCESS
+            # EXCLUSIVE lock, so it stalls behind any concurrent reader and
+            # dies on the hosted 5s statement timeout. Only reach for DDL
+            # when a column is actually missing.
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('targetRole', 'location', 'agentConfig')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _user_profile_columns_ready = True
+                return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240712,))
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "targetRole" text')
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "location" text')

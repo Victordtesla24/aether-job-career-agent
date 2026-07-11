@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import urllib.request
+from html import unescape
 from typing import Any
 
 from app.services.discovery.base_adapter import BaseAdapter, JobRaw
@@ -89,11 +90,85 @@ def _scrape_job_detail(api_key: str, firecrawl_url: str, job_url: str) -> dict:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={"url": job_url, "formats": ["markdown"]},
+        json={"url": job_url, "formats": ["markdown", "rawHtml"]},
         timeout=30,
     )
     response.raise_for_status()
     return response.json()
+
+
+def _apollo_field(record: dict[str, Any], name: str) -> Any:
+    """Read a field from a SEEK Apollo cache record.
+
+    Apollo persists parameterized fields under keys like
+    ``name({"locale":"en-AU"})`` — match on the bare name or that prefix.
+    """
+    for key, value in record.items():
+        if key == name or key.startswith(name + "("):
+            return value
+    return None
+
+
+def _parse_job_from_html(raw_html: str, job_url: str) -> dict[str, Any] | None:
+    """Extract structured job data from SEEK's embedded Apollo GraphQL state.
+
+    Job detail pages ship ``window.SEEK_APOLLO_DATA`` with the canonical
+    advertiser name, location label, posting timestamp, and ad HTML — far more
+    reliable than heuristics over the rendered markdown.
+    """
+    marker = raw_html.find("window.SEEK_APOLLO_DATA")
+    if marker == -1:
+        return None
+    try:
+        start = raw_html.index("{", marker)
+        blob, _ = json.JSONDecoder().raw_decode(raw_html[start:])
+    except (ValueError, json.JSONDecodeError):
+        return None
+
+    root = blob.get("ROOT_QUERY", {})
+    details = next(
+        (v for k, v in root.items() if k.startswith("jobDetails") and isinstance(v, dict)),
+        None,
+    )
+    job = (details or {}).get("job")
+    if not isinstance(job, dict):
+        return None
+
+    title = job.get("title") or ""
+    if not title:
+        return None
+
+    company = _apollo_field(job.get("advertiser") or {}, "name") or ""
+    location = _apollo_field(job.get("location") or {}, "label") or ""
+    posted_at = (job.get("listedAt") or {}).get("dateTimeUtc")
+
+    content = _apollo_field(job, "content2") or ""
+    requirements = [
+        req
+        for req in (
+            re.sub(r"<[^>]+>", " ", li).strip()
+            for li in re.findall(r"<li[^>]*>(.*?)</li>", content, re.S)
+        )
+        if len(req) > 10
+    ][:10]
+    description = unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", content))).strip()
+    if not description:
+        description = job.get("abstract") or ""
+
+    return {
+        "title": unescape(title).strip(),
+        "company": unescape(company).strip() or "Unknown",
+        "location": unescape(location).strip() or "Melbourne, VIC",
+        "description": description[:2000],
+        "requirements": requirements,
+        "sourceUrl": job_url,
+        "postedAt": posted_at,
+    }
+
+
+def _strip_markdown_links(line: str) -> str:
+    """Replace markdown links/images with their label text."""
+    return re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", line).strip()
 
 
 def _parse_job_from_markdown(markdown: str, job_url: str) -> dict[str, Any] | None:
@@ -106,7 +181,7 @@ def _parse_job_from_markdown(markdown: str, job_url: str) -> dict[str, Any] | No
     requirements: list[str] = []
 
     for i, line in enumerate(lines):
-        line = line.strip()
+        line = _strip_markdown_links(line.strip())
         if not line:
             continue
 
@@ -116,12 +191,12 @@ def _parse_job_from_markdown(markdown: str, job_url: str) -> dict[str, Any] | No
         elif "at " in line.lower() and not company:
             # Pattern: "Title at Company" or "Company"
             parts = line.split(" at ", 1)
-            if len(parts) == 2:
+            if len(parts) == 2 and len(parts[1].strip()) <= 60:
                 company = parts[1].strip()
         elif any(loc in line.lower() for loc in (
             "melbourne", "victoria", "vic", "sydney", "brisbane"
         )):
-            if not location:
+            if not location and len(line) <= 60:
                 location = line
 
         # Collect description lines
@@ -202,8 +277,10 @@ class SeekAdapter(BaseAdapter):
             try:
                 detail_result = _scrape_job_detail(api_key, firecrawl_url, job_url)
                 if detail_result.get("success"):
-                    md = detail_result.get("data", {}).get("markdown", "")
-                    job_info = _parse_job_from_markdown(md, job_url)
+                    data = detail_result.get("data", {})
+                    job_info = _parse_job_from_html(data.get("rawHtml", ""), job_url)
+                    if not job_info:
+                        job_info = _parse_job_from_markdown(data.get("markdown", ""), job_url)
                     if job_info:
                         jobs_data.append(job_info)
                         logger.info("seek: scraped job: %s", job_info.get("title", "")[:50])
@@ -214,23 +291,33 @@ class SeekAdapter(BaseAdapter):
         return {"data": jobs_data}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:
-        """Parse scraped job data into JobRaw records."""
+        """Parse job data into JobRaw records.
+
+        Accepts both the live-scrape shape (``company``/``description``/
+        ``sourceUrl``) and the Seek API fixture shape (``advertiser``/
+        ``teaser``/``shareLink``).
+        """
         jobs: list[JobRaw] = []
         for item in payload.get("data", []):
             location_str = str(item.get("location") or "")
-            remote = any(m in location_str.lower() for m in _REMOTE_MARKERS)
+            arrangement = str((item.get("workArrangements") or {}).get("displayText", ""))
+            remote = any(
+                m in f"{location_str} {arrangement}".lower() for m in _REMOTE_MARKERS
+            )
 
             jobs.append(
                 JobRaw(
                     title=item.get("title", ""),
-                    company=item.get("company", ""),
+                    company=item.get("company")
+                    or (item.get("advertiser") or {}).get("description", ""),
                     location=location_str or None,
                     remote=remote,
-                    description=item.get("description", ""),
-                    requirements=item.get("requirements", []),
+                    description=item.get("description") or item.get("teaser", ""),
+                    requirements=item.get("requirements")
+                    or [b for b in item.get("bulletPoints", []) if b],
                     source=self.source,
-                    sourceUrl=item.get("sourceUrl", ""),
-                    postedAt=item.get("postedAt"),
+                    sourceUrl=item.get("sourceUrl") or item.get("shareLink", ""),
+                    postedAt=item.get("postedAt") or item.get("listingDate"),
                 )
             )
         return jobs

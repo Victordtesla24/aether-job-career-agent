@@ -24,11 +24,14 @@ function donutSegments(sources: MarketPulseData["sources"]) {
 }
 
 function sparkPoints(series: number[], w = 120, h = 36) {
-  const max = Math.max(...series, 1);
-  const min = Math.min(...series);
+  // A 0/1-point series would divide by zero below (NaN polyline coords);
+  // render a flat line instead.
+  const pts = series.length >= 2 ? series : [series[0] ?? 0, series[0] ?? 0];
+  const max = Math.max(...pts, 1);
+  const min = Math.min(...pts);
   const range = max - min || 1;
-  return series
-    .map((v, i) => `${(i / (series.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`)
+  return pts
+    .map((v, i) => `${(i / (pts.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`)
     .join(" ");
 }
 

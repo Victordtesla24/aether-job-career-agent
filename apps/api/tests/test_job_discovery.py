@@ -111,3 +111,61 @@ class TestScoutPersistence:
         body = response.json()
         assert len(body) >= 1
         assert {"id", "title", "company", "source", "sourceUrl", "status"} <= set(body[0])
+
+
+class TestSeekApolloParser:
+    """Company/location extraction from SEEK's embedded Apollo state."""
+
+    JOB_URL = "https://www.seek.com.au/job/12345678"
+
+    @staticmethod
+    def _page(job: dict) -> str:
+        blob = {"ROOT_QUERY": {'jobDetails({"id":"12345678"})': {"job": job}}}
+        return (
+            "<html><body><script>window.SEEK_APOLLO_DATA = "
+            + json.dumps(blob)
+            + ";</script></body></html>"
+        )
+
+    def test_parses_company_location_and_posted_at(self):
+        from app.services.discovery.seek_adapter import _parse_job_from_html
+
+        job = self._page(
+            {
+                "title": "Senior Business Analyst",
+                "advertiser": {'name({"locale":"en-AU"})': "Real Employer Pty Ltd"},
+                "location": {'label({"locale":"en-AU","type":"LONG"})': "Melbourne VIC"},
+                "listedAt": {"dateTimeUtc": "2026-07-02T14:19:09.265Z"},
+                'content2({"zone":"anz-1"})': (
+                    "<p>Great role.</p><ul><li>8+ years business analysis</li></ul>"
+                ),
+            }
+        )
+        parsed = _parse_job_from_html(job, self.JOB_URL)
+        assert parsed is not None
+        assert parsed["company"] == "Real Employer Pty Ltd"
+        assert parsed["location"] == "Melbourne VIC"
+        assert parsed["postedAt"] == "2026-07-02T14:19:09.265Z"
+        assert parsed["requirements"] == ["8+ years business analysis"]
+        assert "Great role." in parsed["description"]
+        assert "<p>" not in parsed["description"]
+
+    def test_returns_none_without_apollo_state(self):
+        from app.services.discovery.seek_adapter import _parse_job_from_html
+
+        assert _parse_job_from_html("<html><body>plain page</body></html>", self.JOB_URL) is None
+
+    def test_markdown_fallback_strips_links_and_rejects_overlong_company(self):
+        from app.services.discovery.seek_adapter import _parse_job_from_markdown
+
+        md = "\n".join(
+            [
+                "# Delivery Manager",
+                "Delivery Manager at " + "X" * 80,
+                "[Melbourne VIC](https://au.seek.com/jobs/in-Melbourne-VIC-3000)",
+            ]
+        )
+        parsed = _parse_job_from_markdown(md, self.JOB_URL)
+        assert parsed is not None
+        assert parsed["company"] == "Unknown"
+        assert parsed["location"] == "Melbourne VIC"
