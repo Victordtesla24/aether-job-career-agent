@@ -221,6 +221,37 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
 
     active_count = len(by_stage.get("active", [])) + len(by_stage.get("scheduled", []))
 
+    # Outreach queue + communication log from real OutreachTask rows
+    try:
+        cur.execute(
+            'SELECT ot."id", ot."type", ot."status", ot."message", ot."scheduledAt",'
+            ' ot."sentAt", c."company", c."name"'
+            ' FROM "OutreachTask" ot'
+            ' LEFT JOIN "Contact" c ON c."id" = ot."contactId"'
+            ' WHERE ot."userId" = %s ORDER BY ot."createdAt" DESC LIMIT 50',
+            (uid,),
+        )
+        ot_rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        ot_rows = []
+
+    queue, log = [], []
+    for t in ot_rows:
+        entry = {
+            "id": t["id"],
+            "kind": t["type"],
+            "status": t["status"],
+            "contactName": t.get("name") or "",
+            "company": t.get("company") or "",
+            "subject": f"{t.get('type', '').replace('_', ' ').title()} — {t.get('company', '')}",
+            "scheduledAt": str(t["scheduledAt"]) if t.get("scheduledAt") else None,
+            "sentAt": str(t["sentAt"]) if t.get("sentAt") else None,
+        }
+        if t["status"] == "sent":
+            log.append(entry)
+        else:
+            queue.append(entry)
+
     return {
         "stats": {
             "contacts": len(contacts),
@@ -229,8 +260,8 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
             "responseRate": 0,
         },
         "pipeline": pipeline,
-        "outreachQueue": [],
-        "communicationLog": [],
+        "outreachQueue": queue,
+        "communicationLog": log,
         "crmSummary": {
             "activeConversations": active_count,
             "followUpsDueToday": 0,
