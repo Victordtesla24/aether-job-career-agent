@@ -123,7 +123,7 @@ describe("D5 — resume download client", () => {
     const pdfBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
     const fetchMock = mockFetchOnce(pdfBlob, 200);
     await downloadResume("r1", { token: "tok" });
-    const [url, init] = fetchMock.mock.calls[0]!;
+    const [url] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain("/resumes/r1/download");
     // GET request — no explicit method set
   });
