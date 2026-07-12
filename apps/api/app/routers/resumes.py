@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
@@ -92,15 +92,16 @@ def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
 
 
 @router.get("/{resume_id}/download")
-def download_resume(resume_id: str, current_user: CurrentUser):
-    """Generate a side-by-side PDF: original vs tailored resume comparison."""
-    from io import BytesIO
+def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
+    """Download a resume as a format-preserving PDF.
 
-    from fastapi.responses import StreamingResponse
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
+    - **Base resume** (no parent): the original bundled PDF bytes, verbatim.
+    - **Tailored resume**: the original PDF with *only* the reworded bullets
+      redrawn in place — same two-column layout, peach title panel, coral
+      accents and fonts — plus a subtle highlight behind each changed bullet.
+      Every unchanged element stays byte-for-byte identical to the source.
+    """
+    from app.services.resume_pdf import render_tailored_pdf, resolve_original_pdf
 
     repo = ResumeRepository()
     resume = repo.get_by_id(resume_id, current_user["id"])
@@ -110,59 +111,27 @@ def download_resume(resume_id: str, current_user: CurrentUser):
     parent_id = resume.get("parentId")
     parent = repo.get_by_id(parent_id, current_user["id"]) if parent_id else None
 
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm)
-    styles = getSampleStyleSheet()
-    body = []
+    if parent is None:
+        # Non-tailored root resume → original PDF bytes, unmodified.
+        original = resolve_original_pdf(resume.get("formatHash"))
+        pdf_bytes = original.read_bytes()
+    else:
+        # Tailored version → splice the reworded bullets into the source PDF.
+        parent_by_ref = {
+            b.get("evidenceRef"): b.get("text", "")
+            for b in parent.get("sections", {}).get("bullets", [])
+        }
+        changes: list[tuple[str, str]] = []
+        for bullet in resume.get("sections", {}).get("bullets", []):
+            before = parent_by_ref.get(bullet.get("evidenceRef"))
+            after = bullet.get("text", "")
+            if before and after and before != after:
+                changes.append((before, after))
+        original = resolve_original_pdf(parent.get("formatHash") or resume.get("formatHash"))
+        pdf_bytes = render_tailored_pdf(original, changes)
 
-    title_style = styles["Heading1"]
-    heading_style = styles["Heading2"]
-    normal_style = styles["Normal"]
-
-    body.append(Paragraph("Resume Comparison — Original vs Tailored", title_style))
-    body.append(Spacer(1, 6 * mm))
-
-    row_data = [Paragraph("<b>Original Resume</b>", heading_style),
-                Paragraph("<b>Tailored Resume</b>", heading_style)]
-
-    orig_bullets = []
-    if parent:
-        for b in parent.get("sections", {}).get("bullets", []):
-            orig_bullets.append(Paragraph(b.get("text", ""), normal_style))
-    elif resume.get("sections", {}).get("raw_text"):
-        for line in resume["sections"]["raw_text"].splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("•", "●", "▪", "- ")):
-                orig_bullets.append(Paragraph(stripped.lstrip("•●▪- "), normal_style))
-
-    tailored_bullets = []
-    tailored_sections = resume.get("sections", {})
-    for b in tailored_sections.get("bullets", []):
-        text = b.get("text", "")
-        ref = b.get("evidenceRef")
-        parent_bullets = (parent or {}).get("sections", {}).get("bullets", [])
-        matched = any(o.get("evidenceRef") == ref for o in parent_bullets) if parent else False
-        if matched:
-            tailored_bullets.append(Paragraph(text, normal_style))
-        else:
-            tailored_bullets.append(Paragraph(f"<b>{text}</b>", normal_style))
-
-    max_len = max(len(orig_bullets), len(tailored_bullets))
-    for i in range(max_len):
-        left = orig_bullets[i] if i < len(orig_bullets) else Paragraph("", normal_style)
-        right = tailored_bullets[i] if i < len(tailored_bullets) else Paragraph("", normal_style)
-        row_data.extend([left, right])
-
-    tbl = Table([row_data[i:i + 2] for i in range(0, len(row_data), 2)],
-                colWidths=[doc.width / 2 - 5 * mm, doc.width / 2 - 5 * mm])
-    tbl.setStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
-                  ("GRID", (0, 0), (-1, -1), 0.5, "#CCCCCC"),
-                  ("TOPPADDING", (0, 0), (-1, -1), 4)])
-
-    body.append(tbl)
-    doc.build(body)
-    buf.seek(0)
-    return StreamingResponse(
-        buf, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=resume-{resume_id[:8]}.pdf"},
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="resume-{resume_id[:8]}.pdf"'},
     )

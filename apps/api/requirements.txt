@@ -5,6 +5,8 @@ pydantic>=2.7
 pydantic-settings>=2.3
 httpx>=0.27
 pdfplumber>=0.11
+# Format-preserving resume PDF generation (edits the original doc in place).
+PyMuPDF>=1.24
 psycopg2-binary>=2.9
 passlib>=1.7
 # passlib 1.7.4 reads bcrypt.__about__, removed in bcrypt 4.1+ — pin below 4.1

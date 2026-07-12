@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, apiRequest } from "../../../lib/api/client";
+import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import {
   downloadResume,
@@ -69,12 +69,8 @@ export default function ResumePage() {
     setDownloadNote(null);
     try {
       await downloadResume(resumeId);
+      setDownloadNote("Downloaded — format-preserving PDF saved.");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 501) {
-        // Contract-honest 501: PDF regeneration lands in Phase 3 (D5).
-        setDownloadNote("PDF export is coming in Phase 3 — this version is safely stored.");
-        return;
-      }
       setDownloadNote(e instanceof Error ? e.message : "Download failed");
     }
   };

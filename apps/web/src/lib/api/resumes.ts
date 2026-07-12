@@ -1,7 +1,7 @@
 /** Typed resumes API client (P2-S05). */
 import { z } from "zod";
 
-import { apiRequest, type RequestOptions } from "./client";
+import { ApiError, apiBaseUrl, apiRequest, clearToken, getToken, type RequestOptions } from "./client";
 
 export const ResumeSchema = z.object({
   id: z.string().min(1),
@@ -52,20 +52,44 @@ export interface TailorRunResult {
 }
 
 /**
- * Request a PDF export for a resume version (audit defect D5).
+ * Download a resume version as a format-preserving PDF.
  *
- * The backend intentionally answers 501 until PDF regeneration ships in
- * Phase 3 — callers should catch ApiError(status=501) and show a friendly
- * "coming soon" message rather than a failure.
+ * Streams `GET /resumes/{id}/download` (a binary PDF, so it bypasses the JSON
+ * `apiRequest` helper), then triggers a browser download of the returned blob.
+ * The base resume comes back as the original PDF bytes; tailored versions come
+ * back as the original layout with only the reworded bullets redrawn.
  */
-export async function downloadResume(
-  id: string,
-  options: RequestOptions = {},
-): Promise<{ detail: string; resume_id: string }> {
-  return apiRequest<{ detail: string; resume_id: string }>(`/resumes/${id}/download`, {
-    ...options,
-    method: "POST",
-  });
+export async function downloadResume(id: string, options: RequestOptions = {}): Promise<void> {
+  const baseUrl = options.baseUrl ?? apiBaseUrl();
+  const fetchPdf = async (token: string): Promise<Response> =>
+    fetch(`${baseUrl}/resumes/${id}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+  let token = options.token ?? (await getToken(baseUrl));
+  let res = await fetchPdf(token);
+  if (res.status === 401 && !options.token) {
+    clearToken();
+    token = await getToken(baseUrl);
+    res = await fetchPdf(token);
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new ApiError(`GET /resumes/${id}/download failed (${res.status}): ${detail}`, res.status);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `resume-${id.slice(0, 8)}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export async function runTailorAgent(jobId: string, options: RequestOptions = {}): Promise<TailorRunResult> {
