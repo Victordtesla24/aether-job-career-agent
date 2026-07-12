@@ -233,7 +233,9 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
                     ' WHERE ot."userId" = %s ORDER BY ot."createdAt" DESC LIMIT 50',
                     (uid,),
                 )
-                ot_rows = [dict(r) for r in cur2.fetchall()]
+                ot_rows = cur2.fetchall()
+                cols = [d[0] for d in cur2.description or []]
+                ot_rows = [dict(zip(cols, r)) for r in ot_rows]
             except Exception:
                 ot_rows = []
 
