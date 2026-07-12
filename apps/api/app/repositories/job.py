@@ -57,7 +57,7 @@ class JobRepository:
                         "currency" = COALESCE(EXCLUDED."currency", "Job"."currency"),
                         "postedAt" = COALESCE(EXCLUDED."postedAt", "Job"."postedAt"),
                         "updatedAt" = NOW()
-                    RETURNING {_JOB_COLUMNS}
+                    RETURNING {_JOB_COLUMNS}, (xmax = 0) AS "wasInserted"
                     ''',
                     (
                         new_id(),

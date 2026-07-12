@@ -536,3 +536,33 @@ measurement exists without a third-party detector, and an invented percentage vi
 constraint 2. SC-AG-08/REQ-10 (Langfuse) and Gmail OAuth (SC-EC-02+, SC-AUTH-04) remain blocked on
 credentials/interactive consent. SC-ST-05 is partial: per-agent model preference persists but the
 runtime stays pinned to the validated Anthropic tiers.
+
+## D-0021 — Scout truthfulness: upsert refreshes are not "discoveries"; §10.2 letter format enforcement
+
+**Date.** 2026-07-12  ·  **Status.** Accepted
+
+**Context.** `JobRepository.create` upserts on (userId, sourceUrl) and always returns a row, and
+the scout counted every returned row as `persisted`. With the 30-minute discovery timer live, every
+run re-found the same 5 postings and the dashboard feed rendered "discovered 5 new roles" in
+perpetuity while zero rows were inserted (last real insert hours earlier) — fabricated-looking
+activity in the production UI (constraint 2). Separately, generated cover letters used the banned
+generic opener and lacked the §10.2 business-letter structure (date, addressee, Re: line,
+3-paragraph body, sign-off with the candidate's real name).
+
+**Decision.**
+1. The upsert's RETURNING clause exposes `(xmax = 0) AS "wasInserted"`; the scout counts a job as
+   `persisted` only on a true insert and as `updated` on a refresh. `ScoutResult`, the
+   `/agents/scout/run` response and the AgentRun output carry both counts.
+2. The dashboard feed describes a zero-insert run as "checked job boards — no new roles"
+   (metric "N refreshed") instead of "discovered 0/5 new roles".
+3. Cover letters are composed as full business letters (Melbourne-tz date, addressee block, Re:
+   line, salutation, 3-paragraph body, "Sincerely, <real name from User row/resume contact>").
+   The corrective drafting loop feeds back §10.2 structural violations alongside guard flags; the
+   banned generic opener is stripped deterministically if it survives retries. The system-generated
+   date and signer join the guard's evidence corpus so ground-truth tokens don't false-positive.
+4. Resume tailoring preserves quantified outcomes (a rewrite that drops every metric from a
+   quantified bullet is rejected → original kept), never reuses an evidenceRef, and re-tailors
+   against the parent version's stored bullets so `changes` matches the visible diff.
+
+**Consequences.** Historic AgentRun rows keep the old inflated `persisted` counts (feed shows them
+as recorded); counts are honest from deployment forward.

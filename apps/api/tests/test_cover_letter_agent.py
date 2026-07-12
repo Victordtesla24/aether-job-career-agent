@@ -1,6 +1,9 @@
 """P2-S06 — Cover letter agent + FabricationGuard tests."""
 from __future__ import annotations
 
+import re
+
+from app.agents.cover_letter_agent import CoverLetterAgent
 from app.agents.fit_scorer import get_base_resume_path
 from app.services.fabrication_guard import FabricationGuard
 from app.services.resume_parser import parse_resume_pdf
@@ -38,9 +41,20 @@ class TestFabricationGuard:
 class TestCoverLetterAgent:
     def test_cover_letter_contains_no_invented_claims(self, client, auth_headers):
         body, job = _run_cover_letter(client, auth_headers)
-        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        parsed = parse_resume_pdf(get_base_resume_path())
+        me = client.get("/auth/me", headers=auth_headers).json()
+        signer = me.get("name") or (parsed.get("contact") or {}).get("name") or ""
+        # Mirror the agent's corpus: the letter date and signer name are
+        # system-generated ground truth, not fabrications.
         corpus = " ".join(
-            [resume_text, job["title"], job["company"], job.get("description") or ""]
+            [
+                parsed["raw_text"],
+                job["title"],
+                job["company"],
+                job.get("description") or "",
+                CoverLetterAgent._today(),
+                signer,
+            ]
         )
         assert FabricationGuard().check(body["cover_letter"], corpus) == []
 
@@ -48,6 +62,21 @@ class TestCoverLetterAgent:
         body, job = _run_cover_letter(client, auth_headers)
         assert job["title"] in body["cover_letter"]
         assert job["company"] in body["cover_letter"]
+
+    def test_cover_letter_business_format(self, client, auth_headers):
+        """§10.2 output standards: date, addressee block, salutation,
+        sign-off — and never the banned generic opener."""
+        body, job = _run_cover_letter(client, auth_headers)
+        letter = body["cover_letter"]
+        assert re.match(r"^\d{1,2} [A-Z][a-z]+ \d{4}\n", letter), "missing date line"
+        assert f"Hiring Team\n{job['company']}\nRe: {job['title']}" in letter, (
+            "missing addressee block / Re: line"
+        )
+        assert f"Dear Hiring Team at {job['company']}," in letter
+        assert "Sincerely," in letter, "missing sign-off"
+        assert "i am writing to express my interest" not in letter.lower(), (
+            "banned generic opener shipped"
+        )
 
     def test_cover_letter_requires_approval(self, client, auth_headers):
         body, _ = _run_cover_letter(client, auth_headers)

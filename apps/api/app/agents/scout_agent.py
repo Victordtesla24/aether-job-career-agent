@@ -21,6 +21,7 @@ class ScoutResult:
     """Summary of a scout run."""
 
     persisted: int = 0
+    updated: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -56,6 +57,12 @@ class ScoutAgent:
                 if key in seen:
                     continue
                 seen.add(key)
-                self._repository.create(user_id, job)
-                result.persisted += 1
+                row = self._repository.create(user_id, job)
+                # The repository upserts on (userId, sourceUrl): only a row
+                # that was actually inserted counts as a discovery — a
+                # re-discovered job is a refresh, not a new role.
+                if isinstance(row, dict) and row.get("wasInserted") is False:
+                    result.updated += 1
+                else:
+                    result.persisted += 1
         return result

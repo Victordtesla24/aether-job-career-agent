@@ -64,6 +64,14 @@ describe("describeRun", () => {
     );
   });
 
+  it("describes zero-insert scout runs as a check, not a discovery", () => {
+    const d = describeRun(run({ agentName: "scout", output: { persisted: 0, updated: 5 } }));
+    expect(d.text).toBe("checked job boards — no new roles");
+    expect(d.metric).toBe("5 refreshed");
+    const none = describeRun(run({ agentName: "scout", output: { persisted: 0, updated: 0 } }));
+    expect(none.metric).toBeNull();
+  });
+
   it("flags cover letters awaiting approval", () => {
     const d = describeRun(
       run({ agentName: "coverLetter", output: { approval_status: "pending" } }),

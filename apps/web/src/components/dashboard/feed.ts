@@ -96,10 +96,21 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
   switch (run.agentName) {
     case "scout": {
       const persisted = num(out.persisted);
+      const updated = num(out.updated);
+      if (!persisted) {
+        // A zero-insert run re-checked the boards and refreshed known
+        // postings — saying "discovered 0 new roles" every half hour reads
+        // as broken; saying "discovered N" for refreshes would be untrue.
+        return {
+          text: "checked job boards — no new roles",
+          highlight: null,
+          metric: updated ? `${updated} refreshed` : null,
+        };
+      }
       return {
-        text: `discovered ${persisted ?? 0} new role${persisted === 1 ? "" : "s"}`,
+        text: `discovered ${persisted} new role${persisted === 1 ? "" : "s"}`,
         highlight: null,
-        metric: persisted != null ? `${persisted} persisted` : null,
+        metric: `${persisted} persisted`,
       };
     }
     case "matcher": {

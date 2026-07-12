@@ -107,3 +107,56 @@ class TestValidateIntegration:
         assert result.changes == 0
         assert result.rejected == ["Architected Kubernetes clusters on GCP"]
         assert result.bullets[0]["text"] == original
+
+    def test_duplicate_evidence_ref_keeps_first_rewrite_only(self):
+        """A second rewrite of the same source bullet is rejected — duplicate
+        refs previously shipped duplicated bullets in the stored version."""
+        svc = ResumeTailorService()
+        original = "Led end-to-end delivery for the Kookaburras team across 5 squads"
+        first = "Led end-to-end delivery for the Kookaburras team across 5 squads and more"
+        second = "Led delivery for the Kookaburras team across 5 squads again"
+        raw = {
+            "bullets": [
+                {"text": first, "evidenceRef": "bullet-0"},
+                {"text": second, "evidenceRef": "bullet-0"},
+            ]
+        }
+        result = svc._validate(raw, [original], RESUME)
+        assert len(result.bullets) == 1
+        assert result.bullets[0]["text"] == first
+        assert second in result.rejected
+
+    def test_unreturned_bullets_survive_merge(self):
+        """Bullets the LLM does not return must not vanish from the tailored
+        version — the merge keeps every original in order."""
+        svc = ResumeTailorService()
+        originals = [
+            {"text": "Led end-to-end delivery for the Kookaburras team across 5 squads",
+             "evidenceRef": "bullet-3"},
+            {"text": "Reduced processing time ~92% for the delivery team",
+             "evidenceRef": "bullet-7"},
+        ]
+        raw = {
+            "bullets": [
+                {
+                    "text": "Reduced processing time ≈92% for the Kookaburras delivery team",
+                    "evidenceRef": "bullet-7",
+                }
+            ]
+        }
+        result = svc._validate(raw, originals, RESUME)
+        assert [b["evidenceRef"] for b in result.bullets] == ["bullet-3", "bullet-7"]
+        assert result.bullets[0]["text"] == originals[0]["text"]
+        assert result.changes == 1
+
+    def test_rewrite_dropping_all_metrics_is_rejected(self):
+        """§10.1: a rewrite that loses every quantified outcome from a
+        quantified bullet reverts to the original."""
+        svc = ResumeTailorService()
+        original = "Reduced processing time ~92% for the Kookaburras team"
+        dequantified = "Reduced processing time for the Kookaburras team"
+        raw = {"bullets": [{"text": dequantified, "evidenceRef": "bullet-0"}]}
+        result = svc._validate(raw, [original], RESUME)
+        assert result.changes == 0
+        assert result.bullets[0]["text"] == original
+        assert dequantified in result.rejected

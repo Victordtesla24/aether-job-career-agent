@@ -474,7 +474,12 @@ class ScoutRunRequest(BaseModel):
 def run_scout(body: ScoutRunRequest, current_user: CurrentUser) -> dict[str, Any]:
     """Kick off a scout discovery run for the authenticated user."""
     output = _dispatch(current_user["id"], "scout", body.model_dump())
-    return {"status": "accepted", "persisted": output["persisted"], "errors": output["errors"]}
+    return {
+        "status": "accepted",
+        "persisted": output["persisted"],
+        "updated": output.get("updated", 0),
+        "errors": output["errors"],
+    }
 
 
 @router.post("/fit-scorer/run")

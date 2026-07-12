@@ -143,6 +143,52 @@ class TestScoutDedupe:
         assert result.persisted == 1
         assert len(repo.created) == 1
 
+    def test_upsert_refresh_counts_as_updated_not_persisted(self, monkeypatch):
+        """A re-discovered job (upsert hit an existing row) must not be
+        reported as a new discovery — the dashboard feed renders ``persisted``
+        as "discovered N new roles"."""
+        from app.agents import scout_agent as module
+
+        class FakeAdapter:
+            def fetch(self, query: str, location: str):
+                return [
+                    {
+                        "title": "Delivery Lead",
+                        "company": "Acme",
+                        "location": "Melbourne",
+                        "remote": False,
+                        "description": "Lead delivery.",
+                        "requirements": [],
+                        "source": "a",
+                        "sourceUrl": "https://acme.example/jobs/1",
+                        "postedAt": None,
+                    },
+                    {
+                        "title": "Program Manager",
+                        "company": "Beta",
+                        "location": "Melbourne",
+                        "remote": False,
+                        "description": "Run programs.",
+                        "requirements": [],
+                        "source": "a",
+                        "sourceUrl": "https://beta.example/jobs/2",
+                        "postedAt": None,
+                    },
+                ]
+
+        class FakeRepo:
+            def create(self, user_id: str, payload: dict) -> dict:
+                # First URL already exists (upsert refresh), second is new.
+                inserted = payload["sourceUrl"].endswith("/jobs/2")
+                return {**payload, "wasInserted": inserted}
+
+        monkeypatch.setattr(module, "ADAPTERS", {"a": FakeAdapter})
+        result = module.ScoutAgent(repository=FakeRepo()).run(
+            "user-1", query="delivery lead", location="Melbourne"
+        )
+        assert result.persisted == 1
+        assert result.updated == 1
+
 
 class TestApplicationSubmit:
     def _seed_draft_application(self, client, auth_headers) -> str:

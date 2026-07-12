@@ -23,8 +23,11 @@ from app.services.llm_client import LLMClient, get_model
 
 SYSTEM_PROMPT = (
     "You are a precision resume editor. Only reword existing bullets to match "
-    "keywords. Never add skills, titles, employers not in original. Each "
-    "rewritten bullet must trace to an evidenceRef. Respond with JSON: "
+    "keywords. Never add skills, titles, employers not in original. When the "
+    "original bullet contains a quantified outcome (%, $, headcount, timeframe) "
+    "the rewrite must keep at least one of those figures. Each rewritten bullet "
+    "must trace to the evidenceRef of exactly one original bullet — never reuse "
+    "an evidenceRef twice. Respond with JSON: "
     '{"bullets": [{"text": "...", "evidenceRef": "bullet-N"}], '
     '"evidenceRefs": ["bullet-N", ...]}'
 )
@@ -219,11 +222,23 @@ class ResumeTailorService:
     def __init__(self, llm: LLMClient | None = None) -> None:
         self._llm = llm or LLMClient()
 
-    def tailor(self, resume_text: str, job_description: str) -> TailorResult:
-        bullets = extract_bullets(resume_text)
+    def tailor(
+        self,
+        resume_text: str,
+        job_description: str,
+        originals: list[dict[str, str]] | None = None,
+    ) -> TailorResult:
+        """Tailor ``originals`` bullets (or bullets extracted from
+        ``resume_text``) against ``job_description``.
+
+        Passing the parent version's stored bullets keeps re-tailoring
+        consistent: changes are counted against what the user actually sees,
+        not against the immutable base ``raw_text``.
+        """
+        structured = self._structure_originals(originals, resume_text)
         user_prompt = (
             "Job description:\n" + job_description + "\n\nOriginal bullets:\n"
-            + "\n".join(f"bullet-{i}: {b}" for i, b in enumerate(bullets))
+            + "\n".join(f"{b['evidenceRef']}: {b['text']}" for b in structured)
         )
         raw = self._llm.complete_json(
             "tailor",
@@ -232,27 +247,71 @@ class ResumeTailorService:
             model=get_model("REASONING"),
             temperature=0.0,
         )
-        return self._validate(raw, bullets, resume_text)
+        return self._validate(raw, structured, resume_text)
+
+    @staticmethod
+    def _structure_originals(
+        originals: list[dict[str, str]] | list[str] | None, resume_text: str
+    ) -> list[dict[str, str]]:
+        if originals is None:
+            return [
+                {"text": b, "evidenceRef": f"bullet-{i}"}
+                for i, b in enumerate(extract_bullets(resume_text))
+            ]
+        structured: list[dict[str, str]] = []
+        for i, b in enumerate(originals):
+            if isinstance(b, str):
+                structured.append({"text": b, "evidenceRef": f"bullet-{i}"})
+            else:
+                structured.append(
+                    {
+                        "text": b.get("text", ""),
+                        "evidenceRef": b.get("evidenceRef") or f"bullet-{i}",
+                    }
+                )
+        return structured
 
     def _validate(
-        self, raw: Any, originals: list[str], resume_text: str
+        self,
+        raw: Any,
+        originals: list[dict[str, str]] | list[str],
+        resume_text: str,
     ) -> TailorResult:
         evidence_stems, evidence_numbers = _evidence_index(resume_text)
         result = TailorResult()
-        by_ref = {f"bullet-{i}": b for i, b in enumerate(originals)}
+        structured = self._structure_originals(originals, resume_text)
+        by_ref = {b["evidenceRef"]: b["text"] for b in structured}
+        accepted: dict[str, str] = {}
         for item in raw.get("bullets", []):
             text = (item.get("text") or "").strip()
             ref = item.get("evidenceRef")
             if not text or not ref or ref not in by_ref:
                 result.rejected.append(text or "<empty>")
                 continue
+            if ref in accepted:
+                # A second rewrite of the same source bullet would duplicate
+                # content in the stored version — keep the first only.
+                result.rejected.append(text)
+                continue
+            original = by_ref[ref]
             if unsupported_tokens(text, evidence_stems, evidence_numbers):
                 # Fabrication guard (D-0015): a content token with no
                 # normalized evidence match → keep the original bullet.
                 result.rejected.append(text)
-                text = by_ref[ref]
-            result.bullets.append({"text": text, "evidenceRef": ref})
-            if text != by_ref[ref]:
+                text = original
+            elif _NUMBER_RE.search(original) and not _NUMBER_RE.search(text):
+                # Quantified-outcome guard: a rewrite that drops every metric
+                # from a quantified bullet weakens the resume — keep original.
+                result.rejected.append(text)
+                text = original
+            accepted[ref] = text
+        # Merge: every original bullet survives in order; validated rewrites
+        # replace their source by evidenceRef. ``changes`` therefore counts
+        # exactly the bullets a diff against the parent will show.
+        for b in structured:
+            text = accepted.get(b["evidenceRef"], b["text"])
+            result.bullets.append({"text": text, "evidenceRef": b["evidenceRef"]})
+            if text != b["text"]:
                 result.changes += 1
         return result
 

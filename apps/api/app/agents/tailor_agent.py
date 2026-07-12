@@ -77,7 +77,11 @@ class TailoringAgent:
         )["raw_text"]
 
         jd = f"{job['title']} at {job['company']}. {job.get('description', '')}"
-        result = self._service.tailor(resume_text, jd)
+        # Tailor against the version's stored bullets when present so change
+        # counts (and the diff endpoint) are measured against the parent the
+        # user selected — not re-derived from the immutable base raw_text.
+        parent_bullets = (base.get("sections") or {}).get("bullets") or None
+        result = self._service.tailor(resume_text, jd, originals=parent_bullets)
 
         tailored = self._resumes.create(
             user_id,
