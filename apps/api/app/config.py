@@ -11,7 +11,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: Semantic version of the API surface. Bumped as the API contract evolves.
-API_VERSION = "0.1.0"
+API_VERSION = "0.2.0"
 
 #: Human-facing service title (also used as the OpenAPI title).
 API_TITLE = "Aether API"

@@ -1,9 +1,160 @@
 # Aether Delivery Progress
-Last updated: 2026-07-02 by Aether Delivery Agent Session 2
-Current phase: Phase 1 — Foundation  |  Current slice: all planned Phase 1 slices complete + deployed & verified (P1-S12 shell polish added during verification)
-Branch: phase-1/foundation  |  CI: pipeline defined + pushed at `ci/github-actions-ci.yml`; the identical `.github/workflows/ci.yml` activation commit is pending the app's `workflows` permission (see `ci/README.md`)
+Last updated: 2026-07-10 by Aether Delivery Agent Session 4
+Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: P2-S10 complete; Phase 2 deployed (frontend + API live)
+Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
 
-## Phase 1 — Foundation (in progress)
+## Phase-2 adversarial audit + fix loop (2026-07-09)
+
+Full wireframe↔backend wiring audit against production (17 wireframes, 37 API routes, journeys
+J1–J7). Deliverables: `docs/delivery/TRACEABILITY-MATRIX.md` (per-wireframe verdicts with live
+proof) and `docs/delivery/DEFECTS-PHASE-2-AUDIT.md` (defects D1–D9 with before/after evidence).
+
+- **Fixed & verified on production:** D1 524-timeout on cover-letter/pipeline (hard wall-clock LLM
+  cap + shared pipeline budget + provider override, ADR D-0017 — now 200 in ≈60–62 s); D2
+  approve/reject now moves the linked application draft→submitted/rejected (ADR D-0016); D3
+  contaminated cover-letter retry fixture neutralised; D4 per-job "Tailor Resume" deep link; D5
+  resume Download with graceful 501 note; D6 Story Bank create/edit STAR form; D7 application
+  detail panel + pending-approvals banner; D8 approval expiry badge + disabled actions; D9
+  stage-conversion rates rendered on analytics.
+- **New env vars** (`.env.example`): `AETHER_MODEL_FALLBACK`, `AETHER_LLM_BASE_URL`,
+  `AETHER_LLM_API_KEY` (any OpenAI-compatible provider, e.g. Anthropic Claude).
+- **Gates:** pytest 104 passed / coverage 89%; ruff+mypy clean; vitest 47 passed; lint,
+  type-check, build clean; Playwright e2e 24 passed.
+
+## Section C — BA resume built, registered & tailored (2026-07-10)
+
+- **PDF:** `assets/resume/Vik_Resume_BA_Final.pdf` (3 pages) — Senior Business Analyst / Product
+  Owner variant, rebuilt programmatically (`scripts/generate_ba_resume.py`, reportlab) in the
+  **identical visual format** of `assets/resume/Vik_Resume_Final.pdf` (two-column, left rail,
+  peach title panel, coral accents; format spec measured from the original with PyMuPDF). Every
+  claim traces to `Vik_Resume_BA.pdf` / `Vik_Resume_Final.pdf` only — no fabrication.
+  `Vik_Resume_Final.pdf` untouched (md5 `16b856c0f3f4ec0d801fdde6d084452c` verified before/after).
+- **Registered via the app's own API:** new `POST /resumes` ingestion endpoint +
+  `scripts/ingest_ba_resume.py` → production root resume id `c57a44d136100943494554143`
+  (version 15). `GET /api/resumes` now returns **15 resumes / 2 roots** (BA + demo seed); visible
+  in Resume Studio (screenshot `reverify-C-resume-studio.png` in the evidence archive).
+- **Tailoring against it:** `POST /agents/tailor/run` with new optional `resume_id` →
+  **20 accepted changes**, child resume `c39cbf4a6e6d1b3b2fe37787d` parented to the BA root with
+  the same `formatHash` (`2df88344d04efe30`). ADR **D-0018**.
+- **Gates after changes:** pytest **108 passed** / coverage **89%**; ruff + mypy clean.
+
+## Production defect fixes (2026-07-10)
+
+Live-environment defects found on https://5cb5f0620.abacusai.cloud, all fixed and verified live:
+
+1. **Cover-letter agent hang (>120 s, then 502).** Root cause: `_call_live` used urllib with a
+   120 s per-call timeout and the corrective drafting loop (≤3 drafts × 2-model fallback chain)
+   had **no overall budget** — worst case 6 live OpenRouter calls ≈ 720 s while the free tier
+   stalls. Fix (`llm_client.py`): httpx with strict per-call timeouts (connect 10 s / read 30 s)
+   plus a client-wide wall-clock budget (`AETHER_LLM_BUDGET_SECONDS`, default 60 s) spanning the
+   whole fallback chain; once exhausted, requests degrade to fixture replay or a typed 503 —
+   never a hang. Two extra graceful-degradation paths: malformed/truncated live JSON falls back
+   to the fixture (was an unhandled 500), and a missing per-attempt fixture key (`retry`/`retry2`)
+   degrades to the `default` fixture (was a spurious 503). Live verification: cover-letter run for
+   the previously-hanging job returned **HTTP 200 in ~94 s** (bounded; was infinite) with a real
+   draft + pending approval.
+2. **Tailoring guard rejected every rewrite (`changes: 0`).** Raw-verbatim token matching flagged
+   unicode punctuation, inflections and number formats as fabrication. Fixed with a normalized
+   evidence index (unicode folding + stemming + number-value equivalence + stopword exemption) —
+   see **ADR D-0015**. Live verification: tailor run returned `changes: 22` with 3 genuinely
+   novel bullets rejected; `/resumes/{id}/diff` shows evidence-linked before/after entries.
+3. **`/login` 404.** Real login page added (`apps/web/src/app/login/page.tsx`): demo credentials
+   prefilled, POSTs `/api/auth/login`, stores the JWT under the `aether_token` localStorage key,
+   redirects to `/dashboard`; wrong credentials show an inline alert. Covered by 3 Playwright specs.
+4. **nginx proxy timeout.** `/api/` location on the live vhost now has
+   `proxy_connect_timeout 10s; proxy_send_timeout 30s; proxy_read_timeout 180s` (server-side
+   config only — not a repo file).
+5. **Wireframe sweep (design/screens/*.html as contract).** Two rendered-but-unwired controls with
+   real backend support were wired: Jobs page **source filter** (Seek/LinkedIn/Indeed →
+   `GET /jobs?source=`) and Cover-letter studio **Regenerate** button (re-runs the cover-letter
+   agent for that letter's job). Controls without backend support (kanban drag, topbar search,
+   approval edit-and-approve, analytics export) were intentionally left as-is.
+6. **Test determinism.** `tests/conftest.py` now forces `AETHER_LLM_MODE=replay` (matching CI) so
+   a developer `.env` with `auto` can never make the suite hit the rate-limited live backend.
+
+Verification (2026-07-10): **99 pytest**, **85 vitest**, **24 Playwright** — all green; ruff +
+mypy + eslint + tsc clean; `pnpm build` clean; all dashboard routes + `/login` return 200 live.
+
+## Phase 2 — Intelligence (session started 2026-07-02)
+`phase-1/foundation` was merged into `main` (merge commit `969643e`) and `phase-2/intelligence` was
+branched from the merged `main`. Session-setup checklist:
+
+- **Environment**: `.env` extended with Phase 2 model tiers (`AETHER_MODEL_REASONING`,
+  `AETHER_MODEL_FAST`, `AETHER_MODEL_STRUCTURED`, `AETHER_MODEL_LIGHT`), `AETHER_LLM_MODE=auto`,
+  `DATABASE_URL` / `DATABASE_URL_TEST` (hosted PostgreSQL), `REDIS_URL`, job-board base URLs
+  (`SEEK_BASE_URL`, `LINKEDIN_BASE_URL`, `INDEED_BASE_URL`), and NLP settings
+  (`SENTENCE_TRANSFORMERS_HOME`, `SPACY_MODEL`). `.env.example` updated with matching placeholders.
+- **Database**: Abacus.AI hosted PostgreSQL (single database granted; no `CREATEDB` privilege), so
+  dev/test isolation uses dedicated schemas `aether` and `aether_test` via Prisma's `?schema=`
+  URL parameter. `prisma db push` applied the full Phase 1 schema to both (10 tables each).
+  The hosted server does not ship pgvector, so `JobEmbedding.vector` was changed from
+  `Unsupported("vector(1536)")` to a portable `Float[]` (see schema comment; cosine similarity is
+  computed application-side, Pinecone remains the optional external vector store).
+- **Redis**: `redis-server` installed and running locally (`redis://localhost:6379`, PONG verified).
+- **OpenRouter**: `scripts/validate-openrouter.mjs` passed — key authenticated; free models
+  transiently rate-limited (HTTP 429), treated as reachable.
+- **Baseline**: all Phase 1 tests re-run green on `phase-2/intelligence` (see verification below).
+
+### Phase 2 Slice Ledger
+
+| Slice  | Title                                        | Status | Tests | Notes |
+|--------|----------------------------------------------|--------|-------|-------|
+| P2-S01 | User repository + real auth (bcrypt + JWT)   | ✅     | 10 py | `POST /auth/register` (201, policy: ≥8 chars + digit, 409 on dup email, hash never exposed), `POST /auth/login` (JWT HS256, 24h exp, userId/email/iat/exp claims), `get_current_user` bearer dependency guards `/jobs`. `UserRepository` = raw psycopg2 over the Prisma `User` table (new nullable `passwordHash` column, `prisma db push` applied to `aether` + `aether_test`). |
+| P2-S02 | Job discovery: adapters + persistence        | ✅     | 7 py + 6 ts | `BaseAdapter` (fixture mode primary; live HTTP intentionally `NotImplementedError` — never fake live data) + Seek/LinkedIn/Indeed adapters + registry. `JobRepository` upserts on new unique `(userId, sourceUrl)` (idempotent re-scouting). `ScoutAgent` fans out over all sources. Routes: `GET /jobs` (status/source/saved/sort filters), `GET /jobs/{id}`, `POST /jobs/{id}/save`, `DELETE /jobs/{id}` (soft archive), `POST /agents/scout/run` → 202. Web: `src/lib/api/jobs.ts` typed client with zod validation (zod added to apps/web). Fixtures: `apps/api/tests/fixtures/http/{seek,linkedin,indeed}/jobs.json` (2 realistic AU tech jobs each). |
+| P2-S03 | ATS scoring engine (0–100, deterministic)    | ✅     | 7 py | `ATSEngine.score(resume, jd) -> ATSScore` — 0.4·keyword_match (TF-IDF-ranked JD keywords → resume coverage) + 0.4·semantic_similarity (sentence-transformers all-MiniLM-L6-v2 iff installed AND cached in `SENTENCE_TRANSFORMERS_HOME=/tmp/aether_models`; deterministic token-overlap fallback otherwise — never downloads at scoring time) + 0.2·experience score (regex years parsing, pro-rated gap). `requires_review=True` below 60. scikit-learn in requirements.txt; sentence-transformers optional in `requirements-ml.txt` (heavy torch dep kept out of CI). |
+
+| P2-S04 | LLM fit scoring (record-replay client)       | ✅     | 2 py | `LLMClient` with record/replay modes (`AETHER_LLM_MODE`, default **replay** — CI/tests never hit the network; fixtures at `apps/api/tests/fixtures/llm/<prompt>/<key>.json`), model tiers resolved from `AETHER_MODEL_<TIER>` env. `FitScorerAgent` scores unscored jobs against the real base resume (`assets/resume/Vik_Resume_Final.pdf`, override `AETHER_RESUME_PDF`) and persists `fitScore`; `POST /agents/fit-scorer/run`; `GET /jobs?sort=fit_score` alias. |
+| P2-S05 | Resume tailoring w/ evidence-linked diffs    | ✅     | 5 py | `ResumeTailorService.tailor()` — every rewritten bullet must be a token-subset of the evidence bullet + carry an `evidenceRef`; violations are dropped, never invented. `ResumeRepository` (immutable versions, `parentId` chain, base v1 auto-ingested from the PDF). Routes: `GET /resumes`, `GET /resumes/{id}`, `GET /resumes/{id}/diff` (before/after/evidenceRef), `POST /agents/tailor/run` (creates new version, never mutates base). |
+| P2-S06 | Approval gate state machine                  | ✅     | 7 py | `ApprovalRepository` + `ApprovalService`: pending → approved/rejected, terminal states return 409, 48h expiry (expired approve → 409), `assert_action_allowed` blocks execution of unapproved actions with 403. Routes: `GET /approvals?status=`, `GET /approvals/{id}`, `POST /approvals/{id}/{approve,reject,execute}`. Nothing leaves the system without an explicit human decision. |
+| P2-S07 | Cover letters + fabrication guard            | ✅     | 6 py | `FabricationGuard` — capitalized entities & numeric claims in generated text must appear in resume evidence (punctuation-normalized tokens, exempt-word list); flagged drafts raise `FabricationError` and are **not** persisted. `CoverLetterAgent`: deterministic header (job title + company) + replayed LLM body; each draft stored on the `Application` row and queued as a pending `application_submit` approval (payload `kind=cover_letter`). Routes: `GET /cover-letters`, `GET /cover-letters/{id}`. |
+| P2-S08 | Agent console + audited runs + story bank    | ✅     | 3 py | Every agent invocation recorded as an `AgentRun` (status/input/output/error/cost/duration). `GET /agents` (7-agent roster w/ `approval_gated` flags), `GET /agents/runs`, dedicated run routes (scout 202, fit-scorer, tailor, cover-letter, story-extractor) + `POST /agents/pipeline/run` (scout → fitScorer → tailor → coverLetter on the top job; stops at the approval gate). `StoryExtractorAgent` mines STAR stories from the resume — stories with metrics not evidenced in the resume are dropped; `GET/POST/PUT/DELETE /stories`. |
+| P2-S09 | Analytics + applications API + demo seed     | ✅     | 5 py | `GET /analytics/funnel?period=7d|30d|90d|all` (invalid → 422), `/analytics/ats-distribution` (10 buckets), `/analytics/agent-roi`, `/analytics/conversion`; `GET /applications` joined with Job. `scripts/seed_demo.py` — idempotent demo user (`demo@aether.dev`) + canonical funnel (847 jobs / 412 applications) via batched inserts (hosted-PG friendly). API version bumped to **0.2.0**. |
+| P2-S10 | LangGraph orchestration graph (TS)           | ✅     | 6 ts | `AetherGraph` (`packages/agents/src/graph/aether-graph.ts`): supervisor → scout → matcher → tailor → coverLetter node chain built on `@langchain/langgraph` `StateGraph`/`Annotation`; `runNode()` records `GraphRunRecord`s; approval-gated nodes (`tailor`, `coverLetter`) halt with `pending_approval` instead of acting. |
+| P2-FE  | Dashboard frontend (8 pages, live wiring)    | ✅     | 3 ts + build | `apps/web/src/lib/api/client.ts` (demo auto-login, 401 retry, `/api` proxy base) + 7 typed zod clients. Pages: jobs (filters/save/Run Discovery), resume (versions/tailor/diff), stories (STAR cards/extractor), applications (6-column kanban), agents (roster/runs/pipeline), analytics (funnel + period selector, ATS bars, ROI), approvals (approve/reject queue), cover-letters (job select/draft viewer). Dashboard home stats now live from `GET /analytics/funnel` (`DashboardStats`; hardcoded Phase 1 STATS removed, guarded by `src/__tests__/dashboard/live-stats.test.ts`). e2e placeholder spec repointed at a still-unbuilt route (`/dashboard/interviews`). |
+
+**Test infrastructure (P2-S01):** `apps/api/tests/conftest.py` — points the app at
+`DATABASE_URL_TEST` (schema `aether_test`) before import, `client` (TestClient, truncates
+`Job`/`User` per test), `db_session` (raw psycopg2), `auth_headers` (register+login fixture user).
+`app/db.py` translates Prisma-style `?schema=` URLs into psycopg2 `search_path` options;
+connections are short-lived (hosted PG caps at 25 concurrent).
+
+**Verification after P2-S03:** API 46/46 pytest green (22 Phase 1 + 24 new), ruff + mypy clean;
+Node 76/76 green across workspaces (shared 4, web 35, agents 18, db 12, queue 7); web lint +
+type-check clean.
+
+**Verification after P2-S10 + frontend (2026-07-02):** API **74/74** pytest green; ruff + mypy
+clean (48 files). Node **85/85** green across workspaces (shared 4, web 38, agents 24, db 12,
+queue 7); web lint + type-check + `next build` clean (13 routes). **Deployed:**
+`aether-api.service` (uvicorn :8000, systemd) + `aether-web.service` (Next :3000) behind nginx —
+`https://5cb5f0620.abacusai.cloud/dashboard` → 200, `/api/health` → `{"status":"ok","version":"0.2.0"}`;
+demo data seeded and the live funnel verified end-to-end with the demo login. `.env` `NEXTAUTH_SECRET` rotated from the `change-me` placeholder to a random
+64-hex secret (JWT signing uses `JWT_SECRET` || `NEXTAUTH_SECRET`).
+
+**Post-review hardening (2026-07-09):** an independent review found 3 genuine defects — all fixed:
+1. **TS type-check failure** in `packages/agents/src/graph/aether-graph.ts` (7 errors): the
+   LangGraph `StateGraph` was built with un-chained `addNode` calls, so `addEdge` only knew
+   `__start__`/`__end__`. Fixed with the chained builder pattern (each `.addNode()` widens the
+   node-name union) — no `as any`. `pnpm -r run type-check` → exit 0.
+2. **Live 500s on LLM agent endpoints**: 3 of 4 configured OpenRouter free-tier model ids had been
+   retired upstream (404). Model ids refreshed in `.env`/`.env.example`; `LLMClient` `auto` mode now
+   has a resilience chain (primary model → one retry with `openai/gpt-oss-20b:free` → recorded
+   fixture → typed `LLMUnavailableError` mapped to HTTP **503**, never a 500). See ADR **D-0014**.
+   Live-verified: `POST /agents/tailor/run`, `/agents/cover-letter/run`, `/agents/story-extractor/run`
+   all return 200 through real OpenRouter calls. Also hardened: `FabricationGuard` no longer
+   false-positives on sentence-initial title-case words; cover-letter agent gained a corrective
+   drafting loop (≤3 attempts feeding flagged terms back to the model).
+3. **Playwright e2e gap** (3 tests → **21 passing**): new specs for jobs, resume, analytics,
+   agents, approvals, stories, applications and cover-letters run against the production build with
+   the live API (`next.config.mjs` now mirrors the nginx `/api` → :8000 rewrite for standalone
+   `next start`).
+
+**Verification after post-review hardening (2026-07-09):** API **81/81** pytest green (74 + 7 new
+`test_llm_resilience.py`); ruff + mypy clean (48 files). Node **85/85** vitest green;
+`pnpm -r run type-check` + lint clean; `next build` clean (13 routes). Playwright **21/21** e2e
+green. Redeployed and live-verified: dashboard → 200, `/api/health` → 0.2.0, canonical funnel
+847/412/156/23/4, all three LLM agent runs → 200.
+
+## Phase 1 — Foundation (complete — merged to main 2026-07-02)
 Strict TDD (RED → GREEN → REFACTOR), small vertical slices, one conventional commit per slice on
 `phase-1/foundation`. `main` is untouched this phase (branch pushed only). No secrets committed; the
 résumé PDF (`assets/resume/Vik_Resume_Final.pdf`) is read-only and never modified.

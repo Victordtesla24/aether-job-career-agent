@@ -1,0 +1,5 @@
+# Optional ML extras for the ATS engine (P2-S03). Heavy: pulls in torch.
+# Install with: pip install -r requirements-ml.txt
+# Set SENTENCE_TRANSFORMERS_HOME=/tmp/aether_models and pre-download the
+# all-MiniLM-L6-v2 model; the engine only uses it when already cached.
+sentence-transformers>=3.0

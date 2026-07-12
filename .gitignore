@@ -13,6 +13,7 @@ out/
 dist/
 build/
 coverage/
+.coverage
 *.tsbuildinfo
 .turbo/
 

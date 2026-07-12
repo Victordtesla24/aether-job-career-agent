@@ -10,7 +10,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import health
+from app.routers import (
+    agents,
+    analytics,
+    applications,
+    approvals,
+    auth,
+    cover_letters,
+    health,
+    jobs,
+    resumes,
+    stories,
+    workspaces,
+)
 
 
 def create_app() -> FastAPI:
@@ -37,6 +49,16 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
+    app.include_router(agents.router, prefix="/agents", tags=["agents"])
+    app.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
+    app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
+    app.include_router(cover_letters.router, prefix="/cover-letters", tags=["cover-letters"])
+    app.include_router(stories.router, prefix="/stories", tags=["stories"])
+    app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+    app.include_router(applications.router, prefix="/applications", tags=["applications"])
+    app.include_router(workspaces.router, tags=["workspaces"])
 
     return app
 

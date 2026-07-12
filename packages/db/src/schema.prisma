@@ -1,17 +1,17 @@
-// Aether Prisma schema — Phase 1 Foundation.
-// pgvector is enabled via the postgresqlExtensions preview feature. Embeddings
-// are stored as a native `vector(1536)` column (Unsupported: not queryable via
-// the JS client, populated/queried through raw SQL in the matching pipeline).
+// Aether Prisma schema — Phase 1 Foundation (Phase 2 portability tweak).
+// The hosted PostgreSQL (Abacus.AI) does not ship the pgvector extension, so
+// embeddings are stored as a portable `Float[]` (double precision[]) column.
+// Similarity search runs in the matching pipeline (Python / sentence-transformers)
+// with cosine similarity computed application-side; Pinecone remains the
+// optional external vector store for large-scale retrieval.
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [vector]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +71,15 @@ enum AgentRunStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  image     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  // bcrypt hash for credentials auth (P2-S01). Nullable: OAuth-only users
+  // have no local password.
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   jobs             Job[]
   resumes          Resume[]
@@ -118,16 +121,19 @@ model Job {
   applications    Application[]
   tailoredResumes Resume[]      @relation("JobTailoredResumes")
 
+  // Idempotent discovery: the same posting (per user) is upserted, never
+  // duplicated (P2-S02). NULL sourceUrls are exempt per SQL semantics.
+  @@unique([userId, sourceUrl])
   @@index([userId])
   @@index([status])
 }
 
 model JobEmbedding {
-  id        String                       @id @default(cuid())
-  jobId     String                       @unique
-  vector    Unsupported("vector(1536)")?
+  id        String   @id @default(cuid())
+  jobId     String   @unique
+  vector    Float[]
   model     String
-  createdAt DateTime                      @default(now())
+  createdAt DateTime @default(now())
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 }
@@ -195,7 +201,7 @@ model ApprovalRequest {
   resolvedAt    DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application?  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -235,7 +241,7 @@ model EmailThread {
   updatedAt      DateTime @updatedAt
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
   contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([userId])

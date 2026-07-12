@@ -6,13 +6,12 @@ import { fileURLToPath } from 'node:url';
 const schema = readFileSync(fileURLToPath(new URL('../schema.prisma', import.meta.url)), 'utf8');
 
 describe('prisma schema', () => {
-  it('declares the postgresql datasource with the pgvector extension', () => {
+  it('declares the postgresql datasource without provider-specific extensions', () => {
+    // Phase 2 portability: the hosted PostgreSQL has no pgvector, so the schema
+    // must not require the `vector` extension (or the preview feature for it).
     expect(schema).toMatch(/provider\s*=\s*"postgresql"/);
-    expect(schema).toMatch(/extensions\s*=\s*\[[^\]]*vector[^\]]*\]/);
-  });
-
-  it('enables the postgresqlExtensions preview feature', () => {
-    expect(schema).toMatch(/previewFeatures\s*=\s*\[[^\]]*postgresqlExtensions[^\]]*\]/);
+    expect(schema).not.toMatch(/extensions\s*=\s*\[[^\]]*vector[^\]]*\]/);
+    expect(schema).not.toMatch(/previewFeatures\s*=\s*\[[^\]]*postgresqlExtensions[^\]]*\]/);
   });
 
   it('defines every Phase-1 model', () => {
@@ -32,8 +31,8 @@ describe('prisma schema', () => {
     }
   });
 
-  it('stores the job embedding as a pgvector column', () => {
-    expect(schema).toMatch(/vector\s+Unsupported\("vector\(1536\)"\)/);
+  it('stores the job embedding as a portable Float[] column', () => {
+    expect(schema).toMatch(/model\s+JobEmbedding\s*\{[\s\S]*?vector\s+Float\[\]/);
   });
 
   it('keeps a resume formatHash and links tailored resumes to a parent + source job', () => {

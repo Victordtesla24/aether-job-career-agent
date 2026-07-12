@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "jobkey": "a1b2c3d4e5f60718",
+      "jobtitle": "Full Stack Developer (React/Node)",
+      "company": "Deputy",
+      "formattedLocation": "Sydney NSW 2000",
+      "remoteWorkModel": { "text": "Hybrid work" },
+      "snippet": "Deputy builds workforce management software used by 350k+ workplaces. We need a full-stack developer comfortable across React, TypeScript, Node.js and GraphQL. Requirements: 3+ years commercial experience, testing discipline (Jest/Playwright), CI/CD familiarity.",
+      "formattedRelativeTime": "2 days ago",
+      "pubDate": "2026-06-29T09:30:00Z",
+      "url": "https://au.indeed.com/viewjob?jk=a1b2c3d4e5f60718"
+    },
+    {
+      "jobkey": "f9e8d7c6b5a41302",
+      "jobtitle": "DevOps Engineer",
+      "company": "Culture Amp",
+      "formattedLocation": "Melbourne VIC",
+      "remoteWorkModel": { "text": "Remote" },
+      "snippet": "Culture Amp is hiring a DevOps engineer to own our AWS platform: EKS, Terraform, GitHub Actions pipelines and observability with Datadog. Requirements: 4+ years in platform/SRE roles, strong scripting (Python or Bash), and incident management experience.",
+      "formattedRelativeTime": "1 day ago",
+      "pubDate": "2026-07-01T01:10:00Z",
+      "url": "https://au.indeed.com/viewjob?jk=f9e8d7c6b5a41302"
+    }
+  ]
+}

@@ -245,3 +245,232 @@ an error rather than a roadmap state).
 on the live deployment (all 12 nav routes 200). The placeholder is deliberately honest about scope, so it
 does not overstate Phase 1. **Reversible?** Yes — deleting the catch-all route restores the prior
 behaviour; the resolver is additive and independently useful for future active-nav needs.
+
+
+
+## D-0010 — Cover letters live on the `Application` row (no new Prisma model)
+
+**Date.** 2026-07-02 (P2-S07)
+
+**Context.** The Prisma schema has no `CoverLetter` model, but P2-S07 needs to persist drafts,
+list them, and route them through the approval gate. Adding a model means a schema migration on
+the shared hosted Postgres mid-phase.
+
+**Decision.** Store each draft on an `Application` row (`coverLetter` column, `status=draft`);
+the cover-letter id *is* the application id. `ApprovalRequest.type` only enumerates
+`application_submit | email_send | offer_response`, so cover-letter approvals use
+`application_submit` with `payload.kind = "cover_letter"` as the discriminator.
+
+**Alternatives.** (a) New `CoverLetter` model + migration (rejected for now: schema churn mid-slice
+on a shared DB; the Application row is the natural owner since a letter exists only in service of an
+application). (b) Extend the `ApprovalType` enum (rejected: Postgres enum migration for a value the
+payload can express losslessly).
+
+**Consequences.** Zero schema changes; drafts appear in both `/cover-letters` and the applications
+kanban (`draft` column) for free. **Reversible?** Yes — a later `CoverLetter` model can be backfilled
+from `Application.coverLetter`.
+
+## D-0011 — Record-replay LLM client; CI and tests never call a model
+
+**Date.** 2026-07-02 (P2-S04..S08)
+
+**Context.** Fit scoring, tailoring, cover letters and story extraction all need LLM output, but
+tests must be deterministic, free, and offline; and generated claims must never outrun the resume.
+
+**Decision.** `LLMClient` with `AETHER_LLM_MODE=record|replay` (default **replay**): replay reads
+fixtures from `apps/api/tests/fixtures/llm/<prompt_name>/<key>.json`; record mode (opt-in, live key)
+writes them. Model tiers resolve from `AETHER_MODEL_<TIER>` env vars. Fixture content policy: every
+number/entity in a fixture must exist in the real base resume, because the fabrication guard and
+token-subset validators run on replayed output exactly as they would on live output.
+
+**Alternatives.** Mock at the HTTP layer per test (rejected: N copies of the same canned payloads,
+and no path to "flip one env var and go live"). Skip validation in tests (rejected: the guard *is*
+the product).
+
+**Consequences.** 74 API tests run hermetically; live mode is a config change, not a code change.
+**Reversible?** Yes — the client is a thin seam; swapping in a provider SDK touches one module.
+
+## D-0012 — Web API access: nginx `/api/` proxy + demo auto-login client
+
+**Date.** 2026-07-02 (P2 frontend + deployment)
+
+**Context.** The Next.js app (:3000) and FastAPI (:8000) sit behind one nginx vhost
+(`5cb5f0620.abacusai.cloud`). Browser code needs a same-origin API base (no CORS) and a bearer
+token, but the demo deployment has no interactive login UI yet.
+
+**Decision.** nginx routes `location /api/ { proxy_pass http://127.0.0.1:8000/; }` (prefix
+stripped) ahead of the catch-all `/` → :3000. `src/lib/api/client.ts` resolves the base URL
+(env override → `/api` in the browser → `localhost:8000` for SSR/tests), auto-logs-in with the
+seeded demo user on first request, caches the JWT in `localStorage`, and retries once on 401.
+Both services run under systemd (`aether-api.service`, `aether-web.service`).
+
+**Alternatives.** Next.js rewrites to :8000 (rejected: couples deploy topology into app config and
+double-proxies). Cookie session via NextAuth against FastAPI (deferred: real login UX is a later
+slice; the client seam already accepts an injected token).
+
+**Consequences.** Same-origin API calls, zero CORS config, demo works logged-out; swapping
+auto-login for real auth only touches `getToken()`. **Reversible?** Yes.
+
+## D-0013 — Orchestration: LangGraph `StateGraph` with an inspectable per-node seam
+
+**Date.** 2026-07-02 (P2-S10)
+
+**Context.** Phase 2 needs the supervisor → scout → matcher → tailor → coverLetter flow expressed
+as a real graph (the Phase-3 runtime target) while staying unit-testable without network or model
+calls, and while honouring the approval gate.
+
+**Decision.** `AetherGraph` builds a compiled `@langchain/langgraph` `StateGraph` over an
+`Annotation`-typed state, *and* exposes `runNode(name, state)` — a direct, synchronous seam that
+records a `GraphRunRecord` per invocation. Approval-gated nodes (`tailor`, `coverLetter`) return
+`pending_approval` and halt the chain rather than acting. Tests exercise both the node seam and the
+compiled graph.
+
+**Alternatives.** Hand-rolled async pipeline (rejected: throws away LangGraph checkpointing and
+interrupts we want in Phase 3). Only testing the compiled graph (rejected: per-node assertions and
+run auditing get much noisier).
+
+**Consequences.** +6 TS tests; `@langchain/langgraph` + `@langchain/core` added to
+`packages/agents`. **Reversible?** Yes — nodes are plain functions; the graph wiring is one file.
+
+## D-0014 — Volatile OpenRouter free-tier model ids: env-configured with automatic fallback chain
+
+**Date.** 2026-07-09 (post-review hardening)
+
+**Context.** An independent review found the live LLM agent endpoints returning 500: three of the
+four configured OpenRouter free-tier model ids (`deepseek/deepseek-chat-v3-0324:free`,
+`qwen/qwen-2.5-72b-instruct:free`, `meta-llama/llama-3.1-8b-instruct:free`) had been retired
+upstream (HTTP 404). OpenRouter's free-tier catalogue is volatile — ids appear and disappear
+without notice — so any hard-coded id will eventually rot.
+
+**Decision.** Model ids stay configuration (`AETHER_MODEL_REASONING/STRUCTURED/FAST/LIGHT` env
+vars, refreshed to currently-live ids: `openai/gpt-oss-120b:free`,
+`qwen/qwen3-next-80b-a3b-instruct:free`, `meta-llama/llama-3.3-70b-instruct:free`,
+`meta-llama/llama-3.2-3b-instruct:free`) and `LLMClient` gains a resilience chain in `auto` mode:
+1. call the configured model; 2. on any failure (404/429/5xx/network/empty content) retry once
+with `openai/gpt-oss-20b:free`; 3. fall back to the recorded fixture if one exists; 4. otherwise
+raise a typed `LLMUnavailableError`, which the agents router maps to a clean **HTTP 503
+"LLM backend unavailable"** — never an unhandled 500. Successful live calls record a fixture only
+when none exists, so curated replay fixtures are never clobbered by variable live output. CI and
+tests remain in `replay` mode.
+
+**Alternatives.** Pinning to paid models (rejected: cost for a demo); querying the OpenRouter
+`/models` catalogue at startup (rejected: adds a network dependency to boot and still races
+mid-flight retirements); hiding failures by always serving fixtures (rejected: masks real outages).
+
+**Consequences.** +7 pytest (`test_llm_resilience.py`) covering the fallback chain, fixture
+fallback and the 503 contract; `FabricationGuard` no longer false-positives on sentence-initial
+title-case words; the cover-letter agent gained a corrective drafting loop (≤3 attempts, feeding
+flagged terms back to the model). **Reversible?** Yes — model ids are env vars; the fallback chain
+is one method.
+
+
+## D-0015 — Tailoring guard: evidence normalization instead of raw-verbatim token matching
+
+**Context.** In production the tailoring agent returned `changes: 0` on every run: the
+anti-fabrication validator in `resume_tailor.py` required every token of a rewritten bullet to
+appear *verbatim* in the original bullet set. Any legitimate rewording — a unicode hyphen
+(`e‑commerce` vs `e-commerce`), `≈92%` vs `92 percent`, `10,000` vs `10000`, `leading` vs `led`,
+or a harmless stopword ("the", "of") — was flagged as fabrication, so the guard reverted every
+bullet and the agent could never produce a tailored resume.
+
+**Decision.** Novelty is now judged against a *normalized evidence index* built from the full
+resume text (`_evidence_index` / `unsupported_tokens`):
+1. **Unicode folding** — hyphen/dash/minus variants → `-`, curly quotes → `'`, `≈`/`∼` → `~`,
+   `％` → `%`, nbsp/thin spaces → space, `…` → `...`, `×` → `x`;
+2. **Case folding + light stemming** — suffix stripping (`ing`, `ed`, `er`, `est`, `es`, `ly`,
+   `s`, `ies→y`) so inflectional variants of an evidenced word are accepted;
+3. **Number-format equivalence** — numeric tokens compare by value after comma/format stripping,
+   so `92%`, `≈92%` and `92 percent` are one fact;
+4. **Stopword exemption** — function words and numeric qualifiers (`percent`, `approximately`,
+   `roughly`, …) carry no factual claim and are never counted as novel.
+A bullet is rejected (and reverted to the original) **iff** it still contains a content token
+whose stem/value is absent from the resume evidence — new skills, tools, employers and metrics
+are still rejected exactly as before.
+
+**Alternatives.** Semantic-similarity scoring via the LLM (rejected: uses the very component the
+guard must not trust); whitelisting per-bullet diffs by hand (rejected: unscalable); loosening the
+guard to "reject only numbers" (rejected: would admit fabricated skills/tools).
+
+**Consequences.** Tailoring now yields real accepted changes in production (verified live:
+`changes: 22` with 3 genuinely-novel bullets rejected) while all negative fabrication tests still
+pass. +11 pytest (`test_guard_normalization.py`) pin the accept/reject contract.
+**Reversible?** Yes — the normalization pipeline is three pure functions in `resume_tailor.py`.
+
+
+## D-0016 — Approval resolution propagates to the linked Application
+
+**Context.** Phase-2 audit journey J4: approving or rejecting an `application_submit` approval
+flipped only the `ApprovalRequest` row. The linked `Application` (FK `applicationId`) stayed in
+`draft` forever, so the Applications kanban never reflected any decision (defect D2).
+
+**Decision.** `ApprovalService.resolve()` now synchronises the linked application in the same
+operation: **approve → `submitted`**, **reject → `rejected`**. The update is guarded with
+`WHERE status = 'draft'` (and the owning `userId`) so a late decision can never regress an
+application that already advanced (e.g. to `interview`), and approvals without an
+`applicationId` are untouched.
+
+**Alternatives.** A DB trigger (rejected: hides business logic in the schema); doing it in the
+router (rejected: the service is the single resolution path and is also used by tests/agents);
+an async job (rejected: adds a queue dependency for a two-row transaction).
+
+**Consequences.** Approve/reject now has a visible, verified effect on the tracker — confirmed on
+production with DB before/after snapshots (draft→submitted and draft→rejected). +2 pytest in
+`test_approvals.py` pin the contract. **Reversible?** Yes — one static method call in `resolve()`.
+
+
+## D-0017 — Hard wall-clock LLM budget, shared pipeline deadline, and provider override
+
+**Context.** Phase-2 audit defect D1: cover-letter and pipeline runs hit the edge's ~100 s cut-off
+(524). `AgentRun` rows recorded coverLetter calls of 133–157 s despite a declared 60 s budget —
+httpx's read timeout is **per chunk**, so a model that keeps trickling tokens never times out.
+In the pipeline, each agent's own `LLMClient` had an independent budget, so budgets stacked.
+
+**Decision.** Three changes in `llm_client.py`:
+1. **Hard cap** — live calls execute in a worker thread; `future.result(timeout=…)` abandons any
+   call that exceeds the wall-clock budget, regardless of streaming behaviour.
+2. **`shared_budget()`** — a contextvar-based deadline; the pipeline wraps its tailor+coverLetter
+   dispatches so all LLM clients in scope share one budget instead of adding theirs up.
+3. **Provider override** — `AETHER_LLM_BASE_URL`/`AETHER_LLM_API_KEY` point the agent layer at any
+   OpenAI-compatible endpoint (e.g. Anthropic's `/v1` with Claude model ids via `AETHER_MODEL_*`),
+   and `AETHER_MODEL_FALLBACK` makes the fallback model configurable. OpenRouter remains the
+   default when unset.
+
+**Alternatives.** Raising the edge timeout (rejected: not under our control and hides the bug);
+async cancellation of the httpx stream (rejected: cancellation points depend on the server
+yielding); background jobs + polling (valid future work, but a UX/API contract change out of
+audit scope).
+
+**Consequences.** On production, cover-letter runs complete in ≈60 s (HTTP 200) and the full
+pipeline in ≈62 s — no 524s. The abandoned worker thread may linger until the provider closes the
+socket (bounded, no user impact). +3 pytest in `test_llm_resilience.py`.
+**Reversible?** Yes — env vars default to previous behaviour; the cap is one executor block.
+
+
+## D-0018 — Root-resume ingestion endpoint + explicit resume selection for tailoring
+
+**Context.** Section C of the Phase-2 audit required registering a second base resume (the BA/PO
+variant, `assets/resume/Vik_Resume_BA_Final.pdf`) in the app so it appears in Resume Studio,
+persists in the DB, and is tailorable. The API previously had no way to create a resume — the only
+root resume was the demo-seeded one — and `TailoringAgent.run()` always tailored against
+`ensure_base_resume()`, ignoring any other root.
+
+**Decision.** Two additive API changes:
+1. **`POST /resumes`** (`routers/resumes.py`) — creates a new **root** resume (no `parentId`) from
+   `{label, raw_text, contact?, format_hash?}`. Sections are built server-side (`raw_text`,
+   bullets via `extract_bullets`, contact); `format_hash` defaults to `sha256(raw_text)[:16]`;
+   version comes from `repo.next_version(user_id)`. Returns 201 with the stored resume.
+2. **`resume_id` selection** — `TailoringAgent.run(user_id, job_id, resume_id=None)`: when a
+   `resume_id` is supplied (via the existing `POST /agents/tailor/run` body, whose
+   `JobTargetRequest` gained an optional `resume_id`), the agent tailors against that resume
+   (`get_by_id`, unknown id → 404); otherwise behaviour is unchanged (base resume).
+
+**Alternatives.** Multipart PDF upload with server-side parsing (rejected for audit scope: heavier
+surface, the PDF already lives in the repo and `scripts/ingest_ba_resume.py` extracts its text
+deterministically); a `is_default` flag switch on resumes (rejected: changes existing tailor
+semantics; explicit per-run selection is safer and reversible).
+
+**Consequences.** BA resume registered on production as a root resume (id
+`c57a44d136100943494554143`, version 15); a live tailoring run against it produced **20 accepted
+changes** with a child resume inheriting the parent's `formatHash`. +4 pytest in
+`tests/test_resume_ingest.py` (create, 422 validation, tailor-with-resume_id, 404 unknown id).
+**Reversible?** Yes — both changes are additive; omitting `resume_id` reproduces prior behaviour.
