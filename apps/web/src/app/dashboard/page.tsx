@@ -303,7 +303,23 @@ export default function DashboardPage() {
                       {job.company}
                       {job.location ? ` · ${job.location}` : ""}
                     </p>
-                    <p className="mono mt-2 text-xs text-aether-muted-dim">{salaryLabel(job)}</p>
+                    <p className="mono mt-2 text-xs text-aether-muted-dim">
+                      {salaryLabel(job)}
+                      {job.sourceUrl ? (
+                        <>
+                          {" · "}
+                          <a
+                            href={job.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="opportunity-posting-link"
+                            className="underline underline-offset-2 transition hover:text-white"
+                          >
+                            posting ↗
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
                     {idx === 0 ? (
                       <Link
                         href={`/dashboard/resume?job=${job.id}`}

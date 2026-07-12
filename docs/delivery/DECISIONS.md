@@ -566,3 +566,25 @@ generic opener and lacked the §10.2 business-letter structure (date, addressee,
 
 **Consequences.** Historic AgentRun rows keep the old inflated `persisted` counts (feed shows them
 as recorded); counts are honest from deployment forward.
+
+## D-0022 — Job discovery transparency: every job links to its original posting; "new today" counts from midnight
+
+**Date.** 2026-07-12  ·  **Status.** Accepted
+
+**Context.** The Jobs screen showed zero external links: `sourceUrl` was in every API payload but
+never rendered, so nothing on the page let the user reach the actual posting — the submit gate even
+instructed "complete the submission via the job posting link" while no such link existed. This made
+live-scraped jobs read as fabricated. An audit confirmed the underlying data is real: the Seek
+adapter live-scrapes via Firecrawl (sampled postings match), all non-seek URLs resolve with matching
+titles, and `/jobs/{id}/insights` derives from the real ATS engine. Additionally "N new today" was a
+rolling 24-hour count (33) while only 5 jobs arrived since midnight, and a "Pull from Story Bank"
+link pointed at the non-existent `/dashboard/story-bank` route (catch-all panel).
+
+**Decision.** Render `sourceUrl` as an external link (new tab, `rel="noopener noreferrer"`)
+everywhere a job appears: job-card source chip, saved-card source chip, detail-panel "Sourced from"
+chip, a dedicated "View posting ↗" button beside Preview, the submit-gate warning and its
+confirmation state, and the dashboard opportunity cards. "New today" counts from local midnight.
+The Story Bank link targets the real `/dashboard/stories` route.
+
+**Consequences.** None adverse; jobs without a `sourceUrl` degrade to the plain chip (none exist in
+production today — 0 null/empty/demo URLs).

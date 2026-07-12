@@ -306,8 +306,9 @@ export default function JobsPage() {
 
   const stats = useMemo(() => {
     const all = jobs ?? [];
-    const dayAgo = Date.now() - 86400_000;
-    const newToday = all.filter((j) => j.createdAt && new Date(j.createdAt).getTime() >= dayAgo).length;
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const newToday = all.filter((j) => j.createdAt && new Date(j.createdAt).getTime() >= midnight.getTime()).length;
     const sources = new Set(all.map((j) => j.source)).size;
     return { matches: all.length, newToday, sources };
   }, [jobs]);
@@ -764,9 +765,23 @@ export default function JobsPage() {
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                             <span className="mono text-xs text-aether-muted">{salaryLabel(job)}</span>
                             <span className="flex min-w-0 items-center gap-2 text-[11px] text-aether-muted-dim">
-                              <span className="truncate rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
-                                {SOURCE_LABEL[job.source] ?? job.source}
-                              </span>
+                              {job.sourceUrl ? (
+                                <a
+                                  href={job.sourceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid="job-source-link"
+                                  title={`Open the original posting on ${SOURCE_LABEL[job.source] ?? job.source}`}
+                                  className="truncate rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted underline-offset-2 transition hover:bg-white/15 hover:text-white"
+                                >
+                                  {SOURCE_LABEL[job.source] ?? job.source} ↗
+                                </a>
+                              ) : (
+                                <span className="truncate rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
+                                  {SOURCE_LABEL[job.source] ?? job.source}
+                                </span>
+                              )}
                               <span className="shrink-0">{timeAgo(job.createdAt)}</span>
                             </span>
                           </div>
@@ -797,9 +812,21 @@ export default function JobsPage() {
                         {selected.remote ? " · Remote" : ""} · <span className="mono">{salaryLabel(selected)}</span>
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-aether-muted">
-                          Sourced from {SOURCE_LABEL[selected.source] ?? selected.source}
-                        </span>
+                        {selected.sourceUrl ? (
+                          <a
+                            href={selected.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="detail-source-link"
+                            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-aether-muted transition hover:border-white/25 hover:text-white"
+                          >
+                            Sourced from {SOURCE_LABEL[selected.source] ?? selected.source} ↗
+                          </a>
+                        ) : (
+                          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-aether-muted">
+                            Sourced from {SOURCE_LABEL[selected.source] ?? selected.source}
+                          </span>
+                        )}
                         <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-aether-muted">
                           {selected.postedAt
                             ? `Posted ${timeAgo(selected.postedAt)}`
@@ -959,6 +986,17 @@ export default function JobsPage() {
                       >
                         Preview
                       </Link>
+                      {selected.sourceUrl ? (
+                        <a
+                          href={selected.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="view-posting-link"
+                          className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10"
+                        >
+                          View posting ↗
+                        </a>
+                      ) : null}
                       <button
                         type="button"
                         data-testid="skip-job"
@@ -991,7 +1029,7 @@ export default function JobsPage() {
                           ) : null}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px]">
-                          <Link href="/dashboard/story-bank" className="font-medium text-[#a5b4fc] transition hover:text-white">
+                          <Link href="/dashboard/stories" className="font-medium text-[#a5b4fc] transition hover:text-white">
                             Pull from Story Bank →
                           </Link>
                           <Link href={`/dashboard/resume?job=${selected.id}`} className="text-aether-muted transition hover:text-white">
@@ -1046,7 +1084,24 @@ export default function JobsPage() {
                   Your application for <span className="text-[#C7C7D6]">{gateJob.title}</span> will be recorded as{" "}
                   <span className="text-[#C7C7D6]">Applied</span> with your tailored resume attached.{" "}
                   <span className="text-aether-yellow">
-                    Complete the submission on {SOURCE_LABEL[gateJob.source] ?? gateJob.source} via the job posting link.
+                    Complete the submission on {SOURCE_LABEL[gateJob.source] ?? gateJob.source}
+                    {gateJob.sourceUrl ? (
+                      <>
+                        {" — "}
+                        <a
+                          href={gateJob.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="gate-posting-link"
+                          className="font-semibold underline underline-offset-2 transition hover:text-white"
+                        >
+                          open the job posting ↗
+                        </a>
+                      </>
+                    ) : (
+                      " via the job posting link"
+                    )}
+                    .
                   </span>
                 </p>
               </div>
@@ -1061,7 +1116,22 @@ export default function JobsPage() {
 
             {submitted ? (
               <div className="mt-4 flex items-center gap-2 rounded-xl border border-aether-green/25 bg-aether-green/10 px-3.5 py-2.5 text-[12px]" data-testid="submitted-state" role="status">
-                ✓ Application recorded for {gateJob.company}. <span className="text-aether-muted">Tracking in Applications · finish the submission on the job board.</span>
+                ✓ Application recorded for {gateJob.company}.{" "}
+                <span className="text-aether-muted">
+                  Tracking in Applications ·{" "}
+                  {gateJob.sourceUrl ? (
+                    <a
+                      href={gateJob.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 transition hover:text-white"
+                    >
+                      finish the submission on the job board ↗
+                    </a>
+                  ) : (
+                    "finish the submission on the job board."
+                  )}
+                </span>
               </div>
             ) : (
               <div className="mt-5 flex items-center justify-end gap-2">
@@ -1154,9 +1224,22 @@ function SavedView({
                 <div className="mt-3 flex items-center justify-between">
                   <span className="mono text-xs text-aether-muted">{salaryLabel(job)}</span>
                   <span className="flex items-center gap-2 text-[11px] text-aether-muted-dim">
-                    <span className="rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
-                      {SOURCE_LABEL[job.source] ?? job.source}
-                    </span>
+                    {job.sourceUrl ? (
+                      <a
+                        href={job.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="saved-source-link"
+                        title={`Open the original posting on ${SOURCE_LABEL[job.source] ?? job.source}`}
+                        className="rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted transition hover:bg-white/15 hover:text-white"
+                      >
+                        {SOURCE_LABEL[job.source] ?? job.source} ↗
+                      </a>
+                    ) : (
+                      <span className="rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
+                        {SOURCE_LABEL[job.source] ?? job.source}
+                      </span>
+                    )}
                     {job.fitScore != null ? <span className="mono text-aether-green">{Math.round(job.fitScore)}</span> : null}
                   </span>
                 </div>
