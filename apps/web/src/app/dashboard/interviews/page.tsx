@@ -105,10 +105,11 @@ export default function InterviewCenterPage() {
         <div className="grid gap-6 xl:grid-cols-3">
           <div className="space-y-6 xl:col-span-2">
             {/* Company & Role brief */}
-            <section className="glass rounded-2xl border border-white/10 p-5" data-testid="role-brief">
-              <h2 className="mb-4 text-[15px] font-semibold">Company &amp; Role Brief</h2>
-              <div className="grid gap-4 md:grid-cols-3">
-                {prep.brief.columns.map((col) => (
+            {prep.brief ? (
+              <section className="glass rounded-2xl border border-white/10 p-5" data-testid="role-brief">
+                <h2 className="mb-4 text-[15px] font-semibold">Company &amp; Role Brief</h2>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {prep.brief.columns.map((col) => (
                   <div key={col.title} className="rounded-xl border border-white/10 bg-white/5 p-4">
                     <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
                       {col.title}
@@ -129,6 +130,12 @@ export default function InterviewCenterPage() {
                 {prep.brief.insight}
               </p>
             </section>
+            ) : (
+              <section className="glass rounded-2xl border border-white/10 p-5">
+                <h2 className="mb-4 text-[15px] font-semibold">Company &amp; Role Brief</h2>
+                <p className="text-xs text-aether-muted-dim">No role brief available — an active interview application is needed.</p>
+              </section>
+            )}
 
             {/* Predicted questions */}
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="predicted-questions">
@@ -231,7 +238,8 @@ function LiveAssistCard({
 }
 
 function DebriefCard({ prep, full = false }: { prep: InterviewPrep; full?: boolean }) {
-  const { debrief } = prep;
+  if (!prep.debrief) return null;
+  const d = prep.debrief;
   return (
     <section
       className={`glass rounded-2xl border border-white/10 p-5 ${full ? "max-w-2xl" : ""}`}
@@ -239,19 +247,19 @@ function DebriefCard({ prep, full = false }: { prep: InterviewPrep; full?: boole
     >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[15px] font-semibold">Last Debrief</h2>
-        <span className="mono text-lg font-bold text-aether-green">{debrief.score.toFixed(1)}</span>
+        <span className="mono text-lg font-bold text-aether-green">{d.score.toFixed(1)}</span>
       </div>
       <p className="text-xs text-aether-muted">
-        {debrief.company} · {debrief.round}
+        {d.company} · {d.round}
       </p>
       <div className="mt-3 space-y-1.5">
-        {debrief.strengths.map((s) => (
+        {d.strengths.map((s) => (
           <p key={s} className="flex items-start gap-2 text-xs text-aether-muted">
             <i className="fa-solid fa-circle-check mt-0.5 text-aether-green" aria-hidden="true" />
             {s}
           </p>
         ))}
-        {debrief.warnings.map((w) => (
+        {d.warnings.map((w) => (
           <p key={w} className="flex items-start gap-2 text-xs text-aether-muted">
             <i className="fa-solid fa-triangle-exclamation mt-0.5 text-aether-amber" aria-hidden="true" />
             {w}
