@@ -20,19 +20,6 @@ logger = logging.getLogger(__name__)
 
 _REMOTE_MARKERS = ("remote", "work from home", "wfh", "hybrid")
 
-# Target roles for Vikram Sarkar's job search
-_TARGET_ROLES = [
-    "business analyst",
-    "senior business analyst",
-    "principal business analyst",
-    "product owner",
-    "senior product owner",
-    "technical delivery manager",
-    "delivery manager",
-    "technical lead",
-    "program manager",
-]
-
 
 def _get_abacus_credentials() -> tuple[str | None, str | None]:
     """Get Firecrawl credentials from env or VM metadata."""
