@@ -28,10 +28,14 @@ an in-memory copy whose bytes are streamed back to the caller.
 from __future__ import annotations
 
 import hashlib
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import fitz  # PyMuPDF
+from reportlab.lib.colors import HexColor
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen import canvas
 
 from app.agents.fit_scorer import get_base_resume_path
 
@@ -311,3 +315,189 @@ def render_tailored_pdf(original_path: Path, changes: list[tuple[str, str]]) -> 
         return doc.tobytes(garbage=3, deflate=True)
     finally:
         doc.close()
+
+
+# --- Branded two-page template (reportlab) ----------------------------------
+# A from-scratch renderer for when the source PDF isn't on hand: it redraws the
+# same visual language — peach title panel, coral accents, a two-column grid —
+# on a blank Letter page from structured resume content. Page 1 shows the base
+# bullets; page 2 the tailored ones with a coral wash behind each changed line.
+# Geometry/palette are the measurements read off Vik_Resume_Final.pdf (top-
+# origin points; reportlab's origin is bottom-left, so a top ``y`` maps to
+# ``_PAGE_H - y``).
+_PANEL_HEX = "#FCD9CF"   # peach title panel
+_ACCENT_HEX = "#F4715C"  # coral accent rule along the left rail
+_CHANGE_HEX = "#FF6B35"  # coral wash behind a changed bullet
+_INK_HEX = "#2B2B2B"     # near-black headings / body ink
+_MUTE_HEX = "#4D4D4D"    # muted grey sub-text
+
+_PAGE_W, _PAGE_H = 612.0, 792.0
+_L_X, _L_W = 36.0, 154.0           # left rail:   x 36 -> 190
+_R_X, _R_MAX = 230.0, 576.0        # right column: x 230 -> 576
+_PANEL_TOP, _PANEL_H = 98.0, 82.0  # peach panel: (36, 98) 154 x 82
+_BULLET_LEAD = 12.0                # 9pt body line pitch
+_CHANGE_ALPHA = 0.22               # coral wash kept light so text stays legible
+
+
+def _wrap_rl(text: str, font: str, size: float, width: float) -> list[str]:
+    """Greedy word-wrap ``text`` to ``width`` at ``size`` using font metrics."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        trial = f"{current} {word}".strip()
+        if not current or stringWidth(trial, font, size) <= width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _draw_left_rail(c: Any, name: str, title: str) -> None:
+    """Peach title panel (name + role) with a coral accent rule at its foot."""
+    panel_y = _PAGE_H - _PANEL_TOP - _PANEL_H
+    c.setFillColor(HexColor(_PANEL_HEX))
+    c.rect(_L_X, panel_y, _L_W, _PANEL_H, fill=1, stroke=0)
+
+    pad = 12.0
+    inner = _L_W - 2 * pad
+    size = 20.0
+    while size > 12.0 and stringWidth(name, "Helvetica-Bold", size) > inner:
+        size -= 0.5
+    c.setFillColor(HexColor(_INK_HEX))
+    c.setFont("Helvetica-Bold", size)
+    name_base = panel_y + _PANEL_H - pad - size * 0.8
+    c.drawString(_L_X + pad, name_base, name)
+
+    c.setFont("Helvetica", 12.0)
+    c.setFillColor(HexColor(_MUTE_HEX))
+    ty = name_base - 20.0
+    for line in _wrap_rl(title, "Helvetica", 12.0, inner)[:2]:
+        c.drawString(_L_X + pad, ty, line)
+        ty -= 14.0
+
+    c.setFillColor(HexColor(_ACCENT_HEX))
+    c.rect(_L_X, 44.0, _L_W, 3.0, fill=1, stroke=0)
+
+
+def _draw_bullet(c: Any, base: str, y: float, swaps: dict[str, str]) -> float:
+    """Draw one bullet at baseline ``y``; wash + swap it if it was reworded."""
+    marker_x, text_x = _R_X, _R_X + 12.0
+    text_w = _R_MAX - text_x
+    replacement = swaps.get(_normalize(base))
+    text = base if replacement is None else replacement
+    lines = _wrap_rl(text, "Helvetica", 9.0, text_w)
+
+    if replacement is not None:
+        block_h = len(lines) * _BULLET_LEAD
+        wash_x = marker_x - 3.0
+        c.setFillColor(HexColor(_CHANGE_HEX))
+        c.setFillAlpha(_CHANGE_ALPHA)
+        c.rect(wash_x, y + 9.0 - block_h, (_R_MAX + 2.0) - wash_x,
+               block_h + 2.0, fill=1, stroke=0)
+        c.setFillAlpha(1.0)
+
+    c.setFont("Helvetica", 9.0)
+    c.setFillColor(HexColor(_ACCENT_HEX))
+    c.drawString(marker_x, y, "•")
+    c.setFillColor(HexColor(_INK_HEX))
+    for line in lines:
+        c.drawString(text_x, y, line)
+        y -= _BULLET_LEAD
+    return y
+
+
+def _draw_right_column(
+    c: Any, objective: str, sections: list[dict[str, Any]], swaps: dict[str, str]
+) -> None:
+    """Career-objective header, then each section's heading and bullets."""
+    width = _R_MAX - _R_X
+    y = _PAGE_H - 52.0
+
+    c.setFillColor(HexColor(_INK_HEX))
+    c.setFont("Helvetica-Bold", 12.0)
+    c.drawString(_R_X, y, "Career Objective")
+    c.setFillColor(HexColor(_ACCENT_HEX))
+    c.rect(_R_X, y - 5.0, width, 1.2, fill=1, stroke=0)
+    y -= 18.0
+    if objective.strip():
+        c.setFont("Helvetica", 9.0)
+        c.setFillColor(HexColor(_MUTE_HEX))
+        for line in _wrap_rl(objective, "Helvetica", 9.0, width):
+            c.drawString(_R_X, y, line)
+            y -= _BULLET_LEAD
+    y -= 8.0
+
+    for section in sections:
+        if y < 70.0:
+            break
+        heading = str(section.get("heading", "")).strip()
+        if heading:
+            c.setFont("Helvetica-Bold", 10.5)
+            c.setFillColor(HexColor(_INK_HEX))
+            c.drawString(_R_X, y, heading)
+            y -= _BULLET_LEAD + 2.0
+        for bullet in section.get("bullets", []):
+            if y < 60.0:
+                break
+            if not str(bullet).strip():
+                continue
+            y = _draw_bullet(c, str(bullet), y, swaps)
+        y -= 6.0
+
+
+def _draw_branded_page(
+    c: Any,
+    name: str,
+    title: str,
+    objective: str,
+    sections: list[dict[str, Any]],
+    swaps: dict[str, str],
+) -> None:
+    """Paint one full page; ``swaps`` is empty for the base page."""
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(0, 0, _PAGE_W, _PAGE_H, fill=1, stroke=0)
+    _draw_left_rail(c, name, title)
+    _draw_right_column(c, objective, sections, swaps)
+
+
+def create_branded_resume_pdf(
+    name: str,
+    title: str,
+    objective: str,
+    sections: list[dict[str, Any]],
+    changes: list[tuple[str, str]] | None = None,
+) -> bytes:
+    """Return a two-page branded resume PDF rendered from structured content.
+
+    Unlike :func:`render_tailored_pdf`, which edits the source document in
+    place, this rebuilds the resume from scratch with reportlab — for when the
+    original PDF isn't available. Both pages share one layout: a peach title
+    panel carrying the name and role on the left rail, a coral accent rule at
+    its foot, and a right column that opens with the career objective and then
+    lists each section's bullets.
+
+    - **Page 1** renders ``sections`` verbatim (the base resume).
+    - **Page 2** renders the same layout with every bullet whose text matches a
+      change's *before* swapped for its *after*, over a light coral ``#FF6B35``
+      wash so the reworded lines stand out.
+
+    ``sections`` is a list of ``{"heading": str, "bullets": list[str]}``;
+    ``changes`` a list of ``(before, after)`` bullet-text pairs.
+    """
+    swaps = {
+        _normalize(before): after
+        for before, after in (changes or [])
+        if before and after
+    }
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(_PAGE_W, _PAGE_H))
+    _draw_branded_page(c, name, title, objective, sections, {})
+    c.showPage()
+    _draw_branded_page(c, name, title, objective, sections, swaps)
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
