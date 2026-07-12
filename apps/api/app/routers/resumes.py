@@ -91,6 +91,39 @@ def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return {"resume_id": resume_id, "parent_id": resume["parentId"], "changes": changes}
 
 
+def _branded_content(
+    resume: dict[str, Any],
+) -> tuple[str, str, str, list[dict[str, Any]]]:
+    """Map a stored resume record onto the branded template's inputs.
+
+    Used only on the structured-rendering fallback (no bundled source PDF on
+    disk), so the resume is rebuilt from its ``sections`` payload rather than
+    edited in place. Name/title/objective come from the parsed contact block
+    when present, with the resume label and the first content line as
+    fallbacks; every bullet is grouped under a single Experience heading.
+    """
+    sections = resume.get("sections", {}) or {}
+    contact = sections.get("contact", {}) or {}
+    raw_lines = [
+        line.strip() for line in str(sections.get("raw_text", "")).splitlines() if line.strip()
+    ]
+    name = str(
+        contact.get("name")
+        or (raw_lines[0] if raw_lines else "")
+        or resume.get("label")
+        or "Resume"
+    )
+    title = str(contact.get("title") or contact.get("headline") or "")
+    objective = str(sections.get("objective") or sections.get("summary") or "")
+    bullets = [
+        str(b.get("text", ""))
+        for b in sections.get("bullets", [])
+        if str(b.get("text", "")).strip()
+    ]
+    template_sections = [{"heading": "Experience", "bullets": bullets}] if bullets else []
+    return name, title, objective, template_sections
+
+
 @router.get("/{resume_id}/download")
 def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
     """Download a resume as a format-preserving PDF.
@@ -100,8 +133,15 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
       redrawn in place — same two-column layout, peach title panel, coral
       accents and fonts — plus a subtle highlight behind each changed bullet.
       Every unchanged element stays byte-for-byte identical to the source.
+    - **No bundled source PDF on disk** (e.g. an externally-ingested variant):
+      the resume is rebuilt from its structured content with the branded
+      two-page template — each reworded bullet washed coral on page 2.
     """
-    from app.services.resume_pdf import render_tailored_pdf, resolve_original_pdf
+    from app.services.resume_pdf import (
+        create_branded_resume_pdf,
+        render_tailored_pdf,
+        resolve_original_pdf,
+    )
 
     repo = ResumeRepository()
     resume = repo.get_by_id(resume_id, current_user["id"])
@@ -111,24 +151,35 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
     parent_id = resume.get("parentId")
     parent = repo.get_by_id(parent_id, current_user["id"]) if parent_id else None
 
-    if parent is None:
-        # Non-tailored root resume → original PDF bytes, unmodified.
-        original = resolve_original_pdf(resume.get("formatHash"))
-        pdf_bytes = original.read_bytes()
-    else:
-        # Tailored version → splice the reworded bullets into the source PDF.
+    # The reworded bullets, diffed against the parent (empty for a base resume).
+    changes: list[tuple[str, str]] = []
+    if parent is not None:
         parent_by_ref = {
             b.get("evidenceRef"): b.get("text", "")
             for b in parent.get("sections", {}).get("bullets", [])
         }
-        changes: list[tuple[str, str]] = []
         for bullet in resume.get("sections", {}).get("bullets", []):
             before = parent_by_ref.get(bullet.get("evidenceRef"))
             after = bullet.get("text", "")
             if before and after and before != after:
                 changes.append((before, after))
-        original = resolve_original_pdf(parent.get("formatHash") or resume.get("formatHash"))
-        pdf_bytes = render_tailored_pdf(original, changes)
+
+    original = resolve_original_pdf(
+        (parent or resume).get("formatHash") or resume.get("formatHash")
+    )
+
+    if original.exists():
+        # Source PDF on hand → preserve its exact layout.
+        if parent is None:
+            pdf_bytes = original.read_bytes()  # base → verbatim bytes
+        else:
+            pdf_bytes = render_tailored_pdf(original, changes)  # splice in place
+    else:
+        # No source PDF → structured render with the branded template.
+        name, title, objective, sections = _branded_content(resume)
+        pdf_bytes = create_branded_resume_pdf(
+            name, title, objective, sections, changes or None
+        )
 
     return Response(
         content=pdf_bytes,
