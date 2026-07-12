@@ -7,9 +7,9 @@ import { apiRequest, type RequestOptions } from "./client";
 /* ----------------------------- Interview Center ----------------------------- */
 
 export interface InterviewPrep {
-  session: { role: string; company: string; round: string; scheduledFor: string; format: string };
+  session: { role: string; company: string; round: string; scheduledFor: string; format: string } | null;
   compliance: { message: string; level: string };
-  brief: { columns: Array<{ title: string; items: string[] }>; insight: string };
+  brief: { columns: Array<{ title: string; items: string[] }>; insight: string } | null;
   questions: Array<{ question: string; likelihood: "High" | "Medium" | "Low"; mappedStory: string; angle: string }>;
   liveAssist: {
     enabled: boolean;
@@ -18,7 +18,7 @@ export interface InterviewPrep {
     talkListenRatio: { talk: number; listen: number };
     coachingCue: string;
   };
-  debrief: { company: string; round: string; score: number; strengths: string[]; warnings: string[] };
+  debrief: { company: string; round: string; score: number; strengths: string[]; warnings: string[] } | null;
 }
 
 export const fetchInterviewPrep = (options: RequestOptions = {}) =>
@@ -75,7 +75,7 @@ export interface EmailInbox {
   };
   followUps: Array<{ company: string; role: string; dueIn: string; status: string }>;
   messages: EmailMessage[];
-  recruiterProfile: { name: string; role: string; history: string; notes: string };
+  recruiterProfile: { name: string; role: string; history: string; notes: string } | null;
 }
 
 export const fetchEmailInbox = (options: RequestOptions = {}) =>

@@ -36,12 +36,15 @@ export default function InterviewCenterPage() {
     );
   }
 
-  if (prep === null) {
+  if (prep === null || prep.session === null) {
     return (
-      <div className="space-y-4" aria-busy="true" data-testid="interview-skeleton">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="glass h-40 animate-pulse rounded-2xl border border-white/10" />
-        ))}
+      <div className="space-y-6" data-testid="interview-center">
+        <header><h1 className="text-2xl font-bold">Interview Center</h1></header>
+        <div className="glass rounded-2xl border border-white/10 p-8 text-center">
+          <i className="fa-solid fa-calendar-check text-3xl text-aether-muted-dim" aria-hidden="true" />
+          <p className="mt-3 text-sm text-aether-muted">{prep?.compliance?.message ?? "No interview scheduled."}</p>
+          <p className="mt-1 text-xs text-aether-muted-dim">Once an application progresses to interview stage, your prep brief appears here.</p>
+        </div>
       </div>
     );
   }

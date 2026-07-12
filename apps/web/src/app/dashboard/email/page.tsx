@@ -386,13 +386,15 @@ export default function EmailCenterPage() {
             </div>
           </section>
 
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="recruiter-profile">
-            <h2 className="mb-2 text-[15px] font-semibold">Recruiter Profile</h2>
-            <p className="text-sm font-semibold">{inbox.recruiterProfile.name}</p>
-            <p className="text-xs text-aether-muted">{inbox.recruiterProfile.role}</p>
-            <p className="mono mt-2 text-[11px] text-aether-muted-dim">{inbox.recruiterProfile.history}</p>
-            <p className="mt-2 text-xs text-aether-muted">{inbox.recruiterProfile.notes}</p>
-          </section>
+          {inbox.recruiterProfile ? (
+            <section className="glass rounded-2xl border border-white/10 p-5" data-testid="recruiter-profile">
+              <h2 className="mb-2 text-[15px] font-semibold">Recruiter Profile</h2>
+              <p className="text-sm font-semibold">{inbox.recruiterProfile.name}</p>
+              <p className="text-xs text-aether-muted">{inbox.recruiterProfile.role}</p>
+              <p className="mono mt-2 text-[11px] text-aether-muted-dim">{inbox.recruiterProfile.history}</p>
+              <p className="mt-2 text-xs text-aether-muted">{inbox.recruiterProfile.notes}</p>
+            </section>
+          ) : null}
         </div>
       </div>
 
