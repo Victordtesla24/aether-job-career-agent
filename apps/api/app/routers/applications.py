@@ -24,38 +24,44 @@ _COLUMNS = (
     'j."company", j."sourceUrl" AS "applyUrl", j."fitScore"'
 )
 
-# Canonical 5-stage funnel (REQ-R2) with per-transition drop-off reasons, as
-# annotated in design/screens/application-tracker.html (sankey-view-at41).
-_SANKEY = {
-    "stages": [
-        {"key": "jobs_found", "label": "Jobs Found", "value": 847, "color": "#4F46E5"},
-        {"key": "applied", "label": "Applied", "value": 412, "color": "#818CF8"},
-        {"key": "screened", "label": "Screened", "value": 156, "color": "#FF6B35"},
-        {"key": "interviewed", "label": "Interviewed", "value": 23, "color": "#F59E0B"},
-        {"key": "offers", "label": "Offers", "value": 4, "color": "#34D399"},
-    ],
-    "dropoffs": [
-        {"after": "jobs_found", "count": 435, "reason": "below match threshold"},
-        {"after": "applied", "count": 256, "reason": "not shortlisted"},
-        {"after": "screened", "count": 133, "reason": "no response / screened out"},
-        {"after": "interviewed", "count": 19, "reason": "not selected"},
-    ],
-    "insight": (
-        "Biggest drop-off at Jobs Found → Applied (−435, below match threshold) — "
-        "most sourced roles fall below the match threshold; refine sourcing filters "
-        "to surface higher-fit roles earlier."
-    ),
-}
+router = APIRouter()
 
 
 @router.get("/funnel/sankey")
 def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
-    """Canonical application-flow sankey (Jobs Found 847 → … → Offers 4).
-
-    Fixture-backed per REQ-R2: the canonical figures are a product constant
-    shown identically across screens (cf. /analytics/market-pulse pattern).
-    """
-    return _SANKEY
+    """Real-time application-flow sankey computed from live DB counts."""
+    uid = current_user["id"]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT count(*) FROM "Job" WHERE "userId" = %s', (uid,))
+            jobs_found = cur.fetchone()[0]
+            cur.execute(
+                'SELECT status, count(*) FROM "Application" WHERE "userId" = %s '
+                'GROUP BY status', (uid,))
+            status_counts = dict(cur.fetchall())
+    applied = status_counts.get("submitted", 0)
+    screened = status_counts.get("screening", 0)
+    interviewed = status_counts.get("interview", 0)
+    offers = status_counts.get("offer", 0)
+    return {
+        "stages": [
+            {"key": "jobs_found", "label": "Jobs Found", "value": jobs_found, "color": "#4F46E5"},
+            {"key": "applied", "label": "Applied", "value": applied, "color": "#818CF8"},
+            {"key": "screened", "label": "Screened", "value": screened, "color": "#FF6B35"},
+            {"key": "interviewed", "label": "Interviewed", "value": interviewed, "color": "#F59E0B"},
+            {"key": "offers", "label": "Offers", "value": offers, "color": "#34D399"},
+        ],
+        "dropoffs": [
+            {"after": "jobs_found", "count": jobs_found - applied, "reason": "below match threshold"},
+            {"after": "applied", "count": applied - screened, "reason": "not shortlisted"},
+            {"after": "screened", "count": screened - interviewed, "reason": "no response / screened out"},
+            {"after": "interviewed", "count": interviewed - offers, "reason": "not selected"},
+        ],
+        "insight": (
+            f"{jobs_found} jobs found, {applied} applied. "
+            "Track applications through the pipeline to improve conversion."
+        ),
+    }
 
 
 @router.get("")
