@@ -61,7 +61,8 @@ class TestTailoring:
         diff = client.get(f"/resumes/{body['resume_id']}/diff", headers=auth_headers)
         assert diff.status_code == 200
         assert "changes" in diff.json()
-        download = client.post(
+        download = client.get(
             f"/resumes/{body['resume_id']}/download", headers=auth_headers
         )
-        assert download.status_code == 501
+        assert download.status_code == 200
+        assert download.headers.get("content-type") == "application/pdf"
