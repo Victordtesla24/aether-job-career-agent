@@ -96,7 +96,6 @@ def download_resume(resume_id: str, current_user: CurrentUser):
     """Generate a side-by-side PDF: original vs tailored resume comparison."""
     from io import BytesIO
 
-    import pdfplumber
     from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
@@ -141,7 +140,8 @@ def download_resume(resume_id: str, current_user: CurrentUser):
     for b in tailored_sections.get("bullets", []):
         text = b.get("text", "")
         ref = b.get("evidenceRef")
-        matched = any(o.get("evidenceRef") == ref for o in (parent or {}).get("sections", {}).get("bullets", []) if parent)
+        parent_bullets = (parent or {}).get("sections", {}).get("bullets", [])
+        matched = any(o.get("evidenceRef") == ref for o in parent_bullets) if parent else False
         if matched:
             tailored_bullets.append(Paragraph(text, normal_style))
         else:
@@ -162,5 +162,7 @@ def download_resume(resume_id: str, current_user: CurrentUser):
     body.append(tbl)
     doc.build(body)
     buf.seek(0)
-    return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=resume-{resume_id[:8]}.pdf"})
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=resume-{resume_id[:8]}.pdf"},
+    )
