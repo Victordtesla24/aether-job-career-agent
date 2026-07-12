@@ -18,7 +18,7 @@ export const CatalogAgentSchema = z.object({
   runnable: z.boolean(),
   backend: z.string().nullish(),
   enabled: z.boolean(),
-  status: z.enum(["active", "paused", "error"]),
+  status: z.enum(["active", "paused", "error", "planned"]),
   last_run: z.string().nullish(),
 });
 export type CatalogAgent = z.infer<typeof CatalogAgentSchema>;
@@ -30,6 +30,7 @@ export const CatalogSchema = z.object({
     active: z.number(),
     paused: z.number(),
     error: z.number(),
+    planned: z.number().optional(),
   }),
 });
 export type Catalog = z.infer<typeof CatalogSchema>;

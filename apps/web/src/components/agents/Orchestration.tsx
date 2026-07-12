@@ -7,14 +7,19 @@
  */
 import type { AgentRun, AgentSummary } from "../../lib/api/agents";
 
-/** Canonical 6-node workflow from the wireframe, mapped to real agent names. */
+/**
+ * The REAL 7-agent topology, in pipeline order (supervisor → scout →
+ * fitScorer → matcher → tailor → coverLetter, plus on-demand storyExtractor).
+ * Labels and blurbs describe what each agent actually does — no phantom nodes.
+ */
 const NODES: Array<{ label: string; agent: string; blurb: string }> = [
-  { label: "Discovery", agent: "scout", blurb: "Scans job boards & referrals" },
-  { label: "Evaluator", agent: "fitScorer", blurb: "Scores fit vs your profile" },
-  { label: "Tailoring", agent: "tailor", blurb: "Adapts resume & letters" },
-  { label: "Submission", agent: "supervisor", blurb: "Approval-gated submit" },
-  { label: "Learning", agent: "storyExtractor", blurb: "Mines outcomes into stories" },
-  { label: "Memory", agent: "matcher", blurb: "Long-term preference store" },
+  { label: "Supervisor", agent: "supervisor", blurb: "Plans & sequences the pipeline" },
+  { label: "Discovery", agent: "scout", blurb: "Scrapes job boards & APIs" },
+  { label: "Evaluator", agent: "fitScorer", blurb: "10-dim fit + ATS scoring" },
+  { label: "Matcher", agent: "matcher", blurb: "Selects the best-fit target job" },
+  { label: "Tailoring", agent: "tailor", blurb: "Evidence-grounded resume rewrite" },
+  { label: "Cover Letter", agent: "coverLetter", blurb: "Drafts letter · approval-gated" },
+  { label: "Stories", agent: "storyExtractor", blurb: "Mines resume into STAR+R stories" },
 ];
 
 function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[]) {

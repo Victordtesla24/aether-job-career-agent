@@ -45,19 +45,28 @@ def test_catalog_lists_full_roster_with_defaults(client, auth_headers):
     assert res.status_code == 200
     body = res.json()
     assert body["counts"]["total"] == len(body["agents"]) >= 20
-    # Every agent defaults to active + recommended model, and carries a tooltip.
     for a in body["agents"]:
-        assert a["status"] in {"active", "paused", "error"}
+        assert a["status"] in {"active", "paused", "error", "planned"}
         assert a["model"]
         assert a["tip"]
+        # Honesty contract: an agent with no backend implementation is
+        # "planned" (a roadmap card), never presented as running.
+        if a["backend"] is None:
+            assert a["status"] == "planned"
+        else:
+            assert a["status"] != "planned"
+    assert body["counts"]["planned"] == sum(
+        1 for a in body["agents"] if a["backend"] is None
+    )
     # The runnable agents map to real backends.
     runnable = {a["key"] for a in body["agents"] if a["runnable"]}
     assert {"jobDiscovery", "resumeTailoring", "coverLetter", "matchScoring"} <= runnable
 
 
 def test_disabling_agent_marks_it_paused_and_persists(client, auth_headers):
+    # Must be an IMPLEMENTED agent — planned cards stay "planned" regardless.
     res = client.put(
-        "/agents/config/salaryIntelligence",
+        "/agents/config/coverLetter",
         json={"enabled": False},
         headers=auth_headers,
     )
@@ -65,7 +74,7 @@ def test_disabling_agent_marks_it_paused_and_persists(client, auth_headers):
     assert res.json()["enabled"] is False
 
     cat = client.get("/agents/catalog", headers=auth_headers).json()
-    entry = next(a for a in cat["agents"] if a["key"] == "salaryIntelligence")
+    entry = next(a for a in cat["agents"] if a["key"] == "coverLetter")
     assert entry["status"] == "paused"
     assert entry["enabled"] is False
     assert cat["counts"]["paused"] >= 1
@@ -77,9 +86,14 @@ def test_reassign_agent_model_persists(client, auth_headers):
     )
     assert res.status_code == 200
     assert res.json()["model"] == "gpt-4o"
+    # The catalog card shows the model the agent ACTUALLY runs on (the LLM
+    # tier resolved from env), not the stored preference — no dishonest
+    # "assigned model" display while the runtime is pinned to its tier.
+    from app.services.llm_client import get_model
+
     cat = client.get("/agents/catalog", headers=auth_headers).json()
     entry = next(a for a in cat["agents"] if a["key"] == "resumeTailoring")
-    assert entry["model"] == "gpt-4o"
+    assert entry["model"] == get_model("REASONING")
 
 
 def test_config_unknown_agent_404(client, auth_headers):
@@ -103,18 +117,37 @@ def test_providers_seed_six(client, auth_headers):
     assert bedrock["status"] == "unconfigured"
 
 
-def test_provider_connect_persists(client, auth_headers):
+def test_provider_connect_without_credential_409(client, auth_headers):
+    # A provider with no key on the server can never be marked connected —
+    # that would fabricate a connection status.
     res = client.put(
         "/agents/providers/bedrock", json={"status": "connected"}, headers=auth_headers
     )
+    assert res.status_code == 409
+
+
+def test_provider_connect_with_credential_persists(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_credential")
+    res = client.put(
+        "/agents/providers/groq", json={"status": "connected"}, headers=auth_headers
+    )
     assert res.status_code == 200
-    assert res.json()["status"] == "connected"
     providers = client.get("/agents/providers", headers=auth_headers).json()
-    bedrock = next(p for p in providers if p["id"] == "bedrock")
-    assert bedrock["status"] == "connected"
+    groq = next(p for p in providers if p["id"] == "groq")
+    assert groq["status"] == "connected"
 
 
-def test_provider_model_switch_persists(client, auth_headers):
+def test_provider_status_is_env_derived(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    providers = client.get("/agents/providers", headers=auth_headers).json()
+    by_id = {p["id"]: p for p in providers}
+    assert by_id["openrouter"]["status"] == "connected"
+    assert by_id["openai"]["status"] == "unconfigured"
+
+
+def test_provider_model_switch_persists(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     client.put(
         "/agents/providers/anthropic",
         json={"model": "claude-3.5-haiku"},
@@ -169,10 +202,13 @@ def test_test_run_estimates_no_charge(client, auth_headers):
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["model"] == "claude-sonnet-4"
+    from app.services.llm_client import get_model
+
+    assert body["model"] == get_model("REASONING")
     assert body["estCost"] > 0
     assert body["creditsCharged"] == 0.0
-    assert body["actualCost"] <= body["estCost"]
+    # "Actual" figures are real run history — null until the agent has run.
+    assert body["actualCost"] is None or body["actualCost"] >= 0
 
 
 def test_test_run_unknown_agent_404(client, auth_headers):

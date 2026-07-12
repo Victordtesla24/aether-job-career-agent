@@ -28,6 +28,8 @@ export function providerAction(status: Provider["status"]): ProviderAction {
 }
 
 /** Human-readable status label for an agent card. */
-export function agentStatusLabel(status: "active" | "paused" | "error"): string {
-  return { active: "Active", paused: "Paused", error: "Error" }[status];
+export function agentStatusLabel(
+  status: "active" | "paused" | "error" | "planned",
+): string {
+  return { active: "Active", paused: "Paused", error: "Error", planned: "Planned" }[status];
 }

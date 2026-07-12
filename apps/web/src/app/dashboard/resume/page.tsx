@@ -17,12 +17,26 @@ import {
   type ResumeDiff,
 } from "../../../lib/api/resumes";
 
+/** Real ATS engine breakdown for a tailored version vs its target job. */
+type AtsScore = {
+  overall: number;
+  keyword_match: number;
+  semantic_similarity: number;
+  experience_gap: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  requires_review: boolean;
+  job_title?: string | null;
+  company?: string | null;
+};
+
 export default function ResumePage() {
   const [resumes, setResumes] = useState<Resume[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState("");
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
+  const [ats, setAts] = useState<AtsScore | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
@@ -78,11 +92,19 @@ export default function ResumePage() {
   const openResume = async (resume: Resume) => {
     setSelected(resume);
     setDiff(null);
+    setAts(null);
     setDownloadNote(null);
     try {
       setDiff(await fetchResumeDiff(resume.id));
     } catch {
       setDiff(null);
+    }
+    if (resume.sourceJobId) {
+      try {
+        setAts(await apiRequest<AtsScore>(`/resumes/${resume.id}/ats`));
+      } catch {
+        setAts(null);
+      }
     }
   };
 
@@ -311,6 +333,61 @@ export default function ResumePage() {
           )}
         </section>
       </div>
+
+      {ats ? (
+        <section
+          className="glass rounded-2xl border border-white/10 p-5"
+          data-design-id="ats-score-rs06"
+          data-testid="ats-score-panel"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+                ATS Score
+              </h2>
+              <p className="mt-1 text-xs text-aether-muted-dim">
+                Deterministic keyword + semantic + experience evaluation vs{" "}
+                {ats.job_title ?? "target job"}
+                {ats.company ? ` @ ${ats.company}` : ""}
+              </p>
+            </div>
+            <span
+              className={`font-mono text-2xl font-bold ${ats.overall >= 60 ? "text-aether-green" : "text-aether-amber"}`}
+              data-testid="ats-overall"
+            >
+              {ats.overall}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: "Keyword match (40%)", value: ats.keyword_match },
+              { label: "Semantic similarity (40%)", value: ats.semantic_similarity },
+              { label: "Experience fit (20%)", value: ats.experience_gap },
+            ].map((row) => (
+              <div key={row.label}>
+                <div className="flex items-center justify-between text-xs text-aether-muted">
+                  <span>{row.label}</span>
+                  <span className="mono">{row.value}</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-white/10">
+                  <div
+                    className="h-1.5 rounded-full bg-aether-indigo"
+                    style={{ width: `${Math.min(100, Math.max(0, row.value))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          {ats.missing_keywords.length > 0 ? (
+            <p className="mt-3 text-xs text-aether-muted-dim">
+              Missing JD keywords:{" "}
+              <span className="mono text-aether-amber">
+                {ats.missing_keywords.slice(0, 8).join(", ")}
+              </span>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">
         <section className="glass rounded-2xl border border-white/10 p-5">

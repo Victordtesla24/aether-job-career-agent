@@ -47,6 +47,8 @@ _APPROVAL_GATED = {"tailor", "coverLetter"}
 #: pricing"). Values are approximate list prices, kept in one place.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
     # model: (input $/1K, output $/1K)
+    "claude-fable-5": (0.010, 0.050),
+    "claude-haiku-4-5-20251001": (0.001, 0.005),
     "claude-sonnet-4": (0.003, 0.015),
     "claude-3.5-haiku": (0.0008, 0.004),
     "gpt-4o": (0.005, 0.015),
@@ -69,9 +71,9 @@ def _price_for(model: str) -> tuple[float, float]:
 #: model + rationale surfaced in the info tooltip.
 AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "jobDiscovery", "name": "Job Discovery Agent", "icon": "fa-magnifying-glass",
-     "accent": "indigo", "backend": "scout", "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini for speed and cost efficiency. Processes high volumes of "
-            "listings — a fast, affordable model is ideal."},
+     "accent": "indigo", "backend": "scout", "recommended": "deterministic",
+     "tip": "Deterministic multi-source discovery (Seek, Greenhouse, Lever, Remotive, "
+            "RemoteOK) — scrapes and normalises listings with no LLM cost."},
     {"key": "resumeTailoring", "name": "Resume Tailoring Agent", "icon": "fa-file-pen",
      "accent": "coral", "backend": "tailor", "recommended": "claude-sonnet-4",
      "tip": "Best with Claude claude-sonnet-4 for nuanced writing and format preservation. "
@@ -91,8 +93,9 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "accent": "green", "backend": None, "recommended": "gpt-4o",
      "tip": "Best with GPT-4o for reliable form-filling and browser automation reasoning."},
     {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
-     "accent": "indigo", "backend": "fitScorer", "recommended": "claude-3.5-haiku",
-     "tip": "Best with claude-3.5-haiku — fast scoring across many jobs at low cost."},
+     "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
+     "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "
+            "scores every discovered job with no LLM cost."},
     {"key": "salaryIntelligence", "name": "Salary Intelligence Agent", "icon": "fa-sack-dollar",
      "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — aggregates salary data at scale affordably."},
@@ -126,12 +129,17 @@ AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "reference", "name": "Reference Agent", "icon": "fa-user-check",
      "accent": "indigo", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — manages reference requests & reminders."},
+    {"key": "storyExtraction", "name": "Story Extraction Agent", "icon": "fa-book-bookmark",
+     "accent": "coral", "backend": "storyExtractor", "recommended": "claude-haiku-4-5-20251001",
+     "tip": "Mines the base resume into STAR+R evidence stories for the Story Bank — "
+            "runs on the STRUCTURED model tier."},
     {"key": "learningFeedback", "name": "Learning / Feedback Agent", "icon": "fa-graduation-cap",
-     "accent": "coral", "backend": "storyExtractor", "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 — learns from outcomes to refine future tailoring."},
+     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
+     "tip": "Planned: learns from application outcomes to refine future tailoring."},
     {"key": "orchestration", "name": "Orchestration Agent", "icon": "fa-sitemap",
-     "accent": "indigo", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 — coordinates all agents and resolves dependencies."},
+     "accent": "indigo", "backend": "supervisor", "recommended": "deterministic",
+     "tip": "Plans and sequences the live pipeline (supervisor node): scout → fitScorer → "
+            "matcher → tailor → coverLetter. Deterministic, no LLM cost."},
     {"key": "notification", "name": "Notification Agent", "icon": "fa-bell",
      "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — monitors status changes and pushes timely alerts."},
@@ -141,30 +149,74 @@ _CATALOG_BY_KEY = {a["key"]: a for a in AGENT_CATALOG}
 #: Reverse map: backend run name → catalog key (for status derivation).
 _BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]}
 
-#: The 6 AI providers shown in the wireframe, seeded on first read.
+#: The 6 AI providers offered by the Agents screen. This is a static catalog
+#: of identity/branding only — connection status, active model, and detail
+#: strings are derived at request time from the credentials that actually
+#: exist in the server environment (see ``_provider_env_state``). Nothing here
+#: may claim a connection that does not exist.
 PROVIDER_SEED: list[dict[str, Any]] = [
-    {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key", "status": "connected",
-     "model": "claude-sonnet-4", "detail": "Claude Pro · 45 messages remaining",
-     "models": ["claude-sonnet-4", "claude-3.5-haiku"], "icon": "fa-a", "color": "#D97757"},
+    {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key",
+     "models": [], "icon": "fa-a", "color": "#D97757"},
     {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key",
-     "status": "connected", "model": "llama-3.1-405b", "detail": "$12.40 credit remaining",
-     "models": ["llama-3.1-405b", "llama-3.3-70b-versatile"],
+     "models": ["deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct"],
      "icon": "fa-route", "color": "#6467F2"},
-    {"id": "openai", "name": "OpenAI", "auth": "API Key", "status": "connected",
-     "model": "gpt-4o", "detail": "Tier 3 · 2M TPM limit",
+    {"id": "openai", "name": "OpenAI", "auth": "API Key",
      "models": ["gpt-4o", "gpt-4o-mini", "text-embedding-3-large"], "icon": "fa-brain",
      "color": "#10A37F"},
-    {"id": "gemini", "name": "Google Gemini", "auth": "OAuth + API Key", "status": "warning",
-     "model": "gemini-2.0-flash", "detail": "Token expiring in 3 days",
+    {"id": "gemini", "name": "Google Gemini", "auth": "OAuth + API Key",
      "models": ["gemini-2.0-flash"], "icon": "fa-gem", "color": "#4285F4"},
     {"id": "bedrock", "name": "AWS Bedrock", "auth": "Access + Secret Key",
-     "status": "unconfigured", "model": "", "detail": "Not configured · IAM required",
      "models": [], "icon": "fa-aws", "color": "#FF9900"},
-    {"id": "groq", "name": "Groq", "auth": "API Key", "status": "connected",
-     "model": "llama-3.3-70b-versatile", "detail": "Free tier · 14.4K req/day",
+    {"id": "groq", "name": "Groq", "auth": "API Key",
      "models": ["llama-3.3-70b-versatile"], "icon": "fa-bolt-lightning", "color": "#F55036"},
 ]
 _PROVIDER_SEED_BY_ID = {p["id"]: p for p in PROVIDER_SEED}
+
+#: Env var that carries each provider's credential.
+_PROVIDER_ENV_KEY: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",  # or AETHER_LLM_API_KEY on an Anthropic base URL
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GOOGLE_API_KEY",
+    "bedrock": "AWS_ACCESS_KEY_ID",
+    "groq": "GROQ_API_KEY",
+}
+
+
+def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
+    """(status, active_model, detail, models) from the REAL server env.
+
+    A provider is "connected" only when its credential is actually present.
+    Anthropic is special-cased: the product's primary LLM path is a direct
+    Anthropic token in ``AETHER_LLM_API_KEY`` with an api.anthropic.com base
+    URL (subscription token — deliberately NOT routed through OpenRouter).
+    """
+    import os
+
+    if provider_id == "anthropic":
+        base = os.environ.get("AETHER_LLM_BASE_URL", "")
+        direct = bool(os.environ.get("AETHER_LLM_API_KEY")) and "anthropic.com" in base
+        if direct or os.environ.get("ANTHROPIC_API_KEY"):
+            from app.services.llm_client import get_model
+
+            tiers = {get_model(t) for t in ("REASONING", "STRUCTURED", "FAST", "LIGHT")}
+            return (
+                "connected",
+                get_model("REASONING"),
+                "Direct Anthropic API · token configured in .env",
+                sorted(tiers),
+            )
+        return ("unconfigured", "", "Not configured · add API key to .env", [])
+
+    seed = _PROVIDER_SEED_BY_ID[provider_id]
+    if os.environ.get(_PROVIDER_ENV_KEY[provider_id]):
+        return (
+            "connected",
+            "",
+            "API key configured in .env · standby (Anthropic is the active path)",
+            seed["models"],
+        )
+    return ("unconfigured", "", "Not configured · add API key to .env", seed["models"])
 
 
 #: Set once the screen-scoped tables are known to exist in this process, so the
@@ -247,34 +299,54 @@ def _record_run(
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
     output["approvalRequired"] = agent_name in _APPROVAL_GATED
-    # Real cost estimate from the run's *measured* I/O size × the assigned
-    # model's published per-token price (≈4 chars/token). Stored on the run so
-    # GET /agents/stats reports genuine spend/tokens rather than a hardcoded
-    # figure. Embedding-only agents (fitScorer/ATS) still bill input tokens.
+    # Real cost estimate from the run's *measured* I/O size × the published
+    # per-token price of the model the agent ACTUALLY ran on (≈4 chars/token).
+    # Deterministic agents (scout/fitScorer/matcher/supervisor) make no LLM
+    # calls, so they record zero tokens and zero spend — anything else would
+    # fabricate the spend/ROI figures GET /agents/stats reports.
     model = _model_for_agent(agent_name)
-    tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
-    tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
-    price_in, price_out = _price_for(model)
-    cost = round(tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6)
-    output["model"] = model
-    output["tokensIn"] = tokens_in
-    output["tokensOut"] = tokens_out
-    output["costUsd"] = cost
+    if model is None:
+        cost = 0.0
+        output["model"] = None
+        output["tokensIn"] = 0
+        output["tokensOut"] = 0
+        output["costUsd"] = 0.0
+    else:
+        tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
+        tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
+        price_in, price_out = _price_for(model)
+        cost = round(tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6)
+        output["model"] = model
+        output["tokensIn"] = tokens_in
+        output["tokensOut"] = tokens_out
+        output["costUsd"] = cost
     finished = runs.finish(run["id"], "completed", output=output, cost_usd=cost)
     output["run_id"] = (finished or run)["id"]
     return output
 
 
-def _model_for_agent(agent_name: str) -> str:
-    """Resolve the model a run should be costed against: the catalog default
-    for the agent (its recommended model), falling back to a sane default."""
-    key = _BACKEND_TO_KEY.get(agent_name)
-    if key:
-        return _CATALOG_BY_KEY[key]["recommended"]
-    entry = _CATALOG_BY_KEY.get(agent_name)
-    if entry:
-        return entry["recommended"]
-    return "claude-sonnet-4"
+#: LLM tier each backend agent actually calls through ``llm_client`` — kept in
+#: sync with the ``get_model(...)`` calls in the agent implementations.
+#: Backends absent here (scout, fitScorer, matcher, supervisor) are
+#: deterministic: scraping, embeddings, and plain code — no LLM spend.
+_LLM_TIER_BY_BACKEND: dict[str, str] = {
+    "tailor": "REASONING",
+    "coverLetter": "REASONING",
+    "storyExtractor": "STRUCTURED",
+}
+
+
+def _model_for_agent(agent_name: str) -> str | None:
+    """The model this backend agent ACTUALLY runs on (resolved from the same
+    ``AETHER_MODEL_<TIER>`` env vars the LLM client uses), or None for
+    deterministic agents that make no LLM calls. Costing against the model
+    that really served the run keeps spend/ROI figures genuine."""
+    tier = _LLM_TIER_BY_BACKEND.get(agent_name)
+    if tier is None:
+        return None
+    from app.services.llm_client import get_model
+
+    return get_model(tier)
 
 
 def _user_search_defaults(user_id: str) -> tuple[str, str]:
@@ -565,29 +637,38 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
     """Full agent catalog merged with persisted config + real run status.
 
     ``status`` is derived from live data: an agent whose latest AgentRun failed
-    is ``error``; a disabled agent is ``paused``; otherwise ``active``.
+    is ``error``; a disabled agent is ``paused``; an implemented agent is
+    ``active``. Catalog entries with no backend implementation are ``planned``
+    — they are roadmap cards and are never presented as running (no fabricated
+    activity). ``model`` is the model the agent ACTUALLY runs on ("deterministic"
+    for non-LLM agents, "—" for planned ones).
     """
     user_id = current_user["id"]
     cfg = _config_map(user_id)
     last = AgentRunRepository().last_run_by_agent(user_id)
     agents: list[dict[str, Any]] = []
-    active = paused = error = 0
+    active = paused = error = planned = 0
     for entry in AGENT_CATALOG:
         key = entry["key"]
         c = cfg.get(key, {})
         enabled = bool(c.get("enabled", True))
-        model = c.get("model") or entry["recommended"]
         backend = entry["backend"]
         run = last.get(backend) if backend else None
-        if not enabled:
-            state = "paused"
-            paused += 1
-        elif run and run["status"] == "failed":
-            state = "error"
-            error += 1
+        if backend is None:
+            state = "planned"
+            planned += 1
+            model = "—"
         else:
-            state = "active"
-            active += 1
+            model = _model_for_agent(backend) or "deterministic"
+            if not enabled:
+                state = "paused"
+                paused += 1
+            elif run and run["status"] == "failed":
+                state = "error"
+                error += 1
+            else:
+                state = "active"
+                active += 1
         agents.append(
             {
                 "key": key,
@@ -607,7 +688,13 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
         )
     return {
         "agents": agents,
-        "counts": {"total": len(agents), "active": active, "paused": paused, "error": error},
+        "counts": {
+            "total": len(agents),
+            "active": active,
+            "paused": paused,
+            "error": error,
+            "planned": planned,
+        },
     }
 
 
@@ -655,7 +742,13 @@ def update_agent_config(
 
 @router.get("/providers")
 def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
-    """The 6 AI providers merged with the user's persisted connection state."""
+    """The 6 AI providers with connection state derived from real credentials.
+
+    Status comes from the server environment (a provider can never show
+    "connected" without an actual key). A persisted user override may only
+    DOWNGRADE a connected provider (disconnect it / mark it warning) or pick a
+    preferred model — it can never upgrade a keyless provider to connected.
+    """
     _ensure_agents_tables()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -667,13 +760,23 @@ def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
             overrides = {r["provider"]: r for r in rows_to_dicts(cur)}
     result = []
     for seed in PROVIDER_SEED:
+        env_status, env_model, env_detail, env_models = _provider_env_state(seed["id"])
         o = overrides.get(seed["id"], {})
+        status = env_status
+        if o.get("status") in ("warning", "unconfigured") and env_status == "connected":
+            status = o["status"]
+        model = o.get("model") or env_model
         result.append(
             {
-                **seed,
-                "status": o.get("status", seed["status"]),
-                "model": o.get("model", seed["model"]) or seed["model"],
-                "detail": o.get("detail") or seed["detail"],
+                "id": seed["id"],
+                "name": seed["name"],
+                "auth": seed["auth"],
+                "icon": seed["icon"],
+                "color": seed["color"],
+                "models": env_models,
+                "status": status,
+                "model": model if status == "connected" else "",
+                "detail": env_detail,
             }
         )
     return result
@@ -692,6 +795,13 @@ def update_provider(
     seed = _PROVIDER_SEED_BY_ID.get(provider)
     if seed is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown provider '{provider}'")
+    env_status, env_model, env_detail, _env_models = _provider_env_state(provider)
+    if body.status == "connected" and env_status != "connected":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"'{provider}' has no credential on the server — add its API key to the "
+            "server .env before marking it connected.",
+        )
     _ensure_agents_tables()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -701,15 +811,11 @@ def update_provider(
                 (current_user["id"], provider),
             )
             existing = rows_to_dicts(cur)
-            cur_status = existing[0]["status"] if existing else seed["status"]
-            cur_model = existing[0]["model"] if existing else seed["model"]
+            cur_status = existing[0]["status"] if existing else env_status
+            cur_model = existing[0]["model"] if existing else env_model
             new_status = cur_status if body.status is None else body.status
             new_model = cur_model if body.model is None else body.model
-            detail = (
-                "Not configured · IAM required"
-                if new_status == "unconfigured"
-                else "Connected · manage in Settings"
-            )
+            detail = env_detail
             cur.execute(
                 '''
                 INSERT INTO "AgentProvider" ("userId", "provider", "status", "model", "detail",
@@ -789,30 +895,47 @@ class TestRunRequest(BaseModel):
 def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
     """Dry-run cost preview for a single agent — no credits charged.
 
-    Returns the assigned model, an estimated token count and cost from the
-    provider's published per-token pricing, plus a simulated 'actual' figure
-    the modal reveals as the dry-run result. This never invokes the live LLM,
-    so it is safe to call repeatedly and honestly charges nothing.
+    Returns the model the agent actually runs on, an estimated token count and
+    cost from the provider's published per-token pricing, and — instead of a
+    simulated figure — the REAL cost/tokens/duration of the agent's most
+    recent completed run (null when it has never run). Never invokes the live
+    LLM, so it is safe to call repeatedly and honestly charges nothing.
     """
     if body.agent_key not in _CATALOG_BY_KEY:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{body.agent_key}'")
     entry = _CATALOG_BY_KEY[body.agent_key]
-    cfg = _config_map(current_user["id"]).get(body.agent_key, {})
-    model = cfg.get("model") or entry["recommended"]
-    price_in, price_out = _price_for(model)
-    est_tokens_in, est_tokens_out = 2800, 1400
-    est_cost = round(est_tokens_in / 1000 * price_in + est_tokens_out / 1000 * price_out, 3)
-    # Simulated actual comes in slightly under the estimate (as in the wireframe).
-    actual_cost = round(est_cost * 0.97, 3)
+    backend = entry["backend"]
+    model = _model_for_agent(backend) if backend else None
+    est_cost = None
+    est_tokens: int | None = None
+    if model is not None:
+        price_in, price_out = _price_for(model)
+        est_tokens_in, est_tokens_out = 2800, 1400
+        est_tokens = est_tokens_in + est_tokens_out
+        est_cost = round(
+            est_tokens_in / 1000 * price_in + est_tokens_out / 1000 * price_out, 3
+        )
+    # Real figures from the last completed run of this backend, if any.
+    actual_cost = actual_tokens = response_seconds = None
+    if backend:
+        last = AgentRunRepository().last_run_by_agent(current_user["id"]).get(backend)
+        out = (last or {}).get("output") or {}
+        if last and last.get("status") == "completed":
+            actual_cost = out.get("costUsd")
+            t_in, t_out = out.get("tokensIn"), out.get("tokensOut")
+            if t_in is not None and t_out is not None:
+                actual_tokens = t_in + t_out
+            if out.get("duration_ms") is not None:
+                response_seconds = round(out["duration_ms"] / 1000, 1)
     return {
         "agent_key": body.agent_key,
         "name": entry["name"],
         "model": model,
-        "estTokens": est_tokens_in + est_tokens_out,
+        "estTokens": est_tokens,
         "estCost": est_cost,
         "actualCost": actual_cost,
-        "actualTokens": 4180,
-        "responseSeconds": 1.8,
+        "actualTokens": actual_tokens,
+        "responseSeconds": response_seconds,
         "creditsCharged": 0.0,
     }
 

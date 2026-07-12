@@ -500,3 +500,39 @@ bare `$`, not `AU$`), and SC-JOB-10 (no 30-minute scheduled discovery).
 **Consequences.** REQ-05's "20 named agents" remains deliberately unmet at 7 agents: fabricating
 13 non-existent agent cards would violate the directive's higher-priority constraint 2 (no
 mock/simulated data in production UI). The registry shows exactly the agents that exist.
+
+## D-0020 — Agents-screen truthfulness: env-derived providers, planned cards, real cost attribution, real ATS panel
+**Date:** 2026-07-12 · **Author:** Aether Delivery Agent (swarm directive execution, phase 2) · **Status:** Adopted
+
+**Context.** The second swarm-directive audit found the Agents screen surfacing fabricated data:
+provider cards defaulted to "connected" with invented details ("Claude Pro · 45 messages
+remaining", "$12.40 credit remaining") regardless of real credentials; 16 catalog entries with no
+backend showed status "active"; run costs were priced against catalog-"recommended" models the
+runtime never uses; the Test Run modal returned simulated "actual" figures (est × 0.97); and the
+workflow graph mislabelled real agents (storyExtractor as "Learning", matcher as "Memory").
+Resume Studio also never displayed an ATS score (SC-RS-05).
+
+**Decision.**
+1. Provider status/detail/models derive from the server env at request time
+   (`_provider_env_state`): Anthropic = connected via the direct `AETHER_LLM_API_KEY`
+   subscription token on api.anthropic.com (SC-AG-05 — never via OpenRouter); OpenRouter =
+   connected-standby (key present); OpenAI/Gemini/Groq/Bedrock = unconfigured (no keys). A user
+   override can only downgrade, never fabricate a connection; PUT returns 409 when marking a
+   keyless provider connected. The stale fabricated "gemini connected" row was deleted.
+2. Catalog entries without a backend are status "planned" (roadmap cards, dimmed, no toggle) —
+   21+1 named cards satisfy REQ-05's spirit while constraint 2 bars fake activity. A new "Story
+   Extraction Agent" card owns the real storyExtractor; "Learning / Feedback" is honestly planned;
+   "Orchestration" maps to the real supervisor node.
+3. Run costs bill the model the agent ACTUALLY uses (tailor/coverLetter → AETHER_MODEL_REASONING
+   = claude-fable-5 at $10/$50 per MTok; storyExtractor → STRUCTURED = claude-haiku-4-5 at $1/$5);
+   deterministic agents (scout, fitScorer, matcher, supervisor) record zero LLM spend. Test Run
+   "actual" figures come from the last real completed run (null if never run).
+4. The workflow graph shows the real 7-agent topology in pipeline order.
+5. `GET /resumes/{id}/ats` scores a version against its source job with the deterministic ATS
+   engine; Resume Studio shows the breakdown panel for tailored versions (SC-RS-05).
+
+**Consequences / accepted deviations.** SC-RS-06 (AI-Detection %) is NOT implemented — no honest
+measurement exists without a third-party detector, and an invented percentage violates
+constraint 2. SC-AG-08/REQ-10 (Langfuse) and Gmail OAuth (SC-EC-02+, SC-AUTH-04) remain blocked on
+credentials/interactive consent. SC-ST-05 is partial: per-agent model preference persists but the
+runtime stays pinned to the validated Anthropic tiers.

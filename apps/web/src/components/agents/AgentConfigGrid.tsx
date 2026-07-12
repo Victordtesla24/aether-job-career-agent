@@ -24,24 +24,28 @@ const STATUS_DOT: Record<CatalogAgent["status"], string> = {
   active: "bg-aether-green",
   paused: "bg-aether-yellow",
   error: "bg-red-400",
+  planned: "bg-white/25",
 };
 
 const STATUS_TEXT: Record<CatalogAgent["status"], string> = {
   active: "text-aether-green",
   paused: "text-aether-yellow",
   error: "text-red-400",
+  planned: "text-aether-muted-dim",
 };
 
 const CARD_BORDER: Record<CatalogAgent["status"], string> = {
   active: "border-white/10 hover:border-white/20",
   paused: "border-white/10 hover:border-white/20",
   error: "border-red-400/30 hover:border-red-400/50",
+  planned: "border-white/5 opacity-75",
 };
 
 const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
   active: "Active",
   paused: "Paused",
   error: "Error",
+  planned: "Planned",
 };
 
 function AgentCard({
@@ -103,6 +107,7 @@ function AgentCard({
         <span className={`text-[10px] ${STATUS_TEXT[agent.status]}`}>
           {STATUS_LABEL[agent.status]}
         </span>
+        {agent.status === "planned" ? null : (
         <div className="flex items-center gap-2">
           {agent.runnable ? (
             <button
@@ -134,6 +139,7 @@ function AgentCard({
             </span>
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -148,7 +154,13 @@ export default function AgentConfigGrid({
   onRun,
 }: {
   agents: CatalogAgent[];
-  counts: { total: number; active: number; paused: number; error: number } | null;
+  counts: {
+    total: number;
+    active: number;
+    paused: number;
+    error: number;
+    planned?: number;
+  } | null;
   loading: boolean;
   busyKey: string | null;
   onToggle: (key: string, enabled: boolean) => void;
@@ -176,6 +188,10 @@ export default function AgentConfigGrid({
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-red-400" />
             {counts ? `${counts.error} Error` : "Error"}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-white/25" />
+            {counts ? `${counts.planned ?? 0} Planned` : "Planned"}
           </span>
         </div>
       </div>

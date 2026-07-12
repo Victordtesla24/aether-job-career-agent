@@ -66,6 +66,57 @@ def get_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return resume
 
 
+@router.get("/{resume_id}/ats")
+def ats_score(
+    resume_id: str, current_user: CurrentUser, job_id: str | None = None
+) -> dict[str, Any]:
+    """Deterministic ATS score of this resume version against a job description.
+
+    Scores against the version's source job by default (``?job_id=`` overrides).
+    The breakdown is the real ATS engine output — keyword coverage, semantic
+    similarity, experience gap — never a fabricated number (SC-RS-05).
+    """
+    repo = ResumeRepository()
+    resume = repo.get_by_id(resume_id, current_user["id"])
+    if resume is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
+    target_job_id = job_id or resume.get("sourceJobId")
+    if not target_job_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Resume has no target job — tailor it against a job or pass ?job_id=",
+        )
+    from app.repositories.job import JobRepository
+
+    job = JobRepository().get_by_id(target_job_id, current_user["id"])
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Target job not found")
+    sections = resume.get("sections") or {}
+    text = sections.get("raw_text") or "\n".join(
+        b.get("text", "") for b in sections.get("bullets", [])
+    )
+    if not text.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Resume has no scoreable text"
+        )
+    from app.services.ats_engine import ATSEngine
+
+    score = ATSEngine().score(text, job.get("description") or "")
+    return {
+        "resume_id": resume_id,
+        "job_id": target_job_id,
+        "job_title": job.get("title"),
+        "company": job.get("company"),
+        "overall": round(score.overall, 1),
+        "keyword_match": round(score.keyword_match, 1),
+        "semantic_similarity": round(score.semantic_similarity, 1),
+        "experience_gap": round(score.experience_gap, 1),
+        "matched_keywords": score.matched_keywords,
+        "missing_keywords": score.missing_keywords,
+        "requires_review": score.requires_review,
+    }
+
+
 @router.get("/{resume_id}/diff")
 def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
     """Bullet-level diff of a tailored resume against its parent."""
