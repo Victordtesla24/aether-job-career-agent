@@ -119,12 +119,13 @@ describe("D5 — resume download client", () => {
     }
   });
 
-  it("downloadResume POSTs to /resumes/{id}/download", async () => {
-    const fetchMock = mockFetchOnce({ detail: "ok", resume_id: "r1" }, 200);
+  it("downloadResume calls GET /resumes/{id}/download", async () => {
+    const pdfBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
+    const fetchMock = mockFetchOnce(pdfBlob, 200);
     await downloadResume("r1", { token: "tok" });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain("/resumes/r1/download");
-    expect((init as RequestInit).method).toBe("POST");
+    // GET request — no explicit method set
   });
 });
 

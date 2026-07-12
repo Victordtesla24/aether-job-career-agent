@@ -79,16 +79,18 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
   }
 
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `resume-${id.slice(0, 8)}.pdf`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  } finally {
-    URL.revokeObjectURL(url);
+  if (typeof document !== "undefined" && typeof URL !== "undefined") {
+    const url = URL.createObjectURL(blob);
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `resume-${id.slice(0, 8)}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 }
 
