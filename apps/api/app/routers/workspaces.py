@@ -247,7 +247,10 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
             "status": t["status"],
             "contactName": t.get("name") or "",
             "company": (t.get("company") or ""),
-            "subject": f"{(t.get('type') or '').replace('_', ' ').title()} — {(t.get('company') or '')}",
+            "subject": (
+                f"{(t.get('type') or '').replace('_', ' ').title()}"
+                f" — {(t.get('company') or '')}"
+            ),
             "scheduledAt": str(t["scheduledAt"]) if t.get("scheduledAt") else None,
             "sentAt": str(t["sentAt"]) if t.get("sentAt") else None,
         }
