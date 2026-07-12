@@ -468,7 +468,7 @@ export default function JobsPage() {
         <div>
           <h1 className="text-2xl font-bold">Job Discovery</h1>
           <p className="mono text-xs text-aether-muted-dim" data-testid="jobs-stats">
-            {stats.matches} matches · {stats.newToday} new today · {stats.sources} sources connected
+            {stats.matches} matches across markets · {stats.newToday} new today · {stats.sources} sources connected
           </p>
         </div>
         <button
