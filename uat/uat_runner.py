@@ -26,7 +26,7 @@ from playwright.sync_api import sync_playwright
 
 BASE = "https://5cb5f0620.abacusai.cloud"
 API = f"{BASE}/api"
-CREDS = {"email": "demo@aether.dev", "password": "AetherDemo1"}
+CREDS = {"email": "sarkar.vikram@gmail.com", "password": "AetherDemo1"}
 REPORT_DIR = pathlib.Path(__file__).parent / "reports"
 SHOT_DIR = REPORT_DIR / "evidence"
 

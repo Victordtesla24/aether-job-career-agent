@@ -7,7 +7,7 @@
 set -euo pipefail
 
 API="${AETHER_API_URL:-http://127.0.0.1:8000}"
-EMAIL="${AETHER_CRON_EMAIL:-demo@aether.dev}"
+EMAIL="${AETHER_CRON_EMAIL:-sarkar.vikram@gmail.com}"
 PASSWORD="${AETHER_CRON_PASSWORD:-AetherDemo1}"
 
 log() { echo "[discovery-cron $(date -u +%FT%TZ)] $*"; }

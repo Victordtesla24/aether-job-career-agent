@@ -10,7 +10,7 @@
  */
 
 export const DEMO_CREDENTIALS = {
-  email: "demo@aether.dev",
+  email: "sarkar.vikram@gmail.com",
   password: "AetherDemo1",
 } as const;
 

@@ -119,9 +119,8 @@ export default function LoginPage() {
 
           <p className="text-[12px] text-aether-muted-dim leading-relaxed">
             <i className="fa-solid fa-circle-info mr-1.5" aria-hidden />
-            Demo environment — credentials are prefilled with the seeded demo
-            account (<span className="mono">demo@aether.dev</span>). No real
-            personal data is stored.
+            Credentials are prefilled with Vikram&apos;s workspace account
+            (<span className="mono">sarkar.vikram@gmail.com</span>).
           </p>
         </form>
       </div>

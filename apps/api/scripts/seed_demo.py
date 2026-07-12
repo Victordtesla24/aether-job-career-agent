@@ -30,7 +30,7 @@ from app.db import get_connection, new_id  # noqa: E402
 from app.repositories.user import UserRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
-DEMO_EMAIL = "demo@aether.dev"
+DEMO_EMAIL = "sarkar.vikram@gmail.com"
 DEMO_PASSWORD = "AetherDemo1"
 
 FUNNEL = {"jobs_found": 847, "applied": 412, "screened": 156, "interviewed": 23, "offers": 4}

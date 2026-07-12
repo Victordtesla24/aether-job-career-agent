@@ -10,7 +10,7 @@ test.describe("Login page", () => {
     expect(response?.status()).toBe(200);
 
     await expect(page.getByRole("heading", { name: "Sign in", level: 1 })).toBeVisible();
-    await expect(page.getByLabel("Email")).toHaveValue("demo@aether.dev");
+    await expect(page.getByLabel("Email")).toHaveValue("sarkar.vikram@gmail.com");
     await expect(page.getByLabel("Password")).toHaveValue("AetherDemo1");
     await expect(page.getByText(/demo environment/i)).toBeVisible();
   });

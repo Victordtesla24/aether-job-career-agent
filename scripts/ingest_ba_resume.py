@@ -29,11 +29,15 @@ def main() -> None:
     payload = {
         "label": LABEL,
         "raw_text": raw_text,
+        # Canonical contact block from the portfolio site
+        # (https://forgotten-mistory.web.app/ — mailto/tel links).
         "contact": {
             "name": "Vikram Deshpande",
-            "phone": "0433 224 556",
-            "email": "vikram.deshpande03@gmail.com",
-            "location": "Melbourne, VIC",
+            "phone": "+61 433 224 556",
+            "email": "sarkar.vikram@gmail.com",
+            "location": "Melbourne, VIC, Australia",
+            "github": "github.com/Victordtesla24",
+            "linkedin": "linkedin.com/in/vikramd-profile",
         },
         "format_hash": format_hash,
     }
