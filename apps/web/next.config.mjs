@@ -18,6 +18,15 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        // Root forwards to the dashboard (AuthGuard bounces unauthenticated
+        // visitors to /login). A config redirect — not a page-level
+        // redirect() — because a statically prerendered redirect() ships a
+        // 307 with no Location header, stranding non-JS clients.
+        source: "/",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
         source: "/dashboard/cover-letter",
         destination: "/dashboard/cover-letters",
         permanent: true,
