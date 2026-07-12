@@ -107,6 +107,8 @@ function initials(company: string): string {
 function salaryLabel(job: Job): string {
   const j = job as Job & { salaryMin?: number | null; salaryMax?: number | null; currency?: string | null };
   const fmt = (n: number) => `${j.currency === "USD" ? "US$" : "AU$"}${Math.round(n / 1000)}k`;
+  if (j.salaryMin && j.salaryMax && Math.round(j.salaryMin / 1000) === Math.round(j.salaryMax / 1000))
+    return fmt(j.salaryMax);
   if (j.salaryMin && j.salaryMax) return `${fmt(j.salaryMin)} – ${fmt(j.salaryMax)}`;
   if (j.salaryMax) return `up to ${fmt(j.salaryMax)}`;
   if (j.salaryMin) return `from ${fmt(j.salaryMin)}`;

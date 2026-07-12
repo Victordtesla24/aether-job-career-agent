@@ -48,9 +48,12 @@ function coverageCount(stories: Story[], keywords: string[]): number {
 
 export function StoryAside({
   stories,
+  drafting = false,
   onDraftMissing,
 }: {
   stories: Story[];
+  /** True while the Story Extraction Agent run is in flight. */
+  drafting?: boolean;
   onDraftMissing: () => void;
 }) {
   return (
@@ -103,10 +106,14 @@ export function StoryAside({
           type="button"
           data-testid="draft-missing-btn"
           onClick={onDraftMissing}
-          className="mt-4 min-h-[44px] w-full rounded-xl bg-aether-indigo px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5b52ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-indigo/50"
+          disabled={drafting}
+          className="mt-4 min-h-[44px] w-full rounded-xl bg-aether-indigo px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5b52ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-indigo/50 disabled:opacity-60"
         >
-          <i className="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true" />
-          Draft missing stories
+          <i
+            className={`fa-solid ${drafting ? "fa-spinner fa-spin" : "fa-wand-magic-sparkles"} mr-1`}
+            aria-hidden="true"
+          />
+          {drafting ? "Drafting from resume…" : "Draft missing stories"}
         </button>
       </section>
     </aside>

@@ -399,7 +399,12 @@ export default function ResumePage() {
             <ul className="mt-3 space-y-2 text-sm text-aether-muted">
               {diff.changes.slice(0, 4).map((change, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-2">
-                  <span className="truncate">{(change.after || change.before).slice(0, 60)}</span>
+                  <span className="truncate">
+                    {(() => {
+                      const t = change.after || change.before;
+                      return t.length > 60 ? `${t.slice(0, 60)}…` : t;
+                    })()}
+                  </span>
                   {change.evidenceRef ? (
                     <span className="mono rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">
                       {change.evidenceRef}

@@ -320,7 +320,11 @@ export default function StoryBankPage() {
         </section>
 
         {/* Right: insights aside */}
-        <StoryAside stories={effectiveStories} onDraftMissing={openCreate} />
+        <StoryAside
+          stories={effectiveStories}
+          drafting={running}
+          onDraftMissing={() => void extract()}
+        />
       </div>
     </div>
   );

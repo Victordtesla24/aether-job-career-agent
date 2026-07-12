@@ -360,6 +360,12 @@ export default function EmailCenterPage() {
         <div className="space-y-4 xl:col-span-1">
           <section className="glass rounded-2xl border border-white/10 p-5" data-testid="followups">
             <h2 className="mb-3 text-[15px] font-semibold">Automated Follow-Ups</h2>
+            {inbox.followUps.length === 0 ? (
+              <p className="text-xs text-aether-muted-dim">
+                No follow-ups queued yet — connect your Gmail account to enable the
+                follow-up engine on real threads.
+              </p>
+            ) : null}
             <div className="space-y-2.5">
               {inbox.followUps.map((f) => (
                 <div key={`${f.company}-${f.role}`} className="rounded-xl border border-white/10 bg-white/5 p-3">

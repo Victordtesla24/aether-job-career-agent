@@ -26,6 +26,32 @@ class ApprovalRepository:
             raise ValueError(f"Invalid approval type '{type_}'")
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Idempotent per (job, type): regenerating or refining a letter
+                # for the same job REFRESHES the existing PENDING request
+                # (pointing it at the newest version) instead of stacking
+                # duplicate cards in the approval queue. Resolved requests are
+                # history and never reused.
+                job_id = payload.get("job_id")
+                if job_id:
+                    cur.execute(
+                        f'''
+                        UPDATE "ApprovalRequest"
+                        SET "payload" = %s, "applicationId" = %s
+                        WHERE "id" = (
+                            SELECT "id" FROM "ApprovalRequest"
+                            WHERE "userId" = %s AND "type" = %s::"ApprovalType"
+                              AND "status" = 'pending'
+                              AND "payload"->>'job_id' = %s
+                            ORDER BY "createdAt" DESC LIMIT 1
+                        )
+                        RETURNING {_COLUMNS}
+                        ''',
+                        (json.dumps(payload), application_id, user_id, type_, job_id),
+                    )
+                    rows = rows_to_dicts(cur)
+                    if rows:
+                        conn.commit()
+                        return rows[0]
                 cur.execute(
                     f'''
                     INSERT INTO "ApprovalRequest"

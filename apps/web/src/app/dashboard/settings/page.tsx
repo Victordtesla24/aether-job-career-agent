@@ -5,8 +5,9 @@
  * job board integrations and connected accounts. Backed by GET/PUT /settings
  * (wireframe: settings.html). The Save button validates and persists via PUT.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { apiBaseUrl, getToken } from "../../../lib/api/client";
 import { fetchSettings, saveSettings, type SettingsPayload } from "../../../lib/api/workspaces";
 
 const SECTIONS = [
@@ -37,6 +38,36 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadResume = async (file: File) => {
+    setUploading(true);
+    setUploadNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${apiBaseUrl()}/resumes/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await getToken()}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`Upload failed (${res.status}): ${detail.slice(0, 160)}`);
+      }
+      const created = (await res.json()) as { label?: string; version?: number };
+      setUploadNotice(
+        `Uploaded and parsed — registered as v${created.version} (“${created.label}”); story extraction ran.`,
+      );
+      setData(await fetchSettings());
+    } catch (e) {
+      setUploadNotice(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     fetchSettings()
@@ -203,13 +234,40 @@ export default function SettingsPage() {
                     Active
                   </span>
                 </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.md,application/pdf,text/plain"
+                  className="hidden"
+                  data-testid="resume-upload-input"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadResume(f);
+                    e.target.value = "";
+                  }}
+                />
                 <button
                   type="button"
-                  className="mt-3 w-full rounded-lg border border-dashed border-white/15 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white"
+                  data-testid="resume-upload-btn"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-3 w-full rounded-lg border border-dashed border-white/15 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
                 >
-                  <i className="fa-solid fa-upload mr-2" aria-hidden="true" />
-                  Upload new version
+                  <i
+                    className={`fa-solid ${uploading ? "fa-spinner fa-spin" : "fa-upload"} mr-2`}
+                    aria-hidden="true"
+                  />
+                  {uploading ? "Parsing…" : "Upload new version"}
                 </button>
+                {uploadNotice ? (
+                  <p
+                    className="mt-2 text-[11px] text-aether-muted"
+                    data-testid="resume-upload-notice"
+                    role="status"
+                  >
+                    {uploadNotice}
+                  </p>
+                ) : null}
               </section>
 
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-portfolio">

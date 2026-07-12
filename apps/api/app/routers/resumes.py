@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
@@ -56,6 +56,66 @@ def create_resume(body: ResumeIngestRequest, current_user: CurrentUser) -> dict[
         label=body.label,
         version=repo.next_version(current_user["id"]),
     )
+
+
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+async def upload_resume(
+    current_user: CurrentUser, file: UploadFile = File(...)
+) -> dict[str, Any]:
+    """Upload a resume file as a new root version (SC-ST-03).
+
+    Extracts text server-side (PDF via PyMuPDF; anything else decoded as
+    UTF-8 text), registers a new ROOT resume through the same section-building
+    path as JSON ingestion, then auto-triggers story extraction so the Story
+    Bank reflects the new base resume (SC-SB-01). Extraction failures never
+    fail the upload — the run is best-effort and reported in the response.
+    """
+    data = await file.read()
+    filename = file.filename or "resume"
+    if filename.lower().endswith(".pdf") or data[:4] == b"%PDF":
+        import fitz
+
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+            raw_text = "\n".join(page.get_text() for page in doc)
+        except Exception as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse PDF: {exc}"
+            ) from exc
+    else:
+        raw_text = data.decode("utf-8", errors="replace")
+    if len(raw_text.strip()) < 50:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Extracted resume text is too short to be a resume",
+        )
+    from app.services.resume_tailor import extract_bullets
+
+    stem = filename.rsplit(".", 1)[0][:100] or "Uploaded resume"
+    sections = {
+        "raw_text": raw_text,
+        "bullets": [
+            {"text": b, "evidenceRef": f"bullet-{i}"}
+            for i, b in enumerate(extract_bullets(raw_text))
+        ],
+        "contact": {},
+    }
+    repo = ResumeRepository()
+    resume = repo.create(
+        current_user["id"],
+        sections,
+        hashlib.sha256(data).hexdigest()[:16],
+        label=f"Uploaded — {stem}",
+        version=repo.next_version(current_user["id"]),
+    )
+    extraction: dict[str, Any] | None = None
+    try:
+        from app.routers.agents import _dispatch
+
+        extraction = _dispatch(current_user["id"], "storyExtractor", {})
+    except Exception as exc:  # noqa: BLE001 — upload must survive extraction issues
+        extraction = {"error": str(exc)}
+    return {**resume, "storyExtraction": extraction}
 
 
 @router.get("/{resume_id}")

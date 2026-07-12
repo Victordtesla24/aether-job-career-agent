@@ -21,6 +21,11 @@ class CoverLetterRepository:
     def create(
         self, user_id: str, job_id: str, resume_id: str, cover_letter: str
     ) -> dict[str, Any]:
+        """Insert a letter version (each draft/refine is its own row — the
+        studio's version history is built from these). Duplicate-card
+        prevention lives one layer up: the approval queue reuses the pending
+        request per job, and the tracker shows only the newest draft per job.
+        """
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(

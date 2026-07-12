@@ -118,10 +118,19 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
     }
     case "fitScorer": {
       const scored = num(out.scored);
+      if (!scored) {
+        // A zero-count run means every job was already scored — say so
+        // instead of the broken-sounding "scored 0 jobs".
+        return {
+          text: "checked for unscored jobs — all up to date",
+          highlight: null,
+          metric: null,
+        };
+      }
       return {
-        text: `scored ${scored ?? 0} job${scored === 1 ? "" : "s"} for fit`,
+        text: `scored ${scored} job${scored === 1 ? "" : "s"} for fit`,
         highlight: null,
-        metric: scored != null ? `${scored} scored` : null,
+        metric: `${scored} scored`,
       };
     }
     case "tailor": {

@@ -1,6 +1,7 @@
 """Analytics router — funnel, ATS distribution, agent ROI (P2-S10)."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -159,6 +160,25 @@ _SKILL_STOPWORDS = {
     "excellent", "ability", "skills", "knowledge", "plus", "etc", "including",
     "a", "an", "of", "in", "to", "for", "on", "as", "is", "are",
 }
+
+#: Curated skill lexicon for the Top Skills chart. JD requirement strings are
+#: mostly full sentences, so raw phrase counting produced clipped fragments;
+#: instead each of these terms is matched (word-boundary, case-insensitive)
+#: against every job's requirements. A reported skill therefore literally
+#: appears in that many jobs' JDs — real counts, clean labels.
+_SKILL_LEXICON: tuple[str, ...] = (
+    "Agile", "Scrum", "Kanban", "SAFe", "Jira", "Confluence",
+    "Salesforce", "SAP", "ServiceNow", "Genesys", "Playwright",
+    "AWS", "Azure", "GCP", "Cloud", "SaaS", "CRM", "ERP", "ITIL",
+    "SQL", "Python", "Power BI", "Tableau", "DevOps", "API",
+    "Stakeholder management", "Project management", "Program management",
+    "Change management", "Risk management", "Business analysis",
+    "Process mapping", "Process improvement", "Gap analysis",
+    "Governance", "Compliance", "Automation", "Testing", "Integration",
+    "Migration", "Transformation", "Delivery", "Leadership",
+    "Communication", "Negotiation", "Vendor management", "Procurement",
+    "PMO", "Roadmap", "Budget", "Machine learning", "AI",
+)
 
 
 def _relative_time(ts: datetime | None) -> str:
@@ -339,20 +359,18 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             }
         )
 
-    # ---- Top skills -------------------------------------------------------
+    # ---- Top skills (lexicon match — counted once per job) ----------------
     skill_counts: dict[str, int] = {}
     for row in requirement_rows:
         reqs = row.get("requirements")
         if not isinstance(reqs, list):
             continue
-        for raw in reqs:
-            if not isinstance(raw, str):
-                continue
-            skill = raw.strip()
-            if not skill or skill.lower() in _SKILL_STOPWORDS or len(skill) < 2:
-                continue
-            key = skill if len(skill) <= 24 else skill[:24]
-            skill_counts[key] = skill_counts.get(key, 0) + 1
+        text = " ".join(r for r in reqs if isinstance(r, str)).lower()
+        if not text:
+            continue
+        for skill in _SKILL_LEXICON:
+            if re.search(rf"(?<![a-z]){re.escape(skill.lower())}(?![a-z])", text):
+                skill_counts[skill] = skill_counts.get(skill, 0) + 1
     max_skill = max(skill_counts.values()) if skill_counts else 1
     top_skills = [
         {"skill": s, "demand": round(c / max_skill * 100)}

@@ -115,7 +115,9 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
       const scored = Number(output.scored ?? 0);
       return {
         kind: "success",
-        text: `FitScorer finished — ${scored} jobs scored. Sort Jobs by fit score to see the best matches:`,
+        text: scored
+          ? `FitScorer finished — ${scored} jobs scored. Sort Jobs by fit score to see the best matches:`
+          : "FitScorer finished — every job already had a fit score (nothing new to score):",
         href: "/dashboard/jobs",
         hrefLabel: "open Jobs →",
       };

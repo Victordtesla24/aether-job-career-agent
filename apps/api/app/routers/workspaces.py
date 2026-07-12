@@ -551,6 +551,18 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
             )
             cnt_rows = rows_to_dicts(cur)
 
+            # Job-board integrations = the REAL discovery sources feeding this
+            # user's job list — mirrors the Jobs page source bar (SC-ST-04).
+            cur.execute(
+                '''
+                SELECT "source", COUNT(*) AS cnt, MAX("createdAt") AS last_seen
+                FROM "Job" WHERE "userId" = %s AND "source" IS NOT NULL
+                GROUP BY "source" ORDER BY cnt DESC
+                ''',
+                (uid,),
+            )
+            source_rows = rows_to_dicts(cur)
+
     if not user_rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
@@ -560,6 +572,27 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
 
     result = _build_settings(user, resume)
     result["resume"]["versions"] = version_count
+    result["integrations"] = [
+        {
+            "name": row["source"].capitalize() if row["source"].islower() else row["source"],
+            "status": "connected",
+            "detail": (
+                f"{row['cnt']} jobs discovered · last sync "
+                f"{str(row['last_seen'])[:16]} UTC"
+            ),
+        }
+        for row in source_rows
+    ]
+    # Connected accounts & API keys — the same env-derived truth the Agents
+    # screen shows; never a fabricated connection.
+    from app.routers.agents import PROVIDER_SEED, _provider_env_state
+
+    accounts = []
+    for seed in PROVIDER_SEED:
+        p_status, _model, detail, _models = _provider_env_state(seed["id"])
+        if p_status == "connected":
+            accounts.append({"name": seed["name"], "status": "connected", "detail": detail})
+    result["connectedAccounts"] = accounts
     return result
 
 

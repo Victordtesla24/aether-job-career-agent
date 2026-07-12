@@ -78,13 +78,30 @@ def list_applications(
             )
         clauses.append('a."status" = %s::"ApplicationStatus"')
         params.append(app_status)
+    where = " AND ".join(clauses)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # DISTINCT ON collapses letter versions: each draft/refine of a
+            # cover letter is its own Application row (the studio's version
+            # history), but the tracker must show ONE card per job in the
+            # draft column — the newest version. Non-draft rows (real
+            # submissions and beyond) are all shown.
             cur.execute(
-                f'SELECT {_COLUMNS} FROM "Application" a '
-                'JOIN "Job" j ON j."id" = a."jobId" '
-                f'WHERE {" AND ".join(clauses)} ORDER BY a."createdAt" DESC',
-                params,
+                f'''
+                SELECT * FROM (
+                    SELECT DISTINCT ON (a."jobId") {_COLUMNS}
+                    FROM "Application" a
+                    JOIN "Job" j ON j."id" = a."jobId"
+                    WHERE {where} AND a."status" = 'draft'
+                    ORDER BY a."jobId", a."createdAt" DESC
+                ) drafts
+                UNION ALL
+                SELECT {_COLUMNS} FROM "Application" a
+                JOIN "Job" j ON j."id" = a."jobId"
+                WHERE {where} AND a."status" <> 'draft'
+                ORDER BY "createdAt" DESC
+                ''',
+                params + params,
             )
             return rows_to_dicts(cur)
 

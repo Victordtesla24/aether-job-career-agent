@@ -159,7 +159,10 @@ export default function AnalyticsPage() {
           ) : (
             <div className="mt-4 flex h-40 items-end gap-1.5">
               {ats.buckets.map((bucket) => (
-                <div key={bucket.range} className="flex flex-1 flex-col items-center gap-1">
+                <div
+                  key={bucket.range}
+                  className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                >
                   <div
                     className="w-full rounded-t bg-aether-violet/60"
                     style={{ height: `${Math.max(2, (bucket.count / maxBucket) * 100)}%` }}
@@ -197,7 +200,7 @@ export default function AnalyticsPage() {
               </div>
               <div className="rounded-xl border border-white/10 p-4 text-center">
                 <dd className="mono text-2xl font-bold text-aether-amber">
-                  {Math.round(roi.avg_duration_ms)}ms
+                  {(roi.avg_duration_ms / 1000).toFixed(1)}s
                 </dd>
                 <dt className="mt-1 text-xs text-aether-muted">Avg duration</dt>
               </div>
