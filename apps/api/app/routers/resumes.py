@@ -91,10 +91,76 @@ def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return {"resume_id": resume_id, "parent_id": resume["parentId"], "changes": changes}
 
 
-@router.post("/{resume_id}/download", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-def download_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
-    """PDF regeneration is a later slice — explicit 501 keeps the contract honest."""
-    return {
-        "detail": "Resume PDF export is not implemented yet (planned in a later phase)",
-        "resume_id": resume_id,
-    }
+@router.get("/{resume_id}/download")
+def download_resume(resume_id: str, current_user: CurrentUser):
+    """Generate a side-by-side PDF: original vs tailored resume comparison."""
+    from io import BytesIO
+
+    import pdfplumber
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
+
+    repo = ResumeRepository()
+    resume = repo.get_by_id(resume_id, current_user["id"])
+    if resume is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
+
+    parent_id = resume.get("parentId")
+    parent = repo.get_by_id(parent_id, current_user["id"]) if parent_id else None
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm)
+    styles = getSampleStyleSheet()
+    body = []
+
+    title_style = styles["Heading1"]
+    heading_style = styles["Heading2"]
+    normal_style = styles["Normal"]
+
+    body.append(Paragraph("Resume Comparison — Original vs Tailored", title_style))
+    body.append(Spacer(1, 6 * mm))
+
+    row_data = [Paragraph("<b>Original Resume</b>", heading_style),
+                Paragraph("<b>Tailored Resume</b>", heading_style)]
+
+    orig_bullets = []
+    if parent:
+        for b in parent.get("sections", {}).get("bullets", []):
+            orig_bullets.append(Paragraph(b.get("text", ""), normal_style))
+    elif resume.get("sections", {}).get("raw_text"):
+        for line in resume["sections"]["raw_text"].splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("•", "●", "▪", "- ")):
+                orig_bullets.append(Paragraph(stripped.lstrip("•●▪- "), normal_style))
+
+    tailored_bullets = []
+    tailored_sections = resume.get("sections", {})
+    for b in tailored_sections.get("bullets", []):
+        text = b.get("text", "")
+        ref = b.get("evidenceRef")
+        matched = any(o.get("evidenceRef") == ref for o in (parent or {}).get("sections", {}).get("bullets", []) if parent)
+        if matched:
+            tailored_bullets.append(Paragraph(text, normal_style))
+        else:
+            tailored_bullets.append(Paragraph(f"<b>{text}</b>", normal_style))
+
+    max_len = max(len(orig_bullets), len(tailored_bullets))
+    for i in range(max_len):
+        left = orig_bullets[i] if i < len(orig_bullets) else Paragraph("", normal_style)
+        right = tailored_bullets[i] if i < len(tailored_bullets) else Paragraph("", normal_style)
+        row_data.extend([left, right])
+
+    tbl = Table([row_data[i:i + 2] for i in range(0, len(row_data), 2)],
+                colWidths=[doc.width / 2 - 5 * mm, doc.width / 2 - 5 * mm])
+    tbl.setStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                  ("GRID", (0, 0), (-1, -1), 0.5, "#CCCCCC"),
+                  ("TOPPADDING", (0, 0), (-1, -1), 4)])
+
+    body.append(tbl)
+    doc.build(body)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=resume-{resume_id[:8]}.pdf"})
