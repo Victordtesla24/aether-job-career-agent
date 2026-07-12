@@ -474,3 +474,29 @@ semantics; explicit per-run selection is safer and reversible).
 changes** with a child resume inheriting the parent's `formatHash`. +4 pytest in
 `tests/test_resume_ingest.py` (create, 422 validation, tailor-with-resume_id, 404 unknown id).
 **Reversible?** Yes — both changes are additive; omitting `resume_id` reproduces prior behaviour.
+
+## D-0019 — Swarm-directive conformance: real auth gate, 13-item nav, AU$ salaries, 30-min discovery timer
+**Date:** 2026-07-12 · **Author:** Aether Delivery Agent (swarm directive execution) · **Status:** Adopted
+
+**Context.** The aether-swarm execution directive audits production against its Section 5.4
+success criteria. Five failed: SC-AUTH-03 (silent demo auto-login meant anyone with the URL saw
+the workspace — BUG-013), SC-CL-02/SC-CC-07 (Cover Letter Studio absent from the sidebar),
+SC-CL-01 (`/dashboard/cover-letter` fell through to the catch-all), SC-CC-05 (salaries rendered
+bare `$`, not `AU$`), and SC-JOB-10 (no 30-minute scheduled discovery).
+
+**Decision.**
+1. `getToken()` no longer auto-logs-in with demo credentials; an unauthenticated browser session
+   is redirected to `/login` and the request fails 401. A client-side `AuthGuard` wraps the
+   dashboard layout. The `/login` form still prefills the demo account (demo environment).
+2. **D-0002 amended:** the primary sidebar is now 13 items — "Cover Letter Studio"
+   (`/dashboard/cover-letters`) sits between Resume Studio and Story Bank. The 2026-07-01
+   rejection targeted a then-phantom screen; the workspace is now real.
+3. `next.config.mjs` permanently redirects `/dashboard/cover-letter` → `/dashboard/cover-letters`.
+4. Salary labels prefix `AU$` (or `US$` when `currency === "USD"`).
+5. `aether-discovery.timer` (systemd, `OnCalendar=*:00/30`, logs to
+   `/var/log/aether/discovery.log`) runs `scripts/discovery_cron.sh`: login → scout with the
+   user's saved target role/location → fit-scorer. Runs are verifiable as AgentRun rows.
+
+**Consequences.** REQ-05's "20 named agents" remains deliberately unmet at 7 agents: fabricating
+13 non-existent agent cards would violate the directive's higher-priority constraint 2 (no
+mock/simulated data in production UI). The registry shows exactly the agents that exist.

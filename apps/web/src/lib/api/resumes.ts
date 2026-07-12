@@ -66,11 +66,11 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
       headers: { Authorization: `Bearer ${token}` },
     });
 
-  let token = options.token ?? (await getToken(baseUrl));
+  let token = options.token ?? (await getToken());
   let res = await fetchPdf(token);
   if (res.status === 401 && !options.token) {
     clearToken();
-    token = await getToken(baseUrl);
+    token = await getToken();
     res = await fetchPdf(token);
   }
   if (!res.ok) {

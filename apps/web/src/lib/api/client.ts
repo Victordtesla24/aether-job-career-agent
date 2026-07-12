@@ -3,9 +3,10 @@
  *
  * - Resolves the API base URL: explicit env override → same-origin `/api`
  *   proxy in the browser → localhost FastAPI during SSR/dev.
- * - Manages the bearer token. For the deployed demo, an automatic login with
- *   the seeded demo account keeps every dashboard page live without a
- *   dedicated auth UI (full auth screens land in a later phase).
+ * - Manages the bearer token. There is NO silent auto-login: a visitor
+ *   without a stored session is sent to /login (SC-AUTH-03). The demo
+ *   credentials are exported only so the /login form can prefill them in the
+ *   deployed demo environment.
  */
 
 export const DEMO_CREDENTIALS = {
@@ -37,8 +38,12 @@ export class ApiError extends Error {
 
 let inMemoryToken: string | null = null;
 
-/** Login with the demo account and cache the JWT. */
-export async function getToken(baseUrl: string = apiBaseUrl()): Promise<string> {
+/**
+ * Return the stored session JWT. Never logs in on the caller's behalf: an
+ * unauthenticated browser session is redirected to /login (SC-AUTH-03) and the
+ * in-flight request fails with a 401 ApiError.
+ */
+export async function getToken(): Promise<string> {
   if (inMemoryToken) return inMemoryToken;
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -46,21 +51,9 @@ export async function getToken(baseUrl: string = apiBaseUrl()): Promise<string> 
       inMemoryToken = stored;
       return stored;
     }
+    window.location.replace("/login");
   }
-  const res = await fetch(`${baseUrl}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(DEMO_CREDENTIALS),
-  });
-  if (!res.ok) {
-    throw new ApiError(`Login failed (${res.status})`, res.status);
-  }
-  const body = (await res.json()) as { access_token: string };
-  inMemoryToken = body.access_token;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, body.access_token);
-  }
-  return body.access_token;
+  throw new ApiError("Not authenticated", 401);
 }
 
 export function clearToken(): void {
@@ -90,11 +83,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
-  let token = options.token ?? (await getToken(baseUrl));
+  let token = options.token ?? (await getToken());
   let res = await doFetch(token);
   if (res.status === 401 && !options.token) {
+    // Session expired or revoked — drop it and send the visitor to /login.
     clearToken();
-    token = await getToken(baseUrl);
+    token = await getToken();
     res = await doFetch(token);
   }
   if (!res.ok) {

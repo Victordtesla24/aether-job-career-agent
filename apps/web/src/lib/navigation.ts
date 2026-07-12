@@ -19,13 +19,18 @@ export interface NavItem {
 }
 
 /**
- * The canonical 12-item primary sidebar, in display order.
+ * The canonical 13-item primary sidebar, in display order.
  * "Resume Studio" is intentionally written without accents (D-0002).
+ * "Cover Letter Studio" sits between Resume Studio and Story Bank (D-0002
+ * amendment, 2026-07-12): the screen is now a real workspace at
+ * /dashboard/cover-letters, so it is no longer the "phantom" entry Schema B
+ * was rejected for.
  */
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "fa-solid fa-gauge-high" },
   { label: "Jobs", href: "/dashboard/jobs", icon: "fa-solid fa-magnifying-glass" },
   { label: "Resume Studio", href: "/dashboard/resume", icon: "fa-solid fa-file-lines" },
+  { label: "Cover Letter Studio", href: "/dashboard/cover-letters", icon: "fa-solid fa-envelope-open-text" },
   { label: "Story Bank", href: "/dashboard/stories", icon: "fa-solid fa-book-bookmark" },
   { label: "Applications", href: "/dashboard/applications", icon: "fa-solid fa-paper-plane" },
   { label: "Interview Center", href: "/dashboard/interviews", icon: "fa-solid fa-microphone-lines" },

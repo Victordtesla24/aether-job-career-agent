@@ -12,6 +12,18 @@ const nextConfig = {
     const apiOrigin = process.env.AETHER_API_PROXY ?? "http://127.0.0.1:8000";
     return [{ source: "/api/:path*", destination: `${apiOrigin}/:path*` }];
   },
+
+  // The wireframe spec addresses the screen as /dashboard/cover-letter; the
+  // workspace lives at the plural route (SC-CL-01).
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/cover-letter",
+        destination: "/dashboard/cover-letters",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

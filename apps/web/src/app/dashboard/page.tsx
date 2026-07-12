@@ -62,7 +62,7 @@ function initials(company: string) {
 
 function salaryLabel(job: DashboardJob): string {
   if (job.salaryMin != null && job.salaryMax != null) {
-    const k = (n: number) => `$${Math.round(n / 1000)}k`;
+    const k = (n: number) => `AU$${Math.round(n / 1000)}k`;
     return `${k(job.salaryMin)} – ${k(job.salaryMax)}`;
   }
   return `via ${job.source}`;

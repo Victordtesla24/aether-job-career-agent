@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { NAV_ITEMS, findNavItemByHref } from "../src/lib/navigation";
 
 /**
- * Contract test for the 12-item primary sidebar (Schema A).
+ * Contract test for the 13-item primary sidebar (Schema A + D-0002 amendment
+ * 2026-07-12: Cover Letter Studio between Resume Studio and Story Bank, now
+ * that /dashboard/cover-letters is a real workspace).
  * Order and labels are the single source of truth defined in
  * DECISIONS D-0002; the sidebar component renders straight from this list.
  */
@@ -10,6 +12,7 @@ const CANONICAL_LABELS = [
   "Dashboard",
   "Jobs",
   "Resume Studio",
+  "Cover Letter Studio",
   "Story Bank",
   "Applications",
   "Interview Center",
@@ -22,8 +25,8 @@ const CANONICAL_LABELS = [
 ];
 
 describe("dashboard navigation contract (P1-S06)", () => {
-  it("has exactly 12 items", () => {
-    expect(NAV_ITEMS).toHaveLength(12);
+  it("has exactly 13 items", () => {
+    expect(NAV_ITEMS).toHaveLength(13);
   });
 
   it("matches the canonical Schema-A order and labels", () => {
@@ -38,7 +41,7 @@ describe("dashboard navigation contract (P1-S06)", () => {
 
   it("gives every item a unique route and a non-empty icon", () => {
     const hrefs = NAV_ITEMS.map((i) => i.href);
-    expect(new Set(hrefs).size).toBe(12);
+    expect(new Set(hrefs).size).toBe(13);
     for (const item of NAV_ITEMS) {
       expect(item.href.startsWith("/")).toBe(true);
       expect(item.icon.length).toBeGreaterThan(0);
