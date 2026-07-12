@@ -222,18 +222,20 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
     active_count = len(by_stage.get("active", [])) + len(by_stage.get("scheduled", []))
 
     # Outreach queue + communication log from real OutreachTask rows
-    try:
-        cur.execute(
-            'SELECT ot."id", ot."type", ot."status", ot."message", ot."scheduledAt",'
-            ' ot."sentAt", c."company", c."name"'
-            ' FROM "OutreachTask" ot'
-            ' LEFT JOIN "Contact" c ON c."id" = ot."contactId"'
-            ' WHERE ot."userId" = %s ORDER BY ot."createdAt" DESC LIMIT 50',
-            (uid,),
-        )
-        ot_rows = [dict(r) for r in cur.fetchall()]
-    except Exception:
-        ot_rows = []
+    with get_connection() as conn2:
+        with conn2.cursor() as cur2:
+            try:
+                cur2.execute(
+                    'SELECT ot."id", ot."type", ot."status", ot."scheduledAt",'
+                    ' ot."sentAt", c."company", c."name"'
+                    ' FROM "OutreachTask" ot'
+                    ' LEFT JOIN "Contact" c ON c."id" = ot."contactId"'
+                    ' WHERE ot."userId" = %s ORDER BY ot."createdAt" DESC LIMIT 50',
+                    (uid,),
+                )
+                ot_rows = [dict(r) for r in cur2.fetchall()]
+            except Exception:
+                ot_rows = []
 
     queue, log = [], []
     for t in ot_rows:
