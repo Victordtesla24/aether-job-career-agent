@@ -34,6 +34,7 @@ from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
+from app.repositories.user import UserRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMUnavailableError, get_model
 from app.services.resume_parser import parse_resume_pdf
@@ -269,7 +270,10 @@ def refine_cover_letter(
     resume_text = _resume_text()
     guard = FabricationGuard()
     signer = str(current_user.get("name") or "")
-    position = current_position(current_user)
+    # ``current_user`` comes from the default UserRepository projection, which
+    # omits ``targetRole`` — resolve it with the repository's guarded read so
+    # the hook reflects the user's real configured role (GAP-P4-049).
+    position = current_position(UserRepository().get_target_role(user_id))
     # The letter date, signer and current position are system/profile ground
     # truth, so they join the guard's evidence corpus (mirrors the agent).
     corpus = " ".join(

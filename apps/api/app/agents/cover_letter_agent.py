@@ -84,13 +84,18 @@ def split_paragraphs(body: str) -> list[str]:
     return paras
 
 
-def current_position(user: dict[str, Any]) -> str:
+def current_position(target_role: str | None) -> str:
     """The candidate's stated current position for the letter hook.
 
-    Prefers an explicit workspace ``targetRole`` when present; otherwise falls
-    back to the base resume's professional focus. Always a resume/profile-
-    grounded value (never fabricated)."""
-    role = str(user.get("targetRole") or "").strip()
+    Uses the explicit workspace ``targetRole`` when the user has configured one;
+    otherwise falls back to the base resume's professional focus. Always a
+    resume/profile-grounded value (never fabricated).
+
+    The role must be resolved by the caller via
+    :meth:`UserRepository.get_target_role` — the default ``UserRepository``
+    projection omits ``targetRole``, so reading it off a plain user dict would
+    silently always yield the fallback."""
+    role = str(target_role or "").strip()
     return role or _POSITION_FALLBACK
 
 
@@ -240,7 +245,10 @@ class CoverLetterAgent:
         resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
         user = self._users.get_by_id(user_id) or {}
         signer = str(user.get("name") or "")
-        position = current_position(user)
+        # ``targetRole`` is an additive profile column not carried by the default
+        # UserRepository projection, so resolve it with its own guarded read —
+        # otherwise the hook silently falls back for every user (GAP-P4-049).
+        position = current_position(self._users.get_target_role(user_id))
         base_prompt = (
             f"Target role: {job['title']} at {job['company']}.\n"
             f"Job description: {job.get('description', '')}\n\n"

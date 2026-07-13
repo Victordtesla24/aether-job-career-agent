@@ -4,7 +4,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.db import get_connection, new_id, rows_to_dicts
+from app.db import (
+    ensure_user_profile_columns,
+    get_connection,
+    new_id,
+    rows_to_dicts,
+)
 
 #: Columns returned to callers. ``passwordHash`` is included so the auth layer
 #: can verify credentials — routers must never serialize it outward.
@@ -56,6 +61,25 @@ class UserRepository:
 
     def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return self._get_one('"id" = %s', (user_id,))
+
+    def get_target_role(self, user_id: str) -> str:
+        """The user's configured workspace ``targetRole`` (``''`` when unset).
+
+        ``targetRole`` is an additive profile column that the default
+        ``_USER_COLUMNS`` projection deliberately omits (login/auth never need
+        it), so it is read here with its own guarded SELECT — mirroring
+        ``_user_search_defaults`` in the agents router.
+        ``ensure_user_profile_columns`` keeps the read safe on the older test
+        schema that predates the column.
+        """
+        ensure_user_profile_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "targetRole" FROM "User" WHERE "id" = %s', (user_id,)
+                )
+                rows = rows_to_dicts(cur)
+        return (rows[0].get("targetRole") or "").strip() if rows else ""
 
     def _get_one(self, where: str, params: tuple) -> dict[str, Any] | None:
         with get_connection() as conn:

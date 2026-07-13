@@ -100,6 +100,42 @@ class TestCoverLetterAgent:
             for cue in ("interview", "discuss", "conversation", "call", "meet", "available")
         ), f"closing paragraph has no call-to-action: {paras[-1]!r}"
 
+    def test_configured_target_role_reaches_letter_hook(self, client, auth_headers):
+        """GAP-P4-049 (reviewer follow-up): a workspace ``targetRole`` the user
+        actually configured must surface in the deterministic §10.2 hook.
+
+        Regression guard: ``UserRepository.get_by_id`` never selected
+        ``targetRole``, so ``current_position`` silently fell back to a
+        hardcoded phrase for 100% of users even when a real role was set.
+        """
+        role = "Principal Reliability Engineer"
+        me = client.get("/auth/me", headers=auth_headers).json()
+        put = client.put(
+            "/workspaces/settings",
+            json={
+                "profile": {
+                    "fullName": "Test Candidate",
+                    "email": me["email"],
+                    "targetRole": role,
+                    "location": "Melbourne",
+                },
+                "agentConfig": {
+                    "autoApply": False,
+                    "approvalGate": True,
+                    "matchThreshold": 80,
+                },
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200, put.text
+        assert put.json()["profile"]["targetRole"] == role
+
+        body, job = _run_cover_letter(client, auth_headers)
+        letter = body["cover_letter"]
+        inner = letter.split(f"Dear Hiring Team at {job['company']},\n\n", 1)[1]
+        hook = split_paragraphs(inner)[0]
+        assert role in hook, f"configured targetRole missing from hook: {hook!r}"
+
     def test_cover_letter_requires_approval(self, client, auth_headers):
         body, _ = _run_cover_letter(client, auth_headers)
         assert body["approval_status"] == "pending"
@@ -191,6 +227,9 @@ class TestStructuralContract:
         class _UserRepo:
             def get_by_id(self, user_id):
                 return {"name": "Test User"}
+
+            def get_target_role(self, user_id):
+                return ""
 
         class _NoPersist:
             def create(self, *args, **kwargs):
