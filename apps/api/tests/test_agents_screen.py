@@ -107,12 +107,15 @@ def test_config_unknown_agent_404(client, auth_headers):
 
 
 def test_providers_seed_six(client, auth_headers):
+    # 6 branded providers + the Abacus subscription fallback row (GAP-P4-055)
+    # = 7: the panel must show every credential path the runtime can actually
+    # serve a run on, not just the 6 branded cards.
     res = client.get("/agents/providers", headers=auth_headers)
     assert res.status_code == 200
     body = res.json()
-    assert len(body) == 6
+    assert len(body) == 7
     ids = {p["id"] for p in body}
-    assert ids == {"anthropic", "openrouter", "openai", "gemini", "bedrock", "groq"}
+    assert ids == {"anthropic", "openrouter", "openai", "gemini", "bedrock", "groq", "abacus"}
     bedrock = next(p for p in body if p["id"] == "bedrock")
     assert bedrock["status"] == "unconfigured"
 
@@ -144,6 +147,47 @@ def test_provider_status_is_env_derived(client, auth_headers, monkeypatch):
     by_id = {p["id"]: p for p in providers}
     assert by_id["openrouter"]["status"] == "connected"
     assert by_id["openai"]["status"] == "unconfigured"
+
+
+def _clear_llm_credential_env(monkeypatch):
+    for var in ("AETHER_LLM_API_KEY", "OPENROUTER_API_KEY", "ABACUS_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_abacus_fallback_unconfigured_without_a_key(client, auth_headers, monkeypatch):
+    _clear_llm_credential_env(monkeypatch)
+    providers = client.get("/agents/providers", headers=auth_headers).json()
+    abacus = next(p for p in providers if p["id"] == "abacus")
+    assert abacus["status"] == "unconfigured"
+
+
+def test_abacus_fallback_shown_connected_and_active_when_it_is_the_serving_path(
+    client, auth_headers, monkeypatch
+):
+    # GAP-P4-055: tailor/coverLetter/storyExtractor runs actually execute on
+    # this credential when no OpenRouter/Anthropic key is configured — the
+    # providers panel must say so honestly, not "unconfigured".
+    _clear_llm_credential_env(monkeypatch)
+    monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+    providers = client.get("/agents/providers", headers=auth_headers).json()
+    abacus = next(p for p in providers if p["id"] == "abacus")
+    assert abacus["status"] == "connected"
+    assert "actively serving" in abacus["detail"]
+
+
+def test_abacus_fallback_shown_as_standby_when_a_higher_priority_key_is_active(
+    client, auth_headers, monkeypatch
+):
+    # The Abacus key is present and valid, but OPENROUTER_API_KEY wins the
+    # precedence in llm_client._call_live — the panel must not claim Abacus
+    # is the active serving path when it demonstrably isn't.
+    _clear_llm_credential_env(monkeypatch)
+    monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    providers = client.get("/agents/providers", headers=auth_headers).json()
+    abacus = next(p for p in providers if p["id"] == "abacus")
+    assert abacus["status"] == "connected"
+    assert "standby" in abacus["detail"]
 
 
 def test_provider_model_switch_persists(client, auth_headers, monkeypatch):
@@ -179,7 +223,7 @@ def test_stats_shape_and_realism(client, auth_headers):
     s = res.json()
     for key in ("spendUsd", "tokensTotal", "successRate", "taskCount", "providerCount"):
         assert key in s
-    assert s["providerCount"] == 6
+    assert s["providerCount"] == 7
     # With no runs the success rate defaults to 100 and counts are zero.
     assert 0 <= s["successRate"] <= 100
 

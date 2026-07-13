@@ -72,6 +72,9 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export async function fetchAgentConfig(
   options: RequestOptions = {},
 ): Promise<AgentConfig> {
-  const settings = await apiRequest<{ agentConfig?: unknown }>("/settings", options);
+  const settings = await apiRequest<{ agentConfig?: unknown }>(
+    "/workspaces/settings",
+    options,
+  );
   return AgentConfigSchema.parse(settings.agentConfig);
 }

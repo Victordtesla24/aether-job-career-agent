@@ -19,7 +19,7 @@ from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
-from app.services.llm_client import LLMUnavailableError
+from app.services.llm_client import LLMUnavailableError, get_active_credential_env_var
 
 router = APIRouter()
 
@@ -169,6 +169,13 @@ PROVIDER_SEED: list[dict[str, Any]] = [
      "models": [], "icon": "fa-aws", "color": "#FF9900"},
     {"id": "groq", "name": "Groq", "auth": "API Key",
      "models": ["llama-3.3-70b-versatile"], "icon": "fa-bolt-lightning", "color": "#F55036"},
+    # The Abacus.AI subscription key (ABACUS_API_KEY) is the runtime's last-
+    # resort credential in llm_client._call_live's precedence chain. It is a
+    # genuine serving path (GAP-P4-055) — not surfacing it here left every
+    # tailor/coverLetter/storyExtractor run appearing to come from nowhere
+    # while every provider card showed "unconfigured".
+    {"id": "abacus", "name": "Abacus Subscription (fallback)", "auth": "API Key",
+     "models": [], "icon": "fa-cloud", "color": "#7C3AED"},
 ]
 _PROVIDER_SEED_BY_ID = {p["id"]: p for p in PROVIDER_SEED}
 
@@ -207,6 +214,28 @@ def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
                 sorted(tiers),
             )
         return ("unconfigured", "", "Not configured · add API key to .env", [])
+
+    if provider_id == "abacus":
+        if not os.environ.get("ABACUS_API_KEY"):
+            return ("unconfigured", "", "Not configured · add API key to .env", [])
+        from app.services.llm_client import get_model
+
+        tiers = sorted({get_model(t) for t in ("REASONING", "STRUCTURED", "FAST", "LIGHT")})
+        if get_active_credential_env_var() == "ABACUS_API_KEY":
+            return (
+                "connected",
+                get_model("REASONING"),
+                "Abacus subscription key configured · actively serving live runs "
+                "(fallback path — no OpenRouter/Anthropic key set)",
+                tiers,
+            )
+        return (
+            "connected",
+            "",
+            "Abacus subscription key configured in .env · standby "
+            "(a higher-priority OpenRouter/Anthropic key is the active path)",
+            tiers,
+        )
 
     seed = _PROVIDER_SEED_BY_ID[provider_id]
     if os.environ.get(_PROVIDER_ENV_KEY[provider_id]):

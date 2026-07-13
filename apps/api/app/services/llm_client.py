@@ -136,6 +136,26 @@ def get_model(tier: str = "REASONING") -> str:
     return os.environ.get(f"AETHER_MODEL_{tier.upper()}", FALLBACK_MODEL)
 
 
+#: Env vars ``_call_live`` checks for a usable API key, in the exact
+#: precedence it applies. Exposed as data (not just inline in ``_call_live``)
+#: so callers — notably the Agents providers panel (GAP-P4-055) — can report
+#: which credential path is *actually* serving live runs instead of guessing.
+_LIVE_API_KEY_ENV_VARS = ("AETHER_LLM_API_KEY", "OPENROUTER_API_KEY", "ABACUS_API_KEY")
+
+
+def get_active_credential_env_var() -> str | None:
+    """The env var ``_call_live`` will use as the API key right now, or ``None``.
+
+    Mirrors ``_call_live``'s own precedence exactly (single source of truth)
+    so the providers panel never has to fake or guess which credential path
+    — including the ``ABACUS_API_KEY`` fallback — is actually serving runs.
+    """
+    for name in _LIVE_API_KEY_ENV_VARS:
+        if os.environ.get(name):
+            return name
+    return None
+
+
 class LLMClient:
     """Minimal chat-completion client with record/replay/auto support."""
 
@@ -343,11 +363,8 @@ class LLMClient:
         """
         import httpx
 
-        api_key = (
-            os.environ.get("AETHER_LLM_API_KEY")
-            or os.environ.get("OPENROUTER_API_KEY")
-            or os.environ.get("ABACUS_API_KEY")
-        )
+        active_key_var = get_active_credential_env_var()
+        api_key = os.environ.get(active_key_var) if active_key_var else None
         base_url = (
             os.environ.get("AETHER_LLM_BASE_URL")
             or os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")

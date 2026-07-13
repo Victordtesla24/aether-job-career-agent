@@ -57,7 +57,7 @@ def _ensure_interview_tables() -> None:
                 CREATE TABLE IF NOT EXISTS "InterviewSchedule" (
                     "id"            text PRIMARY KEY,
                     "userId"        text NOT NULL,
-                    "applicationId" text,
+                    "applicationId" text NOT NULL,
                     "type"          text NOT NULL DEFAULT 'video',
                     "status"        text NOT NULL DEFAULT 'scheduled',
                     "scheduledAt"   timestamptz NOT NULL,
@@ -96,7 +96,11 @@ def _ensure_interview_tables() -> None:
 class InterviewCreate(BaseModel):
     """Payload for scheduling a new interview."""
 
-    application_id: str | None = Field(default=None)
+    # Required: the DB column (InterviewSchedule.applicationId) is NOT NULL.
+    # There is no documented "interview without an application" flow (Interview
+    # Center itself is deferred, D-0032) so the contract is enforced here —
+    # a missing value must 422, never reach the INSERT and crash as a 500.
+    application_id: str = Field(min_length=1)
     type: str = Field(default="video")
     scheduled_at: datetime
     duration_minutes: int = Field(default=60, ge=15, le=480)
