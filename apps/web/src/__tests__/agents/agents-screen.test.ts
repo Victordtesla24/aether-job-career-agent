@@ -12,11 +12,14 @@ import {
   TestRunSchema,
 } from "../../components/agents/api";
 import {
+  agentRunDisabledReason,
   agentStatusLabel,
   connectBlockedReason,
   formatTokens,
   providerAction,
+  providerModelDisabledReason,
 } from "../../components/agents/logic";
+import type { CatalogAgent, Provider } from "../../components/agents/api";
 
 describe("formatTokens", () => {
   it("formats millions / thousands / units", () => {
@@ -69,6 +72,50 @@ describe("agentStatusLabel", () => {
     expect(agentStatusLabel("active")).toBe("Active");
     expect(agentStatusLabel("paused")).toBe("Paused");
     expect(agentStatusLabel("error")).toBe("Error");
+  });
+});
+
+// GAP-P4-056: disabled controls (unconfigured provider models, disabled
+// agents) must explain the D-0020 lock via a tooltip, not just render
+// disabled with no reason surfaced.
+describe("providerModelDisabledReason", () => {
+  const base: Provider = {
+    id: "anthropic",
+    name: "Anthropic Claude",
+    auth: "API Key",
+    status: "unconfigured",
+    model: "",
+    detail: "Not configured",
+    models: [],
+    icon: "fa-a",
+    color: "#D97757",
+  };
+
+  it("explains the lock when a provider has no selectable models", () => {
+    const reason = providerModelDisabledReason(base);
+    expect(reason).toContain("Anthropic Claude");
+    expect(reason).toMatch(/no selectable models/i);
+  });
+
+  it("returns null once the provider has models to choose from", () => {
+    expect(providerModelDisabledReason({ ...base, models: ["claude-sonnet-4"] })).toBeNull();
+  });
+});
+
+describe("agentRunDisabledReason", () => {
+  const base: Pick<CatalogAgent, "name" | "enabled"> = {
+    name: "Match Scoring Agent",
+    enabled: false,
+  };
+
+  it("explains the lock when the agent is disabled", () => {
+    const reason = agentRunDisabledReason(base);
+    expect(reason).toContain("Match Scoring Agent");
+    expect(reason).toMatch(/disabled/i);
+  });
+
+  it("returns null once the agent is enabled", () => {
+    expect(agentRunDisabledReason({ ...base, enabled: true })).toBeNull();
   });
 });
 

@@ -34,6 +34,28 @@ export const weightColor = (index: number): string =>
 export const sumWeights = (weights: Array<{ weight: number }>): number =>
   weights.reduce((total, w) => total + w.weight, 0);
 
+/* ------------------------------ Focus trapping ------------------------------ */
+
+/**
+ * Tab-focus-trap boundary check for the Add-Offer dialog (GAP-P4-057). While
+ * the modal is open its backdrop visually covers the rest of the page (the
+ * empty-state / header "Add Offer" triggers included), but without an
+ * explicit trap, Tab/Shift+Tab can still walk focus out of the dialog and
+ * onto those covered background controls — activating a control the overlay
+ * is supposed to make unreachable. Given the dialog's ordered focusable
+ * elements and the one currently focused, returns the element Tab should
+ * land on to stay inside the dialog, or null when no wrap is needed (default
+ * browser Tab behavior already keeps focus inside).
+ */
+export function tabTrapTarget<T>(focusable: T[], active: T | null, shiftKey: boolean): T | null {
+  if (focusable.length === 0) return null;
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+  if (shiftKey && active === first) return last;
+  if (!shiftKey && active === last) return first;
+  return null;
+}
+
 /* --------------------------- Add-Offer validation -------------------------- */
 
 export interface OfferDraft {

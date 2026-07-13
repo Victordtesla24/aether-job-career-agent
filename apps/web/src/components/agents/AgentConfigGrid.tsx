@@ -12,6 +12,7 @@
 import { useId } from "react";
 
 import type { CatalogAgent } from "./api";
+import { agentRunDisabledReason } from "./logic";
 
 const ACCENT_BG: Record<string, string> = {
   indigo: "bg-aether-indigo/15 text-aether-indigo",
@@ -60,6 +61,7 @@ function AgentCard({
   onRun: (key: string) => void;
 }) {
   const tipId = useId();
+  const runLockReason = agentRunDisabledReason(agent);
   return (
     <div
       data-testid={`agent-card-${agent.key}`}
@@ -115,7 +117,9 @@ function AgentCard({
               data-testid={`agent-run-${agent.key}`}
               onClick={() => onRun(agent.key)}
               disabled={busy || !agent.enabled}
-              className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-40"
+              aria-disabled={runLockReason !== null || undefined}
+              title={busy ? "Running…" : (runLockReason ?? undefined)}
+              className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
             >
               Run
             </button>
@@ -128,7 +132,8 @@ function AgentCard({
             data-testid={`agent-toggle-${agent.key}`}
             onClick={() => onToggle(agent.key, !agent.enabled)}
             disabled={busy}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-end disabled:opacity-50 sm:min-h-0 sm:min-w-0"
+            title={busy ? "Updating…" : undefined}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-end disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:min-w-0"
           >
             <span
               className={`relative block h-4 w-8 rounded-full transition ${agent.enabled ? "bg-aether-coral" : "bg-white/12"}`}

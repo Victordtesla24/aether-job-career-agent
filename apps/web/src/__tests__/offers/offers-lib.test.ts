@@ -8,6 +8,7 @@ import {
   emptyDraft,
   money,
   sumWeights,
+  tabTrapTarget,
   validateOfferDraft,
   weightColor,
   WEIGHT_COLORS,
@@ -98,5 +99,31 @@ describe("validateOfferDraft", () => {
     const r = validateOfferDraft(base({ company: "x".repeat(61) }), "11");
     expect(r.ok).toBe(false);
     expect(r.errors.company).toBeTruthy();
+  });
+});
+
+// GAP-P4-057: the Add-Offer modal must trap Tab focus so it can't escape
+// onto the header/empty-state "Add Offer" triggers the overlay visually
+// covers (Playwright's "subtree intercepts pointer events" symptom is the
+// overlay correctly blocking the mouse; without a trap, keyboard Tab could
+// still reach and activate those same covered controls).
+describe("tabTrapTarget", () => {
+  const fields = ["company", "role", "base", "bonus", "equity", "location", "cancel", "submit"];
+
+  it("wraps Shift+Tab from the first field to the last", () => {
+    expect(tabTrapTarget(fields, "company", true)).toBe("submit");
+  });
+
+  it("wraps Tab from the last field to the first", () => {
+    expect(tabTrapTarget(fields, "submit", false)).toBe("company");
+  });
+
+  it("does not interfere with Tab/Shift+Tab away from the boundaries", () => {
+    expect(tabTrapTarget(fields, "base", false)).toBeNull();
+    expect(tabTrapTarget(fields, "base", true)).toBeNull();
+  });
+
+  it("is a no-op when the dialog has no focusable elements", () => {
+    expect(tabTrapTarget([], "anything", false)).toBeNull();
   });
 });

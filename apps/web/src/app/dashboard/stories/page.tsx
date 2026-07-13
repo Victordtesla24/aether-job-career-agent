@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { extractorTriggerState } from "../../../components/stories/logic";
 import { StoryAside } from "../../../components/stories/story-aside";
 import { StoryCard } from "../../../components/stories/story-card";
 import { EMPTY_STORY_FORM, StoryForm } from "../../../components/stories/story-form";
@@ -145,6 +146,7 @@ export default function StoryBankPage() {
   const closeCreate = useCallback(() => setCreating(false), []);
 
   const showEmpty = stories !== null && effectiveStories.length === 0;
+  const importResumeState = extractorTriggerState(running, "Import from Resume", "Importing…");
 
   return (
     <div className="space-y-7">
@@ -267,11 +269,12 @@ export default function StoryBankPage() {
                   type="button"
                   data-testid="empty-import-resume"
                   onClick={() => void extract()}
-                  disabled={running}
+                  disabled={importResumeState.disabled}
+                  aria-busy={running}
                   className="min-h-[44px] rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-aether-bg transition hover:bg-[#ff7d4d] disabled:opacity-50"
                 >
                   <i className="fa-solid fa-file-import mr-1.5" aria-hidden="true" />
-                  {running ? "Importing…" : "Import from Resume"}
+                  {importResumeState.label}
                 </button>
                 <button
                   type="button"

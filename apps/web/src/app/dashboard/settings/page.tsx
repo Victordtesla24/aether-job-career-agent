@@ -9,16 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, getToken } from "../../../lib/api/client";
 import { fetchSettings, saveSettings, type SettingsPayload } from "../../../lib/api/workspaces";
-
-const SECTIONS = [
-  { id: "profile", label: "Profile" },
-  { id: "resume", label: "Resume Management" },
-  { id: "portfolio", label: "Portfolio Sync" },
-  { id: "agents", label: "Agent Configuration" },
-  { id: "integrations", label: "Integrations" },
-  { id: "notifications", label: "Notifications" },
-  { id: "privacy", label: "Privacy & Compliance" },
-] as const;
+import { SECTIONS } from "./sections";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

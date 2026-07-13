@@ -3,16 +3,19 @@
  * (interactivity for add-offer-of05 / empty-add-offer-of16). Validated form;
  * on submit appends a new offer card. Closable via ✕, Cancel, backdrop, Escape.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import {
   emptyDraft,
   money,
+  tabTrapTarget,
   validateOfferDraft,
   type DraftErrors,
   type OfferDraft,
   type UiOffer,
 } from "./offers-lib";
+
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [href]';
 
 interface Props {
   open: boolean;
@@ -30,6 +33,21 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
   const addCounter = useRef(0);
 
+  // Keep Tab/Shift+Tab trapped inside the dialog. Without this, focus can
+  // walk past the dialog's first/last field onto the header/empty-state "Add
+  // Offer" buttons the backdrop visually covers but never removes from the
+  // tab order (GAP-P4-057 — the overlay must isolate the dialog for keyboard
+  // interaction too, not just for the mouse).
+  const trapTab = useCallback((e: KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialogRef.current) return;
+    const nodes = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const target = tabTrapTarget(nodes, document.activeElement as HTMLElement | null, e.shiftKey);
+    if (target) {
+      e.preventDefault();
+      target.focus();
+    }
+  }, []);
+
   // Reset the form each time the modal opens, and move focus into the dialog.
   useEffect(() => {
     if (!open) return;
@@ -38,13 +56,14 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
     const t = setTimeout(() => firstFieldRef.current?.focus(), 0);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else trapTab(e);
     };
     window.addEventListener("keydown", onKey);
     return () => {
       clearTimeout(t);
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, onClose]);
+  }, [open, onClose, trapTab]);
 
   if (!open) return null;
 
