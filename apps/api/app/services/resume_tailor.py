@@ -260,16 +260,21 @@ class ResumeTailorService:
                 for i, b in enumerate(extract_bullets(resume_text))
             ]
         structured: list[dict[str, str]] = []
+        seen_refs: set[str] = set()
         for i, b in enumerate(originals):
             if isinstance(b, str):
-                structured.append({"text": b, "evidenceRef": f"bullet-{i}"})
+                entry = {"text": b, "evidenceRef": f"bullet-{i}"}
             else:
-                structured.append(
-                    {
-                        "text": b.get("text", ""),
-                        "evidenceRef": b.get("evidenceRef") or f"bullet-{i}",
-                    }
-                )
+                entry = {
+                    "text": b.get("text", ""),
+                    "evidenceRef": b.get("evidenceRef") or f"bullet-{i}",
+                }
+            # Heal duplicated refs from pre-fix tailored versions (first
+            # occurrence wins) so corruption never propagates to children.
+            if entry["evidenceRef"] in seen_refs:
+                continue
+            seen_refs.add(entry["evidenceRef"])
+            structured.append(entry)
         return structured
 
     def _validate(

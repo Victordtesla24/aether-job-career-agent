@@ -149,6 +149,23 @@ class TestValidateIntegration:
         assert result.bullets[0]["text"] == originals[0]["text"]
         assert result.changes == 1
 
+    def test_corrupted_parent_duplicate_refs_are_healed(self):
+        """Tailored versions created before the duplicate-ref fix may store
+        two rows for one evidenceRef — re-tailoring them must emit unique
+        refs (first row wins) so the corruption never propagates."""
+        svc = ResumeTailorService()
+        originals = [
+            {"text": "Led end-to-end delivery for the Kookaburras team across 5 squads",
+             "evidenceRef": "bullet-10"},
+            {"text": "Reduced processing time by 92% using Python",
+             "evidenceRef": "bullet-10"},
+        ]
+        raw = {"bullets": []}  # LLM returned nothing usable
+        result = svc._validate(raw, originals, RESUME)
+        assert [b["evidenceRef"] for b in result.bullets] == ["bullet-10"]
+        assert result.bullets[0]["text"] == originals[0]["text"]
+        assert result.changes == 0
+
     def test_rewrite_dropping_all_metrics_is_rejected(self):
         """§10.1: a rewrite that loses every quantified outcome from a
         quantified bullet reverts to the original."""
