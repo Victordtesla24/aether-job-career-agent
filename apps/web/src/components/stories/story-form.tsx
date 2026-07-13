@@ -125,8 +125,10 @@ export function StoryForm({ initial, submitLabel, onSubmit, onCancel }: StoryFor
         </button>
         <button
           type="button"
+          disabled={saving}
           onClick={onCancel}
-          className="min-h-[44px] rounded-xl border border-white/10 px-4 py-2 text-sm text-aether-muted transition hover:border-white/25 hover:text-white"
+          data-testid="story-form-cancel"
+          className="min-h-[44px] rounded-xl border border-white/10 px-4 py-2 text-sm text-aether-muted transition hover:border-white/25 hover:text-white disabled:opacity-40"
         >
           Cancel
         </button>

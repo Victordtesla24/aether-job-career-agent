@@ -45,10 +45,10 @@ export default function StoryBankPage() {
     }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (category?: string) => {
     try {
       const [list, statsResp] = await Promise.all([
-        fetchStories(),
+        fetchStories(category && category !== "All" ? { category } : {}),
         fetchStoryStats().catch(() => null),
       ]);
       setStories(list);
@@ -61,8 +61,8 @@ export default function StoryBankPage() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(filter);
+  }, [filter, load]);
 
   const effectiveStories = useMemo(
     () => (demoEmpty ? [] : (stories ?? [])),
@@ -136,11 +136,13 @@ export default function StoryBankPage() {
     }
   };
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setCreating(true);
     setEditingId(null);
     setDemoEmpty(false);
-  };
+  }, []);
+
+  const closeCreate = useCallback(() => setCreating(false), []);
 
   const showEmpty = stories !== null && effectiveStories.length === 0;
 
@@ -211,7 +213,7 @@ export default function StoryBankPage() {
             initial={EMPTY_STORY_FORM}
             submitLabel="Create Story"
             onSubmit={create}
-            onCancel={() => setCreating(false)}
+            onCancel={closeCreate}
           />
         </div>
       ) : null}

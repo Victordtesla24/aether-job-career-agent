@@ -67,6 +67,14 @@ describe("Story Bank client — enrichment", () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain("/stories");
   });
 
+  it("fetchStories accepts an optional category query param", async () => {
+    const fetchMock = mockFetchOnce([ENRICHED_STORY]);
+    const stories = await fetchStories({ token: "tok", category: "Delivery" });
+    expect(stories).toHaveLength(1);
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/stories?category=Delivery");
+  });
+
   it("fetchStoryStats parses the stats payload from GET /stories/stats", async () => {
     const fetchMock = mockFetchOnce({
       total: 34,

@@ -32,8 +32,15 @@ export const StoryStatsSchema = z.object({
 
 export type StoryStats = z.infer<typeof StoryStatsSchema>;
 
-export async function fetchStories(options: RequestOptions = {}): Promise<Story[]> {
-  return z.array(StorySchema).parse(await apiRequest<unknown>("/stories", options));
+export interface FetchStoriesOptions extends RequestOptions {
+  /** Optional category filter sent as a query param to the API. */
+  category?: string;
+}
+
+export async function fetchStories(options: FetchStoriesOptions = {}): Promise<Story[]> {
+  const { category, ...rest } = options;
+  const path = category ? `/stories?category=${encodeURIComponent(category)}` : "/stories";
+  return z.array(StorySchema).parse(await apiRequest<unknown>(path, rest));
 }
 
 export async function fetchStoryStats(options: RequestOptions = {}): Promise<StoryStats> {
