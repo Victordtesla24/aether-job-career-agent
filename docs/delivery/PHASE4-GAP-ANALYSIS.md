@@ -412,3 +412,66 @@ Status: AWAITING SCOUT 13-17 SUB-AGENT
 
 ## G. Independent QA post-deploy
 Evidence: `uat/reports/evidence/phase4/qa-postdeploy-verify.json` (15 VERIFIED-CLOSED / 0 OPEN). Commit under test: `1f80091` + code `7459d1e`.
+
+---
+
+## H. Phase 4 Fresh Sweep — 2026-07-13T10:25Z (THIS run, no reused evidence)
+
+**Orchestrator:** Hermes Agent (z-ai/glm-5.2 via OpenRouter)
+**Delegation model:** deepseek/deepseek-v4-pro
+**Kanban board:** aether-job-career-agent (16 cards: 1 master + 6 Stage A + 3 Stage C fixers batch 1 + 5 Stage C fixers batch 2)
+
+### Stage A Evidence Files (all fresh from this run)
+- `uat/reports/evidence/phase4/doc-audit-requirement-register.json` — 26 REQs, 125 SCs, 25 features, 48 design-ids
+- `uat/reports/evidence/phase4/api-sweep-results.json` — 86 endpoints, 76 OK, 5 gaps (3 false positives)
+- `uat/reports/evidence/phase4/scout-screens-1-6-findings.json` — 6 screens, 3 G-FAKE CRITICAL dead controls
+- `uat/reports/evidence/phase4/scout-screens-7-12-findings.json` — 6 screens, offers form crash, analytics anomaly, stories filter broken
+- `uat/reports/evidence/phase4/scout-screens-13-17-findings.json` — remaining screens
+- `uat/reports/evidence/phase4/wireframe-diff-all-17.json` — 289 elements, 198 matching, 27 degraded, 64 missing (25 ADR-covered, 6 genuine)
+- `uat/reports/evidence/phase4/data-ai-audit.json` — AI quality PASS_WITH_CAVEATS, email draft-only gap
+- Screenshots in `uat/reports/evidence/phase4/*.png`
+
+### Test Suite Status (this run)
+- Vitest: 141/141 PASS
+- Pytest: 239 passed, 0 failed (after fixer batch 1 — was 205 passed/7 failed/20 errors before)
+
+### Gap Ledger (fresh gaps from this run)
+
+| Gap ID | Type | Severity | Screen | Status | Fixer |
+|--------|------|----------|--------|--------|-------|
+| GAP-P4-019 | G-FAKE | CRITICAL | /dashboard | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-020 | G-FAKE | CRITICAL | /dashboard | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-021 | G-FAKE | CRITICAL | /dashboard/email | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-022 | G-METRIC | MEDIUM | /dashboard | OPEN | — |
+| GAP-P4-023 | G-BUG | CRITICAL | /dashboard/offers | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-024 | G-FAKE | CRITICAL | /dashboard/offers | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-025 | G-METRIC | HIGH | /dashboard/analytics | FIXER DISPATCHED | deleg_7ef75c88 |
+| GAP-P4-026 | G-METRIC | LOW | /dashboard/analytics | FIXER DISPATCHED | deleg_7ef75c88 |
+| GAP-P4-027 | G-BUG | HIGH | /dashboard/stories | FIXER DISPATCHED | deleg_7ef75c88 |
+| GAP-P4-028 | G-BUG | MEDIUM | /dashboard/stories | FIXER DISPATCHED | deleg_7ef75c88 |
+| GAP-P4-029 | G-FAKE | HIGH | /dashboard/email | OPEN (needs ADR or provider) | — |
+| GAP-P4-030 | G-MISSING | MEDIUM | /dashboard/jobs | OPEN (wireframe gap) | — |
+| GAP-P4-031 | G-MISSING | MEDIUM | /dashboard/jobs | OPEN (wireframe gap) | — |
+| GAP-P4-032 | G-MISSING | MEDIUM | /dashboard/resume | OPEN (wireframe gap) | — |
+| GAP-P4-033 | G-MISSING | LOW | /dashboard/cover-letters | OPEN (ADR D-0020 covers) | — |
+| GAP-P4-034 | G-MISSING | MEDIUM | /dashboard/applications | OPEN (wireframe gap) | — |
+| GAP-P4-035 | G-MISSING | LOW | /dashboard/analytics | OPEN (wireframe gap) | — |
+| GAP-P4-036 | G-BUG | HIGH | test suite | VERIFIED-CLOSED (offers router added) | deleg_4b92ee44 |
+| GAP-P4-037 | G-BUG | HIGH | test suite | VERIFIED-CLOSED (cast removed) | deleg_4b92ee44 |
+| GAP-P4-038 | G-BUG | HIGH | test suite | VERIFIED-CLOSED (fixture user fix) | deleg_4b92ee44 |
+| GAP-P4-039 | G-QUALITY | MEDIUM | all AI screens | OPEN (LLM timeout → fixture fallback) | — |
+
+### Summary
+- Total fresh gaps: 21
+- VERIFIED-CLOSED: 3 (GAP-P4-036, 037, 038)
+- FIXER DISPATCHED: 9 (awaiting completion)
+- OPEN: 9 (wireframe gaps need ADR or implementation; email send needs provider; LLM timeout needs budget fix)
+
+### Next Steps
+1. Wait for fixer batches (deleg_e7f2293e + deleg_7ef75c88) to complete
+2. Review and commit fixer output
+3. Deploy: rebuild web, restart services
+4. QA verify on production with fresh screenshots
+5. File ADRs for wireframe gaps (GAP-P4-030 to 035) if deferring
+6. Address LLM timeout (GAP-P4-039) — increase budget or use faster model
+7. Address email send (GAP-P4-029) — provider integration or ADR
