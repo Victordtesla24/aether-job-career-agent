@@ -4,15 +4,12 @@
  * - Resolves the API base URL: explicit env override → same-origin `/api`
  *   proxy in the browser → localhost FastAPI during SSR/dev.
  * - Manages the bearer token. There is NO silent auto-login: a visitor
- *   without a stored session is sent to /login (SC-AUTH-03). The demo
- *   credentials are exported only so the /login form can prefill them in the
- *   deployed demo environment.
+ *   without a stored session is sent to /login (SC-AUTH-03). The /login form
+ *   always starts with empty fields; there is no client-side demo-credential
+ *   prefill (GAP-P4-068 removed the unused, hardcoded DEMO_CREDENTIALS
+ *   export — LOGIN_EMAIL/LOGIN_PASSWORD in the repo .env are the only source
+ *   of the demo credential).
  */
-
-export const DEMO_CREDENTIALS = {
-  email: "sarkar.vikram@gmail.com",
-  password: "AetherDemo1",
-} as const;
 
 const TOKEN_STORAGE_KEY = "aether_token";
 

@@ -8,9 +8,10 @@ import { requireEnv } from "./env";
  *
  * The old auth.setup.ts assumed /login prefilled the demo credentials and
  * just clicked "Sign in" — but apps/web/src/app/login/page.tsx has always
- * initialized both fields to "" (DEMO_CREDENTIALS in lib/api/client.ts is
- * exported but never consumed by the page), so that click submitted an empty
- * form and the wait for /dashboard timed out (see
+ * initialized both fields to "" (the lib/api/client.ts DEMO_CREDENTIALS
+ * export it relied on was never consumed by the page, and was removed
+ * entirely by GAP-P4-068 for hardcoding the demo password), so that click
+ * submitted an empty form and the wait for /dashboard timed out (see
  * uat/reports/evidence/phase4/preflight__tests__20260713T114254Z.log).
  *
  * This performs a REAL login: navigate to /login, fill the form with

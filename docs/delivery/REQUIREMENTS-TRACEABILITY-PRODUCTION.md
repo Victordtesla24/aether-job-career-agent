@@ -1,7 +1,7 @@
 # Aether Career Agent — Requirements-to-Production Traceability Matrix
 
 **Generated:** 2026-07-12 04:30 UTC | **Branch:** main | **Production:** https://5cb5f0620.abacusai.cloud
-**Login:** demo@aether.dev / AetherDemo1 | **Source:** docs/delivery/TRACEABILITY-MATRIX.md, DECISIONS.md, PROGRESS.md, FINAL-REPORT-PHASE-2-AUDIT.md
+**Login:** sarkar.vikram@gmail.com / *(see LOGIN_PASSWORD in repo-root `.env` — never committed in plaintext, GAP-P4-068)* | **Source:** docs/delivery/TRACEABILITY-MATRIX.md, DECISIONS.md, PROGRESS.md, FINAL-REPORT-PHASE-2-AUDIT.md
 
 ## Legend
 | Verdict | Meaning |
@@ -21,7 +21,7 @@
 
 | Requirement | Code | Status |
 |---|---|---|
-| Demo login with prefilled credentials | `apps/web/src/app/login/page.tsx` — form with demo@aether.dev/AetherDemo1 | ✅ WIRED |
+| Demo login (no client-side credential prefill) | `apps/web/src/app/login/page.tsx` — both fields `useState<string>("")`; visitor must type the demo credential manually (SC-AUTH-03). Corrected here per GAP-P4-051, which found this row's prior "prefilled credentials" claim false against live source | ✅ WIRED |
 | JWT session via bearer token | `apps/api/app/routers/auth.py` — `POST /auth/login` returns access_token, 24h expiry | ✅ WIRED |
 | CurrentUser dependency guards routes | `apps/api/app/middleware/auth.py` — get_current_user bearer dependency | ✅ WIRED |
 | Bad password shows error | Login page inline alert rendering | ✅ WIRED |
