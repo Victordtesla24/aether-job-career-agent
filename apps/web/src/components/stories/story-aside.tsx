@@ -1,6 +1,7 @@
 "use client";
 
 import type { Story } from "../../lib/api/stories";
+import { extractorTriggerState } from "./logic";
 
 /** Canonical interview questions mapped to the best-matching live story. */
 const MAPPER_QUESTIONS: { q: string; categories: string[]; accent: string }[] = [
@@ -56,6 +57,7 @@ export function StoryAside({
   drafting?: boolean;
   onDraftMissing: () => void;
 }) {
+  const extractorState = extractorTriggerState(drafting, "Draft missing stories", "Drafting from resume…");
   return (
     <aside className="w-full space-y-4 lg:w-80 lg:shrink-0" aria-label="Story insights">
       <section className="glass rounded-2xl border border-white/10 p-5" data-testid="question-mapper">
@@ -106,14 +108,15 @@ export function StoryAside({
           type="button"
           data-testid="draft-missing-btn"
           onClick={onDraftMissing}
-          disabled={drafting}
+          disabled={extractorState.disabled}
+          aria-busy={drafting}
           className="mt-4 min-h-[44px] w-full rounded-xl bg-aether-indigo px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5b52ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-indigo/50 disabled:opacity-60"
         >
           <i
             className={`fa-solid ${drafting ? "fa-spinner fa-spin" : "fa-wand-magic-sparkles"} mr-1`}
             aria-hidden="true"
           />
-          {drafting ? "Drafting from resume…" : "Draft missing stories"}
+          {extractorState.label}
         </button>
       </section>
     </aside>

@@ -9,7 +9,7 @@
  *  - unconfigured→ "Configure keys"     (click connects)
  */
 import type { Provider } from "./api";
-import { providerAction } from "./logic";
+import { providerAction, providerModelDisabledReason } from "./logic";
 
 const DOT: Record<Provider["status"], string> = {
   connected: "bg-aether-green",
@@ -60,6 +60,7 @@ export default function ProviderConnections({
           {providers.map((p) => {
             const action = providerAction(p.status);
             const busy = busyId === p.id;
+            const modelLockReason = providerModelDisabledReason(p);
             return (
               <div
                 key={p.id}
@@ -101,10 +102,12 @@ export default function ProviderConnections({
                   <select
                     data-testid={`provider-model-${p.id}`}
                     aria-label={`${p.name} model`}
+                    aria-disabled={modelLockReason !== null || undefined}
+                    title={modelLockReason ?? undefined}
                     value={p.model}
                     disabled={p.models.length === 0 || busy}
                     onChange={(e) => onModel(p.id, e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:opacity-60 [&>option]:bg-aether-bg"
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
                   >
                     {p.models.length === 0 ? (
                       <option value="">Select region — ap-southeast-2</option>

@@ -3,7 +3,7 @@
  * separate from the components so the display + interaction logic can be
  * verified in the node vitest environment.
  */
-import type { Provider } from "./api";
+import type { CatalogAgent, Provider } from "./api";
 
 /** Compact token formatting for the stat cards (3.42M / 4.2K / 120). */
 export function formatTokens(n: number): string {
@@ -32,4 +32,32 @@ export function agentStatusLabel(
   status: "active" | "paused" | "error" | "planned",
 ): string {
   return { active: "Active", paused: "Paused", error: "Error", planned: "Planned" }[status];
+}
+
+/**
+ * Why a provider's model select is intentionally locked (no models to choose
+ * from), or null when it isn't. Per D-0020, a provider with no keys/models
+ * configured legitimately disables its select — but a disabled control still
+ * needs to explain itself, so this backs a `title` tooltip rather than
+ * leaving the lock silent.
+ */
+export function providerModelDisabledReason(provider: Provider): string | null {
+  if (provider.models.length === 0) {
+    return `${provider.name} has no selectable models — connect it (add its API key in the server .env) to enable model selection.`;
+  }
+  return null;
+}
+
+/**
+ * Why an agent's Run button is intentionally locked, or null when it isn't.
+ * Excludes the transient "busy" (request in flight) state, which callers
+ * already surface separately (e.g. a "Running…" label).
+ */
+export function agentRunDisabledReason(
+  agent: Pick<CatalogAgent, "name" | "enabled">,
+): string | null {
+  if (!agent.enabled) {
+    return `${agent.name} is disabled — enable it above to run it.`;
+  }
+  return null;
 }
