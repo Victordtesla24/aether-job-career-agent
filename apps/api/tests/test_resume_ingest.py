@@ -61,6 +61,46 @@ class TestResumeIngestion:
         )
         assert resp.status_code == 422
 
+    def test_ingested_bundled_ba_resume_stores_complete_bullets(
+        self, client, auth_headers
+    ):
+        """GAP-P4-044 at the endpoint boundary: ingesting the bundled BA resume
+        via ``POST /resumes`` — exactly as ``scripts/ingest_ba_resume.py`` does,
+        from the PDF's flat text — must store COMPLETE work bullets, not the
+        truncated first-line fragments the legacy extractor produced."""
+        import fitz
+
+        from app.agents.fit_scorer import get_base_resume_path
+
+        ba_pdf = get_base_resume_path().parent / "Vik_Resume_BA_Final.pdf"
+        doc = fitz.open(ba_pdf)
+        try:
+            raw_text = "\n".join(page.get_text() for page in doc)
+        finally:
+            doc.close()
+
+        resp = client.post(
+            "/resumes",
+            json={"label": "BA resume — bundled", "raw_text": raw_text},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, resp.text
+        bullets = [b["text"] for b in resp.json()["sections"]["bullets"]]
+
+        # The multi-line "Agile Delivery Leadership" bullet is stored whole,
+        # not truncated to its first line.
+        agile = [b for b in bullets if b.startswith("Agile Delivery Leadership")]
+        assert len(agile) == 1
+        assert agile[0].rstrip().endswith("executive status reporting.")
+        assert not any(b.rstrip().endswith("Agile Kookaburras squad") for b in bullets)
+        # No work bullet was left as a dangling first-line fragment.
+        fragments = [
+            b
+            for b in bullets
+            if ":" in b[:60] and not b.rstrip().rstrip(")\"']").endswith((".", "!", "?"))
+        ]
+        assert not fragments, f"stored fragmented bullets: {fragments}"
+
     def test_tailor_run_accepts_explicit_resume_id(self, client, auth_headers):
         """The tailoring agent must tailor the SELECTED resume, not the base."""
         created = _ingest_ba_resume(client, auth_headers)

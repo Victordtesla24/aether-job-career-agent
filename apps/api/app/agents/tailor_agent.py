@@ -14,7 +14,8 @@ from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
 from app.services.resume_parser import parse_resume_pdf
-from app.services.resume_tailor import ResumeTailorService, extract_bullets
+from app.services.resume_pdf import extract_pdf_bullets
+from app.services.resume_tailor import ResumeTailorService
 
 
 @dataclass
@@ -39,12 +40,18 @@ class TailoringAgent:
         base = self._resumes.get_base(user_id)
         if base and (base.get("sections") or {}).get("raw_text"):
             return base
-        parsed = parse_resume_pdf(get_base_resume_path())
+        base_path = get_base_resume_path()
+        parsed = parse_resume_pdf(base_path)
+        # Reconstruct COMPLETE bullets positionally from the PDF. The flat text
+        # stream interleaves each wrapped bullet's continuation lines with
+        # left-rail content, so line-based extraction would store truncated
+        # first-line fragments — which the tailoring LLM then "completes" into
+        # incoherent, duplicated output (GAP-P4-044).
         sections = {
             "raw_text": parsed["raw_text"],
             "bullets": [
                 {"text": b, "evidenceRef": f"bullet-{i}"}
-                for i, b in enumerate(extract_bullets(parsed["raw_text"]))
+                for i, b in enumerate(extract_pdf_bullets(base_path))
             ],
             "contact": parsed["contact"],
         }

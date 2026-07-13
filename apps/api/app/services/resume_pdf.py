@@ -51,8 +51,12 @@ _RIGHT_COL_MIN_X = 225.0
 _BODY_X_MIN, _BODY_X_MAX = 238.0, 247.0
 #: Body font size (both bold lead-in and grey body render at this size).
 _BODY_SIZE = 8.7
-#: Fallback sizes tried when reworded text would overflow a bullet's slot.
-_FIT_SIZES = (8.7, 8.4, 8.1, 7.8, 7.5)
+#: Fallback sizes tried, largest-first, when reworded text would overflow a
+#: bullet's slot. The line pitch scales with the chosen size (see
+#: :func:`_fit_text`) so stepping the font down also tightens the leading and
+#: frees the vertical room a fixed pitch could not — this is what keeps a
+#: longer rewrite from spilling onto the next bullet (GAP-P4-046).
+_FIT_SIZES = (8.7, 8.4, 8.1, 7.8, 7.5, 7.2, 6.9, 6.6)
 
 #: Coral bullet marker colour (rgb ≈ 244,113,92) and match tolerance.
 _CORAL = (0.957, 0.443, 0.361)
@@ -196,6 +200,30 @@ def _wrap(font: Any, size: float, words: list[str], width: float) -> list[str]:
     return lines
 
 
+def _fit_text(
+    font: Any, words: list[str], width: float, available: float
+) -> tuple[float, float, list[str]]:
+    """Pick the largest body size (and its proportional line pitch) whose
+    wrapped text fits ``available`` vertical points.
+
+    The pitch scales with the font size (``_LINE_PITCH`` is the pitch at
+    ``_BODY_SIZE``), so a reworded bullet that runs longer than the original is
+    stepped down until it fits its slot instead of overrunning the next bullet
+    (GAP-P4-046). If nothing in the ladder fits, the smallest size is returned —
+    the tightest available packing.
+    """
+    size = _FIT_SIZES[-1]
+    pitch = _LINE_PITCH * (size / _BODY_SIZE)
+    lines: list[str] = []
+    for candidate in _FIT_SIZES:
+        size = candidate
+        pitch = _LINE_PITCH * (candidate / _BODY_SIZE)
+        lines = _wrap(font, candidate, words, width)
+        if (len(lines) - 1) * pitch + size <= available:
+            break
+    return size, pitch, lines
+
+
 def _render_block(
     block: dict[str, Any],
     new_full: str,
@@ -210,8 +238,10 @@ def _render_block(
 
     The reworded text keeps the original bold lead-in ("Prefix:") in the dark
     weight and the remainder in grey, wrapped at the original width and placed
-    on the original baseline/pitch. If it would overflow the bullet's vertical
-    slot the font is stepped down so nothing below shifts.
+    on the original baseline. If it would overflow the bullet's vertical slot
+    the font size (and its proportional line pitch) is stepped down until it
+    fits, so it never renders on top of the next bullet and nothing below
+    shifts.
     """
     x0 = block["x0"]
     width = _RIGHT_MARGIN - x0
@@ -221,20 +251,21 @@ def _render_block(
     # Split the *rendered* text so bold covers exactly the lead-in characters.
     prefix_len = len(prefix)
 
-    available = block["next_top"] - 4 - block["top"]
-    lines: list[str] = []
-    size = _BODY_SIZE
-    for size in _FIT_SIZES:
-        lines = _wrap(font_reg, size, new_full.split(), width)
-        if (len(lines) - 1) * _LINE_PITCH + size <= available:
-            break
+    # Constrain the rewrite to the space the ORIGINAL bullet occupied. Using the
+    # next bullet's marker (``next_top``) overshoots for the last bullet of a
+    # job group — the next job's title/company/date sits in that gap — so a long
+    # rewrite would render on top of it (GAP-P4-046). The original bullet fit its
+    # own box without overlapping anything, so a rewrite that also fits that box
+    # is guaranteed not to overlap and not to shift anything below it.
+    available = block["bottom"] - block["top"]
+    size, pitch, lines = _fit_text(font_reg, new_full.split(), width, available)
 
-    bottom = block["baseline"] + (len(lines) - 1) * _LINE_PITCH + size * 0.3
+    bottom = block["baseline"] + (len(lines) - 1) * pitch + size * 0.3
     highlight.draw_rect(fitz.Rect(x0 - 2, block["top"] - 1.5, _RIGHT_MARGIN + 1, bottom))
 
     consumed = 0
     for row, line in enumerate(lines):
-        y = block["baseline"] + row * _LINE_PITCH
+        y = block["baseline"] + row * pitch
         x = x0
         line_start, line_end = consumed, consumed + len(line)
         if prefix_len > line_start:
@@ -250,28 +281,73 @@ def _render_block(
         consumed = line_end + 1  # +1 for the single space dropped by wrapping
 
 
+def extract_pdf_bullets(pdf_path: Path | str) -> list[str]:
+    """Reconstruct the complete work-experience bullets of a resume PDF.
+
+    The line-based :func:`app.services.resume_tailor.extract_bullets` reads the
+    flat text stream; this prefers *positional* detection (the same column-aware
+    block detection the renderer uses) so a bullet that wraps across several
+    visual lines — with continuation lines interleaved with unrelated left-rail
+    content — is rejoined into one complete sentence instead of being truncated
+    to its first-line fragment (GAP-P4-044). Bullets come back in page /
+    top-to-bottom order, with the left rail (skills / contact) excluded.
+
+    Positional detection keys on the base resume's coral ``•`` glyph and body
+    geometry. A resume drawn with different markers (e.g. the BA variant, whose
+    bullets are black) yields no positional blocks; rather than return an empty
+    list, this falls back to the shared flat-text reconstruction, which now
+    rejoins wrapped bullets on any resume. So this never regresses to zero
+    bullets for a resume that plainly has them.
+    """
+    doc = fitz.open(pdf_path)
+    try:
+        bullets: list[str] = []
+        for page_index in range(len(doc)):
+            for block in _detect_blocks(doc[page_index]):
+                text = block["full_text"].strip()
+                if text:
+                    bullets.append(text)
+        if bullets:
+            return bullets
+        flat_text = "\n".join(page.get_text() for page in doc)
+    finally:
+        doc.close()
+
+    # No coral/base-geometry bullets on any page — reconstruct from flat text.
+    from app.services.resume_tailor import extract_bullets
+
+    return extract_bullets(flat_text)
+
+
 def render_tailored_pdf(original_path: Path, changes: list[tuple[str, str]]) -> bytes:
     """Return format-preserving PDF bytes for a tailored resume.
 
-    ``changes`` is a list of ``(before, after)`` pairs — the original and
-    reworded first-line fragment of each bullet whose text changed. Each pair
-    is matched to a work bullet in ``original_path`` by its first line; the
-    reworded fragment is spliced onto the bullet's original continuation, and
-    only that bullet is redrawn. Pairs that don't match a work bullet (e.g.
-    left-rail skills, or bullets mangled by two-column text extraction) are
-    skipped, leaving the original untouched. With no matching changes the
-    pristine source bytes are returned.
+    ``changes`` is a list of ``(before, after)`` pairs — the original and the
+    reworded text of each bullet whose text changed. Each pair is matched to a
+    work bullet in ``original_path`` and that bullet is redrawn with ``after``
+    in full, replacing the original text. Pairs that don't match a work bullet
+    (e.g. left-rail skills) are skipped, leaving the original untouched. With no
+    matching changes the pristine source bytes are returned.
+
+    ``after`` is the *complete* reworded bullet, so it replaces the whole
+    bullet. The previous implementation spliced ``after`` onto the bullet's
+    original continuation, which duplicated and dangled text whenever the
+    rewrite already restated that continuation (GAP-P4-044).
     """
     doc = fitz.open(original_path)
     try:
-        # Index every work bullet by its normalized first line.
+        # Index every work bullet by BOTH its full text and its first line, so a
+        # stored bullet matches whether it holds the complete sentence (current
+        # pipeline) or a legacy first-line fragment (pre-fix tailored data).
         index: dict[str, tuple[int, dict[str, Any]]] = {}
         for page_index in range(len(doc)):
             for block in _detect_blocks(doc[page_index]):
+                index.setdefault(_normalize(block["full_text"]), (page_index, block))
                 index.setdefault(_normalize(block["first_line"]), (page_index, block))
 
-        # Resolve each change to a (page, block, new_full_text) edit.
+        # Resolve each change to a (page, block, after_text) edit.
         edits: dict[int, list[tuple[dict[str, Any], str]]] = {}
+        edited_blocks: set[int] = set()
         for before, after in changes:
             key = _normalize(before)
             match = index.get(key)
@@ -284,8 +360,10 @@ def render_tailored_pdf(original_path: Path, changes: list[tuple[str, str]]) -> 
             if match is None:
                 continue
             page_index, block = match
-            new_full = after + block["full_text"][len(block["first_line"]):]
-            edits.setdefault(page_index, []).append((block, new_full))
+            if id(block) in edited_blocks:
+                continue  # one edit per physical bullet
+            edited_blocks.add(id(block))
+            edits.setdefault(page_index, []).append((block, after))
 
         for page_index, page_edits in edits.items():
             page = doc[page_index]
