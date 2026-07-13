@@ -31,7 +31,6 @@ from app.repositories.user import UserRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
 DEMO_EMAIL = "sarkar.vikram@gmail.com"
-DEMO_PASSWORD = "AetherDemo1"
 
 FUNNEL = {"jobs_found": 847, "applied": 412, "screened": 156, "interviewed": 23, "offers": 4}
 
@@ -41,12 +40,30 @@ TITLES = ["Senior Software Engineer", "Staff Engineer", "ML Engineer", "Platform
           "Backend Engineer", "Full Stack Developer", "DevOps Engineer", "Data Engineer"]
 
 
+def _demo_password() -> str:
+    """Resolve the demo user's password from the environment (GAP-P4-068).
+
+    Never hardcode a real credential in shipped tooling. Reads
+    SEED_DEMO_PASSWORD first (dedicated override), falling back to
+    LOGIN_PASSWORD (the same repo .env var the login flow and uat tooling
+    already use) so a single `.env` is sufficient for a normal seed run.
+    """
+    password = os.environ.get("SEED_DEMO_PASSWORD") or os.environ.get("LOGIN_PASSWORD")
+    if not password:
+        raise SystemExit(
+            "SEED_DEMO_PASSWORD or LOGIN_PASSWORD must be set (as an env var, or in the "
+            "repo-root .env) to seed the demo user's password. Refusing to hardcode a "
+            "default credential."
+        )
+    return password
+
+
 def main() -> None:
     random.seed(42)
     users = UserRepository()
     user = users.get_by_email(DEMO_EMAIL)
     if user is None:
-        user = users.create(DEMO_EMAIL, hash_password(DEMO_PASSWORD))
+        user = users.create(DEMO_EMAIL, hash_password(_demo_password()))
         print(f"created demo user {DEMO_EMAIL}")
     user_id = user["id"]
 
