@@ -5,11 +5,17 @@ scope.
 
 C-32 / GAP-P4-068: shipped tooling and product code must never hardcode the
 demo password in plaintext; it must read LOGIN_PASSWORD (or, for the demo
-seed script, SEED_DEMO_PASSWORD/LOGIN_PASSWORD) from the repo .env, like
+seed script, SEED_DEMO_PASSWORD/LOGIN_PASSWORD; or, for the discovery cron,
+AETHER_CRON_PASSWORD/LOGIN_PASSWORD) from the repo .env, like
 uat/api_sweep.py's load_env(). GAP-P4-068 extended this guard's scan scope
 beyond uat/*.py to also cover apps/api/scripts/*.py (apps/api/scripts/seed_demo.py
-hardcoded DEMO_PASSWORD = "AetherDemo1") and apps/web/src/lib/api/client.ts
-(exported an unused DEMO_CREDENTIALS constant with the same literal).
+hardcoded DEMO_PASSWORD = "AetherDemo1"), apps/web/src/lib/api/client.ts
+(exported an unused DEMO_CREDENTIALS constant with the same literal), and
+scripts/*.sh (scripts/discovery_cron.sh — the live systemd-timer job
+SC-JOB-10/aether-discovery.timer, which runs every 30 minutes — defaulted
+`AETHER_CRON_PASSWORD` to the literal "AetherDemo1" whenever the env var was
+unset, so the demo password shipped hardcoded in a script that is actually
+scheduled and executed, not merely dead code).
 
 C-34: shipped uat tooling must never navigate a browser directly (GET) to the
 POST-only /api/auth/login endpoint — that produces a real 405 the FastAPI
@@ -42,12 +48,15 @@ GOTO_LOGIN_API_RE = re.compile(
 )
 
 # Pathspecs scanned for the hardcoded-password guard (GAP-P4-068 extended this
-# beyond the original uat/*.py-only scope to also cover the demo seed script
-# and the web API client that used to export the same literal).
+# beyond the original uat/*.py-only scope to also cover the demo seed script,
+# the web API client that used to export the same literal, and shipped shell
+# tooling — scripts/discovery_cron.sh, the live discovery cron job, defaulted
+# to the same hardcoded password).
 PASSWORD_SCAN_PATHSPECS = (
     "uat/*.py",
     "apps/api/scripts/*.py",
     "apps/web/src/lib/api/client.ts",
+    "scripts/*.sh",
 )
 
 
@@ -92,9 +101,10 @@ def test_no_hardcoded_demo_password_in_tracked_tooling():
         if HARDCODED_PASSWORD_RE.search(p.read_text())
     ]
     assert offenders == [], (
-        "Tracked uat/*.py, apps/api/scripts/*.py, and the web API client must read "
-        "LOGIN_PASSWORD (or SEED_DEMO_PASSWORD for the demo seed script) from the repo "
-        f".env, never hardcode it (matches api_sweep.py's load_env() pattern). Offenders: {offenders}"
+        "Tracked uat/*.py, apps/api/scripts/*.py, scripts/*.sh, and the web API client "
+        "must read LOGIN_PASSWORD (or SEED_DEMO_PASSWORD / AETHER_CRON_PASSWORD for the "
+        "demo seed script / discovery cron respectively) from the repo .env, never "
+        f"hardcode it (matches api_sweep.py's load_env() pattern). Offenders: {offenders}"
     )
 
 
