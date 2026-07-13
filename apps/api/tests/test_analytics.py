@@ -145,3 +145,55 @@ class TestAnalytics:
         _seed_funnel(user_id, jobs=4, statuses=["submitted", "offer"])
         conv = client.get("/analytics/conversion", headers=auth_headers).json()
         assert conv["found_to_applied"] == 50.0  # 2 of 4
+
+    def test_sources_donut_label_is_not_mislabeled_as_applications(
+        self, client, auth_headers, user_id
+    ):
+        """GAP-P4-058: the donut's center number is a Job-source count
+        (sourcesTotal), not an applications count — it must carry an honest
+        label, never the static/misleading word 'applications'."""
+        _seed_funnel(user_id, jobs=5, statuses=["submitted"])  # 5 jobs, 1 application
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        assert pulse["sourcesTotal"] == 5
+        assert "sourcesLabel" in pulse
+        assert pulse["sourcesLabel"] != "applications"
+        assert "application" not in pulse["sourcesLabel"].lower()
+
+    def test_avg_runs_per_week_divides_by_12_week_window(
+        self, client, auth_headers, user_id
+    ):
+        """GAP-P4-059: all AgentRun rows land in a single calendar week, so
+        weeks_active must not collapse to len(agent_series)==1 — the label
+        says 'last 12 wks' so the divisor must be the fixed 12-week window."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for _ in range(6):
+                    cur.execute(
+                        '''
+                        INSERT INTO "AgentRun" ("id", "userId", "agentName", "status",
+                            "costUsd", "startedAt", "completedAt", "createdAt")
+                        VALUES (%s, %s, 'scout', 'completed', 0, NOW(), NOW(), NOW())
+                        ''',
+                        (new_id(), user_id),
+                    )
+            conn.commit()
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        rows = {r["label"]: r["delta"] for r in pulse["recruiterTrends"]["rows"]}
+        assert rows["Agent runs (last 12 wks)"] == "6 total"
+        # 6/12 = 0.5, not 6/1 = 6.0 (the divisor-collapse bug).
+        assert rows["Avg runs / week"].startswith("0.5")
+        assert len(pulse["recruiterTrends"]["series"]) == 12
+
+    def test_market_vs_you_does_not_fabricate_market_benchmark(
+        self, client, auth_headers, user_id
+    ):
+        """GAP-P4-060: _MARKET_APPS_PER_MONTH / _MARKET_INTERVIEW_RATE were
+        hardcoded constants presented as real market data with no actual
+        external source — must honestly report the source is not connected."""
+        _seed_funnel(user_id, jobs=3, statuses=["submitted"])
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        mvy = pulse["marketVsYou"]
+        assert mvy["marketDataConnected"] is False
+        for c in mvy["comparisons"]:
+            assert c["market"] is None
+        assert "no market data source connected" in mvy["summary"].lower()

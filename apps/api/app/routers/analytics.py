@@ -148,10 +148,11 @@ _SOURCE_COLORS = {
 }
 _PALETTE = ["#4F46E5", "#FF6B35", "#34D399", "#7C3AED", "#FBBF24", "#F59E0B"]
 
-#: Static market baselines (industry reference points — NOT user data). Real
-#: user figures are compared against these.
-_MARKET_APPS_PER_MONTH = 15
-_MARKET_INTERVIEW_RATE = 8  # percent
+#: No real external market-benchmark data provider is integrated. Market vs.
+#: You must never present a hardcoded guess as if it were sourced market
+#: data (see GAP-P4-060) — the panel instead reports the source as
+#: not-connected and shows only the user's own real figures.
+_MARKET_DATA_SOURCE_CONNECTED = False
 
 #: Non-skill boilerplate tokens filtered out of Job.requirements when counting
 #: skill demand, so the top-skills chart reflects genuine skills.
@@ -304,11 +305,26 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             employer_rows = rows_to_dicts(cur)
 
             # --- Recruiter/agent trends: AgentRun per week (last 12 wks) ---
+            # Zero-filled across the full 12-week window (via generate_series)
+            # so a divisor of len(agent_week_rows) always equals the fixed
+            # window length instead of collapsing to the count of weeks that
+            # merely happen to have data (GAP-P4-059).
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', "startedAt") AS week, COUNT(*) AS cnt '
-                'FROM "AgentRun" WHERE "userId" = %s '
-                'AND "startedAt" >= NOW() - INTERVAL \'84 days\' '
-                'GROUP BY week ORDER BY week',
+                '''
+                SELECT gs.week AS week, COALESCE(runs.cnt, 0) AS cnt
+                FROM generate_series(
+                    DATE_TRUNC('week', NOW()) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', NOW()),
+                    INTERVAL '1 week'
+                ) AS gs(week)
+                LEFT JOIN (
+                    SELECT DATE_TRUNC('week', "startedAt") AS week, COUNT(*) AS cnt
+                    FROM "AgentRun" WHERE "userId" = %s
+                    AND "startedAt" >= NOW() - INTERVAL '84 days'
+                    GROUP BY week
+                ) runs ON runs.week = gs.week
+                ORDER BY gs.week
+                ''',
                 (user_id,),
             )
             agent_week_rows = rows_to_dicts(cur)
@@ -465,23 +481,27 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         ],
     }
 
-    # ---- Market vs you ----------------------------------------------------
+    # ---- Market vs you ------------------------------------------------
+    # No real external market-benchmark data source is connected (see
+    # _MARKET_DATA_SOURCE_CONNECTED above) — report that honestly instead of
+    # fabricating "market average" figures (GAP-P4-060).
     you_apps_month = int(f_last_month or 0)
     market_vs_you = {
+        "marketDataConnected": _MARKET_DATA_SOURCE_CONNECTED,
         "comparisons": [
             {
                 "label": "Applications / month",
-                "market": _MARKET_APPS_PER_MONTH,
+                "market": None,
                 "you": you_apps_month,
             },
             {
                 "label": "Interview rate",
-                "market": _MARKET_INTERVIEW_RATE,
+                "market": None,
                 "you": interview_rate,
                 "unit": "%",
             },
         ],
-        "summary": _market_summary(you_apps_month, interview_rate),
+        "summary": _market_summary(),
     }
 
     # ---- Trend indicators (all series from real weekly rollups) ----------
@@ -509,6 +529,9 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     return {
         "sources": sources,
         "sourcesTotal": sources_total,
+        # sourcesTotal is a count of Job rows (discovery-source breakdown),
+        # not applications — the caption must say so honestly (GAP-P4-058).
+        "sourcesLabel": "jobs sourced",
         "topSkills": top_skills,
         "activityHeatmap": activity_heatmap,
         "probability": {
@@ -604,19 +627,13 @@ def dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     return _dashboard(current_user, period)
 
 
-def _market_summary(you_apps: int, interview_rate: int) -> str:
-    """Compose a factual comparison summary from real user figures."""
-    parts: list[str] = []
-    if you_apps and _MARKET_APPS_PER_MONTH:
-        if you_apps >= _MARKET_APPS_PER_MONTH:
-            pct = round((you_apps - _MARKET_APPS_PER_MONTH) / _MARKET_APPS_PER_MONTH * 100)
-            parts.append(f"You're applying {pct}% more than the market average")
-        else:
-            pct = round((_MARKET_APPS_PER_MONTH - you_apps) / _MARKET_APPS_PER_MONTH * 100)
-            parts.append(f"You're applying {pct}% less than the market average")
-    if interview_rate and _MARKET_INTERVIEW_RATE:
-        ratio = round(interview_rate / _MARKET_INTERVIEW_RATE, 2)
-        parts.append(f"converting interviews at {ratio}× the median")
-    if not parts:
-        return "Not enough application history yet to compare against the market."
-    return " and ".join(parts) + "."
+def _market_summary() -> str:
+    """Honest summary when no real market-benchmark data source is wired up.
+
+    Previously this fabricated a comparison against hardcoded constants
+    (_MARKET_APPS_PER_MONTH / _MARKET_INTERVIEW_RATE) presented as if they
+    were real market data — see GAP-P4-060. Until a real market-data
+    provider is integrated (tracked for ADR), report the gap honestly
+    instead of inventing numbers.
+    """
+    return "No market data source connected — showing your own figures only."

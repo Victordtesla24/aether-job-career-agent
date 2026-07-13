@@ -158,13 +158,17 @@ export const saveSettings = (
 export interface MarketPulse {
   sources: Array<{ label: string; value: number; color: string }>;
   sourcesTotal: number;
+  /** Honest caption for sourcesTotal (a Job-source count, not applications). */
+  sourcesLabel: string;
   topSkills: Array<{ skill: string; demand: number }>;
   activityHeatmap: number[][];
   probability: { score: number; label: string; note: string; factors: Array<{ label: string; value: number }> };
   employerActivity: Array<{ company: string; event: string; when: string; signal: string }>;
   recruiterTrends: { series: number[]; rows: Array<{ label: string; delta: string }> };
   marketVsYou: {
-    comparisons: Array<{ label: string; market: number; you: number; unit?: string }>;
+    /** False until a real external market-benchmark data provider is wired up. */
+    marketDataConnected: boolean;
+    comparisons: Array<{ label: string; market: number | null; you: number; unit?: string }>;
     summary: string;
   };
   trendIndicators: Array<{ label: string; delta: string; direction: string; series: number[] }>;

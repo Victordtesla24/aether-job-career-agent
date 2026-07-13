@@ -120,7 +120,7 @@ export default function MarketPulse() {
                 {data.sourcesTotal}
               </text>
               <text x="50" y="60" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white/40" fontSize="7">
-                applications
+                {data.sourcesLabel}
               </text>
             </svg>
             <div className="space-y-2">
@@ -277,18 +277,22 @@ export default function MarketPulse() {
           </h3>
           <div className="space-y-4">
             {data.marketVsYou.comparisons.map((c) => {
-              const max = Math.max(c.market, c.you, 1);
+              const max = Math.max(c.market ?? 0, c.you, 1);
               return (
                 <div key={c.label}>
                   <p className="mb-1.5 text-xs text-aether-muted">{c.label}</p>
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 rounded-full bg-white/20" style={{ width: `${(c.market / max) * 70}%` }} />
-                      <span className="mono text-[10px] text-aether-muted-dim">
-                        market {c.market}
-                        {c.unit ?? ""}
-                      </span>
-                    </div>
+                    {c.market !== null ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 rounded-full bg-white/20" style={{ width: `${(c.market / max) * 70}%` }} />
+                        <span className="mono text-[10px] text-aether-muted-dim">
+                          market {c.market}
+                          {c.unit ?? ""}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] italic text-aether-muted-dim">Market data: not connected</p>
+                    )}
                     <div className="flex items-center gap-2">
                       <div className="h-2 rounded-full bg-aether-coral" style={{ width: `${(c.you / max) * 70}%` }} />
                       <span className="mono text-[10px] text-aether-coral">
