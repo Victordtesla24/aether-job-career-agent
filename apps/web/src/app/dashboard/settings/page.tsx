@@ -8,7 +8,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, getToken } from "../../../lib/api/client";
-import { fetchSettings, saveSettings, type SettingsPayload } from "../../../lib/api/workspaces";
+import {
+  fetchCareerData,
+  fetchSettings,
+  refreshCareerData,
+  saveSettings,
+  type CareerData,
+  type CareerDataSource,
+  type SettingsPayload,
+} from "../../../lib/api/workspaces";
+import {
+  bySource,
+  buildRefreshPayload,
+  careerStatusLabel,
+  careerStatusStyle,
+  deriveInputs,
+  type CareerDataInputs,
+} from "../../../components/settings/career-data";
 import { SECTIONS } from "./sections";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -32,6 +48,51 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Career Data (GAP-P4-047 · ADR D-0031): real GitHub + portfolio ingestion
+  // and a workspace-stored LinkedIn paste, all feeding tailoring context.
+  const [career, setCareer] = useState<CareerData | null>(null);
+  const [careerInputs, setCareerInputs] = useState<CareerDataInputs>({
+    githubUsername: "",
+    portfolioUrl: "",
+    linkedinSummary: "",
+  });
+  const [linkedinDirty, setLinkedinDirty] = useState(false);
+  const [careerSyncing, setCareerSyncing] = useState(false);
+  const [careerError, setCareerError] = useState<string | null>(null);
+  const [careerNotice, setCareerNotice] = useState<string | null>(null);
+
+  // Gate "Sync now" on the initial GET having resolved: until `career` is
+  // populated, `careerInputs` still holds its un-loaded default (empty
+  // strings), and submitting that verbatim would send an implicit clear of
+  // a githubUsername/portfolioUrl the server already has configured
+  // (GAP-P4-047 Wave-1 regression).
+  const careerLoaded = career !== null;
+
+  const refreshCareer = async () => {
+    if (!careerLoaded) return;
+    setCareerSyncing(true);
+    setCareerError(null);
+    setCareerNotice(null);
+    try {
+      const updated = await refreshCareerData(
+        buildRefreshPayload(careerInputs, linkedinDirty, careerLoaded),
+      );
+      setCareer(updated);
+      setCareerInputs(deriveInputs(updated));
+      setLinkedinDirty(false);
+      const failed = updated.sources.filter((s) => s.status === "error");
+      setCareerNotice(
+        failed.length > 0
+          ? `Synced with ${failed.length} source error${failed.length > 1 ? "s" : ""} — see below.`
+          : "Career data synced ✓",
+      );
+    } catch (e) {
+      setCareerError(e instanceof Error ? e.message : "Career data refresh failed");
+    } finally {
+      setCareerSyncing(false);
+    }
+  };
 
   const uploadResume = async (file: File) => {
     setUploading(true);
@@ -68,6 +129,17 @@ export default function SettingsPage() {
         setAgentConfig(s.agentConfig);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load settings"));
+  }, []);
+
+  useEffect(() => {
+    fetchCareerData()
+      .then((c) => {
+        setCareer(c);
+        setCareerInputs(deriveInputs(c));
+      })
+      .catch((e: unknown) =>
+        setCareerError(e instanceof Error ? e.message : "Failed to load career data"),
+      );
   }, []);
 
   const validation = useMemo(() => {
@@ -208,7 +280,7 @@ export default function SettingsPage() {
           )}
 
           {(active === "resume" || active === "portfolio" || active === "profile") && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-resume">
                 <h2 className="mb-3 text-[15px] font-semibold">Resume Management</h2>
                 <div className="flex items-center justify-between rounded-xl border border-aether-green/25 bg-aether-green/5 p-3">
@@ -261,21 +333,123 @@ export default function SettingsPage() {
                 ) : null}
               </section>
 
-              <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-portfolio">
-                <h2 className="mb-3 text-[15px] font-semibold">Portfolio Sync</h2>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <p className="mb-1 text-[11px] text-aether-muted-dim">Portfolio URL</p>
-                  <p className="mono text-xs">{data.portfolio.url}</p>
-                  <p className="mt-1 text-[11px] text-aether-muted-dim">
-                    Sync cadence: {data.portfolio.cadence} · last synced {data.portfolio.lastSynced}
-                  </p>
+              <section
+                className="glass rounded-2xl border border-white/10 p-5"
+                data-testid="settings-portfolio"
+                aria-labelledby="career-data-heading"
+              >
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+                  <h2 id="career-data-heading" className="text-[15px] font-semibold">
+                    Career Data
+                  </h2>
+                  {careerNotice ? (
+                    <span role="status" data-testid="career-data-notice" className="text-[11px] text-aether-green">
+                      {careerNotice}
+                    </span>
+                  ) : null}
                 </div>
+                <p className="mb-4 text-[11px] text-aether-muted-dim">
+                  Aether consolidates your public GitHub, portfolio site and LinkedIn summary into the
+                  evidence your tailoring and cover-letter agents draw on. Update a source and press
+                  “Sync now” to re-ingest it.
+                </p>
+
+                {careerError ? (
+                  <p
+                    className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-[11px] text-red-300"
+                    role="alert"
+                    data-testid="career-data-error"
+                  >
+                    {careerError}
+                  </p>
+                ) : null}
+
+                <div className="space-y-4">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="career-github"
+                        className="text-[11px] font-medium uppercase tracking-wide text-aether-muted"
+                      >
+                        GitHub username
+                      </label>
+                      <SourceStatusChip source={bySource(career, "github")} />
+                    </div>
+                    <input
+                      id="career-github"
+                      type="text"
+                      data-testid="career-github-input"
+                      value={careerInputs.githubUsername}
+                      onChange={(e) => setCareerInputs((c) => ({ ...c, githubUsername: e.target.value }))}
+                      placeholder="e.g. octocat"
+                      autoComplete="off"
+                      className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50"
+                    />
+                    <SourceError source={bySource(career, "github")} />
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="career-portfolio"
+                        className="text-[11px] font-medium uppercase tracking-wide text-aether-muted"
+                      >
+                        Portfolio URL
+                      </label>
+                      <SourceStatusChip source={bySource(career, "portfolio")} />
+                    </div>
+                    <input
+                      id="career-portfolio"
+                      type="url"
+                      data-testid="career-portfolio-input"
+                      value={careerInputs.portfolioUrl}
+                      onChange={(e) => setCareerInputs((c) => ({ ...c, portfolioUrl: e.target.value }))}
+                      placeholder="https://your-portfolio.example"
+                      autoComplete="off"
+                      className="mono w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50"
+                    />
+                    <SourceError source={bySource(career, "portfolio")} />
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="career-linkedin"
+                        className="text-[11px] font-medium uppercase tracking-wide text-aether-muted"
+                      >
+                        Paste your LinkedIn summary
+                      </label>
+                      <SourceStatusChip source={bySource(career, "linkedin")} />
+                    </div>
+                    <textarea
+                      id="career-linkedin"
+                      data-testid="career-linkedin-input"
+                      value={careerInputs.linkedinSummary}
+                      onChange={(e) => {
+                        setCareerInputs((c) => ({ ...c, linkedinSummary: e.target.value }));
+                        setLinkedinDirty(true);
+                      }}
+                      rows={4}
+                      placeholder="Paste the text from your LinkedIn ‘About’ / summary section…"
+                      className="w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50"
+                    />
+                    <p className="mt-1 text-[10px] text-aether-muted-dim">
+                      {career?.linkedinNote ??
+                        "LinkedIn has no public profile API — paste your summary to include it in tailoring."}
+                    </p>
+                    <SourceError source={bySource(career, "linkedin")} />
+                  </div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => syncOne("portfolio")}
-                  className="mt-3 w-full rounded-lg border border-white/15 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white"
+                  data-testid="career-sync-btn"
+                  onClick={() => void refreshCareer()}
+                  disabled={careerSyncing || !careerLoaded}
+                  title={careerLoaded ? undefined : "Loading your career data…"}
+                  className="mt-4 w-full rounded-lg border border-white/15 py-2 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
                 >
-                  {syncing.portfolio ? "Syncing…" : "Sync now"}
+                  {careerSyncing ? "Syncing…" : "Sync now"}
                 </button>
               </section>
             </div>
@@ -393,6 +567,36 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Status chip for one career-data source (GAP-P4-047). */
+function SourceStatusChip({ source }: { source?: CareerDataSource }) {
+  const status = source?.status ?? "not_configured";
+  return (
+    <span
+      data-testid={`career-${source?.source ?? "unknown"}-status`}
+      className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${careerStatusStyle(status)}`}
+    >
+      {careerStatusLabel(status)}
+      {source?.lastSynced ? (
+        <span className="ml-1 text-aether-muted-dim">· {source.lastSynced.slice(0, 10)}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Honest per-source detail line: red for a true error, muted guidance for an
+ * "empty"/"not configured" source, nothing once the source is synced.
+ */
+function SourceError({ source }: { source?: CareerDataSource }) {
+  if (!source || source.status === "ok" || !source.error) return null;
+  const tone = source.status === "error" ? "text-red-300" : "text-aether-muted-dim";
+  return (
+    <p className={`mt-1 text-[10px] ${tone}`} data-testid={`career-${source.source}-detail`}>
+      {source.error}
+    </p>
   );
 }
 

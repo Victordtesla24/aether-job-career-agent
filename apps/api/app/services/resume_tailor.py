@@ -386,6 +386,7 @@ class ResumeTailorService:
         resume_text: str,
         job_description: str,
         originals: Sequence[dict[str, str] | str] | None = None,
+        evidence_extra: str = "",
     ) -> TailorResult:
         """Tailor ``originals`` bullets (or bullets extracted from
         ``resume_text``) against ``job_description``.
@@ -393,6 +394,13 @@ class ResumeTailorService:
         Passing the parent version's stored bullets keeps re-tailoring
         consistent: changes are counted against what the user actually sees,
         not against the immutable base ``raw_text``.
+
+        ``evidence_extra`` is additional consolidated career evidence (the
+        user's GitHub/portfolio/LinkedIn signal per ADR D-0031) that widens the
+        anti-fabrication corpus without contributing bullets to rewrite — so a
+        rewrite may legitimately reference a skill proven by the user's repos,
+        while genuinely invented claims are still rejected. Empty by default,
+        so users with no career data see identical behaviour to before.
         """
         structured = self._structure_originals(originals, resume_text)
         user_prompt = (
@@ -406,7 +414,9 @@ class ResumeTailorService:
             model=get_model("REASONING"),
             temperature=0.0,
         )
-        return self._validate(raw, structured, resume_text, job_description)
+        return self._validate(
+            raw, structured, resume_text, job_description, evidence_extra
+        )
 
     @staticmethod
     def _structure_originals(
@@ -441,10 +451,14 @@ class ResumeTailorService:
         originals: Sequence[dict[str, str] | str],
         resume_text: str,
         job_description: str = "",
+        evidence_extra: str = "",
     ) -> TailorResult:
-        evidence_stems, evidence_numbers = _evidence_index(resume_text)
+        evidence_source = (
+            f"{resume_text}\n{evidence_extra}" if evidence_extra else resume_text
+        )
+        evidence_stems, evidence_numbers = _evidence_index(evidence_source)
         jd_ngrams = jd_ngram_index(job_description)
-        evidence_ngrams = _ngram_set(_content_stems(resume_text), _JD_ECHO_NGRAM)
+        evidence_ngrams = _ngram_set(_content_stems(evidence_source), _JD_ECHO_NGRAM)
         result = TailorResult()
         structured = self._structure_originals(originals, resume_text)
         by_ref = {b["evidenceRef"]: b["text"] for b in structured}
