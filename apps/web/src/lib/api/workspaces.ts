@@ -88,6 +88,21 @@ export const sendEmailReply = (messageId: string, body: string, options: Request
     body: { message_id: messageId, body },
   });
 
+export interface DraftPayload {
+  subject: string;
+  body: string;
+  application_id?: string;
+  contact_id?: string;
+  classification?: string;
+}
+
+export const createEmailDraft = (payload: DraftPayload, options: RequestOptions = {}) =>
+  apiRequest<Record<string, unknown>>("/emails/draft", {
+    ...options,
+    method: "POST",
+    body: payload,
+  });
+
 /* --------------------------------- Offers --------------------------------- */
 
 export interface Offer {

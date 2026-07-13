@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  createEmailDraft,
   fetchEmailInbox,
   sendEmailReply,
   type EmailInbox,
@@ -42,6 +43,14 @@ export default function EmailCenterPage() {
   const [gateOpen, setGateOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
+
+  // Compose modal state
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
+  const [composeSaving, setComposeSaving] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEmailInbox()
@@ -87,6 +96,44 @@ export default function EmailCenterPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [gateOpen, closeGate]);
+
+  // Escape closes the compose modal.
+  useEffect(() => {
+    if (!composeOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setComposeOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [composeOpen]);
+
+  const openCompose = useCallback(() => {
+    setComposeTo("");
+    setComposeSubject("");
+    setComposeBody("");
+    setComposeError(null);
+    setComposeOpen(true);
+  }, []);
+
+  const saveDraft = useCallback(async () => {
+    if (!composeSubject.trim() || !composeBody.trim()) return;
+    setComposeSaving(true);
+    setComposeError(null);
+    try {
+      const bodyWithTo = composeTo.trim()
+        ? `To: ${composeTo.trim()}\n\n${composeBody}`
+        : composeBody;
+      await createEmailDraft({
+        subject: composeSubject.trim(),
+        body: bodyWithTo,
+      });
+      setComposeOpen(false);
+    } catch (e) {
+      setComposeError(e instanceof Error ? e.message : "Failed to save draft");
+    } finally {
+      setComposeSaving(false);
+    }
+  }, [composeSubject, composeBody, composeTo]);
 
   const confirmSend = async () => {
     if (!selected) return;
@@ -134,6 +181,7 @@ export default function EmailCenterPage() {
           </span>
           <button
             type="button"
+            onClick={openCompose}
             className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             <i className="fa-solid fa-pen mr-2" aria-hidden="true" />
@@ -441,6 +489,94 @@ export default function EmailCenterPage() {
                 className="rounded-lg bg-aether-green px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
               >
                 {sending ? "Sending…" : "Confirm & Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Compose modal */}
+      {composeOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Compose email"
+        >
+          <div className="glass w-full max-w-lg rounded-2xl border border-white/15 bg-[#12121C] p-6" data-testid="compose-modal">
+            <div className="mb-4 flex items-center gap-2">
+              <i className="fa-solid fa-pen-to-square text-aether-coral" aria-hidden="true" />
+              <h2 className="text-lg font-semibold">Compose Draft</h2>
+            </div>
+
+            {composeError ? (
+              <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300" role="alert">
+                {composeError}
+              </p>
+            ) : null}
+
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="compose-to" className="mb-1 block text-xs font-medium text-aether-muted">
+                  To
+                </label>
+                <input
+                  id="compose-to"
+                  type="email"
+                  value={composeTo}
+                  onChange={(e) => setComposeTo(e.target.value)}
+                  placeholder="recipient@example.com"
+                  data-testid="compose-to"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-aether-muted-dim focus:border-aether-coral/40"
+                />
+              </div>
+              <div>
+                <label htmlFor="compose-subject" className="mb-1 block text-xs font-medium text-aether-muted">
+                  Subject
+                </label>
+                <input
+                  id="compose-subject"
+                  type="text"
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  placeholder="Email subject"
+                  data-testid="compose-subject"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-aether-muted-dim focus:border-aether-coral/40"
+                />
+              </div>
+              <div>
+                <label htmlFor="compose-body" className="mb-1 block text-xs font-medium text-aether-muted">
+                  Body
+                </label>
+                <textarea
+                  id="compose-body"
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  rows={8}
+                  placeholder="Write your email…"
+                  data-testid="compose-body"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-aether-muted-dim focus:border-aether-coral/40"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                data-testid="compose-cancel"
+                onClick={() => setComposeOpen(false)}
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-aether-muted hover:border-white/30"
+              >
+                Cancel (Esc)
+              </button>
+              <button
+                type="button"
+                data-testid="compose-save-draft"
+                onClick={() => void saveDraft()}
+                disabled={composeSaving || !composeSubject.trim() || !composeBody.trim()}
+                className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {composeSaving ? "Saving…" : "Save Draft"}
               </button>
             </div>
           </div>
