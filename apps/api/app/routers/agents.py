@@ -540,7 +540,7 @@ def run_tailor(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, A
 @router.post("/cover-letter/run")
 def run_cover_letter(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, Any]:
     """Draft a fabrication-guarded cover letter; requires human approval (P2-S06)."""
-    from app.agents.cover_letter_agent import FabricationError
+    from app.agents.cover_letter_agent import FabricationError, StructuralError
 
     try:
         output = _dispatch(current_user["id"], "coverLetter", body.model_dump())
@@ -550,6 +550,11 @@ def run_cover_letter(body: JobTargetRequest, current_user: CurrentUser) -> dict[
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Cover letter rejected by fabrication guard: {exc.flagged}",
+        ) from exc
+    except StructuralError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Cover letter rejected — §10.2 format contract not met: {exc.issues}",
         ) from exc
     return {
         "cover_letter_id": output["cover_letter_id"],

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import io
 import re
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -23,12 +22,19 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
+from app.agents.cover_letter_agent import (
+    build_body,
+    compose_letter,
+    current_position,
+    letter_date,
+)
 from app.agents.fit_scorer import get_base_resume_path
 from app.middleware.auth import CurrentUser
 from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
+from app.repositories.user import UserRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMUnavailableError, get_model
 from app.services.resume_parser import parse_resume_pdf
@@ -263,8 +269,23 @@ def refine_cover_letter(
 
     resume_text = _resume_text()
     guard = FabricationGuard()
+    signer = str(current_user.get("name") or "")
+    # ``current_user`` comes from the default UserRepository projection, which
+    # omits ``targetRole`` — resolve it with the repository's guarded read so
+    # the hook reflects the user's real configured role (GAP-P4-049).
+    position = current_position(UserRepository().get_target_role(user_id))
+    # The letter date, signer and current position are system/profile ground
+    # truth, so they join the guard's evidence corpus (mirrors the agent).
     corpus = " ".join(
-        [resume_text, job["title"], job["company"], job.get("description") or ""]
+        [
+            resume_text,
+            job["title"],
+            job["company"],
+            job.get("description") or "",
+            letter_date(),
+            signer,
+            position,
+        ]
     )
     asks: list[str] = []
     if body.instructions.strip():
@@ -293,12 +314,10 @@ def refine_cover_letter(
             fixture_key=fixture_key,
         )
         text = (raw.get("body") or "").strip()
-        full = (
-            f"Dear Hiring Team at {job['company']},\n\n"
-            f"I am writing to express my interest in the {job['title']} "
-            f"position at {job['company']}.\n\n{text}\n\n"
-            f"Thank you for your consideration.\n"
-        )
+        # Compose the revision as a full §10.2 business letter (date, addressee,
+        # Re:, salutation, role/company hook, revised body, sign-off) — never the
+        # banned generic opener the studio previously hardcoded (D-0021, GAP-P4-049).
+        full = compose_letter(build_body(text, job, position), job, signer)
         return full, guard.check(full, corpus)
 
     try:
@@ -346,18 +365,12 @@ def refine_cover_letter(
     }
 
 
-# --- Branded PDF export (dark glassmorphism letterhead, cl05/cl12) -----------
-#: Palette lifted verbatim from the studio wireframe (cover-letter-studio.html).
-_PDF_BG = "#0A0A0F"
-_PDF_INK = "#F4F4F8"
-_PDF_CORAL = "#FF6B35"
-_PDF_MUTED = "#6B6B82"
-
-#: The Aether lightning-bolt mark as a normalized (y-up) polygon.
-_BOLT = [
-    (0.50, 1.00), (0.10, 0.48), (0.38, 0.48),
-    (0.22, 0.00), (0.90, 0.52), (0.52, 0.52),
-]
+# --- Business-letter PDF export (light, submission-ready) --------------------
+#: Neutral print palette — dark ink on white, no third-party/tool branding
+#: and no AI-generated disclosure (GAP-P4-048): the output is submission-ready.
+_PDF_INK = "#1A1A1A"
+_PDF_MUTED = "#555555"
+_PDF_RULE = "#CCCCCC"
 
 #: Vendored fonts live beside the app package so export works off-CDN in CI/prod.
 _FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
@@ -380,23 +393,33 @@ def _pdf_fonts() -> tuple[str, str]:
     return "Helvetica", "Helvetica-Bold"
 
 
-def _draw_bolt(page: Any, x: float, y: float, box: float, color: Any) -> None:
-    """Fill the Aether bolt inside the coral logo tile anchored at (x, y)."""
-    inset = box * 0.30
-    span = box - 2 * inset
-    path = page.beginPath()
-    for i, (px, py) in enumerate(_BOLT):
-        point = (x + inset + px * span, y + inset + py * span)
-        (path.moveTo if i == 0 else path.lineTo)(*point)
-    path.close()
-    page.setFillColor(color)
-    page.drawPath(path, stroke=0, fill=1)
+@lru_cache(maxsize=1)
+def _resume_contact() -> dict[str, Any]:
+    """Candidate contact fields parsed once from the base resume PDF."""
+    return dict(parse_resume_pdf(get_base_resume_path())["contact"])
+
+
+def _sender_block(user: dict[str, Any]) -> tuple[str, list[str]]:
+    """Sender identity for the letterhead: name/email from the workspace profile,
+    supplemented with the résumé's own phone and profile links so the exported
+    letter carries the candidate's real contact details (GAP-P4-048)."""
+    contact = _resume_contact()
+    name = str(user.get("name") or "").strip()
+    email = str(user.get("email") or contact.get("email") or "").strip()
+    primary = [v for v in (email, contact.get("phone")) if v]
+    links = [v for v in (contact.get("linkedin"), contact.get("github")) if v]
+    lines: list[str] = []
+    if primary:
+        lines.append("  ·  ".join(primary))
+    if links:
+        lines.append("  ·  ".join(links))
+    return name, lines
 
 
 @router.get("/{letter_id}/pdf")
 def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Response:
-    """Render the letter as a branded, dark-theme PDF (Export PDF, cl12)."""
-    from reportlab.lib.colors import HexColor, white
+    """Render the letter as a clean, submission-ready business-letter PDF."""
+    from reportlab.lib.colors import HexColor
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdf_canvas
@@ -406,34 +429,20 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
     company = (job or {}).get("company") or "the team"
 
     regular, bold = _pdf_fonts()
-    bg, ink = HexColor(_PDF_BG), HexColor(_PDF_INK)
-    coral, muted = HexColor(_PDF_CORAL), HexColor(_PDF_MUTED)
+    ink, muted, rule = HexColor(_PDF_INK), HexColor(_PDF_MUTED), HexColor(_PDF_RULE)
 
     buf = io.BytesIO()
     page = pdf_canvas.Canvas(buf, pagesize=A4)
     width, height = A4
     margin = 25 * mm
     usable = width - 2 * margin
-    now = datetime.now()
-    date_line = f"{now.day} {now:%B %Y}"
-
-    def _chrome() -> None:
-        """Dark page fill + gray generated-by footer, repainted per page."""
-        page.setFillColor(bg)
-        page.rect(0, 0, width, height, stroke=0, fill=1)
-        page.setFillColor(muted)
-        page.setFont(regular, 8)
-        page.drawCentredString(
-            width / 2, 15 * mm, f"Generated by Aether Career Agent | {date_line}"
-        )
 
     y = height - margin
 
     def _line(text: str, font: str, size: float, color: Any) -> None:
         nonlocal y
-        if y < margin + 12 * mm:  # keep clear of the footer band
+        if y < margin:  # white page, no footer band — break at the bottom margin
             page.showPage()
-            _chrome()
             y = height - margin
         page.setFillColor(color)
         page.setFont(font, size)
@@ -452,52 +461,41 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
         if buff:
             _line(buff, font, size, color)
 
-    _chrome()
-
-    # Letterhead — coral logo tile + white bolt + Aether wordmark.
-    tile = 9 * mm
-    page.setFillColor(coral)
-    page.roundRect(margin, y - tile, tile, tile, 2.2 * mm, stroke=0, fill=1)
-    _draw_bolt(page, margin, y - tile, tile, white)
-    page.setFillColor(ink)
-    page.setFont(bold, 15)
-    page.drawString(margin + tile + 3.5 * mm, y - tile * 0.46, "Aether")
-    page.setFillColor(muted)
-    page.setFont(regular, 8)
-    page.drawString(margin + tile + 3.5 * mm, y - tile * 0.86, "Career Agent")
-    y -= tile + 7 * mm
-
-    # Coral rule, then a right-aligned date line.
-    page.setStrokeColor(coral)
-    page.setLineWidth(1.2)
+    # Sender contact block — the candidate's own identity heads the letter.
+    name, contact_lines = _sender_block(current_user)
+    if name:
+        _line(name, bold, 14, ink)
+        y -= 1 * mm
+    for contact_line in contact_lines:
+        _line(contact_line, regular, 9.5, muted)
+    y -= 5 * mm
+    page.setStrokeColor(rule)
+    page.setLineWidth(0.6)
     page.line(margin, y, width - margin, y)
-    y -= 8 * mm
-    page.setFillColor(muted)
-    page.setFont(regular, 10)
-    page.drawRightString(width - margin, y, date_line)
-    y -= 11 * mm
+    y -= 9 * mm
 
-    # Bold salutation, then 11pt body paragraphs.
+    # Letter content: date, addressee, salutation, body, sign-off — parsed from
+    # the composed text (compose_letter already emits the §10.2 structure).
     raw = (letter["coverLetter"] or "").strip()
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw) if p.strip()]
-    # Business-format letters embed their own date line; the letterhead
-    # already draws one, so a leading date-only paragraph is dropped.
+
+    # Leading date line.
     if paragraphs and re.fullmatch(r"\d{1,2} [A-Za-z]+ \d{4}", paragraphs[0]):
-        paragraphs.pop(0)
-    # Multi-line addressee block ("Hiring Team / company / Re: role") renders
-    # line-by-line above the salutation.
+        _line(paragraphs.pop(0), regular, 10.5, ink)
+        y -= 6 * mm
+    # Multi-line addressee block ("Hiring Team / company / Re: role").
     addressee: list[str] = []
     if paragraphs and "\n" in paragraphs[0] and not paragraphs[0].lower().startswith("dear"):
         addressee = [ln.strip() for ln in paragraphs.pop(0).splitlines() if ln.strip()]
+    for line in addressee:
+        _line(line, regular, 10.5, ink)
+    if addressee:
+        y -= 6 * mm
     if paragraphs and paragraphs[0].lower().startswith("dear"):
         salutation = paragraphs.pop(0)
     else:
         salutation = f"Dear Hiring Team at {company},"
-    for line in addressee:
-        _line(line, regular, 10.5, ink)
-    if addressee:
-        y -= 4 * mm
-    _paragraph(" ".join(salutation.split()), bold, 12, ink)
+    _paragraph(" ".join(salutation.split()), regular, 11, ink)
     y -= 4 * mm
     for para in paragraphs:
         if "\n" in para:

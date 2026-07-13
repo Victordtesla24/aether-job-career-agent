@@ -2,6 +2,13 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 
+import {
+  changeRequestSubmitDisabled,
+  changeRequestToggleDisabled,
+  exportDisabled,
+  regenerateDisabled,
+} from "./actions";
+
 export function ActionsPanel({
   disabled,
   regenerating,
@@ -24,7 +31,14 @@ export function ActionsPanel({
   const [open, setOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
   const textareaId = useId();
-  const busy = regenerating || refining;
+  // `disabled` is the panel's "no letter selected" signal; hasSelection is its inverse.
+  const state = {
+    hasSelection: !disabled,
+    regenerating,
+    refining,
+    exporting,
+    hasInstructions: instructions.trim().length > 0,
+  };
 
   const submit = async () => {
     if (!instructions.trim()) return;
@@ -44,7 +58,7 @@ export function ActionsPanel({
         type="button"
         data-testid="rail-regenerate-btn"
         onClick={onRegenerate}
-        disabled={disabled || busy}
+        disabled={regenerateDisabled(state)}
         className="mb-2.5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-aether-coral py-2.5 text-sm font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:opacity-90 disabled:opacity-50"
       >
         <i
@@ -62,7 +76,7 @@ export function ActionsPanel({
           type="button"
           data-testid="request-changes-btn"
           onClick={() => setOpen((v) => !v)}
-          disabled={disabled || busy}
+          disabled={changeRequestToggleDisabled(state)}
           aria-expanded={open}
           className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-medium transition hover:bg-white/10 disabled:opacity-50"
         >
@@ -73,7 +87,7 @@ export function ActionsPanel({
           type="button"
           data-testid="export-pdf-btn"
           onClick={onExport}
-          disabled={disabled || exporting}
+          disabled={exportDisabled(state)}
           className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-medium transition hover:bg-white/10 disabled:opacity-50"
         >
           <i
@@ -111,7 +125,7 @@ export function ActionsPanel({
           />
           <button
             type="submit"
-            disabled={refining || !instructions.trim()}
+            disabled={changeRequestSubmitDisabled(state)}
             data-testid="request-changes-submit"
             className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-aether-violet/20 py-2 text-xs font-semibold text-aether-violet transition hover:bg-aether-violet/30 disabled:opacity-50"
           >
