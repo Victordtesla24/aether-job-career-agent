@@ -22,7 +22,7 @@ export interface InterviewPrep {
 }
 
 export const fetchInterviewPrep = (options: RequestOptions = {}) =>
-  apiRequest<InterviewPrep>("/interviews/prep", options);
+  apiRequest<InterviewPrep>("/workspaces/interviews/prep", options);
 
 /* ------------------------------- Networking ------------------------------- */
 
@@ -42,7 +42,7 @@ export interface NetworkingSummary {
 }
 
 export const fetchNetworkingSummary = (options: RequestOptions = {}) =>
-  apiRequest<NetworkingSummary>("/networking/summary", options);
+  apiRequest<NetworkingSummary>("/workspaces/networking/summary", options);
 
 /* ------------------------------- Email Center ------------------------------ */
 
@@ -79,10 +79,10 @@ export interface EmailInbox {
 }
 
 export const fetchEmailInbox = (options: RequestOptions = {}) =>
-  apiRequest<EmailInbox>("/emails/inbox", options);
+  apiRequest<EmailInbox>("/workspaces/emails/inbox", options);
 
 export const sendEmailReply = (messageId: string, body: string, options: RequestOptions = {}) =>
-  apiRequest<{ status: string; messageId: string }>("/emails/send", {
+  apiRequest<{ status: string; messageId: string }>("/workspaces/emails/send", {
     ...options,
     method: "POST",
     body: { message_id: messageId, body },
@@ -111,7 +111,7 @@ export interface OffersPayload {
 }
 
 export const fetchOffers = (options: RequestOptions = {}) =>
-  apiRequest<OffersPayload>("/offers", options);
+  apiRequest<OffersPayload>("/workspaces/offers", options);
 
 /* -------------------------------- Settings -------------------------------- */
 
