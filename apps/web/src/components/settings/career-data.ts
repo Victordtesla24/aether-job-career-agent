@@ -84,20 +84,30 @@ export function deriveInputs(data: CareerData | null): CareerDataInputs {
 /**
  * Build the refresh request body from the current inputs.
  *
- * GitHub username and portfolio URL are always sent (trimmed) — clearing an
- * input intentionally clears that source. LinkedIn is only sent when the user
- * has actually edited the textarea (`linkedinDirty`); otherwise it is omitted
- * so a bare "Sync now" preserves a previously pasted LinkedIn summary instead
- * of silently wiping it.
+ * GitHub username and portfolio URL are sent (trimmed) once the initial
+ * career-data GET has resolved (`loaded`) — at that point clearing an input
+ * intentionally clears that source. Before the GET resolves, `inputs` is
+ * still the component's un-populated default state (`""`), which is NOT a
+ * user's intentional clear: sending it verbatim would silently wipe a
+ * GitHub username / portfolio URL the server already has configured the
+ * instant "Sync now" is pressed too early. So while `loaded` is false, both
+ * fields are omitted entirely — the same "omit means keep" guard LinkedIn
+ * already relies on (GAP-P4-047 Wave-1 regression).
+ *
+ * LinkedIn is only sent when the user has actually edited the textarea
+ * (`linkedinDirty`); otherwise it is omitted so a bare "Sync now" preserves a
+ * previously pasted LinkedIn summary instead of silently wiping it.
  */
 export function buildRefreshPayload(
   inputs: CareerDataInputs,
   linkedinDirty: boolean,
+  loaded: boolean = true,
 ): CareerDataRefreshInput {
-  const payload: CareerDataRefreshInput = {
-    githubUsername: inputs.githubUsername.trim(),
-    portfolioUrl: inputs.portfolioUrl.trim(),
-  };
+  const payload: CareerDataRefreshInput = {};
+  if (loaded) {
+    payload.githubUsername = inputs.githubUsername.trim();
+    payload.portfolioUrl = inputs.portfolioUrl.trim();
+  }
   if (linkedinDirty) {
     payload.linkedinSummary = inputs.linkedinSummary;
   }

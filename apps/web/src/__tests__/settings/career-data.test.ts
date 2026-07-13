@@ -107,7 +107,7 @@ describe("career-data API client", () => {
 describe("buildRefreshPayload", () => {
   const base = { githubUsername: "  octocat  ", portfolioUrl: "  https://x.dev ", linkedinSummary: "pasted text" };
 
-  it("always sends trimmed github username and portfolio url", () => {
+  it("always sends trimmed github username and portfolio url once loaded", () => {
     const payload = buildRefreshPayload(base, false);
     expect(payload.githubUsername).toBe("octocat");
     expect(payload.portfolioUrl).toBe("https://x.dev");
@@ -121,6 +121,37 @@ describe("buildRefreshPayload", () => {
   it("includes linkedinSummary when the textarea was edited — even when cleared", () => {
     expect(buildRefreshPayload(base, true).linkedinSummary).toBe("pasted text");
     expect(buildRefreshPayload({ ...base, linkedinSummary: "" }, true).linkedinSummary).toBe("");
+  });
+
+  // GAP-P4-047 Wave-1 reviewer regression: the Settings page fetches career
+  // data asynchronously on mount, so there is a window where `career` is
+  // still null and `careerInputs` is still the component's un-populated
+  // default (empty strings) — even though the server already has
+  // githubUsername/portfolioUrl configured. Pressing "Sync now" in that
+  // window must never submit those defaults as an implicit clear.
+  describe("omits githubUsername/portfolioUrl when career data has not loaded yet (career === null)", () => {
+    const unloadedInputs = { githubUsername: "", portfolioUrl: "", linkedinSummary: "" };
+
+    it("sends nothing for github/portfolio while `loaded` is false, even with server-configured values present", () => {
+      // `loaded` mirrors the page's `career !== null` check — false here
+      // reproduces clicking "Sync now" before the initial GET resolves.
+      const payload = buildRefreshPayload(unloadedInputs, false, false);
+      expect(payload).not.toHaveProperty("githubUsername");
+      expect(payload).not.toHaveProperty("portfolioUrl");
+      expect(payload).toEqual({});
+    });
+
+    it("never sends empty-string github/portfolio as an implicit clear before load", () => {
+      const payload = buildRefreshPayload(unloadedInputs, false, false);
+      expect(payload.githubUsername).not.toBe("");
+      expect(payload.portfolioUrl).not.toBe("");
+    });
+
+    it("resumes sending trimmed github/portfolio once `loaded` is true (default) — unchanged post-load behaviour", () => {
+      const payload = buildRefreshPayload(base, false);
+      expect(payload.githubUsername).toBe("octocat");
+      expect(payload.portfolioUrl).toBe("https://x.dev");
+    });
   });
 });
 

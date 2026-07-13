@@ -62,12 +62,22 @@ export default function SettingsPage() {
   const [careerError, setCareerError] = useState<string | null>(null);
   const [careerNotice, setCareerNotice] = useState<string | null>(null);
 
+  // Gate "Sync now" on the initial GET having resolved: until `career` is
+  // populated, `careerInputs` still holds its un-loaded default (empty
+  // strings), and submitting that verbatim would send an implicit clear of
+  // a githubUsername/portfolioUrl the server already has configured
+  // (GAP-P4-047 Wave-1 regression).
+  const careerLoaded = career !== null;
+
   const refreshCareer = async () => {
+    if (!careerLoaded) return;
     setCareerSyncing(true);
     setCareerError(null);
     setCareerNotice(null);
     try {
-      const updated = await refreshCareerData(buildRefreshPayload(careerInputs, linkedinDirty));
+      const updated = await refreshCareerData(
+        buildRefreshPayload(careerInputs, linkedinDirty, careerLoaded),
+      );
       setCareer(updated);
       setCareerInputs(deriveInputs(updated));
       setLinkedinDirty(false);
@@ -435,7 +445,8 @@ export default function SettingsPage() {
                   type="button"
                   data-testid="career-sync-btn"
                   onClick={() => void refreshCareer()}
-                  disabled={careerSyncing}
+                  disabled={careerSyncing || !careerLoaded}
+                  title={careerLoaded ? undefined : "Loading your career data…"}
                   className="mt-4 w-full rounded-lg border border-white/15 py-2 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
                 >
                   {careerSyncing ? "Syncing…" : "Sync now"}
