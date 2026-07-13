@@ -189,15 +189,27 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
             )
             contacts = rows_to_dicts(cur)
 
-    # Stage ordering
-    stage_order = ["new", "warm", "active", "scheduled", "placed"]
+    # Stage ordering: the DB's `ContactStage` enum (identified/contacted/
+    # responded/meeting/referral) mapped to the wireframe's pipeline column
+    # labels (New/Warm/Active/Scheduled/Placed). Contacts are stored with the
+    # enum value, so grouping and the pipeline columns must use the same keys
+    # — previously this mapping was missing and every column showed count 0.
+    stage_order = ["identified", "contacted", "responded", "meeting", "referral"]
+    stage_labels = {
+        "identified": "New",
+        "contacted": "Warm",
+        "responded": "Active",
+        "meeting": "Scheduled",
+        "referral": "Placed",
+    }
+    stage_warmth = {"identified": 1, "contacted": 2, "responded": 3, "meeting": 4, "referral": 5}
 
     # Group contacts by stage
     by_stage: dict[str, list[dict]] = {s: [] for s in stage_order}
     for c in contacts:
-        stage_key = (c.get("stage") or "new").lower()
+        stage_key = (c.get("stage") or "identified").lower()
         if stage_key not in by_stage:
-            by_stage[stage_key] = []
+            stage_key = "identified"
         by_stage[stage_key].append({
             "id": c["id"],
             "name": c["name"] or "",
@@ -205,21 +217,19 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
             "company": c.get("company") or "",
             "email": c.get("email") or "",
             "linkedinUrl": c.get("linkedinUrl") or "",
-            "warmth": {"new": 1, "warm": 2, "active": 3, "scheduled": 4, "placed": 5}.get(
-                stage_key, 1
-            ),
+            "warmth": stage_warmth.get(stage_key, 1),
         })
 
     pipeline = [
         {
-            "stage": s.capitalize(),
+            "stage": stage_labels[s],
             "count": len(by_stage[s]),
             "contacts": by_stage[s][:5],  # show up to 5 per column
         }
         for s in stage_order
     ]
 
-    active_count = len(by_stage.get("active", [])) + len(by_stage.get("scheduled", []))
+    active_count = len(by_stage.get("responded", [])) + len(by_stage.get("meeting", []))
 
     # Outreach queue + communication log from real OutreachTask rows
     with get_connection() as conn2:
@@ -263,7 +273,7 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
         "stats": {
             "contacts": len(contacts),
             "activeConversations": active_count,
-            "referralsInFlight": len(by_stage.get("placed", [])),
+            "referralsInFlight": len(by_stage.get("referral", [])),
             "responseRate": 0,
         },
         "pipeline": pipeline,
@@ -272,7 +282,7 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
         "crmSummary": {
             "activeConversations": active_count,
             "followUpsDueToday": 0,
-            "warmIntrosPending": len(by_stage.get("warm", [])),
+            "warmIntrosPending": len(by_stage.get("contacted", [])),
         },
     }
 
