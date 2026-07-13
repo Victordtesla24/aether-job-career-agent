@@ -36,12 +36,33 @@ from playwright.sync_api import sync_playwright
 
 BASE_URL = "https://5cb5f0620.abacusai.cloud"
 API_BASE = f"{BASE_URL}/api"
-CREDS = {"email": "sarkar.vikram@gmail.com", "password": "AetherDemo1"}
 TOKEN_STORAGE_KEY = "aether_token"  # must match apps/web/src/app/login/page.tsx
 
 EVIDENCE_DIR = Path(
     "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/phase4"
 )
+REPO_ROOT = Path("/home/ubuntu/github_repos/aether-job-career-agent")
+
+
+def load_env() -> dict:
+    """Parse the repo-root .env (never committed) into a dict.
+
+    Mirrors uat/api_sweep.py's load_env() — LOGIN_EMAIL/LOGIN_PASSWORD live
+    only in .env, never hardcoded here (GAP-P4-051 / C-32).
+    """
+    env_path = REPO_ROOT / ".env"
+    env: dict[str, str] = {}
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+_env = load_env()
+CREDS = {"email": _env["LOGIN_EMAIL"], "password": _env["LOGIN_PASSWORD"]}
 
 
 def utc_stamp() -> str:

@@ -20,8 +20,17 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      // Real login via /login (GAP-P4-051 / C-15): fills the form with
+      // LOGIN_EMAIL/LOGIN_PASSWORD and saves the resulting session so the
+      // chromium project below doesn't have to log in per-spec.
+      name: "setup",
+      testMatch: /.*\.setup\.ts/,
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
+      dependencies: ["setup"],
     },
   ],
   webServer: {

@@ -26,7 +26,27 @@ from playwright.sync_api import sync_playwright
 
 BASE = "https://5cb5f0620.abacusai.cloud"
 API = f"{BASE}/api"
-CREDS = {"email": "sarkar.vikram@gmail.com", "password": "AetherDemo1"}
+
+
+def _load_env() -> dict:
+    """Parse the repo-root .env (never committed) into a dict.
+
+    Mirrors uat/api_sweep.py's load_env() — LOGIN_EMAIL/LOGIN_PASSWORD live
+    only in .env, never hardcoded here (GAP-P4-051 / C-32).
+    """
+    env_path = pathlib.Path(__file__).resolve().parent.parent / ".env"
+    env: dict[str, str] = {}
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+_env = _load_env()
+CREDS = {"email": _env["LOGIN_EMAIL"], "password": _env["LOGIN_PASSWORD"]}
 REPORT_DIR = pathlib.Path(__file__).parent / "reports"
 SHOT_DIR = REPORT_DIR / "evidence"
 
