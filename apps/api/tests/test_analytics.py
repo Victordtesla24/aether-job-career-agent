@@ -4,14 +4,13 @@ from __future__ import annotations
 import pytest
 
 from app.db import get_connection, new_id
-from app.repositories.user import UserRepository
 
 
 @pytest.fixture()
 def user_id(client, auth_headers) -> str:
-    user = UserRepository().get_by_email("fixture-user@example.com")
-    assert user is not None
-    return user["id"]
+    res = client.get("/auth/me", headers=auth_headers)
+    assert res.status_code == 200
+    return res.json()["id"]
 
 
 def _seed_funnel(user_id: str, jobs: int, statuses: list[str], days_ago: int = 0) -> None:

@@ -52,12 +52,10 @@ def _seed_offer(
     return app_id
 
 
-def _current_user_id() -> str:
-    from app.repositories.user import UserRepository
-
-    user = UserRepository().get_by_email("fixture-user@example.com")
-    assert user is not None
-    return user["id"]
+def _current_user_id(client, auth_headers) -> str:
+    res = client.get("/auth/me", headers=auth_headers)
+    assert res.status_code == 200
+    return res.json()["id"]
 
 
 def test_offers_requires_auth(client) -> None:
@@ -78,7 +76,7 @@ def test_offers_payload_shape_empty_pipeline(client, auth_headers) -> None:
 def test_offers_reflect_real_offer_applications(client, auth_headers, db_session) -> None:
     """Offers come from Application(status='offer') with figures computed
     from the job's real salary band, ranked by fit score."""
-    uid = _current_user_id()
+    uid = _current_user_id(client, auth_headers)
     _seed_offer(db_session, uid, company="Real Co A", title="Delivery Manager",
                 salary_min=180000, salary_max=200000, fit_score=88.0)
     _seed_offer(db_session, uid, company="Real Co B", title="Product Owner",

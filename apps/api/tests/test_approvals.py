@@ -8,14 +8,9 @@ from app.repositories.approval import ApprovalRepository
 
 @pytest.fixture()
 def user_id(client, auth_headers) -> str:
-    me = client.get("/jobs", headers=auth_headers)
-    assert me.status_code == 200
-    # Resolve the user id from the registered fixture user via the repository.
-    from app.repositories.user import UserRepository
-
-    user = UserRepository().get_by_email("fixture-user@example.com")
-    assert user is not None
-    return user["id"]
+    res = client.get("/auth/me", headers=auth_headers)
+    assert res.status_code == 200
+    return res.json()["id"]
 
 
 def _create_approval(user_id: str) -> dict:

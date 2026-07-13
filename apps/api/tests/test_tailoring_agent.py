@@ -60,14 +60,14 @@ class TestTailoring:
         `changes` equal to what the diff endpoint reports (observed live:
         run said 7, diff said 6)."""
         from app.repositories.resume import ResumeRepository
-        from app.repositories.user import UserRepository
 
         job = _seed_job(client, auth_headers)
-        user = UserRepository().get_by_email("fixture-user@example.com")
-        assert user is not None
+        me = client.get("/auth/me", headers=auth_headers)
+        assert me.status_code == 200
+        user_id = me.json()["id"]
         repo = ResumeRepository()
         corrupted = repo.create(
-            user["id"],
+            user_id,
             {
                 "raw_text": "• Led delivery across squads\n• Reduced costs by 15%\n",
                 "bullets": [
@@ -78,7 +78,7 @@ class TestTailoring:
             },
             "corrupthash",
             label="Corrupted pre-fix version",
-            version=repo.next_version(user["id"]),
+            version=repo.next_version(user_id),
         )
         resp = client.post(
             "/agents/tailor/run",

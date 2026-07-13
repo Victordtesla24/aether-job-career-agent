@@ -47,11 +47,9 @@ def _seed_application(
 
 @pytest.fixture()
 def user_id(client, auth_headers) -> str:
-    from app.repositories.user import UserRepository
-
-    user = UserRepository().get_by_email("fixture-user@example.com")
-    assert user is not None
-    return user["id"]
+    res = client.get("/auth/me", headers=auth_headers)
+    assert res.status_code == 200
+    return res.json()["id"]
 
 
 class TestListApplications:
