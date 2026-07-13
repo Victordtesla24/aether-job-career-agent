@@ -153,7 +153,7 @@ export default function DashboardPage() {
 
   const visibleRuns = (runs.data ?? [])
     .filter((r) => feedFilter === "All" || runBadge(r).label === feedFilter)
-    .slice(0, 5);
+    .slice(0, 10);
 
   return (
     <div className="flex flex-col gap-7">

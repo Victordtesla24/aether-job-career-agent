@@ -1,18 +1,73 @@
 "use client";
 
 /**
- * Dashboard top bar: greeting, live activity subtitle, notifications, and the
- * user chip. The user's name, target role and initials are loaded live from
- * the /settings API (fetchSettings). The greeting adapts to the local time of
- * day; the subtitle shows the real date and last agent run; the notification
- * bell reflects the real pending-approvals count and links to the queue. If a
- * fetch fails we fall back to neutral copy so the shell never breaks.
+ * Dashboard top bar: greeting, live activity subtitle, global search,
+ * notifications, and the user chip. The user's name, target role and initials
+ * are loaded live from the /settings API (fetchSettings). The greeting adapts
+ * to the local time of day; the subtitle shows the real date and last agent
+ * run; the search box indexes the user's real jobs, applications and agents
+ * (wireframe topbar contract); the notification bell reflects the real
+ * pending-approvals count and links to the queue. If a fetch fails we fall
+ * back to neutral copy so the shell never breaks.
  */
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals } from "../lib/api/approvals";
 import { fetchSettings } from "../lib/api/workspaces";
+import { apiRequest } from "../lib/api/client";
+
+export interface SearchHit {
+  kind: "job" | "application" | "agent";
+  id: string;
+  label: string;
+  sublabel: string;
+  href: string;
+}
+
+/** Case-insensitive substring match over label + sublabel; requires ≥2 chars. */
+export function filterSearchHits(hits: SearchHit[], query: string, limit = 8): SearchHit[] {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  return hits
+    .filter((h) => `${h.label} ${h.sublabel}`.toLowerCase().includes(q))
+    .slice(0, limit);
+}
+
+/** Build the search index from the user's live jobs, applications and agents. */
+export async function loadSearchIndex(): Promise<SearchHit[]> {
+  const [jobs, applications, agents] = await Promise.all([
+    apiRequest<Array<{ id: string; title: string; company: string }>>("/jobs?"),
+    apiRequest<Array<{ id: string; jobTitle?: string | null; company?: string | null }>>(
+      "/applications",
+    ),
+    fetchAgents(),
+  ]);
+  return [
+    ...jobs.map<SearchHit>((j) => ({
+      kind: "job",
+      id: j.id,
+      label: j.title,
+      sublabel: j.company,
+      href: "/dashboard/jobs",
+    })),
+    ...applications.map<SearchHit>((a) => ({
+      kind: "application",
+      id: a.id,
+      label: a.jobTitle ?? "Application",
+      sublabel: a.company ?? "",
+      href: "/dashboard/applications",
+    })),
+    ...agents.map<SearchHit>((a) => ({
+      kind: "agent",
+      id: a.name,
+      label: a.name,
+      sublabel: "agent",
+      href: "/dashboard/agents",
+    })),
+  ];
+}
 
 interface UserChip {
   firstName: string;
@@ -59,15 +114,39 @@ function shortenRole(role: string): string {
 }
 
 export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
+  const router = useRouter();
   const [greeting, setGreeting] = useState("Welcome");
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchIndex = useRef<SearchHit[] | null>(null);
+  const [, setIndexReady] = useState(false);
   const [chip, setChip] = useState<UserChip>({
     firstName: "",
     initials: "AE",
     chipName: "Welcome",
     role: "",
   });
+
+  // Lazy-load the search index on first focus so the topbar mount stays cheap.
+  function ensureSearchIndex(): void {
+    if (searchIndex.current) return;
+    loadSearchIndex()
+      .then((hits) => {
+        searchIndex.current = hits;
+        setIndexReady(true);
+      })
+      .catch(() => undefined);
+  }
+
+  const hits = filterSearchHits(searchIndex.current ?? [], query);
+
+  function goTo(hit: SearchHit): void {
+    setQuery("");
+    setSearchOpen(false);
+    router.push(hit.href);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +206,62 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         <p className="text-xs text-aether-muted-dim mono">{liveSubtitle}</p>
       </div>
       <div className="flex items-center gap-3">
+        <div className="relative w-72 max-lg:hidden">
+          <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-aether-muted-dim text-sm" />
+          <input
+            type="text"
+            role="combobox"
+            aria-expanded={searchOpen && hits.length > 0}
+            aria-controls="topbar-search-results"
+            aria-label="Search jobs, applications, agents"
+            placeholder="Search jobs, applications, agents…"
+            value={query}
+            onFocus={() => {
+              ensureSearchIndex();
+              setSearchOpen(true);
+            }}
+            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && hits[0]) goTo(hits[0]);
+              if (e.key === "Escape") {
+                setQuery("");
+                setSearchOpen(false);
+              }
+            }}
+            className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
+          />
+          {searchOpen && hits.length > 0 ? (
+            <ul
+              id="topbar-search-results"
+              role="listbox"
+              className="absolute z-50 mt-2 w-full rounded-xl border border-white/10 bg-[#16162a] shadow-xl overflow-hidden"
+            >
+              {hits.map((hit) => (
+                <li key={`${hit.kind}-${hit.id}`} role="option" aria-selected={false}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      goTo(hit);
+                    }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-white/5 transition flex items-center gap-2"
+                  >
+                    <span className="text-[10px] uppercase tracking-wide text-aether-muted-dim w-20 shrink-0">
+                      {hit.kind}
+                    </span>
+                    <span className="text-[13px] truncate">{hit.label}</span>
+                    {hit.sublabel ? (
+                      <span className="text-[11px] text-aether-muted-dim truncate">
+                        {hit.sublabel}
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <Link
           href="/dashboard/approvals"
           aria-label={

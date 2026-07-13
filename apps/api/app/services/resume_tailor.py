@@ -16,6 +16,7 @@ tests and CI never hit the network.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -226,7 +227,7 @@ class ResumeTailorService:
         self,
         resume_text: str,
         job_description: str,
-        originals: list[dict[str, str]] | None = None,
+        originals: Sequence[dict[str, str] | str] | None = None,
     ) -> TailorResult:
         """Tailor ``originals`` bullets (or bullets extracted from
         ``resume_text``) against ``job_description``.
@@ -251,7 +252,7 @@ class ResumeTailorService:
 
     @staticmethod
     def _structure_originals(
-        originals: list[dict[str, str]] | list[str] | None, resume_text: str
+        originals: Sequence[dict[str, str] | str] | None, resume_text: str
     ) -> list[dict[str, str]]:
         if originals is None:
             return [
@@ -274,7 +275,7 @@ class ResumeTailorService:
     def _validate(
         self,
         raw: Any,
-        originals: list[dict[str, str]] | list[str],
+        originals: Sequence[dict[str, str] | str],
         resume_text: str,
     ) -> TailorResult:
         evidence_stems, evidence_numbers = _evidence_index(resume_text)

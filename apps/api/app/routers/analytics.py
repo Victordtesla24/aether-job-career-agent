@@ -348,9 +348,21 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # ---- Sources → percentages -------------------------------------------
     src_sum = sum(int(r["cnt"]) for r in source_rows) or 1
     sources: list[dict[str, Any]] = []
-    for idx, r in enumerate(source_rows):
+    # Fallback colors for unmapped sources must skip colors already claimed
+    # by mapped sources — otherwise adjacent donut segments are identical.
+    claimed = {
+        _SOURCE_COLORS[str(r["source"]).lower()]
+        for r in source_rows
+        if str(r["source"]).lower() in _SOURCE_COLORS
+    }
+    fallback_cycle = [c for c in _PALETTE if c not in claimed] or list(_PALETTE)
+    fallback_idx = 0
+    for r in source_rows:
         label = str(r["source"])
-        color = _SOURCE_COLORS.get(label.lower(), _PALETTE[idx % len(_PALETTE)])
+        color = _SOURCE_COLORS.get(label.lower())
+        if color is None:
+            color = fallback_cycle[fallback_idx % len(fallback_cycle)]
+            fallback_idx += 1
         sources.append(
             {
                 "label": label[:1].upper() + label[1:],
@@ -403,10 +415,16 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         {"label": "Market demand", "value": market_demand_factor},
         {"label": "Skill match", "value": skill_match_factor},
     ]
-    factor_values: list[int] = [app_volume_factor, interview_rate,
-                                market_demand_factor, skill_match_factor]
-    non_zero = [v for v in factor_values if v]
-    prob_score = round(sum(non_zero) / len(non_zero)) if non_zero else 0
+    # Average over MEASURED factors only: a factor is excluded when its basis
+    # has no data yet (no applications → conversion unknowable; no fit-scored
+    # jobs → skill match unknowable), but a genuinely measured zero (e.g. 7
+    # applications, 0 interviews) counts — excluding it inflated the score.
+    measured: list[int] = [app_volume_factor, market_demand_factor]
+    if total_apps:
+        measured.append(interview_rate)
+    if avg_fit:
+        measured.append(skill_match_factor)
+    prob_score = round(sum(measured) / len(measured)) if measured else 0
     prob_score = max(0, min(100, prob_score))
 
     # ---- Employer activity feed ------------------------------------------

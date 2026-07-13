@@ -100,6 +100,47 @@ class TestAnalytics:
         assert len(dist["buckets"]) == 10
         assert dist["total"] == 5
 
+    def test_probability_counts_measured_zero_conversion(self, client, auth_headers, user_id):
+        """Market-pulse probability must include a genuinely measured 0%
+        interview conversion (applications exist, none interviewed) instead of
+        silently dropping it — dropping inflated the headline score."""
+        _seed_funnel(user_id, jobs=3, statuses=["submitted", "submitted", "submitted"])
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        factors = {f["label"]: f["value"] for f in pulse["probability"]["factors"]}
+        assert factors["Interview conversion"] == 0
+        measured = [
+            factors["Application volume"],
+            factors["Market demand"],
+            factors["Interview conversion"],  # 3 applications → measured zero
+        ]
+        if factors["Skill match"]:
+            measured.append(factors["Skill match"])
+        assert pulse["probability"]["score"] == round(sum(measured) / len(measured))
+
+    def test_source_donut_colors_are_unique(self, client, auth_headers, user_id):
+        """An unmapped source must not receive a fallback color already
+        claimed by a mapped source (seek=#FF6B35 was duplicated at palette
+        index 1, merging adjacent donut segments)."""
+        _seed_funnel(user_id, jobs=3, statuses=["submitted"])  # 3 seek jobs
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    INSERT INTO "Job" ("id", "userId", "title", "company",
+                        "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    ''',
+                    (new_id(), user_id, "Unmapped board role", "Acme",
+                     "desc", "customboard", "https://example.com/custom"),
+                )
+            conn.commit()
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        sources = pulse["sources"]
+        labels = {s["label"].lower() for s in sources}
+        assert {"seek", "customboard"} <= labels
+        colors = [s["color"] for s in sources]
+        assert len(colors) == len(set(colors)), f"duplicate donut colors: {colors}"
+
     def test_conversion_rates(self, client, auth_headers, user_id):
         _seed_funnel(user_id, jobs=4, statuses=["submitted", "offer"])
         conv = client.get("/analytics/conversion", headers=auth_headers).json()

@@ -148,10 +148,9 @@ class CoverLetterAgent:
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
 
-        parsed = parse_resume_pdf(get_base_resume_path())
-        resume_text = parsed["raw_text"]
+        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
         user = self._users.get_by_id(user_id) or {}
-        signer = user.get("name") or (parsed.get("contact") or {}).get("name") or ""
+        signer = str(user.get("name") or "")
         base_prompt = (
             f"Target role: {job['title']} at {job['company']}.\n"
             f"Job description: {job.get('description', '')}\n\n"

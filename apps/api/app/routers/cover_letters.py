@@ -480,15 +480,34 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
     # Bold salutation, then 11pt body paragraphs.
     raw = (letter["coverLetter"] or "").strip()
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw) if p.strip()]
+    # Business-format letters embed their own date line; the letterhead
+    # already draws one, so a leading date-only paragraph is dropped.
+    if paragraphs and re.fullmatch(r"\d{1,2} [A-Za-z]+ \d{4}", paragraphs[0]):
+        paragraphs.pop(0)
+    # Multi-line addressee block ("Hiring Team / company / Re: role") renders
+    # line-by-line above the salutation.
+    addressee: list[str] = []
+    if paragraphs and "\n" in paragraphs[0] and not paragraphs[0].lower().startswith("dear"):
+        addressee = [ln.strip() for ln in paragraphs.pop(0).splitlines() if ln.strip()]
     if paragraphs and paragraphs[0].lower().startswith("dear"):
         salutation = paragraphs.pop(0)
     else:
         salutation = f"Dear Hiring Team at {company},"
+    for line in addressee:
+        _line(line, regular, 10.5, ink)
+    if addressee:
+        y -= 4 * mm
     _paragraph(" ".join(salutation.split()), bold, 12, ink)
     y -= 4 * mm
     for para in paragraphs:
-        _paragraph(" ".join(para.split()), regular, 11, ink)
-        y -= 5 * mm
+        if "\n" in para:
+            # Sign-off block ("Sincerely, / name") keeps its line breaks.
+            for line in para.splitlines():
+                _line(line.strip(), regular, 11, ink)
+            y -= 5 * mm
+        else:
+            _paragraph(" ".join(para.split()), regular, 11, ink)
+            y -= 5 * mm
 
     page.save()
 

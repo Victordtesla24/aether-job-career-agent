@@ -43,7 +43,7 @@ class TestCoverLetterAgent:
         body, job = _run_cover_letter(client, auth_headers)
         parsed = parse_resume_pdf(get_base_resume_path())
         me = client.get("/auth/me", headers=auth_headers).json()
-        signer = me.get("name") or (parsed.get("contact") or {}).get("name") or ""
+        signer = me.get("name") or ""
         # Mirror the agent's corpus: the letter date and signer name are
         # system-generated ground truth, not fabrications.
         corpus = " ".join(
