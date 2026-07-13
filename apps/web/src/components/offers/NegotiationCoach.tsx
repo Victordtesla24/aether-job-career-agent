@@ -13,7 +13,7 @@ export interface Negotiation {
 
 export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) {
   const [showDraft, setShowDraft] = useState(false);
-  const counter = negotiation.suggestedCounter;
+  const counter = negotiation?.suggestedCounter ?? 0;
 
   return (
     <section
@@ -27,7 +27,7 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
 
       <div className="mb-3 rounded-xl border border-[#34D399]/20 bg-[#34D399]/10 p-3 text-[12px] text-[#C7C7D6]">
         <i className="fa-solid fa-lightbulb mr-1 text-aether-yellow" aria-hidden="true" />
-        {negotiation.insight}
+        {negotiation?.insight ?? "No coaching insight available yet."}
       </div>
 
       <div className="space-y-2 text-[12px] text-[#C7C7D6]">
@@ -39,7 +39,7 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
           </span>
         </div>
         <ul className="space-y-1.5">
-          {negotiation.leverage.map((point) => (
+          {(negotiation?.leverage ?? []).map((point) => (
             <li key={point} className="flex items-start gap-2">
               <i
                 className="fa-solid fa-shield-halved mt-0.5 shrink-0 text-[#818CF8]"

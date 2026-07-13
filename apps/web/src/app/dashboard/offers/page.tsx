@@ -20,17 +20,6 @@ export default function OffersPage() {
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<UiOffer[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [previewEmpty, setPreviewEmpty] = useState(false);
-
-  // ?demo=empty → start in the empty-state preview (state-variant preview).
-  useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("demo") === "empty"
-    ) {
-      setPreviewEmpty(true);
-    }
-  }, []);
 
   useEffect(() => {
     fetchOffers()
@@ -65,7 +54,7 @@ export default function OffersPage() {
     );
   }
 
-  const isEmpty = previewEmpty || offers.length === 0;
+  const isEmpty = offers.length === 0;
 
   return (
     <div className="space-y-6" data-testid="offer-comparison">
@@ -83,16 +72,6 @@ export default function OffersPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            data-testid="toggle-empty"
-            aria-pressed={previewEmpty}
-            onClick={() => setPreviewEmpty((v) => !v)}
-            className="flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-medium text-aether-muted transition hover:bg-white/10"
-          >
-            <i className="fa-solid fa-eye" aria-hidden="true" />
-            {previewEmpty ? "Show populated offers" : "Preview empty state"}
-          </button>
-          <button
-            type="button"
             data-testid="add-offer"
             onClick={() => setModalOpen(true)}
             className="flex min-h-[44px] items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
@@ -106,7 +85,6 @@ export default function OffersPage() {
       {isEmpty ? (
         <EmptyState
           onAddOffer={() => {
-            setPreviewEmpty(false);
             setModalOpen(true);
           }}
         />
