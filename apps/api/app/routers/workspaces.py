@@ -20,6 +20,25 @@ from app.middleware.auth import CurrentUser
 
 router = APIRouter()
 
+
+def _email_provider_connected() -> bool:
+    """Whether a real outbound email provider (SMTP / Gmail OAuth / etc.) is
+    wired and connected for this deployment.
+
+    No email-send integration exists anywhere in the API yet (see ADR D-0029):
+    there is no SMTP transport, no OAuth handoff, and the inbox surfaces every
+    account as ``not_connected``. Sending therefore cannot succeed, and the
+    send handler must fail honestly instead of fabricating a ``sent`` status.
+
+    This is the single source of truth for "can we send an email?" — both the
+    inbox ``accounts`` status and the send gate read it, so the two can never
+    drift apart. When a genuine provider integration lands, replace this stub
+    with a real connectivity check and the honest error branch disappears on
+    its own.
+    """
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Interview Center  GET /interviews/prep
 # ---------------------------------------------------------------------------
@@ -334,7 +353,7 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             {
                 "email": current_user.get("email", ""),
                 "provider": "Gmail",
-                "status": "not_connected",
+                "status": "connected" if _email_provider_connected() else "not_connected",
                 "unread": 0,
                 "note": "Connect your Gmail account to see your inbox here.",
             }
@@ -360,7 +379,25 @@ class SendReplyRequest(BaseModel):
 
 @router.post("/emails/send")
 def send_reply(payload: SendReplyRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Approve + send a drafted reply — writes message to EmailThread."""
+    """Approve + send a drafted reply.
+
+    Sending requires a connected outbound email provider. None exists yet
+    (ADR D-0029), so this fails honestly with a ``409`` instead of fabricating
+    a ``sent`` status and silently mutating the thread. The gate runs before
+    any DB write, so a rejected send leaves the thread untouched. Drafting
+    (``POST /emails/draft``) is a separate endpoint and is unaffected.
+    """
+    if not _email_provider_connected():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "no_email_provider_connected",
+                "message": (
+                    "No email provider connected — connect an account in Settings "
+                    "to send. No email has been sent."
+                ),
+            },
+        )
     uid = current_user["id"]
     with get_connection() as conn:
         with conn.cursor() as cur:
