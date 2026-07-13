@@ -54,6 +54,45 @@ class TestTailoring:
         parent = client.get(f"/resumes/{resume['parentId']}", headers=auth_headers).json()
         assert parent["parentId"] is None  # parent is the base resume
 
+    def test_retailoring_corrupted_parent_stays_consistent(self, client, auth_headers):
+        """A pre-fix tailored version storing two rows for one evidenceRef
+        must re-tailor cleanly: unique refs in the child and the run's
+        `changes` equal to what the diff endpoint reports (observed live:
+        run said 7, diff said 6)."""
+        from app.repositories.resume import ResumeRepository
+        from app.repositories.user import UserRepository
+
+        job = _seed_job(client, auth_headers)
+        user = UserRepository().get_by_email("fixture-user@example.com")
+        assert user is not None
+        repo = ResumeRepository()
+        corrupted = repo.create(
+            user["id"],
+            {
+                "raw_text": "• Led delivery across squads\n• Reduced costs by 15%\n",
+                "bullets": [
+                    {"text": "Led delivery across squads", "evidenceRef": "bullet-0"},
+                    {"text": "Led delivery across squads again", "evidenceRef": "bullet-0"},
+                    {"text": "Reduced costs by 15%", "evidenceRef": "bullet-1"},
+                ],
+            },
+            "corrupthash",
+            label="Corrupted pre-fix version",
+            version=repo.next_version(user["id"]),
+        )
+        resp = client.post(
+            "/agents/tailor/run",
+            json={"job_id": job["id"], "resume_id": corrupted["id"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        child = client.get(f"/resumes/{body['resume_id']}", headers=auth_headers).json()
+        refs = [b["evidenceRef"] for b in child["sections"]["bullets"]]
+        assert len(refs) == len(set(refs)), f"duplicate refs propagated: {refs}"
+        diff = client.get(f"/resumes/{body['resume_id']}/diff", headers=auth_headers).json()
+        assert body["changes"] == len(diff["changes"])
+
     def test_resume_list_and_diff_endpoints(self, client, auth_headers):
         body = _run_tailor(client, auth_headers)
         resumes = client.get("/resumes", headers=auth_headers).json()

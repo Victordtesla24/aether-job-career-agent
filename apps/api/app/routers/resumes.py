@@ -187,10 +187,12 @@ def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
     if not resume.get("parentId"):
         return {"resume_id": resume_id, "parent_id": None, "changes": []}
     parent = repo.get_by_id(resume["parentId"], current_user["id"])
-    parent_by_ref = {
-        b.get("evidenceRef"): b.get("text", "")
-        for b in (parent or {}).get("sections", {}).get("bullets", [])
-    }
+    # First occurrence wins for duplicated refs (pre-fix tailored versions),
+    # matching the tailor service's healing — the diff stays consistent with
+    # the originals each rewrite was actually validated against.
+    parent_by_ref: dict[Any, str] = {}
+    for b in (parent or {}).get("sections", {}).get("bullets", []):
+        parent_by_ref.setdefault(b.get("evidenceRef"), b.get("text", ""))
     changes = []
     for bullet in resume.get("sections", {}).get("bullets", []):
         ref = bullet.get("evidenceRef")
