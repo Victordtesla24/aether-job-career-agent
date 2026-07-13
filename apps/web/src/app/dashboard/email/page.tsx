@@ -10,6 +10,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createEmailDraft,
+  emailIntelligenceView,
+  emailSendErrorMessage,
   fetchEmailInbox,
   sendEmailReply,
   type EmailInbox,
@@ -43,6 +45,7 @@ export default function EmailCenterPage() {
   const [gateOpen, setGateOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -70,6 +73,13 @@ export default function EmailCenterPage() {
     [inbox, selectedId],
   );
 
+  // Guarded AI-intelligence view: `intelligence` is null until a real scoring
+  // backend is wired (GAP-P4-041), so never dereference it directly.
+  const intelligence = useMemo(
+    () => (selected ? emailIntelligenceView(selected) : ({ available: false } as const)),
+    [selected],
+  );
+
   const visibleMessages = useMemo(() => {
     if (!inbox) return [];
     return inbox.messages.filter((m) => {
@@ -83,6 +93,7 @@ export default function EmailCenterPage() {
     setSelectedId(m.id);
     setDraft(m.draftReply);
     setSentNotice(null);
+    setSendError(null);
   };
 
   const closeGate = useCallback(() => setGateOpen(false), []);
@@ -138,12 +149,17 @@ export default function EmailCenterPage() {
   const confirmSend = async () => {
     if (!selected) return;
     setSending(true);
+    setSendError(null);
     try {
       await sendEmailReply(selected.id, draft);
       setSentNotice(`Reply to ${selected.from} sent ✓ — logged to the communication trail.`);
       setGateOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Send failed");
+      // Honest failure surface (GAP-P4-042 / ADR D-0029): no provider is
+      // connected, so the send is rejected and the user is told plainly —
+      // never a silent swallow or a fabricated "sent" toast.
+      setSentNotice(null);
+      setSendError(emailSendErrorMessage(e));
       setGateOpen(false);
     } finally {
       setSending(false);
@@ -231,6 +247,16 @@ export default function EmailCenterPage() {
         </p>
       ) : null}
 
+      {sendError ? (
+        <p
+          data-testid="email-send-error"
+          role="alert"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        >
+          {sendError}
+        </p>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-4">
         {/* Smart Inbox */}
         <section className="glass min-w-0 rounded-2xl border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
@@ -315,26 +341,38 @@ export default function EmailCenterPage() {
                   {selected.body}
                 </p>
 
-                {/* AI intelligence */}
-                <div className="mt-4 rounded-xl border border-aether-violet/30 bg-aether-violet/5 p-4" data-testid="ai-intelligence">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-violet">
-                    AI Intelligence · score {selected.intelligence.score}
-                  </h3>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {selected.intelligence.breakdown.map((b) => (
-                      <div key={b.label}>
-                        <div className="mb-1 flex justify-between text-[11px]">
-                          <span className="text-aether-muted">{b.label}</span>
-                          <span className="mono">{b.value}</span>
+                {/* AI intelligence — guarded: the backend returns no score yet */}
+                {intelligence.available ? (
+                  <div className="mt-4 rounded-xl border border-aether-violet/30 bg-aether-violet/5 p-4" data-testid="ai-intelligence">
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-violet">
+                      AI Intelligence · score {intelligence.score}
+                    </h3>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {intelligence.breakdown.map((b) => (
+                        <div key={b.label}>
+                          <div className="mb-1 flex justify-between text-[11px]">
+                            <span className="text-aether-muted">{b.label}</span>
+                            <span className="mono">{b.value}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-white/10">
+                            <div className="h-1.5 rounded-full bg-aether-violet" style={{ width: `${b.value}%` }} />
+                          </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-white/10">
-                          <div className="h-1.5 rounded-full bg-aether-violet" style={{ width: `${b.value}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-aether-muted">{intelligence.summary}</p>
                   </div>
-                  <p className="mt-3 text-xs text-aether-muted">{selected.intelligence.summary}</p>
-                </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4" data-testid="ai-intelligence-empty">
+                    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+                      AI Intelligence
+                    </h3>
+                    <p className="text-xs text-aether-muted-dim">
+                      No intelligence available yet — connect your Gmail account to enable AI
+                      scoring on your real threads.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Draft reply */}

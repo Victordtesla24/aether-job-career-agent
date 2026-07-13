@@ -64,12 +64,47 @@ def test_workspaces_emails_send_requires_auth(client):
     assert resp.status_code == 401
 
 
-def test_workspaces_emails_send_returns_200(client, auth_headers):
-    """POST /workspaces/emails/send returns 200 with status=sent (integration test)."""
-    # First we need an email thread to reply to.
-    # Since the fixture user has no email threads, we'll skip this test for now.
-    # We'll just verify the endpoint exists by checking 404 vs 401.
-    pass
+def test_workspaces_emails_send_no_provider_returns_409(
+    client, auth_headers, test_user_id, db_session
+):
+    """POST /workspaces/emails/send must return an honest 409 when no email
+    provider is connected — never a fabricated ``status=sent`` (GAP-P4-042,
+    ADR D-0029). The thread must be left untouched (no message appended)."""
+    import json as _json
+
+    thread_id = "thread-fixc-042"
+    original_messages = [{"role": "recruiter", "body": "Are you free for a call?"}]
+    with db_session.cursor() as cur:
+        # Deterministic seed: clear any leftover with this fixed id first so the
+        # test is repeatable across invocations.
+        cur.execute('DELETE FROM "EmailThread" WHERE id = %s', (thread_id,))
+        cur.execute(
+            'INSERT INTO "EmailThread" '
+            '("id","userId","subject","messages","createdAt","updatedAt") '
+            "VALUES (%s,%s,%s,%s::jsonb, now(), now())",
+            (thread_id, test_user_id, "Interview", _json.dumps(original_messages)),
+        )
+    db_session.commit()
+
+    resp = client.post(
+        "/workspaces/emails/send",
+        headers=auth_headers,
+        json={"message_id": thread_id, "body": "Yes, I am available."},
+    )
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body.get("status") != "sent"
+    detail = body["detail"]
+    assert detail["error"] == "no_email_provider_connected"
+    assert detail["message"]  # honest, human-facing message present
+
+    # No fabricated send: the stored thread must be byte-for-byte unchanged.
+    with db_session.cursor() as cur:
+        cur.execute('SELECT messages FROM "EmailThread" WHERE id = %s', (thread_id,))
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == original_messages
 
 
 def test_workspaces_endpoints_require_auth(client):

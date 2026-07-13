@@ -46,6 +46,12 @@ export const fetchNetworkingSummary = (options: RequestOptions = {}) =>
 
 /* ------------------------------- Email Center ------------------------------ */
 
+export interface EmailIntelligence {
+  score: number;
+  breakdown: Array<{ label: string; value: number }>;
+  summary: string;
+}
+
 export interface EmailMessage {
   id: string;
   from: string;
@@ -58,9 +64,35 @@ export interface EmailMessage {
   receivedAt: string;
   account: string;
   body: string;
-  intelligence: { score: number; breakdown: Array<{ label: string; value: number }>; summary: string };
+  // The inbox API returns `null` until a real AI-scoring backend is wired
+  // (GAP-P4-041): the intelligence panel must render an honest empty state
+  // rather than dereferencing a null object.
+  intelligence: EmailIntelligence | null;
   draftReply: string;
   voiceDna: number;
+}
+
+/**
+ * View-model for the AI-intelligence panel. Discriminated on `available` so the
+ * UI cannot dereference a missing intelligence object (GAP-P4-041): when the
+ * backend has no score yet (`intelligence: null`), the panel shows an honest
+ * "not available yet" state instead of crashing.
+ */
+export type EmailIntelligenceView =
+  | { available: false }
+  | { available: true; score: number; breakdown: EmailIntelligence["breakdown"]; summary: string };
+
+export function emailIntelligenceView(
+  message: Pick<EmailMessage, "intelligence">,
+): EmailIntelligenceView {
+  const intel = message.intelligence;
+  if (!intel) return { available: false };
+  return {
+    available: true,
+    score: intel.score,
+    breakdown: intel.breakdown ?? [],
+    summary: intel.summary ?? "",
+  };
 }
 
 export interface EmailInbox {
@@ -87,6 +119,31 @@ export const sendEmailReply = (messageId: string, body: string, options: Request
     method: "POST",
     body: { message_id: messageId, body },
   });
+
+/**
+ * Turn a failed send into an honest, human-facing message (GAP-P4-042).
+ * The API returns `409 {"detail": {"error": ..., "message": ...}}` when no
+ * email provider is connected; `ApiError.message` embeds that JSON, so we lift
+ * out the `detail.message` when present and fall back to the raw error text.
+ */
+export function emailSendErrorMessage(error: unknown): string {
+  const fallback = error instanceof Error ? error.message : "Send failed";
+  if (!(error instanceof Error)) return fallback;
+  const match = error.message.match(/\{[\s\S]*\}$/);
+  if (!match) return fallback;
+  try {
+    const parsed = JSON.parse(match[0]) as { detail?: unknown };
+    const detail = parsed.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object" && "message" in detail) {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+  } catch {
+    // Not JSON — surface the raw error text.
+  }
+  return fallback;
+}
 
 export interface DraftPayload {
   subject: string;
