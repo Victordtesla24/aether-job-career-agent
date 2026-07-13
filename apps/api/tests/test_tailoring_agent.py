@@ -60,11 +60,11 @@ class TestTailoring:
         `changes` equal to what the diff endpoint reports (observed live:
         run said 7, diff said 6)."""
         from app.repositories.resume import ResumeRepository
+        from app.security import decode_access_token
 
         job = _seed_job(client, auth_headers)
-        me = client.get("/auth/me", headers=auth_headers)
-        assert me.status_code == 200
-        user_id = me.json()["id"]
+        token = auth_headers["Authorization"].removeprefix("Bearer ")
+        user_id = decode_access_token(token)["userId"]
         repo = ResumeRepository()
         corrupted = repo.create(
             user_id,

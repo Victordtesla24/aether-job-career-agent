@@ -1,13 +1,21 @@
-# Phase 4 Gap Analysis — 2026-07-13T08:25:00Z — Production: https://5cb5f0620.abacusai.cloud
+# Phase 4 Gap Analysis — 2026-07-13T11:29:03Z — Production: https://5cb5f0620.abacusai.cloud
 
-**Orchestrator:** Hermes Agent (deepseek/deepseek-v4-pro via OpenRouter)
-**Model Map:**
-- Orchestrator: deepseek/deepseek-v4-pro
-- Sub-agents (scouts, doc-audit, fixers): qwen/qwen3-coder-next
-- Reviewers/QA (to be dispatched): different model family (TBD)
+## Header: Model Routing Table & Orchestrator Audit Log (Run 3 — Claude Code native, §9)
+
+**Orchestrator:** `claude-fable-5` (xhigh) — Claude Code CLI native session. Decision points only; all evidence collection and code changes delegated.
+**Routing table (verified-available models in this session; no OpenRouter — prior runs' OpenRouter/Hermes orchestration is superseded):**
+
+| Tier | Model | Roles |
+|---|---|---|
+| T1 — strong coder | `claude-opus-4-8` (`opus`) | Fixers on CRITICAL/HIGH gaps, gnarly RCA |
+| T2 — balanced (default) | `claude-sonnet-5` (`sonnet`) | Reviewers, QA/verifiers, MEDIUM/LOW fixes, deep audits |
+| T3 — economy | `claude-haiku-4-5` (`haiku`) | Scouts, doc-extraction, evidence collection, deploy, log-tailing |
+
+**Non-inheritance enforcement:** every spawn carries an explicit `model:` override; role definitions with explicit `model:` frontmatter at `.claude/agents/{doc-audit,scout,fixer,reviewer,qa,deploy}.md`; session subagent default pinned to T2 via `.claude/settings.json` (`CLAUDE_CODE_SUBAGENT_MODEL=claude-sonnet-5`). Cross-model independence: reviewer/QA model ≠ fixer model for every gap.
+**Audit log:** `uat/reports/evidence/phase4/orchestrator-audit-log.md` (every spawn: role, model, task, outcome). Zero `fable-5` sub-agent spawns permitted; zero OpenRouter calls permitted.
 
 **Evidence Root:** `uat/reports/evidence/phase4/`
-**Fresh Production Sweep:** 2026-07-13 — independent verification, no reused Phase 2/3 evidence.
+**Fresh Production Sweep (Run 3):** 2026-07-13T11:29Z — independent verification by THIS run's sub-agents; all prior verdicts (Runs 1–2, sections A–H below) are treated as UNVERIFIED inputs until re-verified against live production.
 
 ---
 
@@ -468,10 +476,55 @@ Evidence: `uat/reports/evidence/phase4/qa-postdeploy-verify.json` (15 VERIFIED-C
 - OPEN: 9 (wireframe gaps need ADR or implementation; email send needs provider; LLM timeout needs budget fix)
 
 ### Next Steps
-1. Wait for fixer batches (deleg_e7f2293e + deleg_7ef75c88) to complete
-2. Review and commit fixer output
-3. Deploy: rebuild web, restart services
-4. QA verify on production with fresh screenshots
-5. File ADRs for wireframe gaps (GAP-P4-030 to 035) if deferring
-6. Address LLM timeout (GAP-P4-039) — increase budget or use faster model
-7. Address email send (GAP-P4-029) — provider integration or ADR
+(Superseded by Run 3 — see Section I. The deleg_* fixer batches' output was adjudicated in the Run-3 preflight review: 14 files KEEP, 5 files DROP.)
+
+---
+
+## I. Run-3 Triage Rulings — 2026-07-13T13:05Z (Orchestrator decision record, claude-fable-5)
+
+Inputs: Stage A swarm (26 agents, 0 failures) distilled to 41 candidates in `uat/reports/evidence/phase4/triage-candidates__run3.json`. One gap = one record; new records GAP-P4-040+ to be expanded to full §3 format by the doc agent from the triage JSON + these rulings.
+
+### I.1 New gap records and dispatch
+
+| GAP | Cand. | Sev | Ruling (summary) | Cluster | Fixer→Reviewer |
+|---|---|---|---|---|---|
+| GAP-P4-040 | C-01 | CRITICAL | POST /interviews must never 500; validate (422) or nullable column per RCA — no fake defaults | FIX-D | sonnet→opus |
+| GAP-P4-041 | C-02 | CRITICAL | Email page null-guards `intelligence`; honest empty state; no fabricated scores | FIX-C | opus→sonnet |
+| GAP-P4-042 | C-03 | CRITICAL | Send returns explicit "no provider connected" error; UI surfaces it; drafts unaffected. Supersedes GAP-P4-021/029 (duplicates). ADR D-0029 | FIX-C | opus→sonnet |
+| GAP-P4-043 | C-04 | CRITICAL | Request Changes button: RCA + real wiring | FIX-B | opus→sonnet |
+| GAP-P4-044 | C-05 | CRITICAL | No duplicated/dangling bullets in tailored output/PDF | FIX-A | opus→sonnet |
+| GAP-P4-045 | C-06 | HIGH | Rewrites ground in user evidence, not JD verbatim echo; add overlap regression test | FIX-A | opus→sonnet |
+| GAP-P4-046 | C-08 | HIGH | PDF renderer: zero cross-bullet overlap; geometry test | FIX-A | opus→sonnet |
+| GAP-P4-047 | C-07 | HIGH | Implement real career-data consolidation (portfolio + GitHub ingestion; LinkedIn honest limitation, ADR D-0031) | FIX-J | opus→sonnet |
+| GAP-P4-048 | C-09 | HIGH | CL PDF: business-letter styling + sender contact block | FIX-B | opus→sonnet |
+| GAP-P4-049 | C-10 | HIGH | CL pipeline enforces format contract (3-para, Re:, CTA, no banned openers) with real validation/retry | FIX-B | opus→sonnet |
+| GAP-P4-050 | C-11 | HIGH | 8-column Kanban per wireframe; reopens falsely-closed GAP-P4-034; corrects Section E row | FIX-E | sonnet→opus |
+| GAP-P4-051 | C-15+C-32+C-34 | HIGH | Working e2e auth via env-var creds + storageState; drop password-hardcoded scripts; fix harness 405 noise | FIX-G | sonnet→opus |
+| GAP-P4-052 | C-13 | HIGH | Networking Kanban board with contact cards per wireframe | FIX-F | sonnet→opus |
+| GAP-P4-053 | C-17 | MEDIUM | Frontend calls existing /workspaces/settings; no duplicate alias | FIX-D | sonnet→opus |
+| GAP-P4-054 | C-19 | MEDIUM | Locked-provider 409s handled gracefully; guard stays | FIX-D | sonnet→opus |
+| GAP-P4-055 | C-20 | MEDIUM | Provider panel honestly shows actual serving path incl. Abacus fallback; D-0020 text amended | FIX-D | sonnet→opus |
+| GAP-P4-056 | C-12 | MEDIUM | Disabled controls get disabled affordance per D-0020 honesty | FIX-I | sonnet→opus |
+| GAP-P4-057 | C-22 | MEDIUM | Offers modal overlay no longer blocks empty-state button | FIX-I | sonnet→opus |
+| GAP-P4-058 | C-23 | MEDIUM | Fix jobs-vs-applications label/value binding | FIX-H | sonnet→opus |
+| GAP-P4-059 | C-24 | MEDIUM | Avg runs/week uses real weeks divisor | FIX-H | sonnet→opus |
+| GAP-P4-060 | C-40 | MEDIUM | Implement sources donut + market-vs-you sections from real data | FIX-H | sonnet→opus |
+| GAP-P4-061 | C-25 | MEDIUM | Delete provably-test rows only (per data-metrics audit list); log deletions | FIX-D | sonnet→opus |
+| GAP-P4-062 | C-36 | LOW | Settings sub-nav order per wireframe | FIX-I | sonnet→opus |
+| GAP-P4-063 | C-38 | LOW | Story-extractor trigger gets async feedback | FIX-I | sonnet→opus |
+| GAP-P4-064 | C-26 | MEDIUM | Avatar management ADR-deferred (D-0030) — no backend storage exists | DOC-K | n/a |
+| GAP-P4-065 | C-27 | MEDIUM | Interview Center deferral: cite/amend ADR explicitly (D-0009) | DOC-K | n/a |
+| GAP-P4-066 | C-16+C-33 | MEDIUM | Index D-0018 in requirement register; note PDF/infra-ADR coverage as accepted | DOC-K | n/a |
+| GAP-P4-067 | C-18 | MEDIUM | Reconcile D-0025 text vs live jobs filters (investigate in Wave 2) | Wave-2 | tbd |
+
+### I.2 No-gap rulings (to Section E with reasons)
+- C-14/C-21/C-29: live production data correctly displayed; wireframe canonical numbers are design examples, not a production data contract (new ADR D-0028). Fabricating them would violate §6.4/§8.
+- C-31: mobile-dashboard now matches its wireframe — contradicts stale D-0026 text; amend ADR (improvement, not gap).
+- C-28 (extra Edit/Delete controls), C-30 (design-id attrs; D-0027 + testid convention), C-37 (honest empty states), C-39 (naming-only mismatches), C-41 (informational): no-gaps with reasons.
+- C-35: cover-letter list-view deviation → ADR-file as intentional; correct GAP-P4-033's wrong D-0020 citation.
+
+### I.3 Working-tree adjudication (from preflight)
+KEEP: 6 api test fixes, e2e/agents.spec.ts, e2e/dashboard.spec.ts, PHASE3-GAP-LEDGER.md, PHASE4-GAP-ANALYSIS.md, apps/web/.gitignore, uat/api_sweep.py, uat/scout_production.py, uat/phase4_sweep.py, .claude/*. DROP: e2e/login.spec.ts + e2e/auth.setup.ts + playwright.config.ts modifications (broken prefill assumption zeroing the e2e suite — properly rebuilt under GAP-P4-051), uat/api_sweep.sh, uat/api_sweep_v2.sh (hardcoded password).
+
+### I.4 Prior-ledger reconciliation
+GAP-P4-021/029 → superseded by GAP-P4-042. GAP-P4-034 → REOPENED as GAP-P4-050 (fresh evidence contradicts VERIFIED-CLOSED). GAP-P4-022 → GAP-P4-058. GAP-P4-025/026 → GAP-P4-058/059 lineage noted; D-0003 ruling (Section I.2) closes the "canonical funnel" reading. GAP-P4-039 (LLM timeout→fixture fallback): monitored in Wave-2 QA under AI-quality recipes. All other Run-1/2 VERIFIED-CLOSED verdicts: fresh Stage A evidence found no regression except where noted.

@@ -9,7 +9,8 @@ test.describe("Agents page", () => {
     await page.goto("/dashboard/agents");
 
     await expect(page.getByRole("heading", { name: "Agents", level: 1 })).toBeVisible();
-    const cards = page.getByTestId("agent-card");
+    // Configurable agent cards carry per-agent testids (agent-card-scout, …).
+    const cards = page.locator('[data-testid^="agent-card-"]');
     await expect(cards.first()).toBeVisible({ timeout: 20_000 });
     // Canonical registry: supervisor, scout, matcher, fitScorer, tailor,
     // coverLetter, storyExtractor.

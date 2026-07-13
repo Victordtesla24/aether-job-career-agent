@@ -7,10 +7,11 @@ from app.db import get_connection, new_id
 
 
 @pytest.fixture()
-def user_id(client, auth_headers) -> str:
-    res = client.get("/auth/me", headers=auth_headers)
-    assert res.status_code == 200
-    return res.json()["id"]
+def user_id(auth_headers) -> str:
+    from app.security import decode_access_token
+
+    token = auth_headers["Authorization"].removeprefix("Bearer ")
+    return decode_access_token(token)["userId"]
 
 
 def _seed_funnel(user_id: str, jobs: int, statuses: list[str], days_ago: int = 0) -> None:

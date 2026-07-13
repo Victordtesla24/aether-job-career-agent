@@ -2,7 +2,8 @@ import { test, expect } from "@playwright/test";
 
 /**
  * Smoke test for the dashboard shell (P1-S06). Verifies the page renders and
- * that all 12 primary navigation items from the Schema-A contract are present
+ * that all primary navigation items from the NAV_ITEMS contract (Schema-A plus
+ * the Cover Letter Studio added with the cover-letter workspace) are present
  * in the sidebar, in order. Detailed content is covered by unit tests and later
  * slices; this is an end-to-end sanity check of the shell.
  */
@@ -10,6 +11,7 @@ const EXPECTED_NAV = [
   "Dashboard",
   "Jobs",
   "Resume Studio",
+  "Cover Letter Studio",
   "Story Bank",
   "Applications",
   "Interview Center",
@@ -21,7 +23,7 @@ const EXPECTED_NAV = [
   "Settings",
 ];
 
-test("dashboard renders the 12-item primary sidebar", async ({ page }) => {
+test("dashboard renders the 13-item primary sidebar", async ({ page }) => {
   await page.goto("/dashboard");
 
   const nav = page.getByRole("navigation", { name: "Primary" });

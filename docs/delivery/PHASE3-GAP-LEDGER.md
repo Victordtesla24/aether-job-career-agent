@@ -9,7 +9,7 @@ forbidden-pattern scan (clean), and independent per-REQ audit agents.
 ## Summary
 | Total | Open | Fixed (awaiting QA verify) | Verified Closed | Regressions |
 |-------|------|---------------------------|-----------------|-------------|
-| 10    | 0    | 10                        | 0               | 0           |
+| 11    | 0    | 11                        | 0               | 0           |
 
 ## Gap Records
 | Gap ID | Type | Screen | Severity | Description | Code Ref | Iteration Fixed | Verified By | Evidence | Status |
@@ -24,6 +24,18 @@ forbidden-pattern scan (clean), and independent per-REQ audit agents.
 | GAP-P3-008 | G-QUALITY | /dashboard (Market Pulse) | MEDIUM | Job Probability Score averaged only non-zero factors, silently excluding a genuinely measured 0% interview conversion (7 applied, 0 interviews) — headline inflated 46→62% | apps/api/app/routers/analytics.py (measured-factor mean) | 1 | — | curls/market-pulse.json factors [37,0,100,45] vs score 61; test_analytics.py::test_probability_counts_measured_zero_conversion | FIXED |
 | GAP-P3-009 | G-QUALITY | /dashboard (Agent Activity) | LOW | SC-02-B requires last 10 AgentRun rows; page sliced to 5 with no documenting ADR | apps/web/src/app/dashboard/page.tsx:156 | 1 | — | scout-dashboard.png (5 rows) vs agent-runs.json (50 rows available) | FIXED |
 | GAP-P3-010 | G-BUG | /dashboard (Market Pulse donut) | LOW | Unmapped job sources took fallback palette colors already claimed by mapped sources (Seek + Greenhouse both #FF6B35 — adjacent segments indistinguishable) | apps/api/app/routers/analytics.py (claimed-color-aware fallback) | 1 | — | curls/market-pulse.json duplicate colors; test_analytics.py::test_source_donut_colors_are_unique | FIXED |
+
+| GAP-P3-011 | G-BUG | /dashboard/resume | MEDIUM | Re-tailoring a pre-fix corrupted version (duplicate evidenceRef rows) propagated the duplicates into new children and skewed changes-vs-diff counts (live: run=7, diff=6); diff endpoint's last-wins ref collapse also disagreed with the service's first-wins healing | apps/api/app/services/resume_tailor.py::_structure_originals (heal, first-wins); apps/api/app/routers/resumes.py::diff_resume (setdefault) | 1 | — | curls/verify-tailor-run2.json (pre-fix: 7≠6, dup refs) → verify-tailor-run3.json (6==6, unique refs, 0 metric drops); test_retailoring_corrupted_parent_stays_consistent | FIXED |
+
+## Post-deploy live verification (this iteration, evidence on file)
+- Cover letter (GAP-P3-001): fresh production run — date line, addressee block + Re:, salutation,
+  3-paragraph body with role/company/current-role hook, evidence-grounded requirements with intact
+  metrics, specific CTA with real contact details, "Sincerely, Vikram Deshpande" sign-off, no banned
+  opener. Evidence: curls/verify-coverletter-run.json (271 words).
+- Tailor pipeline (GAP-P3-002/003/004/005/011): fresh production re-tailor of the corrupted parent —
+  changes(run)==changes(diff)==6, unique refs, all 8 parent bullets preserved, 0 metric drops,
+  1 honest rejection kept as original. Evidence: curls/verify-tailor-run3.json.
+- Test story (GAP-P3-006): GET /stories → 23 rows, zero audit leftovers.
 
 ## Verified No-Gap (checked and explicitly cleared)
 | Item | Verdict |
