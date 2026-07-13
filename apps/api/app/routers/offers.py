@@ -15,7 +15,7 @@ from app.middleware.auth import CurrentUser
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def get_offers(current_user: CurrentUser) -> dict[str, Any]:
     """Offer comparison payload — real Application records with status='offer'."""
     uid = current_user["id"]
