@@ -127,6 +127,15 @@ export default function DashboardPage() {
   const [busyApprovalId, setBusyApprovalId] = useState<string | null>(null);
   const [approvalActionError, setApprovalActionError] = useState<string | null>(null);
 
+  // Toast state for approval confirmations
+  const [toast, setToast] = useState<{ message: string; kind: "success" | "error" } | null>(null);
+
+  /** Show a temporary toast notification (auto-dismisses after 3.5 s). */
+  function showToast(message: string, kind: "success" | "error" = "success") {
+    setToast({ message, kind });
+    setTimeout(() => setToast(null), 3500);
+  }
+
   const scoredJobs = (jobs.data ?? []).filter((j) => j.fitScore != null);
   const avgFit =
     scoredJobs.length > 0
@@ -142,10 +151,14 @@ export default function DashboardPage() {
     try {
       await (action === "approve" ? approveRequest(id) : rejectRequest(id));
       approvals.setData(pending.filter((a) => a.id !== id));
-    } catch (e: unknown) {
-      setApprovalActionError(
-        `Couldn't ${action} — ${e instanceof Error ? e.message : "request failed"}`,
+      showToast(
+        action === "approve" ? "Approved ✓" : "Rejected",
+        "success",
       );
+    } catch (e: unknown) {
+      const msg = `Couldn't ${action} — ${e instanceof Error ? e.message : "request failed"}`;
+      setApprovalActionError(msg);
+      showToast(msg, "error");
     } finally {
       setBusyApprovalId(null);
     }
@@ -157,6 +170,20 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-7">
+      {/* Toast notification for approval actions */}
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed right-6 top-20 z-50 animate-fade-in rounded-xl border px-5 py-3 text-sm font-medium shadow-lg backdrop-blur-md transition-all ${
+            toast.kind === "success"
+              ? "border-aether-green/40 bg-aether-green/15 text-aether-green"
+              : "border-red-500/40 bg-red-500/15 text-red-300"
+          }`}
+        >
+          {toast.message}
+        </div>
+      ) : null}
       {/* Stats row — full width above the columns (wireframe stats-row-p7q8r9) */}
       <DashboardStats
         funnel={funnel.data}
@@ -226,6 +253,12 @@ export default function DashboardPage() {
                   const badge = runBadge(r);
                   const tile = agentTile(r.agentName);
                   const desc = describeRun(r);
+                  const out = (r.output ?? {}) as Record<string, unknown>;
+                  const isCoverLetterPending =
+                    r.agentName === "coverLetter" &&
+                    out.approval_status === "pending" &&
+                    typeof out.approval_id === "string";
+                  const feedApproveBusy = busyApprovalId === (out.approval_id as string);
                   return (
                     <li key={r.id} className="flex items-start gap-3.5">
                       <span
@@ -243,6 +276,16 @@ export default function DashboardPage() {
                           {relTime(r.startedAt ?? r.createdAt)}
                           {desc.metric ? ` · ${desc.metric}` : ""}
                         </p>
+                        {isCoverLetterPending ? (
+                          <button
+                            type="button"
+                            disabled={feedApproveBusy}
+                            onClick={() => void resolveApproval(out.approval_id as string, "approve")}
+                            className="mt-2 rounded-lg border border-aether-green/25 bg-aether-green/15 px-3 py-1 text-[11px] font-medium text-aether-green transition hover:bg-aether-green/25 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {feedApproveBusy ? "Approving…" : "Approve"}
+                          </button>
+                        ) : null}
                       </div>
                       <span
                         className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-medium ${badge.cls}`}
@@ -323,9 +366,10 @@ export default function DashboardPage() {
                     {idx === 0 ? (
                       <Link
                         href={`/dashboard/resume?job=${job.id}`}
+                        data-testid="tailor-apply-link"
                         className="mt-3 block w-full rounded-lg bg-aether-coral py-2 text-center text-xs font-medium text-white transition hover:opacity-90 max-sm:min-h-11 max-sm:content-center"
                       >
-                        Tailor &amp; Apply
+                        Tailor & Apply
                       </Link>
                     ) : (
                       <Link
