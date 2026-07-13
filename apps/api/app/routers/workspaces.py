@@ -17,6 +17,8 @@ from app.db import (
     rows_to_dicts,
 )
 from app.middleware.auth import CurrentUser
+from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
+from app.services.career_data import refresh_career_data
 
 router = APIRouter()
 
@@ -525,7 +527,11 @@ class SettingsUpdate(BaseModel):
     agentConfig: AgentConfig
 
 
-def _build_settings(user: dict[str, Any], resume_row: dict | None) -> dict[str, Any]:
+def _build_settings(
+    user: dict[str, Any],
+    resume_row: dict | None,
+    portfolio_row: dict | None = None,
+) -> dict[str, Any]:
     """Assemble the settings payload from real DB columns."""
     agent_cfg = user.get("agentConfig") or {
         "autoApply": False,
@@ -534,6 +540,22 @@ def _build_settings(user: dict[str, Any], resume_row: dict | None) -> dict[str, 
     }
     # Compute display name
     display_name = user.get("name") or user.get("email", "")
+    # Portfolio block reflects the real ingested CareerProfile row (GAP-P4-047):
+    # a genuine URL + sync status once configured, honest nulls before that.
+    portfolio = {
+        "url": None,
+        "cadence": None,
+        "lastSynced": None,
+        "status": "not_configured",
+    }
+    if portfolio_row:
+        synced = portfolio_row.get("syncedAt")
+        portfolio = {
+            "url": portfolio_row.get("url"),
+            "cadence": None,
+            "lastSynced": str(synced)[:19] if synced else None,
+            "status": portfolio_row.get("status") or "not_configured",
+        }
     return {
         "profile": {
             "fullName": display_name,
@@ -546,11 +568,7 @@ def _build_settings(user: dict[str, Any], resume_row: dict | None) -> dict[str, 
             "uploadedAt": str(resume_row["createdAt"])[:10] if resume_row else None,
             "versions": 0,  # will be filled below
         },
-        "portfolio": {
-            "url": None,
-            "cadence": None,
-            "lastSynced": None,
-        },
+        "portfolio": portfolio,
         "agentConfig": {
             "autoApply": bool(agent_cfg.get("autoApply", False)),
             "approvalGate": bool(agent_cfg.get("approvalGate", True)),
@@ -617,7 +635,8 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     resume = resume_rows[0] if resume_rows else None
     version_count = cnt_rows[0]["cnt"] if cnt_rows else 0
 
-    result = _build_settings(user, resume)
+    portfolio_row = CareerProfileRepository().get(uid, "portfolio")
+    result = _build_settings(user, resume, portfolio_row)
     result["resume"]["versions"] = version_count
     result["integrations"] = [
         {
@@ -673,3 +692,80 @@ def update_settings(payload: SettingsUpdate, current_user: CurrentUser) -> dict[
         conn.commit()
 
     return get_settings(current_user)
+
+
+# ---------------------------------------------------------------------------
+# Career Data  GET /workspaces/career-data   POST /workspaces/career-data/refresh
+# (GAP-P4-047 · ADR D-0031) — real consolidation of GitHub + portfolio, with an
+# honest LinkedIn limitation. The ingested signal feeds resume tailoring and
+# cover-letter context assembly (see app.services.career_data).
+# ---------------------------------------------------------------------------
+
+#: Honest, standing note about the LinkedIn scope decision (ADR D-0031).
+_LINKEDIN_NOTE = (
+    "LinkedIn offers no public profile API to third-party apps, so it is not "
+    "auto-synced. Paste your LinkedIn summary below and it will be consolidated "
+    "into your tailoring evidence alongside GitHub and your portfolio."
+)
+
+
+class CareerDataRefreshRequest(BaseModel):
+    """Optional per-source inputs. A field left unset reuses the previously
+    stored value for that source; an empty string clears it."""
+
+    githubUsername: str | None = Field(default=None, max_length=100)
+    portfolioUrl: str | None = Field(default=None, max_length=500)
+    linkedinSummary: str | None = Field(default=None, max_length=20000)
+
+
+def _shape_source(source: str, row: dict | None) -> dict[str, Any]:
+    """UI-facing view of one career-data source's stored state."""
+    if not row:
+        return {
+            "source": source,
+            "status": "not_configured",
+            "url": None,
+            "summary": None,
+            "error": None,
+            "lastSynced": None,
+        }
+    synced = row.get("syncedAt")
+    return {
+        "source": source,
+        "status": row.get("status") or "not_configured",
+        "url": row.get("url"),
+        "summary": row.get("summary"),
+        "error": row.get("error"),
+        "lastSynced": str(synced)[:19] if synced else None,
+    }
+
+
+@router.get("/career-data")
+def get_career_data(current_user: CurrentUser) -> dict[str, Any]:
+    """Current consolidated career-data state for the authenticated user."""
+    rows = {r["source"]: r for r in CareerProfileRepository().list_by_user(current_user["id"])}
+    return {
+        "sources": [_shape_source(s, rows.get(s)) for s in CAREER_SOURCES],
+        "linkedinNote": _LINKEDIN_NOTE,
+    }
+
+
+@router.post("/career-data/refresh")
+def refresh_career_data_endpoint(
+    payload: CareerDataRefreshRequest, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Re-ingest GitHub + portfolio (real fetches) and store LinkedIn paste.
+
+    Each source is persisted with its true status/error; a source that cannot
+    be ingested is reported honestly and contributes nothing to tailoring.
+    """
+    results = refresh_career_data(
+        current_user["id"],
+        github_username=payload.githubUsername,
+        portfolio_url=payload.portfolioUrl,
+        linkedin_summary=payload.linkedinSummary,
+    )
+    return {
+        "sources": [_shape_source(s, results.get(s)) for s in CAREER_SOURCES],
+        "linkedinNote": _LINKEDIN_NOTE,
+    }

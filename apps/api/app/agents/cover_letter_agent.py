@@ -24,6 +24,7 @@ from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
 from app.repositories.user import UserRepository
+from app.services.career_data import build_career_corpus
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
 from app.services.resume_parser import parse_resume_pdf
@@ -249,13 +250,23 @@ class CoverLetterAgent:
         # UserRepository projection, so resolve it with its own guarded read —
         # otherwise the hook silently falls back for every user (GAP-P4-049).
         position = current_position(self._users.get_target_role(user_id))
+        # Consolidated career evidence (GitHub/portfolio/LinkedIn, ADR D-0031):
+        # real ingested signal the letter may draw on and the guard checks
+        # against. Empty when the user has ingested no career data.
+        career_corpus = build_career_corpus(user_id)
         base_prompt = (
             f"Target role: {job['title']} at {job['company']}.\n"
             f"Job description: {job.get('description', '')}\n\n"
             f"Candidate resume:\n{resume_text}"
+            + (
+                f"\n\nCandidate portfolio & GitHub evidence:\n{career_corpus}"
+                if career_corpus
+                else ""
+            )
         )
         # The letter date, signer name and current position are system/profile
-        # ground truth, so they join the evidence corpus the guard checks against.
+        # ground truth, so they join the evidence corpus the guard checks
+        # against — as does the consolidated career evidence when present.
         corpus = " ".join(
             [
                 resume_text,
@@ -266,6 +277,7 @@ class CoverLetterAgent:
                 signer,
                 position,
             ]
+            + ([career_corpus] if career_corpus else [])
         )
 
         # Corrective drafting loop: each retry feeds back the accumulated

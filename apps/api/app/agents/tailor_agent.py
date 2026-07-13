@@ -13,6 +13,7 @@ from typing import Any
 from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
+from app.services.career_data import build_career_corpus
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
 from app.services.resume_tailor import ResumeTailorService
@@ -88,7 +89,13 @@ class TailoringAgent:
         # counts (and the diff endpoint) are measured against the parent the
         # user selected — not re-derived from the immutable base raw_text.
         parent_bullets = (base.get("sections") or {}).get("bullets") or None
-        result = self._service.tailor(resume_text, jd, originals=parent_bullets)
+        # Consolidated career evidence (GitHub/portfolio/LinkedIn, ADR D-0031)
+        # widens the anti-fabrication corpus so a rewrite may draw on skills the
+        # user's public work proves. Empty when no career data is ingested.
+        career_corpus = build_career_corpus(user_id)
+        result = self._service.tailor(
+            resume_text, jd, originals=parent_bullets, evidence_extra=career_corpus
+        )
 
         tailored = self._resumes.create(
             user_id,
