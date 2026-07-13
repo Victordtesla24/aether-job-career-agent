@@ -122,6 +122,35 @@ describe("buildStages", () => {
     );
     expect(stages.find((s) => s.key === "offer")!.cards[0].meta.offerAmount).toBe("$225k");
   });
+
+  // GAP-P4-050 regression guard: the board must always mount all 8 wireframe
+  // columns (Discovered..Offer) — a stage with zero cards is still a column,
+  // never silently dropped/unmounted client-side.
+  it("always returns all 8 wireframe columns, in order, even with no data", () => {
+    const stages = buildStages([], []);
+    expect(stages).toHaveLength(8);
+    expect(stages.map((s) => s.key)).toEqual(STAGE_DEFS.map((d) => d.key));
+    for (const s of stages) expect(s.cards).toEqual([]);
+  });
+
+  it("keeps every column mounted with a real card in it (draft..offer all populate a distinct stage)", () => {
+    const stages = buildStages(
+      [
+        app({ id: "a1", jobId: "j1", status: "draft" }),
+        app({ id: "a2", jobId: "j2", status: "submitted" }),
+        app({ id: "a3", jobId: "j3", status: "screening" }),
+        app({ id: "a4", jobId: "j4", status: "interview" }),
+        app({ id: "a5", jobId: "j5", status: "offer" }),
+      ],
+      [
+        job({ id: "j6", status: "discovered" }),
+        job({ id: "j7", status: "screening" }),
+        job({ id: "j8", status: "tailoring" }),
+      ],
+    );
+    expect(stages).toHaveLength(8);
+    for (const s of stages) expect(s.cards.length).toBeGreaterThan(0);
+  });
 });
 
 describe("fitClass / initials / time formatting", () => {
@@ -196,5 +225,18 @@ describe("filter / sort", () => {
     );
     const filtered = viewStages(stages, "high-fit", "fit");
     expect(filtered.find((s) => s.key === "ready")!.cards.map((c) => c.id)).toEqual(["a1"]);
+  });
+
+  // GAP-P4-050 regression guard: a filter that empties every card in a stage
+  // must not remove that stage's column — the board always shows all 8.
+  it("viewStages keeps all 8 columns mounted even when a filter matches nothing", () => {
+    const stages = buildStages(
+      [app({ id: "a1", jobId: "j1", status: "submitted", fitScore: 40 })],
+      [],
+    );
+    const filtered = viewStages(stages, "high-fit", "recent");
+    expect(filtered).toHaveLength(8);
+    expect(filtered.map((s) => s.key)).toEqual(STAGE_DEFS.map((d) => d.key));
+    expect(filtered.find((s) => s.key === "submitted")!.cards).toEqual([]);
   });
 });
