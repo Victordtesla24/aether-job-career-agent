@@ -43,6 +43,7 @@ import {
   type Catalog,
   type Provider,
 } from "../../../components/agents/api";
+import { connectBlockedReason } from "../../../components/agents/logic";
 import {
   agentSuccessNotice,
   pipelineCompletionNotice,
@@ -217,6 +218,18 @@ export default function AgentsPage() {
   };
 
   const onProviderToggle = async (id: string, next: Provider["status"]) => {
+    // Locked (keyless) providers are guaranteed to 409 (D-0020: the server
+    // never fabricates a connection). Recognise that up front — from the
+    // status the client already has — instead of firing a doomed request
+    // that would otherwise still show as a failed network load.
+    if (next === "connected") {
+      const target = providers?.find((p) => p.id === id);
+      const blocked = target && connectBlockedReason(target);
+      if (blocked) {
+        setNotice({ kind: "info", text: blocked });
+        return;
+      }
+    }
     setProviderBusy(id);
     try {
       await updateProvider(id, { status: next });
@@ -244,6 +257,11 @@ export default function AgentsPage() {
     const target = providers?.find((p) => p.status === "unconfigured");
     if (!target) {
       setNotice({ kind: "info", text: "All providers are already connected." });
+      return;
+    }
+    const blocked = connectBlockedReason(target);
+    if (blocked) {
+      setNotice({ kind: "info", text: blocked });
       return;
     }
     setProviderBusy(target.id);

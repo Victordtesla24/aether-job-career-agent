@@ -16,6 +16,7 @@ import pytest
 from app.services.llm_client import (
     LLMClient,
     LLMUnavailableError,
+    get_active_credential_env_var,
     get_budget_seconds,
     get_fallback_model,
     shared_budget,
@@ -42,6 +43,65 @@ class TestModelChain:
     def test_no_duplicate_attempt_when_primary_is_fallback(self):
         fallback = get_fallback_model()
         assert LLMClient._model_chain(fallback) == [fallback]
+
+
+class TestActiveCredentialSource:
+    """GAP-P4-055 — the Agents providers panel must honestly reflect which
+    credential ``_call_live`` actually uses, including the ``ABACUS_API_KEY``
+    fallback. ``get_active_credential_env_var`` is the single source of truth
+    both ``_call_live`` and the providers panel now read from."""
+
+    def _clear(self, monkeypatch):
+        for var in ("AETHER_LLM_API_KEY", "OPENROUTER_API_KEY", "ABACUS_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_none_when_no_key_configured(self, monkeypatch):
+        self._clear(monkeypatch)
+        assert get_active_credential_env_var() is None
+
+    def test_abacus_key_wins_when_it_is_the_only_one_set(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+        assert get_active_credential_env_var() == "ABACUS_API_KEY"
+
+    def test_openrouter_key_takes_precedence_over_abacus(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+        assert get_active_credential_env_var() == "OPENROUTER_API_KEY"
+
+    def test_aether_llm_api_key_takes_precedence_over_everything(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-direct-test")
+        assert get_active_credential_env_var() == "AETHER_LLM_API_KEY"
+
+    def test_call_live_actually_uses_the_abacus_fallback_key(self, monkeypatch):
+        """Not just the helper in isolation — ``_call_live`` itself must send
+        the Abacus key as the bearer token when it's the only one present."""
+        import httpx
+
+        self._clear(monkeypatch)
+        monkeypatch.setenv("ABACUS_API_KEY", "test-abacus-key")
+        seen: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {"choices": [{"message": {"content": "hello"}}]}
+
+        def _capture(url, **kwargs):
+            seen["auth"] = kwargs["headers"]["Authorization"]
+            return _Resp()
+
+        monkeypatch.setattr(httpx, "post", _capture)
+        llm = LLMClient(mode="live")
+        out = llm._call_live("sys", "usr", model="test-model", temperature=0.0)
+        assert out == "hello"
+        assert seen["auth"] == "Bearer test-abacus-key"
 
 
 class TestAutoModeFallback:

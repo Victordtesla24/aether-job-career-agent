@@ -11,7 +11,12 @@ import {
   StatsSchema,
   TestRunSchema,
 } from "../../components/agents/api";
-import { agentStatusLabel, formatTokens, providerAction } from "../../components/agents/logic";
+import {
+  agentStatusLabel,
+  connectBlockedReason,
+  formatTokens,
+  providerAction,
+} from "../../components/agents/logic";
 
 describe("formatTokens", () => {
   it("formats millions / thousands / units", () => {
@@ -35,6 +40,27 @@ describe("providerAction", () => {
     const a = providerAction("unconfigured");
     expect(a.label).toBe("Configure keys");
     expect(a.next).toBe("connected");
+  });
+});
+
+describe("connectBlockedReason", () => {
+  // GAP-P4-054 regression: the "Configure keys" / "Add Provider" actions must
+  // not fire a PUT that the server is guaranteed to 409 (D-0020). The client
+  // already knows a provider is unconfigured from GET /agents/providers, so
+  // it should short-circuit locally instead of letting the request fail.
+  it("blocks connecting an unconfigured provider (server has no credential)", () => {
+    const reason = connectBlockedReason({ name: "Anthropic Claude", status: "unconfigured" });
+    expect(reason).not.toBeNull();
+    expect(reason).toContain("Anthropic Claude");
+    expect(reason).toContain("credential");
+  });
+
+  it("does not block a connected provider", () => {
+    expect(connectBlockedReason({ name: "OpenAI", status: "connected" })).toBeNull();
+  });
+
+  it("does not block a warning-status provider (re-authenticate may succeed)", () => {
+    expect(connectBlockedReason({ name: "Google Gemini", status: "warning" })).toBeNull();
   });
 });
 
