@@ -138,7 +138,11 @@ def client() -> Iterator:
 
 @pytest.fixture()
 def auth_headers(client) -> dict[str, str]:
-    """Register + login a test user; return the Authorization header."""
+    """Register + login a test user; return the Authorization header.
+
+    Also stashes the user id on the client object so the ``test_user_id``
+    fixture can retrieve it without a second API round-trip.
+    """
     email = f"fixture-user-{uuid.uuid4().hex[:8]}@example.com"
     credentials = {"email": email, "password": "Sup3rSecret"}
     register = client.post("/auth/register", json=credentials)
@@ -151,4 +155,20 @@ def auth_headers(client) -> dict[str, str]:
         login = client.post("/auth/login", json=credentials)
         assert login.status_code == 200, login.text
     token = login.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+    # Stash user id for the test_user_id fixture
+    me = client.get("/auth/me", headers=headers)
+    assert me.status_code == 200, me.text
+    client._test_user_id = me.json()["id"]
+    return headers
+
+
+@pytest.fixture()
+def test_user_id(client, auth_headers) -> str:
+    """The user id of the fixture user created by ``auth_headers``.
+
+    Use this in test files that need the user id for DB seeding or
+    agent runs.  It avoids the stale-email-lookup pattern that broke
+    when conftest switched to random UUID emails.
+    """
+    return client._test_user_id
