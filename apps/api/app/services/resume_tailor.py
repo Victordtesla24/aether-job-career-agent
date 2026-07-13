@@ -39,6 +39,16 @@ SYSTEM_PROMPT = (
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _BULLET_MARKERS = ("•", "●", "▪", "- ")
 
+#: Sentence-terminal punctuation that closes a reconstructed bullet.
+_TERMINAL_PUNCT = (".", "!", "?")
+#: All-caps section banner ("WORK EXPERIENCE", "SKILLS", …) — a hard boundary
+#: that can never be part of a wrapped bullet.
+_SECTION_RE = re.compile(r"[A-Z][A-Z][A-Z &/]*")
+#: A four-digit calendar year, used to spot job date/period lines.
+_YEAR_RE = re.compile(r"(?:19|20)\d{2}")
+#: A year immediately followed by a range dash — the signature of a date line.
+_DATE_RANGE_RE = re.compile(r"(?:19|20)\d{2}\s*[-–—]")
+
 # ---------------------------------------------------------------------------
 # Evidence normalization (ADR D-0015).
 #
@@ -244,13 +254,113 @@ def jd_echoed_phrases(
     return sorted(" ".join(gram) for gram in lifted)
 
 
+def _is_bullet_marker(line: str) -> bool:
+    return line.startswith(_BULLET_MARKERS)
+
+
+def _is_section_banner(line: str) -> bool:
+    """True for an all-caps section banner ("SKILLS", "WORK EXPERIENCE")."""
+    return bool(_SECTION_RE.fullmatch(line)) and (len(line) >= 6 or " " in line)
+
+
+def _ends_bullet(line: str) -> bool:
+    """True when ``line`` closes a bullet's sentence (terminal punctuation)."""
+    return line.rstrip(")\"']").endswith(_TERMINAL_PUNCT)
+
+
+def _is_date_line(line: str) -> bool:
+    """True for a job header's date/period line ("2017 - 2022 | Melbourne").
+
+    Deliberately narrow so it never fires on a bullet that merely mentions a
+    parenthetical year range ("… (2022 - 2025): Led …"): those carry a colon
+    and run far longer than a bare date line.
+    """
+    if ":" in line or len(line) > 60 or not _YEAR_RE.search(line):
+        return False
+    return (
+        "present" in line.lower()
+        or "|" in line
+        or bool(_DATE_RANGE_RE.search(line))
+    )
+
+
+def _job_header_indices(lines: list[str]) -> set[int]:
+    """Line indices that form job-header blocks (title / company / date).
+
+    Anchored on each date line, together with the up-to-two preceding
+    non-marker, non-banner lines (job title and company). Excluding these from
+    reconstruction stops the last bullet of a job group from running on into
+    the next job's title when that bullet lacks terminal punctuation.
+    """
+    header: set[int] = set()
+    for i, line in enumerate(lines):
+        if not _is_date_line(line):
+            continue
+        header.add(i)
+        seen, j = 0, i - 1
+        while j >= 0 and seen < 2:
+            prev = lines[j]
+            if not prev or _is_bullet_marker(prev) or _is_section_banner(prev):
+                break
+            header.add(j)
+            seen += 1
+            j -= 1
+    return header
+
+
 def extract_bullets(raw_text: str) -> list[str]:
-    """Pull bullet-point lines out of extracted resume text."""
+    """Reconstruct complete resume bullets from a flat text stream.
+
+    The bundled resumes are two-column, so PyMuPDF's flat text breaks each
+    wrapped bullet across several lines and interleaves job headers (title /
+    company / date) between bullet groups. A naive "keep lines starting with a
+    marker" pass captured only each bullet's truncated first line — a fragment
+    the tailoring LLM then "completed" into incoherent, duplicated output and
+    the PDF renderer dangled (GAP-P4-044).
+
+    This reassembles each bullet from its marker line through its wrapped
+    continuation lines, closing it at the first of: the next marker, an all-caps
+    section banner, a job-header line, or the sentence's terminal punctuation. A
+    soft hyphen at a line break ("test-\nevidence") is rejoined without a space.
+    Bullets are returned in document order. Works uniformly across both bundled
+    resumes and every ingestion path (base bootstrap, ``POST /resumes``,
+    ``POST /resumes/upload``).
+    """
+    lines = [ln.strip() for ln in raw_text.splitlines()]
+    header = _job_header_indices(lines)
     bullets: list[str] = []
-    for line in raw_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(_BULLET_MARKERS):
-            bullets.append(stripped.lstrip("•●▪- ").strip())
+    buf: list[str] | None = None
+
+    def flush() -> None:
+        nonlocal buf
+        if buf is not None:
+            text = " ".join(part for part in buf if part).strip()
+            if text:
+                bullets.append(text)
+        buf = None
+
+    for i, line in enumerate(lines):
+        if not line:
+            continue
+        if _is_bullet_marker(line):
+            flush()
+            first = line.lstrip("•●▪- ").strip()
+            buf = [first] if first else []
+            if first and _ends_bullet(first):
+                flush()
+            continue
+        if buf is None:
+            continue
+        if _is_section_banner(line) or i in header:
+            flush()
+            continue
+        if buf and buf[-1].endswith("-"):
+            buf[-1] += line
+        else:
+            buf.append(line)
+        if _ends_bullet(line):
+            flush()
+    flush()
     return bullets
 
 

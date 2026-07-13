@@ -284,14 +284,20 @@ def _render_block(
 def extract_pdf_bullets(pdf_path: Path | str) -> list[str]:
     """Reconstruct the complete work-experience bullets of a resume PDF.
 
-    Unlike the line-based :func:`app.services.resume_tailor.extract_bullets`,
-    which reads the flat text stream, this detects bullets *positionally* (the
-    same column-aware block detection the renderer uses). A bullet that wraps
-    across several visual lines — and whose continuation lines are interleaved
-    with unrelated left-rail content in the raw text stream — is therefore
-    rejoined into one complete sentence instead of being truncated to its
-    first-line fragment (GAP-P4-044). Bullets are returned in page / top-to-
-    bottom order.
+    The line-based :func:`app.services.resume_tailor.extract_bullets` reads the
+    flat text stream; this prefers *positional* detection (the same column-aware
+    block detection the renderer uses) so a bullet that wraps across several
+    visual lines — with continuation lines interleaved with unrelated left-rail
+    content — is rejoined into one complete sentence instead of being truncated
+    to its first-line fragment (GAP-P4-044). Bullets come back in page /
+    top-to-bottom order, with the left rail (skills / contact) excluded.
+
+    Positional detection keys on the base resume's coral ``•`` glyph and body
+    geometry. A resume drawn with different markers (e.g. the BA variant, whose
+    bullets are black) yields no positional blocks; rather than return an empty
+    list, this falls back to the shared flat-text reconstruction, which now
+    rejoins wrapped bullets on any resume. So this never regresses to zero
+    bullets for a resume that plainly has them.
     """
     doc = fitz.open(pdf_path)
     try:
@@ -301,9 +307,16 @@ def extract_pdf_bullets(pdf_path: Path | str) -> list[str]:
                 text = block["full_text"].strip()
                 if text:
                     bullets.append(text)
-        return bullets
+        if bullets:
+            return bullets
+        flat_text = "\n".join(page.get_text() for page in doc)
     finally:
         doc.close()
+
+    # No coral/base-geometry bullets on any page — reconstruct from flat text.
+    from app.services.resume_tailor import extract_bullets
+
+    return extract_bullets(flat_text)
 
 
 def render_tailored_pdf(original_path: Path, changes: list[tuple[str, str]]) -> bytes:
