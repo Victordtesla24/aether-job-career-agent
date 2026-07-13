@@ -12,23 +12,7 @@ import {
   type NetworkingContact,
   type NetworkingSummary,
 } from "../../../lib/api/workspaces";
-
-const STAGE_ACCENT: Record<string, string> = {
-  New: "bg-white/40",
-  Warm: "bg-aether-amber",
-  Active: "bg-aether-coral",
-  Scheduled: "bg-aether-violet",
-  Placed: "bg-aether-green",
-};
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
+import { STAGE_ACCENT, buildPipelineColumns, initials, totalContacts } from "./lib";
 
 export default function NetworkingPage() {
   const [data, setData] = useState<NetworkingSummary | null>(null);
@@ -84,8 +68,9 @@ export default function NetworkingPage() {
     );
   }
 
-  const totalContacts = data.stats.contacts + added.length;
-  const isEmpty = totalContacts === 0 || demoEmpty;
+  const contactCount = totalContacts(data.stats, added);
+  const isEmpty = contactCount === 0 || demoEmpty;
+  const columns = buildPipelineColumns(data.pipeline, added);
 
   return (
     <div className="space-y-6" data-testid="networking-crm">
@@ -124,7 +109,7 @@ export default function NetworkingPage() {
         <>
           {/* Stat tiles */}
           <section className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="networking-stats">
-            <Stat label="Contacts" value={String(totalContacts)} />
+            <Stat label="Contacts" value={String(contactCount)} />
             <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-aether-coral" />
             <Stat label="Referrals in flight" value={String(data.stats.referralsInFlight)} accent="text-aether-violet" />
             <Stat label="Response rate" value={`${data.stats.responseRate}%`} accent="text-aether-green" />
@@ -137,10 +122,7 @@ export default function NetworkingPage() {
                 Contact Pipeline
               </h2>
               <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-                {data.pipeline.map((col) => {
-                  const contacts =
-                    col.stage === "New" ? [...added, ...col.contacts] : col.contacts;
-                  const count = col.stage === "New" ? col.count + added.length : col.count;
+                {columns.map((col) => {
                   return (
                     <div key={col.stage} className="min-w-0" data-testid={`pipeline-${col.stage.toLowerCase()}`}>
                       <div className="mb-2 flex items-center justify-between px-1">
@@ -148,33 +130,42 @@ export default function NetworkingPage() {
                           <span className={`h-2 w-2 rounded-full ${STAGE_ACCENT[col.stage] ?? "bg-white/40"}`} />
                           <span className="text-xs font-semibold">{col.stage}</span>
                         </div>
-                        <span className="mono text-[11px] text-aether-muted-dim">{count}</span>
+                        <span className="mono text-[11px] text-aether-muted-dim">{col.count}</span>
                       </div>
-                      <div className="space-y-2">
-                        {contacts.map((c) => (
-                          <article
-                            key={`${c.name}-${c.company}`}
-                            data-testid="contact-card"
-                            className="glass rounded-xl border border-white/10 p-3 transition hover:border-aether-coral/40"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
-                                {initials(c.name)}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold">{c.name}</p>
-                                <p className="truncate text-[10px] text-aether-muted-dim">
-                                  {c.role} · {c.company}
-                                </p>
+                      {col.contacts.length === 0 ? (
+                        <div
+                          className="rounded-xl border border-dashed border-white/10 px-2 py-3 text-center text-[10px] text-aether-muted-dim"
+                          data-testid={`pipeline-${col.stage.toLowerCase()}-empty`}
+                        >
+                          No contacts yet
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {col.contacts.map((c) => (
+                            <article
+                              key={`${c.name}-${c.company}`}
+                              data-testid="contact-card"
+                              className="glass rounded-xl border border-white/10 p-3 transition hover:border-aether-coral/40"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                                  {initials(c.name)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold">{c.name}</p>
+                                  <p className="truncate text-[10px] text-aether-muted-dim">
+                                    {c.role} · {c.company}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                            <p className="mt-1.5 text-[10px] text-aether-amber" aria-label={`Warmth ${c.warmth} of 5`}>
-                              {"★".repeat(c.warmth)}
-                              <span className="text-white/15">{"★".repeat(Math.max(0, 5 - c.warmth))}</span>
-                            </p>
-                          </article>
-                        ))}
-                      </div>
+                              <p className="mt-1.5 text-[10px] text-aether-amber" aria-label={`Warmth ${c.warmth} of 5`}>
+                                {"★".repeat(c.warmth)}
+                                <span className="text-white/15">{"★".repeat(Math.max(0, 5 - c.warmth))}</span>
+                              </p>
+                            </article>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
