@@ -22,6 +22,7 @@ from app.routers import (
     interviews,
     jobs,
     networking,
+    offers,
     resumes,
     stories,
     workspaces,
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
     app.include_router(emails.router, prefix="/emails", tags=["emails"])
     app.include_router(networking.router, prefix="/networking", tags=["networking"])
+    app.include_router(offers.router, prefix="/offers", tags=["offers"])
 
     return app
 
