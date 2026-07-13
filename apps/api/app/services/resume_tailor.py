@@ -24,11 +24,14 @@ from app.services.llm_client import LLMClient, get_model
 
 SYSTEM_PROMPT = (
     "You are a precision resume editor. Only reword existing bullets to match "
-    "keywords. Never add skills, titles, employers not in original. When the "
-    "original bullet contains a quantified outcome (%, $, headcount, timeframe) "
-    "the rewrite must keep at least one of those figures. Each rewritten bullet "
-    "must trace to the evidenceRef of exactly one original bullet — never reuse "
-    "an evidenceRef twice. Respond with JSON: "
+    "keywords. Never add skills, titles, employers not in original. Ground every "
+    "rewrite in the candidate's OWN evidence — do NOT copy distinctive phrases "
+    "from the job description into their experience; reuse the job's wording only "
+    "where the candidate's own bullet already demonstrates it. When the original "
+    "bullet contains a quantified outcome (%, $, headcount, timeframe) the "
+    "rewrite must keep at least one of those figures. Each rewritten bullet must "
+    "trace to the evidenceRef of exactly one original bullet — never reuse an "
+    "evidenceRef twice. Respond with JSON: "
     '{"bullets": [{"text": "...", "evidenceRef": "bullet-N"}], '
     '"evidenceRefs": ["bullet-N", ...]}'
 )
@@ -196,6 +199,51 @@ def unsupported_tokens(
     return novel
 
 
+#: Content-word n-gram length treated as a "distinctive phrase" by the JD-echo
+#: guard. Three consecutive content words (stopwords dropped) is long enough
+#: that a shared run is a lifted phrase, not incidental vocabulary overlap.
+_JD_ECHO_NGRAM = 3
+
+
+def _content_stems(text: str) -> list[str]:
+    """Ordered content-word stems of ``text`` (folded, stopwords dropped)."""
+    return [
+        _stem(tok)
+        for tok in _TOKEN_RE.findall(_fold(text))
+        if tok not in _STOPWORDS
+    ]
+
+
+def _ngram_set(stems: list[str], n: int) -> set[tuple[str, ...]]:
+    return {tuple(stems[i : i + n]) for i in range(len(stems) - n + 1)}
+
+
+def jd_ngram_index(job_description: str) -> set[tuple[str, ...]]:
+    """Distinctive content-word n-grams of the target job description."""
+    return _ngram_set(_content_stems(job_description), _JD_ECHO_NGRAM)
+
+
+def jd_echoed_phrases(
+    text: str,
+    jd_ngrams: set[tuple[str, ...]],
+    evidence_ngrams: set[tuple[str, ...]],
+) -> list[str]:
+    """Distinctive JD phrases a rewrite lifts that the user's evidence lacks.
+
+    A content-word n-gram present in the target job description but absent from
+    the user's own resume is a phrase copied from the *posting*, not grounded in
+    their real experience (GAP-P4-045, audit clause (a): the rewrite must
+    reflect the user's consolidated career data, not phrases from the target
+    job). Numbers and proper nouns are already policed by
+    :func:`unsupported_tokens`; this catches the lowercase phrase-level lifting
+    the evidence-normalization guard is blind to (e.g. "first-class software",
+    "high-traffic environment" echoed straight from the JD).
+    """
+    text_ngrams = _ngram_set(_content_stems(text), _JD_ECHO_NGRAM)
+    lifted = text_ngrams & (jd_ngrams - evidence_ngrams)
+    return sorted(" ".join(gram) for gram in lifted)
+
+
 def extract_bullets(raw_text: str) -> list[str]:
     """Pull bullet-point lines out of extracted resume text."""
     bullets: list[str] = []
@@ -248,7 +296,7 @@ class ResumeTailorService:
             model=get_model("REASONING"),
             temperature=0.0,
         )
-        return self._validate(raw, structured, resume_text)
+        return self._validate(raw, structured, resume_text, job_description)
 
     @staticmethod
     def _structure_originals(
@@ -282,8 +330,11 @@ class ResumeTailorService:
         raw: Any,
         originals: Sequence[dict[str, str] | str],
         resume_text: str,
+        job_description: str = "",
     ) -> TailorResult:
         evidence_stems, evidence_numbers = _evidence_index(resume_text)
+        jd_ngrams = jd_ngram_index(job_description)
+        evidence_ngrams = _ngram_set(_content_stems(resume_text), _JD_ECHO_NGRAM)
         result = TailorResult()
         structured = self._structure_originals(originals, resume_text)
         by_ref = {b["evidenceRef"]: b["text"] for b in structured}
@@ -308,6 +359,12 @@ class ResumeTailorService:
             elif _NUMBER_RE.search(original) and not _NUMBER_RE.search(text):
                 # Quantified-outcome guard: a rewrite that drops every metric
                 # from a quantified bullet weakens the resume — keep original.
+                result.rejected.append(text)
+                text = original
+            elif jd_echoed_phrases(text, jd_ngrams, evidence_ngrams):
+                # JD-echo guard (GAP-P4-045): the rewrite lifts a distinctive
+                # phrase from the job posting that the candidate's own evidence
+                # never contained → keep the original, evidence-grounded bullet.
                 result.rejected.append(text)
                 text = original
             accepted[ref] = text
