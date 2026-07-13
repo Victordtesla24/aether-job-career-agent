@@ -63,6 +63,12 @@ These exact numbers must be used everywhere funnel data appears. Analytics is al
 
 **Consequences.** Any screen showing funnel data must reference this set. Deviations are bugs.
 
+**Amended by D-0028 (2026-07-13).** The numbers above are the canonical *design-time example*
+used to validate layout/consistency, not a literal string every live screen must render. See
+D-0028 for the corrected scope: every screen must compute the funnel from the same live query
+(already true), but a screen showing correct real per-user data that differs from 847/412/156/23/4
+is not a bug.
+
 ---
 
 ## D-0004 — Test harness & CI toolchain
@@ -245,6 +251,11 @@ an error rather than a roadmap state).
 on the live deployment (all 12 nav routes 200). The placeholder is deliberately honest about scope, so it
 does not overstate Phase 1. **Reversible?** Yes — deleting the catch-all route restores the prior
 behaviour; the resolver is additive and independently useful for future active-nav needs.
+
+**Amended by D-0032 (2026-07-13).** The generic placeholder pattern here covers every unbuilt route
+mechanically, but Interview Center specifically now has its own named deferral ADR (D-0032), mirroring
+how D-0025/D-0026/D-0027 name their deferrals, so its Phase 3+ status is discoverable without reading
+a code comment.
 
 
 
@@ -537,6 +548,20 @@ constraint 2. SC-AG-08/REQ-10 (Langfuse) and Gmail OAuth (SC-EC-02+, SC-AUTH-04)
 credentials/interactive consent. SC-ST-05 is partial: per-agent model preference persists but the
 runtime stays pinned to the validated Anthropic tiers.
 
+**Amended by DOC-K (2026-07-13, per GAP-P4-055 / candidate C-20).** The claim in the paragraph
+above — "the runtime stays pinned to the validated Anthropic tiers" — does not match reality and is
+corrected here. `_provider_env_state()` (`apps/api/app/routers/agents.py`) only inspects the
+documented per-provider keys (Anthropic/OpenRouter/OpenAI/Gemini/Groq/Bedrock); it has no visibility
+into `apps/api/app/services/llm_client.py`'s `ABACUS_API_KEY` fallback path, which is what actually
+serves tailor/coverLetter/storyExtractor runs in this environment (live calls execute against
+Abacus-subscription-backed deepseek/qwen models, not Anthropic). The result is that every provider
+card can read "unconfigured" while runs are, in fact, being served — the panel does not reflect the
+credential path actually in use. The fix (GAP-P4-055) extends the provider-status source to detect
+and surface the Abacus subscription fallback honestly (e.g. a distinct "Abacus subscription
+(fallback)" status) instead of reporting it as no provider at all or misrepresenting it as pinned to
+Anthropic. The "never fabricate a connection" principle from this ADR's Decision §1 is unchanged —
+what changes is that the *fallback path itself* must now also be represented truthfully, not omitted.
+
 ## D-0021 — Scout truthfulness: upsert refreshes are not "discoveries"; §10.2 letter format enforcement
 
 **Date.** 2026-07-12  ·  **Status.** Accepted
@@ -686,6 +711,19 @@ implementation. **Reversible?** Yes — Phase 3 can pick up the mobile workstrea
 implementing responsive variants for each workspace section, reusing the existing
 `MobileTabBar` and sidebar breakpoint contract.
 
+**Amended by DOC-K (2026-07-13, per GAP-P4-031 / candidate C-31).** The "remain unimplemented"
+consequence above is now stale for half of this ADR's scope. Run-3 Stage A evidence
+(`mobile-dashboard__wireframe_fidelity__20260713T121243Z.json`) shows the mobile dashboard at
+390×844 now renders all 8 wireframe sections (topbar, notification button, main content, 2×2 stats
+grid, approval banner, agent activity feed, bottom navigation) with 0 missing / 0 degraded — this
+half of the deferral has since been implemented and this is an improvement to record, not a gap.
+**Mobile Dashboard is no longer deferred** and is reclassified from this backlog to VERIFIED. **Mobile
+Approval remains deferred** exactly as originally decided — the mobile-approvals sweep in the same
+run confirms 0/9 elements match (the desktop approval modal still renders at mobile viewport). The
+remaining Phase 3+ backlog under this ADR is therefore scoped to the mobile approval screen only
+(9 elements), not 16. GAP-P4-017 (which cited this ADR to close both halves) is corrected accordingly
+in the gap ledger.
+
 ## D-0027 — Approval queue list view is intentional simplification of modal wireframe
 
 **Date.** 2026-07-13  ·  **Status.** Accepted
@@ -745,3 +783,178 @@ preference, and `DecisionContext` propagation work identically from both the lis
 modal. **Reversible?** Yes — the list is one page component; replacing it with a modal-first
 flow in a future phase would not affect the `ApprovalModal` component, the API, or the
 approval service.
+
+## D-0028 — Wireframe mock/example numbers are design-time illustrations, not a production data contract
+
+**Date:** 2026-07-13 · **Author:** DOC-K (T2, Phase 4 Run-3 doc rulings) · **Status:** Adopted
+
+**Context.** Run-3 Stage A evidence found three screens where live production numbers differ from
+wireframe mock figures: (1) the Analytics/Dashboard funnel shows live Applications=13-16,
+Interviews=0, Offers=0, Jobs Found≈136-149 for the authenticated account, diverging from D-0003's
+canonical set (847→412→156→23→4) (candidate C-14); (2) the Networking CRM stat tiles show live
+1 contact / 0 active conversations / 0 referrals / 0% response rate versus the wireframe's mock
+48/12/5/41% (candidate C-21); (3) the Story Bank stat tiles show live 23 stories / 22 quantified
+versus the wireframe's mock 24/19/11/94% (candidate C-29). D-0003's original text states "these
+exact numbers must be used everywhere funnel data appears... deviations are bugs," which, read
+literally, would make correct live per-user data itself a bug.
+
+**Decision.** Wireframe stat-tile and funnel numbers (D-0003's 847/412/156/23/4 funnel, the
+networking CRM mock 48/12/5/41%, the story-bank stat mock 24/19/11/94%) are design-time
+illustrative examples used to validate layout, typography, and visual hierarchy during design
+review — they are not a literal data contract the running application must reproduce. Production
+screens must display live, per-user data derived from real DB queries; a screen showing correct
+live numbers that differ from a wireframe's illustrative mock is explicitly **not** a gap.
+D-0003 is amended accordingly (see its own amendment note): its binding requirement narrows to
+"every screen showing the funnel must compute it from the same live query" (already true — the
+Dashboard, Application Tracker, and Analytics screens all call the shared analytics/funnel
+endpoint), not "must literally read 847/412/156/23/4."
+
+**Alternatives.** (a) Keep D-0003 literal and treat every live-data screen as broken until it
+matches the mock numbers (rejected: would require hardcoding fabricated metrics into production,
+directly violating the §6/§8 ban on hardcoded/fake data — fabricating "847 jobs found" for an
+account that has actually found ~140 is a worse defect than the one being chased). (b) Silently
+leave the contradiction in D-0003 (rejected: an ADR that reads as binding will keep generating
+false-positive gaps in every future audit cycle).
+
+**Consequences.** Candidates C-14, C-21, C-29 are closed as no-gap and recorded in the Verified
+No-Gap Register (Section E) with this ADR as the reason. Future audits should treat wireframe
+stat/funnel figures as illustrative unless a screen is caught computing a number incorrectly (a
+genuine metric bug — e.g. mislabeled source counts or a wrong per-week divisor, GAP-P4-058/059 —
+remains a real gap; this ADR does not blanket-cover computation errors, only value divergence from
+the mock). **Reversible?** Yes — this is a clarifying amendment; no code changes.
+
+---
+
+## D-0029 — Email send: honest degraded UX when no provider is connected
+
+**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Adopted
+
+**Context.** Run-3 audit (candidate C-03; prior ledger GAP-P4-021 and GAP-P4-029, both duplicates of
+this one defect) found `POST /workspaces/emails/send` returns `200 {"status":"sent"}`
+unconditionally — the handler only appends to `EmailThread.messages` JSONB; no SMTP/Gmail/provider
+call exists anywhere in the repo, and the account's email provider status is `not_connected`.
+D-0020 established "never fabricate a connection" for the Agents-screen provider cards, but its
+text is scoped to that screen and does not reach the email-send code path, leaving this a live gap
+in the Email Center.
+
+**Decision.** `POST /workspaces/emails/send` must return an explicit error — not `"sent"` — whenever
+no email provider is connected, mirroring the existing `PUT /providers/{id}` 409 pattern from
+D-0020 (e.g. `409 {"error": "no_email_provider_connected", "message": "Connect an email provider to
+send. No email has been sent."}`). The Email Center UI must surface this as a visible error state,
+not a silent failure or an inferred success toast. Drafting, saving, and listing drafts
+(`POST /emails/draft` and the GET endpoints) are unaffected — only the send action changes. A real
+"sent" response is only permitted once a genuine provider integration (SMTP/Gmail OAuth/etc.)
+exists and the call actually succeeds. This closes GAP-P4-021 and GAP-P4-029 as duplicate reports of
+a single defect, now tracked under GAP-P4-042.
+
+**Alternatives.** (a) Wire a stub/queued provider path that reports success (rejected: still
+fabricates completion of an action nothing performed). (b) Silently drop the send with no error
+(rejected: the user has no way to know the message never left the system — worse than an explicit
+error). (c) Block the Send button client-side only when no provider is connected (rejected: does
+not fix the API contract itself, and any other caller of the endpoint would still receive a
+fabricated "sent").
+
+**Consequences.** Until a real provider integration lands, every send attempt without a connected
+provider fails honestly and visibly; fabricated "sent" success is forbidden. GAP-P4-042 (FIX-C)
+implements the 409 response and the UI error surface. **Reversible?** Yes — the guard is additive to
+the send handler; a future real integration simply replaces the error branch with the actual send
+call.
+
+---
+
+## D-0030 — Avatar management deferred: no backend storage exists
+
+**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Accepted
+
+**Context.** Candidate C-26 (GAP-P4-064) found the Settings → Profile section's wireframe "Change
+Avatar" control (`btn-avatar-st08`, "PNG or JPG, max 2MB") absent from production. There is no
+avatar/file-storage backend anywhere in the API — no upload endpoint, no object-storage wiring, no
+`avatarUrl` column on the user model — so the control has no functional backend to attach to.
+
+**Decision.** Avatar management (upload, storage, and display of a user profile photo) is deferred
+to Phase 3+. The Change Avatar button's omission from the Settings Profile section is accepted as
+consistent with current backend scope, not a regression or an oversight. Implementing it would
+require net-new backend surface: a file-upload endpoint, size/type validation, object storage (or DB
+blob) wiring, and a schema column to persist the reference — none of which exist today.
+
+**Alternatives.** (a) Render a disabled/greyed control with a "coming soon" affordance (a
+reasonable future micro-improvement per the D-0020 disabled-control-visibility principle, not
+required now — a fully-absent control is no worse than a disabled one for a feature with zero
+backend). (b) Implement a minimal upload path in this cycle (rejected: net-new storage dependency,
+out of Phase 4 fix-cycle scope).
+
+**Consequences.** GAP-P4-064 is VERIFIED-CLOSED as documentary — this ADR is the evidence. The
+Settings Profile section ships without avatar upload; the wireframe control is tracked here as a
+Phase 3+ backlog item. **Reversible?** Yes — purely additive feature; no existing behavior changes.
+
+---
+
+## D-0031 — Career-data consolidation scope: portfolio + GitHub ingested for real; LinkedIn limited to workspace-stored profile data
+
+**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Adopted
+
+**Context.** Candidate C-07 (GAP-P4-047) found the tailoring pipeline never consolidates
+GitHub/LinkedIn/portfolio content into rewrite context: `scrape_github_profile()` has zero callers
+app-wide, the "Portfolio Sync Agent" catalog entry is `status: planned` with `backend=None`, and
+`GET /settings` always returns a null portfolio block (`{url: null}`). The tailoring audit (clause
+a) expects rewrites to draw on the user's full career-data profile, including portfolio and GitHub
+signal.
+
+**Decision.** Career-data consolidation scope for this delivery cycle:
+1. **Portfolio and GitHub are ingested for real.** `scrape_github_profile()` is wired into the
+   tailoring context-build step (GAP-P4-047, FIX-J) so public repo/profile signal (languages,
+   pinned repos, README summaries) joins the evidence corpus the fabrication guard checks against,
+   and the Settings portfolio block persists and returns a real `url`/sync status once configured.
+2. **LinkedIn is explicitly limited to workspace-stored profile data.** There is no LinkedIn API
+   integration — LinkedIn does not offer general-purpose profile scraping to third-party apps
+   without a partnership — so LinkedIn content only enters the system if the user pastes or stores
+   it directly in their workspace profile. No live LinkedIn scraping or OAuth exists or is planned
+   for this phase. This is an honest, documented limitation, not a silent gap: the Settings/Career
+   Data UI must label LinkedIn input as "paste your LinkedIn summary" rather than implying an
+   automatic sync.
+
+**Alternatives.** (a) Scrape LinkedIn without authorization (rejected: violates LinkedIn's terms of
+service and is not a defensible engineering position). (b) Defer portfolio/GitHub consolidation
+alongside LinkedIn (rejected: the GitHub scraper already exists in the codebase with zero callers —
+wiring it up is genuinely buildable now, so deferring it too would under-deliver relative to what's
+actually available).
+
+**Consequences.** GAP-P4-047 implements real portfolio+GitHub wiring into the tailoring context;
+LinkedIn remains workspace-paste-only with clear UI labeling — closing the tailoring audit's clause
+(a) expectation for the two sources that can honestly be automated, while documenting the LinkedIn
+constraint as a scope decision rather than a defect. **Reversible?** Yes — GitHub wiring is additive
+to the context-build step; a LinkedIn API integration can be added later without changing the
+workspace-paste path.
+
+---
+
+## D-0032 — Interview Center: Phase 3+ deferral made explicit
+
+**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Accepted
+
+**Context.** Candidate C-27 (GAP-P4-065) found the Interview Center (`/dashboard/interviews`)
+renders only an empty-state placeholder ("No interview scheduled" + View Applications button)
+against a wireframe defining 26 elements (tabs, company brief, predicted questions, live-assist
+metrics, debrief) — only 4 (15%) implemented. A code comment in
+`apps/web/src/app/dashboard/interviews/page.tsx` already states "Interview Center — deferred to
+Phase 3+ ... No backend routes exist yet," but no ADR named this deferral the way D-0025, D-0026,
+and D-0027 name theirs — only D-0009's generic "honest placeholder for any unbuilt route" pattern
+applied, which covers the mechanism but not this screen specifically.
+
+**Decision.** The Interview Center's full wireframe (tabs, company brief, AI-predicted questions,
+live-assist metrics, post-interview debrief) is formally deferred to Phase 3+, following the same
+pattern and rationale as D-0025 (job filters/bulk actions) and D-0026 (mobile layout): no backend
+routes exist for interview scheduling/prep content, and building them is a material scope increase
+(new data model, new agent, new UI surface) beyond this fix cycle. The current empty-state
+placeholder — which already exceeds a bare 404 or generic catch-all per D-0009 — is the accepted
+Phase 4 state. This ADR formalizes in writing what the code comment already asserted informally.
+
+**Alternatives.** (a) Implement a minimal Interview Center now (rejected: no interview-scheduling
+backend or predicted-questions agent exists; this is net-new feature scope, not a fix). (b) Leave
+the deferral undocumented as only a code comment (rejected: undiscoverable to auditors and
+inconsistent with how every other Phase-3+ deferral in this codebase is tracked via a named ADR).
+
+**Consequences.** GAP-P4-065 is VERIFIED-CLOSED as documentary — this ADR is the evidence. The
+26-element wireframe (`design/screens/interview-center.html`) remains the Phase 3 implementation
+target. **Reversible?** Yes — purely documentary; Phase 3 can implement against the existing
+wireframe without further ADR changes.

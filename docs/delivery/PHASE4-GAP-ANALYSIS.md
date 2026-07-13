@@ -325,6 +325,370 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Status:** VERIFIED-CLOSED (ADR D-0027 approval list intentional)
 - **Evidence (post-fix):** (pending)
 
+### GAP-P4-040
+- **Type:** G-BUG
+- **Severity:** CRITICAL
+- **Screen / Route:** API: POST /interviews · **REQ/SC violated:** N/A (functionality broken)
+- **Observed (production):** `POST /interviews` returns HTTP 500 when `application_id` is omitted — server-side `psycopg2.errors.NotNullViolation` on the `applicationId` column of `InterviewSchedule`. Evidence: `uat/reports/evidence/phase4/curls/api_sweep__run3__20260713T113932Z.json`.
+- **Expected (doc/wireframe ref):** `apps/api/app/routers/interviews.py:99` declares `application_id: str | None = Field(default=None)` (optional) while the DB column is `NOT NULL` — a schema/DB contract mismatch; per §6 standards a genuine validation failure must return an honest error (422), never an unhandled 500.
+- **Root cause analysis:** `apps/api/app/routers/interviews.py:99` (Pydantic optional) contradicts the `NOT NULL` DB constraint on `InterviewSchedule.applicationId`; no validation layer catches this before the INSERT reaches Postgres.
+- **Fix specification:** Either make `application_id` required in the request schema and return 422 when absent, or make the DB column nullable via a backward-compatible migration — pick one contract and align both layers; add a regression test posting without `application_id`.
+- **Verification recipe:** POST /interviews without `application_id` → expect 422 (if required) or 201 (if column made nullable), never 500. Re-run the API sweep endpoint list.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
+- **Status:** IN-FIX (FIX-D dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-041
+- **Type:** G-BUG
+- **Severity:** CRITICAL
+- **Screen / Route:** /dashboard/email · **REQ/SC violated:** N/A (Section B.7–B.17 requirement mapping was never backfilled in the register excerpt)
+- **Observed (production):** Email Center crashes on every load: `TypeError: Cannot read properties of null (reading 'score')` at `page.tsx:321`, because `GET /workspaces/emails/inbox` hardcodes `intelligence: null` for all threads (`workspaces.py:325`). Wireframe diff shows 0/47 elements rendering (page crashed before paint). Reproduced independently by both the screen sweep and the email-agents deep audit. Evidence: `uat/reports/evidence/phase4/email__screenshot__20260713T115216Z.png`, `email__console__20260713T115216Z.log`, `email__findings.log`, `email-run3__crash__20260713T122631Z.png`, `email-run3__console__20260713T122631Z.log`.
+- **Expected (doc/wireframe ref):** `design/screens/email-center.html` (47 design-ids expected); `apps/web/src/app/dashboard/email/page.tsx:319-326` accesses `selected.intelligence.score` without a null guard.
+- **Root cause analysis:** `apps/api/app/routers/workspaces.py:325` (intelligence hardcoded null) × `apps/web/src/app/dashboard/email/page.tsx:321` (no null-guard on `selected.intelligence.score`).
+- **Fix specification:** Either the backend returns a real/typed `intelligence` object (`{score, breakdown, summary}`) or an explicit null the frontend guards for; add optional-chaining (`selected.intelligence?.score`) and a fallback UI state; add a regression test/e2e for email load with `intelligence=null`.
+- **Verification recipe:** Navigate to /dashboard/email logged in; page must render inbox/detail panes with zero console errors; confirm via network log that the `intelligence` field shape matches frontend expectations.
+- **Assigned model tier:** opus (fixer, cluster FIX-C) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-C dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-042
+- **Type:** G-FAKE
+- **Severity:** CRITICAL
+- **Screen / Route:** /dashboard/email (API: POST /workspaces/emails/send) · **REQ/SC violated:** N/A
+- **Observed (production):** `POST /workspaces/emails/send` returns `200 {"status":"sent"}` unconditionally; it only appends to `EmailThread.messages` JSONB. No SMTP/Gmail/provider call exists anywhere in the repo. The Gmail account is explicitly `not_connected` yet send still reports `"sent"`. Evidence: `uat/reports/evidence/phase4/email-run3__send-attempt__20260713T122652Z.json`, `email-run3__thread-after-send__20260713T122652Z.json`.
+- **Expected (doc/wireframe ref):** `docs/delivery/DECISIONS.md` D-0029 (new, this pass) — an explicit "no email provider connected" error is required until a real provider integration lands; fabricated success is forbidden.
+- **Root cause analysis:** `apps/api/app/routers/workspaces.py:356-383` (send handler) and `:333-341` (accounts `status=not_connected`) — no branch surfaces a degraded/error state when no provider is connected.
+- **Fix specification:** Return an honest error (e.g. `409`, mirroring the agents `PUT /providers` 409 pattern) when no email provider is connected; the UI surfaces it as a visible error state; never report `"sent"` for an unsent message. Per D-0029.
+- **Verification recipe:** POST /workspaces/emails/send with no connected provider → expect a non-"sent" status or explicit error; connect a provider and confirm a real send path exists before re-testing the success case.
+- **Assigned model tier:** opus (fixer, cluster FIX-C) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-C dispatched). **Supersedes GAP-P4-021 and GAP-P4-029** — both were duplicate reports of this single defect (Run-3 orchestrator cross-check); GAP-P4-042 is now the canonical record.
+- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0029 is the ADR authorizing the honest-error fix shape.
+
+### GAP-P4-043
+- **Type:** G-FAKE
+- **Severity:** CRITICAL
+- **Screen / Route:** /dashboard/cover-letters · **REQ/SC violated:** REQ-0007, SC-CL-01 (list only; Request Changes action not covered by the register excerpt)
+- **Observed (production):** Request Changes button renders with `disabled=false`, `visible=true`, but times out (5000ms) when clicked, in both the interaction pass and a dedicated modal test. Evidence: `uat/reports/evidence/phase4/cover-letters__controls__20260713T115205Z.json` (index 41), `cover-letters__interaction__20260713T115434Z.json`.
+- **Expected (doc/wireframe ref):** `design/screens/cover-letter-studio.html` — button should be interactive and fire a request when clicked.
+- **Root cause analysis:** control shows `disabled=false` in the controls dump vs. a click timeout in the interaction pass — likely a missing `onClick` handler or a blocked event target.
+- **Fix specification:** Wire the Request Changes button to its intended action (or explicitly disable+style it if the feature is not yet implemented); add an interaction test asserting a network call or state change fires on click.
+- **Verification recipe:** Click Request Changes on a cover letter; expect either a visible action (modal/request fired) within a normal timeout, or a properly disabled/greyed control if deferred.
+- **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-B dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-044
+- **Type:** G-QUALITY
+- **Severity:** CRITICAL
+- **Screen / Route:** /dashboard/resume (tailoring pipeline) · **REQ/SC violated:** N/A
+- **Observed (production):** Master resume "bullets" are PDF line-wrap fragments, not full sentences (22/26 end mid-sentence/mid-word). Tailoring rewrites these fragments rather than complete statements, and the exported PDF shows dangling/duplicated fragments in ~all 24 rewritten bullets (e.g. p1 "...in a high-traffic environment. squad — one of eight squads..."; p3 a phrase repeated verbatim twice in one bullet). Evidence: `uat/reports/evidence/phase4/tailor-run3__pdfpage-1.png`, `tailor-run3__pdfpage-2.png`, `tailor-run3__pdfpage-3.png`, `tailor-run3__analysis-summary__20260713T122200Z.json`.
+- **Expected (doc/wireframe ref):** Audit clause (a): rewrite must reflect the user's actual complete career-data statements. Audit clause (f): exported PDF must have no broken/duplicated/orphan text.
+- **Root cause analysis:** `apps/api/app/services/resume_tailor.py` `extract_bullets()` ingests raw PDF line-wraps as bullet boundaries; `apps/api/app/services/resume_pdf.py` then renders the LLM's completions of those fragments, producing incoherent/duplicated text.
+- **Fix specification:** Fix bullet extraction to join line-wrapped fragments into complete sentences before they reach the tailoring LLM (sentence-boundary detection, not just line breaks); re-run tailoring after ingestion is corrected and re-check PDF output for coherence.
+- **Verification recipe:** Re-ingest master resume with fixed extraction; run a tailor pass; export PDF; confirm every bullet reads as one coherent sentence with no duplicated/orphan fragments.
+- **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-A dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-045
+- **Type:** G-QUALITY
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/resume (tailoring pipeline) · **REQ/SC violated:** N/A
+- **Observed (production):** 6+ of 24 rewritten bullets echo distinctive JD phrases near-verbatim as the candidate's own experience (e.g. JD "Deliver first-class software"/"high-traffic environments" → resume "first-class software outcomes"/"high-traffic environment"). The fabrication guard only screens proper-nouns/numbers, not phrase-level lifting. Evidence: `uat/reports/evidence/phase4/tailor-run3__analysis-summary__20260713T122200Z.json`, `tailor-run3__diff__20260713T121930Z.json`.
+- **Expected (doc/wireframe ref):** Audit clause (a): rewrite must reflect the user's actual consolidated career data, not phrases copied from the target job posting. D-0015 (evidence normalization guard) covers token/number matching but not JD n-gram overlap — partial coverage only.
+- **Root cause analysis:** Fabrication-guard bypass — the guard only checks proper-nouns/numbers, not near-verbatim phrase reuse from the JD.
+- **Fix specification:** Extend the fabrication guard to flag/penalize n-gram overlap with the JD text above a similarity threshold, not just named entities/numbers; add an overlap regression test.
+- **Verification recipe:** Re-run tailoring on the same job; diff rewritten bullets against JD text for n-gram overlap; confirm the guard flags/blocks near-verbatim JD phrase reuse.
+- **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-A dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-046
+- **Type:** G-QUALITY
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/resume (tailored PDF export) · **REQ/SC violated:** N/A
+- **Observed (production):** PDF page 3: a 3-line rewritten bullet visually overlaps the next bullet's marker/first line — text renders on top of text. Evidence: `uat/reports/evidence/phase4/tailor-run3__pdfpage-3.png`.
+- **Expected (doc/wireframe ref):** Audit clause (f): no visual overlaps in exported PDF; renderer must recompute block height/spacing when a rewritten bullet grows longer than the original.
+- **Root cause analysis:** `apps/api/app/services/resume_pdf.py` does not recompute layout height when a rewritten bullet exceeds the original bullet's line count.
+- **Fix specification:** Make `resume_pdf.py` measure rendered text height dynamically (not assume the original bullet's line count) before placing the next block; add a geometry/overlap regression test.
+- **Verification recipe:** Regenerate the same tailored PDF; confirm no bullet text overlaps the next entry, across all pages.
+- **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-A dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-047
+- **Type:** G-MISSING
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/resume, /dashboard/settings (portfolio sync) · **REQ/SC violated:** N/A
+- **Observed (production):** No GitHub/LinkedIn/portfolio content is ever consolidated into tailoring: `scrape_github_profile()` has zero callers app-wide, the "Portfolio Sync Agent" catalog entry has `backend=None`/`status: planned`, `GET /settings` portfolio block is always `{url: null}`. Evidence: `apps/api/app/services/portfolio_scraper.py`, `apps/api/app/routers/agents.py`, `apps/api/app/routers/workspaces.py`.
+- **Expected (doc/wireframe ref):** Audit clause (a) requires the rewrite to draw on portfolio/GitHub/LinkedIn data in the user's workspace profile. `docs/delivery/DECISIONS.md` D-0031 (new, this pass) scopes real portfolio+GitHub ingestion with an honest LinkedIn limitation.
+- **Root cause analysis:** `apps/api/app/services/portfolio_scraper.py` is dead code (no callers); `apps/api/app/routers/agents.py` `AGENT_CATALOG` `portfolioSync` entry is `status='planned'`; `apps/api/app/routers/workspaces.py` `_build_settings` portfolio block is always null.
+- **Fix specification:** Wire `portfolio_scraper.py` into the tailoring context-build step (real GitHub ingestion); persist and sync a real portfolio URL in Settings. LinkedIn remains workspace-paste-only per D-0031 (no API access exists).
+- **Verification recipe:** Grep for `scrape_github_profile()` callers post-fix — confirm a real invocation exists in the tailoring pipeline; Settings portfolio block returns a real URL when configured.
+- **Assigned model tier:** opus (fixer, cluster FIX-J) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-J dispatched)
+- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0031 documents the LinkedIn scope limitation this fix must respect.
+
+### GAP-P4-048
+- **Type:** G-QUALITY
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/cover-letters (PDF export) · **REQ/SC violated:** N/A
+- **Observed (production):** PDF export renders a dark (`#0A0A0F`) branded "Aether Career Agent" template, white-on-black, no candidate email/phone anywhere, footer reads "Generated by Aether Career Agent" — confirmed on 2 separate production letters (Infinity Pro, Duratec). Evidence: `uat/reports/evidence/phase4/cover-letter__run3__pdfrender__20260713T122016Z-1.png`, `cover-letter__run3__corroborate-pdfrender__20260713T122213Z-1.png`.
+- **Expected (doc/wireframe ref):** Business cover letter PDF should use a plain printable format, include the candidate's own contact details, and carry no third-party/tool branding or AI-generated disclosure.
+- **Root cause analysis:** `apps/api/app/routers/cover_letters.py` PDF template hardcodes dark branded styling and omits contact-info interpolation.
+- **Fix specification:** Switch PDF template to a neutral printable style (white/black text), interpolate candidate contact details from the resume/profile, and drop the "Generated by Aether" footer line for submission-ready output.
+- **Verification recipe:** Generate a new cover letter PDF; confirm neutral styling, presence of candidate contact info, absence of tool branding/footer.
+- **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-B dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-049
+- **Type:** G-QUALITY
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/cover-letters (agent format contract) · **REQ/SC violated:** N/A
+- **Observed (production):** A pre-existing production letter (Duratec/Operations Manager) has only 2 body paragraphs (no closing/CTA at all) and a first paragraph that never names "Operations Manager" or "Duratec Limited", despite the agent's own structural retry loop. Evidence: `uat/reports/evidence/phase4/cover-letter__run3__corroborate-get__20260713T122146Z.json`, `cover-letter__run3__corroborate-pdfrender__20260713T122213Z-1.png`.
+- **Expected (doc/wireframe ref):** Agent contract (D-0021 §10.2) requires exactly 3 paragraphs (hook naming role+company+current position; JD-matched evidence; CTA), enforced via a corrective retry loop before shipping.
+- **Root cause analysis:** `apps/api/app/agents/cover_letter_agent.py` retry/validation loop does not reliably enforce its own paragraph-count/hook contract before persisting output.
+- **Fix specification:** Add a hard structural validator (paragraph count, presence of role+company mention, presence of CTA) that blocks shipping and forces a real retry rather than a soft/best-effort pass.
+- **Verification recipe:** Re-run cover letter generation for the same job/company; confirm 3 paragraphs, role+company named in paragraph 1, and a CTA present in paragraph 3, on every run including retries.
+- **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
+- **Status:** IN-FIX (FIX-B dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-050
+- **Type:** G-WIRING
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/applications · **REQ/SC violated:** REQ-0006, SC-TRACK-02
+- **Observed (production):** Kanban board displays only 4 status columns (Discovered, Evaluating, Tailoring, Ready to Apply); Submitted, In Review, Interview, Offer (5+4+2+3 items per wireframe) are entirely absent, with no horizontal scroll to reveal them. Evidence: `uat/reports/evidence/phase4/applications__screenshot__20260713T114840Z.png`, `applications__interaction_results__20260713T115033Z.json`.
+- **Expected (doc/wireframe ref):** `design/screens/application-tracker.html` — 8-column kanban (`col-submitted-at18`, `col-review-at20`, `col-interview-at22`, `col-offer-at24` all defined). No ADR (D-0019 through D-0027) covers an intentional simplification of the applications tracker layout.
+- **Root cause analysis:** Kanban main container renders only the first 4 columns (`at09`-`at16`); the remaining 4 column components are either not mounted or filtered out client-side.
+- **Fix specification:** Restore all 8 kanban columns with horizontal scroll per wireframe. No ADR justifies a 4-column simplification, so implementation (not documentation) is the required path.
+- **Verification recipe:** Navigate to /dashboard/applications Board View; confirm all 8 status columns render (scroll if needed) with correct per-column counts.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-E) → opus (reviewer)
+- **Status:** IN-FIX (FIX-E dispatched). **Reopens GAP-P4-034** — this run's fresh evidence directly contradicts that record's prior VERIFIED-CLOSED status and also contradicts the Section E "Verified No-Gap Register" row claiming the 8-stage board renders (corrected below in Section E).
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-051
+- **Type:** G-BUG
+- **Severity:** HIGH
+- **Screen / Route:** N/A (e2e test suite / CI + repo hygiene) · **REQ/SC violated:** N/A
+- **Observed (production):** `apps/web/e2e/login.spec.ts` and `auth.setup.ts` assert the login form is prefilled with demo credentials; `apps/web/src/app/login/page.tsx` actually initializes both fields to `''` (verified live: `GET /login` renders `value=""` on both inputs). `auth.setup.ts` times out waiting for navigation, and `playwright.config.ts` makes the broken `'setup'` project a hard dependency of the chromium project, so all 3 remaining e2e tests report "did not run" — net effect: 0 e2e tests execute. Separately, `uat/api_sweep.sh` and `uat/api_sweep_v2.sh` hardcode the demo password `AetherDemo1` in plaintext, near-duplicating `api_sweep.py`. A 405 console error on `GET /api/auth/login` seen during the Playwright login flow on the cover-letters page appears to be harness noise (a GET hitting a POST-only endpoint during test setup), not a page-specific defect. Evidence: `uat/reports/evidence/phase4/preflight__tests__20260713T114254Z.log`, `cover-letters__interaction__20260713T115434Z.json`.
+- **Expected (doc/wireframe ref):** e2e auth should exercise the real login flow via env-var credentials + Playwright `storageState`, not assume a nonexistent prefill; uat tooling should read credentials from `.env` like `api_sweep.py`, never hardcode a password.
+- **Root cause analysis:** `apps/web/e2e/login.spec.ts`, `apps/web/e2e/auth.setup.ts` (new), `apps/web/playwright.config.ts` (new hard dependency) all assume a prefill behavior that does not exist in source; `uat/api_sweep.sh` + `uat/api_sweep_v2.sh` hardcode a plaintext password.
+- **Fix specification:** Per the Run-3 preflight adjudication (Section I.3): drop `e2e/login.spec.ts`, `e2e/auth.setup.ts`, and the `playwright.config.ts` hard-dependency changes (the broken prefill assumption zeroes out the whole e2e suite); rebuild real e2e auth using env-var credentials (`LOGIN_EMAIL`/`LOGIN_PASSWORD`) + Playwright `storageState`, matching `api_sweep.py`'s credential pattern; drop `uat/api_sweep.sh` and `uat/api_sweep_v2.sh` (hardcoded password, superseded by `api_sweep.py`); confirm the 405 harness-noise finding does not reproduce outside Playwright.
+- **Verification recipe:** Run the full Playwright e2e suite; confirm `setup` no longer times out and the remaining chromium tests execute (not "did not run"); `grep -r 'AetherDemo1' uat/` returns zero matches; reproduce the login flow outside Playwright to confirm the 405 does not occur in normal navigation.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-G) → opus (reviewer)
+- **Status:** IN-FIX (FIX-G dispatched)
+- **Evidence (post-fix):** (pending). The working-tree disposition for the broken/dropped files is recorded in Section I.3 of this ledger.
+
+### GAP-P4-052
+- **Type:** G-MISSING
+- **Severity:** HIGH
+- **Screen / Route:** /dashboard/networking · **REQ/SC violated:** N/A
+- **Observed (production):** Contact pipeline is displayed as a tab/pill interface showing only counts (New 0, Warm 0, Active 0, Scheduled 0, Placed 0), not the wireframe's kanban board with individual contact cards. Evidence: `uat/reports/evidence/phase4/networking__screenshot__20260713T115646Z.png`.
+- **Expected (doc/wireframe ref):** `design/screens/networking.html` lines 81-105 specify a kanban layout with contact cards (Sarah L., Mark K., Priya R., James T., Dan N. in the mock). No ADR covers this simplification.
+- **Root cause analysis:** Frontend networking page implements a simplified tab/pill summary component instead of the wireframe's per-contact kanban cards.
+- **Fix specification:** Implement the kanban contact-card view per wireframe (no ADR exists to justify the tab/pill simplification, so implementation is the required path).
+- **Verification recipe:** Navigate to /dashboard/networking; confirm kanban cards per contact render.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-F) → opus (reviewer)
+- **Status:** IN-FIX (FIX-F dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-053
+- **Type:** G-CONSOLE
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/applications · **REQ/SC violated:** N/A
+- **Observed (production):** Browser console error: "Failed to load resource: 404" for `GET /api/settings`. Server logs show the correct endpoint is `/workspaces/settings` (200 OK), i.e. the applications page (or a shared layout it includes) calls the wrong path. Evidence: `uat/reports/evidence/phase4/applications__console__20260713T114840Z.log`.
+- **Expected (doc/wireframe ref):** All frontend API calls should target existing, correct endpoints.
+- **Root cause analysis:** Some component reachable from /dashboard/applications calls `GET /api/settings` instead of `GET /workspaces/settings`.
+- **Fix specification:** Find and correct the client call site to use the existing `/workspaces/settings` endpoint — no duplicate backend alias is to be added; add a console-clean assertion to the applications e2e/smoke test.
+- **Verification recipe:** Load /dashboard/applications; confirm no 404s in console/network for settings-related calls.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
+- **Status:** IN-FIX (FIX-D dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-054
+- **Type:** G-CONSOLE
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/agents · **REQ/SC violated:** N/A
+- **Observed (production):** 6 error-level console entries for failed resource loads (409 Conflict) when clicking provider action buttons; `PUT /api/agents/providers/anthropic` and `/openai` both return 409. Evidence: `uat/reports/evidence/phase4/agents__interaction__20260713T120557Z.log`.
+- **Expected (doc/wireframe ref):** No error-level console entries on page load and interaction. Per D-0020 the 409 itself is intentional ("never fabricate a connection") — only the raw-console-error surfacing is the defect.
+- **Root cause analysis:** `PUT /api/agents/providers/{provider}` intentionally 409s per D-0020, but the frontend logs this as a raw console error rather than handling it as an expected/handled state.
+- **Fix specification:** Catch the 409 client-side and surface a handled UI message instead of letting it bubble as a console error. The 409 guard itself is retained — only the client-side handling changes.
+- **Verification recipe:** Click provider config actions; confirm the 409 is handled gracefully with zero console error-level entries.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
+- **Status:** IN-FIX (FIX-D dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-055
+- **Type:** G-DATA
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/agents · **REQ/SC violated:** N/A
+- **Observed (production):** Providers screen shows all 6 providers (incl. Anthropic-adjacent) "unconfigured", yet tailor/coverLetter/storyExtractor runs actually execute live on deepseek/qwen models via an `ABACUS_API_KEY` fallback in `llm_client.py` that `_provider_env_state()` never checks — no provider card ever reflects the credential path actually serving runs. Evidence: `uat/reports/evidence/phase4/agents-run3__providers__20260713T122718Z.json`, `agents-run3__catalog__20260713T122718Z.json`.
+- **Expected (doc/wireframe ref):** `docs/delivery/DECISIONS.md` D-0020 (amended, this pass) — the provider panel must reflect the actual serving credential path including the Abacus subscription fallback; the ADR's prior "pinned to validated Anthropic tiers" claim is corrected to match reality.
+- **Root cause analysis:** `apps/api/app/services/llm_client.py:344-356` (fallback path) is invisible to `apps/api/app/routers/agents.py:186-219` / `_provider_env_state()`, which only inspects the documented per-provider keys.
+- **Fix specification:** Extend `_provider_env_state()` (or an equivalent status source) to detect and surface the `ABACUS_API_KEY` fallback path so the providers panel accurately reflects what's actually serving runs (e.g. a distinct "Abacus subscription (fallback)" status).
+- **Verification recipe:** Trigger a tailor/coverLetter run; confirm the providers panel shows the actual serving credential/model, not a blanket "unconfigured".
+- **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
+- **Status:** IN-FIX (FIX-D dispatched)
+- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0020's amendment (this pass) is the ADR-level correction this fix implements.
+
+### GAP-P4-056
+- **Type:** G-WIRING
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/agents · **REQ/SC violated:** N/A
+- **Observed (production):** 3 UI controls (Resume Tailoring Run button, Anthropic model dropdown, Bedrock model dropdown) render as visually interactive but are functionally disabled; Playwright reports "element is not enabled" after 30s of retries with no opacity/greying to signal disabled state. Evidence: `uat/reports/evidence/phase4/agents__controls__20260713T120338Z.json`, `agents__screenshot__20260713T120338Z.png`, `agents__interaction__20260713T120557Z.log`.
+- **Expected (doc/wireframe ref):** Disabled controls should be visually distinct from interactive controls; per D-0020 the underlying disablement (unconfigured providers) is legitimate, but the lack of visual affordance is not addressed by that ADR.
+- **Root cause analysis:** `AgentConfigGrid.tsx` / provider dropdown components apply the `disabled` attribute without a corresponding disabled visual style.
+- **Fix specification:** Add visual disabled styling (opacity/greyed background/cursor-not-allowed) wherever the `disabled` attribute is set on these controls.
+- **Verification recipe:** Load /dashboard/agents with unconfigured providers; confirm disabled controls are visually distinguishable and Playwright's accessibility tree marks them disabled without long timeouts on click attempts.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
+- **Status:** IN-FIX (FIX-I dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-057
+- **Type:** G-WIRING
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/offers · **REQ/SC violated:** N/A
+- **Observed (production):** The empty-add-offer button in the empty state times out (30s) when clicked; Playwright reports a modal overlay (`add-offer-modal` input) intercepts pointer events, preventing the click. A separate modal-open interaction also shows the form becoming blocked once open, suggesting a z-index/stacking issue. Evidence: `uat/reports/evidence/phase4/offers__interaction_log__20260713T120156Z.log`, `offers__screenshot__20260713T115951Z.png`.
+- **Expected (doc/wireframe ref):** Both Add Offer buttons should be clickable and responsive without timeout.
+- **Root cause analysis:** Likely a stray/invisible modal overlay element left mounted (z-index or pointer-events issue) intercepting clicks meant for the empty-state button.
+- **Fix specification:** Audit the Add Offer modal's mount/unmount and z-index stacking; ensure the overlay only intercepts pointer events while actually open and visible.
+- **Verification recipe:** Click empty-add-offer in the empty state; confirm the modal opens without timeout and its own fields are independently clickable.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
+- **Status:** IN-FIX (FIX-I dispatched). Residual, far-lower-severity finding on the same screen as prior GAP-P4-023/GAP-P4-024 (CRITICAL, FIXER DISPATCHED) — consistent with a partial prior fix that left this UI-blocking regression rather than the original crash/fabrication.
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-058
+- **Type:** G-METRIC
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard, /dashboard/analytics · **REQ/SC violated:** N/A
+- **Observed (production):** Applications-by-source widget on both /dashboard and /dashboard/analytics displays "149 applications" with a source breakdown; real total applications = 16 (Application table row count, matches API `totalApplications` exactly). 149 is actually the Job row count (`sourcesTotal`), mislabeled as "applications". Evidence: `uat/reports/evidence/phase4/audit-metrics__run3__20260713T122906Z.json`, `audit-metrics__ui-text__20260713T122601Z.json`.
+- **Expected (doc/wireframe ref):** Widget label should read the correct metric name for the number shown.
+- **Root cause analysis:** `apps/api/app/routers/analytics.py` `market_pulse()` computes `sources_total` via `SELECT COUNT(*) FROM Job`; `apps/web/src/components/analytics/MarketPulse.tsx` renders `{data.sourcesTotal}` next to a static label "applications".
+- **Fix specification:** Relabel the widget to "jobs sourced" (or similar) when displaying `sourcesTotal`, or bind a true applications-by-source breakdown if that is the intended metric.
+- **Verification recipe:** Confirm widget label matches the underlying metric on both /dashboard and /dashboard/analytics after fix.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
+- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-022 (G-METRIC MEDIUM, OPEN) is the same defect; GAP-P4-058 is its Run-3 successor record with root cause identified.
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-059
+- **Type:** G-METRIC
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/analytics · **REQ/SC violated:** N/A
+- **Observed (production):** "Recruiter Activity" widget shows "Agent runs (last 12 wks): 77 total" and "Avg runs / week: 77.0" — should be ≈77/12=6.4, not identical to the total. All 77 AgentRun rows fall in one calendar week, so `weeks_active=len(agent_series)=1` is used as the divisor instead of the fixed 12-week window the label claims. Evidence: `uat/reports/evidence/phase4/audit-metrics__run3__20260713T122906Z.json`.
+- **Expected (doc/wireframe ref):** The "last 12 wks" label implies a 12-week divisor for the average.
+- **Root cause analysis:** `apps/api/app/routers/analytics.py`: `weeks_active = len(agent_series) or 1; round(total_runs/weeks_active,1)` — no zero-fill for empty weeks in the 84-day window.
+- **Fix specification:** Zero-fill the `agent_week_rows` series across the full 12-week window before computing `weeks_active`, or divide by the fixed window length (12) rather than the count of weeks with data.
+- **Verification recipe:** Recompute avg runs/week after fix; confirm it equals total/12 (or the correct window), not total/weeks-with-data.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
+- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-026 (G-METRIC LOW, FIXER DISPATCHED `deleg_7ef75c88`) is the same defect; GAP-P4-059 is its Run-3 successor record with the precise root cause now identified.
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-060
+- **Type:** G-MISSING
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/analytics · **REQ/SC violated:** N/A
+- **Observed (production):** Wireframe diff for analytics.html shows 2 missing sections (Applications by Source donut `sources-an09`; Market vs Your Performance `market-vs-you-an16`) and 3 degraded chart stylings (Interview Conversion chart, Top Skills bar chart, Trend Indicators layout). An "Agent ROI" section not in the wireframe is also present (extra). Evidence: `uat/reports/evidence/phase4/analytics__screenshot__20260713T120044Z.png`.
+- **Expected (doc/wireframe ref):** `design/screens/analytics.html`.
+- **Root cause analysis:** Frontend analytics page has not implemented the sources-donut and market-vs-you comparison components; 3 existing chart components render with different styling than spec.
+- **Fix specification:** Implement the sources donut + market-vs-you sections from real data; align styling on the 3 degraded charts.
+- **Verification recipe:** Navigate to /dashboard/analytics; confirm sources donut and market-vs-you sections render with real data; confirm chart stylings match wireframe.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
+- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-035 (G-MISSING LOW, OPEN) is the same defect; GAP-P4-060 is its Run-3 successor record.
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-061
+- **Type:** G-DATA
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/email, /dashboard/networking · **REQ/SC violated:** N/A
+- **Observed (production):** 100% of the demo account's EmailThread rows (5/5) are audit/test artifacts (subjects: "Test", "QA Test", "Test Draft", "Test from Audit", "Phase4 T2 Audit..."); the sole Contact row is fabricated ("Jane Doe"/"Tech Corp"/jane@example.com). All `createdAt` = today, written by audit tooling, not seed data. Evidence: `uat/reports/evidence/phase4/audit-metrics__run3__20260713T122906Z.json`.
+- **Expected (doc/wireframe ref):** Email Center / Networking pages should show only genuine data for the demo login, not test rows written by concurrent/prior audit runs into the shared production account.
+- **Root cause analysis:** Data contamination from repeated audit-tooling runs against a shared demo/production account, not an application code bug.
+- **Fix specification:** Delete provably-test rows only (the 5 EmailThread rows and the 1 fabricated Contact row identified above by subject/content pattern), and log the deletions; consider a dedicated non-production test account for future audit tooling to avoid polluting the demo experience.
+- **Verification recipe:** DELETE the identified test rows (with a deletion log); re-check `GET /api/emails` and `/api/networking/contacts` return only genuine data.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
+- **Status:** IN-FIX (FIX-D dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-062
+- **Type:** G-QUALITY
+- **Severity:** LOW
+- **Screen / Route:** /dashboard/settings · **REQ/SC violated:** N/A
+- **Observed (production):** Settings sub-navigation order differs from wireframe: live order has Notifications at index 5 (position 6), wireframe has it at index 3 (position 4). Evidence: `uat/reports/evidence/phase4/settings__controls__20260713T120937Z.json`.
+- **Expected (doc/wireframe ref):** `design/screens/settings.html` lines 50-57.
+- **Root cause analysis:** Sub-nav item array order in the settings page component does not match the wireframe's specified order.
+- **Fix specification:** Reorder the sub-nav array to match the wireframe: Profile, Resume Management, Portfolio Sync, Notifications, Agent Configuration, Integrations, Privacy & Compliance.
+- **Verification recipe:** Load /dashboard/settings; confirm sub-nav order matches the wireframe exactly.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
+- **Status:** IN-FIX (FIX-I dispatched). Residual sub-gap of the same ticket as prior GAP-P4-015 (settings page), which is otherwise fixed (12/14 elements now match).
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-063
+- **Type:** G-QUALITY
+- **Severity:** LOW
+- **Screen / Route:** /dashboard/stories · **REQ/SC violated:** N/A
+- **Observed (production):** Clicking "Draft missing stories" fires `POST /api/agents/story-extractor/run` asynchronously with no loading spinner/toast/status change; 2 requests recorded as `net::ERR_ABORTED` (`GET /api/approvals?status=pending`, `POST /api/agents/story-extractor/run`), likely due to test-navigation-away rather than a server failure. Evidence: `uat/reports/evidence/phase4/stories__interaction_pass__20260713T120738Z.json`.
+- **Expected (doc/wireframe ref):** Long-running async actions should provide immediate UI feedback.
+- **Root cause analysis:** The story bank page lacks a loading/confirmation state for the async story-extractor trigger.
+- **Fix specification:** Add a loading spinner or toast confirmation when the async agent call is accepted.
+- **Verification recipe:** Click "Draft missing stories"; confirm immediate visual feedback before the async call resolves.
+- **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
+- **Status:** IN-FIX (FIX-I dispatched)
+- **Evidence (post-fix):** (pending)
+
+### GAP-P4-064
+- **Type:** G-MISSING
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/settings · **REQ/SC violated:** N/A
+- **Observed (production):** Change Avatar button (`btn-avatar-st08`) is absent from the Profile section; wireframe shows it labeled "PNG or JPG, max 2MB" next to the avatar. Evidence: `uat/reports/evidence/phase4/settings__controls__20260713T120937Z.json`, `settings__screenshot__20260713T120937Z.png`.
+- **Expected (doc/wireframe ref):** `design/screens/settings.html` line 66.
+- **Root cause analysis:** No avatar/file-storage backend exists anywhere in the API (no upload endpoint, no object storage, no `avatarUrl` column) — the Profile section component omits the control because there is nothing for it to call.
+- **Fix specification:** Documented as an accepted, deferred-scope decision — see `docs/delivery/DECISIONS.md` D-0030 (new ADR, this pass).
+- **Verification recipe:** Confirm D-0030 exists in DECISIONS.md and accurately describes the no-backend rationale.
+- **Assigned model tier:** DOC-K (T2) — documentary only, no fixer/reviewer dispatch.
+- **Status:** VERIFIED-CLOSED (documentary — resolved by DOC-K in this pass).
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0030 "Avatar management deferred: no backend storage exists".
+
+### GAP-P4-065
+- **Type:** G-QUALITY
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/interviews · **REQ/SC violated:** N/A
+- **Observed (production):** Interview Center shows only an empty-state placeholder ("No interview scheduled" + View Applications button); wireframe defines 26 elements (tabs, company brief, predicted questions, live-assist metrics, debrief), of which only 4 (15%) are implemented. Evidence: `uat/reports/evidence/phase4/interviews__wireframe-fidelity__20260713T115601Z.log`, `interviews__interaction__20260713T115601Z.log`.
+- **Expected (doc/wireframe ref):** `design/screens/interview-center.html`.
+- **Root cause analysis:** `apps/web/src/app/dashboard/interviews/page.tsx` contains a code comment deferring the screen to Phase 3+, but no named ADR (mirroring D-0025/D-0026/D-0027's style) formalized the deferral — only D-0009's generic unbuilt-route placeholder pattern applied by default.
+- **Fix specification:** Documented via a new named ADR — see `docs/delivery/DECISIONS.md` D-0032 (new, this pass), cross-referenced from D-0009.
+- **Verification recipe:** Confirm D-0032 exists in DECISIONS.md and names the Interview Center deferral explicitly.
+- **Assigned model tier:** DOC-K (T2) — documentary only, no fixer/reviewer dispatch.
+- **Status:** VERIFIED-CLOSED (documentary — resolved by DOC-K in this pass).
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0032 "Interview Center: Phase 3+ deferral made explicit"; D-0009 amendment note cross-referencing it.
+
+### GAP-P4-066
+- **Type:** G-MISSING
+- **Severity:** MEDIUM
+- **Screen / Route:** N/A (requirement register / docs) · **REQ/SC violated:** N/A
+- **Observed (production):** D-0018 (Resume ingestion endpoint) is not found in `doc-audit-requirement-register.json` despite being referenced 8 times in DECISIONS.md and defining `POST /resumes` (user-facing API supporting REQ-4 Resume Studio). Separately, the 6 architecture/infrastructure ADRs (D-0004, D-0005, D-0006, D-0008, D-0012, D-0013) are not indexed (18/25 = 72% coverage). Evidence: `uat/reports/evidence/phase4/doc-audit-requirement-register.json`, `requirement-register.md`.
+- **Expected (doc/wireframe ref):** `docs/delivery/DECISIONS.md` D-0018, lines 449-477: "POST /resumes (routers/resumes.py) — creates a new root resume (no parentId) from {label, raw_text, contact?, format_hash?}... Returns 201 with the stored resume."
+- **Root cause analysis:** The register-generation process did not pick up D-0018 when indexing ADRs against requirements. Separately, `requirement-register.md`'s REQ-0011 Navigation row and Conflict Log entry C-0003 mis-cited "DECISIONS D-0018" for the 13-item-sidebar amendment — that change is actually D-0019's (D-0018 is unrelated: resume ingestion). The 6 infra/CI ADRs were never assessed as excluded in writing.
+- **Fix specification:** Index D-0018 under REQ-0004 (Resume Studio) in both `requirement-register.md` and `doc-audit-requirement-register.json`, quoting D-0018's text and linking `POST /resumes`; correct the REQ-0011/Conflict-Log mis-citation from D-0018 to D-0019; add an explicit "intentionally excluded — infrastructure/CI/auth, not user-facing" note for D-0004/D-0005/D-0006/D-0008/D-0012/D-0013 in the register's coverage summary.
+- **Verification recipe:** `grep 'D-0018' doc-audit-requirement-register.json` returns ≥1 match; `grep 'D-0018' requirement-register.md` shows it correctly tied to REQ-0004/POST /resumes, not to the 13-item sidebar.
+- **Assigned model tier:** DOC-K (T2) — documentary only, no fixer/reviewer dispatch.
+- **Status:** VERIFIED-CLOSED (documentary — resolved by DOC-K in this pass).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/requirement-register.md` REQ-0004 row + REQ-0011 correction + Sources-Audited coverage note; `uat/reports/evidence/phase4/doc-audit-requirement-register.json` REQ-4 `related_decisions` entry.
+
+### GAP-P4-067
+- **Type:** G-MISSING
+- **Severity:** MEDIUM
+- **Screen / Route:** /dashboard/jobs · **REQ/SC violated:** REQ-0003, SC-JOB-09 (WIRE-0033 jd04, WIRE-0035 jd05, WIRE-0036 jd06, WIRE-0052 jd33)
+- **Observed (production):** Jobs wireframe fidelity check reports 17 unmatched design-ids and 4 degraded items with a vague note that the underlying elements are "present in degraded category". D-0025 (cited to close GAP-P4-009/011) explicitly states the Location filter (jd05) and Preview button (jd33) were ALREADY IMPLEMENTED when it was written — only Role dropdown (jd04), Salary dropdown (jd06), Bulk Tailor&Apply (jd10), and Saved Tailor-all (jd43) are genuinely deferred by that ADR. Evidence: `uat/reports/evidence/phase4/jobs__wireframe-check__20260713T114550Z.json`.
+- **Expected (doc/wireframe ref):** `docs/delivery/DECISIONS.md` D-0025, lines 592-636.
+- **Root cause analysis:** GAP-P4-009's "location filter MISSING" and GAP-P4-011's "preview button MISSING" claims conflict with D-0025's own text describing both as already working; the closure citations are directionally fine but imprecise, and this run's vague wireframe-diff (17 unmatched ids, no itemized list) cannot independently confirm current live state.
+- **Fix specification:** Re-scout /dashboard/jobs with an itemized missing/degraded design-id list for `job-discovery.html` and cross-check each against D-0025's precise deferred scope (only jd04/jd06/jd10/jd43); reconcile the GAP-P4-009/010/011/030/031 citations accordingly.
+- **Verification recipe:** Re-run the wireframe diff for /dashboard/jobs with itemized missing/degraded design-ids; confirm jd05/jd33 are live and only jd04/jd06/jd10/jd43 remain deferred.
+- **Assigned model tier:** Wave-2 (tbd) — not yet dispatched.
+- **Status:** OPEN (deferred to Wave-2 investigation per orchestrator ruling I.1).
+- **Evidence (post-fix):** pending Wave-2 scout re-run.
+
 ---
 
 ## Summary (Updated)
@@ -362,13 +726,13 @@ Status: AWAITING SCOUT 13-17 SUB-AGENT
 | /login — auth flow | JWT login works, token returned, session active | api-sweep-results.json: POST /auth/login 200, GET /auth/me 200 |
 | /dashboard — layout | Sidebar, stats, feed, opportunities all render | screenshot + console clean |
 | /dashboard/jobs — core listing | Market tabs, job cards, Sync button work | screenshot + console clean |
-| /dashboard/applications — Kanban | 8-stage board renders, Sankey flow works | screenshot + api-sweep (funnel/sankey 200) |
+| /dashboard/applications — Sankey flow | Application funnel Sankey visualization works | api-sweep (funnel/sankey 200) |
 | /dashboard/resume — diff view | Side-by-side comparison available | screenshot + console clean |
 | /dashboard/cover-letters — list | Cover letter list renders | screenshot + console clean |
 | Production health | /api/health returns {"status":"ok","version":"0.2.0"} 200 | curl verified |
 | Vitest suite | 141/141 pass | pnpm test run |
 | Pytest suite (minus 1 config test) | 124/125 pass | pytest run |
-| Navigation consistency | 13-item Schema A+1 sidebar on all screens | requirement-register.md (DECISIONS D-0002, D-0018) |
+| Navigation consistency | 13-item Schema A+1 sidebar on all screens | requirement-register.md (DECISIONS D-0002, D-0019 — corrected citation, was mis-cited as D-0018 per GAP-P4-066) |
 | Design tokens | Coral/Indigo/Inter/JetBrains Mono/Glassmorphism verified | requirement-register.md |
 | Story bank STARS | Extraction, create/edit, question mapper all functional | api-sweep: GET /stories 200, POST 201, GET /stories/stats 200 |
 | Agent catalog | 21 agents, run history, pipeline trigger | api-sweep: GET /agents 200, GET /agents/runs 200, POST /agents/scout/run 202 |
@@ -378,6 +742,18 @@ Status: AWAITING SCOUT 13-17 SUB-AGENT
 | Application funnel (Sankey) | Real-time flow data returns | api-sweep: GET /applications/funnel/sankey 200 |
 | ATS distribution | 10-bucket histogram returns | api-sweep: GET /analytics/ats-distribution 200 |
 | Agent ROI | Cost/value metrics return | api-sweep: GET /analytics/agent-roi 200 |
+| Analytics/Dashboard funnel numbers (C-14) | Live funnel (Applications 13-16, Interviews 0, Offers 0, Jobs Found ≈136-149) is real per-user data computed from the shared live query; D-0003's 847/412/156/23/4 is a design-time illustrative example, not a literal production contract | `analytics__screenshot__20260713T120044Z.png`, `analytics__api_summary__20260713T120250Z.json`; reason codified in DECISIONS.md D-0028 |
+| Networking CRM stat tiles (C-21) | Live 1 contact / 0 active conversations / 0 referrals / 0% response rate is correct low-volume real account data, not a bug; wireframe's 48/12/5/41% is an illustrative mock | `networking__screenshot__20260713T115646Z.png`; DECISIONS.md D-0028 |
+| Story Bank stat tiles (C-29) | Live 23 stories / 22 quantified is correct real account data (small delta vs. wireframe's 24/19/11/94% mock reflects normal data drift, not a computation bug) | `stories__controls__20260713T120449Z.json`; DECISIONS.md D-0028 |
+| Mobile dashboard 390×844 (C-31) | All 8 wireframe sections (topbar, notification button, main content, 2×2 stats grid, approval banner, agent activity feed, bottom navigation) now render — this is an *improvement* since D-0026 was written, not a gap. Mobile approval remains genuinely deferred (0/9 elements) | `mobile-dashboard__screenshot__20260713T121243Z.png`, `mobile-dashboard__wireframe_fidelity__20260713T121243Z.json`; DECISIONS.md D-0026 amendment |
+| Story card Edit/Delete buttons (C-28) | Explicit Edit/Delete buttons beyond the wireframe's ellipsis-menu design are an intentional UX improvement (more discoverable actions), not an unauthorized deviation | `stories__controls__20260713T120449Z.json` |
+| ApprovalModal element naming (C-30) | The modal is functionally complete per D-0027 (5/5 wireframe elements); it uses `testId` attributes for automation instead of the wireframe's literal `data-design-id` values — a naming-convention difference only, not a missing element | `approvals__modal_structure.json`; DECISIONS.md D-0027 |
+| Networking empty-state sections (C-37) | Outreach Queue and Communication Log show correct empty-state layouts because the low-usage demo account genuinely has no outreach/communication history yet — not a structural defect | `networking__screenshot__20260713T115646Z.png` |
+| Jobs wireframe "missing" design-ids (C-39) | The 17 "missing" design-ids reported for job-discovery.html are a scout test-id/data-design-id naming mismatch — the underlying elements (sidebar, header, detail panel) are actually present. The genuinely-missing items (role/salary dropdowns, bulk actions) are tracked separately under GAP-P4-067 | `jobs__wireframe-check__20260713T114550Z.json` |
+| Mobile-approvals data authenticity (C-41) | All 3 visible approval items match authentic API data (real company names, job titles, application IDs, plausible timestamps); no placeholder/demo/lorem content found — confirmatory pass, not a defect | `mobile-approvals__screenshot__20260713T121438Z.png` |
+| Cover-letter list/version-history view (C-35) | Collapsed list view (v1-v5) instead of a single expanded letter, and version count beyond the wireframe's v1-v3, is an intentional simplification analogous to D-0027's list-vs-modal rationale for approvals (batch scanning over one-at-a-time review). GAP-P4-033's original citation of "ADR D-0020 covers" was incorrect — D-0020's full text is scoped entirely to the Agents screen (providers/catalog/cost/ATS) and never mentions cover letters; this is corrected here | `cover-letters__screenshot__20260713T115205Z.png`; DECISIONS.md D-0027 (analogous rationale, not a literal citation) |
+
+**Correction (this pass):** the previous row "/dashboard/applications — Kanban | 8-stage board renders" is removed — it directly contradicted Run-3 evidence (only 4/8 columns render; see GAP-P4-050, which reopens GAP-P4-034). The Sankey-flow claim on that same screen is retained above since it independently verified 200 OK and is unaffected by the Kanban-column defect.
 
 ---
 
@@ -449,7 +825,7 @@ Evidence: `uat/reports/evidence/phase4/qa-postdeploy-verify.json` (15 VERIFIED-C
 |--------|------|----------|--------|--------|-------|
 | GAP-P4-019 | G-FAKE | CRITICAL | /dashboard | FIXER DISPATCHED | deleg_e7f2293e |
 | GAP-P4-020 | G-FAKE | CRITICAL | /dashboard | FIXER DISPATCHED | deleg_e7f2293e |
-| GAP-P4-021 | G-FAKE | CRITICAL | /dashboard/email | FIXER DISPATCHED | deleg_e7f2293e |
+| GAP-P4-021 | G-FAKE | CRITICAL | /dashboard/email | **SUPERSEDED-BY-042** (duplicate of GAP-P4-042, Run-3 reconciliation) | deleg_e7f2293e |
 | GAP-P4-022 | G-METRIC | MEDIUM | /dashboard | OPEN | — |
 | GAP-P4-023 | G-BUG | CRITICAL | /dashboard/offers | FIXER DISPATCHED | deleg_e7f2293e |
 | GAP-P4-024 | G-FAKE | CRITICAL | /dashboard/offers | FIXER DISPATCHED | deleg_e7f2293e |
@@ -457,12 +833,12 @@ Evidence: `uat/reports/evidence/phase4/qa-postdeploy-verify.json` (15 VERIFIED-C
 | GAP-P4-026 | G-METRIC | LOW | /dashboard/analytics | FIXER DISPATCHED | deleg_7ef75c88 |
 | GAP-P4-027 | G-BUG | HIGH | /dashboard/stories | FIXER DISPATCHED | deleg_7ef75c88 |
 | GAP-P4-028 | G-BUG | MEDIUM | /dashboard/stories | FIXER DISPATCHED | deleg_7ef75c88 |
-| GAP-P4-029 | G-FAKE | HIGH | /dashboard/email | OPEN (needs ADR or provider) | — |
+| GAP-P4-029 | G-FAKE | HIGH | /dashboard/email | **SUPERSEDED-BY-042** (duplicate of GAP-P4-042; ADR D-0029 now governs the fix) | — |
 | GAP-P4-030 | G-MISSING | MEDIUM | /dashboard/jobs | OPEN (wireframe gap) | — |
 | GAP-P4-031 | G-MISSING | MEDIUM | /dashboard/jobs | OPEN (wireframe gap) | — |
 | GAP-P4-032 | G-MISSING | MEDIUM | /dashboard/resume | OPEN (wireframe gap) | — |
-| GAP-P4-033 | G-MISSING | LOW | /dashboard/cover-letters | OPEN (ADR D-0020 covers) | — |
-| GAP-P4-034 | G-MISSING | MEDIUM | /dashboard/applications | OPEN (wireframe gap) | — |
+| GAP-P4-033 | G-MISSING | LOW | /dashboard/cover-letters | OPEN — **citation corrected**: "ADR D-0020 covers" was wrong (D-0020 is scoped to the Agents screen only); see Section E (candidate C-35) for the corrected reasoning | — |
+| GAP-P4-034 | G-MISSING | MEDIUM | /dashboard/applications | **REOPENED-AS-050** (Run-3 evidence: only 4/8 kanban columns render, contradicting this row's prior close and the Section E no-gap claim) | — |
 | GAP-P4-035 | G-MISSING | LOW | /dashboard/analytics | OPEN (wireframe gap) | — |
 | GAP-P4-036 | G-BUG | HIGH | test suite | VERIFIED-CLOSED (offers router added) | deleg_4b92ee44 |
 | GAP-P4-037 | G-BUG | HIGH | test suite | VERIFIED-CLOSED (cast removed) | deleg_4b92ee44 |
