@@ -18,6 +18,14 @@ router = APIRouter()
 _STATUS_FILTERS = frozenset({"pending", "approved", "rejected", "all"})
 
 
+class CreateApprovalBody(BaseModel):
+    """Body for creating a new approval request (POST /approvals)."""
+
+    type: str = Field(..., description="Approval type: application_submit, email_send, offer_response")
+    payload: dict[str, Any] = Field(..., description="Arbitrary key-value payload for the approval card")
+    application_id: str | None = Field(default=None, max_length=50)
+
+
 class DecisionBody(BaseModel):
     """Optional context sent with an approve/reject decision.
 
@@ -77,6 +85,23 @@ def list_approvals(
     if status in (None, "all"):
         return repo.list_by_user(current_user["id"])
     return repo.list_by_user(current_user["id"], status)
+
+
+@router.post("", status_code=http_status.HTTP_201_CREATED)
+def create_approval(
+    body: CreateApprovalBody, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Create a new approval request for human-in-the-loop gating.
+
+    Supported types: application_submit, email_send, offer_response.
+    Returns the created ApprovalRequest row.
+    """
+    return ApprovalRepository().create(
+        user_id=current_user["id"],
+        type_=body.type,
+        payload=body.payload,
+        application_id=body.application_id,
+    )
 
 
 @router.get("/{approval_id}")

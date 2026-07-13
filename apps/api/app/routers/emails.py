@@ -110,8 +110,9 @@ def create_draft(body: DraftEmail, current_user: CurrentUser) -> dict[str, Any]:
                 """
                 INSERT INTO "EmailThread" (
                     "id", "userId", "applicationId", "contactId",
-                    "subject", "messages", "classification"
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
+                    "subject", "messages", "classification",
+                    "createdAt", "updatedAt"
+                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, now(), now())
                 """,
                 (
                     thread_id,

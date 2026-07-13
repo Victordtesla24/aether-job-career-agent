@@ -23,7 +23,7 @@ export function apiBaseUrl(): string {
   if (typeof window !== "undefined") {
     return "/api";
   }
-  return "http://localhost:8000";
+  return "http://127.0.0.1:8000";
 }
 
 export class ApiError extends Error {

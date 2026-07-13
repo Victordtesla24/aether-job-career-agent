@@ -515,6 +515,83 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Dashboard summary
+# ---------------------------------------------------------------------------
+
+
+def _dashboard(current_user: CurrentUser) -> dict[str, Any]:
+    """Build a dashboard summary from existing analytics queries."""
+    user_id = current_user["id"]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Application stats
+            cur.execute(
+                'SELECT COUNT(*) FROM "Application" WHERE "userId" = %s',
+                (user_id,),
+            )
+            total_apps = cur.fetchone()[0]  # type: ignore[index]
+
+            cur.execute(
+                '''SELECT COUNT(*) FROM "Application"
+                   WHERE "userId" = %s
+                   AND "status" IN ('interview','offer')''',
+                (user_id,),
+            )
+            interviews = cur.fetchone()[0]  # type: ignore[index]
+
+            cur.execute(
+                '''SELECT COUNT(*) FROM "Application"
+                   WHERE "userId" = %s AND "status" = 'offer' ''',
+                (user_id,),
+            )
+            offers = cur.fetchone()[0]  # type: ignore[index]
+
+            # Job stats
+            cur.execute(
+                'SELECT COUNT(*) FROM "Job" WHERE "userId" = %s',
+                (user_id,),
+            )
+            jobs_found = cur.fetchone()[0]  # type: ignore[index]
+
+            cur.execute(
+                '''SELECT COALESCE(AVG("fitScore"), 0)
+                   FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL''',
+                (user_id,),
+            )
+            avg_fit = float(cur.fetchone()[0])  # type: ignore[index]
+
+            # Agent stats
+            cur.execute(
+                '''SELECT COALESCE(SUM("costUsd"), 0), COUNT(*)
+                   FROM "AgentRun" WHERE "userId" = %s''',
+                (user_id,),
+            )
+            total_cost, total_runs = cur.fetchone()  # type: ignore[misc]
+
+    return {
+        "totalApplications": total_apps,
+        "interviews": interviews,
+        "offers": offers,
+        "jobsFound": jobs_found,
+        "avgFitScore": round(avg_fit, 1),
+        "agentRuns": int(total_runs),
+        "agentCostUsd": float(total_cost),
+    }
+
+
+@router.get("")
+def dashboard_root(current_user: CurrentUser) -> dict[str, Any]:
+    """Dashboard summary — alias for the root analytics path."""
+    return _dashboard(current_user)
+
+
+@router.get("/dashboard")
+def dashboard(current_user: CurrentUser) -> dict[str, Any]:
+    """Dashboard summary with key metrics across all analytics dimensions."""
+    return _dashboard(current_user)
+
+
 def _market_summary(you_apps: int, interview_rate: int) -> str:
     """Compose a factual comparison summary from real user figures."""
     parts: list[str] = []

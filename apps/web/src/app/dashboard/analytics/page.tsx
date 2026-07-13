@@ -11,10 +11,12 @@ import {
   fetchAgentRoi,
   fetchAtsDistribution,
   fetchConversion,
+  fetchDashboard,
   fetchFunnel,
   type AgentRoi,
   type AtsDistribution,
   type Conversion,
+  type Dashboard,
   type Funnel,
   type Period,
 } from "../../../lib/api/analytics";
@@ -27,10 +29,12 @@ export default function AnalyticsPage() {
   const [ats, setAts] = useState<AtsDistribution | null>(null);
   const [roi, setRoi] = useState<AgentRoi | null>(null);
   const [conversion, setConversion] = useState<Conversion | null>(null);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
+      // Fetch from working sub-endpoints first — these must not block the page.
       const [funnelData, atsData, roiData, conversionData] = await Promise.all([
         fetchFunnel(period),
         fetchAtsDistribution(),
@@ -42,6 +46,16 @@ export default function AnalyticsPage() {
       setRoi(roiData);
       setConversion(conversionData);
       setError(null);
+
+      // Dashboard summary is fetched separately so a 404 on the dashboard
+      // endpoint does not take down the entire page (GAP-P4-005 / P4-016).
+      try {
+        const dashboardData = await fetchDashboard();
+        setDashboard(dashboardData);
+      } catch {
+        // Dashboard endpoint not yet deployed — degrade gracefully.
+        setDashboard(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
     }
@@ -93,6 +107,27 @@ export default function AnalyticsPage() {
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
         </p>
+      ) : null}
+
+      {dashboard ? (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-summary">
+          {(
+            [
+              ["Applications", dashboard.totalApplications, "text-aether-coral"],
+              ["Interviews", dashboard.interviews, "text-aether-violet"],
+              ["Offers", dashboard.offers, "text-aether-green"],
+              ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],
+              ["Avg Fit Score", `${dashboard.avgFitScore}%`, "text-aether-coral"],
+              ["Agent Runs", dashboard.agentRuns, "text-aether-violet"],
+              ["Agent Spend", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
+            ] as const
+          ).map(([label, value, color]) => (
+            <div key={label} className="glass rounded-2xl border border-white/10 p-4">
+              <dt className="text-xs text-aether-muted">{label}</dt>
+              <dd className={`mono mt-1 text-2xl font-bold ${color}`}>{value}</dd>
+            </div>
+          ))}
+        </section>
       ) : null}
 
       <section className="glass rounded-2xl border border-white/10 p-5" data-testid="funnel-chart">

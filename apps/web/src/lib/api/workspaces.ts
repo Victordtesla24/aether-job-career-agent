@@ -125,14 +125,14 @@ export interface SettingsPayload {
 }
 
 export const fetchSettings = (options: RequestOptions = {}) =>
-  apiRequest<SettingsPayload>("/settings", options);
+  apiRequest<SettingsPayload>("/workspaces/settings", options);
 
 export const saveSettings = (
   profile: SettingsPayload["profile"],
   agentConfig: SettingsPayload["agentConfig"],
   options: RequestOptions = {},
 ) =>
-  apiRequest<SettingsPayload>("/settings", {
+  apiRequest<SettingsPayload>("/workspaces/settings", {
     ...options,
     method: "PUT",
     body: { profile, agentConfig },

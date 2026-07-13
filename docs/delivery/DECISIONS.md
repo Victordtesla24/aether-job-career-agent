@@ -588,3 +588,160 @@ The Story Bank link targets the real `/dashboard/stories` route.
 
 **Consequences.** None adverse; jobs without a `sourceUrl` degrade to the plain chip (none exist in
 production today — 0 null/empty/demo URLs).
+
+## D-0025 — Job Discovery: role/salary dropdown filters + bulk tailor/saved-tailor-all deferred to Phase 3+
+
+**Date.** 2026-07-13  ·  **Status.** Accepted
+
+**Context.** The Job Discovery wireframe (`design/screens/job-discovery.html`) defines eight
+filter/action elements. Four are already live (source dropdown jd29, remote toggle jd07, match
+slider, and bulk skip jd11). Four are absent from the current implementation:
+- **Role dropdown filter** (WIRE-0033 / jd04) — a chevron button that would open a role-category
+  picker.
+- **Salary dropdown filter** (WIRE-0036 / jd06) — a chevron button for salary-band selection.
+- **Bulk "Tailor & Apply" button** (WIRE-0040 / jd10) — in the select-all bar, triggers
+  multi-job tailoring before bulk-apply.
+- **Saved "Tailor & Apply all" button** (WIRE-0059 / jd43) — in the Saved tab, tailors all
+  saved jobs in one action.
+
+The Preview button (WIRE-0052 / jd33) is already implemented as a `<Link>` to Resume Studio at
+`/dashboard/resume?job={id}` and the Location filter (WIRE-0035 / jd05) has a working
+client-side text input.
+
+**Decision.** Defer all four missing elements to Phase 3+ for these reasons:
+1. **Role + Salary dropdowns** require server-side query-param support. The `GET /jobs` endpoint
+   and `JobRepository.list_by_user()` accept only `status`, `source`, `saved`, and `sort` —
+   there are no `role` or `salary` filter columns. Adding them means (a) a DB migration for
+   role-category/salary-band columns or (b) full-text/range filtering with index support. Both
+   paths are material scope increases beyond this fix cycle. The dropdown UI pattern itself
+   (chevron button → popup menu with predefined options) is a reusable component not yet in the
+   design system.
+2. **Bulk Tailor & Saved Tailor-all** require multi-job tailoring orchestration. The current
+   `POST /agents/tailor/run` handles one job at a time. Running N tailoring jobs and N apply
+   operations in a single user-facing action needs a queue or concurrency model, progress
+   feedback, partial-failure handling, and likely a new agent endpoint. This is explicitly
+   scoped as a Phase 3 pipeline feature.
+
+**Alternatives.** (a) Add client-side text-input filters for role/salary (like the existing
+`locationQuery`) — rejected because the wireframe shows dropdown selectors with discrete options,
+and a free-text filter misrepresents the design intent while providing a brittle UX (titles
+aren't categorised). (b) Add "Tailor & Apply" as a client-loop over sequential API calls —
+rejected because N sequential LLM calls from a browser would timeout and provide no progress
+feedback, making the feature appear broken.
+
+**Consequences.** The Job Discovery screen ships with 4 of 8 wireframe filter/action elements
+live. The four deferred elements are documented here with clear acceptance criteria so Phase 3
+can pick them up without rediscovery. No code changes in this slice. **Reversible?** Yes — each
+element can be added independently when its backend dependency is ready.
+
+## D-0026 — Mobile responsive layout deferred to Phase 3+
+
+**Date.** 2026-07-13  ·  **Status.** Accepted
+
+**Context.** The design wireframes include two mobile-specific screens at 390×844 viewport —
+`design/screens/mobile-dashboard.html` (7 mobile-specific elements including top bar greeting,
+notification badge, 2×2 stats grid, approval banner, activity feed with agent cards, and bottom
+tab bar) and `design/screens/mobile-approval.html` (9 mobile-specific elements including back
+button, centered approval header with counter, action card with confidence meter, AI reasoning
+checklist, trust-agent checkbox, and sticky bottom action footer). The current frontend
+implementation is desktop-first: the 13-item sidebar layout works at ≥1024px, a basic
+`MobileTabBar` provides 5-tab bottom navigation below that breakpoint, but no other screen
+has been adapted for mobile viewport. A structural audit against the mobile wireframes
+identifies 16 mobile-specific elements that are absent from the current build — the dashboard
+still renders its desktop card grid on a 390px viewport, and the approval flow shows the
+desktop modal rather than the dedicated mobile approval screen.
+
+**Decision.** Full mobile-responsive layout — including the dedicated mobile dashboard, mobile
+approval screen, and responsive adaptations for all 13 workspace sections — is deferred to
+**Phase 3+** (post-MVP). Phase 2 ships with the desktop layout as the only supported viewport.
+The existing `MobileTabBar` and the responsive breakpoints already in the `ApprovalModal` footer
+(desktop row layout → mobile stacked layout) are kept as forward-compatible scaffolding, but no
+further mobile work is undertaken in Phase 2.
+
+**Rationale.**
+1. **No mobile user stories in Phase 2 scope.** The delivery brief targets a desktop web
+   application; the mobile wireframes were produced as part of the original design exploration
+   but were never in the Phase 1–2 delivery contract.
+2. **The desktop layout is functional end-to-end.** All 13 workspace sections, the approval
+   gate, the agent pipeline, and the job-discovery flow work correctly at ≥1024px. Adding
+   mobile breakpoints to every screen would be a non-trivial cross-cutting effort (~16
+   screens × responsive adaptation) that would delay Phase 2 completion without adding
+   user-facing functionality.
+3. **The scaffolding stays.** The `MobileTabBar`, the modal's responsive footer, and the
+   `lg:` breakpoint on the desktop sidebar are already wired and tested — they provide a clean
+   seam for Phase 3 mobile work without bit-rot.
+
+**Alternatives.** (a) Implement full mobile responsive in Phase 2 (rejected: out of scope,
+slows delivery, no mobile user stories). (b) Remove the `MobileTabBar` and responsive
+scaffolding entirely to avoid confusion (rejected: more work to remove than to leave;
+the scaffolding is tested and documents the intended mobile direction). (c) Ship a
+half-finished mobile experience where only the dashboard is adapted (rejected: worse than
+no mobile — inconsistent UX across sections).
+
+**Consequences.** The 16 mobile-wireframe elements (7 dashboard + 9 approval) remain
+unimplemented and are tracked as a Phase 3+ backlog item. The mobile wireframes
+(`mobile-dashboard.html`, `mobile-approval.html`) serve as the design target for Phase 3.
+The existing responsive scaffolding is explicitly forward-compatible, not a partial
+implementation. **Reversible?** Yes — Phase 3 can pick up the mobile workstream by
+implementing responsive variants for each workspace section, reusing the existing
+`MobileTabBar` and sidebar breakpoint contract.
+
+## D-0027 — Approval queue list view is intentional simplification of modal wireframe
+
+**Date.** 2026-07-13  ·  **Status.** Accepted
+
+**Context.** The design wireframe `design/screens/approval-modal.html` presents the approval
+flow as a modal dialog (560px wide, glass-raised panel, backdrop blur) containing a header
+with close button, action summary with confidence meter, "why approval is needed" panel, AI
+reasoning checklist, cover letter preview, trust-agent checkbox, and a footer with
+Reject / Edit & Approve / Approve buttons. The approval wireframe is designed as if the modal
+*is* the primary approval interaction — the user is expected to encounter one approval at a
+time, in a focused modal context.
+
+The current implementation deliberately diverges: the primary approval interaction is a
+**queue list view** (`/dashboard/approvals`) showing all approval requests as cards with
+inline approve/reject buttons, status badges, confidence scores, expiry indicators, and a
+preview snippet. A "Review" button on each card opens the `ApprovalModal` (which faithfully
+implements all wireframe elements: close, Reject, Edit & Approve, Approve, plus mobile-stacked
+footer), but the modal is a *secondary* detail view — the queue list is the default interaction.
+
+**Decision.** The list-first design is an intentional simplification of the modal-centric
+wireframe, for the following reasons:
+
+1. **Batch efficiency.** A human reviewer typically handles multiple pending approvals in a
+   session. A list view lets them scan all pending items at once, spot the highest-confidence
+   or most-urgent approvals, and decide inline (approve/reject directly from the card) without
+   opening a modal for each one. The modal wireframe's one-at-a-time flow would require
+   opening → reviewing → deciding → closing → repeating for each item.
+2. **Status visibility.** The list shows approved/rejected items alongside pending ones
+   (filterable), giving a complete audit trail. The modal wireframe has no concept of
+   "previously decided" — it only shows the current pending request.
+3. **The modal is preserved for deep review.** When detailed review is needed (reading the
+   full cover letter, editing before approving, or reviewing AI reasoning), the "Review"
+   button opens the full `ApprovalModal` with all wireframe elements intact. The
+   `?review=<id>` deep-link parameter also lets any route (dashboard, notifications,
+   email center) trigger the modal directly — the list is not the only entry point.
+
+**Wireframe parity.** The `ApprovalModal` component implements 5 of 5 wireframe elements
+from `approval-modal.html`: close button (`btn-close-ap02`), Reject (`btn-reject-ap03`),
+Edit & Approve (`btn-edit-ap04`), Approve (`btn-approve-ap05`), and the full modal shell
+with backdrop. The 5 "missing modal elements" reported in the P4-018 audit refer to the
+fact that these elements are not visible on the list page itself — they live in the modal,
+which is one click away. This is by design: the list optimizes for scanning and fast
+decisions; the modal optimizes for detailed review.
+
+**Alternatives.** (a) Make the modal the only approval interaction, removing the list
+(rejected: worse UX for multi-approval sessions; no audit trail visibility). (b) Show the
+modal on page load for the first pending approval (rejected: modal-on-load is intrusive
+and breaks the user's orientation — the list provides context first). (c) Inline all modal
+elements into each list card (rejected: each card would be ~400px tall; the list would become
+unscannable).
+
+**Consequences.** The approval flow has two tiers: **list for triage** (inline approve/reject,
+status filter, confidence-at-a-glance) and **modal for deep review** (edit, full reasoning,
+letter preview). The 5 wireframe modal elements are present in the `ApprovalModal` and
+reachable via the "Review" button or `?review=` deep link. The 48h expiry, trust-agent
+preference, and `DecisionContext` propagation work identically from both the list and the
+modal. **Reversible?** Yes — the list is one page component; replacing it with a modal-first
+flow in a future phase would not affect the `ApprovalModal` component, the API, or the
+approval service.

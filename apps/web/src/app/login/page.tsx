@@ -11,14 +11,14 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-import { apiBaseUrl, DEMO_CREDENTIALS } from "../../lib/api/client";
+import { apiBaseUrl } from "../../lib/api/client";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState<string>(DEMO_CREDENTIALS.email);
-  const [password, setPassword] = useState<string>(DEMO_CREDENTIALS.password);
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -116,12 +116,6 @@ export default function LoginPage() {
           >
             {submitting ? "Signing in…" : "Sign in"}
           </button>
-
-          <p className="text-[12px] text-aether-muted-dim leading-relaxed">
-            <i className="fa-solid fa-circle-info mr-1.5" aria-hidden />
-            Credentials are prefilled with Vikram&apos;s workspace account
-            (<span className="mono">sarkar.vikram@gmail.com</span>).
-          </p>
         </form>
       </div>
     </main>

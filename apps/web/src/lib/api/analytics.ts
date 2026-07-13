@@ -62,3 +62,21 @@ export async function fetchConversion(
     await apiRequest<unknown>(`/analytics/conversion?period=${period}`, options),
   );
 }
+
+/* ------------------------------- Dashboard ------------------------------- */
+
+export const DashboardSchema = z.object({
+  totalApplications: z.number(),
+  interviews: z.number(),
+  offers: z.number(),
+  jobsFound: z.number(),
+  avgFitScore: z.number(),
+  agentRuns: z.number(),
+  agentCostUsd: z.number(),
+});
+
+export type Dashboard = z.infer<typeof DashboardSchema>;
+
+export async function fetchDashboard(options: RequestOptions = {}): Promise<Dashboard> {
+  return DashboardSchema.parse(await apiRequest<unknown>("/analytics/dashboard", options));
+}

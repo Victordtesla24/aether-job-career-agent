@@ -98,6 +98,34 @@ _OUTREACH_COLUMNS = (
 
 
 # ---------------------------------------------------------------------------
+# Root summary
+# ---------------------------------------------------------------------------
+
+
+@router.get("")
+def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
+    """Return counts of contacts and outreach tasks for the current user."""
+    uid = current_user["id"]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT COUNT(*) FROM "Contact" WHERE "userId" = %s', (uid,)
+            )
+            contacts = cur.fetchone()[0]
+    try:
+        _ensure_outreach_tables()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT COUNT(*) FROM "OutreachTask" WHERE "userId" = %s', (uid,)
+                )
+                outreach = cur.fetchone()[0]
+    except Exception:
+        outreach = 0
+    return {"contacts": contacts, "outreach": outreach}
+
+
+# ---------------------------------------------------------------------------
 # Pydantic schemas — Contacts
 # ---------------------------------------------------------------------------
 
@@ -227,8 +255,9 @@ def create_contact(
                 """
                 INSERT INTO "Contact" (
                     "id", "userId", "name", "title", "company",
-                    "stage", "email", "linkedinUrl"
-                ) VALUES (%s, %s, %s, %s, %s, %s::"ContactStage", %s, %s)
+                    "stage", "email", "linkedinUrl",
+                    "createdAt", "updatedAt"
+                ) VALUES (%s, %s, %s, %s, %s, %s::"ContactStage", %s, %s, now(), now())
                 """,
                 (
                     contact_id,
@@ -394,8 +423,9 @@ def create_outreach_task(
                 """
                 INSERT INTO "OutreachTask" (
                     "id", "userId", "contactId", "type", "status",
-                    "message", "scheduledAt"
-                ) VALUES (%s, %s, %s, %s, 'pending', %s, %s)
+                    "message", "scheduledAt",
+                    "createdAt", "updatedAt"
+                ) VALUES (%s, %s, %s, %s, 'pending', %s, %s, now(), now())
                 """,
                 (
                     task_id,

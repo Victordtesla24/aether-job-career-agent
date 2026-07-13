@@ -14,10 +14,10 @@ import time
 import pytest
 
 from app.services.llm_client import (
-    FALLBACK_MODEL,
     LLMClient,
     LLMUnavailableError,
     get_budget_seconds,
+    get_fallback_model,
     shared_budget,
 )
 
@@ -36,11 +36,12 @@ class TestModelChain:
     def test_retries_once_with_fallback_model(self):
         assert LLMClient._model_chain("openai/gpt-oss-120b:free") == [
             "openai/gpt-oss-120b:free",
-            FALLBACK_MODEL,
+            get_fallback_model(),
         ]
 
     def test_no_duplicate_attempt_when_primary_is_fallback(self):
-        assert LLMClient._model_chain(FALLBACK_MODEL) == [FALLBACK_MODEL]
+        fallback = get_fallback_model()
+        assert LLMClient._model_chain(fallback) == [fallback]
 
 
 class TestAutoModeFallback:

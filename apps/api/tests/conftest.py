@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -70,6 +71,8 @@ os.environ["AETHER_LLM_MODE"] = "replay"
 # ---------------------------------------------------------------------------
 
 #: Tables owned by the suites that write to the DB, truncated between tests.
+#: Includes tables from Prisma schema; additive tables (OutreachTask, InterviewSchedule)
+#: are created lazily and not truncated.
 _TABLES_TO_CLEAN = (
     '"AgentRun"',
     '"ApprovalRequest"',
@@ -78,6 +81,10 @@ _TABLES_TO_CLEAN = (
     '"Resume"',
     '"Job"',
     '"User"',
+    '"EmailThread"',
+    '"Contact"',
+    # '"OutreachTask"',  # created lazily; may not exist yet
+    # '"InterviewSchedule"',  # created lazily; may not exist yet
 )
 
 
@@ -86,7 +93,20 @@ def _truncate_tables() -> None:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"TRUNCATE TABLE {', '.join(_TABLES_TO_CLEAN)} CASCADE")
+            # Truncate only tables that exist (ignore missing ones).
+            # This avoids errors with lazily-created tables.
+            cur.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = ANY(current_schemas(false))
+                  AND table_name = ANY(%s)
+                """,
+                ([t.strip('"') for t in _TABLES_TO_CLEAN],),
+            )
+            existing = [f'"{row[0]}"' for row in cur.fetchall()]
+            if existing:
+                cur.execute(f"TRUNCATE TABLE {', '.join(existing)} CASCADE")
         conn.commit()
 
 
@@ -119,10 +139,16 @@ def client() -> Iterator:
 @pytest.fixture()
 def auth_headers(client) -> dict[str, str]:
     """Register + login a test user; return the Authorization header."""
-    credentials = {"email": "fixture-user@example.com", "password": "Sup3rSecret"}
+    email = f"fixture-user-{uuid.uuid4().hex[:8]}@example.com"
+    credentials = {"email": email, "password": "Sup3rSecret"}
     register = client.post("/auth/register", json=credentials)
-    assert register.status_code == 201, register.text
-    login = client.post("/auth/login", json=credentials)
-    assert login.status_code == 200, login.text
+    if register.status_code == 409:
+        # Already exists; try login directly
+        login = client.post("/auth/login", json=credentials)
+        assert login.status_code == 200, login.text
+    else:
+        assert register.status_code == 201, register.text
+        login = client.post("/auth/login", json=credentials)
+        assert login.status_code == 200, login.text
     token = login.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
