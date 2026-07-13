@@ -348,6 +348,15 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # ---- Sources → percentages -------------------------------------------
     src_sum = sum(int(r["cnt"]) for r in source_rows) or 1
     sources: list[dict[str, Any]] = []
+
+    # Compute rounded percentages via largest remainder so they sum to 100%.
+    raw_pcts = [int(r["cnt"]) / src_sum * 100 for r in source_rows]
+    floored = [int(p) for p in raw_pcts]
+    remainders = [(raw_pcts[i] - floored[i], i) for i in range(len(raw_pcts))]
+    remaining = 100 - sum(floored)
+    for _, idx in sorted(remainders, key=lambda x: (-x[0], x[1]))[:remaining]:
+        floored[idx] += 1
+
     # Fallback colors for unmapped sources must skip colors already claimed
     # by mapped sources — otherwise adjacent donut segments are identical.
     claimed = {
@@ -357,7 +366,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     }
     fallback_cycle = [c for c in _PALETTE if c not in claimed] or list(_PALETTE)
     fallback_idx = 0
-    for r in source_rows:
+    for idx, r in enumerate(source_rows):
         label = str(r["source"])
         color = _SOURCE_COLORS.get(label.lower())
         if color is None:
@@ -366,7 +375,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         sources.append(
             {
                 "label": label[:1].upper() + label[1:],
-                "value": round(int(r["cnt"]) / src_sum * 100),
+                "value": floored[idx],
                 "color": color,
             }
         )
@@ -520,51 +529,54 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _dashboard(current_user: CurrentUser) -> dict[str, Any]:
+def _dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     """Build a dashboard summary from existing analytics queries."""
     user_id = current_user["id"]
+    app_filter = _period_clause(period, '"createdAt"')
+    job_filter = _period_clause(period, '"createdAt"')
+    agent_filter = _period_clause(period, '"startedAt"')
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Application stats
             cur.execute(
-                'SELECT COUNT(*) FROM "Application" WHERE "userId" = %s',
+                f'SELECT COUNT(*) FROM "Application" WHERE "userId" = %s{app_filter}',
                 (user_id,),
             )
             total_apps = cur.fetchone()[0]  # type: ignore[index]
 
             cur.execute(
-                '''SELECT COUNT(*) FROM "Application"
+                f'''SELECT COUNT(*) FROM "Application"
                    WHERE "userId" = %s
-                   AND "status" IN ('interview','offer')''',
+                   AND "status" IN ('interview','offer'){app_filter}''',
                 (user_id,),
             )
             interviews = cur.fetchone()[0]  # type: ignore[index]
 
             cur.execute(
-                '''SELECT COUNT(*) FROM "Application"
-                   WHERE "userId" = %s AND "status" = 'offer' ''',
+                f'''SELECT COUNT(*) FROM "Application"
+                   WHERE "userId" = %s AND "status" = 'offer'{app_filter}''',
                 (user_id,),
             )
             offers = cur.fetchone()[0]  # type: ignore[index]
 
             # Job stats
             cur.execute(
-                'SELECT COUNT(*) FROM "Job" WHERE "userId" = %s',
+                f'SELECT COUNT(*) FROM "Job" WHERE "userId" = %s{job_filter}',
                 (user_id,),
             )
             jobs_found = cur.fetchone()[0]  # type: ignore[index]
 
             cur.execute(
-                '''SELECT COALESCE(AVG("fitScore"), 0)
-                   FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL''',
+                f'''SELECT COALESCE(AVG("fitScore"), 0)
+                   FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL{job_filter}''',
                 (user_id,),
             )
             avg_fit = float(cur.fetchone()[0])  # type: ignore[index]
 
             # Agent stats
             cur.execute(
-                '''SELECT COALESCE(SUM("costUsd"), 0), COUNT(*)
-                   FROM "AgentRun" WHERE "userId" = %s''',
+                f'''SELECT COALESCE(SUM("costUsd"), 0), COUNT(*)
+                   FROM "AgentRun" WHERE "userId" = %s{agent_filter}''',
                 (user_id,),
             )
             total_cost, total_runs = cur.fetchone()  # type: ignore[misc]
@@ -581,15 +593,15 @@ def _dashboard(current_user: CurrentUser) -> dict[str, Any]:
 
 
 @router.get("")
-def dashboard_root(current_user: CurrentUser) -> dict[str, Any]:
+def dashboard_root(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     """Dashboard summary — alias for the root analytics path."""
-    return _dashboard(current_user)
+    return _dashboard(current_user, period)
 
 
 @router.get("/dashboard")
-def dashboard(current_user: CurrentUser) -> dict[str, Any]:
+def dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     """Dashboard summary with key metrics across all analytics dimensions."""
-    return _dashboard(current_user)
+    return _dashboard(current_user, period)
 
 
 def _market_summary(you_apps: int, interview_rate: int) -> str:
