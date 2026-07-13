@@ -200,7 +200,7 @@ def list_contacts(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 f"Invalid stage '{stage}'. Valid: {sorted(_CONTACT_STAGES)}",
             )
-        clauses.append('c."stage" = %s::"ContactStage"')
+        clauses.append('c."stage" = %s')
         params.append(stage)
     if company is not None:
         clauses.append('c."company" ILIKE %s')
