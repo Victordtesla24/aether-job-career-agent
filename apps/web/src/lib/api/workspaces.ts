@@ -190,7 +190,7 @@ export const fetchOffers = (options: RequestOptions = {}) =>
 export interface SettingsPayload {
   profile: { fullName: string; email: string; targetRole: string; location: string };
   resume: { activeFile: string; uploadedAt: string; versions: number };
-  portfolio: { url: string; cadence: string; lastSynced: string };
+  portfolio: { url: string | null; cadence: string | null; lastSynced: string | null; status?: string };
   agentConfig: { autoApply: boolean; approvalGate: boolean; matchThreshold: number };
   integrations: Array<{ name: string; status: string; detail: string }>;
   connectedAccounts: Array<{ name: string; detail: string; status: string }>;
@@ -208,6 +208,46 @@ export const saveSettings = (
     ...options,
     method: "PUT",
     body: { profile, agentConfig },
+  });
+
+/* ------------------------------ Career Data ------------------------------ */
+
+/** One consolidated career-data source (GAP-P4-047 · ADR D-0031). */
+export type CareerSourceName = "github" | "portfolio" | "linkedin";
+
+export interface CareerDataSource {
+  source: CareerSourceName;
+  status: "ok" | "empty" | "error" | "not_configured" | "pending" | string;
+  url: string | null;
+  summary: string | null;
+  error: string | null;
+  lastSynced: string | null;
+}
+
+export interface CareerData {
+  sources: CareerDataSource[];
+  linkedinNote: string;
+}
+
+/**
+ * Refresh inputs. An omitted field reuses the previously stored value for that
+ * source; an explicit empty string clears it (matches the API contract in
+ * `app.services.career_data.refresh_career_data`).
+ */
+export interface CareerDataRefreshInput {
+  githubUsername?: string;
+  portfolioUrl?: string;
+  linkedinSummary?: string;
+}
+
+export const fetchCareerData = (options: RequestOptions = {}) =>
+  apiRequest<CareerData>("/workspaces/career-data", options);
+
+export const refreshCareerData = (input: CareerDataRefreshInput, options: RequestOptions = {}) =>
+  apiRequest<CareerData>("/workspaces/career-data/refresh", {
+    ...options,
+    method: "POST",
+    body: input,
   });
 
 /* ------------------------------ Market pulse ------------------------------ */
