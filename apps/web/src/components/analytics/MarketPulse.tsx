@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Real-Time Market Pulse — activity heatmap, applications-by-source donut,
+ * Real-Time Market Pulse — activity heatmap, jobs-by-source donut,
  * top skills, job probability score, employer activity, recruiter trends,
  * market-vs-you and trend indicators (wireframe: analytics.html an09–an17,
  * DEF-005..011). Backed by GET /analytics/market-pulse.
@@ -96,13 +96,13 @@ export default function MarketPulse() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        {/* Applications by source donut */}
+        {/* Jobs by source donut */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="sources-donut">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Applications by Source
+            Jobs by Source
           </h3>
           <div className="flex items-center gap-5">
-            <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90" role="img" aria-label="Applications by source">
+            <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90" role="img" aria-label="Jobs by source">
               {donutSegments(data.sources).map((s) => (
                 <circle
                   key={s.label}
