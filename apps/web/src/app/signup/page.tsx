@@ -91,9 +91,10 @@ export default function SignupPage() {
             </p>
           </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Name (optional)
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="signup-name">Name (optional)</label>
             <input
+              id="signup-name"
               type="text"
               name="name"
               autoComplete="name"
@@ -101,11 +102,12 @@ export default function SignupPage() {
               onChange={(e) => setName(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Email
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="signup-email">Email</label>
             <input
+              id="signup-email"
               type="email"
               name="email"
               autoComplete="email"
@@ -120,11 +122,12 @@ export default function SignupPage() {
                 {fieldErrors.email}
               </span>
             ) : null}
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Password
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="signup-password">Password</label>
             <input
+              id="signup-password"
               type="password"
               name="password"
               autoComplete="new-password"
@@ -142,7 +145,7 @@ export default function SignupPage() {
                 {fieldErrors.password}
               </span>
             ) : null}
-          </label>
+          </div>
 
           {formError ? (
             <p role="alert" data-testid="signup-error" className="text-sm text-aether-coral">

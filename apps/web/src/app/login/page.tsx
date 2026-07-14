@@ -78,9 +78,10 @@ export default function LoginPage() {
             </p>
           ) : null}
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Email or username
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="login-identifier">Email or username</label>
             <input
+              id="login-identifier"
               type="text"
               name="email"
               autoComplete="username"
@@ -89,11 +90,12 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Password
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="login-password">Password</label>
             <input
+              id="login-password"
               type="password"
               name="password"
               autoComplete="current-password"
@@ -102,7 +104,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
-          </label>
+          </div>
 
           {error ? (
             <p role="alert" data-testid="login-error" className="text-sm text-aether-coral">

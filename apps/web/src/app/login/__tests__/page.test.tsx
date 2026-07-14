@@ -7,6 +7,9 @@
  * native HTML5 validation even though the backend accepts username-or-email)
  * and there was no link to /signup. Renders the real component so the
  * mislabel/missing-link defects are caught at the layer where they'd ship.
+ *
+ * Note: this project does not install @testing-library/jest-dom, so
+ * assertions use plain DOM properties/vitest matchers only.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,24 +44,24 @@ afterEach(() => {
 describe("LoginPage", () => {
   it('labels the identifier field "Email or username" and accepts a bare username', () => {
     render(<LoginPage />);
-    const field = screen.getByLabelText(/email or username/i);
-    expect(field).toBeInTheDocument();
+    const field = screen.getByLabelText(/email or username/i) as HTMLInputElement;
+    expect(field).toBeTruthy();
     // A plain <input type="email"> would reject a bare username under HTML5
     // constraint validation — the field must NOT be type="email".
-    expect(field).not.toHaveAttribute("type", "email");
+    expect(field.type).not.toBe("email");
   });
 
   it("links to /signup to create an account", () => {
     render(<LoginPage />);
     const createAccountLink = screen.getByRole("link", { name: /create account/i });
-    expect(createAccountLink).toHaveAttribute("href", "/signup");
+    expect(createAccountLink.getAttribute("href")).toBe("/signup");
   });
 
   it("still renders the Sign in heading and empty fields", () => {
     render(<LoginPage />);
-    expect(screen.getByRole("heading", { name: "Sign in", level: 1 })).toBeInTheDocument();
-    expect(screen.getByLabelText(/email or username/i)).toHaveValue("");
-    expect(screen.getByLabelText(/^password$/i)).toHaveValue("");
+    expect(screen.getByRole("heading", { name: "Sign in", level: 1 }).textContent).toBe("Sign in");
+    expect((screen.getByLabelText(/email or username/i) as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/^password$/i) as HTMLInputElement).value).toBe("");
   });
 
   it("logs in with a bare username identifier and redirects to /dashboard", async () => {
@@ -84,12 +87,14 @@ describe("LoginPage", () => {
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "wrong" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
-    expect(await screen.findByTestId("login-error")).toHaveTextContent(/too many failed login attempts/i);
+    const errorEl = await screen.findByTestId("login-error");
+    expect(errorEl.textContent).toMatch(/too many failed login attempts/i);
   });
 
   it("shows a success flash when arriving with ?registered=1 (post-signup fallback)", async () => {
     window.history.replaceState(null, "", "/login?registered=1");
     render(<LoginPage />);
-    expect(await screen.findByTestId("signup-success")).toHaveTextContent(/account created/i);
+    const flash = await screen.findByTestId("signup-success");
+    expect(flash.textContent).toMatch(/account created/i);
   });
 });
