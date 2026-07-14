@@ -56,14 +56,17 @@ import {
 /** Per-agent discovery params for backend triggers. */
 const RUN_PARAMS: Record<string, Record<string, unknown>> = {
   scout: { query: "software engineer", location: "Australia" },
+  emailAgent: { mode: "triage" },
 };
 
 const AGENT_ROUTE: Record<string, string> = {
   scout: "scout",
   fitScorer: "fit-scorer",
+  matcher: "matcher",
   tailor: "tailor",
   coverLetter: "cover-letter",
   storyExtractor: "story-extractor",
+  emailAgent: "email-agent",
 };
 
 const POLL_MS = 3000;

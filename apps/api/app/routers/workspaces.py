@@ -23,22 +23,20 @@ from app.services.career_data import refresh_career_data
 router = APIRouter()
 
 
-def _email_provider_connected() -> bool:
-    """Whether a real outbound email provider (SMTP / Gmail OAuth / etc.) is
-    wired and connected for this deployment.
+def _email_provider_connected(user_id: str) -> bool:
+    """Whether the user has a real outbound email provider (Gmail via Google
+    OAuth) connected.
 
-    No email-send integration exists anywhere in the API yet (see ADR D-0029):
-    there is no SMTP transport, no OAuth handoff, and the inbox surfaces every
-    account as ``not_connected``. Sending therefore cannot succeed, and the
-    send handler must fail honestly instead of fabricating a ``sent`` status.
-
-    This is the single source of truth for "can we send an email?" — both the
-    inbox ``accounts`` status and the send gate read it, so the two can never
-    drift apart. When a genuine provider integration lands, replace this stub
-    with a real connectivity check and the honest error branch disappears on
-    its own.
+    A ``GoogleCredential`` row — persisted by the in-app Google OAuth flow
+    (ADR D-0029, resolved in P4) — means Gmail send/sync is available for this
+    user. This is the single source of truth for "can we send an email?": both
+    the inbox ``accounts`` status and the send gate read it, so the two can
+    never drift apart. Absent a credential the send handler fails honestly
+    (409) instead of fabricating a ``sent`` status.
     """
-    return False
+    from app.repositories.google_credential import GoogleCredentialRepository
+
+    return GoogleCredentialRepository().is_connected(user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -314,8 +312,37 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
 
 @router.get("/emails/inbox")
 def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
-    """Email Command Center — real EmailThread records from the database."""
+    """Email Command Center — real EmailThread records from the database.
+
+    When the user has connected Gmail, a best-effort sync pulls the latest
+    threads into ``EmailThread`` first so the inbox reflects the real mailbox.
+    A Gmail hiccup never 500s the inbox — it degrades to whatever is already
+    stored (honest, never fabricated).
+    """
     uid = current_user["id"]
+
+    connected = _email_provider_connected(uid)
+    if connected:
+        try:
+            from app.services.gmail_service import (
+                GmailAuthError,
+                GmailNotConnectedError,
+                GmailService,
+            )
+
+            GmailService(uid).sync_threads_to_db()
+        except (GmailAuthError, GmailNotConnectedError):
+            connected = False
+        except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
+            pass
+
+    account_email = current_user.get("email", "")
+    if connected:
+        from app.repositories.google_credential import GoogleCredentialRepository
+
+        pub = GoogleCredentialRepository().public_view(uid)
+        if pub and pub.get("googleEmail"):
+            account_email = pub["googleEmail"]
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -363,11 +390,15 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
     return {
         "accounts": [
             {
-                "email": current_user.get("email", ""),
+                "email": account_email,
                 "provider": "Gmail",
-                "status": "connected" if _email_provider_connected() else "not_connected",
+                "status": "connected" if connected else "not_connected",
                 "unread": 0,
-                "note": "Connect your Gmail account to see your inbox here.",
+                "note": (
+                    "Gmail connected — your inbox is syncing."
+                    if connected
+                    else "Connect your Gmail account to see your inbox here."
+                ),
             }
         ],
         "stats": {
@@ -399,37 +430,92 @@ def send_reply(payload: SendReplyRequest, current_user: CurrentUser) -> dict[str
     any DB write, so a rejected send leaves the thread untouched. Drafting
     (``POST /emails/draft``) is a separate endpoint and is unaffected.
     """
-    if not _email_provider_connected():
+    uid = current_user["id"]
+    if not _email_provider_connected(uid):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={
                 "error": "no_email_provider_connected",
                 "message": (
-                    "No email provider connected — connect an account in Settings "
-                    "to send. No email has been sent."
+                    "No email provider connected — connect your Gmail account to "
+                    "send. No email has been sent."
                 ),
             },
         )
-    uid = current_user["id"]
+    # Load the thread + its contact's address (the real recipient).
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT id, messages FROM "EmailThread" WHERE id = %s AND "userId" = %s',
+                'SELECT et.id, et.messages, et.subject, c.email AS contact_email'
+                ' FROM "EmailThread" et'
+                ' LEFT JOIN "Contact" c ON et."contactId" = c.id'
+                ' WHERE et.id = %s AND et."userId" = %s',
                 (payload.message_id, uid),
             )
             rows = rows_to_dicts(cur)
-            if not rows:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Thread not found")
-            thread = rows[0]
-            msgs = thread.get("messages") or []
-            msgs.append({"role": "user", "body": payload.body})
-            import json as _json
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thread not found")
+    thread = rows[0]
+    recipient = thread.get("contact_email")
+    if not recipient:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "No recipient email on this thread — add the contact's email before sending.",
+        )
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailError,
+        GmailNotConnectedError,
+        GmailService,
+    )
+
+    try:
+        sent = GmailService(uid).send(
+            to=recipient,
+            subject=thread.get("subject") or "(no subject)",
+            body=payload.body,
+        )
+    except (GmailAuthError, GmailNotConnectedError):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "gmail_auth_failed",
+                "message": (
+                    "Gmail authorization expired — reconnect your Gmail account "
+                    "to send. No email has been sent."
+                ),
+            },
+        ) from None
+    except GmailError:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "gmail_send_failed",
+                "message": (
+                    "Gmail could not send the message right now — no email was "
+                    "sent. Please try again."
+                ),
+            },
+        ) from None
+    import json as _json
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            msgs = list(thread.get("messages") or [])
+            msgs.append(
+                {"role": "user", "body": payload.body, "gmailMessageId": sent.get("id")}
+            )
             cur.execute(
-                'UPDATE "EmailThread" SET messages = %s, "updatedAt" = NOW() WHERE id = %s',
-                (_json.dumps(msgs), payload.message_id),
+                'UPDATE "EmailThread" SET messages = %s::jsonb, "updatedAt" = NOW()'
+                ' WHERE id = %s AND "userId" = %s',
+                (_json.dumps(msgs), payload.message_id, uid),
             )
         conn.commit()
-    return {"status": "sent", "messageId": payload.message_id}
+    return {
+        "status": "sent",
+        "messageId": payload.message_id,
+        "gmailMessageId": sent.get("id"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +744,18 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
         p_status, _model, detail, _models = _provider_env_state(seed["id"])
         if p_status == "connected":
             accounts.append({"name": seed["name"], "status": "connected", "detail": detail})
+    # Real Gmail connection (P4) — surfaced only when a GoogleCredential exists.
+    from app.repositories.google_credential import GoogleCredentialRepository
+
+    gpub = GoogleCredentialRepository().public_view(uid)
+    if gpub and gpub.get("googleEmail"):
+        accounts.append(
+            {
+                "name": "Google (Gmail)",
+                "status": "connected",
+                "detail": f"Connected as {gpub['googleEmail']}",
+            }
+        )
     result["connectedAccounts"] = accounts
     return result
 

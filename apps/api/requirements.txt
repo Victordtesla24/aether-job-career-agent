@@ -18,6 +18,12 @@ PyJWT>=2.8
 pydantic[email]>=2.7
 beautifulsoup4>=4.12
 scikit-learn>=1.4
+# Google OAuth + Gmail API — real in-app Gmail integration (P4). google-auth
+# handles token refresh; google-auth-oauthlib runs the consent/exchange flow;
+# google-api-python-client is the Gmail REST client.
+google-auth>=2.30
+google-auth-oauthlib>=1.2
+google-api-python-client>=2.130
 # Optional/heavy: embedding-based semantic similarity for the ATS engine
 # (see requirements-ml.txt). The engine degrades gracefully to a deterministic
 # TF-IDF/token-overlap fallback when it (or its cached model) is unavailable.

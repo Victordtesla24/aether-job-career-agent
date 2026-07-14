@@ -20,6 +20,7 @@ const NODES: Array<{ label: string; agent: string; blurb: string }> = [
   { label: "Tailoring", agent: "tailor", blurb: "Evidence-grounded resume rewrite" },
   { label: "Cover Letter", agent: "coverLetter", blurb: "Drafts letter · approval-gated" },
   { label: "Stories", agent: "storyExtractor", blurb: "Mines resume into STAR+R stories" },
+  { label: "Email", agent: "emailAgent", blurb: "Triages inbox · drafts grounded replies · applies labels" },
 ];
 
 function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[]) {

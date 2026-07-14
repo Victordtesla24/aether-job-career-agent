@@ -31,11 +31,12 @@ _DEFAULT_LOCATION = "Melbourne, Australia"
 #: Canonical agent registry (mirrors the LangGraph node names in
 #: packages/agents/src/graph/aether-graph.ts).
 AGENT_NAMES = (
-    "supervisor", "scout", "matcher", "fitScorer", "tailor", "coverLetter", "storyExtractor"
+    "supervisor", "scout", "matcher", "fitScorer", "tailor", "coverLetter",
+    "storyExtractor", "emailAgent"
 )
 
 #: Agents whose output is gated behind a human approval.
-_APPROVAL_GATED = {"tailor", "coverLetter"}
+_APPROVAL_GATED = {"tailor", "coverLetter", "emailAgent"}
 
 # ---------------------------------------------------------------------------
 # Agents-screen catalog, provider seeds and model pricing (design/screens/agents.html)
@@ -83,8 +84,10 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "tip": "Best with Claude claude-sonnet-4 or GPT-4o. Needs strong creative writing and "
             "tone adaptation capabilities."},
     {"key": "atsOptimization", "name": "ATS Optimization Agent", "icon": "fa-vector-square",
-     "accent": "indigo", "backend": None, "recommended": "text-embedding-3-large",
-     "tip": "Best with text-embedding-3-large for semantic matching. Uses embeddings, not chat."},
+     "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
+     "tip": "The semantic ATS engine that runs inside Match Scoring — embeds each resume "
+            "against the job description (deterministic, no chat cost). Already shipped; "
+            "runs as part of fit scoring."},
     {"key": "compliance", "name": "Compliance Agent", "icon": "fa-shield-halved",
      "accent": "green", "backend": None, "recommended": "claude-sonnet-4",
      "tip": "Best with Claude claude-sonnet-4 for careful reasoning about truthfulness and "
@@ -96,27 +99,35 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "
             "scores every discovered job with no LLM cost."},
+    {"key": "jobMatching", "name": "Job Matching Agent", "icon": "fa-arrows-to-dot",
+     "accent": "indigo", "backend": "matcher", "recommended": "deterministic",
+     "tip": "Ranks every fit-scored job and selects the best-fit target for tailoring — "
+            "the matcher node of the live pipeline, now runnable on its own. "
+            "Deterministic, no LLM cost."},
     {"key": "salaryIntelligence", "name": "Salary Intelligence Agent", "icon": "fa-sack-dollar",
      "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — aggregates salary data at scale affordably."},
     {"key": "interviewPrep", "name": "Interview Prep Agent", "icon": "fa-comments",
      "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
      "tip": "Best with Claude claude-sonnet-4 for realistic mock interviews and deep reasoning."},
-    {"key": "followUp", "name": "Follow-up Agent", "icon": "fa-reply",
-     "accent": "indigo", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — short, timely follow-up messages at low cost."},
     {"key": "companyResearch", "name": "Company Research Agent", "icon": "fa-building",
      "accent": "indigo", "backend": None, "recommended": "gpt-4o",
      "tip": "Best with GPT-4o for synthesizing company research from web sources."},
     {"key": "skillGap", "name": "Skill Gap Agent", "icon": "fa-code-compare",
-     "accent": "green", "backend": None, "recommended": "claude-3.5-haiku",
-     "tip": "Best with claude-3.5-haiku — quick skill-gap comparisons against job requirements."},
-    {"key": "portfolioSync", "name": "Portfolio Sync Agent", "icon": "fa-github",
-     "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — syncs GitHub/portfolio activity into profile evidence."},
+     "accent": "green", "backend": "fitScorer", "recommended": "deterministic",
+     "tip": "Surfaces the job's missing keywords from the ATS engine "
+            "(ATSScore.missing_keywords) — the skill-gap facet of Match Scoring. "
+            "Already shipped; deterministic, no LLM cost."},
     {"key": "recruiterOutreach", "name": "Recruiter Outreach Agent", "icon": "fa-handshake",
      "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 for personalised, professional recruiter outreach."},
+     "tip": "Planned: first-touch outbound to a recruiter/contact with no existing thread "
+            "(a future dedicated OutreachAgent). Inbox triage and reply/follow-up drafting "
+            "already live in the Email Agent."},
+    {"key": "emailAgent", "name": "Email Agent", "icon": "fa-envelope",
+     "accent": "coral", "backend": "emailAgent", "recommended": "claude-sonnet-4",
+     "tip": "Real Gmail-backed inbox triage, evidence-grounded reply and follow-up drafting, "
+            "label management and per-thread insights. Sends are approval-gated. Best with "
+            "Claude claude-sonnet-4. Connect Gmail (Email Center) to activate live send/sync."},
     {"key": "marketTrends", "name": "Market Trends Agent", "icon": "fa-arrow-trend-up",
      "accent": "indigo", "backend": None, "recommended": "gpt-4o",
      "tip": "Best with GPT-4o — synthesizes market & hiring trend signals."},
@@ -148,6 +159,10 @@ AGENT_CATALOG: list[dict[str, Any]] = [
 _CATALOG_BY_KEY = {a["key"]: a for a in AGENT_CATALOG}
 #: Reverse map: backend run name → catalog key (for status derivation).
 _BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]}
+#: A single backend can power several catalog facets (fitScorer serves Match
+#: Scoring plus its ATS-optimization / skill-gap facets); pin the canonical card
+#: so stat displays name the primary agent, not whichever facet sorted last.
+_BACKEND_TO_KEY["fitScorer"] = "matchScoring"
 
 #: The 6 AI providers offered by the Agents screen. This is a static catalog
 #: of identity/branding only — connection status, active model, and detail
@@ -362,6 +377,7 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     "tailor": "REASONING",
     "coverLetter": "REASONING",
     "storyExtractor": "STRUCTURED",
+    "emailAgent": "REASONING",
 }
 
 
@@ -442,6 +458,18 @@ def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]
 
         return _record_run(
             user_id, "storyExtractor", params, lambda: StoryExtractorAgent().run(user_id)
+        )
+    if name in ("matcher", "job-matching", "jobMatching"):
+        from app.agents.matcher_agent import MatcherAgent
+
+        return _record_run(
+            user_id, "matcher", params, lambda: MatcherAgent().run(user_id)
+        )
+    if name in ("emailAgent", "email-agent", "email"):
+        from app.agents.email_agent import EmailAgent
+
+        return _record_run(
+            user_id, "emailAgent", params, lambda: EmailAgent().run(user_id, **params)
         )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
@@ -570,6 +598,36 @@ def run_story_extractor(current_user: CurrentUser) -> dict[str, Any]:
     return _dispatch(current_user["id"], "storyExtractor", {})
 
 
+class EmailAgentRequest(BaseModel):
+    mode: str = Field(default="triage")
+    thread_id: str | None = None
+    to: str | None = None
+    subject: str | None = None
+    body: str | None = None
+    #: Optional PDFs to attach on an approved send (resolved in-process at
+    #: execute time). Only ids travel — never the bytes.
+    attach_resume_id: str | None = None
+    attach_cover_letter_id: str | None = None
+
+
+@router.post("/email/run")
+def run_email_agent(body: EmailAgentRequest, current_user: CurrentUser) -> dict[str, Any]:
+    """Run the Email Agent: triage / draft_reply / insights / send (P4).
+
+    Gmail-backed when the user has connected Gmail; otherwise degrades honestly
+    to local ``EmailThread`` rows (never fabricates inbox data). ``send`` mode
+    never sends directly — it opens a pending ``email_send`` approval so the
+    human-in-the-loop gate always adjudicates a real outbound email.
+    """
+    params = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return _dispatch(current_user["id"], "emailAgent", params)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # Orchestration (P2-S08)
 # ---------------------------------------------------------------------------
@@ -609,30 +667,17 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
     fit_out = _dispatch(user_id, "fitScorer", {"rescore": False})
     steps.append({"agent": "fitScorer", "output": fit_out})
 
-    from app.repositories.job import JobRepository
-
-    jobs = JobRepository().list_by_user(user_id, sort="fitScore")
+    from app.agents.matcher_agent import MatcherAgent
 
     # Matcher node: ranks scored jobs and selects the top match (audit-recorded).
-    def _match() -> dict[str, Any]:
-        if not jobs:
-            return {"matched": 0, "top_job_id": None}
-        top = jobs[0]
-        return {
-            "matched": len(jobs),
-            "top_job_id": top["id"],
-            "top_job_title": top.get("title"),
-            "top_company": top.get("company"),
-            "top_fit_score": top.get("fitScore"),
-        }
-
-    match_out = _record_run(user_id, "matcher", {}, _match)
+    # Reuses the now first-class MatcherAgent so the pipeline and the standalone
+    # /agents/matcher/run trigger share one implementation.
+    match_out = _record_run(user_id, "matcher", {}, lambda: MatcherAgent().run(user_id))
     steps.append({"agent": "matcher", "output": match_out})
 
-    if not jobs:
+    top_job_id = match_out.get("top_job_id")
+    if not top_job_id:
         return {"status": "completed", "steps": steps, "approvalRequired": False}
-
-    top_job_id = jobs[0]["id"]
     # One shared wall-clock budget across BOTH LLM-backed steps: without it
     # tailor and coverLetter each armed their own 60 s budget, so the pipeline
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
@@ -717,8 +762,8 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "model": model,
                 "recommended": entry["recommended"],
                 "tip": entry["tip"],
-                "runnable": backend in ("scout", "fitScorer", "tailor", "coverLetter",
-                                        "storyExtractor"),
+                "runnable": backend in ("scout", "fitScorer", "matcher", "tailor",
+                                        "coverLetter", "storyExtractor", "emailAgent"),
                 "backend": backend,
                 "enabled": enabled,
                 "status": state,
