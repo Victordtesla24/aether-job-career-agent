@@ -19,7 +19,14 @@ from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
-from app.services.llm_client import LLMUnavailableError, get_active_credential_env_var
+from app.repositories.provider_credential import ProviderCredentialRepository
+from app.services import credential_vault
+from app.services.llm_client import (
+    LLMUnavailableError,
+    _infer_anthropic_auth_mode,
+    get_active_credential_env_var,
+    verify_provider_credential,
+)
 
 router = APIRouter()
 
@@ -254,10 +261,14 @@ def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
 
     seed = _PROVIDER_SEED_BY_ID[provider_id]
     if os.environ.get(_PROVIDER_ENV_KEY[provider_id]):
+        # GAP-PC-005 fix: the old string hardcoded "standby (Anthropic is the
+        # active path)" for EVERY provider regardless of truth. State only what
+        # is actually true — the key is present in the server env — without
+        # asserting which provider is serving live runs.
         return (
             "connected",
             "",
-            "API key configured in .env · standby (Anthropic is the active path)",
+            "API key configured in server .env",
             seed["models"],
         )
     return ("unconfigured", "", "Not configured · add API key to .env", seed["models"])
@@ -824,46 +835,156 @@ def update_agent_config(
     return {"key": row["agentKey"], "enabled": row["enabled"], "model": row["model"]}
 
 
-@router.get("/providers")
-def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
-    """The 6 AI providers with connection state derived from real credentials.
+#: The provider ids that support stored (encrypted-vault) credentials — exactly
+#: the 6 real ids already backed by an env key in ``_PROVIDER_ENV_KEY``. The
+#: abacus fallback and any others keep behaving as today (no credential CRUD).
+_CREDENTIAL_PROVIDERS = frozenset(_PROVIDER_ENV_KEY)
 
-    Status comes from the server environment (a provider can never show
-    "connected" without an actual key). A persisted user override may only
-    DOWNGRADE a connected provider (disconnect it / mark it warning) or pick a
-    preferred model — it can never upgrade a keyless provider to connected.
+
+def _env_secret_for(provider_id: str) -> str | None:
+    """The raw env secret backing ``provider_id``'s 'environment' source, if any.
+
+    Used ONLY to derive the masked last-4 hint + authMode for an env-sourced
+    provider; the value never leaves this module.
     """
+    import os
+
+    if provider_id == "anthropic":
+        base = os.environ.get("AETHER_LLM_BASE_URL", "")
+        direct = os.environ.get("AETHER_LLM_API_KEY")
+        if direct and "anthropic.com" in base:
+            return direct
+        return os.environ.get("ANTHROPIC_API_KEY")
+    if provider_id == "abacus":
+        return os.environ.get("ABACUS_API_KEY")
+    key_var = _PROVIDER_ENV_KEY.get(provider_id)
+    return os.environ.get(key_var) if key_var else None
+
+
+def _provider_db_masked(provider_id: str) -> dict[str, Any] | None:
+    """Masked DB credential row for a supported provider, or None.
+
+    Degrades to None on ANY read error (missing table / DB hiccup) so the
+    providers panel never fails because the credential store is unavailable.
+    """
+    if provider_id not in _CREDENTIAL_PROVIDERS:
+        return None
+    try:
+        return ProviderCredentialRepository().get_masked(provider_id)
+    except Exception:  # noqa: BLE001 — providers panel must stay up
+        return None
+
+
+def _iso_or_none(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else (value or None)
+
+
+def _build_provider_entry(
+    seed: dict[str, Any], override: dict[str, Any]
+) -> dict[str, Any]:
+    """One provider's honest status: DB credential FIRST, then env, then none.
+
+    ``source`` is the truth about where a live credential would come from
+    (``database`` / ``environment`` / ``none``); a provider is never shown
+    ``connected`` without a real credential (D-0020). A persisted per-user
+    override may only DOWNGRADE a connected provider or pick a preferred model.
+    """
+    provider_id = seed["id"]
+    env_status, env_model, env_detail, env_models = _provider_env_state(provider_id)
+    # A stored credential is only usable when the vault key is present; without
+    # it the ciphertext can't be decrypted, so per ADR-PC-3 the read degrades to
+    # the env source (or none) instead of dishonestly claiming a DB connection.
+    db = _provider_db_masked(provider_id) if credential_vault.key_present() else None
+    if db:
+        source = "database"
+        status = "connected"
+        auth_mode = db.get("authMode")
+        secret_hint = db.get("secretHint")
+        base_url = db.get("baseUrl")
+        last_verified_at = _iso_or_none(db.get("lastVerifiedAt"))
+        last_verify_status = db.get("lastVerifyStatus")
+        detail = f"Credential stored in the encrypted vault ({secret_hint})"
+        if last_verify_status:
+            detail += f" · last verify: {last_verify_status}"
+    elif env_status == "connected":
+        source = "environment"
+        status = "connected"
+        secret = _env_secret_for(provider_id)
+        if provider_id == "anthropic" and secret:
+            auth_mode = _infer_anthropic_auth_mode(secret)
+        else:
+            auth_mode = "api_key" if secret else None
+        secret_hint = credential_vault.secret_hint(secret) if secret else None
+        base_url = None
+        last_verified_at = None
+        last_verify_status = None
+        detail = env_detail
+    else:
+        source = "none"
+        status = "unconfigured"
+        auth_mode = None
+        secret_hint = None
+        base_url = None
+        last_verified_at = None
+        last_verify_status = None
+        detail = env_detail
+    if override.get("status") in ("warning", "unconfigured") and status == "connected":
+        status = override["status"]
+    model = override.get("model") or env_model
+    return {
+        "id": provider_id,
+        "label": seed["name"],
+        "name": seed["name"],
+        "auth": seed["auth"],
+        "icon": seed["icon"],
+        "color": seed["color"],
+        "models": env_models,
+        "status": status,
+        "source": source,
+        "authMode": auth_mode,
+        "secretHint": secret_hint,
+        "baseUrl": base_url,
+        "lastVerifiedAt": last_verified_at,
+        "lastVerifyStatus": last_verify_status,
+        "model": model if status == "connected" else "",
+        "detail": detail,
+    }
+
+
+def _user_provider_overrides(user_id: str) -> dict[str, dict[str, Any]]:
     _ensure_agents_tables()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT "provider", "status", "model", "detail" FROM "AgentProvider" '
                 'WHERE "userId" = %s',
-                (current_user["id"],),
+                (user_id,),
             )
-            overrides = {r["provider"]: r for r in rows_to_dicts(cur)}
-    result = []
-    for seed in PROVIDER_SEED:
-        env_status, env_model, env_detail, env_models = _provider_env_state(seed["id"])
-        o = overrides.get(seed["id"], {})
-        status = env_status
-        if o.get("status") in ("warning", "unconfigured") and env_status == "connected":
-            status = o["status"]
-        model = o.get("model") or env_model
-        result.append(
-            {
-                "id": seed["id"],
-                "name": seed["name"],
-                "auth": seed["auth"],
-                "icon": seed["icon"],
-                "color": seed["color"],
-                "models": env_models,
-                "status": status,
-                "model": model if status == "connected" else "",
-                "detail": env_detail,
-            }
-        )
-    return result
+            return {r["provider"]: r for r in rows_to_dicts(cur)}
+
+
+def _provider_status_object(provider_id: str, user_id: str) -> dict[str, Any]:
+    """Full masked status object for a single provider (PUT/DELETE responses)."""
+    override = _user_provider_overrides(user_id).get(provider_id, {})
+    return _build_provider_entry(_PROVIDER_SEED_BY_ID[provider_id], override)
+
+
+@router.get("/providers")
+def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """The AI providers with connection state derived from real credentials.
+
+    Status is DB-first with an honest ``source`` (``database``/``environment``/
+    ``none``): a stored encrypted-vault credential wins, else a legacy env key
+    (ADR-PC-4), else unconfigured. A provider can never show ``connected``
+    without an actual credential (D-0020). A persisted user override may only
+    DOWNGRADE a connected provider or pick a preferred model — never upgrade a
+    keyless provider to connected. Secrets are masked to a last-4 hint only.
+    """
+    overrides = _user_provider_overrides(current_user["id"])
+    return [
+        _build_provider_entry(seed, overrides.get(seed["id"], {}))
+        for seed in PROVIDER_SEED
+    ]
 
 
 class ProviderUpdate(BaseModel):
@@ -915,6 +1036,115 @@ def update_provider(
             row = rows_to_dicts(cur)[0]
         conn.commit()
     return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# Provider credential CRUD + verification (PROVIDER-CONFIG-RUN §1 contract).
+# Fully in-UI, encrypted at rest (ADR-PC-3), no cross-provider billing.
+# ---------------------------------------------------------------------------
+
+
+class ProviderCredentialBody(BaseModel):
+    authMode: str = Field(min_length=1)
+    secret: str = Field(min_length=1)
+    baseUrl: str | None = None
+
+
+def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> None:
+    """Reject an authMode/secret that does not match the provider (REQ-PC-2/3).
+
+    Anthropic accepts ``api_key`` (``sk-ant-api…``) or ``subscription_oauth``
+    (``sk-ant-oat…``) with the matching key prefix; every other provider
+    accepts only ``api_key``.
+    """
+    if provider == "anthropic":
+        if auth_mode == "api_key":
+            if not secret.startswith("sk-ant-api"):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Anthropic api_key must start with 'sk-ant-api'.",
+                )
+        elif auth_mode == "subscription_oauth":
+            if not secret.startswith("sk-ant-oat"):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Anthropic subscription_oauth token must start with 'sk-ant-oat'.",
+                )
+        else:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Anthropic accepts authMode 'api_key' or 'subscription_oauth'.",
+            )
+    elif auth_mode != "api_key":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Provider '{provider}' accepts only authMode 'api_key'.",
+        )
+
+
+@router.put("/providers/{provider}/credential")
+def put_provider_credential(
+    provider: str, body: ProviderCredentialBody, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Store (encrypt) a provider credential entirely in-UI; return masked row.
+
+    Honest failures: an unknown/unsupported provider is 404; a mismatched
+    authMode/prefix is 422; a missing ``AETHER_CREDENTIAL_KEY`` is a 503 (the
+    secret is never stored in the clear — ADR-PC-3).
+    """
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support stored credentials.",
+        )
+    _validate_provider_auth(provider, body.authMode, body.secret)
+    if not credential_vault.key_present():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Credential encryption unavailable: AETHER_CREDENTIAL_KEY is not "
+            "configured on the server.",
+        )
+    try:
+        ProviderCredentialRepository().upsert(
+            provider, auth_mode=body.authMode, secret=body.secret, base_url=body.baseUrl
+        )
+    except credential_vault.CredentialVaultError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)
+        ) from exc
+    return _provider_status_object(provider, current_user["id"])
+
+
+@router.delete("/providers/{provider}/credential")
+def delete_provider_credential(
+    provider: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Remove a stored credential; status falls back to the env source (ADR-PC-4)."""
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support stored credentials.",
+        )
+    ProviderCredentialRepository().delete(provider)
+    return _provider_status_object(provider, current_user["id"])
+
+
+@router.post("/providers/{provider}/verify")
+def verify_provider(provider: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Perform a REAL provider round-trip and record the honest result (REQ-PC-7).
+
+    Never marks a credential verified without a genuine 2xx. The result is
+    stamped onto the stored row (when one exists) as ``lastVerifiedAt`` /
+    ``lastVerifyStatus``.
+    """
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support verification.",
+        )
+    ok, status_token, detail = verify_provider_credential(provider)
+    ProviderCredentialRepository().mark_verified(provider, "ok" if ok else "failed")
+    return {"ok": ok, "status": status_token, "detail": detail}
 
 
 @router.get("/stats")

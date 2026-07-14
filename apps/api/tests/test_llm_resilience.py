@@ -222,12 +222,13 @@ class TestHardWallClockCap:
                 assert llm.complete("shared_prompt", "sys", "usr") == "canned"
 
     def test_provider_base_url_is_configurable(self, monkeypatch):
-        """AETHER_LLM_BASE_URL/API_KEY allow any OpenAI-compatible provider
-        (e.g. Anthropic's compat endpoint) without a code change."""
+        """AETHER_LLM_BASE_URL/API_KEY point the OpenAI-compatible (OpenRouter)
+        transport at any compatible endpoint without a code change. Anthropic
+        models are routed natively instead — see test_provider_config.py."""
         import httpx
 
-        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
-        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-test")
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://example-openai-compat.test/v1")
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-compat-test")
         seen: dict[str, object] = {}
 
         class _Resp:
@@ -244,25 +245,25 @@ class TestHardWallClockCap:
 
         monkeypatch.setattr(httpx, "post", _capture)
         llm = LLMClient(mode="live")
-        out = llm._call_live("sys", "usr", model="claude-test", temperature=0.0)
+        out = llm._call_live("sys", "usr", model="test-model", temperature=0.0)
         assert out == "hello"
-        assert seen["url"] == "https://api.anthropic.com/v1/chat/completions"
-        assert seen["auth"] == "Bearer sk-ant-test"
+        assert seen["url"] == "https://example-openai-compat.test/v1/chat/completions"
+        assert seen["auth"] == "Bearer sk-compat-test"
 
     def test_extra_headers_env_injected_into_live_calls(self, monkeypatch):
-        """AETHER_LLM_EXTRA_HEADERS (JSON object) is merged into every live
-        request — required by Anthropic's OpenAI-compat endpoint, which needs
-        anthropic-version + (for OAuth tokens) anthropic-beta headers."""
+        """AETHER_LLM_EXTRA_HEADERS (JSON object) is merged into every
+        OpenAI-compatible (OpenRouter) live request — some compat endpoints
+        require custom headers. (Native Anthropic sets its own headers.)"""
         import httpx
 
-        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
-        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-test")
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://example-openai-compat.test/v1")
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-compat-test")
         monkeypatch.setenv(
             "AETHER_LLM_EXTRA_HEADERS",
             json.dumps(
                 {
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "oauth-2025-04-20",
+                    "x-custom-header": "abc123",
+                    "x-another-header": "def456",
                 }
             ),
         )
@@ -281,12 +282,12 @@ class TestHardWallClockCap:
 
         monkeypatch.setattr(httpx, "post", _capture)
         llm = LLMClient(mode="live")
-        assert llm._call_live("sys", "usr", model="claude-test", temperature=0.0) == "hello"
+        assert llm._call_live("sys", "usr", model="test-model", temperature=0.0) == "hello"
         headers = seen["headers"]
         assert isinstance(headers, dict)
-        assert headers["anthropic-version"] == "2023-06-01"
-        assert headers["anthropic-beta"] == "oauth-2025-04-20"
-        assert headers["Authorization"] == "Bearer sk-ant-test"
+        assert headers["x-custom-header"] == "abc123"
+        assert headers["x-another-header"] == "def456"
+        assert headers["Authorization"] == "Bearer sk-compat-test"
 
     def test_extra_headers_malformed_json_is_ignored(self, monkeypatch):
         """A malformed AETHER_LLM_EXTRA_HEADERS value must never break calls."""

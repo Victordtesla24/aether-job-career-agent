@@ -15,6 +15,9 @@ passlib>=1.7
 # to keep login logs free of the (trapped) AttributeError traceback.
 bcrypt>=4.0,<4.1
 PyJWT>=2.8
+# Fernet symmetric encryption for the provider-credential vault
+# (app/services/credential_vault.py). Fernet lives in cryptography.fernet.
+cryptography>=42.0
 pydantic[email]>=2.7
 beautifulsoup4>=4.12
 scikit-learn>=1.4
