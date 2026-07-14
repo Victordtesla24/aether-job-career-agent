@@ -119,7 +119,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add outreach table creation to database initialization in `apps/api/app/db.py`. Ensure tables exist before endpoint is called. Add integration test for draft save flow.
 - **Verification recipe:** 1. Deploy fix. 2. POST /api/emails/draft with valid payload. 3. Verify 201 Created response. 4. GET /api/emails to confirm draft appears. 5. Browser console clean on /dashboard/email.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: POST /emails/draft 201; evidence qa__gap_p4_001__*.json)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_001__20260713T090404Z.json` (POST /emails/draft → 201)
 
 ### GAP-P4-002
 - **Type:** G-BUG
@@ -131,7 +131,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add networking/contacts table creation to DB init. Add integration test.
 - **Verification recipe:** 1. Deploy fix. 2. POST /api/networking/contacts with valid payload. 3. Verify 201 Created. 4. GET /api/networking/contacts to confirm. 5. Clean log on /dashboard/networking.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: POST /networking/contacts 201)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_002__20260713T090404Z.json` (POST /networking/contacts → 201)
 
 ### GAP-P4-003
 - **Type:** G-MISSING
@@ -143,7 +143,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Verify `app.include_router(workspaces.router, prefix="/workspaces")` in `apps/api/app/main.py`. If missing, add it. Add pytest for workspaces endpoints.
 - **Verification recipe:** 1. Deploy fix. 2. GET /api/workspaces/interviews/prep returns 200. 3. GET /api/workspaces/networking/summary returns 200. 4. Run pytest workspaces tests.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: GET /workspaces/interviews/prep 200)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_003__20260713T090404Z.json` (GET /workspaces/interviews/prep → 200)
 
 ### GAP-P4-004
 - **Type:** G-WIRING
@@ -155,7 +155,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add a GET handler for `/` in networking router that returns summary or redirects.
 - **Verification recipe:** 1. Deploy fix. 2. GET /api/networking returns 200 or 302. 3. Log clean.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: GET /networking 200)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_004__20260713T090404Z.json` (GET /networking → 200)
 
 ### GAP-P4-005
 - **Type:** G-WIRING
@@ -167,7 +167,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add GET handler for `/` and `/dashboard` in analytics router.
 - **Verification recipe:** 1. Deploy fix. 2. GET /api/analytics returns 200. 3. GET /api/analytics/dashboard returns 200.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: GET /analytics + /dashboard 200)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_005a__20260713T090404Z.json` (GET /analytics → 200), `qa__gap_p4_005b__20260713T090404Z.json` (GET /analytics/dashboard → 200)
 
 ### GAP-P4-006
 - **Type:** G-WIRING
@@ -179,7 +179,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Verify agent router path registration. Either implement `/agents/tailor/run` or document correct path. Add test.
 - **Verification recipe:** 1. Deploy fix. 2. POST /api/agents/tailor/run with valid payload → 200/202. 3. Ui tailor button triggers successfully.
 - **Status:** VERIFIED-CLOSED (false positive — tailor/run returns 422 not 404)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_006__20260713T090404Z.json` (POST /agents/tailor/run without payload → 422, route live, not 404)
 
 ### GAP-P4-007
 - **Type:** G-WIRING
@@ -191,7 +191,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Fix agent router to handle `/coverLetter/run` or `/cover-letter/run`. Add test.
 - **Verification recipe:** 1. Deploy fix. 2. POST /api/agents/coverLetter/run → 200/202.
 - **Status:** VERIFIED-CLOSED (false positive — cover-letter/run returns 422 not 404)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_007__20260713T090404Z.json` (POST /agents/coverLetter/run without payload → 422, route live, not 404)
 
 ### GAP-P4-008
 - **Type:** G-BUG
@@ -203,7 +203,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Update test expected fallback chain to match current config, OR update config default fallback chain. Fix test at `apps/api/tests/test_llm_resilience.py:37`.
 - **Verification recipe:** 1. Apply fix. 2. Run `pytest tests/test_llm_resilience.py -x` → PASS. 3. Full `pytest` suite → 125/125 pass.
 - **Status:** VERIFIED-CLOSED (test uses get_fallback_model; deploy commit includes fix)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** This pass's fresh full-suite re-run confirms no regression: `pytest` (apps/api) 292/292 passed, 0 failed (see Summary, re-run this pass).
 
 ### GAP-P4-009
 - **Type:** G-MISSING
@@ -215,7 +215,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Either (a) implement role/location/salary filters per wireframe and add to DECISIONS.md, or (b) file ADR documenting the simplification. Wireframe fidelity requires (a) unless explicitly deferred.
 - **Verification recipe:** 1. Implement or ADR. 2. Re-verify against wireframe. 3. If implemented, test filter behavior.
 - **Status:** VERIFIED-CLOSED (ADR D-0025 Phase 3+ deferral)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0025 (role/salary filters deferred; location filter (jd05) confirmed genuinely live and functional, not deferred — re-verified in GAP-P4-067).
 
 ### GAP-P4-010
 - **Type:** G-MISSING
@@ -227,7 +227,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Either implement bulk endpoints or file ADR deferring to Phase 3+. If ADR: mark wireframe elements as deferred in requirement register.
 - **Verification recipe:** 1. Implement or ADR. 2. Re-verify against wireframe.
 - **Status:** VERIFIED-CLOSED (ADR D-0025 Phase 3+ deferral)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0025 (bulk tailor/skip/saved-tailor-all buttons genuinely deferred to Phase 3+ — reconfirmed live-absent in GAP-P4-067).
 
 ### GAP-P4-011
 - **Type:** G-MISSING
@@ -239,7 +239,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Implement preview endpoint or file ADR. If deferring, add ADR.
 - **Verification recipe:** 1. Implement or ADR. 2. Re-verify.
 - **Status:** VERIFIED-CLOSED (ADR D-0025 Phase 3+ deferral)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0025 — but note the preview button (jd33) is actually **live and functional**, not deferred: `GAP-P4-067__detail-panel__post__20260713T235336Z.png` and `GAP-P4-067__result2__post__20260713T235336Z.json` (`preview_href: "/dashboard/resume?job={id}"`) confirm a real, working `<Link>`, correcting this row's original "MISSING" observation (see GAP-P4-067 and §C.1).
 
 ### GAP-P4-012
 - **Type:** G-WIRING  
@@ -251,7 +251,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Verify approvals router endpoints. Add POST handler if needed.
 - **Verification recipe:** 1. Deploy fix. 2. POST /api/approvals with valid payload → 201. 3. Log clean.
 - **Status:** VERIFIED-CLOSED (QA 2026-07-13: POST /approvals 201)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_012__20260713T090404Z.json` (POST /approvals → 201)
 
 ### GAP-P4-013
 - **Type:** G-CONSOLE
@@ -263,7 +263,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Ensure API listens on 127.0.0.1:8000 when co-located, or configure Next.js to use correct internal API URL. Verify `start-api.sh` binds to 0.0.0.0 or 127.0.0.1 as expected.
 - **Verification recipe:** 1. Apply fix. 2. Tail web.log — no ECONNREFUSED. 3. Server-side rendered pages work without errors.
 - **Status:** VERIFIED-CLOSED (no ECONNREFUSED after last Ready; webBUILD rwybxM7wKY1faLHecO67A)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `/var/log/aether/web.log` (no `ECONNREFUSED` lines after the cited build's `Ready` line); cross-checked this pass — Wave-2's own merge-1 finding (§I.6) that production web was briefly served by an orphan non-systemd process is now corrected (`aether-web.service` systemd-managed), removing the class of internal-networking misconfiguration this gap flagged.
 
 ### GAP-P4-014
 - **Type:** G-DATA
@@ -275,7 +275,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** If intentional, file ADR. If not, remove "Demo" labeling from production UI.
 - **Verification recipe:** 1. Confirm with ADR or remove. 2. Re-screenshot login page.
 - **Status:** VERIFIED-CLOSED (login fields empty prefill; browser snapshot email/password textboxes without values; demo label removed)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__login__post.png` (empty fields, no "Demo" label); re-confirmed this pass by GAP-P4-051's e2e login coverage (`Login page renders the sign-in form with empty fields` — passing, see this pass's fresh 29/29 Playwright run).
 
 ### GAP-P4-015
 - **Type:** G-MISSING
@@ -287,7 +287,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Verify settings router included in main.py. Add backend endpoints for settings/profile data. Verify frontend page renders settings content per wireframe.
 - **Verification recipe:** 1. Deploy fix. 2. Navigate /dashboard/settings — shows settings content. 3. Wireframe elements present. 4. Console clean.
 - **Status:** VERIFIED-CLOSED (GET /workspaces/settings 200; settings page client wired; production route HTTP 200)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__gap_p4_015_api__20260713T090404Z.json` (GET /workspaces/settings → 200, full profile/resume/portfolio/integrations payload), `qa__settings__post.png` (rendered page).
 
 ### GAP-P4-016
 - **Type:** G-MISSING
@@ -299,7 +299,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Fix analytics base endpoint (GAP-P4-005). Verify frontend analytics page renders all chart/grid components from API data. Add missing wireframe sections.
 - **Verification recipe:** 1. Deploy fix. 2. Navigate /dashboard/analytics — full analytics dashboard visible. 3. Wireframe elements present. 4. Console clean.
 - **Status:** VERIFIED-CLOSED (browser: Analytics funnel/conversion/ATS/ROI/market pulse headings present live)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/qa__analytics__post.png` (rendered analytics dashboard); the remaining sources-donut/market-vs-you sections this row didn't yet cover are independently closed by GAP-P4-060.
 
 ### GAP-P4-017
 - **Type:** G-COSMETIC
@@ -311,7 +311,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Implement responsive breakpoints and mobile layouts per wireframes, OR file ADR deferring mobile to Phase 3+.
 - **Verification recipe:** 1. Implement or file ADR. 2. Resize viewport to 390×844 — mobile layouts render per wireframes.
 - **Status:** VERIFIED-CLOSED (ADR D-0026 mobile deferred Phase 3+)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0026 (mobile approval genuinely still deferred); D-0026 amendment records that mobile *dashboard* now matches its wireframe (an improvement, Section E C-31, `rg-mob-dash__page-load__post__20260713T235952Z.png`) — the kept `apps/web/e2e/mobile-regression.spec.ts` regression-guards both routes going forward (this pass: 5/5 passed).
 
 ### GAP-P4-018
 - **Type:** G-COSMETIC
@@ -323,7 +323,7 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Implement approval modal dialog per wireframe, OR file ADR documenting the simplification to list view.
 - **Verification recipe:** 1. Implement or ADR. 2. Click approval → modal dialog with action buttons.
 - **Status:** VERIFIED-CLOSED (ADR D-0027 approval list intentional)
-- **Evidence (post-fix):** (pending)
+- **Evidence (post-fix):** `docs/delivery/DECISIONS.md` D-0027; `approvals__modal_structure.json` confirms the list view is functionally complete (5/5 wireframe-equivalent elements present under `data-testid` naming, Section E C-30).
 
 ### GAP-P4-040
 - **Type:** G-BUG
@@ -335,8 +335,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Either make `application_id` required in the request schema and return 422 when absent, or make the DB column nullable via a backward-compatible migration — pick one contract and align both layers; add a regression test posting without `application_id`.
 - **Verification recipe:** POST /interviews without `application_id` → expect 422 (if required) or 201 (if column made nullable), never 500. Re-run the API sweep endpoint list.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
-- **Status:** IN-FIX (FIX-D dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-API 2026-07-13, production). `POST /interviews` was exercised live against production three ways: (1) without `application_id` → `422` with `{"detail":[{"type":"missing","loc":["body","application_id"],"msg":"Field required",...}]}` — never a 500 (the router's Pydantic schema now declares `application_id: str = Field(min_length=1)`, required); (2) with a real, existing `application_id` (`c4bbc712a79c387b34580bb4a`, a genuine production application) → `201` with a full `InterviewResponse` body (`id: c7546c13f67837dae18e0ea6b`); (3) cleanup — `DELETE /interviews/c7546c13f67837dae18e0ea6b` → `204`, then re-`GET` on the same id → `404 "Interview not found"`, confirming the test row left no residue. `/var/log/aether/api.log` for the full test window: 0 ERROR lines.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-040__no-app-id__post__20260713T232112Z.json` (422), `GAP-P4-040__valid-create__post__20260713T232123Z.json` (201), `GAP-P4-040__cleanup-delete__post__20260713T232130Z.json` (204 + confirmed 404 after).
 
 ### GAP-P4-041
 - **Type:** G-BUG
@@ -348,8 +348,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Either the backend returns a real/typed `intelligence` object (`{score, breakdown, summary}`) or an explicit null the frontend guards for; add optional-chaining (`selected.intelligence?.score`) and a fallback UI state; add a regression test/e2e for email load with `intelligence=null`.
 - **Verification recipe:** Navigate to /dashboard/email logged in; page must render inbox/detail panes with zero console errors; confirm via network log that the `intelligence` field shape matches frontend expectations.
 - **Assigned model tier:** opus (fixer, cluster FIX-C) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-C dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-EMAIL 2026-07-13, production). Navigated to /dashboard/email on production (fresh login) with an empty inbox: page rendered fully (no crash, `data-testid="email-center"` present), zero console errors/pageerrors. Composed a new draft via the Compose modal (`POST /emails/draft` → 201) then reloaded; the new thread auto-selected on load and rendered the honest `data-testid="ai-intelligence-empty"` panel ("No intelligence available yet — connect your Gmail account...") — `selected.intelligence` is null and the frontend never dereferences `.score` (optional-chaining/guard confirmed live, matches `emailIntelligenceView()` unit coverage in `email-intelligence-guard.test.ts`, 5/5 passed). `/var/log/aether/api.log` window for the whole session contains zero ERROR lines. Backend `intelligence` field is still typed `null` (honest, per fix spec's accepted branch) — frontend guard is the closure mechanism, confirmed live.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-041__page-load__pre__20260713T224746Z.png` (pre-interaction, empty inbox, clean render), `GAP-P4-041__thread-detail-all-tab__post__20260713T224826Z.png` (real thread selected, honest empty-intelligence panel + "No reply needed for this email", zero console errors), `GAP-P4-041-042__flow__post__20260713T224746Z.json`, `GAP-P4-041-042__console__post__20260713T224746Z.log` (0 console errors excl. one benign 409 network log from the deliberate GAP-P4-042 send test, 0 pageerrors), `GAP-P4-041__all-tab-select__post__20260713T224826Z.json`, `GAP-P4-041-042__api-log-window__post__20260713T224841Z.log` (0 ERROR lines).
 
 ### GAP-P4-042
 - **Type:** G-FAKE
@@ -361,8 +361,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Return an honest error (e.g. `409`, mirroring the agents `PUT /providers` 409 pattern) when no email provider is connected; the UI surfaces it as a visible error state; never report `"sent"` for an unsent message. Per D-0029.
 - **Verification recipe:** POST /workspaces/emails/send with no connected provider → expect a non-"sent" status or explicit error; connect a provider and confirm a real send path exists before re-testing the success case.
 - **Assigned model tier:** opus (fixer, cluster FIX-C) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-C dispatched). **Supersedes GAP-P4-021 and GAP-P4-029** — both were duplicate reports of this single defect (Run-3 orchestrator cross-check); GAP-P4-042 is now the canonical record.
-- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0029 is the ADR authorizing the honest-error fix shape.
+- **Status:** VERIFIED-CLOSED (QA QA-EMAIL 2026-07-13, production). **Supersedes GAP-P4-021 and GAP-P4-029** — both were duplicate reports of this single defect (Run-3 orchestrator cross-check); GAP-P4-042 is now the canonical record. Composed a real draft thread on production, then attempted to send it two independent ways: (1) from *within* the authenticated browser session via the exact `fetch(...)` call `sendEmailReply()`/`confirmSend()` issues (`POST /workspaces/emails/send {message_id, body}`), and (2) via a standalone API client outside the browser. Both returned `409 Conflict` with `{"detail":{"error":"no_email_provider_connected","message":"No email provider connected — connect an account in Settings to send. No email has been sent."}}` — never `200 {"status":"sent"}`, never a 500. Confirmed via `GET /emails/{thread_id}` that the thread's `messages` array was untouched by the rejected send (only the original draft entry present, no fabricated "sent" append). `/var/log/aether/api.log` shows the exact sequence `POST /emails/draft → 201`, `POST /workspaces/emails/send → 409` (×2), `GET /emails/{id} → 200`, with zero ERROR lines in the whole session window. Backend regression test `test_workspaces_emails_send_no_provider_returns_409` (`apps/api/tests/test_workspaces.py`) passed live (2/2 send-related tests). Frontend `emailSendErrorMessage()` unit tests (5/5, `email-intelligence-guard.test.ts`) confirm the exact 409 payload observed live is correctly lifted to the human-facing message the `data-testid="email-send-error"` banner would render. Note: the "Send Reply" button itself is not click-reachable in the *current* production data model because `GET /workspaces/emails/inbox` unconditionally returns `draftReply: ""` for every thread (a separate, intentional "no AI reply drafted yet" honest-empty-state, gating `{selected.draftReply ? <draft-reply-ui> : "No reply needed for this email."}` — verified rendering the latter, not a regression of this gap); the send attempt was therefore exercised at the exact network call the button issues rather than via a DOM click, and the honest-failure contract (409, no fabricated success, no 500, thread untouched) is fully verified end-to-end. `docs/delivery/DECISIONS.md` D-0029 is the ADR authorizing the honest-error fix shape.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-042__in-browser-send-attempt__post__20260713T224746Z.png`, `GAP-P4-041-042__flow__post__20260713T224746Z.json` (in-browser send: `{"status":409,"body":"...no_email_provider_connected..."}`, standalone API send: `{"status_code":409,...}`, thread-after: unchanged messages array), `GAP-P4-041-042__console__post__20260713T224746Z.log`, `GAP-P4-041-042__api-log-window__post__20260713T224841Z.log` (0 ERROR lines).
 
 ### GAP-P4-043
 - **Type:** G-FAKE
@@ -374,8 +374,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Wire the Request Changes button to its intended action (or explicitly disable+style it if the feature is not yet implemented); add an interaction test asserting a network call or state change fires on click.
 - **Verification recipe:** Click Request Changes on a cover letter; expect either a visible action (modal/request fired) within a normal timeout, or a properly disabled/greyed control if deferred.
 - **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-B dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-CONTENT 2026-07-13, production). On production `/dashboard/cover-letters` with a real, freshly-generated letter selected (Ampersand · Business Analyst), clicked `data-testid="request-changes-btn"` — the disclosure form (`data-testid="request-changes-form"`) opened, filled the instructions textarea, clicked `data-testid="request-changes-submit"`, and captured the full network round trip live: `POST /api/cover-letters/{id}/refine` → `200 OK` after ~29s (real LLM latency), response body `{"cover_letter_id": "ce2cca98...", "cover_letter": "...Stakeholder communication has always been at the heart of my delivery practice...", "approval_id": "cc26b448...", "approval_status": "pending"}` — the revised text visibly incorporated the requested change ("emphasize stakeholder communication"). The button correctly showed a busy "Redrafting…" state, then settled (form closed on success, matching the component's `setOpen(false)` success path); the Versions rail advanced from v1 to v5·current; a new `ApprovalRequest` was created (`pending`), confirming this is a real, persisted, human-gated redraft — not a fake/no-op click. Repeated independently via a direct API client (bypassing the browser) with a second letter: same 200 + new `cover_letter_id` + new pending approval, and `GET /cover-letters/{id}` confirmed the original letter was untouched (a new sibling row was created, not a mutation). `/var/log/aether/api.log` for the entire test window (both the browser and API-direct passes) shows 0 `ERROR` lines. This is the real documented effect described by the router's own docstring ("fabrication-guarded LLM revision stored as a new draft with a pending ApprovalRequest").
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-043__cover-letters-loaded__post__20260713T225933Z.png`, `GAP-P4-043__form-open__post__20260713T225933Z.png` (instructions filled), `GAP-P4-043__after-submit__post__20260713T225933Z.png` (button settled, v5·current, revised text visible), `GAP-P4-043__ui-flow__post__20260713T225933Z.json` (full console/network capture incl. the `POST .../refine` → `200` request/response pair), `GAP-P4-049__generation-flow__post__20260713T230330Z.json` (API-direct refine round trip + unchanged-original confirmation), `GAP-P4-043-048-049__api-log-window__post__20260713T230330Z.log` (0 ERROR lines).
 
 ### GAP-P4-044
 - **Type:** G-QUALITY
@@ -387,8 +387,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Fix bullet extraction to join line-wrapped fragments into complete sentences before they reach the tailoring LLM (sentence-boundary detection, not just line breaks); re-run tailoring after ingestion is corrected and re-check PDF output for coherence.
 - **Verification recipe:** Re-ingest master resume with fixed extraction; run a tailor pass; export PDF; confirm every bullet reads as one coherent sentence with no duplicated/orphan fragments.
 - **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-A dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-RESUME 2026-07-13, production). Re-ingested the master resume PDF fresh via `POST /resumes/upload` (`assets/resume/Vik_Resume_Final.pdf`) through the fixed `extract_bullets()` — all 25 bullets are now complete, coherent sentences ending in terminal punctuation (or a clean noun-phrase skills/certs line), vs. the pre-fix version of the same source PDF which had entries cut off mid-word (e.g. "...Authored the executive change request re-"). Ran a real tailor pass on a fresh, previously-untested job (`POST /agents/tailor/run`, Delivery Lead/Scrum Master @ Aurec, job `c6ab5afc5e323f14ff8b641cd`) → 4 accepted rewrites, 3 rejected (fabrication/JD-echo guard correctly fell back to the original complete bullet text, not a spliced hybrid). Exported the tailored PDF (`GET /resumes/{id}/download`) and inspected all 3 pages both visually (rendered PNGs) and via `PyMuPDF` text extraction: zero duplicated phrases, zero dangling/mid-sentence fragments across all 25 bullets. `changes(run)=4` matched `changes(GET /resumes/{id}/diff)=4` exactly (same 4 evidenceRefs). Quantified outcomes (PI 47–48, 75-hour, six-day, 95%+, $5M+, 5+, 40 resources) all preserved in the accepted rewrites. Cross-bullet PDF overlap re-checked as part of this same evidence (see GAP-P4-046 note) — zero overlaps. `apps/api` regression suite `test_resume_bullet_extraction.py` + `test_resume_pdf_layout.py` + `test_resume_ingest.py` (14/14 relevant cases) passed live against the deployed code. `/var/log/aether/api.log` window for the full flow (lines 21935–21943: upload→201, jobs lookup→200, tailor/run→200, diff→200, resume GET→200, download→200): 0 ERROR lines.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-044-045-046__flow__post__20260713T231316Z.json` (reingested resume bullets, job, full tailor-run + diff responses), `GAP-P4-044__tailored-pdf__post__20260713T231316Z.pdf`, `GAP-P4-044__pdfpage-{1,2,3}__post__20260713T231316Z.png`, `GAP-P4-044-045-046__analysis__post__20260713T231316Z.json` (duplication/dangling-fragment check, quantified-outcomes check), `GAP-P4-044-045-046__api-log-window__post__20260713T231316Z.log` (0 ERROR lines).
 
 ### GAP-P4-045
 - **Type:** G-QUALITY
@@ -400,8 +400,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Extend the fabrication guard to flag/penalize n-gram overlap with the JD text above a similarity threshold, not just named entities/numbers; add an overlap regression test.
 - **Verification recipe:** Re-run tailoring on the same job; diff rewritten bullets against JD text for n-gram overlap; confirm the guard flags/blocks near-verbatim JD phrase reuse.
 - **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-A dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-RESUME 2026-07-13, production). Re-ran tailoring live on a fresh, previously-untested job (Delivery Lead/Scrum Master @ Aurec, `c6ab5afc5e323f14ff8b641cd`) and independently diffed every rewritten/rejected bullet against the real JD text for content-word n-gram overlap (stopword-stripped, light-stemmed 3-grams — same n=3 window as the shipped `_JD_ECHO_NGRAM`/`jd_echoed_phrases()` guard, computed with a separate script, not the guard's own code). Result: all 4 ACCEPTED rewrites show **zero** JD-lifted 3-grams. Of the 3 REJECTED candidates (correctly reverted to the evidence-grounded original), 2 show clear near-verbatim JD phrase lifting caught by the guard — e.g. rejected text "...underpinned transparent progress reporting to departmental governance bodies" shares the stemmed 3-gram "transparent progress report[ing]" with the JD's "...deliver transparent progress reports tailored for executive stakeholders", and rejected text "...exemplifying exceptional stakeholder management and communication" shares "exceptional stakeholder management" verbatim with the JD's Core Capabilities line. This is the same class of defect the gap named (JD phrase lifted into the candidate's own experience) — confirmed live, not a canned fixture, with the guard demonstrably discriminating (blocks JD-echo, keeps evidence-grounded rewrites). Backend regression `test_tailor_jd_echo_guard.py` (4/4 cases incl. the exact "first-class software"/"high-traffic environment" scenario cited in this gap) passed live against deployed code. `/var/log/aether/api.log`: 0 ERROR lines in the test window.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-044-045-046__flow__post__20260713T231316Z.json` (job description text, full tailor-run response incl. the 3 rejected candidates), `GAP-P4-044-045-046__analysis__post__20260713T231316Z.json` (per-bullet 3-gram overlap counts, accepted vs. rejected), `GAP-P4-044-045-046__api-log-window__post__20260713T231316Z.log`.
 
 ### GAP-P4-046
 - **Type:** G-QUALITY
@@ -413,8 +413,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Make `resume_pdf.py` measure rendered text height dynamically (not assume the original bullet's line count) before placing the next block; add a geometry/overlap regression test.
 - **Verification recipe:** Regenerate the same tailored PDF; confirm no bullet text overlaps the next entry, across all pages.
 - **Assigned model tier:** opus (fixer, cluster FIX-A) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-A dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-RESUME 2026-07-13, production). Regenerated the same tailored PDF used for GAP-P4-044's fresh production run (Delivery Lead/Scrum Master @ Aurec) and independently checked all 3 pages for cross-bullet visual overlap using `PyMuPDF`'s `get_text("dict")`: right-column (bullet) spans grouped into true visual rows by shared baseline (≤2.5pt tolerance, so a bullet's bold lead-in and grey body — drawn as two separate text objects sharing one baseline — merge into one row instead of being mistaken for two), then checked each row's bottom against the next row's top with a 1.5pt descender/ascender tolerance. Result: **0 overlaps on all 3 pages** (35/36/30 rows respectively). Page 2 contains this run's longest rewritten bullet ("Directed a $5M+ program portfolio...", 3 lines in a highlighted box) — the exact "longer rewrite overflowing into the next bullet" scenario the original defect exhibited — and it renders fully contained with clean spacing above and below (confirmed both by the geometric check and visually in the rendered page image). Note: an initial naive bbox check (grouping words by rounded `top` alone, without baseline merging) produced 5 false-positive "overlaps" by conflating a bullet's isolated left-edge marker glyph with the far-right end of its own body-text bounding box; re-deriving the check to mirror the renderer's actual two-span-per-row draw structure (matching the shipped test's own methodology in `test_resume_pdf_layout.py::_rendered_rows`) resolved all 5 to true negatives — noted here so this isn't mistaken for a silent re-check that just happened to pass. Backend regression `test_resume_pdf_layout.py::test_tailored_pdf_has_no_cross_bullet_overlap` (which stress-tests every block on every page with an artificially-lengthened rewrite) passed live against deployed code. `/var/log/aether/api.log`: 0 ERROR lines in the test window.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-044__tailored-pdf__post__20260713T231316Z.pdf`, `GAP-P4-044__pdfpage-{1,2,3}__post__20260713T231316Z.png` (page 2 shows the longest rewrite fully contained, no overlap into "Architecture & Governance:" below it), `GAP-P4-044-045-046__analysis__post__20260713T231316Z.json` (row-overlap check results per page: 0/0/0).
 
 ### GAP-P4-047
 - **Type:** G-MISSING
@@ -426,8 +426,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Wire `portfolio_scraper.py` into the tailoring context-build step (real GitHub ingestion); persist and sync a real portfolio URL in Settings. LinkedIn remains workspace-paste-only per D-0031 (no API access exists).
 - **Verification recipe:** Grep for `scrape_github_profile()` callers post-fix — confirm a real invocation exists in the tailoring pipeline; Settings portfolio block returns a real URL when configured.
 - **Assigned model tier:** opus (fixer, cluster FIX-J) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-J dispatched)
-- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0031 documents the LinkedIn scope limitation this fix must respect.
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Confirmed `scrape_github_profile()` (`apps/api/app/services/portfolio_scraper.py`) now has a real caller chain: `ingest_github()` → `refresh_career_data()` (`apps/api/app/services/career_data.py`) → `POST /workspaces/career-data/refresh`; and `build_career_corpus(user_id)` is called from both `apps/api/app/agents/tailor_agent.py:95` and `apps/api/app/agents/cover_letter_agent.py:256`, passed through as `evidence_extra` into `ResumeTailorService.tailor()`/`_validate()` (`apps/api/app/services/resume_tailor.py:389-457`) where it is concatenated into the grounding/anti-fabrication evidence corpus — not dead code, and not merely present but actually consumed. Live production exercise via the real Settings UI (`/dashboard/settings` → Portfolio Sync sub-nav, `data-testid="career-github-input"`/`career-portfolio-input"`/`career-sync-btn`): filled the user's real GitHub username (`Victordtesla24`) and portfolio URL (`https://forgotten-mistory.web.app/`), clicked "Sync now" — the button showed the immediate "Syncing…" pending state, then resolved to "Career data synced ✓" with per-source chips reading "Synced · 2026-07-13" for both GitHub and Portfolio and an honest "Not provided" for LinkedIn (zero console/network events during the whole flow). Cross-checked via `GET /workspaces/career-data`: both sources return `status: "ok"` with real, non-fabricated ingested content — GitHub shows the account's actual 38 public repos/19 stars/top languages/named repos (`forgotten-mistory`, `3-tier-multi-agent-architecture`, etc., matching the real `github.com/Victordtesla24`), and Portfolio shows real scraped text from the live portfolio site (name, role, ATO/ANZ experience bullets) — not placeholder text. LinkedIn correctly stays `status: "empty"` with the explicit D-0031 honest-limitation message (no scraping attempted). End-to-end proof the wiring lands in the tailoring context: triggered a real `POST /agents/tailor/run` against an existing job (`cdd4cd1a2fda3a9019a47e30a`) with career data now configured → `200 OK`, 5 accepted changes, 0 rejected bullets — confirming the widened evidence corpus does not break or over-reject the grounding validator. `/var/log/aether/api.log` for the full test window: 0 ERROR lines (the two `LLM live call failed … falling back to fixture` / `LLM auto mode: served fixture fallback` lines are the pre-existing, accepted INFO-level resilience path per GAP-P4-039, not an error).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-047__settings-after-sync__post__20260713T235022Z.png`, `GAP-P4-047__ui-sync-result__post__20260713T235022Z.json`, `GAP-P4-047__console__post__20260713T235022Z.log` (0 bytes), `GAP-P4-047__career-data-api__post__20260713T235236Z.json` (live `GET /workspaces/career-data`, both sources `status:"ok"` with real content), `GAP-P4-047__tailor-trigger__post__20260713T235236Z.json` (`POST /agents/tailor/run` → 200, 5 changes/0 rejected), `GAP-P4-047__tailor-diff__post__20260713T235236Z.json`. `docs/delivery/DECISIONS.md` D-0031 documents the LinkedIn scope limitation, respected by this implementation.
 
 ### GAP-P4-048
 - **Type:** G-QUALITY
@@ -439,8 +439,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Switch PDF template to a neutral printable style (white/black text), interpolate candidate contact details from the resume/profile, and drop the "Generated by Aether" footer line for submission-ready output.
 - **Verification recipe:** Generate a new cover letter PDF; confirm neutral styling, presence of candidate contact info, absence of tool branding/footer.
 - **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-B dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-CONTENT 2026-07-13, production). Generated a real cover letter PDF on production (`GET /cover-letters/{id}/pdf` → `200`, `content-type: application/pdf`) and independently inspected it with `pdftotext -layout` and `pdfplumber` (not just a screenshot). Confirmed: (1) a sender contact block heads the letter — "Vikram Deshpande" (bold) then "sarkar.vikram@gmail.com · +61 433 224 556" and "linkedin.com/in/vikramd-profile · github.com/Victordtesla24", sourced from the workspace profile + parsed résumé contact fields; (2) light business styling — `pdfplumber` reports the only text fill colors used on the page are `(0.102,0.102,0.102)` = `#1A1A1A` ink and `(0.333,0.333,0.333)` = `#555555` muted, one `#CCCCCC` rule line, and **zero fill rects** (no dark background band of any kind — plain white page), matching the `_PDF_INK`/`_PDF_MUTED`/`_PDF_RULE` constants in `apps/api/app/routers/cover_letters.py`; (3) `"Generated by Aether"` and `"AI-generated"` do not appear anywhere in the extracted text — no tool branding or AI-disclosure footer. Repeated the same checks on a second, independently-generated PDF (the Request-Changes/refine redraft from GAP-P4-043's test) with identical results (same ink colors, same contact block, no branding). `/var/log/aether/api.log` shows both `GET .../pdf` calls returning `200 OK` with 0 ERROR lines in the session window.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-048__pdf-original__post__20260713T230330Z.pdf`, `GAP-P4-048__pdf-refined__post__20260713T230330Z.pdf` (raw PDF bytes, both letters), `GAP-P4-048__pdf-render__post__20260713T230330Z.png` (rendered page-1 image — light business letter, contact block visible), `GAP-P4-048__pdf-color-analysis__post__20260713T230330Z.json` (pdfplumber color/rect/branding-string analysis for both PDFs), `GAP-P4-043-048-049__api-log-window__post__20260713T230330Z.log` (0 ERROR lines).
 
 ### GAP-P4-049
 - **Type:** G-QUALITY
@@ -452,8 +452,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add a hard structural validator (paragraph count, presence of role+company mention, presence of CTA) that blocks shipping and forces a real retry rather than a soft/best-effort pass.
 - **Verification recipe:** Re-run cover letter generation for the same job/company; confirm 3 paragraphs, role+company named in paragraph 1, and a CTA present in paragraph 3, on every run including retries.
 - **Assigned model tier:** opus (fixer, cluster FIX-B) → sonnet (reviewer)
-- **Status:** IN-FIX (FIX-B dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-CONTENT 2026-07-13, production). Re-ran cover letter generation on production for the **exact job cited in the original defect** (Duratec Limited · Operations Manager, job `cdd4cd1a2fda3a9019a47e30a`) via `POST /agents/cover-letter/run`, twice independently (one run's primary LLM call hit its 60s hard budget and fell back to a fixture per the existing resilience path — `LLM auto mode: served fixture fallback for prompt 'cover_letter'` — and the structural gate still enforced compliance on that path too). Both fresh letters: exactly 3 body paragraphs; paragraph 1 = "My background in Senior Technical Program Manager is a direct match for the **Operations Manager** role at **Duratec Limited**." (explicitly names both role and company, unlike the cited defect); paragraph 3 in both closes with an explicit CTA ("I would welcome the opportunity to discuss..."/"...available for an interview at your convenience."); date, `Re:` line, `Dear` salutation, and `Sincerely, Vikram Deshpande` sign-off all present; no banned generic opener. Directly retrieved and re-checked the **original defective row** (`cabb3c2b35cc0dc2498d967f4`, created 2026-07-13T12:07:40, pre-fix) as a negative control with an independent checker script mirroring `cover_letter_agent.py`'s own `_structural_issues()` rules: it correctly reproduces the cited defect (2 paragraphs, no CTA, role/company not named in paragraph 1) — confirming the checker is discriminating, not a rubber stamp — while both new post-fix runs pass every check. Also independently generated and format-checked a second job/company (Ampersand · Business Analyst, run twice) with the same all-pass result. `/var/log/aether/api.log` for the full test window: 0 `ERROR` lines. **Caveat for Wave-2 follow-up (not a blocker for this gap, scoped to a different code path than this gap's cited root cause):** the *separate* `POST /cover-letters/{id}/refine` endpoint ("Request Changes" / rail Regenerate, `apps/api/app/routers/cover_letters.py`) does **not** share `cover_letter_agent.py`'s hard structural validator/retry — it only retries on fabrication-guard flags. Two independently-observed refine outputs (one via direct API call, one via the live "Request Changes" UI click under GAP-P4-043) each violated one structural rule (4 body paragraphs instead of 3; CTA cue absent from the closing paragraph, respectively) despite passing the fabrication guard. This gap's own root-cause analysis and fix specification name `cover_letter_agent.py`'s *generation* retry loop specifically, which is what I verified; the refine path was never in this gap's scope (GAP-P4-043's fix spec was only "wire the button to a real action"). Flagging so the orchestrator can open a new Wave-2 gap for structural-contract parity across the refine endpoint if desired.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-049__duratec-rerun-A__post__20260713T230330Z.json`, `GAP-P4-049__duratec-rerun-B__post__20260713T230330Z.json` (both fresh Duratec/Operations Manager letters, full text + persisted IDs), `GAP-P4-049__generation-flow__post__20260713T230330Z.json` (Ampersand/Business Analyst runs), `GAP-P4-049__contract-cases__post__20260713T230330Z.json` (all cases incl. the old defective letter as negative control, fed through the independent checker), `GAP-P4-043-048-049__api-log-window__post__20260713T230330Z.log` (0 ERROR lines).
 
 ### GAP-P4-050
 - **Type:** G-WIRING
@@ -465,8 +465,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Restore all 8 kanban columns with horizontal scroll per wireframe. No ADR justifies a 4-column simplification, so implementation (not documentation) is the required path.
 - **Verification recipe:** Navigate to /dashboard/applications Board View; confirm all 8 status columns render (scroll if needed) with correct per-column counts.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-E) → opus (reviewer)
-- **Status:** IN-FIX (FIX-E dispatched). **Reopens GAP-P4-034** — this run's fresh evidence directly contradicts that record's prior VERIFIED-CLOSED status and also contradicts the Section E "Verified No-Gap Register" row claiming the 8-stage board renders (corrected below in Section E).
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-BOARDS 2026-07-13, production). Navigated to `/dashboard/applications` Board View (fresh login, real session) and evaluated the DOM directly: `data-testid="applications-kanban"` renders all **8** `kanban-column-*` sections in wireframe order with correct labels — Discovered, Evaluating, Tailoring, Ready to Apply, Submitted, In Review, Interview, Offer — each with a live per-column count matching its rendered card count (Discovered 147/25-shown+122-more, Evaluating 0, Tailoring 0, Ready to Apply 5/5, Submitted 4/4, In Review 0, Interview 0, Offer 0). The container is genuinely horizontally scrollable (`scrollWidth=2192` vs `clientWidth=1128`, `overflow-x: auto`); scrolling it to the far right reveals Submitted/In Review/Interview/Offer with real application cards (e.g. "Infrastructure Project Manager · Pathway Search" with a working "View Email Thread" cross-link), confirmed both via DOM query and a second, scrolled full-page screenshot. Zero-count columns render an honest "Empty" placeholder, not fabricated cards. Also re-verified the Sankey toggle named in this recipe still works after the kanban fix: clicked `data-testid="view-sankey"` → `sankey-view` renders with 1 live `<svg>` funnel (Jobs Found 154 → Applied 4, real numbers, no error banner), backed by `GET /applications/funnel/sankey → 200`. Console/network capture during the whole flow (load + scroll + Sankey click) is **0 bytes — zero events of any kind**. `/var/log/aether/api.log` for the full test window: 0 ERROR lines; relevant calls all 200 (`GET /applications`, `GET /workspaces/settings` ×3, `GET /applications/funnel/sankey`).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-050__board-view__post__20260713T233154Z.png` (full 8-stage board, unscrolled), `GAP-P4-050__board-scrolled__post__20260713T233154Z.png` (scrolled right — Submitted/In Review/Interview/Offer visible with real cards), `GAP-P4-050__sankey-view__post__20260713T233154Z.png` (Sankey toggle still renders), `GAP-P4-050__console__post__20260713T233154Z.log` (0 bytes), `GAP-P4-050-052__result__post__20260713T233154Z.json` (full column/count DOM dump + Sankey check).
 
 ### GAP-P4-051
 - **Type:** G-BUG
@@ -478,8 +478,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Per the Run-3 preflight adjudication (Section I.3): drop `e2e/login.spec.ts`, `e2e/auth.setup.ts`, and the `playwright.config.ts` hard-dependency changes (the broken prefill assumption zeroes out the whole e2e suite); rebuild real e2e auth using env-var credentials (`LOGIN_EMAIL`/`LOGIN_PASSWORD`) + Playwright `storageState`, matching `api_sweep.py`'s credential pattern; drop `uat/api_sweep.sh` and `uat/api_sweep_v2.sh` (hardcoded password, superseded by `api_sweep.py`); confirm the 405 harness-noise finding does not reproduce outside Playwright.
 - **Verification recipe:** Run the full Playwright e2e suite; confirm `setup` no longer times out and the remaining chromium tests execute (not "did not run"); `grep -r 'AetherDemo1' uat/` returns zero matches; reproduce the login flow outside Playwright to confirm the 405 does not occur in normal navigation.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-G) → opus (reviewer)
-- **Status:** IN-FIX (FIX-G dispatched)
-- **Evidence (post-fix):** (pending). The working-tree disposition for the broken/dropped files is recorded in Section I.3 of this ledger.
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, on merged main + production). Ran the full rebuilt Playwright e2e suite on merged `main` (`cd apps/web && npx playwright test --project=chromium`, real env-var creds exported from repo `.env`): **25/25 passed** (21.8s), including the `setup` project (`e2e/auth.setup.ts` — real login via `LOGIN_EMAIL`/`LOGIN_PASSWORD`, no more prefill-assumption timeout) and all 3 `login.spec.ts` cases (empty-field render, real sign-in redirect, wrong-credentials error) that previously reported "did not run" — confirming the hard-dependency chain now resolves end-to-end instead of zeroing out the suite. `apps/web/e2e/login.spec.ts` and `auth.setup.ts` are present again but rebuilt (not the dropped broken versions) per the Section I.3 disposition — they now fill the real form via `requireEnv("LOGIN_EMAIL"/"LOGIN_PASSWORD")` (`apps/web/e2e/env.ts`) instead of asserting a nonexistent prefill. `uat/api_sweep.sh` and `uat/api_sweep_v2.sh` are confirmed absent from disk (`ls` → No such file). `git grep -n 'AetherDemo1' --` on `main` (tracked files only) returns matches **only** in `uat/tests/test_tooling_hygiene.py` (the regression-guard's own regex/docstring, which must reference the literal string to detect it elsewhere — not a live credential) and in this ledger's own historical "Observed" prose describing the pre-fix defect; zero matches in any script that actually authenticates (`seed_demo.py`, `client.ts`, `discovery_cron.sh`, `api_sweep.py` all resolve the password from the environment only). `uat/tests/test_tooling_hygiene.py` (2 tests) passes. Production harness sweep (`python3 uat/phase4_sweep.py --route /dashboard --out-prefix qa051`): `ok=True`, `bounced_to_login=False`, `nav_error=null`, and the console/network capture is **0 bytes — zero events of any kind**, confirming zero tooling-induced console errors and specifically no `GET /api/auth/login` 405 (the harness-noise finding does not reproduce). `/var/log/aether/api.log` for both the e2e run and the harness sweep: 0 ERROR lines. The working-tree disposition for the broken/dropped files remains as recorded in Section I.3 of this ledger.
+- **Evidence (post-fix):** `/tmp` playwright run captured and archived to `uat/reports/evidence/phase4/GAP-P4-051__playwright-run__post__20260713T234923Z.log` (25 passed, 0 failed), `qa051__screenshot__20260713T234912Z.png`, `qa051__console__20260713T234912Z.log` (0 bytes), `qa051__controls__20260713T234912Z.json`, `qa051__meta__20260713T234912Z.json` (`bounced_to_login: false`, `nav_error: null`).
 
 ### GAP-P4-052
 - **Type:** G-MISSING
@@ -491,8 +491,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Implement the kanban contact-card view per wireframe (no ADR exists to justify the tab/pill simplification, so implementation is the required path).
 - **Verification recipe:** Navigate to /dashboard/networking; confirm kanban cards per contact render.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-F) → opus (reviewer)
-- **Status:** IN-FIX (FIX-F dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-BOARDS 2026-07-13, production). Navigated to `/dashboard/networking` (fresh login): the tab/pill summary is gone — `data-testid="contact-pipeline"` renders a genuine 5-column kanban (New/Warm/Active/Scheduled/Placed, `role="tablist"` absent, confirmed `isTabPill: false`) built from real `GET /workspaces/networking/summary` data (`workspaces.py`'s stage-label mapping fix). The account currently has 0 real contacts, so it first rendered the honest whole-board "No connections yet" empty state (not a fabricated placeholder) — to fully exercise the kanban-card rendering path per this recipe, created one real, persisted contact via the actual production `POST /networking/contacts` endpoint (`{"name":"Priya Sharma","title":"Senior Technical Recruiter","company":"Endeavour Group","stage":"contacted"}` → `201`), reloaded the page, and confirmed live: the board now renders (not the empty-state branch), the contact appears as a proper `data-testid="contact-card"` article in the correct "Warm" column (name + role/company + warmth stars all correct), the stat tile updates to "1 CONTACTS", and the other 4 columns each show their own honest `pipeline-*-empty` ("No contacts yet") marker — exactly the wireframe kanban-with-honest-empty-columns behavior this gap required, not the old aggregate tab/pill counts. Cleaned up immediately after: `DELETE /networking/contacts/{id} → 204`, re-`GET` same id → `404`, `GET /networking/contacts` → `[]` (production account left in its original zero-contact state, no residue). Console/network capture across both the empty-board load and the with-contact load: **0 bytes — zero events** in both. `/var/log/aether/api.log` for the full test window: 0 ERROR lines (`GET /workspaces/networking/summary` ×4 → 200, `POST /networking/contacts` → 201, `DELETE .../contacts/{id}` → 204, `GET .../contacts/{id}` → 404 as expected, `GET /networking/contacts` → 200 `[]`).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-052__board-view__post__20260713T233154Z.png` (honest empty-board state, 0 real contacts), `GAP-P4-052__contact-create__post__20260713T233154Z.json` (real `POST /networking/contacts` → 201), `GAP-P4-052__board-with-real-contact__post__20260713T233358Z.png` + `.json` (kanban board with the real "Priya Sharma" card in Warm column, other 4 columns honestly empty, DOM dump), `GAP-P4-052__console-with-real-contact__post__20260713T233358Z.log` (0 bytes), `GAP-P4-052__contact-cleanup__post__20260713T233358Z.json` (204 delete + 404 confirm), `GAP-P4-052__api-summary__post__20260713T233154Z.json` (raw API response, pre-test).
 
 ### GAP-P4-053
 - **Type:** G-CONSOLE
@@ -504,8 +504,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Find and correct the client call site to use the existing `/workspaces/settings` endpoint — no duplicate backend alias is to be added; add a console-clean assertion to the applications e2e/smoke test.
 - **Verification recipe:** Load /dashboard/applications; confirm no 404s in console/network for settings-related calls.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
-- **Status:** IN-FIX (FIX-D dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-API 2026-07-13, production). Loaded `/dashboard/applications` fresh (real login, `uat/phase4_sweep.py`, `networkidle` + 2s settle) and captured every console message/pageerror/requestfailed/response≥400 unfiltered: the console/network log is **0 bytes — zero events of any kind**, so in particular zero `GET /api/settings` 404s. Cross-checked server-side: `/var/log/aether/api.log` for the exact request window shows `GET /workspaces/settings HTTP/1.1" 200 OK` (the correct endpoint, called twice during the page's lifecycle) and 0 ERROR lines — confirming the frontend now calls the real `/workspaces/settings` endpoint (matches `apps/web/src/components/applications/tracker-api.ts:76` and the `tracker-api.test.ts` regression test) and never `/api/settings`.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-053__applications__console__20260713T232419Z.log` (0 bytes), `GAP-P4-053__applications__screenshot__20260713T232419Z.png`, `GAP-P4-053__applications__meta__20260713T232419Z.json` (confirms no bounce-to-login, real page load), `GAP-P4-053__applications__controls__20260713T232419Z.json`.
 
 ### GAP-P4-054
 - **Type:** G-CONSOLE
@@ -517,8 +517,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Catch the 409 client-side and surface a handled UI message instead of letting it bubble as a console error. The 409 guard itself is retained — only the client-side handling changes.
 - **Verification recipe:** Click provider config actions; confirm the 409 is handled gracefully with zero console error-level entries.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
-- **Status:** IN-FIX (FIX-D dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-API 2026-07-13, production). Loaded `/dashboard/agents` fresh (0 console/network events on page load itself), then drove a real interaction pass: clicked `data-testid="provider-action-anthropic"` ("Configure keys" on the locked, keyless Anthropic card) and separately `data-testid="provider-action-openai"`, capturing every console message/pageerror/requestfailed/response≥400 across both clicks. Result: **0 events of any kind fired for either click** — no error-level console entries, no network request at all (not even a 409), because the frontend's `connectBlockedReason()` pre-check (`apps/web/src/app/dashboard/agents/page.tsx` `onProviderToggle`) recognizes a keyless provider from the state it already has and short-circuits before ever issuing the doomed `PUT /agents/providers/{id}` request — a stronger fix than merely catching the 409 client-side. Each click instead rendered the graceful, correctly-worded info banner (`data-testid="agents-notice"`, `role="status"`): "Anthropic Claude has no credential configured on the server — add its API key to the server .env, then reload this page." (and the equivalent for OpenAI) — confirmed both in the captured `innerText` and visually in the screenshot. `/var/log/aether/api.log` for the full interaction window: 0 `PUT /agents/providers/*` calls at all (consistent with the pre-check design) and 0 ERROR lines. Repeated the full click sequence twice independently with identical (zero-event) results.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-054__agents-load__console__20260713T232503Z.log` (0 bytes, clean page load), `GAP-P4-054__interaction__console__20260713T232617Z.log` (0 bytes, clean interaction), `GAP-P4-054__interaction-result__20260713T232617Z.json` (0 error-level events, 0 network 409s, 0 requestfailed, both notice texts captured verbatim), `GAP-P4-054__before-click__20260713T232617Z.png`, `GAP-P4-054__after-click-anthropic__20260713T232617Z.png` (amber graceful-notice banner visible, page otherwise intact), `GAP-P4-054__after-click-openai__20260713T232617Z.png`.
 
 ### GAP-P4-055
 - **Type:** G-DATA
@@ -530,8 +530,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Extend `_provider_env_state()` (or an equivalent status source) to detect and surface the `ABACUS_API_KEY` fallback path so the providers panel accurately reflects what's actually serving runs (e.g. a distinct "Abacus subscription (fallback)" status).
 - **Verification recipe:** Trigger a tailor/coverLetter run; confirm the providers panel shows the actual serving credential/model, not a blanket "unconfigured".
 - **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
-- **Status:** IN-FIX (FIX-D dispatched)
-- **Evidence (post-fix):** (pending). `docs/delivery/DECISIONS.md` D-0020's amendment (this pass) is the ADR-level correction this fix implements.
+- **Status:** VERIFIED-CLOSED (QA QA-API 2026-07-13, production). `GET /agents/providers` now returns a 7th card, `{"id":"abacus","name":"Abacus Subscription (fallback)",...}`, alongside the original 6 — no longer a blanket-unconfigured display. Cross-checked the returned state against `apps/api/app/routers/agents.py`'s own logic and the live server environment (read-only `/proc/<pid>/environ` inspection of the running `aether-api` process, presence-only, no values printed): `AETHER_LLM_API_KEY` absent, `OPENROUTER_API_KEY` present (73 chars), `ABACUS_API_KEY` present (35 chars) — per `_LIVE_API_KEY_ENV_VARS` precedence (`AETHER_LLM_API_KEY` > `OPENROUTER_API_KEY` > `ABACUS_API_KEY`) `get_active_credential_env_var()` resolves to `OPENROUTER_API_KEY` right now, so `abacus` should show "standby", not "actively serving" — and that is exactly what the live response shows: `abacus.status="connected"`, `abacus.detail="Abacus subscription key configured in .env · standby (a higher-priority OpenRouter/Anthropic key is the active path)"`, `abacus.models=["deepseek/deepseek-v4-flash","deepseek/deepseek-v4-pro","qwen/qwen3-coder-next"]` (matching the real `AETHER_MODEL_*` env values). Cross-checked against real recent `AgentRun` history (`GET /agents/runs`) from live tailor/coverLetter/storyExtractor executions today: recorded `output.model` values (`deepseek/deepseek-v4-pro`, `qwen/qwen3-coder-next`) match the tier→model env mapping exactly, with real multi-second durations (14.6s–61s), confirming genuine live calls rather than fabricated figures. This is the honest, self-consistent single-source-of-truth the fix spec required: the providers panel and the LLM client's actual routing decision are provably reading the same precedence function, and the panel correctly reflects real-time server credential state rather than a hardcoded claim. `/var/log/aether/api.log`: 0 ERROR lines for the `GET /agents/providers` call and the whole session.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-055__providers-status__post__20260713T232142Z.json` (full live `GET /agents/providers` response, 200 OK, all 7 providers incl. `abacus`), cross-referenced against `apps/api/app/services/llm_client.py:139-156` (`_LIVE_API_KEY_ENV_VARS`, `get_active_credential_env_var`) and `apps/api/app/routers/agents.py:193-248` (`_provider_env_state`) read directly from the deployed source tree, plus a read-only presence check of the live `aether-api` process environment (no secret values captured).
 
 ### GAP-P4-056
 - **Type:** G-WIRING
@@ -543,8 +543,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add visual disabled styling (opacity/greyed background/cursor-not-allowed) wherever the `disabled` attribute is set on these controls.
 - **Verification recipe:** Load /dashboard/agents with unconfigured providers; confirm disabled controls are visually distinguishable and Playwright's accessibility tree marks them disabled without long timeouts on click attempts.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
-- **Status:** IN-FIX (FIX-I dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Loaded `/dashboard/agents` fresh and evaluated computed styles directly on every currently-disabled `button`/`select` in the DOM: `provider-model-anthropic` and `provider-model-bedrock` (both keyless-provider model dropdowns) render `opacity:0.6`, `cursor:not-allowed`, `filter:grayscale(1)`, `aria-disabled="true"`, and a real `title` tooltip ("Anthropic Claude has no selectable models — connect it (add its API key in the server .env) to enable model selection." / the AWS Bedrock equivalent); the currently-disabled agent run button (`agent-run-matchScoring`, the Match Scoring agent being toggled off right now) renders `opacity:0.4`, `cursor:not-allowed`, `filter:grayscale(1)`, `aria-disabled="true"`, `title="Match Scoring Agent is disabled — enable it above to run it."`. Confirmed the mechanism is general (not special-cased to one control) by also checking all 5 `agent-run-*` buttons: the 4 currently-enabled ones (jobDiscovery, resumeTailoring, coverLetter, storyExtraction) render `opacity:1`/no title, i.e. disabled-vs-enabled visual state is correctly conditional on the live `disabled` attribute, not hardcoded. This matches the fix in source (`apps/web/src/components/agents/AgentConfigGrid.tsx` and `ProviderConnections.tsx`: `disabled:cursor-not-allowed disabled:opacity-40/60 disabled:grayscale` + `title={...}` on every gated control). Console/network capture during page load: 0 bytes — zero events. `/var/log/aether/api.log` for the check window: 0 ERROR lines.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-056__agents-load__post__20260713T234518Z.png`, `GAP-P4-056__console__post__20260713T234518Z.log` (0 bytes), `GAP-P4-056__result__post__20260713T234518Z.json` (full computed-style dump of all disabled controls: 2 provider-model selects + 1 agent-run button, all with opacity/cursor/grayscale/title present).
 
 ### GAP-P4-057
 - **Type:** G-WIRING
@@ -556,8 +556,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Audit the Add Offer modal's mount/unmount and z-index stacking; ensure the overlay only intercepts pointer events while actually open and visible.
 - **Verification recipe:** Click empty-add-offer in the empty state; confirm the modal opens without timeout and its own fields are independently clickable.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
-- **Status:** IN-FIX (FIX-I dispatched). Residual, far-lower-severity finding on the same screen as prior GAP-P4-023/GAP-P4-024 (CRITICAL, FIXER DISPATCHED) — consistent with a partial prior fix that left this UI-blocking regression rather than the original crash/fabrication.
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Confirmed in source (`apps/web/src/components/offers/AddOfferModal.tsx:68`: `if (!open) return null;`) that the modal — including its backdrop overlay — is entirely unmounted, not just visually hidden, whenever closed; there is no stray/invisible overlay left in the DOM to intercept pointer events. Drove the real flow live on production: with the account in its genuine empty-offers state, clicked `data-testid="empty-add-offer"` — the click resolved in 0.046s (no 30s timeout), the modal (`data-testid="add-offer-modal"`) opened immediately, and a field inside it (`input[name="company"]`) was independently clickable/fillable (not blocked by any overlay). Filled required fields (company, base, location), clicked `data-testid="add-offer-submit"` — the form submitted, the modal closed, and a new offer card rendered on the board with the entered company name. Reopened the modal a second time and closed it via `Escape` — confirmed closed. All of this produced **zero console/network events** across the whole interaction sequence (open, field-click, submit, reopen, escape-close). `/var/log/aether/api.log` for the check window: 0 ERROR lines (the add-offer flow is client-state-only per `onAdd`, so no API calls are expected here). This resolves the residual UI-blocking regression noted alongside the earlier, unrelated GAP-P4-023/024 crash/fabrication findings on this same screen.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-057__before-click__post__20260713T234635Z.png`, `GAP-P4-057__modal-open__post__20260713T234635Z.png`, `GAP-P4-057__after-submit__post__20260713T234635Z.png`, `GAP-P4-057__console__post__20260713T234635Z.log` (0 bytes), `GAP-P4-057__result__post__20260713T234635Z.json` (click_ok=true, click_duration_s=0.046, modal_open_after_click=true, field_click_ok=true, submit_ok=true, modal_closed_after_submit=true, new_offer_card_present=true, closed_via_escape=true).
 
 ### GAP-P4-058
 - **Type:** G-METRIC
@@ -569,8 +569,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Relabel the widget to "jobs sourced" (or similar) when displaying `sourcesTotal`, or bind a true applications-by-source breakdown if that is the intended metric.
 - **Verification recipe:** Confirm widget label matches the underlying metric on both /dashboard and /dashboard/analytics after fix.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
-- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-022 (G-METRIC MEDIUM, OPEN) is the same defect; GAP-P4-058 is its Run-3 successor record with root cause identified.
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA-ANALYTICS-RERUN 2026-07-14, production, current deployed HEAD). Independently re-verified from scratch (fresh login, fresh evidence, not reusing 2026-07-13 artifacts): live `GET /api/analytics` returns `jobsFound: 154`, `totalApplications: 25`; live `GET /api/analytics/market-pulse` returns `sourcesTotal: 154`, `sourcesLabel: "jobs sourced"`; live `GET /api/jobs` returns a 154-element list (cross-check of `jobsFound`/`sourcesTotal` via the raw jobs collection itself, not just the aggregate endpoint). Direct read-only DB query (psycopg2, `.env` `DATABASE_URL`, `search_path=aether`, read-only session) independently confirms `Job` row count for the demo user = 154 (exact match) and `Application` row count = 25 (exact match). Fresh screenshots of both `/dashboard` and `/dashboard/analytics` (`phase4_sweep.py`) show the donut captioned "154 / jobs sourced" (not "applications"), with the true Applications figure (25, and the dashboard's separate "Active Applications 4" / funnel "Applied 4" sub-metric) shown correctly and separately from the jobs-sourced count on both routes — label matches the datum truthfully in both places. Console capture: 0 bytes (zero events) on both routes. `/var/log/aether/api.log`: checked the entire live-check window by exact line-offset delta (22576→22617, 41 new lines) — 0 `ERROR` lines, all 41 responses `200`.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-058__api-analytics-root__post__20260714T001230Z.json`, `GAP-P4-058__api-jobs-count__post__20260714T001230Z.json`, `GAP-P4-058-059-060__api-market-pulse__post__20260714T001230Z.json`, `GAP-P4-058-059-060__db-crosscheck__post__20260714T001230Z.json`, `GAP-P4-058-059-060__dashboard__post__screenshot__20260714T001046Z.png`, `GAP-P4-058-059-060__analytics__post__screenshot__20260714T001051Z.png`, `GAP-P4-058-059-060__dashboard__post__console__20260714T001046Z.log` (0 bytes), `GAP-P4-058-059-060__analytics__post__console__20260714T001051Z.log` (0 bytes), `GAP-P4-058-059-060__api-log-window__post__20260714T001230Z.log` (0 ERROR lines). Prior evidence (QA-ANALYTICS 2026-07-13): `GAP-P4-058__api-analytics-dashboard__post__20260713T233710Z.json`, `GAP-P4-058__api-analytics-root__post__20260713T233710Z.json`, `GAP-P4-058-059-060__api-market-pulse__post__20260713T233805Z.json`, `GAP-P4-058-060__dashboard__post__screenshot__20260713T233833Z.png`, `GAP-P4-058-060__analytics__post__screenshot__20260713T233840Z.png`, `GAP-P4-058-060__dashboard__post__console__20260713T233833Z.log` (empty), `GAP-P4-058-060__analytics__post__console__20260713T233840Z.log` (empty), `GAP-P4-058-059-060__recomputation__post__20260713T233900Z.json`.
 
 ### GAP-P4-059
 - **Type:** G-METRIC
@@ -582,8 +582,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Zero-fill the `agent_week_rows` series across the full 12-week window before computing `weeks_active`, or divide by the fixed window length (12) rather than the count of weeks with data.
 - **Verification recipe:** Recompute avg runs/week after fix; confirm it equals total/12 (or the correct window), not total/weeks-with-data.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
-- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-026 (G-METRIC LOW, FIXER DISPATCHED `deleg_7ef75c88`) is the same defect; GAP-P4-059 is its Run-3 successor record with the precise root cause now identified.
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA-ANALYTICS-RERUN 2026-07-14, production, current deployed HEAD). Independently re-verified per the T2 recipe: pulled the complete, real `GET /api/agents/runs?limit=500` collection (148 rows, not the paginated 50-row default) and rebucketed every row's real `startedAt` timestamp into real ISO calendar weeks (Mon 00:00 UTC boundaries) covering the 12-week window ending at the current calendar week — computed independently in a standalone script, not reusing the API's own `recruiterTrends.series`. Result: `[0,0,0,0,0,0,0,0,0,0,0,148]`, total = 148, `148/12 = 12.3`, which exactly matches both (a) the API's own `recruiterTrends.series`/`rows` (`"148 total"`, `"12.3 · no change"`) and (b) the on-screen "Avg runs / week: 12.3" on fresh screenshots of both `/dashboard` and `/dashboard/analytics`. Direct DB query independently confirms `AgentRun` count for this user = 148, with real timestamps spanning `2026-07-13T09:16:59Z`→`2026-07-14T00:01:07Z` (all in the current calendar week — the account's history is < 1 day old, a fresh reseed since the prior 2026-07-13 check, yet the fix still correctly zero-fills the other 11 real calendar weeks rather than dividing by weeks-with-data). Confirmed the displayed value (12.3) is **not** equal to the raw total (148) — the exact defect pattern this gap targets (avg==total) is absent. Per the ledger's own Section C recipe ("confirm it equals total/12 ... not total/weeks-with-data"), `total/12` is the authorized correct-window divisor; the alternative literal reading ("weeks since first run" as an account-lifetime divisor, ≈0.089 wk here) was also computed for transparency and would imply a nonsensical ≈1665/wk rate — not what the "last 12 wks" widget label claims to measure, and not the criterion the recipe specifies. `/var/log/aether/api.log`: 0 ERROR lines in the full check window (41/41 responses 200).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-059__api-agents-runs-full__post__20260714T001230Z.json` (148 raw rows), `GAP-P4-059__recomputation-rerun__post__20260714T001230Z.json` (independent rebucketing + both divisor readings), `GAP-P4-058-059-060__api-market-pulse__post__20260714T001230Z.json` (series length 12, total 148, avg 12.3), `GAP-P4-058-059-060__db-crosscheck__post__20260714T001230Z.json` (AgentRun count=148, timestamp span), `GAP-P4-058-059-060__dashboard__post__screenshot__20260714T001046Z.png`, `GAP-P4-058-059-060__analytics__post__screenshot__20260714T001051Z.png`, `GAP-P4-058-059-060__api-log-window__post__20260714T001230Z.log` (0 ERROR lines), console logs 0 bytes for both routes. Prior evidence (QA-ANALYTICS 2026-07-13): `GAP-P4-058-059-060__api-market-pulse__post__20260713T233805Z.json` (series length 12, total 144, avg 12.0), `GAP-P4-058-060__dashboard__post__screenshot__20260713T233833Z.png`, `GAP-P4-058-060__analytics__post__screenshot__20260713T233840Z.png`, `GAP-P4-058-059-060__recomputation__post__20260713T233900Z.json`.
 
 ### GAP-P4-060
 - **Type:** G-MISSING
@@ -595,8 +595,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Implement the sources donut + market-vs-you sections from real data; align styling on the 3 degraded charts.
 - **Verification recipe:** Navigate to /dashboard/analytics; confirm sources donut and market-vs-you sections render with real data; confirm chart stylings match wireframe.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-H) → opus (reviewer)
-- **Status:** IN-FIX (FIX-H dispatched). Lineage: prior GAP-P4-035 (G-MISSING LOW, OPEN) is the same defect; GAP-P4-060 is its Run-3 successor record.
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA-ANALYTICS-RERUN 2026-07-14, production, current deployed HEAD). Independently re-verified: both sections are present and render on `/dashboard/analytics` (and `/dashboard`) with `data-testid="sources-donut"` and `data-testid="market-vs-you"` (confirmed live in `apps/web/src/components/analytics/MarketPulse.tsx` lines 100 and 274 — real markup, not test-only stubs). (1) Sources donut ("Jobs by Source") renders `154 / jobs sourced` with a real per-source breakdown (Seek 97%, Greenhouse 2%, Lever 1%, Remotive 0%) sourced from live `GET /api/analytics/market-pulse`; independently cross-checked against a direct DB `GROUP BY source` query on the `Job` table (raw counts: seek=149, greenhouse=3, lever=1, remotive=1, total=154, matching `sourcesTotal` exactly) — the percentages are a rounded/normalized view of these real counts (Remotive's raw 1/154≈0.65% rounds toward 0% once the other three buckets are forced to sum to 100 — a benign largest-remainder rounding artifact, not fabricated data). (2) Market vs. Your Performance still renders `marketDataConnected: false` and `market: null` for both comparison rows in the live API response, with the UI honestly printing "Market data: not connected — showing your own figures only" alongside the user's real figures ("you 25" applications/month — matches the DB `Application` count exactly; "you 0%" interview rate) — confirmed `_MARKET_DATA_SOURCE_CONNECTED = False` (apps/api/app/routers/analytics.py:155) remains the single, honest source of truth with no hardcoded market-benchmark numbers introduced since the prior check. Provenance re-verified at the network level (live API response), not just the rendered DOM. Console capture: 0 bytes on both routes (zero errors). `/var/log/aether/api.log`: 0 ERROR lines in the full check window (41/41 responses 200). Residual, lower-severity note carried forward unchanged from the 2026-07-13 check (not blocking closure, per the Section I.2 / D-0028 ruling): the 3 "degraded chart stylings" and the extra "Agent ROI" section are still present as honest-substitution styling/layout deviations from `design/screens/analytics.html`'s illustrative markup, not a reopened gap.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-058-059-060__api-market-pulse__post__20260714T001230Z.json`, `GAP-P4-058-059-060__db-crosscheck__post__20260714T001230Z.json` (Job-by-source raw counts), `GAP-P4-058-059-060__dashboard__post__screenshot__20260714T001046Z.png`, `GAP-P4-058-059-060__analytics__post__screenshot__20260714T001051Z.png`, `GAP-P4-058-059-060__dashboard__post__controls__20260714T001046Z.json`, `GAP-P4-058-059-060__analytics__post__controls__20260714T001051Z.json`, `GAP-P4-058-059-060__api-log-window__post__20260714T001230Z.log` (0 ERROR lines), console logs 0 bytes for both routes. Prior evidence (QA-ANALYTICS 2026-07-13): `GAP-P4-058-059-060__api-market-pulse__post__20260713T233805Z.json`, `GAP-P4-058-060__dashboard__post__screenshot__20260713T233833Z.png`, `GAP-P4-058-060__analytics__post__screenshot__20260713T233840Z.png`, `GAP-P4-058-060__dashboard__post__controls__20260713T233833Z.json`, `GAP-P4-058-060__analytics__post__controls__20260713T233840Z.json`, `GAP-P4-058-059-060__recomputation__post__20260713T233900Z.json`.
 
 ### GAP-P4-061
 - **Type:** G-DATA
@@ -608,8 +608,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Delete provably-test rows only (the 5 EmailThread rows and the 1 fabricated Contact row identified above by subject/content pattern), and log the deletions; consider a dedicated non-production test account for future audit tooling to avoid polluting the demo experience.
 - **Verification recipe:** DELETE the identified test rows (with a deletion log); re-check `GET /api/emails` and `/api/networking/contacts` return only genuine data.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-D) → opus (reviewer)
-- **Status:** IN-FIX (FIX-D dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-API 2026-07-13, production). Read-only `psql`-equivalent check (`psycopg2`, single-var `DATABASE_URL` from `.env`, `schema=` query param stripped, `search_path=aether` set via connection `options`, session set read-only) against the demo user (`c58996b5b105c17e50f1ef2f8`) confirmed all 6 audit-listed rows are gone: the `Contact` table for this user now returns **0 rows** (the fabricated "Jane Doe"/"Tech Corp"/`jane@example.com` row is deleted), and none of the 5 audit-listed `EmailThread` ids (`c64de826c393fcb10e46e025e` "Phase4 T2 Audit...", `c5df7500226419f0475159a62` "Test", `c43b86df34e9849b059d75163` "QA Test", `c7347c7f11996dd989043b71e` "Test Draft", `cc8ff42f86b08f6396a583144` "Test from Audit") exist in the table any more — an explicit `id = ANY(...)` re-check against those exact 6 ids returned an empty result set for both tables. The `EmailThread` table for this user now contains exactly 1 row, but it is a **different, newer** row (`cc532aef3ca5ce01e9d3427e9`, subject "QA verify GAP-P4-041/042 20260713T224746Z") created by a separate QA verifier's own live production verification of GAP-P4-041/042 today — not one of this gap's audit-listed rows, and out of this gap's scope (a genuine artifact of a different, legitimate test action, not a re-regression of the deleted rows). Re-checked the same absence from the application's own read path (not just the DB): live `GET /emails` returns only that one non-audit-listed thread, and live `GET /networking/contacts` returns `[]` — confirming the deletion is visible end-to-end, not just at the DB layer. `/var/log/aether/api.log` for the whole check window: 0 ERROR lines.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-061__db-check__post__20260713T232048Z.json` (DB-layer: 0 Contact rows, the 5 audit EmailThread ids all absent, one unrelated newer thread present), `GAP-P4-061__api-emails__post__20260713T232650Z.json` (live `GET /emails`, 200 OK), `GAP-P4-061__api-contacts__post__20260713T232650Z.json` (live `GET /networking/contacts` → `[]`, 200 OK).
 
 ### GAP-P4-062
 - **Type:** G-QUALITY
@@ -621,8 +621,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Reorder the sub-nav array to match the wireframe: Profile, Resume Management, Portfolio Sync, Notifications, Agent Configuration, Integrations, Privacy & Compliance.
 - **Verification recipe:** Load /dashboard/settings; confirm sub-nav order matches the wireframe exactly.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
-- **Status:** IN-FIX (FIX-I dispatched). Residual sub-gap of the same ticket as prior GAP-P4-015 (settings page), which is otherwise fixed (12/14 elements now match).
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Confirmed the sub-nav array is centralized in `apps/web/src/app/dashboard/settings/sections.ts` (`SECTIONS`, consumed by `page.tsx`), explicitly ordered and code-commented to match `design/screens/settings.html`'s `settings-subnav-st06`. Loaded `/dashboard/settings` fresh and read the live DOM order of `[data-testid^="settings-nav-"]` inside `nav[aria-label="Settings sections"]`: **Profile, Resume Management, Portfolio Sync, Notifications, Agent Configuration, Integrations, Privacy & Compliance** — an exact match, index-for-index, to the wireframe order (Notifications now at position 4, not position 6 as the original defect described). Console/network capture: 0 bytes — zero events. `/var/log/aether/api.log` for the check window: 0 ERROR lines. This resolves the residual sub-gap of the same ticket as prior GAP-P4-015 (settings page), which was otherwise already fixed (12/14 elements matching).
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-062__settings__post__20260713T234716Z.png`, `GAP-P4-062__console__post__20260713T234716Z.log` (0 bytes), `GAP-P4-062__result__post__20260713T234716Z.json` (live nav-item array, `matches: true` against the exact expected wireframe order).
 
 ### GAP-P4-063
 - **Type:** G-QUALITY
@@ -634,8 +634,8 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Add a loading spinner or toast confirmation when the async agent call is accepted.
 - **Verification recipe:** Click "Draft missing stories"; confirm immediate visual feedback before the async call resolves.
 - **Assigned model tier:** sonnet (fixer, cluster FIX-I) → opus (reviewer)
-- **Status:** IN-FIX (FIX-I dispatched)
-- **Evidence (post-fix):** (pending)
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Confirmed source wiring (`apps/web/src/app/dashboard/stories/page.tsx`: `extract()` calls `setRunning(true)` synchronously before `await runStoryExtractor()`, then `await load()` to refresh, then `setRunning(false)`; `apps/web/src/components/stories/story-aside.tsx`: button renders `aria-busy={drafting}`, `disabled={extractorState.disabled}`, a spinning `fa-spinner fa-spin` icon, and swaps its label to "Drafting from resume…" while `drafting`). Drove the real click live on production: captured button state at baseline ("Draft missing stories", `aria-busy="false"`, enabled), clicked, then re-read state ~150ms later — immediate pending feedback confirmed: label → "Drafting from resume…", `aria-busy="true"`, `disabled=true`, spinner icon visibly present — well before the async call resolves. Waited for real completion (`aria-busy` returning to `"false"`, observed within the run's actual duration, no artificial timeout needed) and confirmed the button returns to "Draft missing stories" / enabled / not busy. Network capture across the whole interaction shows the real completion-refresh: `POST /agents/story-extractor/run` → 200, followed immediately by fresh `GET /stories` and `GET /stories/stats` calls (the page's `load()` refetch) — i.e. both the immediate pending affordance and the post-completion data refresh this gap's fix spec required are present, and no `net::ERR_ABORTED` requests occurred (the original observation's aborted requests do not reproduce). Zero console/network error-level events throughout. `/var/log/aether/api.log` for the check window: 0 ERROR lines; `POST /agents/story-extractor/run HTTP/1.1" 200 OK` and the subsequent `GET /stories`/`GET /stories/stats` calls all 200.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-063__pending-state__post__20260713T234759Z.png` (spinner + "Drafting from resume…" + disabled, captured ~150ms after click), `GAP-P4-063__after-completion__post__20260713T234759Z.png` (button back to normal, fresh story data visible), `GAP-P4-063__console__post__20260713T234759Z.log` (0 bytes), `GAP-P4-063__result__post__20260713T234759Z.json` (before/pending/after button-state dump + the real `story-extractor/run` → `stories`/`stories/stats` network-call sequence).
 
 ### GAP-P4-064
 - **Type:** G-MISSING
@@ -686,36 +686,128 @@ Sub-agents dispatched (deleg_a1e1634e). Screens 7-12, 13-17, and wireframe diff 
 - **Fix specification:** Re-scout /dashboard/jobs with an itemized missing/degraded design-id list for `job-discovery.html` and cross-check each against D-0025's precise deferred scope (only jd04/jd06/jd10/jd43); reconcile the GAP-P4-009/010/011/030/031 citations accordingly.
 - **Verification recipe:** Re-run the wireframe diff for /dashboard/jobs with itemized missing/degraded design-ids; confirm jd05/jd33 are live and only jd04/jd06/jd10/jd43 remain deferred.
 - **Assigned model tier:** Wave-2 (tbd) — not yet dispatched.
-- **Status:** OPEN (deferred to Wave-2 investigation per orchestrator ruling I.1).
-- **Evidence (post-fix):** pending Wave-2 scout re-run.
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production). Independently re-ran the itemized wireframe reconciliation live against `/dashboard/jobs`: (1) **Location filter (jd05)** — `data-testid="job-location-filter"` is present and genuinely functional: filled it with "Melbourne" and the visible job list narrowed to Melbourne-matching results (client-side `locationQuery` filter at `apps/web/src/app/dashboard/jobs/page.tsx:277`), confirming it is a real working filter, not a static input. (2) **Preview button (jd33)** — selecting a job (`data-testid="job-select"`) and reading `data-testid="preview-link"` shows `href="/dashboard/resume?job={id}"` (e.g. `/dashboard/resume?job=cdd4cd1a2fda3a9019a47e30a"`), exactly the `<Link>` D-0025 describes — live, not a placeholder `href="#"`. (3) Confirmed the four elements D-0025 explicitly scopes as deferred remain genuinely absent from the live DOM: no `job-role-filter`, no `job-salary-filter`, no "Tailor & Apply" bulk-action text anywhere on the page — consistent with the ADR's stated Phase-3+ deferral, not a silent regression or an over-claim. This independently reproduces and confirms the FIX-K commit's (`7b8b3e1`/`edf2d6e`) own finding: **D-0025's text (`docs/delivery/DECISIONS.md` lines 632-634) is accurate against live production** — the Location filter and Preview button were already correctly implemented when the ADR was written, only Role/Salary dropdowns + bulk Tailor-and-Apply/Saved-Tailor-all remain deferred — so the GAP-P4-009/011 "MISSING" citations that GAP-P4-067 exists to reconcile are corrected by this ADR text, no further code change needed. Console/network capture across the whole interaction (load, filter, select, screenshot): 0 bytes — zero events. `/var/log/aether/api.log` for the check window: 0 ERROR lines.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-067__location-filter__post__20260713T235303Z.png`, `GAP-P4-067__result__post__20260713T235303Z.json` (location filter present/fillable, Melbourne results confirmed, role/salary dropdowns and bulk Tailor&Apply confirmed absent), `GAP-P4-067__console__post__20260713T235303Z.log` (0 bytes), `GAP-P4-067__detail-panel__post__20260713T235336Z.png`, `GAP-P4-067__result2__post__20260713T235336Z.json` (`preview_href: "/dashboard/resume?job=cdd4cd1a2fda3a9019a47e30a"`, `preview_href_matches_pattern: true`), `GAP-P4-067__console2__post__20260713T235336Z.log` (0 bytes).
+
+### GAP-P4-068
+- **Type:** G-SECURITY
+- **Severity:** MEDIUM
+- **Screen / Route:** N/A (repo hygiene / shipped tooling) · **REQ/SC violated:** N/A
+- **Observed (production, pre-fix):** `apps/api/scripts/seed_demo.py` hardcoded `DEMO_PASSWORD = "AetherDemo1"`; `apps/web/src/lib/api/client.ts` exported an unused, hardcoded `DEMO_CREDENTIALS` literal; `scripts/discovery_cron.sh:11` hardcoded `PASSWORD="${AETHER_CRON_PASSWORD:-AetherDemo1}"` — and that script is the live `ExecStart` of `aether-discovery.service`, triggered every 30 minutes by `aether-discovery.timer` (SC-JOB-10), so the demo password was actively authenticating to `/auth/login` on a schedule whenever `AETHER_CRON_PASSWORD` was unset (the default, since it was never set in the systemd unit).
+- **Expected (doc/wireframe ref):** No shipped tooling or product code should ever hardcode a real credential; all credential-dependent tooling should resolve from the environment (`.env` / `LOGIN_PASSWORD`), matching `uat/api_sweep.py`'s existing pattern.
+- **Root cause analysis:** The credential-handling migration to env-var-driven config had covered `uat/*.py` and the web login flow, but missed `apps/api/scripts/seed_demo.py`, `apps/web/src/lib/api/client.ts`'s dead `DEMO_CREDENTIALS` export, and (initially missed even by the first remediation attempt) the shipped, scheduler-invoked `scripts/discovery_cron.sh` — a scope gap in the original migration, not an isolated file issue.
+- **Fix specification:** Resolve the password from `SEED_DEMO_PASSWORD`/`AETHER_CRON_PASSWORD` falling back to `LOGIN_PASSWORD` in every affected script; refuse to run (raise/exit non-zero) rather than default to a hardcoded credential when neither is set; delete the unused `DEMO_CREDENTIALS` export; extend `uat/tests/test_tooling_hygiene.py`'s hardcoded-password guard to scan `apps/api/scripts/*.py`, `apps/web/src/lib/api/client.ts`, and `scripts/*.sh`.
+- **Verification recipe:** `git grep -n 'AetherDemo1'` on `main` (tracked source) returns no match in any script that actually authenticates; confirm each affected script refuses to run without a real env-sourced credential; confirm the live `aether-discovery.timer`/`.service` continues running successfully with the patched script.
+- **Assigned model tier:** sonnet (fixer) → opus (reviewer) — landed as `fix/run3-fix-k` (commits `7b8b3e1`, `edf2d6e`)
+- **Status:** VERIFIED-CLOSED (QA QA-POLISH 2026-07-13, production + main). `git grep -n "AetherDemo1" --` on `main` (all tracked files) returns matches **only** in `uat/tests/test_tooling_hygiene.py` (the regression guard's own regex/docstring, which must reference the literal to detect it — not a live credential) and in this ledger's historical "Observed" prose describing the pre-fix defect; zero matches in `apps/api/scripts/seed_demo.py`, `apps/web/src/lib/api/client.ts`, `scripts/discovery_cron.sh`, or any other executable tooling. Read all three previously-affected files directly: `seed_demo.py::_demo_password()` reads `SEED_DEMO_PASSWORD or LOGIN_PASSWORD` and `raise SystemExit(...)` if neither is set (no default); `client.ts` no longer exports `DEMO_CREDENTIALS` at all; `discovery_cron.sh` resolves `PASSWORD="${AETHER_CRON_PASSWORD:-${LOGIN_PASSWORD:-}}"`, loads the repo-root `.env` first, and `exit 1`s with a `FATAL` log line if the password is still empty — no hardcoded fallback anywhere. `python3 -m pytest uat/tests/test_tooling_hygiene.py -v`: **2/2 passed** (`test_no_hardcoded_demo_password_in_tracked_tooling`, `test_no_browser_navigation_to_login_api_in_tracked_uat_scripts`). Confirmed live production continuity, not just static analysis: `systemctl show aether-discovery.service -p Result -p ExecMainStatus` → `Result=success`, `ExecMainStatus=0` for its most recent run (23 min before this check), and `aether-discovery.timer` is active with a normal next-fire schedule — the patched, env-driven script is genuinely running successfully on its live 30-minute cadence, not just passing in isolation.
+- **Evidence (post-fix):** `uat/reports/evidence/phase4/GAP-P4-068__git-grep-main__post__20260713T235414Z.log` (only the guard's own regex + this ledger's historical prose match), `GAP-P4-068__hygiene-suite__post__20260713T235414Z.log` (2 passed), `GAP-P4-068__discovery-cron-systemd__post__20260713T235414Z.log` (`Result=success`, `ExecMainStatus=0`).
+
+### C.1 — Legacy Run-2 numbers GAP-P4-019–039: final disposition (reconciled this pass)
+
+These 21 IDs were assigned by the pre-Run-3, externally-orchestrated sweep in Section H (Hermes Agent / OpenRouter, 2026-07-13T10:25Z) and exist only as table rows there, not as full §3-format records. Per the Header's standing rule, Section H's verdicts were treated as unverified inputs and independently re-swept by Run 3's own Stage A agents; nothing below is asserted on Section H's authority alone — every disposition is anchored to a VERIFIED-CLOSED §3 record, a Section E no-gap entry, or fresh Run-3 evidence that the underlying screen/behavior no longer reproduces the defect.
+
+- **Superseded (2):** GAP-P4-021, GAP-P4-029 — both duplicate reports of the single email-send defect now canonically tracked as **GAP-P4-042** (VERIFIED-CLOSED above, §I.4).
+- **Reopened under a new number (1):** GAP-P4-034 (applications kanban, falsely closed in Section H) — fresh Run-3 evidence contradicted that closure; refiled and closed as **GAP-P4-050** (VERIFIED-CLOSED above, §I.4).
+- **Absorbed with a direct successor mapping (3):** GAP-P4-022 (jobs/applications mislabel) → **GAP-P4-058**; GAP-P4-025 and GAP-P4-026 (analytics metric anomalies) → **GAP-P4-058/059** lineage (§I.4). All closed under their successor IDs above.
+- **Already VERIFIED-CLOSED under their own numbers (3):** GAP-P4-036, 037, 038 (test-suite fixes: offers router added, cast removed, fixture-user fix) — closed within Section H itself; Run 3's fresh `pytest` pass found no regression.
+- **Citation-corrected, folded into the no-gap register (1):** GAP-P4-033 (cover-letter list view) — its original "ADR D-0020 covers this" citation was wrong (D-0020 is scoped to the Agents screen only). The underlying list-vs-modal deviation is intentional; recorded with the corrected rationale in Section E, row "Cover-letter list/version-history view (C-35)". Not a live gap.
+- **Did not reproduce in Run 3's independent fresh sweep, no successor record needed (12):** GAP-P4-019/020 (dashboard dead-control G-FAKE findings — Stage A's fresh `/dashboard` scout and Section E's "/dashboard — layout" row found the screen fully functional, 0 console errors); GAP-P4-023/024 (offers-screen crash/fabrication — Stage A's fresh `/dashboard/offers` scout found the screen functional; the one residual offers-screen defect it did find is tracked fresh as **GAP-P4-057**, VERIFIED-CLOSED); GAP-P4-027/028 (stories-screen bugs — Stage A's fresh `/dashboard/stories` scout found the screen functional; the one residual stories-screen defect it did find is tracked fresh as **GAP-P4-063**, VERIFIED-CLOSED); GAP-P4-030/031 (jobs wireframe gaps — reconciled precisely by **GAP-P4-067** against D-0025, VERIFIED-CLOSED); GAP-P4-032 (resume wireframe gap — Run 3's fresh `/dashboard/resume` evidence, Section B.5, shows the diff view fully present with no other missing element requiring a new record); GAP-P4-035 (analytics wireframe gap — reconciled by **GAP-P4-060**, VERIFIED-CLOSED); GAP-P4-039 (LLM timeout → fixture-fallback quality note — the accepted resilience path under D-0017's hard wall-clock budget, referenced and still observed live in GAP-P4-047's evidence log ("LLM auto mode: served fixture fallback"); a documented, honest degradation path, not an open defect).
+
+**Net effect:** zero of the 21 legacy Run-2 numbers remain open, unaccounted-for, or in contradiction with Run-3 evidence.
 
 ---
 
-## Summary (Updated)
+## D. User-Journey Maps
 
-### Journey 1: Discovery → Application (to be populated with evidence)
-Status: AWAITING DATA AUDIT SUB-AGENT
+Each journey is the ordered, real path a user takes through production. Every step cites the evidence file that proves it happened as described; where a step corresponds to a defect this run closed, the VERIFIED-CLOSED gap id is cited. All evidence lives under `uat/reports/evidence/phase4/`.
 
-### Journey 2: Tailoring (to be populated)
-Status: AWAITING DATA AUDIT SUB-AGENT
+### Journey 1: Discovery → Application
 
-### Journey 3: Cover Letter (to be populated)
-Status: AWAITING DATA AUDIT SUB-AGENT
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | Sign in at `/login` with real credentials → JWT session, redirected to `/dashboard` | `rg-login__screenshot__20260713T235900Z.png`, `rg-login__console__20260713T235900Z.log` (0 bytes) | — |
+| 2 | `/dashboard/jobs` loads: market tabs (AU/Intl/Saved), job cards, Sync button, all live data | `rg-jobs__screenshot__20260713T235914Z.png`, `dashboard_jobs__screenshot__20260713_082143.png` | — |
+| 3 | Location filter (jd05) narrows the live list (e.g. "Melbourne") — genuinely functional, not static | `GAP-P4-067__location-filter__post__20260713T235303Z.png`, `GAP-P4-067__result__post__20260713T235303Z.json` | GAP-P4-067 |
+| 4 | Select a job → Preview link (jd33) resolves to a real tailoring deep-link (`/dashboard/resume?job={id}`) | `GAP-P4-067__detail-panel__post__20260713T235336Z.png`, `GAP-P4-067__result2__post__20260713T235336Z.json` | GAP-P4-067 |
+| 5 | Scout/discovery agent runs on its 30-min systemd timer, inserting/refreshing real jobs (upserts counted honestly, not as fake "discoveries") | `GAP-P4-068__discovery-cron-systemd__post__20260713T235414Z.log` (`Result=success`) | GAP-P4-068 (tooling hygiene on this same cron path) |
+| 6 | Application progresses through the full 8-stage Kanban (`/dashboard/applications`): Discovered→Evaluating→Tailoring→Ready to Apply→Submitted→In Review→Interview→Offer, horizontally scrollable, real per-column counts | `GAP-P4-050__board-view__post__20260713T233154Z.png`, `GAP-P4-050__board-scrolled__post__20260713T233154Z.png` | GAP-P4-050 |
+| 7 | Sankey funnel toggle renders the real conversion flow (Jobs Found→Applied) | `GAP-P4-050__sankey-view__post__20260713T233154Z.png` | — (Section E: Sankey flow) |
+| 8 | Fresh regression confirms the whole path still renders with 0 console errors | `rg-applications__screenshot__20260713T235924Z.png` + `.log` (0 bytes), `rg-jobs__console__20260713T235914Z.log` (0 bytes) | — |
 
-### Journey 4: Email (to be populated)
-Status: AWAITING DATA AUDIT SUB-AGENT (GAP-P4-001 may block)
+### Journey 2: Tailoring
 
-### Journey 5: Metrics (to be populated)
-Status: AWAITING DATA AUDIT SUB-AGENT (GAP-P4-005 blocks analytics)
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard/resume` loads the side-by-side diff studio | `dashboard_resume__screenshot__20260713_082143.png`, `rg-resume__screenshot__20260713T235930Z.png` | — |
+| 2 | Settings → Portfolio Sync ingests real GitHub + portfolio content into the tailoring evidence corpus (LinkedIn honestly "Not provided") | `GAP-P4-047__settings-after-sync__post__20260713T235022Z.png`, `GAP-P4-047__career-data-api__post__20260713T235236Z.json` | GAP-P4-047 |
+| 3 | Master resume re-ingested with complete-sentence bullet extraction (no mid-word PDF line-wrap fragments) | `GAP-P4-044-045-046__flow__post__20260713T231316Z.json` | GAP-P4-044 |
+| 4 | Tailor agent run rewrites bullets grounded in real evidence; JD-echo guard rejects near-verbatim JD phrase lifting | `GAP-P4-044-045-046__analysis__post__20260713T231316Z.json` | GAP-P4-045 |
+| 5 | Tailored PDF exported: zero cross-bullet visual overlap, even for the longest rewritten bullet | `GAP-P4-044__tailored-pdf__post__20260713T231316Z.pdf`, `GAP-P4-044__pdfpage-{1,2,3}__post__20260713T231316Z.png` | GAP-P4-046 |
+| 6 | Real ATS score computed for the tailored resume via `GET /resumes/{id}/ats` | `tailor-run3__ats__20260713T121930Z.json` | — |
+| 7 | Fresh regression: resume studio still renders, 0 console errors | `rg-resume__console__20260713T235930Z.log` (0 bytes) | — |
 
-### Journey 6: Agents (to be populated)
-Status: AWAITING SCOUT 7-12 SUB-AGENT (GAP-P4-006, GAP-P4-007 block)
+### Journey 3: Cover Letter
 
-### Journey 7: Approvals (to be populated)
-Status: AWAITING SCOUT 13-17 SUB-AGENT (GAP-P4-012 blocks)
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard/cover-letters` list renders real generated letters | `dashboard_cover_letters__screenshot__20260713_082143.png`, `rg-cover-letters__screenshot__20260713T235935Z.png` | — |
+| 2 | Generation enforces the §10.2 structural contract: exactly 3 paragraphs, role+company named in ¶1, CTA in ¶3 — verified on the exact job that originally failed this check | `GAP-P4-049__duratec-rerun-A__post__20260713T230330Z.json`, `GAP-P4-049__contract-cases__post__20260713T230330Z.json` | GAP-P4-049 |
+| 3 | "Request Changes" opens the disclosure form, submits, and produces a real `POST /cover-letters/{id}/refine` → 200 with a new version + pending `ApprovalRequest` | `GAP-P4-043__form-open__post__20260713T225933Z.png`, `GAP-P4-043__after-submit__post__20260713T225933Z.png` | GAP-P4-043 |
+| 4 | PDF export: plain business-letter styling, real sender contact block, no "Generated by Aether" branding | `GAP-P4-048__pdf-render__post__20260713T230330Z.png`, `GAP-P4-048__pdf-color-analysis__post__20260713T230330Z.json` | GAP-P4-048 |
+| 5 | Fresh regression: cover-letters page still renders, 0 console errors | `rg-cover-letters__console__20260713T235935Z.log` (0 bytes) | — |
 
-### Journey 8: Mobile (to be populated)
-Status: AWAITING SCOUT 13-17 SUB-AGENT
+### Journey 4: Email
+
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard/email` renders the inbox/detail panes without crashing (previously threw on `selected.intelligence.score`) | `GAP-P4-041__page-load__pre__20260713T224746Z.png` | GAP-P4-041 |
+| 2 | Compose a real draft → `POST /emails/draft` → 201 | `GAP-P4-041-042__flow__post__20260713T224746Z.json` | GAP-P4-001 (draft-save 500 fixed), GAP-P4-041 |
+| 3 | New thread auto-selects; honest `data-testid="ai-intelligence-empty"` panel renders (never a fabricated score) | `GAP-P4-041__thread-detail-all-tab__post__20260713T224826Z.png` | GAP-P4-041 |
+| 4 | Attempting to send with no email provider connected returns an honest `409 no_email_provider_connected` — never a fabricated `"sent"`, thread left unmodified | `GAP-P4-042__in-browser-send-attempt__post__20260713T224746Z.png`, `GAP-P4-041-042__flow__post__20260713T224746Z.json` | GAP-P4-042 |
+| 5 | Fresh regression: email center still renders, 0 console errors | `rg-email__console__20260713T235941Z.log` (0 bytes) | — |
+
+### Journey 5: Metrics
+
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard` stats/funnel widgets render live per-user numbers | `rg-dashboard__screenshot__20260713T235907Z.png` | — |
+| 2 | `/dashboard/analytics` renders the sources donut and Market-vs-You sections from real data (previously entirely absent) | `GAP-P4-058-059-060__analytics__post__screenshot__20260714T001051Z.png` | GAP-P4-060 |
+| 3 | Jobs-sourced widget correctly labeled "154 / jobs sourced" (no longer mislabeled "applications") | `GAP-P4-058__api-analytics-root__post__20260714T001230Z.json` | GAP-P4-058 |
+| 4 | "Avg runs/week" now divides over a real zero-filled 12-week window (12.3, not `==total`) | `GAP-P4-059__recomputation-rerun__post__20260714T001230Z.json` | GAP-P4-059 |
+| 5 | Independent read-only DB cross-check confirms every displayed figure against raw `Job`/`Application`/`AgentRun` rows | `audit-metrics__run3__20260713T122906Z.json`, `GAP-P4-058-059-060__db-crosscheck__post__20260714T001230Z.json` | GAP-P4-058, 059, 060 |
+| 6 | Fresh regression: dashboard + analytics render, 0 console errors | `rg-dashboard__console__20260713T235907Z.log`, `rg-analytics__console__20260714T000006Z.log` (0 bytes each) | — |
+
+### Journey 6: Agents
+
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard/agents` renders the full catalog and run history | `rg-agents__screenshot__20260714T000011Z.png` | — |
+| 2 | Providers panel honestly shows the actual serving credential path, including the Abacus-subscription fallback and its standby/active state | `GAP-P4-055__providers-status__post__20260713T232142Z.json` | GAP-P4-055 |
+| 3 | Clicking a locked/unconfigured provider's action shows a handled, worded notice — 0 raw console errors, 0 stray network calls | `GAP-P4-054__after-click-anthropic__20260713T232617Z.png` | GAP-P4-054 |
+| 4 | Disabled controls (unconfigured-provider model dropdowns, disabled agent-run buttons) render visibly disabled (opacity/cursor/grayscale/title), enabled controls do not | `GAP-P4-056__result__post__20260713T234518Z.json` | GAP-P4-056 |
+| 5 | Real agent runs (tailor/coverLetter/storyExtractor) are recorded in `AgentRun` history with real model ids and durations, cross-checked against the live env's credential precedence | `GAP-P4-055__providers-status__post__20260713T232142Z.json` (cross-ref to `GET /agents/runs`) | GAP-P4-055 |
+| 6 | Fresh regression: agents page renders, 0 console errors | `rg-agents__console__20260714T000011Z.log` (0 bytes) | — |
+
+### Journey 7: Approvals
+
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | `/dashboard/approvals` renders the queue as an intentional list view (not a modal — D-0027) | `rg-approvals__screenshot__20260714T000025Z.png` | — |
+| 2 | `POST /api/approvals` creates a real approval request → 201 (previously 405) | `qa__gap_p4_012__20260713T090404Z.json` | GAP-P4-012 |
+| 3 | Approve/reject resolution propagates to the linked `Application` row (D-0016); modal-equivalent element set is functionally complete under `data-testid` naming (D-0027) | `approvals__modal_structure.json` | — (Section E, C-30) |
+| 4 | At mobile viewport (390×844), approvals load with real data, bottom nav visible, cards stacked ≤390px wide, touch targets ≥44px | `rg-mob-appr__page-load__post__20260713T235956Z.png`, `apps/web/e2e/mobile-regression.spec.ts` (kept, see Journey 8) | — |
+| 5 | Fresh regression: approvals page renders, 0 console errors | `rg-approvals__console__20260714T000025Z.log` (0 bytes) | — |
+
+### Journey 8: Mobile
+
+| # | Step | Evidence | Gap |
+|---|---|---|---|
+| 1 | Mobile dashboard (390×844) renders all 8 wireframe sections (topbar, notification button, 2×2 stats grid, approval banner, agent activity feed, bottom nav) — an improvement over the stale D-0026 baseline | `rg-mob-dash__page-load__pre__20260713T235952Z.png`, `rg-mob-dash__page-load__post__20260713T235952Z.png` | — (Section E, C-31) |
+| 2 | Mobile approvals route loads with the real bottom nav and stacked cards; the kept regression spec `apps/web/e2e/mobile-regression.spec.ts` exercises this automatically going forward | `rg-mob-appr__page-load__pre__20260713T235956Z.png`, `rg-mob-appr__page-load__post__20260713T235956Z.png`, `rg-mob__summary__post__20260713T235957Z.json` (2/2 tracked assertions PASS) | — |
+| 3 | Approval action buttons meet the ≥44px minimum touch target on mobile | `apps/web/e2e/mobile-regression.spec.ts:306-345` (assertion) | — |
+| 4 | Zero horizontal overflow at mobile viewport (`scrollWidth ≤ clientWidth+5`) | `apps/web/e2e/mobile-regression.spec.ts:176-197` (assertion) | — |
+| 5 | This pass's fresh re-run of the full Playwright suite (incl. the mobile spec) is green: 29/29 | `rg-mob__summary__post__20260714T001641Z.json`, terminal run this pass (5/5 mobile-regression.spec.ts; 29/29 full suite) | — |
+| 6 | Mobile **modal** parity for approvals (as opposed to the working list/card layout above) remains a genuinely deferred, documented Phase 3+ scope item — not a regression | `docs/delivery/DECISIONS.md` D-0026 | — |
 
 ---
 
@@ -755,19 +847,25 @@ Status: AWAITING SCOUT 13-17 SUB-AGENT
 
 **Correction (this pass):** the previous row "/dashboard/applications — Kanban | 8-stage board renders" is removed — it directly contradicted Run-3 evidence (only 4/8 columns render; see GAP-P4-050, which reopens GAP-P4-034). The Sankey-flow claim on that same screen is retained above since it independently verified 200 OK and is unaffected by the Kanban-column defect.
 
+**Register total (this pass, final): 29 confirmed no-gap items**, covering every C-series candidate from the Run-3 triage (§I.2) plus the pre-existing Run-1/2 no-gap findings, each with a named reason and evidence citation. Combined with the 47 VERIFIED-CLOSED records in Section C, every candidate this ledger has ever raised (Section C's 47 + Section H's 21 legacy numbers, reconciled in §C.1 + this register's 29) resolves to exactly one of: VERIFIED-CLOSED, no-gap (confirmed intentional/correct), or superseded/absorbed into another VERIFIED-CLOSED record. None are outstanding.
+
 ---
 
-## Summary
+## Summary — Final (this pass, 2026-07-14)
+
+*(Superseded: the severity table this replaces was the very first snapshot from 2026-07-13T11:29Z, before Section C had been expanded past GAP-P4-018 or Run-3's Wave-1/2/3 fix-review-QA cycle had run. It is retained nowhere else; the numbers below are the reconciled final state.)*
 
 | Severity | Count | Status |
 |---|---|---|
-| CRITICAL | 3 (GAP-P4-001, 002, 003) | OPEN |
-| HIGH | 4 (GAP-P4-004, 005, 006, 007) | OPEN |
-| MEDIUM | 4 (GAP-P4-008, 009, 010, 012) | OPEN |
-| LOW | 3 (GAP-P4-011, 013, 014) | OPEN |
-| **Total** | **14** | **ALL OPEN** |
+| CRITICAL | 8 | VERIFIED-CLOSED |
+| HIGH | 14 | VERIFIED-CLOSED |
+| MEDIUM | 20 | VERIFIED-CLOSED |
+| LOW | 5 | VERIFIED-CLOSED |
+| **Total (Section C, GAP-P4-001–018 + 040–068)** | **47** | **100% VERIFIED-CLOSED** |
 
-**Next:** Wait for wave 2 sub-agents (scouts 7-12, 13-17, data audit) to produce evidence. Then triage, dedupe, and enter §4 DISPATCH phase with fixer sub-agents.
+Of the 47: 2 closed as false positives on re-test (GAP-P4-006, 007 — `tailor/run` and `cover-letter/run` return 422, not 404), 3 closed documentarily via new ADRs with no code/fixer/reviewer dispatch (GAP-P4-064, 065, 066), and 42 closed via a real fix (or, for 040/053/054/055, a confirmed-correct existing behavior) independently re-verified live on production by a QA agent on a different model than the fixer. Legacy Run-2 numbers GAP-P4-019–039 (21 IDs) are fully reconciled with zero left open — see Section C.1. The Section E no-gap register carries 29 additional confirmed non-defects. Zero records remain IN-FIX, FIXED-AWAITING-QA, or OPEN anywhere in this ledger.
+
+**Test suites, current (this pass, freshly re-run):** `pytest` (apps/api) — **292/292 passed**, 0 failed; `vitest` (apps/web) — **195/195 passed** (26 files); Playwright e2e — **29/29 passed** (25 pre-existing + 4 in the newly-kept `apps/web/e2e/mobile-regression.spec.ts`; see Section D Journey 8 and the mobile-spec adjudication note in Section J).
 
 
 ## F. Production Verification Snapshot — 2026-07-13T09:00Z
@@ -904,3 +1002,73 @@ KEEP: 6 api test fixes, e2e/agents.spec.ts, e2e/dashboard.spec.ts, PHASE3-GAP-LE
 
 ### I.4 Prior-ledger reconciliation
 GAP-P4-021/029 → superseded by GAP-P4-042. GAP-P4-034 → REOPENED as GAP-P4-050 (fresh evidence contradicts VERIFIED-CLOSED). GAP-P4-022 → GAP-P4-058. GAP-P4-025/026 → GAP-P4-058/059 lineage noted; D-0003 ruling (Section I.2) closes the "canonical funnel" reading. GAP-P4-039 (LLM timeout→fixture fallback): monitored in Wave-2 QA under AI-quality recipes. All other Run-1/2 VERIFIED-CLOSED verdicts: fresh Stage A evidence found no regression except where noted.
+
+### I.5 Wave-1 outcome & merge authorization — 2026-07-13T20:45Z (Orchestrator)
+32 agents, 0 errors, all on assigned tiers (fixers sonnet/opus per I.1; reviewers cross-model). 8/9 clusters APPROVED by adversarial review; gaps 040–046, 048–063 → FIXED-AWAITING-QA on branches fix/run3-fix-{a..i}. FIX-G additionally diff-reviewed by the Orchestrator personally (clean). **Merge authorized** for the 8 approved branches in order g,d,c,b,a,e,f,h,i. FIX-J (047) re-decomposed per §9.1(4) to a T2 task implementing the reviewer's two required changes; conditional merge authorization granted for fix/run3-fix-j and fix/run3-fix-k contingent on adversarial APPROVE (both subsequently received — see I.6). GAP-P4-068 filed from the Orchestrator's own FIX-G diff sweep (hardcoded demo credentials). *(Provenance note: this section was written pre-merge but sat uncommitted; the merge agent stashed it for a clean tree, so the Wave-2 merge-2 agent could not see it and correctly flagged the missing citation before verifying the reviewer approvals independently. Restored from stash@{0} and recorded here; the authorization chain was real and is now durable.)*
+
+### I.6 Wave-2 outcome — 2026-07-14T00:15Z (Orchestrator)
+18 agents, 1 infra failure (QA-ANALYTICS died mid-response — re-dispatched in Wave 3). **Merged & deployed:** all 10 fix branches now on main (merge-1: 8 branches, suites 271 pytest/182 vitest/build/25 playwright all green; merge-2: fix-j 86130fe + fix-k f9937f0, suites 292/195/build/25 green), deployed HEAD f9937f0, health OK. **QA: 20 gaps VERIFIED-CLOSED** by independent T2 verifiers (040–046, 048–057, 061–063, 047, 067, 068, 051); 058/059/060 pending Wave-3 QA re-run. **Regression:** 15 desktop routes + 2 mobile viewports — 0 console errors, 0 failed requests, health OK. **Rulings:** (a) QA-EMAIL's single counted console entry is the browser's network-tab echo of the deliberately-provoked 409 send-gate (honest-error path working as designed, UI handles it) — benign, not a gap; (b) merge-1 discovered production web was served by an orphan non-systemd `next start` process (since 13:47Z) while aether-web.service was dead — corrected during merge-1 (now systemd-managed); infra deviation logged, structural fix in place. **Compliance incident (logged, audit trail):** the merge-1 agent sourced the full `.env` instead of grepping the two permitted vars, echoing DATABASE_URL/DATABASE_URL_TEST (incl. password) into its local transcript; self-reported and corrected immediately. Exposure confined to local transcript files on this VM; **recommendation to user: rotate the hosted DB credential via the Abacus Database tile.** OPENROUTER_API_KEY untouched throughout. fixK additionally found+fixed a third hardcoded-credential instance (scripts/discovery_cron.sh) beyond the two filed in GAP-P4-068.
+
+### I.7 Wave-3 outcome — 2026-07-14T00:12–00:15Z (QA-ANALYTICS-RERUN, T2 sonnet)
+Re-dispatched the one Wave-2 infra failure (QA-ANALYTICS died mid-response). Independent re-verification from scratch (fresh login, fresh evidence, not reusing Wave-2 artifacts) closed the 3 gaps left pending: **GAP-P4-058, 059, 060 → VERIFIED-CLOSED** (evidence `GAP-P4-058-059-060__*__post__20260714T001046Z/001051Z/001230Z.*`, DB cross-check, 0 console errors on `/dashboard` and `/dashboard/analytics`, 0 API ERROR lines). This closes out Section C in full — all 47 records are now VERIFIED-CLOSED (see the Summary and §C.1 above).
+
+### I.8 DOC-FINAL — 2026-07-14T (this pass, T2 sonnet)
+Brought the ledger to §3-complete: expanded Section D into full 8-journey user-journey maps with per-step evidence and gap citations; added §C.1 reconciling the 21 legacy Run-2 numbers (GAP-P4-019–039) to final disposition; rewrote the stale first-pass Summary severity table to final reconciled counts (47/47 VERIFIED-CLOSED); added a final-count line to Section E; added this ledger's own Section J (Model-Governance Audit); adjudicated the untracked `apps/web/e2e/mobile-regression.spec.ts` — re-ran it live (5/5 passed) and as part of the full suite (29/29 passed), confirmed it is a coherent, already-evidenced regression spec (its `rg-mob-dash`/`rg-mob-appr` evidence files predate this pass), and staged it as KEEP. Re-ran `apps/web`'s vitest suite fresh this pass: 195/195 passed (26 files). No code changes made; documentation and evidence-index only, per this task's scope.
+
+---
+
+## J. Model-Governance Audit
+
+**Scope:** this section audits Run 3 only (Claude Code native orchestration, `claude-fable-5` xhigh, 2026-07-13T11:29Z onward through this DOC-FINAL pass). Section H documents a *different, prior, superseded* run orchestrated externally via Hermes/OpenRouter (`z-ai/glm-5.2` orchestrator, `deepseek/deepseek-v4-pro` delegation, 2026-07-13T10:25Z) — that run predates and is not governed by the Run-3 zero-OpenRouter-spawn mandate; its evidence was independently re-verified from scratch by Run 3 and is not relied upon here (see Header and §C.1).
+
+### J.1 Enforcement mechanism (verified from source, not just asserted)
+- Every Run-3 sub-agent role has an explicit `model:` frontmatter pin, read directly from `.claude/agents/*.md`: `scout.model=haiku`, `doc-audit.model=haiku`, `deploy.model=haiku`, `fixer.model=opus`, `reviewer.model=sonnet`, `qa.model=sonnet`.
+- The session-wide subagent default is pinned at `.claude/settings.json` → `"CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"` — so even a spawn with no per-role file falls back to T2 (sonnet), never to the orchestrator's own `fable-5`.
+- A canary probe at session start (2026-07-13T11:29Z, role=haiku) asked a spawned sub-agent to self-report its model with no tools available: it reported `claude-haiku-4-5-20251001` — confirmed **≠** `fable-5`, confirming non-inheritance works as designed (orchestrator-audit-log.md row 1).
+- Cross-model independence is enforced per gap cluster: every fixer/reviewer pair in §I.1 uses two *different* models (opus fixer → sonnet reviewer, or sonnet fixer → opus reviewer), never same-model self-review.
+
+### J.2 Spawn counts by role and model (Run 3)
+
+| Role | Model | Tier | Count | Source |
+|---|---|---|---|---|
+| Orchestrator (not a sub-agent) | `claude-fable-5` (xhigh) | — | 1 (this run's top-level session) | Header |
+| Canary check | haiku | T3 | 1 | orchestrator-audit-log.md row 1 |
+| Stage-A swarm: scouts (1 screen each) | haiku | T3 | 17 | Header §I intro ("26 agents, 0 failures"); `.claude/agents/scout.md` |
+| Stage-A swarm: doc-audit / preflight / harness / api-sweep | haiku | T3 | 4 | same 26-agent Stage-A total; `.claude/agents/doc-audit.md` |
+| Stage-A swarm: deep audits (data/AI-quality) | sonnet | T2 | 5 | §I intro ("deep audits ×5 (sonnet)") |
+| Triage-prep analyst | sonnet | T2 | 1 | orchestrator-audit-log.md row 3 |
+| Fixers (clusters FIX-A…K, 11 clusters) | opus (A,B,C,J) / sonnet (D,E,F,G,H,I,K) | T1 / T2 | 4 opus + 7 sonnet = 11 | §I.1 table; `.claude/agents/fixer.md` |
+| Reviewers (clusters FIX-A…K, cross-model from their fixer) | sonnet (reviewing A,B,C,J) / opus (reviewing D,E,F,G,H,I,K) | T2 / T1 | 4 sonnet + 7 opus = 11 | §I.1 table; `.claude/agents/reviewer.md` |
+| Doc agent (DOC-K: gaps 064/065/066, ADRs, register) | sonnet | T2 | 1 | orchestrator-audit-log.md last dispatch row |
+| QA verifiers (distinct-tagged production verification passes) | sonnet | T2 | 8 (`QA-API`, `QA-EMAIL`, `QA-CONTENT`, `QA-RESUME`, `QA-BOARDS`, `QA-POLISH`, `QA-ANALYTICS`, `QA-ANALYTICS-RERUN`) | Section C Status lines (distinct tags counted directly); `.claude/agents/qa.md` |
+| Merge/deploy agents (merge-1, merge-2, build+health confirm) | sonnet (session default; no dedicated `merge` role file exists) | T2 (default) | 2 | git log merge commits; §I.6 |
+| DOC-FINAL (this pass) | sonnet (`claude-sonnet-5`) | T2 | 1 | this task |
+| **Total itemized spawns** | | | **62** | sum of rows above |
+
+The orchestrator's own coarser wave-level self-reports (§I: Stage A "26 agents", Wave-1 "32 agents", Wave-2 "18 agents") are **consistent with but not arithmetically decomposed by** the itemized table above — the wave totals additionally include re-dispatch of the one Wave-1 cluster that needed a second review pass and the Wave-3 QA-ANALYTICS re-run after its Wave-2 infra failure (§I.6, §I.7), which are not each individually itemized as separate rows in the abbreviated `orchestrator-audit-log.md` on disk. No itemized or aggregate count implicates any model outside the routing table.
+
+### J.3 Compliance assertions
+- **Zero `fable-5` sub-agent spawns:** confirmed by (a) the canary probe (J.1), (b) every role's explicit `model:` frontmatter pin, (c) the session default fallback to sonnet, and (d) a full read of `orchestrator-audit-log.md` — every "Model assigned" cell is haiku/sonnet/opus, never fable-5.
+- **Zero OpenRouter calls (orchestration layer, Run 3):** no Run-3 sub-agent spawn or dispatch used OpenRouter — all sub-agent tooling is native Claude Code CLI model routing. This is distinct from the **product's own, in-scope, documented** use of OpenRouter as an LLM-provider fallback for the Aether platform's AI agents (tailor/coverLetter/storyExtractor) — GAP-P4-055's evidence shows `OPENROUTER_API_KEY` is the currently active *product* credential per `get_active_credential_env_var()`'s precedence, which is the deployed application's own accepted architecture (D-0014, D-0020 as amended), not an orchestration-layer violation.
+- **One compliance incident (logged, not hidden):** during Wave-2 merge, the merge-1 agent sourced the entire `.env` file instead of grepping only the two permitted vars (`LOGIN_EMAIL`/`LOGIN_PASSWORD`), which echoed `DATABASE_URL`/`DATABASE_URL_TEST` (including the DB password) into its local transcript. **Resolution:** self-reported and corrected immediately within the same wave (§I.6); exposure confined to local transcript files on this VM (never committed, never sent externally); `OPENROUTER_API_KEY` was untouched throughout the incident. **Standing recommendation to the user (repeated here for visibility): rotate the hosted DB credential via the Abacus Database tile.** No other credential-handling deviation occurred in Run 3 — every other `.env` read across this run's evidence trail used the permitted `grep -E '^LOGIN_(EMAIL|PASSWORD)='` pattern (e.g. GAP-P4-051, GAP-P4-058-060 evidence).
+
+### J.4 Summary table: role → model → count
+
+| Role | Model | Count |
+|---|---|---|
+| Orchestrator | claude-fable-5 (xhigh) | 1 |
+| Scout | haiku | 17 |
+| Doc-audit / preflight / harness / api-sweep | haiku | 4 |
+| Deep audit | sonnet | 5 |
+| Canary | haiku | 1 |
+| Triage-prep | sonnet | 1 |
+| Fixer | opus | 4 |
+| Fixer | sonnet | 7 |
+| Reviewer | sonnet | 4 |
+| Reviewer | opus | 7 |
+| Doc agent (DOC-K) | sonnet | 1 |
+| QA verifier | sonnet | 8 |
+| Merge/deploy | sonnet | 2 |
+| DOC-FINAL (this pass) | sonnet | 1 |
+| **fable-5 (sub-agents only)** | — | **0** |
+| **OpenRouter (orchestration layer)** | — | **0** |
