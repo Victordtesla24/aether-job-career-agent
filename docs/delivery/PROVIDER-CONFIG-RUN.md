@@ -78,5 +78,22 @@ Merge order after approvals: `fix/gmail-pkce` → `feat/provider-config-be` → 
 |---|---|---|---|
 | GAP-PC-006 | OpenRouter env-fallback adopts Anthropic secret/base when AETHER_LLM_API_KEY+anthropic base set → non-Claude model billed to Anthropic (cross-provider crossover, violates ADR-PC-2) | CRITICAL | OPEN → BE re-fix |
 | GAP-PC-001b | `.env` instruction leaks to UI via backend `detail` strings + 409 message (FE renders p.detail) | HIGH | OPEN → BE re-fix |
-| GAP-PC-004 (gmail) | PKCE verifier fix | CRITICAL | REVIEW-APPROVED (opus) |
-| REQ-PC-1..9 FE | in-app config UI | HIGH | REVIEW-APPROVED (sonnet) |
+| GAP-PC-004 (gmail) | PKCE verifier fix | CRITICAL | VERIFIED-CLOSED (fix deployed + confirmed live: state JWT carries `cv`, code_challenge present, redirect URI exact) |
+| REQ-PC-1..9 FE | in-app config UI | HIGH | VERIFIED-CLOSED (prod QA2 PASS) |
+
+## 7. Closure (2026-07-14)
+
+**All lanes merged to main, deployed, and independently QA-verified on production.** Final HEAD chain: gmail(fa5bfad) → be(4292971) → fe(d0b79d5) → test-hermeticity(b1d61a2) → deploy-parser-fix(5c8a83a) → toast-honesty(6e526d4).
+
+Gates: pytest 370 / vitest 244+ / web build clean. Deployed: `AETHER_CREDENTIAL_KEY` (Fernet) in server env; `aether-api`/`aether-web` restarted; health 200.
+
+- **GAP-PC-006** (billing crossover) — CLOSED: re-fix + cross-model re-verify both directions (0 HTTP, honest raise).
+- **GAP-PC-001b** (.env leak via detail/409) — CLOSED: strings rewritten to in-app vocabulary; grep clean.
+- **GAP-PC-007** (deploy blocker) — `start-api.sh`/`start-web.sh` `IFS='='` parser stripped the Fernet key's trailing `=` (44→43 chars) → vault 503 on every save. FIXED (split on first `=`); prod save round-trip now 200. CLOSED.
+- **GAP-PC-008** (toast honesty) — credential save/verify toast showed generic "AI model is busy" for 503/422; now surfaces the real backend detail. CLOSED.
+
+**Independent production QA (QA2): PASS** — save round-trip (200, masked, reload-persist, delete), subscription-mode save (authMode subscription_oauth), honest verify failure (real Anthropic 401), corrected toast, 0 console errors, no test credential left behind. Evidence: `uat/reports/evidence/provider-config/qa2/`.
+
+**Deferred (recorded, not in scope):** GAP-PC-SEC-1 (GoogleCredential plaintext tokens, ADR-PC-6) — future run.
+
+**USER ACTION REQUIRED (external, cannot be automated):** the real Connect-Gmail inbox round-trip needs interactive Google consent — click **Connect Gmail** on the Email screen and approve. The PKCE fix + redirect URI are confirmed live, so it should now complete without the "Missing code verifier" error. Ping me after and I'll verify triage/draft/label on the live inbox.
