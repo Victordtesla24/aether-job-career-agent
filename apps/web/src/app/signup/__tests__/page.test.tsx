@@ -6,6 +6,11 @@
  * component (as MarketPulse.test.tsx does for its screen) so the defects a
  * backend-only test cannot see — a missing field, a swallowed 409, a
  * validation bypass — are caught at the layer where they'd actually ship.
+ *
+ * Note: this project does not install @testing-library/jest-dom, so
+ * assertions use plain DOM properties/vitest matchers only (no
+ * toBeInTheDocument/toHaveAttribute/toHaveValue), matching the existing
+ * MarketPulse.test.tsx precedent.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -50,12 +55,12 @@ function fillForm({ name, email, password }: { name?: string; email: string; pas
 describe("SignupPage", () => {
   it("renders name (optional), email, password fields and a Sign in link back to /login", () => {
     render(<SignupPage />);
-    expect(screen.getByRole("heading", { name: "Create account", level: 1 })).toBeInTheDocument();
-    expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create account", level: 1 }).textContent).toBe("Create account");
+    expect(screen.getByLabelText(/name/i)).toBeTruthy();
+    expect((screen.getByLabelText(/^email$/i) as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/^password$/i) as HTMLInputElement).value).toBe("");
     const signInLink = screen.getByRole("link", { name: /sign in/i });
-    expect(signInLink).toHaveAttribute("href", "/login");
+    expect(signInLink.getAttribute("href")).toBe("/login");
   });
 
   it("blocks submission client-side for a weak password and never calls the API", () => {
@@ -64,7 +69,7 @@ describe("SignupPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(registerAccountMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/8 characters/)).toBeInTheDocument();
+    expect(screen.getByRole("alert").textContent).toMatch(/8 characters/);
   });
 
   it("registers, auto-logs in, stores the token, and routes to /dashboard on success", async () => {
@@ -92,7 +97,8 @@ describe("SignupPage", () => {
     fillForm({ email: "dup@example.com", password: "abcdefg1" });
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(await screen.findByTestId("signup-error")).toHaveTextContent(/already exists/i);
+    const errorEl = await screen.findByTestId("signup-error");
+    expect(errorEl.textContent).toMatch(/already exists/i);
     expect(loginMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -106,7 +112,8 @@ describe("SignupPage", () => {
     fillForm({ email: "spam@example.com", password: "abcdefg1" });
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(await screen.findByTestId("signup-error")).toHaveTextContent(/too many attempts/i);
+    const errorEl = await screen.findByTestId("signup-error");
+    expect(errorEl.textContent).toMatch(/too many attempts/i);
   });
 
   it("falls back to /login with a success flash if the account was created but auto-login fails", async () => {
