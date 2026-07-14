@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.rate_limit import build_login_rate_limiter, build_register_rate_limiter
 from app.routers import (
     agents,
     analytics,
@@ -41,6 +42,15 @@ def create_app() -> FastAPI:
             "resume tailoring, applications, and approvals."
         ),
     )
+
+    # Per-app auth rate limiters (see app.rate_limit), keyed on the submitted
+    # request identifier — never the client IP, which is untrustworthy behind
+    # Envoy -> nginx -> uvicorn (ADR D-0033). Stored on app.state so each
+    # constructed app owns isolated counters; the auth router reads them via the
+    # guard/record/reset helpers. ``login_rate_limiter`` caps failed logins per
+    # identifier; ``register_rate_limiter`` caps register attempts per email.
+    app.state.login_rate_limiter = build_login_rate_limiter()
+    app.state.register_rate_limiter = build_register_rate_limiter()
 
     # Permit the Next.js dashboard (and other same-origin tooling) to call the
     # API during development. Origins are tightened per-environment later.

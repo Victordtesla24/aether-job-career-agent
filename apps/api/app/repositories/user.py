@@ -37,18 +37,25 @@ def validate_password_policy(password: str) -> list[str]:
 class UserRepository:
     """CRUD over the ``User`` table using short-lived psycopg2 connections."""
 
-    def create(self, email: str, password_hash: str) -> dict[str, Any]:
-        """Insert a user; raise ``DuplicateEmailError`` on an email collision."""
+    def create(
+        self, email: str, password_hash: str, name: str | None = None
+    ) -> dict[str, Any]:
+        """Insert a user; raise ``DuplicateEmailError`` on an email collision.
+
+        ``name`` is an optional display name persisted on the row (NULL when
+        omitted); the parameter defaults so existing two-argument callers stay
+        source-compatible.
+        """
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'''
-                    INSERT INTO "User" ("id", "email", "passwordHash", "updatedAt")
-                    VALUES (%s, %s, %s, NOW())
+                    INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+                    VALUES (%s, %s, %s, %s, NOW())
                     ON CONFLICT ("email") DO NOTHING
                     RETURNING {_USER_COLUMNS}
                     ''',
-                    (new_id(), email, password_hash),
+                    (new_id(), email, name, password_hash),
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()
@@ -61,6 +68,28 @@ class UserRepository:
 
     def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return self._get_one('"id" = %s', (user_id,))
+
+    def get_by_username_or_email(self, identifier: str) -> dict[str, Any] | None:
+        """Resolve a user by exact ``email`` or case-insensitive ``username``.
+
+        Login accepts a single identifier that may be either credential. Both
+        columns are UNIQUE, so at most one row matches per column; when a value
+        happens to match one user's email and another's username, the exact
+        email match wins (deterministic ``ORDER BY``). ``username`` is an
+        additive column, so ``ensure_user_profile_columns`` is invoked first to
+        keep the lookup safe on the older test schema that predates it.
+        """
+        ensure_user_profile_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_USER_COLUMNS} FROM "User"'
+                    ' WHERE "email" = %s OR lower("username") = lower(%s)'
+                    ' ORDER BY ("email" = %s) DESC LIMIT 1',
+                    (identifier, identifier, identifier),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
 
     def get_target_role(self, user_id: str) -> str:
         """The user's configured workspace ``targetRole`` (``''`` when unset).

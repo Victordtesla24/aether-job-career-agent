@@ -70,16 +70,21 @@ _user_profile_columns_ready = False
 def ensure_user_profile_columns() -> None:
     """Idempotently add the additive profile columns to ``User`` on first use.
 
-    ``targetRole``/``location``/``agentConfig`` were introduced after the
-    original Prisma migration and only ALTER-added to the production ``aether``
-    schema. The shared test schema (``aether_test``) predates them, so any
-    query that reads these columns would fail there with ``UndefinedColumn``.
+    ``targetRole``/``location``/``agentConfig``/``username`` were introduced
+    after the original Prisma migration and only ALTER-added to the production
+    ``aether`` schema. The shared test schema (``aether_test``) predates them,
+    so any query that reads these columns would fail there with
+    ``UndefinedColumn``.
 
     ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS`` is a no-op where the columns
-    already exist (production) and safely backfills them everywhere else. A
-    transaction-scoped advisory lock serializes concurrent first-hit callers so
-    the DDL can't race, mirroring the pattern used for the agent config tables.
-    ``TRUNCATE`` never drops columns, so this survives the test-suite teardown.
+    already exist (production) and safely backfills them everywhere else. The
+    ``username`` column is additionally given a nullable UNIQUE index (multiple
+    NULLs are allowed by Postgres, so pre-existing users without a username are
+    unaffected) via ``CREATE UNIQUE INDEX IF NOT EXISTS``, keeping the whole
+    migration additive and backward-compatible. A transaction-scoped advisory
+    lock serializes concurrent first-hit callers so the DDL can't race,
+    mirroring the pattern used for the agent config tables. ``TRUNCATE`` never
+    drops columns, so this survives the test-suite teardown.
     """
     global _user_profile_columns_ready
     if _user_profile_columns_ready:
@@ -94,10 +99,11 @@ def ensure_user_profile_columns() -> None:
                 "SELECT count(*) FROM information_schema.columns"
                 " WHERE table_name = 'User'"
                 " AND table_schema = ANY(current_schemas(false))"
-                " AND column_name IN ('targetRole', 'location', 'agentConfig')"
+                " AND column_name IN ('targetRole', 'location', 'agentConfig',"
+                " 'username')"
             )
             row = cur.fetchone()
-            if row and row[0] == 3:
+            if row and row[0] == 4:
                 _user_profile_columns_ready = True
                 return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240712,))
@@ -105,6 +111,11 @@ def ensure_user_profile_columns() -> None:
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "location" text')
             cur.execute(
                 'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "agentConfig" jsonb'
+            )
+            cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "username" text')
+            cur.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key"'
+                ' ON "User" ("username")'
             )
         conn.commit()
     _user_profile_columns_ready = True

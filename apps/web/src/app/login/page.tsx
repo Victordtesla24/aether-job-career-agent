@@ -1,22 +1,30 @@
 "use client";
 
 /**
- * /login — email+password sign-in against POST /api/auth/login.
- *
- * The deployed environment is a demo: the form is prefilled with the seeded
- * demo account, and a successful login stores the JWT under the same
+ * /login — identifier (email or username) + password sign-in against
+ * POST /api/auth/login (the backend accepts either credential — GAP
+ * FEATURE CONTRACT). A successful login stores the JWT under the same
  * `aether_token` localStorage key the shared API client uses before
  * redirecting to /dashboard.
  */
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-import { apiBaseUrl } from "../../lib/api/client";
+import { AuthApiError, login } from "../../lib/api/auth";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
 export default function LoginPage() {
   const router = useRouter();
+  // Read client-side only (no Suspense boundary needed for a static page,
+  // unlike useSearchParams) — set by /signup when a fresh account's
+  // auto-login didn't complete, so the account exists but the user still
+  // needs to sign in.
+  const [justRegistered, setJustRegistered] = useState(false);
+  useEffect(() => {
+    setJustRegistered(new URLSearchParams(window.location.search).get("registered") === "1");
+  }, []);
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -27,24 +35,11 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch(`${apiBaseUrl()}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        setError(
-          res.status === 401
-            ? "Invalid email or password."
-            : `Login failed (${res.status}). Please try again.`,
-        );
-        return;
-      }
-      const body = (await res.json()) as { access_token: string };
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, body.access_token);
+      const session = await login(email, password);
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, session.accessToken);
       router.push("/dashboard");
-    } catch {
-      setError("Could not reach the API. Please try again.");
+    } catch (err) {
+      setError(err instanceof AuthApiError ? err.message : "Could not reach the API. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -77,22 +72,30 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Email
+          {justRegistered ? (
+            <p role="status" data-testid="signup-success" className="text-sm text-aether-green">
+              Account created — sign in to continue.
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="login-identifier">Email or username</label>
             <input
-              type="email"
+              id="login-identifier"
+              type="text"
               name="email"
-              autoComplete="email"
+              autoComplete="username"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-            Password
+          <div className="flex flex-col gap-1.5 text-[13px] font-medium">
+            <label htmlFor="login-password">Password</label>
             <input
+              id="login-password"
               type="password"
               name="password"
               autoComplete="current-password"
@@ -101,7 +104,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
-          </label>
+          </div>
 
           {error ? (
             <p role="alert" data-testid="login-error" className="text-sm text-aether-coral">
@@ -116,6 +119,13 @@ export default function LoginPage() {
           >
             {submitting ? "Signing in…" : "Sign in"}
           </button>
+
+          <p className="text-sm text-aether-muted text-center">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-aether-indigo hover:underline">
+              Create account
+            </Link>
+          </p>
         </form>
       </div>
     </main>
