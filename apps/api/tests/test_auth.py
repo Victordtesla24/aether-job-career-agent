@@ -180,19 +180,28 @@ class TestLoginByIdentifier:
 
 
 class TestAuthRateLimiting:
-    def test_register_is_rate_limited_after_threshold(self, client):
-        # The default limiter allows 5 auth calls / IP / window; the 6th 429s.
-        statuses = [
-            client.post(
-                "/auth/register",
-                json={"email": f"rl{i}@example.com", "password": "Passw0rd1"},
-            ).status_code
-            for i in range(7)
-        ]
-        assert statuses[-1] == 429
-        assert 429 in statuses
+    """Auth rate limiting is keyed on the normalized REQUEST IDENTIFIER
+    (submitted email / username), never on the client IP.
 
-    def test_login_is_rate_limited_after_threshold(self, client):
+    Why not IP: in this deployment the API sits behind Envoy -> nginx ->
+    uvicorn. nginx forwards no ``X-Forwarded-For`` and uvicorn's
+    ``ProxyHeadersMiddleware`` trusts the loopback peer, so an IP-keyed limiter
+    is either bypassable (a forged ``X-Forwarded-For`` mints a fresh bucket per
+    request) or collapses every user into one global bucket (a site-wide auth
+    DoS). The client IP is therefore not trustworthy and is deliberately NOT
+    used as a key. See ADR D-0033.
+
+    The previous ``test_rate_limit_not_bypassable_via_x_forwarded_for`` was
+    DELETED on purpose: ``TestClient`` never runs uvicorn's proxy middleware, so
+    that test could not exercise the real IP-trust bug it claimed to guard —
+    it gave false confidence. Body-identifier keying, by contrast, IS fully
+    exercisable through ``TestClient`` (the identifier travels in the JSON body,
+    not the transport), which is what the tests below do.
+    """
+
+    def test_failed_logins_lock_a_single_identifier(self, client):
+        # Register so the identifier resolves to a real user; the wrong password
+        # then drives genuine 401s that the failure limiter counts.
         assert (
             client.post(
                 "/auth/register",
@@ -200,31 +209,154 @@ class TestAuthRateLimiting:
             ).status_code
             == 201
         )
-        # One register already consumed a slot; hammer login until throttled.
-        last = None
-        for _ in range(7):
-            last = client.post(
-                "/auth/login",
-                json={"email": "brute@example.com", "password": "Passw0rd1"},
-            )
-        assert last.status_code == 429
-
-    def test_rate_limit_not_bypassable_via_x_forwarded_for(self, client):
-        # A unique, attacker-controlled X-Forwarded-For per request must NOT
-        # reset the limiter: the key is the trusted socket peer, never the
-        # client-supplied header. Before the fix each spoofed value minted a
-        # fresh bucket, so all 7 calls returned 201 and the limiter never
-        # engaged; now the 6th call (index 5) is throttled regardless.
+        # Default cap: 5 failed attempts / identifier / window. The first five
+        # wrong-password logins return 401; the sixth is throttled with 429.
         statuses = [
             client.post(
-                "/auth/register",
-                json={"email": f"xff{i}@example.com", "password": "Passw0rd1"},
-                headers={"X-Forwarded-For": f"10.0.0.{i}"},
+                "/auth/login",
+                json={"email": "brute@example.com", "password": "wrongpass9"},
             ).status_code
-            for i in range(7)
+            for _ in range(6)
         ]
+        assert statuses[:5] == [401, 401, 401, 401, 401], statuses
         assert statuses[5] == 429, statuses
-        assert all(s == 201 for s in statuses[:5]), statuses
+        # The 429 must advertise a Retry-After so clients back off honestly.
+        blocked = client.post(
+            "/auth/login",
+            json={"email": "brute@example.com", "password": "wrongpass9"},
+        )
+        assert blocked.status_code == 429
+        assert blocked.headers.get("Retry-After")
+
+    def test_login_lockout_is_per_identifier(self, client):
+        # Two independent accounts; hammering one must never affect the other.
+        for email in ("victim@example.com", "bystander@example.com"):
+            assert (
+                client.post(
+                    "/auth/register", json={"email": email, "password": "Passw0rd1"}
+                ).status_code
+                == 201
+            )
+        # Lock the victim identifier out entirely.
+        for _ in range(6):
+            client.post(
+                "/auth/login",
+                json={"email": "victim@example.com", "password": "nope12345"},
+            )
+        assert (
+            client.post(
+                "/auth/login",
+                json={"email": "victim@example.com", "password": "nope12345"},
+            ).status_code
+            == 429
+        )
+        # A DIFFERENT identifier is on its own bucket and can still log in.
+        ok = client.post(
+            "/auth/login",
+            json={"email": "bystander@example.com", "password": "Passw0rd1"},
+        )
+        assert ok.status_code == 200, ok.text
+
+    def test_successful_login_resets_failure_counter(self, client):
+        assert (
+            client.post(
+                "/auth/register",
+                json={"email": "reset@example.com", "password": "Passw0rd1"},
+            ).status_code
+            == 201
+        )
+        # Four near-miss failures — one shy of the cap of five.
+        for _ in range(4):
+            assert (
+                client.post(
+                    "/auth/login",
+                    json={"email": "reset@example.com", "password": "wrongpass9"},
+                ).status_code
+                == 401
+            )
+        # A correct login must succeed AND clear the failure counter so a legit
+        # user who finally remembers their password is not locked out.
+        assert (
+            client.post(
+                "/auth/login",
+                json={"email": "reset@example.com", "password": "Passw0rd1"},
+            ).status_code
+            == 200
+        )
+        # Because the counter reset, four more failures are all 401 (no 429).
+        # A limiter that did not reset would 429 on the second failure here.
+        for _ in range(4):
+            assert (
+                client.post(
+                    "/auth/login",
+                    json={"email": "reset@example.com", "password": "wrongpass9"},
+                ).status_code
+                == 401
+            )
+
+    def test_login_failure_key_is_case_insensitive(self, client):
+        # Mixed-case variants of one email share ONE normalized failure bucket,
+        # so an attacker cannot dodge the cap by toggling case.
+        assert (
+            client.post(
+                "/auth/register",
+                json={"email": "casey@example.com", "password": "Passw0rd1"},
+            ).status_code
+            == 201
+        )
+        variants = ["casey@example.com", "CASEY@example.com", "Casey@Example.com"]
+        statuses = [
+            client.post(
+                "/auth/login",
+                json={"email": variants[i % len(variants)], "password": "wrongpass9"},
+            ).status_code
+            for i in range(6)
+        ]
+        assert statuses[:5] == [401, 401, 401, 401, 401], statuses
+        assert statuses[5] == 429, statuses
+
+    def test_register_spam_on_one_email_is_capped(self, client):
+        # Default cap: 3 register attempts / email / window. The first creates
+        # the account (201); the next two collide (409 duplicate) but STILL
+        # count; the fourth attempt on the same email is throttled with 429.
+        first = client.post(
+            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+        )
+        assert first.status_code == 201, first.text
+        second = client.post(
+            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+        )
+        third = client.post(
+            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+        )
+        assert second.status_code == 409
+        assert third.status_code == 409
+        fourth = client.post(
+            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+        )
+        assert fourth.status_code == 429, fourth.text
+        assert fourth.headers.get("Retry-After")
+
+    def test_register_cap_is_per_email(self, client):
+        # Exhaust one email's registration budget...
+        for _ in range(4):
+            client.post(
+                "/auth/register",
+                json={"email": "capped@example.com", "password": "Passw0rd1"},
+            )
+        assert (
+            client.post(
+                "/auth/register",
+                json={"email": "capped@example.com", "password": "Passw0rd1"},
+            ).status_code
+            == 429
+        )
+        # ...a DIFFERENT email is on its own bucket and still registers.
+        fresh = client.post(
+            "/auth/register",
+            json={"email": "brandnew@example.com", "password": "Passw0rd1"},
+        )
+        assert fresh.status_code == 201, fresh.text
 
 
 class TestAdminSeed:

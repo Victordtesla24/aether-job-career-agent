@@ -958,3 +958,59 @@ inconsistent with how every other Phase-3+ deferral in this codebase is tracked 
 26-element wireframe (`design/screens/interview-center.html`) remains the Phase 3 implementation
 target. **Reversible?** Yes — purely documentary; Phase 3 can implement against the existing
 wireframe without further ADR changes.
+
+---
+
+## D-0033 — Auth rate limiting is keyed on the request identifier, not the client IP
+
+**Date:** 2026-07-14 · **Author:** FIX-BE-RL · **Status:** Accepted
+
+**Context.** The first rate-limiter for `/auth/register` and `/auth/login`
+(`apps/api/app/rate_limit.py`) keyed on the client IP (`request.client.host`). Review of the
+production topology found that key is not trustworthy here: the API runs behind
+`Envoy -> nginx -> uvicorn`, nginx sets no `X-Forwarded-For`, and uvicorn's `ProxyHeadersMiddleware`
+trusts the loopback peer. That leaves two failure modes with no safe middle ground — either the
+limiter honours a client-supplied `X-Forwarded-For` (so any caller mints a fresh bucket per request
+with a spoofed value and bypasses the limiter entirely), or it keys on the single trusted
+`127.0.0.1` nginx hop (so every user on the internet collapses into one global bucket — a low
+ceiling there is a site-wide auth denial-of-service the moment normal traffic exceeds it). The
+prior test `test_rate_limit_not_bypassable_via_x_forwarded_for` gave false confidence: FastAPI's
+`TestClient` never runs uvicorn's proxy middleware, so it could not exercise the real IP-trust bug.
+
+**Decision.** Rate limiting is keyed on the **normalized submitted request identifier** carried in
+the request body — never on the client IP. The client IP is not read for rate limiting.
+* `/auth/login` — key = normalized (trimmed + lowercased) submitted identifier (email or username).
+  Only FAILED attempts are counted; the default cap is 5 failures / 15 min per identifier, then
+  `429`. A successful login resets that identifier's counter, so a legitimate user is never locked
+  out by their own earlier typos. Different identifiers have independent buckets.
+* `/auth/register` — key = normalized submitted email. Every attempt counts; the default cap is
+  3 / hour per email, then `429` (blunts re-registration spam against one address).
+* No low global bucket is used — a shared low ceiling would reintroduce the site-wide DoS above.
+  Both caps are tunable via env (`AUTH_LOGIN_MAX_FAILURES`, `AUTH_LOGIN_WINDOW_SECONDS`,
+  `AUTH_REGISTER_MAX`, `AUTH_REGISTER_WINDOW_SECONDS`). The limiter is an in-process, thread-safe
+  sliding window (no new dependency). `429` responses carry a clear JSON message and a `Retry-After`
+  header. Because the identifier travels in the JSON body (not the transport), this design IS fully
+  exercisable through `TestClient`, so the tests assert the real behaviour.
+
+**HONEST RESIDUAL (limitation, not a defect).** Identifier-keying stops brute-force against a single
+account and re-registration spam against a single email. It does **NOT** stop a distributed
+mass-registration attack that uses many different email addresses (each fresh email is a fresh
+bucket), nor distributed credential-stuffing that spreads guesses across many distinct accounts.
+Defending against those requires a trustworthy client-IP signal, a CAPTCHA / proof-of-work
+challenge, or email-verification before an account is usable — none of which exist in this
+deployment today. This ADR explicitly does **not** claim any IP-based or distributed-abuse
+protection; that gap is accepted for now and left to a future phase.
+
+**Alternatives.** (a) Keep IP-keying with a hardened proxy chain (configure nginx to set a real
+`X-Forwarded-For` and uvicorn `forwarded_allow_ips` to trust only Envoy) — rejected for now: it
+depends on infra changes outside this repo and the reviewer verified the current chain does not
+provide it, so shipping IP-keying would be security theatre. (b) A low global bucket as a backstop —
+rejected: it is a user-visible DoS. (c) Add a CAPTCHA / email-verification to close the distributed
+residual — deferred: material new scope (new UX, provider integration) beyond this fix.
+
+**Consequences.** `apps/api/app/rate_limit.py` is reworked to two identifier-keyed limiters wired in
+`app.main.create_app` and enforced inline in `apps/api/app/routers/auth.py`; `tests/test_auth.py`
+replaces the misleading `X-Forwarded-For` test with honest body-keyed tests (per-identifier login
+lockout + reset, per-email register cap, and case-insensitive keying). **Reversible?** Yes — the
+limiter is in-process and self-contained; caps are env-tunable and a future IP/CAPTCHA layer can be
+added alongside it without changing the identifier-keyed core.
