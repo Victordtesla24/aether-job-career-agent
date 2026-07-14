@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     cover_letters,
     emails,
+    google_oauth,
     health,
     interviews,
     jobs,
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(google_oauth.router, prefix="/auth", tags=["auth"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     app.include_router(agents.router, prefix="/agents", tags=["agents"])
     app.include_router(resumes.router, prefix="/resumes", tags=["resumes"])

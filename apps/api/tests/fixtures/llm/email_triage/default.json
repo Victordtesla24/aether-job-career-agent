@@ -1,0 +1,3 @@
+{
+  "content": "{\"items\": [{\"index\": 0, \"category\": \"priority\", \"score\": 88, \"reason\": \"Recruiter with a live role needing a timely response\"}, {\"index\": 1, \"category\": \"followup\", \"score\": 60, \"reason\": \"Candidate owes a follow-up\"}, {\"index\": 2, \"category\": \"all\", \"score\": 30, \"reason\": \"General update\"}, {\"index\": 3, \"category\": \"auto\", \"score\": 5, \"reason\": \"Automated newsletter, no reply needed\"}, {\"index\": 4, \"category\": \"priority\", \"score\": 75, \"reason\": \"Hiring manager follow-up\"}]}"
+}

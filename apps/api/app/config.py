@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Present only at runtime; never logged. Left optional so the app boots
     # without it (agent calls that need it fail loudly at call time instead).
     openrouter_api_key: str | None = None
+    # Google OAuth (Gmail integration, P4). Read at runtime from ``os.environ``
+    # by ``app.services.google_oauth``; declared here for discoverability only.
+    # Secrets — never logged or echoed.
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
 
 
 @lru_cache

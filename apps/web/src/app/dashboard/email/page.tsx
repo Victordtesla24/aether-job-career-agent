@@ -17,6 +17,7 @@ import {
   type EmailInbox,
   type EmailMessage,
 } from "../../../lib/api/workspaces";
+import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
 
 const CATEGORIES = [
   { key: "priority", label: "Priority" },
@@ -46,6 +47,8 @@ export default function EmailCenterPage() {
   const [sending, setSending] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [connectNotice, setConnectNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -66,6 +69,37 @@ export default function EmailCenterPage() {
         }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load inbox"));
+  }, []);
+
+  // Handle the Google OAuth callback landing (…/email?gmail_connected=1|0).
+  // Read the query string directly (no useSearchParams → no Suspense boundary
+  // required), show an honest banner, refetch the now-synced inbox on success,
+  // then strip the params so a refresh doesn't re-show the notice.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const result = gmailConnectResultFromParams(new URLSearchParams(window.location.search));
+    if (!result) return;
+    if (result.kind === "success") {
+      setConnectNotice({ kind: "success", message: "Gmail connected ✓ — syncing your inbox…" });
+      fetchEmailInbox()
+        .then((data) => setInbox(data))
+        .catch(() => {});
+    } else {
+      setConnectNotice({ kind: "error", message: result.message });
+    }
+    window.history.replaceState(null, "", "/dashboard/email");
+  }, []);
+
+  const startConnect = useCallback(() => {
+    setConnecting(true);
+    setConnectNotice(null);
+    void connectGmail().catch((e: unknown) => {
+      setConnecting(false);
+      setConnectNotice({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Could not start Gmail sign-in.",
+      });
+    });
   }, []);
 
   const selected: EmailMessage | undefined = useMemo(
@@ -232,10 +266,31 @@ export default function EmailCenterPage() {
             <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
           </button>
         ))}
-        <button type="button" className="rounded-lg border border-dashed border-white/15 px-3 py-1.5 text-xs text-aether-muted-dim hover:text-white">
-          + Connect account
+        <button
+          type="button"
+          data-testid="connect-gmail-btn"
+          onClick={startConnect}
+          disabled={connecting}
+          className="rounded-lg border border-dashed border-white/15 px-3 py-1.5 text-xs text-aether-muted-dim hover:text-white disabled:opacity-50"
+        >
+          <i className="fa-brands fa-google mr-1.5" aria-hidden="true" />
+          {connecting ? "Opening Google…" : "Connect Gmail"}
         </button>
       </div>
+
+      {connectNotice ? (
+        <p
+          data-testid="gmail-connect-notice"
+          role={connectNotice.kind === "error" ? "alert" : "status"}
+          className={`rounded-xl border p-3 text-sm ${
+            connectNotice.kind === "error"
+              ? "border-red-500/30 bg-red-500/10 text-red-300"
+              : "border-aether-green/30 bg-aether-green/10 text-aether-green"
+          }`}
+        >
+          {connectNotice.message}
+        </p>
+      ) : null}
 
       {sentNotice ? (
         <p

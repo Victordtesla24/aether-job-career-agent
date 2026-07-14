@@ -21,8 +21,12 @@ _STATUS_FILTERS = frozenset({"pending", "approved", "rejected", "all"})
 class CreateApprovalBody(BaseModel):
     """Body for creating a new approval request (POST /approvals)."""
 
-    type: str = Field(..., description="Approval type: application_submit, email_send, offer_response")
-    payload: dict[str, Any] = Field(..., description="Arbitrary key-value payload for the approval card")
+    type: str = Field(
+        ..., description="Approval type: application_submit, email_send, offer_response"
+    )
+    payload: dict[str, Any] = Field(
+        ..., description="Arbitrary key-value payload for the approval card"
+    )
     application_id: str | None = Field(default=None, max_length=50)
 
 
@@ -135,4 +139,84 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     records the action as executed.
     """
     approval = ApprovalService().assert_action_allowed(approval_id, current_user["id"])
+    if approval["type"] == "email_send":
+        return _execute_email_send(approval, current_user["id"])
     return {"status": "executed", "approval_id": approval["id"], "type": approval["type"]}
+
+
+def _execute_email_send(approval: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Send the Gmail message behind an approved ``email_send`` approval.
+
+    The approval was created by the Email Agent (``mode=send``); executing it is
+    the single point where a real outbound email leaves the system. Sending
+    requires a connected Gmail account — absent one (or on an expired grant) it
+    fails honestly with a 409 and no email is sent.
+    """
+    payload = approval.get("payload") or {}
+    to = payload.get("to")
+    subject = payload.get("subject") or "(no subject)"
+    body = payload.get("body") or ""
+    if not to:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Approval payload is missing a recipient — cannot send.",
+        )
+    from app.repositories.google_credential import GoogleCredentialRepository
+
+    if not GoogleCredentialRepository().is_connected(user_id):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            detail={
+                "error": "no_email_provider_connected",
+                "message": (
+                    "No Gmail account connected — connect Gmail to send. "
+                    "No email has been sent."
+                ),
+            },
+        )
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailError,
+        GmailNotConnectedError,
+        GmailService,
+    )
+
+    try:
+        # ``thread_id`` (the Gmail threadId) is what actually threads the reply
+        # into the existing conversation; ``in_reply_to`` sets the RFC In-Reply-To
+        # header from the original Message-ID when the agent captured one.
+        sent = GmailService(user_id).send(
+            to=to,
+            subject=subject,
+            body=body,
+            thread_id=payload.get("gmail_thread_id"),
+            in_reply_to=payload.get("in_reply_to"),
+        )
+    except (GmailAuthError, GmailNotConnectedError):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            detail={
+                "error": "gmail_auth_failed",
+                "message": (
+                    "Gmail authorization expired — reconnect Gmail. "
+                    "No email has been sent."
+                ),
+            },
+        ) from None
+    except GmailError:
+        raise HTTPException(
+            http_status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "gmail_send_failed",
+                "message": (
+                    "Gmail could not send the message right now — no email was "
+                    "sent. Please try again."
+                ),
+            },
+        ) from None
+    return {
+        "status": "sent",
+        "approval_id": approval["id"],
+        "type": approval["type"],
+        "gmailMessageId": sent.get("id"),
+    }

@@ -31,11 +31,12 @@ _DEFAULT_LOCATION = "Melbourne, Australia"
 #: Canonical agent registry (mirrors the LangGraph node names in
 #: packages/agents/src/graph/aether-graph.ts).
 AGENT_NAMES = (
-    "supervisor", "scout", "matcher", "fitScorer", "tailor", "coverLetter", "storyExtractor"
+    "supervisor", "scout", "matcher", "fitScorer", "tailor", "coverLetter",
+    "storyExtractor", "emailAgent"
 )
 
 #: Agents whose output is gated behind a human approval.
-_APPROVAL_GATED = {"tailor", "coverLetter"}
+_APPROVAL_GATED = {"tailor", "coverLetter", "emailAgent"}
 
 # ---------------------------------------------------------------------------
 # Agents-screen catalog, provider seeds and model pricing (design/screens/agents.html)
@@ -114,9 +115,11 @@ AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "portfolioSync", "name": "Portfolio Sync Agent", "icon": "fa-github",
      "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — syncs GitHub/portfolio activity into profile evidence."},
-    {"key": "recruiterOutreach", "name": "Recruiter Outreach Agent", "icon": "fa-handshake",
-     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 for personalised, professional recruiter outreach."},
+    {"key": "recruiterOutreach", "name": "Email Agent", "icon": "fa-inbox",
+     "accent": "coral", "backend": "emailAgent", "recommended": "claude-sonnet-4",
+     "tip": "Real Gmail-backed inbox triage, evidence-grounded reply drafting, labels "
+            "and insights. Best with Claude claude-sonnet-4 for personalised, professional "
+            "outreach. Connect Gmail (Email Center) to activate live send/sync."},
     {"key": "marketTrends", "name": "Market Trends Agent", "icon": "fa-arrow-trend-up",
      "accent": "indigo", "backend": None, "recommended": "gpt-4o",
      "tip": "Best with GPT-4o — synthesizes market & hiring trend signals."},
@@ -362,6 +365,7 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     "tailor": "REASONING",
     "coverLetter": "REASONING",
     "storyExtractor": "STRUCTURED",
+    "emailAgent": "REASONING",
 }
 
 
@@ -442,6 +446,12 @@ def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]
 
         return _record_run(
             user_id, "storyExtractor", params, lambda: StoryExtractorAgent().run(user_id)
+        )
+    if name in ("emailAgent", "email-agent", "email"):
+        from app.agents.email_agent import EmailAgent
+
+        return _record_run(
+            user_id, "emailAgent", params, lambda: EmailAgent().run(user_id, **params)
         )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
@@ -568,6 +578,32 @@ def run_cover_letter(body: JobTargetRequest, current_user: CurrentUser) -> dict[
 def run_story_extractor(current_user: CurrentUser) -> dict[str, Any]:
     """Extract STAR stories from the base resume (P2-S09)."""
     return _dispatch(current_user["id"], "storyExtractor", {})
+
+
+class EmailAgentRequest(BaseModel):
+    mode: str = Field(default="triage")
+    thread_id: str | None = None
+    to: str | None = None
+    subject: str | None = None
+    body: str | None = None
+
+
+@router.post("/email/run")
+def run_email_agent(body: EmailAgentRequest, current_user: CurrentUser) -> dict[str, Any]:
+    """Run the Email Agent: triage / draft_reply / insights / send (P4).
+
+    Gmail-backed when the user has connected Gmail; otherwise degrades honestly
+    to local ``EmailThread`` rows (never fabricates inbox data). ``send`` mode
+    never sends directly — it opens a pending ``email_send`` approval so the
+    human-in-the-loop gate always adjudicates a real outbound email.
+    """
+    params = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return _dispatch(current_user["id"], "emailAgent", params)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -718,7 +754,7 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "recommended": entry["recommended"],
                 "tip": entry["tip"],
                 "runnable": backend in ("scout", "fitScorer", "tailor", "coverLetter",
-                                        "storyExtractor"),
+                                        "storyExtractor", "emailAgent"),
                 "backend": backend,
                 "enabled": enabled,
                 "status": state,
