@@ -140,11 +140,13 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     """
     approval = ApprovalService().assert_action_allowed(approval_id, current_user["id"])
     if approval["type"] == "email_send":
-        return _execute_email_send(approval, current_user["id"])
+        return _execute_email_send(approval, current_user)
     return {"status": "executed", "approval_id": approval["id"], "type": approval["type"]}
 
 
-def _execute_email_send(approval: dict[str, Any], user_id: str) -> dict[str, Any]:
+def _execute_email_send(
+    approval: dict[str, Any], current_user: dict[str, Any]
+) -> dict[str, Any]:
     """Send the Gmail message behind an approved ``email_send`` approval.
 
     The approval was created by the Email Agent (``mode=send``); executing it is
@@ -152,6 +154,7 @@ def _execute_email_send(approval: dict[str, Any], user_id: str) -> dict[str, Any
     requires a connected Gmail account — absent one (or on an expired grant) it
     fails honestly with a 409 and no email is sent.
     """
+    user_id = current_user["id"]
     payload = approval.get("payload") or {}
     to = payload.get("to")
     subject = payload.get("subject") or "(no subject)"
@@ -174,6 +177,23 @@ def _execute_email_send(approval: dict[str, Any], user_id: str) -> dict[str, Any
                 ),
             },
         )
+    # Resolve any resume / cover-letter PDFs to attach — in-process, from the
+    # real download handlers. A dangling reference raises here (404/422) *before*
+    # the send, so a broken attachment never yields a partial email.
+    attachments = None
+    resume_id = payload.get("attach_resume_id")
+    cover_letter_id = payload.get("attach_cover_letter_id")
+    if resume_id or cover_letter_id:
+        from app.services.email_attachments import resolve_email_attachments
+
+        try:
+            attachments = resolve_email_attachments(
+                current_user, resume_id=resume_id, cover_letter_id=cover_letter_id
+            )
+        except ValueError as exc:  # aggregate over Gmail's size cap
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            ) from exc
     from app.services.gmail_service import (
         GmailAuthError,
         GmailError,
@@ -191,6 +211,7 @@ def _execute_email_send(approval: dict[str, Any], user_id: str) -> dict[str, Any
             body=body,
             thread_id=payload.get("gmail_thread_id"),
             in_reply_to=payload.get("in_reply_to"),
+            attachments=attachments,
         )
     except (GmailAuthError, GmailNotConnectedError):
         raise HTTPException(

@@ -62,6 +62,7 @@ const RUN_PARAMS: Record<string, Record<string, unknown>> = {
 const AGENT_ROUTE: Record<string, string> = {
   scout: "scout",
   fitScorer: "fit-scorer",
+  matcher: "matcher",
   tailor: "tailor",
   coverLetter: "cover-letter",
   storyExtractor: "story-extractor",

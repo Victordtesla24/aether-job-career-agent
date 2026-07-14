@@ -72,6 +72,36 @@ def test_draft_requires_thread_id():
         agent.run("u1", mode="draft_reply")
 
 
+# ---------------------------------------------------------- draft_follow_up
+def test_draft_follow_up_requires_thread_id():
+    agent = EmailAgent(credentials=_FakeCreds())
+    with pytest.raises(EmailAgentError):
+        agent.run("u1", mode="draft_follow_up")
+
+
+def test_draft_follow_up_returns_follow_up_mode_and_guards():
+    """The subsumed Follow-up capability: a silence-triggered nudge on an
+    existing thread, grounded in the same evidence corpus + FabricationGuard."""
+    clean = (
+        "just following up on my earlier note about the delivery role. "
+        "i remain available for a quick call this week whenever it helps."
+    )
+    fake_llm = _FakeLLM({"body": clean})
+    agent = EmailAgent(llm=fake_llm, credentials=_FakeCreds())
+    agent._thread = lambda user_id, thread_id: {  # type: ignore[assignment]
+        "id": thread_id,
+        "subject": "Delivery role",
+        "messages": [{"body": "Thanks for applying — we'll be in touch."}],
+    }
+    agent._resume_text = lambda: "Experienced delivery lead and program manager."  # type: ignore[assignment]
+    res = agent.run("u1", mode="draft_follow_up", thread_id="t9")
+    assert res.mode == "draft_follow_up"
+    assert res.thread_id == "t9"
+    assert res.draft.startswith("just following up")
+    # Nothing fabricated → no flags.
+    assert res.flagged == []
+
+
 # ---------------------------------------------------------------- draft guard
 def test_draft_flags_fabricated_claims():
     """A drafted reply that invents a metric/entity absent from the resume and

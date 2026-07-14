@@ -23,6 +23,46 @@ def test_decode_state_rejects_garbage():
         google_oauth.decode_state("not-a-real-jwt")
 
 
+# ------------------------------------------------ SECURITY: state ≠ session
+def test_state_token_is_not_a_valid_session_token():
+    """A single-purpose OAuth ``state`` token MUST NOT verify as an app session
+    token. It is signed with a namespaced key distinct from the session secret,
+    so ``decode_access_token`` rejects it on the signature."""
+    import jwt as pyjwt
+
+    from app.security import decode_access_token
+
+    state = google_oauth.encode_state("user-123")
+    with pytest.raises(pyjwt.PyJWTError):
+        decode_access_token(state)
+
+
+def test_state_token_rejected_as_bearer_on_protected_route(client):
+    """End-to-end: ``get_current_user`` cannot be satisfied by an OAuth state
+    token presented as a Bearer credential — the protected route 401s."""
+    state = google_oauth.encode_state("user-123")
+    resp = client.get("/agents", headers={"Authorization": f"Bearer {state}"})
+    assert resp.status_code == 401
+
+
+def test_state_token_expires_in_five_minutes():
+    """Short replay window: the state token's lifetime is 5 minutes."""
+    import jwt as pyjwt
+
+    state = google_oauth.encode_state("user-123")
+    claims = pyjwt.decode(
+        state,
+        google_oauth._state_secret(),
+        algorithms=["HS256"],
+        audience=google_oauth._STATE_AUD,
+    )
+    assert claims["exp"] - claims["iat"] == 300
+    assert claims["aud"] == "google-oauth-state"
+    assert claims["uid"] == "user-123"
+    # The identity rides in `uid`, never the `userId`/`sub` a session reads.
+    assert "userId" not in claims and "sub" not in claims
+
+
 # --------------------------------------------------------------- /login gate
 def test_login_requires_server_config(client, auth_headers, monkeypatch):
     for var in (

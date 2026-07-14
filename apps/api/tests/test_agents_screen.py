@@ -63,6 +63,48 @@ def test_catalog_lists_full_roster_with_defaults(client, auth_headers):
     assert {"jobDiscovery", "resumeTailoring", "coverLetter", "matchScoring"} <= runnable
 
 
+def test_catalog_decomposition_email_matcher_and_outreach(client, auth_headers):
+    """P4 decomposition contract:
+
+    - the Email Agent has its OWN card (key ``emailAgent``, backend ``emailAgent``);
+    - ``recruiterOutreach`` stays a planned card with NO backend (no SR collision);
+    - the previously-invisible ``matcher`` is now a runnable ``jobMatching`` card;
+    - the standalone ``followUp`` card is retired (subsumed by the Email Agent).
+    """
+    body = client.get("/agents/catalog", headers=auth_headers).json()
+    by_key = {a["key"]: a for a in body["agents"]}
+
+    email = by_key["emailAgent"]
+    assert email["name"] == "Email Agent"
+    assert email["backend"] == "emailAgent"
+    assert email["status"] == "active" and email["runnable"] is True
+
+    outreach = by_key["recruiterOutreach"]
+    assert outreach["backend"] is None
+    assert outreach["status"] == "planned"
+    # The outreach card must NOT masquerade as the Email Agent.
+    assert outreach["name"] != "Email Agent"
+
+    matching = by_key["jobMatching"]
+    assert matching["backend"] == "matcher"
+    assert matching["status"] == "active" and matching["runnable"] is True
+
+    # Retired standalone follow-up card.
+    assert "followUp" not in by_key
+
+
+def test_matcher_runs_and_is_audited(client, auth_headers):
+    """The promoted matcher is dispatchable on its own and records an AgentRun."""
+    resp = client.post("/agents/matcher/run", json={}, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    # No jobs discovered in this fresh account → honest zero match, never faked.
+    assert out["matched"] == 0
+    assert out["top_job_id"] is None
+    runs = client.get("/agents/runs", headers=auth_headers).json()
+    assert any(r["agentName"] == "matcher" for r in runs)
+
+
 def test_disabling_agent_marks_it_paused_and_persists(client, auth_headers):
     # Must be an IMPLEMENTED agent — planned cards stay "planned" regardless.
     res = client.put(

@@ -8,6 +8,9 @@ Modes (``run(user_id, mode=...)``):
 - ``draft_reply`` — draft a reply grounded ONLY in the candidate's resume + the
                   incoming thread, checked by :class:`FabricationGuard` so it
                   never invents facts about the candidate.
+- ``draft_follow_up`` — draft a silence-triggered outbound nudge on an existing
+                  thread (subsumes the retired standalone Follow-up agent). Same
+                  evidence grounding + FabricationGuard as ``draft_reply``.
 - ``insights``  — produce the AI-intelligence view-model (score + breakdown +
                   summary) the Email Center's intelligence panel renders.
 - ``apply_labels`` — apply/remove Gmail labels on a thread's latest message.
@@ -154,7 +157,9 @@ class EmailAgent:
         if mode == "triage":
             return self._triage(user_id)
         if mode == "draft_reply":
-            return self._draft_reply(user_id, params)
+            return self._compose_draft(user_id, params, mode="draft_reply")
+        if mode == "draft_follow_up":
+            return self._compose_draft(user_id, params, mode="draft_follow_up")
         if mode == "insights":
             return self._insights(user_id, params)
         if mode == "apply_labels":
@@ -234,11 +239,19 @@ class EmailAgent:
             message=f"Triaged {triaged} emails into {len(categories)} categories.",
         )
 
-    # ----------------------------------------------------------- draft_reply
-    def _draft_reply(self, user_id: str, params: dict[str, Any]) -> EmailAgentResult:
+    # ------------------------------------------------ draft_reply / follow_up
+    def _compose_draft(
+        self, user_id: str, params: dict[str, Any], *, mode: str
+    ) -> EmailAgentResult:
+        """Shared draft path for ``draft_reply`` and ``draft_follow_up``.
+
+        Both ground the draft in ONLY the candidate's resume + the thread and run
+        the :class:`FabricationGuard`; they differ only in intent (respond vs.
+        nudge) and the honest status message.
+        """
         thread_id = params.get("thread_id")
         if not thread_id:
-            raise EmailAgentError("draft_reply requires thread_id")
+            raise EmailAgentError(f"{mode} requires thread_id")
         thread = self._thread(user_id, thread_id)
         incoming = self._latest_body(thread)
         resume_text = self._resume_text()
@@ -246,10 +259,21 @@ class EmailAgent:
         # evidence, so it joins the corpus the guard checks against — only
         # claims about the *candidate* that aren't in the resume get flagged.
         corpus = " ".join([resume_text, thread.get("subject") or "", incoming])
-        prompt = (
-            f"Incoming email:\nSubject: {thread.get('subject')}\n{incoming}\n\n"
-            f"Candidate resume:\n{resume_text}"
-        )
+        if mode == "draft_follow_up":
+            prompt = (
+                "Write a brief, polite follow-up nudge for a thread the candidate "
+                "has had no reply on. Reference the prior message without repeating "
+                "it in full, and add NO new claims about the candidate.\n\n"
+                f"Previous email:\nSubject: {thread.get('subject')}\n{incoming}\n\n"
+                f"Candidate resume:\n{resume_text}"
+            )
+            message = "Follow-up draft ready — review and approve before sending."
+        else:
+            prompt = (
+                f"Incoming email:\nSubject: {thread.get('subject')}\n{incoming}\n\n"
+                f"Candidate resume:\n{resume_text}"
+            )
+            message = "Draft ready — review and approve before sending."
         draft, flagged = self._draft_once(prompt, corpus, "default")
         if flagged:
             retry_prompt = (
@@ -262,12 +286,12 @@ class EmailAgent:
             except LLMFixtureMissingError:
                 pass  # keep the first draft; flagged is surfaced honestly below
         return EmailAgentResult(
-            mode="draft_reply",
+            mode=mode,
             connected=self._is_connected(user_id),
             thread_id=thread_id,
             draft=draft,
             flagged=flagged,
-            message="Draft ready — review and approve before sending.",
+            message=message,
         )
 
     def _draft_once(
@@ -353,6 +377,11 @@ class EmailAgent:
             "thread_id": params.get("thread_id"),
             "gmail_thread_id": params.get("gmail_thread_id"),
             "in_reply_to": params.get("in_reply_to"),
+            # Optional resume / cover-letter PDFs to attach — resolved in-process
+            # at execute time (approvals._execute_email_send). Never the bytes,
+            # only the ids, so the approval card stays small.
+            "attach_resume_id": params.get("attach_resume_id"),
+            "attach_cover_letter_id": params.get("attach_cover_letter_id"),
         }
         approval = self._approvals.create(user_id, "email_send", payload)
         return EmailAgentResult(
