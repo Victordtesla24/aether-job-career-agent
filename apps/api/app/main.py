@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.rate_limit import build_auth_rate_limiter
 from app.routers import (
     agents,
     analytics,
@@ -41,6 +42,11 @@ def create_app() -> FastAPI:
             "resume tailoring, applications, and approvals."
         ),
     )
+
+    # Per-app auth rate limiter (see app.rate_limit). Stored on app.state so
+    # each constructed app owns an isolated counter; the auth router reads it
+    # through the ``enforce_auth_rate_limit`` dependency.
+    app.state.auth_rate_limiter = build_auth_rate_limiter()
 
     # Permit the Next.js dashboard (and other same-origin tooling) to call the
     # API during development. Origins are tightened per-environment later.

@@ -62,6 +62,28 @@ class UserRepository:
     def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return self._get_one('"id" = %s', (user_id,))
 
+    def get_by_username_or_email(self, identifier: str) -> dict[str, Any] | None:
+        """Resolve a user by exact ``email`` or case-insensitive ``username``.
+
+        Login accepts a single identifier that may be either credential. Both
+        columns are UNIQUE, so at most one row matches per column; when a value
+        happens to match one user's email and another's username, the exact
+        email match wins (deterministic ``ORDER BY``). ``username`` is an
+        additive column, so ``ensure_user_profile_columns`` is invoked first to
+        keep the lookup safe on the older test schema that predates it.
+        """
+        ensure_user_profile_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_USER_COLUMNS} FROM "User"'
+                    ' WHERE "email" = %s OR lower("username") = lower(%s)'
+                    ' ORDER BY ("email" = %s) DESC LIMIT 1',
+                    (identifier, identifier, identifier),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
+
     def get_target_role(self, user_id: str) -> str:
         """The user's configured workspace ``targetRole`` (``''`` when unset).
 

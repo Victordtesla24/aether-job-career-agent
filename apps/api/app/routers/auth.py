@@ -4,11 +4,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
+from app.rate_limit import enforce_auth_rate_limit
 from app.repositories.user import (
     DuplicateEmailError,
     UserRepository,
@@ -33,7 +34,10 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Identifier — an email OR a username. Kept named ``email`` for backward
+    # compatibility with the existing frontend/tests, and deliberately a plain
+    # ``str`` (not ``EmailStr``) so a bare username like "admin" validates.
+    email: str
     password: str
 
 
@@ -52,7 +56,12 @@ class TokenResponse(BaseModel):
     email: str
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(enforce_auth_rate_limit)],
+)
 def register(body: RegisterRequest) -> UserResponse:
     try:
         user = UserRepository().create(body.email, hash_password(body.password))
@@ -64,10 +73,15 @@ def register(body: RegisterRequest) -> UserResponse:
     return UserResponse(id=user["id"], email=user["email"], createdAt=user["createdAt"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(enforce_auth_rate_limit)],
+)
 def login(body: LoginRequest) -> TokenResponse:
-    user = UserRepository().get_by_email(body.email)
-    # Constant-shaped failure: never reveal whether the email exists.
+    # ``email`` is an identifier: an email address OR a username.
+    user = UserRepository().get_by_username_or_email(body.email)
+    # Constant-shaped failure: never reveal whether the identifier exists.
     if user is None or not user.get("passwordHash"):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not verify_password(body.password, user["passwordHash"]):

@@ -26,11 +26,72 @@ if _root_env.exists():
         if m and m.group(1) not in os.environ:
             os.environ[m.group(1)] = next(g for g in m.groups()[1:] if g is not None)
 
-from app.db import get_connection, new_id  # noqa: E402
+from app.db import ensure_user_profile_columns, get_connection, new_id  # noqa: E402
 from app.repositories.user import UserRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
 DEMO_EMAIL = "sarkar.vikram@gmail.com"
+
+# Admin account seeded for the platform owner (login-by-username feature).
+ADMIN_USERNAME = "admin"
+ADMIN_EMAIL = "admin@aether.local"
+ADMIN_NAME = "Administrator"
+
+
+def _admin_password() -> str:
+    """Resolve the admin seed password.
+
+    The owner's explicit product decision is a default of ``admin123``; it is
+    read from ``ADMIN_PASSWORD`` when set so real deployments can override it,
+    and this is the *only* place the default literal appears.
+    """
+    return os.environ.get("ADMIN_PASSWORD") or "admin123"
+
+
+def seed_admin_user() -> str:
+    """Idempotently upsert the ``admin`` user; return its id.
+
+    Skips creation when an admin already exists (matched by username or email),
+    so running the seed twice yields exactly one admin row. The insert also
+    guards the email UNIQUE constraint with ``ON CONFLICT DO NOTHING`` to stay
+    safe under a concurrent seeder.
+    """
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id" FROM "User"'
+                ' WHERE lower("username") = %s OR "email" = %s',
+                (ADMIN_USERNAME, ADMIN_EMAIL),
+            )
+            existing = cur.fetchone()
+            if existing:
+                return existing[0]
+            admin_id = new_id()
+            cur.execute(
+                'INSERT INTO "User"'
+                ' ("id", "email", "username", "name", "passwordHash", "updatedAt")'
+                ' VALUES (%s, %s, %s, %s, %s, NOW())'
+                ' ON CONFLICT ("email") DO NOTHING RETURNING "id"',
+                (
+                    admin_id,
+                    ADMIN_EMAIL,
+                    ADMIN_USERNAME,
+                    ADMIN_NAME,
+                    hash_password(_admin_password()),
+                ),
+            )
+            inserted = cur.fetchone()
+        conn.commit()
+    if inserted:
+        print(f"seeded admin user {ADMIN_EMAIL} (username={ADMIN_USERNAME})")
+        return inserted[0]
+    # A concurrent seeder won the email conflict; return the existing row.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT "id" FROM "User" WHERE "email" = %s', (ADMIN_EMAIL,))
+            row = cur.fetchone()
+    return row[0] if row else admin_id
 
 FUNNEL = {"jobs_found": 847, "applied": 412, "screened": 156, "interviewed": 23, "offers": 4}
 
@@ -60,6 +121,9 @@ def _demo_password() -> str:
 
 def main() -> None:
     random.seed(42)
+    # Provision the admin account first (idempotent, independent of the demo
+    # funnel below) so a standard seed run always yields a usable admin login.
+    seed_admin_user()
     users = UserRepository()
     user = users.get_by_email(DEMO_EMAIL)
     if user is None:
