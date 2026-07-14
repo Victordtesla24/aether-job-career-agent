@@ -2,9 +2,13 @@
 export PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin"
 cd /home/ubuntu/github_repos/aether-job-career-agent/apps/web
 
-# Load env vars safely - strip quotes
-while IFS='=' read -r key value; do
-    [[ -z "$key" || "$key" =~ ^# ]] && continue
+# Load env vars safely - strip quotes.
+# Split on the FIRST '=' only so values containing '=' (e.g. base64 padding)
+# survive intact; the previous IFS='=' parser dropped a trailing '='.
+while IFS= read -r line || [ -n "$line" ]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
     # Remove surrounding quotes if present
     value="${value#\"}"
     value="${value%\"}"
