@@ -48,7 +48,7 @@
     <header data-design-id="topbar-ag03" class="h-16 shrink-0 border-b border-white/8 glass flex items-center justify-between px-8">
       <div><h1 class="text-[15px] font-semibold">Manage Agents</h1><p class="text-xs text-[#6B6B82] mono">20 agents · 6 AI providers · configure models &amp; connections</p></div>
       <div class="flex items-center gap-3">
-        <button data-design-id="btn-add-provider-ag04" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-plus text-[10px]"></i>Add Provider</button>
+        <button data-design-id="btn-add-provider-ag04" onclick="openProviderConfig('bedrock')" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-plus text-[10px]"></i>Add Provider</button>
         <button data-design-id="btn-test-ag16" onclick="openTestRun()" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition"><i class="fa-solid fa-vial text-[10px] text-[#818CF8]"></i>Test Run</button>
         <button data-design-id="btn-run-all-ag05" class="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#FF6B35] hover:bg-[#ff7d4d] text-white transition shadow-lg shadow-[#FF6B35]/25"><i class="fa-solid fa-play text-[10px]"></i>Run All</button>
       </div>
@@ -62,12 +62,16 @@
           <!-- Anthropic -->
           <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
             <div class="flex items-start justify-between mb-3">
-              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#D97757] flex items-center justify-center"><i class="fa-solid fa-a text-white text-sm"></i></div><div><p class="text-sm font-semibold">Anthropic Claude</p><p class="text-[11px] text-[#6B6B82]">API Key</p></div></div>
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-[#D97757] flex items-center justify-center"><i class="fa-solid fa-a text-white text-sm"></i></div><div><p class="text-sm font-semibold">Anthropic Claude</p><p class="text-[11px] text-[#6B6B82]">Subscription / API Key</p></div></div>
               <span class="w-2.5 h-2.5 rounded-full bg-[#34D399] mt-1"></span>
             </div>
             <p class="text-[11px] text-[#A0A0B8] mb-2">Claude Pro · <span class="mono text-white">45</span> messages remaining</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">claude-sonnet-4</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-anthropic-ag08" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#34D399]/25 bg-[#34D399]/10 text-[#34D399]">Saved in app</span>
+              <span class="mono text-[10px] text-[#6B6B82]">subscription · Ends …oat9</span>
+            </div>
+            <button data-design-id="btn-anthropic-ag08" onclick="openProviderConfig('anthropic')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
           </div>
           <!-- OpenRouter -->
           <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
@@ -77,7 +81,11 @@
             </div>
             <p class="text-[11px] text-[#A0A0B8] mb-2"><span class="mono text-white">$12.40</span> credit remaining</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">llama-3.1-405b</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-openrouter-ag09" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#34D399]/25 bg-[#34D399]/10 text-[#34D399]">Saved in app</span>
+              <span class="mono text-[10px] text-[#6B6B82]">Ends …r7Kp</span>
+            </div>
+            <button data-design-id="btn-openrouter-ag09" onclick="openProviderConfig('openrouter')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
           </div>
           <!-- OpenAI -->
           <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
@@ -87,7 +95,10 @@
             </div>
             <p class="text-[11px] text-[#A0A0B8] mb-2">Tier 3 · <span class="mono text-white">2M</span> TPM limit</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">gpt-4o</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-openai-ag10" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#FBBF24]/25 bg-[#FBBF24]/10 text-[#FBBF24]">From environment</span>
+            </div>
+            <button data-design-id="btn-openai-ag10" onclick="openProviderConfig('openai')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
           </div>
           <!-- Google Gemini -->
           <div class="glass rounded-2xl border border-[#FBBF24]/30 p-5">
@@ -97,7 +108,10 @@
             </div>
             <p class="text-[11px] text-[#FBBF24] mb-2">Token expiring in 3 days</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">gemini-2.0-flash</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-gemini-ag11" class="w-full text-xs font-medium py-2 rounded-lg bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/25 hover:bg-[#FBBF24]/25 transition"><i class="fa-brands fa-google mr-1.5"></i>Re-authenticate</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#FBBF24]/25 bg-[#FBBF24]/10 text-[#FBBF24]">From environment</span>
+            </div>
+            <button data-design-id="btn-gemini-ag11" onclick="openProviderConfig('gemini')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/25 hover:bg-[#FBBF24]/25 transition"><i class="fa-brands fa-google mr-1.5"></i>Re-authenticate</button>
           </div>
           <!-- AWS Bedrock -->
           <div class="glass rounded-2xl border border-white/8 p-5">
@@ -107,7 +121,10 @@
             </div>
             <p class="text-[11px] text-[#6B6B82] mb-2">Not configured · IAM required</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#6B6B82]">Select region — ap-southeast-2</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-bedrock-ag12" class="w-full text-xs font-medium py-2 rounded-lg bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition">Configure keys</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-white/10 bg-white/5 text-[#6B6B82]">Not configured</span>
+            </div>
+            <button data-design-id="btn-bedrock-ag12" onclick="openProviderConfig('bedrock')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#4F46E5]/15 text-[#818CF8] border border-[#4F46E5]/25 hover:bg-[#4F46E5]/25 transition"><i class="fa-solid fa-key mr-1.5"></i>Configure keys</button>
           </div>
           <!-- Groq -->
           <div class="glass rounded-2xl border border-[#34D399]/25 p-5">
@@ -117,7 +134,11 @@
             </div>
             <p class="text-[11px] text-[#A0A0B8] mb-2">Free tier · <span class="mono text-white">14.4K</span> req/day</p>
             <div class="flex items-center justify-between bg-white/5 border border-white/8 rounded-lg px-3 py-2 mb-3"><span class="text-[11px] text-[#A0A0B8]">llama-3.3-70b-versatile</span><i class="fa-solid fa-chevron-down text-[9px] text-[#6B6B82]"></i></div>
-            <button data-design-id="btn-groq-ag13" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#34D399]/25 bg-[#34D399]/10 text-[#34D399]">Saved in app</span>
+              <span class="mono text-[10px] text-[#6B6B82]">Ends …9f2c</span>
+            </div>
+            <button data-design-id="btn-groq-ag13" onclick="openProviderConfig('groq')" class="w-full text-xs font-medium py-2 rounded-lg bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/25 hover:bg-[#34D399]/25 transition"><i class="fa-solid fa-circle-check mr-1.5"></i>Connected · Manage</button>
           </div>
         </div>
       </section>
@@ -429,6 +450,174 @@
   }
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeTestRun();
+  });
+</script>
+
+<!-- Provider credential configuration modal (REQ-PC-9: 1:1 with the in-app
+     ProviderConfigModal — replaces the old "edit the server .env" UX). -->
+<div data-design-id="provider-config-ag21" id="providerConfigModal" class="fixed inset-0 z-50 hidden items-center justify-center px-6">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeProviderConfig()"></div>
+  <div class="relative glass-raised rounded-2xl border border-[#4F46E5]/40 w-full max-w-lg p-6 shadow-2xl">
+    <div class="flex items-start justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div id="pcIcon" class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:#D97757"><i id="pcIconGlyph" class="fa-solid fa-a text-white text-sm"></i></div>
+        <div><h3 id="pcTitle" class="text-sm font-semibold">Configure Anthropic Claude</h3><p class="text-[11px] text-[#6B6B82]">Credentials are stored encrypted on the server — enter them here, no <code class="mono">.env</code> editing.</p></div>
+      </div>
+      <button onclick="closeProviderConfig()" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 flex items-center justify-center transition"><i class="fa-solid fa-xmark text-[#A0A0B8] text-xs"></i></button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <span id="pcSource" class="rounded-md border px-2 py-0.5 text-[10px] font-medium border-[#34D399]/25 bg-[#34D399]/10 text-[#34D399]">Saved in app</span>
+      <span id="pcHint" class="mono text-[10px] text-[#A0A0B8]">Ends …oat9</span>
+    </div>
+
+    <!-- Anthropic-only auth-mode selector: subscription token vs API key -->
+    <fieldset id="pcModes" class="mb-4">
+      <legend class="block text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium mb-1.5">Authentication mode</legend>
+      <div class="grid grid-cols-2 gap-2">
+        <label id="pcModeLabel-subscription_oauth" class="flex items-center gap-2 rounded-lg border border-[#4F46E5]/40 bg-[#4F46E5]/10 px-3 py-2.5 text-xs cursor-pointer"><input type="radio" name="pcMode" value="subscription_oauth" checked onchange="pcSetMode('subscription_oauth')" class="accent-[#4F46E5]"><span class="font-medium">Claude subscription (Max/Pro)</span></label>
+        <label id="pcModeLabel-api_key" class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-xs cursor-pointer text-[#A0A0B8]"><input type="radio" name="pcMode" value="api_key" onchange="pcSetMode('api_key')" class="accent-[#4F46E5]"><span class="font-medium">API key</span></label>
+      </div>
+    </fieldset>
+
+    <label id="pcSecretLabel" class="block text-[11px] uppercase tracking-wide text-[#6B6B82] font-medium mb-1.5">Claude subscription (Max/Pro)</label>
+    <div class="relative mb-1.5">
+      <input id="pcSecret" type="password" placeholder="sk-ant-oat…" autocomplete="off" spellcheck="false" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 pr-16 text-xs text-white focus:outline-none focus:border-[#4F46E5]/50">
+      <button type="button" id="pcReveal" onclick="pcToggleReveal()" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-white/8 bg-white/5 px-2 py-1 text-[10px] font-medium text-[#A0A0B8] hover:bg-white/10 transition">Show</button>
+    </div>
+    <p id="pcModeHint" class="text-[11px] text-[#A0A0B8] mb-3 leading-relaxed">Paste a Claude subscription token (starts sk-ant-oat…). Runs on Anthropic models draw from your Claude subscription quota.</p>
+
+    <p id="pcBilling" class="rounded-lg border border-[#4F46E5]/20 bg-[#4F46E5]/5 p-2.5 text-[11px] text-[#A0A0B8] mb-4 leading-relaxed"><i class="fa-solid fa-scale-balanced text-[#818CF8] mr-1.5"></i>Anthropic models bill to your Anthropic account (subscription quota or API credits, per the mode above). Every non-Anthropic model bills to OpenRouter — credentials never cross providers.</p>
+
+    <div id="pcResult" class="hidden glass rounded-xl border border-[#34D399]/25 p-3 mb-4"><div class="flex items-center gap-2"><i id="pcResultIcon" class="fa-solid fa-circle-check text-[#34D399] text-xs"></i><p id="pcResultText" class="text-[11px] text-[#A0A0B8]">Connection ok — provider reachable.</p></div></div>
+
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <button id="pcRemove" onclick="pcSimResult('removed')" class="text-xs font-medium px-3 py-2 rounded-lg border border-[#F87171]/25 bg-[#F87171]/10 text-[#F87171] hover:bg-[#F87171]/20 transition">Remove</button>
+        <button onclick="pcSimResult('verify')" class="text-xs font-medium px-3 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Test connection</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="closeProviderConfig()" class="text-xs font-medium px-3.5 py-2 rounded-lg bg-white/5 border border-white/8 hover:bg-white/10 transition">Cancel</button>
+        <button onclick="pcSimResult('saved')" class="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#5b54ea] text-white transition shadow-lg shadow-[#4F46E5]/25"><i class="fa-solid fa-floppy-disk text-[10px]"></i>Save credential</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Provider-config wireframe fixtures — mirrors the in-app modal's copy so the
+  // static wireframe stays 1:1. This is a design mock: Save/Test/Remove only
+  // render a representative result line (no network), like the Test Run modal.
+  const PC_SRC = {
+    saved: { label: 'Saved in app', cls: 'border-[#34D399]/25 bg-[#34D399]/10 text-[#34D399]' },
+    env:   { label: 'From environment', cls: 'border-[#FBBF24]/25 bg-[#FBBF24]/10 text-[#FBBF24]' },
+    none:  { label: 'Not configured', cls: 'border-white/10 bg-white/5 text-[#6B6B82]' },
+  };
+  const PC_OTHER_BILLING = "Stored encrypted and used only for this provider's models. Anthropic-billed and OpenRouter-billed traffic never cross.";
+  const PC = {
+    anthropic: { name: 'Anthropic Claude', color: '#D97757', glyph: 'fa-solid fa-a', modes: true, source: 'saved', hint: 'subscription · Ends …oat9', remove: true,
+      billing: 'Anthropic models bill to your Anthropic account (subscription quota or API credits, per the mode above). Every non-Anthropic model bills to OpenRouter — credentials never cross providers.' },
+    openrouter: { name: 'OpenRouter', color: '#6467F2', glyph: 'fa-solid fa-route', modes: false, source: 'saved', hint: 'Ends …r7Kp', remove: true,
+      placeholder: 'sk-or-v1…', label: 'API key', modeHint: 'Paste your OpenRouter API key (starts sk-or-v1…). It is stored encrypted and never shown again.',
+      billing: 'Every non-Anthropic model across Aether bills to your OpenRouter credits. Anthropic models never route through OpenRouter.' },
+    openai: { name: 'OpenAI', color: '#10A37F', glyph: 'fa-solid fa-brain', modes: false, source: 'env', hint: '', remove: false,
+      placeholder: 'sk-…', label: 'API key', modeHint: "Paste this provider's API key. It is stored encrypted and never shown again — only the last 4 characters.", billing: PC_OTHER_BILLING },
+    gemini: { name: 'Google Gemini', color: '#4285F4', glyph: 'fa-solid fa-gem', modes: false, source: 'env', hint: '', remove: false,
+      placeholder: 'API key', label: 'API key', modeHint: "Paste this provider's API key. It is stored encrypted and never shown again — only the last 4 characters.", billing: PC_OTHER_BILLING },
+    bedrock: { name: 'AWS Bedrock', color: '#FF9900', glyph: 'fa-brands fa-aws', modes: false, source: 'none', hint: '', remove: false,
+      placeholder: 'Access key ID', label: 'API key', modeHint: "Paste this provider's API key. It is stored encrypted and never shown again — only the last 4 characters.", billing: PC_OTHER_BILLING },
+    groq: { name: 'Groq', color: '#F55036', glyph: 'fa-solid fa-bolt-lightning', modes: false, source: 'saved', hint: 'Ends …9f2c', remove: true,
+      placeholder: 'gsk_…', label: 'API key', modeHint: 'Paste your Groq API key (starts gsk_…). It is stored encrypted and never shown again.', billing: PC_OTHER_BILLING },
+  };
+  const PC_MODE = {
+    subscription_oauth: { label: 'Claude subscription (Max/Pro)', placeholder: 'sk-ant-oat…', hint: 'Paste a Claude subscription token (starts sk-ant-oat…). Runs on Anthropic models draw from your Claude subscription quota.' },
+    api_key: { label: 'API key', placeholder: 'sk-ant-api…', hint: 'Paste an Anthropic API key (starts sk-ant-api…). Runs on Anthropic models bill to your Anthropic API credits.' },
+  };
+  let pcCurrent = 'anthropic';
+
+  function pcSetMode(mode) {
+    // Anthropic-only visual toggle between subscription token and API key.
+    ['subscription_oauth', 'api_key'].forEach(function (m) {
+      const el = document.getElementById('pcModeLabel-' + m);
+      if (!el) return;
+      const on = m === mode;
+      el.className = 'flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs cursor-pointer ' +
+        (on ? 'border-[#4F46E5]/40 bg-[#4F46E5]/10 text-white' : 'border-white/10 bg-white/5 text-[#A0A0B8]');
+      const input = el.querySelector('input');
+      if (input) input.checked = on;
+    });
+    const cfg = PC_MODE[mode];
+    document.getElementById('pcSecretLabel').textContent = cfg.label;
+    document.getElementById('pcSecret').placeholder = cfg.placeholder;
+    document.getElementById('pcModeHint').textContent = cfg.hint;
+  }
+
+  function pcToggleReveal() {
+    const input = document.getElementById('pcSecret');
+    const btn = document.getElementById('pcReveal');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.textContent = show ? 'Hide' : 'Show';
+  }
+
+  function openProviderConfig(id) {
+    const p = PC[id] || PC.anthropic;
+    pcCurrent = id;
+    document.getElementById('pcTitle').textContent = 'Configure ' + p.name;
+    document.getElementById('pcIcon').style.background = p.color;
+    document.getElementById('pcIconGlyph').className = p.glyph + ' text-white text-sm';
+    // Source badge + last-4 hint from (mock) backend state.
+    const src = PC_SRC[p.source];
+    const badge = document.getElementById('pcSource');
+    badge.textContent = src.label;
+    badge.className = 'rounded-md border px-2 py-0.5 text-[10px] font-medium ' + src.cls;
+    const hint = document.getElementById('pcHint');
+    hint.textContent = p.hint ? 'Ends ' + (p.hint.indexOf('Ends ') === 0 ? p.hint.slice(5) : p.hint) : '';
+    hint.style.display = p.hint ? '' : 'none';
+    // Auth-mode selector only for Anthropic.
+    document.getElementById('pcModes').style.display = p.modes ? '' : 'none';
+    document.getElementById('pcBilling').innerHTML = '<i class="fa-solid fa-scale-balanced text-[#818CF8] mr-1.5"></i>' + p.billing;
+    document.getElementById('pcRemove').style.display = p.remove ? '' : 'none';
+    document.getElementById('pcResult').classList.add('hidden');
+    document.getElementById('pcSecret').value = '';
+    document.getElementById('pcSecret').type = 'password';
+    document.getElementById('pcReveal').textContent = 'Show';
+    if (p.modes) {
+      pcSetMode('subscription_oauth');
+    } else {
+      document.getElementById('pcSecretLabel').textContent = p.label;
+      document.getElementById('pcSecret').placeholder = p.placeholder;
+      document.getElementById('pcModeHint').textContent = p.modeHint;
+    }
+    const m = document.getElementById('providerConfigModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+  }
+
+  function closeProviderConfig() {
+    const m = document.getElementById('providerConfigModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+  }
+
+  function pcSimResult(kind) {
+    const box = document.getElementById('pcResult');
+    const icon = document.getElementById('pcResultIcon');
+    const text = document.getElementById('pcResultText');
+    const name = PC[pcCurrent].name;
+    if (kind === 'verify') {
+      icon.className = 'fa-solid fa-circle-check text-[#34D399] text-xs';
+      text.textContent = name + ' connection ok — provider reachable (real round-trip in the app).';
+    } else if (kind === 'saved') {
+      icon.className = 'fa-solid fa-circle-check text-[#34D399] text-xs';
+      text.textContent = name + ' credential saved — encrypted at rest, only the last 4 characters are ever shown.';
+    } else {
+      icon.className = 'fa-solid fa-circle-info text-[#818CF8] text-xs';
+      text.textContent = name + ' credential removed — falls back to the server environment credential if one exists.';
+    }
+    box.classList.remove('hidden');
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeProviderConfig();
   });
 </script>
 </body>

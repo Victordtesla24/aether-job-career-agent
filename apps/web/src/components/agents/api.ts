@@ -45,8 +45,33 @@ export const ProviderSchema = z.object({
   models: z.array(z.string()),
   icon: z.string(),
   color: z.string(),
+  // Enriched provider-config fields (PROVIDER-CONFIG-RUN §1). Optional so the
+  // client parses both a legacy env-only row and the DB-backed enriched row —
+  // FE and BE ship on independent branches against this one contract.
+  source: z.enum(["database", "environment", "none"]).nullish(),
+  authMode: z.enum(["api_key", "subscription_oauth"]).nullish(),
+  secretHint: z.string().nullish(),
+  lastVerifiedAt: z.string().nullish(),
+  lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
 });
 export type Provider = z.infer<typeof ProviderSchema>;
+
+/** Which credential shape a provider row carries. */
+export type ProviderAuthMode = "api_key" | "subscription_oauth";
+
+/** Body for PUT /agents/providers/{id}/credential. */
+export interface CredentialInput {
+  authMode: ProviderAuthMode;
+  secret: string;
+  baseUrl?: string;
+}
+
+export const VerifyResultSchema = z.object({
+  ok: z.boolean(),
+  status: z.string(),
+  detail: z.string(),
+});
+export type VerifyResult = z.infer<typeof VerifyResultSchema>;
 
 export const StatsSchema = z.object({
   spendUsd: z.number(),
@@ -107,5 +132,56 @@ export async function updateProvider(
 export async function runTestRun(key: string, o: RequestOptions = {}): Promise<TestRunResult> {
   return TestRunSchema.parse(
     await apiRequest<unknown>("/agents/test-run", { ...o, method: "POST", body: { agent_key: key } }),
+  );
+}
+
+/**
+ * Save (or rotate) a provider credential in-app: PUT
+ * /agents/providers/{id}/credential. The server stores the secret encrypted
+ * and returns the masked provider row (last-4 hint only — never the secret).
+ * Parsed as a partial passthrough so a full enriched row and a lean patch both
+ * round-trip without the schema over-constraining the backend.
+ */
+export async function putProviderCredential(
+  id: string,
+  body: CredentialInput,
+  o: RequestOptions = {},
+): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/providers/${id}/credential`, {
+        ...o,
+        method: "PUT",
+        body,
+      }),
+    ) as Provider;
+}
+
+/**
+ * Remove an in-app provider credential: DELETE
+ * /agents/providers/{id}/credential. The server drops the DB secret and
+ * returns the masked row, which may fall back to an `environment` source if a
+ * legacy env credential is still present (ADR-PC-4).
+ */
+export async function deleteProviderCredential(
+  id: string,
+  o: RequestOptions = {},
+): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/providers/${id}/credential`, { ...o, method: "DELETE" }),
+    ) as Provider;
+}
+
+/**
+ * Test a provider credential end-to-end: POST /agents/providers/{id}/verify.
+ * Performs a real provider round-trip server-side and reports the honest
+ * result (no fabricated "connected").
+ */
+export async function verifyProvider(id: string, o: RequestOptions = {}): Promise<VerifyResult> {
+  return VerifyResultSchema.parse(
+    await apiRequest<unknown>(`/agents/providers/${id}/verify`, { ...o, method: "POST" }),
   );
 }

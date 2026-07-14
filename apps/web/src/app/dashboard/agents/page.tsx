@@ -30,6 +30,7 @@ import {
 import { apiRequest } from "../../../lib/api/client";
 import Orchestration from "../../../components/agents/Orchestration";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
+import ProviderConfigModal from "../../../components/agents/ProviderConfigModal";
 import AgentConfigGrid from "../../../components/agents/AgentConfigGrid";
 import AgentStatsRow from "../../../components/agents/AgentStats";
 import TestRunModal from "../../../components/agents/TestRunModal";
@@ -43,7 +44,6 @@ import {
   type Catalog,
   type Provider,
 } from "../../../components/agents/api";
-import { connectBlockedReason } from "../../../components/agents/logic";
 import {
   agentSuccessNotice,
   pipelineCompletionNotice,
@@ -81,6 +81,7 @@ export default function AgentsPage() {
   const [providerBusy, setProviderBusy] = useState<string | null>(null);
   const [toggleBusy, setToggleBusy] = useState<string | null>(null);
   const [testOpen, setTestOpen] = useState(false);
+  const [configProvider, setConfigProvider] = useState<Provider | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
@@ -220,29 +221,20 @@ export default function AgentsPage() {
     }
   };
 
-  const onProviderToggle = async (id: string, next: Provider["status"]) => {
-    // Locked (keyless) providers are guaranteed to 409 (D-0020: the server
-    // never fabricates a connection). Recognise that up front — from the
-    // status the client already has — instead of firing a doomed request
-    // that would otherwise still show as a failed network load.
-    if (next === "connected") {
-      const target = providers?.find((p) => p.id === id);
-      const blocked = target && connectBlockedReason(target);
-      if (blocked) {
-        setNotice({ kind: "info", text: blocked });
-        return;
-      }
-    }
-    setProviderBusy(id);
+  // The provider card action opens the in-app credential configuration modal
+  // (REQ-PC-1). There is no ".env editing" path and no doomed status-flip PUT:
+  // credentials are entered, tested and removed entirely in the modal, which
+  // then refreshes the honest DB-first provider list.
+  const openConfig = (provider: Provider) => setConfigProvider(provider);
+
+  const refreshProviders = useCallback(async () => {
+    setProviderBusy(null);
     try {
-      await updateProvider(id, { status: next });
       setProviders(await fetchProviders());
     } catch (e) {
-      setNotice(runErrorNotice(e, "Updating provider"));
-    } finally {
-      setProviderBusy(null);
+      setNotice(runErrorNotice(e, "Refreshing providers"));
     }
-  };
+  }, []);
 
   const onProviderModel = async (id: string, model: string) => {
     setProviderBusy(id);
@@ -256,27 +248,16 @@ export default function AgentsPage() {
     }
   };
 
-  const onAddProvider = async () => {
-    const target = providers?.find((p) => p.status === "unconfigured");
-    if (!target) {
-      setNotice({ kind: "info", text: "All providers are already connected." });
+  // "Add Provider" jumps straight into the config modal — the first provider
+  // still awaiting a credential, or (all configured) the first one to manage.
+  const onAddProvider = () => {
+    const list = providers ?? [];
+    if (list.length === 0) {
+      setNotice({ kind: "info", text: "Providers are still loading — try again in a moment." });
       return;
     }
-    const blocked = connectBlockedReason(target);
-    if (blocked) {
-      setNotice({ kind: "info", text: blocked });
-      return;
-    }
-    setProviderBusy(target.id);
-    try {
-      await updateProvider(target.id, { status: "connected" });
-      setProviders(await fetchProviders());
-      setNotice({ kind: "success", text: `${target.name} connected.` });
-    } catch (e) {
-      setNotice(runErrorNotice(e, "Adding provider"));
-    } finally {
-      setProviderBusy(null);
-    }
+    const target = list.find((p) => p.status === "unconfigured") ?? list[0];
+    setConfigProvider(target);
   };
 
   const agentCount = catalog?.counts.total ?? 0;
@@ -363,7 +344,7 @@ export default function AgentsPage() {
         providers={providers ?? []}
         loading={providers === null}
         busyId={providerBusy}
-        onToggle={(id, next) => void onProviderToggle(id, next)}
+        onConfigure={openConfig}
         onModel={(id, model) => void onProviderModel(id, model)}
       />
 
@@ -432,6 +413,13 @@ export default function AgentsPage() {
         open={testOpen}
         agents={catalog?.agents ?? []}
         onClose={() => setTestOpen(false)}
+      />
+
+      <ProviderConfigModal
+        provider={configProvider}
+        onClose={() => setConfigProvider(null)}
+        onSaved={refreshProviders}
+        onNotice={setNotice}
       />
     </div>
   );

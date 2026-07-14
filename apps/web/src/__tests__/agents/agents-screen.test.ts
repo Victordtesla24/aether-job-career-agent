@@ -1,7 +1,12 @@
 /**
  * AGT-AGENTS — unit tests for the Agents screen's pure logic + API schemas.
  * (Node/vitest environment: no DOM — component rendering is proven by the
- * Playwright E2E scripts in the evidence dir.)
+ * ProviderConfigModal component test + the Playwright E2E scripts.)
+ *
+ * REQ-PC-1 regression: the Agents screen configures provider credentials fully
+ * in-UI. NO helper or copy may tell the user to edit the server `.env` — the
+ * former `connectBlockedReason` .env instruction is gone, and the model-lock
+ * tooltip points at the in-app config flow, not an environment variable.
  */
 import { describe, expect, it } from "vitest";
 
@@ -14,10 +19,10 @@ import {
 import {
   agentRunDisabledReason,
   agentStatusLabel,
-  connectBlockedReason,
   formatTokens,
   providerAction,
   providerModelDisabledReason,
+  providerSourceBadge,
 } from "../../components/agents/logic";
 import type { CatalogAgent, Provider } from "../../components/agents/api";
 
@@ -31,39 +36,16 @@ describe("formatTokens", () => {
 });
 
 describe("providerAction", () => {
-  it("connected → click disconnects", () => {
+  it("connected → click opens the manage/rotate flow", () => {
     const a = providerAction("connected");
     expect(a.label).toBe("Connected · Manage");
-    expect(a.next).toBe("unconfigured");
   });
-  it("warning → re-authenticate connects", () => {
-    expect(providerAction("warning").next).toBe("connected");
+  it("warning → re-authenticate", () => {
+    expect(providerAction("warning").label).toBe("Re-authenticate");
   });
-  it("unconfigured → configure keys connects", () => {
+  it("unconfigured → configure keys", () => {
     const a = providerAction("unconfigured");
     expect(a.label).toBe("Configure keys");
-    expect(a.next).toBe("connected");
-  });
-});
-
-describe("connectBlockedReason", () => {
-  // GAP-P4-054 regression: the "Configure keys" / "Add Provider" actions must
-  // not fire a PUT that the server is guaranteed to 409 (D-0020). The client
-  // already knows a provider is unconfigured from GET /agents/providers, so
-  // it should short-circuit locally instead of letting the request fail.
-  it("blocks connecting an unconfigured provider (server has no credential)", () => {
-    const reason = connectBlockedReason({ name: "Anthropic Claude", status: "unconfigured" });
-    expect(reason).not.toBeNull();
-    expect(reason).toContain("Anthropic Claude");
-    expect(reason).toContain("credential");
-  });
-
-  it("does not block a connected provider", () => {
-    expect(connectBlockedReason({ name: "OpenAI", status: "connected" })).toBeNull();
-  });
-
-  it("does not block a warning-status provider (re-authenticate may succeed)", () => {
-    expect(connectBlockedReason({ name: "Google Gemini", status: "warning" })).toBeNull();
   });
 });
 
@@ -75,9 +57,8 @@ describe("agentStatusLabel", () => {
   });
 });
 
-// GAP-P4-056: disabled controls (unconfigured provider models, disabled
-// agents) must explain the D-0020 lock via a tooltip, not just render
-// disabled with no reason surfaced.
+// REQ-PC-1: disabled controls must explain the lock via the in-app config
+// flow — never by instructing the user to edit the server `.env`.
 describe("providerModelDisabledReason", () => {
   const base: Provider = {
     id: "anthropic",
@@ -97,8 +78,46 @@ describe("providerModelDisabledReason", () => {
     expect(reason).toMatch(/no selectable models/i);
   });
 
+  it("points at the in-app config flow, never the server .env", () => {
+    const reason = providerModelDisabledReason(base) ?? "";
+    expect(reason.toLowerCase()).not.toContain(".env");
+    expect(reason.toLowerCase()).not.toMatch(/environment variable/);
+    expect(reason).toMatch(/configure/i);
+  });
+
   it("returns null once the provider has models to choose from", () => {
-    expect(providerModelDisabledReason({ ...base, models: ["claude-sonnet-4"] })).toBeNull();
+    expect(providerModelDisabledReason({ ...base, models: ["claude-sonnet-5"] })).toBeNull();
+  });
+});
+
+// REQ-PC-6: the source badge is derived honestly from the backend `source`
+// field — "Saved in app" ONLY when the credential really lives in the DB.
+describe("providerSourceBadge", () => {
+  it("maps database → Saved in app", () => {
+    expect(providerSourceBadge({ source: "database", status: "connected" })).toEqual({
+      label: "Saved in app",
+      tone: "saved",
+    });
+  });
+  it("maps environment → From environment", () => {
+    expect(providerSourceBadge({ source: "environment", status: "connected" })).toEqual({
+      label: "From environment",
+      tone: "env",
+    });
+  });
+  it("maps none → Not configured", () => {
+    expect(providerSourceBadge({ source: "none", status: "unconfigured" })).toEqual({
+      label: "Not configured",
+      tone: "none",
+    });
+  });
+  it("never fabricates 'Saved in app' when the backend has not enriched source", () => {
+    // Legacy row (no `source`): fall back to the honest status signal.
+    expect(providerSourceBadge({ status: "connected" }).tone).not.toBe("saved");
+    expect(providerSourceBadge({ status: "unconfigured" })).toEqual({
+      label: "Not configured",
+      tone: "none",
+    });
   });
 });
 
@@ -126,9 +145,9 @@ describe("API schemas", () => {
       name: "Resume Tailoring Agent",
       icon: "fa-file-pen",
       accent: "coral",
-      model: "claude-sonnet-4",
-      recommended: "claude-sonnet-4",
-      tip: "Best with claude-sonnet-4",
+      model: "claude-sonnet-5",
+      recommended: "claude-sonnet-5",
+      tip: "Best with claude-sonnet-5",
       runnable: true,
       backend: "tailor",
       enabled: true,
@@ -161,14 +180,52 @@ describe("API schemas", () => {
       name: "Anthropic Claude",
       auth: "API Key",
       status: "connected",
-      model: "claude-sonnet-4",
+      model: "claude-sonnet-5",
       detail: "Claude Pro",
-      models: ["claude-sonnet-4"],
+      models: ["claude-sonnet-5"],
       icon: "fa-a",
       color: "#D97757",
     });
     expect(p.id).toBe("anthropic");
     expect(() => ProviderSchema.parse({ ...p, status: "nope" })).toThrow();
+  });
+
+  it("parses the enriched provider fields (source/authMode/secretHint/lastVerify*)", () => {
+    const p = ProviderSchema.parse({
+      id: "anthropic",
+      name: "Anthropic Claude",
+      auth: "Subscription / API Key",
+      status: "connected",
+      model: "claude-opus-4-8",
+      detail: "Claude subscription · quota billed to Anthropic",
+      models: ["claude-opus-4-8"],
+      icon: "fa-a",
+      color: "#D97757",
+      source: "database",
+      authMode: "subscription_oauth",
+      secretHint: "…x4Qz",
+      lastVerifiedAt: "2026-07-14T00:00:00Z",
+      lastVerifyStatus: "ok",
+    });
+    expect(p.source).toBe("database");
+    expect(p.authMode).toBe("subscription_oauth");
+    expect(p.secretHint).toBe("…x4Qz");
+    expect(p.lastVerifyStatus).toBe("ok");
+  });
+
+  it("still parses a legacy provider row with no enriched fields", () => {
+    const p = ProviderSchema.parse({
+      id: "openrouter",
+      name: "OpenRouter",
+      auth: "API Key",
+      status: "connected",
+      model: "",
+      detail: "API key configured",
+      models: ["deepseek/deepseek-chat"],
+      icon: "fa-route",
+      color: "#6467F2",
+    });
+    expect(p.source).toBeUndefined();
   });
 
   it("parses stats and a test-run result", () => {
@@ -190,7 +247,7 @@ describe("API schemas", () => {
       TestRunSchema.parse({
         agent_key: "resumeTailoring",
         name: "Resume Tailoring Agent",
-        model: "claude-sonnet-4",
+        model: "claude-sonnet-5",
         estTokens: 4200,
         estCost: 0.032,
         actualCost: 0.031,

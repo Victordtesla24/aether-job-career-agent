@@ -27,19 +27,32 @@ export function providerAction(status: Provider["status"]): ProviderAction {
   return { label: "Configure keys", icon: "fa-key", next: "connected" };
 }
 
-/**
- * Whether marking `provider` as "connected" from the UI is guaranteed to be
- * rejected by the server (PUT /agents/providers/{id} 409s whenever no real
- * credential exists — D-0020: never fabricate a connection). The client
- * already has this provider's real env-derived status from GET
- * /agents/providers, so it can — and should — recognise a doomed request
- * before firing it, rather than let it 409 and surface as a raw network
- * failure. Returns a user-facing explanation, or `null` when the attempt
- * would actually succeed server-side.
- */
-export function connectBlockedReason(provider: Pick<Provider, "name" | "status">): string | null {
-  if (provider.status !== "unconfigured") return null;
-  return `${provider.name} has no credential configured on the server — add its API key to the server .env, then reload this page.`;
+/** Where a provider's active credential really lives, derived from the
+ * backend `source` field. Honest by construction (REQ-PC-6): "Saved in app"
+ * is returned ONLY when the credential is persisted in the database — the UI
+ * never fabricates it. Legacy rows that predate the enriched contract (no
+ * `source`) fall back to the plain connected/not-configured status signal. */
+export interface ProviderSourceBadge {
+  label: string;
+  tone: "saved" | "env" | "none";
+}
+
+export function providerSourceBadge(
+  provider: Pick<Provider, "source" | "status">,
+): ProviderSourceBadge {
+  switch (provider.source) {
+    case "database":
+      return { label: "Saved in app", tone: "saved" };
+    case "environment":
+      return { label: "From environment", tone: "env" };
+    case "none":
+      return { label: "Not configured", tone: "none" };
+    default:
+      // Backend not yet enriched — never claim "Saved in app" without proof.
+      return provider.status === "connected"
+        ? { label: "Configured", tone: "env" }
+        : { label: "Not configured", tone: "none" };
+  }
 }
 
 /** Human-readable status label for an agent card. */
@@ -58,7 +71,7 @@ export function agentStatusLabel(
  */
 export function providerModelDisabledReason(provider: Provider): string | null {
   if (provider.models.length === 0) {
-    return `${provider.name} has no selectable models — connect it (add its API key in the server .env) to enable model selection.`;
+    return `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`;
   }
   return null;
 }

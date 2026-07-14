@@ -2,14 +2,15 @@
 
 /**
  * AI Provider Connections (wireframe: providers-ag07). Six provider cards whose
- * connection status + active model are real, persisted state (GET/PUT
- * /agents/providers). Buttons perform genuine state changes:
- *  - connected   → "Connected · Manage" (click disconnects)
- *  - warning     → "Re-authenticate"    (click reconnects)
- *  - unconfigured→ "Configure keys"     (click connects)
+ * connection status, credential source + active model are real, persisted
+ * state (GET /agents/providers). The card action opens the in-app credential
+ * configuration modal (REQ-PC-1) — there is no ".env editing" path:
+ *  - connected   → "Connected · Manage" (rotate / test / remove the credential)
+ *  - warning     → "Re-authenticate"
+ *  - unconfigured→ "Configure keys"
  */
 import type { Provider } from "./api";
-import { providerAction, providerModelDisabledReason } from "./logic";
+import { providerAction, providerModelDisabledReason, providerSourceBadge, type ProviderSourceBadge } from "./logic";
 
 const DOT: Record<Provider["status"], string> = {
   connected: "bg-aether-green",
@@ -29,17 +30,23 @@ const ACTION_CLS: Record<Provider["status"], string> = {
   unconfigured: "bg-aether-indigo/15 text-aether-indigo border-aether-indigo/25 hover:bg-aether-indigo/25",
 };
 
+const BADGE_CLS: Record<ProviderSourceBadge["tone"], string> = {
+  saved: "border-aether-green/25 bg-aether-green/10 text-aether-green",
+  env: "border-aether-amber/25 bg-aether-amber/10 text-aether-amber",
+  none: "border-white/10 bg-white/5 text-aether-muted-dim",
+};
+
 export default function ProviderConnections({
   providers,
   loading,
   busyId,
-  onToggle,
+  onConfigure,
   onModel,
 }: {
   providers: Provider[];
   loading: boolean;
   busyId: string | null;
-  onToggle: (id: string, next: Provider["status"]) => void;
+  onConfigure: (provider: Provider) => void;
   onModel: (id: string, model: string) => void;
 }) {
   return (
@@ -61,6 +68,7 @@ export default function ProviderConnections({
             const action = providerAction(p.status);
             const busy = busyId === p.id;
             const modelLockReason = providerModelDisabledReason(p);
+            const badge = providerSourceBadge(p);
             return (
               <div
                 key={p.id}
@@ -91,11 +99,28 @@ export default function ProviderConnections({
                 </div>
 
                 <p
-                  className={`mb-3 text-[11px] ${p.status === "warning" ? "text-aether-yellow" : "text-aether-muted"}`}
+                  className={`mb-2 text-[11px] ${p.status === "warning" ? "text-aether-yellow" : "text-aether-muted"}`}
                   data-testid={`provider-detail-${p.id}`}
                 >
                   {p.detail}
                 </p>
+
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span
+                    data-testid={`provider-source-${p.id}`}
+                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${BADGE_CLS[badge.tone]}`}
+                  >
+                    {badge.label}
+                  </span>
+                  {p.secretHint ? (
+                    <span
+                      data-testid={`provider-hint-${p.id}`}
+                      className="font-mono text-[10px] text-aether-muted-dim"
+                    >
+                      Ends {p.secretHint}
+                    </span>
+                  ) : null}
+                </div>
 
                 <label className="mb-3 block">
                   <span className="sr-only">{p.name} model</span>
@@ -124,7 +149,7 @@ export default function ProviderConnections({
                 <button
                   type="button"
                   data-testid={`provider-action-${p.id}`}
-                  onClick={() => onToggle(p.id, action.next)}
+                  onClick={() => onConfigure(p)}
                   disabled={busy}
                   className={`w-full rounded-lg border py-2 text-xs font-medium transition disabled:opacity-60 ${ACTION_CLS[p.status]}`}
                 >
