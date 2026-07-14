@@ -251,14 +251,30 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
             )
         return None
     # openrouter (and every non-anthropic model, which is served via OpenRouter).
-    active = get_active_credential_env_var()
-    if active:
-        base = (
-            os.environ.get("AETHER_LLM_BASE_URL")
-            or os.environ.get("OPENROUTER_BASE_URL")
-        )
+    # Strictly provider-scoped — the generic AETHER_LLM_* pair may hold a legacy
+    # Anthropic token pointed at api.anthropic.com; handing that to the OpenRouter
+    # path is exactly the cross-provider billing crossover ADR-PC-2 forbids.
+    or_key = os.environ.get("OPENROUTER_API_KEY")
+    if or_key:
         return ProviderCredentialResolution(
-            "openrouter", "api_key", os.environ.get(active), base, "environment"
+            "openrouter", "api_key", or_key,
+            os.environ.get("OPENROUTER_BASE_URL"), "environment",
+        )
+    # Fall back to the generic AETHER_LLM_* pair only when it is NOT pointed at an
+    # Anthropic endpoint (mirror of the anthropic-branch guard above). If the only
+    # env pair present is Anthropic, return None so the caller raises the honest
+    # 'no credential for openrouter' error and fires ZERO HTTP.
+    llm_base = os.environ.get("AETHER_LLM_BASE_URL", "")
+    llm_key = os.environ.get("AETHER_LLM_API_KEY")
+    if llm_key and "anthropic.com" not in llm_base:
+        return ProviderCredentialResolution(
+            "openrouter", "api_key", llm_key, llm_base or None, "environment"
+        )
+    abacus = os.environ.get("ABACUS_API_KEY")
+    if abacus:
+        return ProviderCredentialResolution(
+            "openrouter", "api_key", abacus,
+            os.environ.get("OPENROUTER_BASE_URL"), "environment",
         )
     return None
 

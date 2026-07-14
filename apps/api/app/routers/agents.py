@@ -232,14 +232,24 @@ def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
             return (
                 "connected",
                 get_model("REASONING"),
-                "Direct Anthropic API · token configured in .env",
+                "Configured via server environment (legacy)",
                 sorted(tiers),
             )
-        return ("unconfigured", "", "Not configured · add API key to .env", [])
+        return (
+            "unconfigured",
+            "",
+            "Not configured — add a key in the Agents panel",
+            [],
+        )
 
     if provider_id == "abacus":
         if not os.environ.get("ABACUS_API_KEY"):
-            return ("unconfigured", "", "Not configured · add API key to .env", [])
+            return (
+                "unconfigured",
+                "",
+                "Not configured — add a key in the Agents panel",
+                [],
+            )
         from app.services.llm_client import get_model
 
         tiers = sorted({get_model(t) for t in ("REASONING", "STRUCTURED", "FAST", "LIGHT")})
@@ -254,7 +264,7 @@ def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
         return (
             "connected",
             "",
-            "Abacus subscription key configured in .env · standby "
+            "Abacus subscription key (server environment) · standby "
             "(a higher-priority OpenRouter/Anthropic key is the active path)",
             tiers,
         )
@@ -268,10 +278,15 @@ def _provider_env_state(provider_id: str) -> tuple[str, str, str, list[str]]:
         return (
             "connected",
             "",
-            "API key configured in server .env",
+            "Configured via server environment (legacy)",
             seed["models"],
         )
-    return ("unconfigured", "", "Not configured · add API key to .env", seed["models"])
+    return (
+        "unconfigured",
+        "",
+        "Not configured — add a key in the Agents panel",
+        seed["models"],
+    )
 
 
 #: Set once the screen-scoped tables are known to exist in this process, so the
@@ -1004,8 +1019,8 @@ def update_provider(
     if body.status == "connected" and env_status != "connected":
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"'{provider}' has no credential on the server — add its API key to the "
-            "server .env before marking it connected.",
+            f"'{provider}' has no credential configured — add one in the Agents "
+            "panel before marking it connected.",
         )
     _ensure_agents_tables()
     with get_connection() as conn:

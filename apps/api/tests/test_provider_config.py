@@ -141,6 +141,52 @@ class TestNoCrossProviderFallback:
         assert "anthropic" in str(exc.value).lower()
         assert called["n"] == 0
 
+    def test_openrouter_model_with_only_anthropic_env_gets_no_credential(
+        self, monkeypatch
+    ):
+        """Mirror crossover (GAP-PC-006): a NON-claude model with ONLY the legacy
+        Anthropic env pair set (AETHER_LLM_API_KEY=sk-ant-… +
+        AETHER_LLM_BASE_URL=…anthropic.com…) and NO OpenRouter key must NOT be
+        handed the Anthropic secret. resolve_credential('openrouter') MUST be
+        None so the Anthropic key/host is never used for OpenRouter traffic."""
+        _no_db_credentials(monkeypatch)
+        _clear_all_provider_env(monkeypatch)
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-api-LEGACYanthropicKEY")
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
+
+        # The Anthropic-pointed generic pair must NOT resolve for openrouter.
+        assert resolve_credential("openrouter") is None
+        # And the anthropic-direction guard must still resolve for anthropic.
+        anth = resolve_credential("anthropic")
+        assert anth is not None and anth.provider == "anthropic"
+
+    def test_call_live_never_sends_anthropic_secret_to_openrouter(self, monkeypatch):
+        """The live path for a non-claude model (e.g. the auto-mode fallback
+        model) with ONLY the legacy Anthropic env pair must raise an honest
+        'no credential for openrouter' error and fire ZERO HTTP — never POST the
+        Anthropic secret to the OpenRouter path (ADR-PC-2)."""
+        import httpx
+
+        _no_db_credentials(monkeypatch)
+        _clear_all_provider_env(monkeypatch)
+        monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-ant-api-LEGACYanthropicKEY")
+        monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://api.anthropic.com/v1")
+
+        called = {"n": 0}
+
+        def _boom_post(*a, **k):
+            called["n"] += 1
+            raise AssertionError("no HTTP call should be made without a credential")
+
+        monkeypatch.setattr(httpx, "post", _boom_post)
+        llm = LLMClient(mode="live")
+        with pytest.raises(RuntimeError) as exc:
+            llm._call_live(
+                "sys", "usr", model="openai/gpt-oss-20b:free", temperature=0.0
+            )
+        assert "openrouter" in str(exc.value).lower()
+        assert called["n"] == 0
+
 
 # ---------------------------------------------------------------------------
 # 4. Native Anthropic transport — header selection per authMode
