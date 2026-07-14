@@ -16,6 +16,21 @@ CANNOT be replayed as an app session token — three independent barriers:
    ``userId``/``sub`` that ``get_current_user`` reads, so even a decoded state
    token yields no session user.
 
+**PKCE code_verifier (ADR-PC-1)** — ``state`` also carries the PKCE
+``code_verifier`` (claim ``cv``) that was used to build the ``code_challenge``
+in the consent URL. This is required because ``google-auth-oauthlib``'s
+``Flow`` generates its ``code_verifier`` in-memory on the ``Flow`` instance
+that builds the consent URL (:func:`build_consent_url`); the callback handles
+the exchange on a brand-new ``Flow`` instance (:func:`_build_flow` called again
+in :func:`exchange_code`) that never saw that verifier, so without carrying it
+across, Google's token endpoint rejects the exchange with
+``(invalid_grant) Missing code verifier``. The state JWT is the only
+cross-request channel available (see above), so the verifier rides alongside
+``uid``. This is defense-in-depth, not a new secret to protect: the verifier
+alone cannot complete a token exchange without the ``client_secret``, and the
+state token keeps its existing security properties (signed, single audience,
+5-minute TTL).
+
 It is signed here with PyJWT rather than importing ``app.security`` so this
 module stays decoupled from the auth layer, and expires in 5 minutes.
 
@@ -28,8 +43,9 @@ never byte-equal to the session-signing secret.
 from __future__ import annotations
 
 import os
+import secrets
 import time
-from typing import Any
+from typing import Any, NamedTuple
 
 import jwt
 
@@ -55,6 +71,16 @@ _STATE_TTL = 300
 
 class OAuthError(RuntimeError):
     """Any failure building the consent URL or exchanging the auth code."""
+
+
+class StateClaims(NamedTuple):
+    """Decoded ``state`` JWT payload the callback needs."""
+
+    user_id: str
+    #: PKCE code_verifier carried from build_consent_url, or None for a state
+    #: token that predates ADR-PC-1 (never issued by this build, but decoding
+    #: stays lenient rather than hard-failing on the missing claim).
+    code_verifier: str | None
 
 
 def _client_id() -> str:
@@ -90,20 +116,32 @@ def oauth_configured() -> bool:
     return bool(_client_id() and _client_secret() and get_redirect_uri())
 
 
-def encode_state(user_id: str) -> str:
-    """Sign a short-lived state token carrying the app user id."""
+def _generate_code_verifier() -> str:
+    """A cryptographically random PKCE code_verifier (RFC 7636 S4.1: 43-128
+    chars from the unreserved URL-safe alphabet). ``token_urlsafe(96)`` yields
+    exactly 128 base64url characters (96 bytes, no padding)."""
+    return secrets.token_urlsafe(96)
+
+
+def encode_state(user_id: str, code_verifier: str | None = None) -> str:
+    """Sign a short-lived state token carrying the app user id and, per
+    ADR-PC-1, the PKCE ``code_verifier`` that matches the consent URL's
+    ``code_challenge`` (see module docstring)."""
     now = int(time.time())
-    payload = {
+    payload: dict[str, Any] = {
         "uid": user_id,
         "aud": _STATE_AUD,
         "iat": now,
         "exp": now + _STATE_TTL,
     }
+    if code_verifier:
+        payload["cv"] = code_verifier
     return jwt.encode(payload, _state_secret(), algorithm="HS256")
 
 
-def decode_state(state: str) -> str:
-    """Return the app user id from a valid state token, else raise OAuthError."""
+def decode_state(state: str) -> StateClaims:
+    """Return the app user id (and PKCE code_verifier, if any) from a valid
+    state token, else raise OAuthError."""
     try:
         payload = jwt.decode(
             state,
@@ -116,7 +154,7 @@ def decode_state(state: str) -> str:
     uid = payload.get("uid")
     if not uid:
         raise OAuthError("OAuth state missing user id")
-    return str(uid)
+    return StateClaims(user_id=str(uid), code_verifier=payload.get("cv"))
 
 
 def _client_config() -> dict[str, Any]:
@@ -143,15 +181,27 @@ def _build_flow() -> Any:
 def build_consent_url(user_id: str) -> str:
     """Google consent-screen URL. ``access_type=offline`` + ``prompt=consent``
     force a refresh token on every grant so a re-connect can never come back
-    without one."""
+    without one.
+
+    Per ADR-PC-1, the PKCE ``code_verifier`` is generated explicitly (rather
+    than relying on ``Flow.authorization_url``'s autogeneration) so it is
+    known *before* the state JWT is built and can be carried in it — the
+    ``Flow`` instance handling the callback is a different object
+    (:func:`_build_flow` runs again in :func:`exchange_code`) that would
+    otherwise never see it, producing Google's
+    ``(invalid_grant) Missing code verifier`` error.
+    """
     if not oauth_configured():
         raise OAuthError("Google OAuth is not configured on the server")
     flow = _build_flow()
+    code_verifier = _generate_code_verifier()
+    flow.code_verifier = code_verifier
+    flow.autogenerate_code_verifier = False
     url, _state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=encode_state(user_id),
+        state=encode_state(user_id, code_verifier),
     )
     return url
 
@@ -170,11 +220,20 @@ def _resolve_email(creds: Any) -> str | None:
 def exchange_code(code: str, state: str) -> dict[str, Any]:
     """Validate ``state``, exchange ``code`` for tokens, and return a normalized
     credential dict (including the app ``user_id`` recovered from state)."""
-    user_id = decode_state(state)
+    claims = decode_state(state)
+    user_id = claims.user_id
     if not oauth_configured():
         raise OAuthError("Google OAuth is not configured on the server")
     try:
         flow = _build_flow()
+        if claims.code_verifier:
+            # ADR-PC-1 defense-in-depth: this Flow is a brand-new instance
+            # that never generated a code_verifier of its own (see
+            # build_consent_url) — without setting it here, fetch_token sends
+            # no verifier and Google rejects the exchange with
+            # "(invalid_grant) Missing code verifier". The verifier is not a
+            # long-term secret; token exchange still requires client_secret.
+            flow.code_verifier = claims.code_verifier
         flow.fetch_token(code=code)
         creds = flow.credentials
     except OAuthError:
