@@ -1,10 +1,19 @@
 """P4 — Google OAuth login + callback (in-app Gmail connect).
 
 Covers state signing round-trip, the config-gated /login endpoint, and the
-callback's honest redirect behaviour (never a 500 to the browser). The token
-exchange itself is mocked — no live Google call is ever made.
+callback's honest redirect behaviour (never a 500 to the browser). Most tests
+here mock the token exchange (no live Google call is ever made), but the PKCE
+tests below exercise the REAL build_consent_url -> decode_state ->
+exchange_code handoff — only google-auth-oauthlib's ``Flow.fetch_token`` (the
+actual network boundary) and email resolution are monkeypatched — as a
+regression guard for the "(invalid_grant) Missing code verifier" bug
+(ADR-PC-1).
 """
 from __future__ import annotations
+
+import time
+import urllib.parse
+from typing import Any
 
 import pytest
 
@@ -12,10 +21,20 @@ from app.repositories.google_credential import GoogleCredentialRepository
 from app.services import google_oauth
 
 
+def _configure_oauth_env(monkeypatch):
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "cid.apps.googleusercontent.com")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv(
+        "GOOGLE_OAUTH_REDIRECT_URI",
+        "https://example.abacusai.cloud/api/auth/google/callback",
+    )
+
+
 # --------------------------------------------------------------- state tokens
 def test_encode_decode_state_roundtrip():
     token = google_oauth.encode_state("user-123")
-    assert google_oauth.decode_state(token) == "user-123"
+    claims = google_oauth.decode_state(token)
+    assert claims.user_id == "user-123"
 
 
 def test_decode_state_rejects_garbage():
@@ -61,6 +80,66 @@ def test_state_token_expires_in_five_minutes():
     assert claims["uid"] == "user-123"
     # The identity rides in `uid`, never the `userId`/`sub` a session reads.
     assert "userId" not in claims and "sub" not in claims
+
+
+# --------------------------------------------------------- PKCE (ADR-PC-1)
+def test_build_consent_url_carries_pkce_verifier_in_state(monkeypatch):
+    """RCA regression guard: build_consent_url must produce a state token
+    whose decoded payload carries a non-empty PKCE code_verifier ('cv'), and
+    the consent URL itself must carry the matching code_challenge."""
+    _configure_oauth_env(monkeypatch)
+
+    url = google_oauth.build_consent_url("user-123")
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+
+    assert query.get("code_challenge"), "consent URL missing code_challenge"
+    assert query["code_challenge_method"][0] == "S256"
+
+    state = query["state"][0]
+    claims = google_oauth.decode_state(state)
+    assert claims.user_id == "user-123"
+    assert claims.code_verifier, "state JWT missing PKCE code_verifier ('cv')"
+
+
+def test_exchange_code_sets_verifier_from_state_before_fetch_token(monkeypatch):
+    """Regression guard for the exact shipped bug: exchange_code builds a NEW
+    Flow (a different object than the one build_consent_url used), so it must
+    thread the code_verifier carried in ``state`` onto that new Flow BEFORE
+    calling fetch_token — otherwise Google rejects the exchange with
+    "(invalid_grant) Missing code verifier"."""
+    _configure_oauth_env(monkeypatch)
+    monkeypatch.setattr(google_oauth, "_resolve_email", lambda creds: "me@gmail.com")
+
+    # Step 1: consent URL + its state carry the real verifier.
+    url = google_oauth.build_consent_url("user-123")
+    state = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["state"][0]
+    expected_verifier = google_oauth.decode_state(state).code_verifier
+    assert expected_verifier
+
+    # Step 2: capture what exchange_code's (new) Flow actually sends.
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_token(self, **kwargs):
+        captured["code_verifier"] = self.code_verifier
+        # Simulate a successful token response so exchange_code can proceed
+        # to build its return dict without ever hitting the network.
+        self.oauth2session.token = {
+            "access_token": "access-xyz",
+            "refresh_token": "refresh-xyz",
+            "expires_at": time.time() + 3600,
+            "scope": "gmail.modify",
+        }
+        self.oauth2session.scope = ["gmail.modify"]
+
+    from google_auth_oauthlib.flow import Flow
+
+    monkeypatch.setattr(Flow, "fetch_token", fake_fetch_token)
+
+    result = google_oauth.exchange_code("auth-code-from-google", state)
+
+    assert captured["code_verifier"] == expected_verifier
+    assert result["refresh_token"] == "refresh-xyz"
+    assert result["user_id"] == "user-123"
 
 
 # --------------------------------------------------------------- /login gate
