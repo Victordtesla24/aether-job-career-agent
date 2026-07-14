@@ -227,6 +227,12 @@ class TestHardWallClockCap:
         models are routed natively instead — see test_provider_config.py."""
         import httpx
 
+        # Isolate the AETHER_LLM_* (generic OpenAI-compat) fallback: the
+        # OpenRouter provider now prefers OPENROUTER_* when present (ADR-PC-2
+        # provider-scoping), so any ambient OPENROUTER_*/ABACUS_* (e.g. a
+        # developer with .env sourced) must be cleared to exercise this path.
+        for _var in ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "ABACUS_API_KEY"):
+            monkeypatch.delenv(_var, raising=False)
         monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://example-openai-compat.test/v1")
         monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-compat-test")
         seen: dict[str, object] = {}
@@ -256,6 +262,10 @@ class TestHardWallClockCap:
         require custom headers. (Native Anthropic sets its own headers.)"""
         import httpx
 
+        # Same isolation as test_provider_base_url_is_configurable: clear ambient
+        # OPENROUTER_*/ABACUS_* so the AETHER_LLM_* fallback path is exercised.
+        for _var in ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "ABACUS_API_KEY"):
+            monkeypatch.delenv(_var, raising=False)
         monkeypatch.setenv("AETHER_LLM_BASE_URL", "https://example-openai-compat.test/v1")
         monkeypatch.setenv("AETHER_LLM_API_KEY", "sk-compat-test")
         monkeypatch.setenv(
