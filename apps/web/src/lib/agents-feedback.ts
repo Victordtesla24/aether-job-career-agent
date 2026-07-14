@@ -152,6 +152,50 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
   }
 }
 
+/**
+ * Lift the real backend `detail` out of an `ApiError`'s raw message.
+ * `apiRequest` embeds the raw response body in the error message (e.g.
+ * `PUT /agents/providers/x/credential failed (503): {"detail":"Vault
+ * unavailable"}`); this pulls the JSON `detail` string out when present and
+ * otherwise falls back to the raw message text. Mirrors the extraction
+ * already used for email-send errors (see lib/api/workspaces.ts).
+ */
+function extractApiDetail(err: unknown): string | null {
+  if (!(err instanceof Error) || !err.message.trim()) return null;
+  const match = err.message.match(/\{[\s\S]*\}$/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]) as { detail?: unknown };
+      if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+        return parsed.detail;
+      }
+    } catch {
+      // Not JSON — fall through to the raw message.
+    }
+  }
+  return err.message;
+}
+
+/**
+ * Honest toast for the provider-credential save/remove/verify flow (QA
+ * finding: `runErrorNotice`'s generic 503 copy — "the AI model is busy or its
+ * time budget was exceeded" — is WRONG here. A 503 on this path means the
+ * server's credential vault is unreachable or misconfigured, not that an LLM
+ * call timed out; a 422 means the pasted secret failed validation. The
+ * modal's inline banner already renders the real backend detail, so this
+ * keeps the toast in agreement with it instead of contradicting it with an
+ * unrelated generic message. Scoped to provider-credential actions only —
+ * `runErrorNotice` is untouched for the pipeline/agent-run flows that still
+ * want the generic retry guidance.
+ */
+export function providerCredentialErrorNotice(err: unknown, context: string): Notice {
+  const detail = extractApiDetail(err);
+  return {
+    kind: "error",
+    text: detail ? `${context} failed — ${detail}` : `${context} failed. Please try again.`,
+  };
+}
+
 /** Actionable failure/timeout guidance (never a dead-end error). */
 export function runErrorNotice(err: unknown, context: string): Notice {
   const status =

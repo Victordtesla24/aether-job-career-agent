@@ -26,7 +26,7 @@ import {
   type ProviderAuthMode,
 } from "./api";
 import { providerSourceBadge, type ProviderSourceBadge } from "./logic";
-import { runErrorNotice, type Notice } from "../../lib/agents-feedback";
+import { providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
 
 interface AuthModeOption {
   value: ProviderAuthMode;
@@ -190,7 +190,7 @@ export default function ProviderConfigModal({
       });
       await onSaved();
     } catch (e) {
-      onNotice(runErrorNotice(e, `Saving ${view.name} credential`));
+      onNotice(providerCredentialErrorNotice(e, `Saving ${view.name} credential`));
       setError(e instanceof Error ? e.message.slice(0, 160) : "Save failed");
     } finally {
       setBusy(null);
@@ -215,7 +215,7 @@ export default function ProviderConfigModal({
       });
       await onSaved();
     } catch (e) {
-      onNotice(runErrorNotice(e, `Removing ${view.name} credential`));
+      onNotice(providerCredentialErrorNotice(e, `Removing ${view.name} credential`));
       setError(e instanceof Error ? e.message.slice(0, 160) : "Remove failed");
     } finally {
       setBusy(null);
@@ -235,7 +235,7 @@ export default function ProviderConfigModal({
       });
       await onSaved();
     } catch (e) {
-      onNotice(runErrorNotice(e, `Testing ${view.name} connection`));
+      onNotice(providerCredentialErrorNotice(e, `Testing ${view.name} connection`));
       setError(e instanceof Error ? e.message.slice(0, 160) : "Verify failed");
     } finally {
       setBusy(null);
