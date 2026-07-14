@@ -23,6 +23,10 @@ router = APIRouter()
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
+    # Optional display name for the new account (the /signup form submits it).
+    # Persisted on the User row so self-registered users don't get a blank
+    # profile name; absent/blank values leave ``name`` NULL.
+    name: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -31,6 +35,14 @@ class RegisterRequest(BaseModel):
         if problems:
             raise ValueError("; ".join(problems))
         return value
+
+    @field_validator("name")
+    @classmethod
+    def _normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class LoginRequest(BaseModel):
@@ -64,7 +76,9 @@ class TokenResponse(BaseModel):
 )
 def register(body: RegisterRequest) -> UserResponse:
     try:
-        user = UserRepository().create(body.email, hash_password(body.password))
+        user = UserRepository().create(
+            body.email, hash_password(body.password), name=body.name
+        )
     except DuplicateEmailError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

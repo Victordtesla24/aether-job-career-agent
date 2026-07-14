@@ -52,6 +52,26 @@ class TestRegister:
         no_digit = {"email": "weak2@example.com", "password": "abcdefghij"}
         assert _register(client, no_digit).status_code == 422
 
+    def test_register_persists_name(self, client):
+        # The /signup form submits a display name; it must survive to the row
+        # and be retrievable via /auth/me (contract register body {email,
+        # password, name}).
+        creds = {
+            "email": "named@example.com",
+            "password": "Passw0rd1",
+            "name": "Jane Doe",
+        }
+        assert _register(client, creds).status_code == 201
+        login = client.post(
+            "/auth/login",
+            json={"email": "named@example.com", "password": "Passw0rd1"},
+        )
+        assert login.status_code == 200, login.text
+        token = login.json()["access_token"]
+        me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert me.status_code == 200, me.text
+        assert me.json()["name"] == "Jane Doe"
+
 
 class TestLogin:
     def test_login_returns_jwt(self, client):
@@ -188,6 +208,23 @@ class TestAuthRateLimiting:
                 json={"email": "brute@example.com", "password": "Passw0rd1"},
             )
         assert last.status_code == 429
+
+    def test_rate_limit_not_bypassable_via_x_forwarded_for(self, client):
+        # A unique, attacker-controlled X-Forwarded-For per request must NOT
+        # reset the limiter: the key is the trusted socket peer, never the
+        # client-supplied header. Before the fix each spoofed value minted a
+        # fresh bucket, so all 7 calls returned 201 and the limiter never
+        # engaged; now the 6th call (index 5) is throttled regardless.
+        statuses = [
+            client.post(
+                "/auth/register",
+                json={"email": f"xff{i}@example.com", "password": "Passw0rd1"},
+                headers={"X-Forwarded-For": f"10.0.0.{i}"},
+            ).status_code
+            for i in range(7)
+        ]
+        assert statuses[5] == 429, statuses
+        assert all(s == 201 for s in statuses[:5]), statuses
 
 
 class TestAdminSeed:

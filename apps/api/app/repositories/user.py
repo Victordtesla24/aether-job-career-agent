@@ -37,18 +37,25 @@ def validate_password_policy(password: str) -> list[str]:
 class UserRepository:
     """CRUD over the ``User`` table using short-lived psycopg2 connections."""
 
-    def create(self, email: str, password_hash: str) -> dict[str, Any]:
-        """Insert a user; raise ``DuplicateEmailError`` on an email collision."""
+    def create(
+        self, email: str, password_hash: str, name: str | None = None
+    ) -> dict[str, Any]:
+        """Insert a user; raise ``DuplicateEmailError`` on an email collision.
+
+        ``name`` is an optional display name persisted on the row (NULL when
+        omitted); the parameter defaults so existing two-argument callers stay
+        source-compatible.
+        """
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'''
-                    INSERT INTO "User" ("id", "email", "passwordHash", "updatedAt")
-                    VALUES (%s, %s, %s, NOW())
+                    INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+                    VALUES (%s, %s, %s, %s, NOW())
                     ON CONFLICT ("email") DO NOTHING
                     RETURNING {_USER_COLUMNS}
                     ''',
-                    (new_id(), email, password_hash),
+                    (new_id(), email, name, password_hash),
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()

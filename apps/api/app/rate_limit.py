@@ -83,17 +83,21 @@ def build_auth_rate_limiter() -> SlidingWindowRateLimiter:
 
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP.
+    """Resolve the caller's real client IP from the trusted socket peer.
 
-    Behind the VM's nginx/envoy hops the socket peer is the proxy, so the
-    left-most ``X-Forwarded-For`` entry (the original caller) is preferred when
-    present, falling back to the direct socket address.
+    Uvicorn runs with its default ``proxy_headers=True`` /
+    ``forwarded_allow_ips='127.0.0.1'``, so its ``ProxyHeadersMiddleware``
+    already rewrites ``scope['client']`` to the genuine external caller when the
+    request arrives through the single trusted ``nginx → 127.0.0.1`` hop.
+    Reading ``request.client.host`` therefore yields the real client IP.
+
+    We deliberately do NOT parse ``X-Forwarded-For`` ourselves: that header is
+    fully attacker-controlled end-to-end, so keying on its left-most entry would
+    let any caller mint a fresh limiter bucket per request (a unique spoofed
+    value each time) and slip past the limiter entirely — defeating the whole
+    brute-force / signup-abuse defence. The socket peer cannot be spoofed by the
+    client, so it is the only trustworthy key here.
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
     return request.client.host if request.client else "unknown"
 
 
