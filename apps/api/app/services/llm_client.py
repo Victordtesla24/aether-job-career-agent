@@ -27,6 +27,7 @@ import logging
 import os
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -154,6 +155,287 @@ def get_active_credential_env_var() -> str | None:
         if os.environ.get(name):
             return name
     return None
+
+
+# ---------------------------------------------------------------------------
+# Provider-aware routing + native Anthropic transport (PROVIDER-CONFIG-RUN).
+#
+# A model id resolves to EXACTLY one provider and one credential source. There
+# is NO cross-provider fallback: a ``claude-*`` model only ever hits
+# api.anthropic.com with the Anthropic credential (native Messages API), and
+# every other model only ever hits OpenRouter with the OpenRouter credential.
+# A missing credential is an honest, provider-named error — never a silent
+# reroute (ADR-PC-2 — the billing separation this feature exists to guarantee).
+# ---------------------------------------------------------------------------
+
+#: Native Anthropic Messages API (NOT OpenAI-compatible).
+ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
+
+
+def get_anthropic_max_tokens() -> int:
+    """Required ``max_tokens`` for the Anthropic Messages API (env-overridable)."""
+    try:
+        return int(os.environ.get("AETHER_ANTHROPIC_MAX_TOKENS", "4096"))
+    except ValueError:
+        return 4096
+
+
+def resolve_provider(model: str) -> str:
+    """Map a model id to its billing provider: ``'anthropic'`` or ``'openrouter'``.
+
+    ``claude-*`` and ``anthropic/*`` are Anthropic-native; everything else is
+    served through OpenRouter. Pure function so the router, the verify endpoint
+    and the transport all agree on one resolution.
+    """
+    m = (model or "").strip().lower()
+    if m.startswith("claude-") or m.startswith("anthropic/"):
+        return "anthropic"
+    return "openrouter"
+
+
+def _infer_anthropic_auth_mode(secret: str) -> str:
+    """Anthropic authMode from the key prefix (``sk-ant-oat…`` = subscription)."""
+    return "subscription_oauth" if secret.startswith("sk-ant-oat") else "api_key"
+
+
+@dataclass(frozen=True)
+class ProviderCredentialResolution:
+    """A resolved provider credential and where it came from."""
+
+    provider: str
+    auth_mode: str          # 'api_key' | 'subscription_oauth'
+    secret: str
+    base_url: str | None
+    source: str             # 'database' | 'environment'
+
+
+def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
+    """Resolve ``provider``'s credential: DB row FIRST, then legacy env fallback.
+
+    Returns ``None`` when neither exists — the caller must then raise an honest,
+    provider-named error and must NOT reroute to the other provider.
+    """
+    # 1. Encrypted DB credential (the in-UI configured path) wins.
+    try:
+        from app.repositories.provider_credential import ProviderCredentialRepository
+
+        row = ProviderCredentialRepository().get_secret(provider)
+    except Exception as exc:  # DB down / table missing / key rotated -> degrade
+        logger.warning(
+            "provider-credential DB lookup for '%s' failed; falling back to env: %s",
+            provider, exc,
+        )
+        row = None
+    if row and row.get("secret"):
+        return ProviderCredentialResolution(
+            provider=provider,
+            auth_mode=row.get("authMode") or "api_key",
+            secret=row["secret"],
+            base_url=row.get("baseUrl"),
+            source="database",
+        )
+    # 2. Legacy env fallback — strictly provider-scoped, never cross-provider.
+    if provider == "anthropic":
+        base = os.environ.get("AETHER_LLM_BASE_URL", "")
+        direct = os.environ.get("AETHER_LLM_API_KEY")
+        if direct and "anthropic.com" in base:
+            return ProviderCredentialResolution(
+                "anthropic", _infer_anthropic_auth_mode(direct), direct, base, "environment"
+            )
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if key:
+            return ProviderCredentialResolution(
+                "anthropic", _infer_anthropic_auth_mode(key), key, None, "environment"
+            )
+        return None
+    # openrouter (and every non-anthropic model, which is served via OpenRouter).
+    # Strictly provider-scoped — the generic AETHER_LLM_* pair may hold a legacy
+    # Anthropic token pointed at api.anthropic.com; handing that to the OpenRouter
+    # path is exactly the cross-provider billing crossover ADR-PC-2 forbids.
+    or_key = os.environ.get("OPENROUTER_API_KEY")
+    if or_key:
+        return ProviderCredentialResolution(
+            "openrouter", "api_key", or_key,
+            os.environ.get("OPENROUTER_BASE_URL"), "environment",
+        )
+    # Fall back to the generic AETHER_LLM_* pair only when it is NOT pointed at an
+    # Anthropic endpoint (mirror of the anthropic-branch guard above). If the only
+    # env pair present is Anthropic, return None so the caller raises the honest
+    # 'no credential for openrouter' error and fires ZERO HTTP.
+    llm_base = os.environ.get("AETHER_LLM_BASE_URL", "")
+    llm_key = os.environ.get("AETHER_LLM_API_KEY")
+    if llm_key and "anthropic.com" not in llm_base:
+        return ProviderCredentialResolution(
+            "openrouter", "api_key", llm_key, llm_base or None, "environment"
+        )
+    abacus = os.environ.get("ABACUS_API_KEY")
+    if abacus:
+        return ProviderCredentialResolution(
+            "openrouter", "api_key", abacus,
+            os.environ.get("OPENROUTER_BASE_URL"), "environment",
+        )
+    return None
+
+
+def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
+    """Auth/version headers for the native Anthropic Messages API.
+
+    - ``'subscription_oauth'`` (Claude Max/Pro token, ``sk-ant-oat…``):
+      ``Authorization: Bearer <token>`` + ``anthropic-beta: oauth-2025-04-20``.
+    - ``'api_key'`` (``sk-ant-api…``): ``x-api-key: <key>`` (no Bearer).
+    """
+    headers = {
+        "anthropic-version": ANTHROPIC_VERSION,
+        "content-type": "application/json",
+    }
+    if auth_mode == "subscription_oauth":
+        headers["Authorization"] = f"Bearer {secret}"
+        headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA
+    elif auth_mode == "api_key":
+        headers["x-api-key"] = secret
+    else:
+        raise RuntimeError(f"Unsupported Anthropic authMode '{auth_mode}'")
+    return headers
+
+
+def build_anthropic_request(
+    model: str,
+    system: str | None,
+    user: str,
+    *,
+    auth_mode: str,
+    secret: str,
+    base_url: str | None = None,
+    max_tokens: int | None = None,
+) -> dict[str, Any]:
+    """Prepare a native Anthropic Messages request (``{url, json, headers}``).
+
+    Exposed so tests and the verify endpoint can inspect the prepared request
+    without a live call. ``temperature``/``top_p`` are deliberately omitted —
+    current Anthropic models 400 on them.
+    """
+    base = (base_url or ANTHROPIC_BASE_URL).rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3].rstrip("/")
+    body: dict[str, Any] = {
+        "model": model,
+        "max_tokens": int(max_tokens or get_anthropic_max_tokens()),
+        "messages": [{"role": "user", "content": user}],
+    }
+    if system:
+        body["system"] = system
+    return {
+        "url": f"{base}/v1/messages",
+        "json": body,
+        "headers": anthropic_auth_headers(auth_mode, secret),
+    }
+
+
+def parse_anthropic_response(body: dict[str, Any]) -> str:
+    """Extract assistant text from a Messages API response, honestly.
+
+    Concatenates ``content`` blocks where ``type == 'text'``. A ``refusal`` stop
+    reason is surfaced as an error; a ``max_tokens`` truncation with no text is
+    an error, and with partial text is logged (the JSON caller's parser catches
+    a truncated object and degrades to a fixture).
+    """
+    stop = body.get("stop_reason")
+    if stop == "refusal":
+        raise RuntimeError("Anthropic declined to answer (stop_reason=refusal)")
+    blocks = body.get("content") or []
+    text = "".join(
+        b.get("text", "")
+        for b in blocks
+        if isinstance(b, dict) and b.get("type") == "text"
+    )
+    if not text.strip():
+        if stop == "max_tokens":
+            raise RuntimeError(
+                "Anthropic response truncated at max_tokens before any text; "
+                "raise AETHER_ANTHROPIC_MAX_TOKENS"
+            )
+        raise RuntimeError("Anthropic returned empty content")
+    if stop == "max_tokens":
+        logger.warning("Anthropic response truncated at max_tokens (partial content)")
+    return text
+
+
+def _build_openrouter_request(
+    model: str,
+    system: str,
+    user: str,
+    temperature: float,
+    cred: "ProviderCredentialResolution",
+) -> dict[str, Any]:
+    """Prepare the existing OpenAI-compatible OpenRouter chat request."""
+    base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
+    return {
+        "url": f"{base}/chat/completions",
+        "json": {
+            "model": model,
+            "temperature": temperature,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        },
+        "headers": {
+            "Authorization": f"Bearer {cred.secret}",
+            "Content-Type": "application/json",
+            **_extra_headers(),
+        },
+    }
+
+
+def verify_provider_credential(
+    provider: str, *, timeout: float = 15.0
+) -> tuple[bool, str, str]:
+    """Perform a REAL minimal round-trip against ``provider``'s stored credential.
+
+    Returns ``(ok, status, detail)``. ``ok`` is only True on a genuine 2xx —
+    never fabricated. Anthropic sends a 1-token Messages ping; OpenRouter lists
+    models. Providers with no native transport report an honest ``'unsupported'``.
+    """
+    import httpx
+
+    cred = resolve_credential(provider)
+    if cred is None:
+        return (False, "no_credential", f"No credential configured for '{provider}'.")
+    try:
+        if provider == "anthropic":
+            req = build_anthropic_request(
+                "claude-haiku-4-5", None, "ping",
+                auth_mode=cred.auth_mode, secret=cred.secret,
+                base_url=cred.base_url, max_tokens=1,
+            )
+            resp = httpx.post(
+                req["url"], json=req["json"], headers=req["headers"], timeout=timeout
+            )
+        elif provider == "openrouter":
+            base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
+            resp = httpx.get(
+                f"{base}/models",
+                headers={"Authorization": f"Bearer {cred.secret}"},
+                timeout=timeout,
+            )
+        else:
+            return (
+                False,
+                "unsupported",
+                f"Live verification is not available for provider '{provider}' "
+                "(its models are served through OpenRouter).",
+            )
+    except Exception as exc:  # network/DNS/timeout — honest failure, never faked
+        return (False, "error", f"Verification request failed: {exc}")
+    if 200 <= resp.status_code < 300:
+        return (True, "ok", f"{provider} responded HTTP {resp.status_code}.")
+    return (
+        False,
+        "failed",
+        f"{provider} returned HTTP {resp.status_code}: {resp.text[:150]}",
+    )
 
 
 class LLMClient:
@@ -346,31 +628,41 @@ class LLMClient:
         temperature: float,
         max_seconds: float | None = None,
     ) -> str:
-        """Single live chat-completion call with a HARD wall-clock cap.
+        """Single live call with a HARD wall-clock cap, routed by provider.
 
-        httpx read timeouts are *per-chunk*: a provider that trickles bytes
-        can keep a "30 s read timeout" call alive for minutes (observed
-        133–157 s coverLetter runs → edge 524s, defect D1). The request is
-        therefore executed in a worker thread and abandoned outright once
-        ``max_seconds`` elapses, so the caller can move on to the fallback
-        model / fixture while still inside the budget.
+        The model id resolves to EXACTLY one provider + credential source
+        (:func:`resolve_provider` / :func:`resolve_credential`). Anthropic models
+        use the native Messages API; everything else uses the OpenAI-compatible
+        OpenRouter path. A missing credential raises an honest, provider-named
+        error — the request is NEVER rerouted to the other provider (ADR-PC-2).
 
-        Provider selection (OpenAI-compatible chat completions):
-        - ``AETHER_LLM_BASE_URL`` / ``AETHER_LLM_API_KEY`` take precedence,
-          allowing e.g. Anthropic's OpenAI-compat endpoint
-          (``https://api.anthropic.com/v1``) with a Claude model id.
-        - Otherwise ``OPENROUTER_BASE_URL`` / ``OPENROUTER_API_KEY`` (default).
+        httpx read timeouts are *per-chunk*: a provider that trickles bytes can
+        keep a "30 s read timeout" call alive for minutes (observed 133–157 s
+        coverLetter runs → edge 524s, defect D1). The request is therefore
+        executed in a worker thread and abandoned outright once ``max_seconds``
+        elapses, so the caller can move on to the fallback model / fixture while
+        still inside the budget.
         """
         import httpx
 
-        active_key_var = get_active_credential_env_var()
-        api_key = os.environ.get(active_key_var) if active_key_var else None
-        base_url = (
-            os.environ.get("AETHER_LLM_BASE_URL")
-            or os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        ).rstrip("/")
-        if not api_key:
-            raise RuntimeError("No LLM API key configured for live mode")
+        model_id = model or get_model("REASONING")
+        provider = resolve_provider(model_id)
+        cred = resolve_credential(provider)
+        if cred is None:
+            raise RuntimeError(
+                f"No credential configured for provider '{provider}' "
+                f"(model '{model_id}'). Add a {provider} credential in the Agents "
+                "panel or its server env key. The request will NOT be rerouted to "
+                "another provider — billing separation is enforced."
+            )
+        if provider == "anthropic":
+            req = build_anthropic_request(
+                model_id, system, user,
+                auth_mode=cred.auth_mode, secret=cred.secret, base_url=cred.base_url,
+            )
+        else:
+            req = _build_openrouter_request(model_id, system, user, temperature, cred)
+
         connect = CONNECT_TIMEOUT
         read = READ_TIMEOUT
         if max_seconds is not None:
@@ -380,21 +672,7 @@ class LLMClient:
 
         def _do_request() -> httpx.Response:
             return httpx.post(
-                f"{base_url}/chat/completions",
-                json={
-                    "model": model or get_model("REASONING"),
-                    "temperature": temperature,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                },
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    **_extra_headers(),
-                },
-                timeout=timeout,
+                req["url"], json=req["json"], headers=req["headers"], timeout=timeout
             )
 
         if max_seconds is None:
@@ -417,6 +695,8 @@ class LLMClient:
         if resp.status_code >= 400:
             raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.json()
+        if provider == "anthropic":
+            return parse_anthropic_response(body)
         if "error" in body:
             raise RuntimeError(f"LLM provider error: {body['error']}")
         content = body["choices"][0]["message"]["content"]
