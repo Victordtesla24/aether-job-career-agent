@@ -304,6 +304,147 @@ class TestHonestErrorSurfacing:
         assert len(jobs_repo.created) == 2
 
 
+class TestFanOutTotalOutageSurfaced:
+    """GAP-SRC-002 must-fix: a fan-out adapter (Ashby/Workable) whose EVERY
+    configured board/account fetch RAISES is a total outage — it must surface a
+    per-source ERROR (status=error, lastError set), never a silent
+    status=ok fetched=0. A board that fetches OK but returns zero open roles is
+    a *genuine* zero and stays a legitimate status=ok fetched=0.
+    """
+
+    # -- adapter-level: _fetch_live raises when every board fails -------------
+
+    def test_ashby_all_boards_fail_raises_adapter_error(self, monkeypatch):
+        from app.services.discovery import ashby_adapter as mod
+        from app.services.discovery.base_adapter import AdapterFetchError
+
+        def boom(url, *args, **kwargs):  # every board 403s (keyless-provider block)
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        with pytest.raises(AdapterFetchError):
+            mod.AshbyAdapter()._fetch_live("delivery lead", "Melbourne")
+
+    def test_workable_all_accounts_fail_raises_adapter_error(self, monkeypatch):
+        from app.services.discovery import workable_adapter as mod
+        from app.services.discovery.base_adapter import AdapterFetchError
+
+        def boom(url, body, *args, **kwargs):
+            raise RuntimeError("HTTP 429 rate limited")
+
+        monkeypatch.setattr(mod, "fetch_json_post", boom)
+        with pytest.raises(AdapterFetchError):
+            mod.WorkableAdapter()._fetch_live("delivery lead", "Melbourne")
+
+    def test_ashby_boards_ok_zero_jobs_does_not_raise(self, monkeypatch):
+        """Every board fetches OK but has no open roles → normal empty result,
+        NOT an error (the scout will record status=ok fetched=0)."""
+        from app.services.discovery import ashby_adapter as mod
+
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: {"jobs": []})
+        payload = mod.AshbyAdapter()._fetch_live("delivery lead", "Melbourne")
+        assert payload["boards"], "boards that fetched OK must be retained"
+        assert all(b["jobs"] == [] for b in payload["boards"])
+
+    # -- scout-level: total outage → status=error, genuine zero → status=ok ---
+
+    def test_ashby_total_outage_scout_records_status_error(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import ashby_adapter as mod
+
+        # Reach _fetch_live (conftest points adapters at fixtures by default).
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+
+        def boom(url, *args, **kwargs):
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"ashby": mod.AshbyAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("outage-user", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        # NOT status=ok fetched=0 — a wholly-failed source is an ERROR.
+        assert by_source["ashby"]["status"] == "error"
+        assert by_source["ashby"]["error"]  # lastError populated
+        assert by_source["ashby"]["fetched"] == 0
+        assert result.errors and any("ashby" in e for e in result.errors)
+        # Persisted JobSourceStatus reflects the outage (never a healthy row).
+        assert status_repo.rows[("outage-user", "ashby")]["status"] == "error"
+        assert status_repo.rows[("outage-user", "ashby")]["error"]
+
+    def test_ashby_genuine_zero_scout_records_status_ok(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import ashby_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: {"jobs": []})
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"ashby": mod.AshbyAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("empty-user", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        # Boards fetched OK, zero jobs → legitimate status=ok fetched=0.
+        assert by_source["ashby"]["status"] == "ok"
+        assert by_source["ashby"]["error"] is None
+        assert by_source["ashby"]["fetched"] == 0
+        assert not result.errors
+        assert status_repo.rows[("empty-user", "ashby")]["status"] == "ok"
+        assert status_repo.rows[("empty-user", "ashby")]["error"] is None
+
+    def test_workable_total_outage_scout_records_status_error(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import workable_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+
+        def boom(url, body, *args, **kwargs):
+            raise RuntimeError("HTTP 429 rate limited")
+
+        monkeypatch.setattr(mod, "fetch_json_post", boom)
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"workable": mod.WorkableAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("outage-user2", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["workable"]["status"] == "error"
+        assert by_source["workable"]["error"]
+        assert by_source["workable"]["fetched"] == 0
+        assert result.errors and any("workable" in e for e in result.errors)
+        assert status_repo.rows[("outage-user2", "workable")]["status"] == "error"
+
+    def test_workable_genuine_zero_scout_records_status_ok(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import workable_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+        monkeypatch.setattr(
+            mod, "fetch_json_post", lambda url, body, *a, **k: {"results": []}
+        )
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"workable": mod.WorkableAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("empty-user2", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["workable"]["status"] == "ok"
+        assert by_source["workable"]["error"] is None
+        assert by_source["workable"]["fetched"] == 0
+        assert not result.errors
+        assert status_repo.rows[("empty-user2", "workable")]["status"] == "ok"
+
+
 class TestJobSourceStatusRepository:
     def test_upsert_then_list_roundtrip(self):
         from app.repositories.job_source_status import JobSourceStatusRepository

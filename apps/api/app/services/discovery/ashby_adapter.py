@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from app.services.discovery import portals, relevance
-from app.services.discovery.base_adapter import BaseAdapter, JobRaw
+from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
@@ -26,16 +26,29 @@ class AshbyAdapter(BaseAdapter):
     source = "ashby"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        tokens = portals.ashby_boards()
         boards: list[dict[str, Any]] = []
-        for token in portals.ashby_boards():
+        failures: list[str] = []
+        for token in tokens:
             url = f"https://api.ashbyhq.com/posting-api/job-board/{token}?includeCompensation=false"
             try:
                 payload = fetch_json(url)
             except Exception as exc:  # noqa: BLE001 — one bad board must not sink the run
                 logger.warning("ashby: board %s failed: %s", token, exc)
+                failures.append(f"{token}: {type(exc).__name__}: {exc}")
                 continue
             jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
             boards.append({"token": token, "jobs": jobs})
+        # GAP-SRC-002: if boards were configured but EVERY one failed to fetch,
+        # this is a total outage — surface it as a real per-source error rather
+        # than returning an empty-but-ok result the scout records as status=ok.
+        # A board that fetched OK but has zero open roles keeps ``boards``
+        # non-empty, so a genuine "fetched 0 jobs" stays a legitimate status=ok.
+        if tokens and not boards:
+            raise AdapterFetchError(
+                f"ashby: all {len(tokens)} configured board(s) failed: "
+                + "; ".join(failures)
+            )
         return {"boards": boards}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:

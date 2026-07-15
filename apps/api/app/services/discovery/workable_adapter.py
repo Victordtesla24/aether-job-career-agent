@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from app.services.discovery import portals, relevance
-from app.services.discovery.base_adapter import BaseAdapter, JobRaw
+from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json_post
 
 logger = logging.getLogger(__name__)
@@ -35,16 +35,28 @@ class WorkableAdapter(BaseAdapter):
             "worktype": [],
             "remote": [],
         }
+        subs = portals.workable_accounts()
         accounts: list[dict[str, Any]] = []
-        for sub in portals.workable_accounts():
+        failures: list[str] = []
+        for sub in subs:
             url = f"https://apply.workable.com/api/v3/accounts/{sub}/jobs"
             try:
                 payload = fetch_json_post(url, body)
             except Exception as exc:  # noqa: BLE001 — one bad account must not sink the run
                 logger.warning("workable: account %s failed: %s", sub, exc)
+                failures.append(f"{sub}: {type(exc).__name__}: {exc}")
                 continue
             results = payload.get("results", []) if isinstance(payload, dict) else []
             accounts.append({"sub": sub, "name": sub, "jobs": results})
+        # GAP-SRC-002: accounts configured but EVERY one failed => total outage;
+        # surface it as a real per-source error instead of an empty-but-ok
+        # result. An account that fetched OK but has zero open roles keeps
+        # ``accounts`` non-empty, so a genuine "fetched 0 jobs" stays status=ok.
+        if subs and not accounts:
+            raise AdapterFetchError(
+                f"workable: all {len(subs)} configured account(s) failed: "
+                + "; ".join(failures)
+            )
         return {"accounts": accounts}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:
