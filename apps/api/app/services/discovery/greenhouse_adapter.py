@@ -15,7 +15,7 @@ import logging
 from typing import Any
 
 from app.services.discovery import portals, relevance
-from app.services.discovery.base_adapter import BaseAdapter, JobRaw
+from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
@@ -32,15 +32,28 @@ class GreenhouseAdapter(BaseAdapter):
     source = "greenhouse"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        tokens = configured_boards()
         boards: list[dict[str, Any]] = []
-        for token in configured_boards():
+        failures: list[str] = []
+        for token in tokens:
             url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
             try:
                 payload = fetch_json(url)
             except Exception as exc:  # noqa: BLE001 — one bad board must not sink the run
                 logger.warning("greenhouse: board %s failed: %s", token, exc)
+                failures.append(f"{token}: {type(exc).__name__}: {exc}")
                 continue
             boards.append({"token": token, "jobs": payload.get("jobs", [])})
+        # GAP-SRC-002: if boards were configured but EVERY one failed to fetch,
+        # this is a total outage — surface it as a real per-source error rather
+        # than returning an empty-but-ok result the scout records as status=ok.
+        # A board that fetched OK but has zero open roles keeps ``boards``
+        # non-empty, so a genuine "fetched 0 jobs" stays a legitimate status=ok.
+        if tokens and not boards:
+            raise AdapterFetchError(
+                f"greenhouse: all {len(tokens)} configured board(s) failed: "
+                + "; ".join(failures)
+            )
         return {"boards": boards}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:

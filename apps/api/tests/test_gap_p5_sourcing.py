@@ -444,6 +444,144 @@ class TestFanOutTotalOutageSurfaced:
         assert not result.errors
         assert status_repo.rows[("empty-user2", "workable")]["status"] == "ok"
 
+    # -- greenhouse: same guard, previously unguarded --------------------------
+
+    def test_greenhouse_all_boards_fail_raises_adapter_error(self, monkeypatch):
+        from app.services.discovery import greenhouse_adapter as mod
+        from app.services.discovery.base_adapter import AdapterFetchError
+
+        def boom(url, *args, **kwargs):  # every board 403s (keyless-provider block)
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        with pytest.raises(AdapterFetchError):
+            mod.GreenhouseAdapter()._fetch_live("delivery lead", "Melbourne")
+
+    def test_greenhouse_boards_ok_zero_jobs_does_not_raise(self, monkeypatch):
+        """Every board fetches OK but has no open roles → normal empty result,
+        NOT an error (the scout will record status=ok fetched=0)."""
+        from app.services.discovery import greenhouse_adapter as mod
+
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: {"jobs": []})
+        payload = mod.GreenhouseAdapter()._fetch_live("delivery lead", "Melbourne")
+        assert payload["boards"], "boards that fetched OK must be retained"
+        assert all(b["jobs"] == [] for b in payload["boards"])
+
+    def test_greenhouse_total_outage_scout_records_status_error(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import greenhouse_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+
+        def boom(url, *args, **kwargs):
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"greenhouse": mod.GreenhouseAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("outage-user-gh", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["greenhouse"]["status"] == "error"
+        assert by_source["greenhouse"]["error"]
+        assert by_source["greenhouse"]["fetched"] == 0
+        assert result.errors and any("greenhouse" in e for e in result.errors)
+        assert status_repo.rows[("outage-user-gh", "greenhouse")]["status"] == "error"
+        assert status_repo.rows[("outage-user-gh", "greenhouse")]["error"]
+
+    def test_greenhouse_genuine_zero_scout_records_status_ok(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import greenhouse_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: {"jobs": []})
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"greenhouse": mod.GreenhouseAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("empty-user-gh", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["greenhouse"]["status"] == "ok"
+        assert by_source["greenhouse"]["error"] is None
+        assert by_source["greenhouse"]["fetched"] == 0
+        assert not result.errors
+        assert status_repo.rows[("empty-user-gh", "greenhouse")]["status"] == "ok"
+        assert status_repo.rows[("empty-user-gh", "greenhouse")]["error"] is None
+
+    # -- lever: same guard, previously unguarded -------------------------------
+
+    def test_lever_all_companies_fail_raises_adapter_error(self, monkeypatch):
+        from app.services.discovery import lever_adapter as mod
+        from app.services.discovery.base_adapter import AdapterFetchError
+
+        def boom(url, *args, **kwargs):  # every company 403s (keyless-provider block)
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        with pytest.raises(AdapterFetchError):
+            mod.LeverAdapter()._fetch_live("delivery lead", "Melbourne")
+
+    def test_lever_companies_ok_zero_jobs_does_not_raise(self, monkeypatch):
+        """Every company fetches OK but has no open postings → normal empty
+        result, NOT an error (the scout will record status=ok fetched=0)."""
+        from app.services.discovery import lever_adapter as mod
+
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: [])
+        payload = mod.LeverAdapter()._fetch_live("delivery lead", "Melbourne")
+        assert payload["companies"], "companies that fetched OK must be retained"
+        assert all(c["postings"] == [] for c in payload["companies"])
+
+    def test_lever_total_outage_scout_records_status_error(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import lever_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+
+        def boom(url, *args, **kwargs):
+            raise RuntimeError("HTTP 403 Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", boom)
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"lever": mod.LeverAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("outage-user-lv", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["lever"]["status"] == "error"
+        assert by_source["lever"]["error"]
+        assert by_source["lever"]["fetched"] == 0
+        assert result.errors and any("lever" in e for e in result.errors)
+        assert status_repo.rows[("outage-user-lv", "lever")]["status"] == "error"
+        assert status_repo.rows[("outage-user-lv", "lever")]["error"]
+
+    def test_lever_genuine_zero_scout_records_status_ok(self, monkeypatch):
+        from app.agents import scout_agent as scout_mod
+        from app.services.discovery import lever_adapter as mod
+
+        monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+        monkeypatch.setattr(mod, "fetch_json", lambda url, *a, **k: [])
+        monkeypatch.setattr(scout_mod, "ADAPTERS", {"lever": mod.LeverAdapter})
+
+        status_repo = _FakeStatusRepo()
+        result = scout_mod.ScoutAgent(
+            repository=_FakeJobRepo(), status_repository=status_repo
+        ).run("empty-user-lv", query="delivery lead", location="Melbourne")
+
+        by_source = {s["source"]: s for s in result.per_source}
+        assert by_source["lever"]["status"] == "ok"
+        assert by_source["lever"]["error"] is None
+        assert by_source["lever"]["fetched"] == 0
+        assert not result.errors
+        assert status_repo.rows[("empty-user-lv", "lever")]["status"] == "ok"
+        assert status_repo.rows[("empty-user-lv", "lever")]["error"] is None
+
 
 class TestJobSourceStatusRepository:
     def test_upsert_then_list_roundtrip(self):
