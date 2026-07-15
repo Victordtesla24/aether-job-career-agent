@@ -177,6 +177,30 @@ def _evidence_index(text: str) -> tuple[set[str], set[str]]:
     return stems, numbers
 
 
+def _metric_figures(text: str) -> list[str]:
+    """Every quantified figure (numeric literal) in ``text``, order preserved."""
+    return _NUMBER_RE.findall(_fold(text).replace(",", ""))
+
+
+def _metrics_dropped(original: str, rewrite: str) -> bool:
+    """True when ``rewrite`` strips all/most of ``original``'s quantified figures.
+
+    GAP-TAIL-001: a metric-rich bullet ("75+ hours … 40 scenarios … 11 data
+    tables") must not be replaced by generic filler ("re-engineering the
+    delivery plan"). The guard fires when the original carried figures and the
+    rewrite keeps fewer than half of that count — dropping every metric is the
+    common case, but keeping only a token figure while discarding the rest is
+    the same evidentiary loss. A rewrite that *swaps* one evidence-backed figure
+    for another (equal count) is legitimate rephrasing and passes; fabricated
+    numbers are already blocked by the strict numeric branch of the guard.
+    """
+    original_count = len(_metric_figures(original))
+    if original_count == 0:
+        return False
+    rewrite_count = len(_metric_figures(rewrite))
+    return rewrite_count * 2 < original_count
+
+
 #: Positions where a capital letter is expected (segment starts) — sentence
 #: boundaries, headers ("Governance:"), bullet markers, line starts.
 _SEGMENT_START_RE = re.compile(r"(?:^|[.:;!?•●▪&]\s*|\n\s*|-\s+)")
@@ -184,7 +208,10 @@ _SURFACE_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 def unsupported_tokens(
-    text: str, evidence_stems: set[str], evidence_numbers: set[str]
+    text: str,
+    evidence_stems: set[str],
+    evidence_numbers: set[str],
+    jd_stems: set[str] | None = None,
 ) -> list[str]:
     """Claim-bearing tokens in ``text`` with no normalized match in the evidence.
 
@@ -200,6 +227,19 @@ def unsupported_tokens(
     - **Lowercase natural language** is style, not a checkable claim — the
       guard must not forbid ordinary rewording (observed live: every tailor
       run was rejected over words like "improvement" → 0 changes shipped).
+
+    ``jd_stems`` (GAP-TAIL-001 re-fix) closes the lowercase-domain-term leak.
+    The candidate's evidence is the ONLY source of truth — the JD is never part
+    of it. But the tailoring LLM mirrors the JD's wording, so it can inject a
+    *lowercase* domain term lifted straight from the posting ("financial crime",
+    "core banking") that the pure surface-form heuristic waves through as
+    "prose". When the JD's content stems are supplied, a lowercase token that
+    (a) appears in the job description, (b) has no match in the candidate's
+    evidence, and (c) is not generic professional/style vocabulary is an
+    injected, unsupported domain claim → flagged. The JD is used here purely as
+    a RISK signal for which lowercase tokens to scrutinise; it never *supports*
+    a claim. Lowercase tokens absent from the JD stay ordinary rewording, so
+    legitimate rephrasing is untouched (backward compatible when ``None``).
     """
     folded_text = text.translate(_UNICODE_FOLD)
     segment_starts = {m.end() for m in _SEGMENT_START_RE.finditer(folded_text)}
@@ -217,13 +257,20 @@ def unsupported_tokens(
                 continue
             novel.append(tok)
             continue
+        if tok in evidence_stems or _stem(tok) in evidence_stems:
+            continue  # supported by the candidate's own evidence
+        if tok in _GENERIC_PROFESSIONAL or _stem(tok) in _GENERIC_STEMS:
+            continue  # generic professional/style vocabulary — no claim
         capitalized_mid_segment = surface[0].isupper() and match.start() not in segment_starts
         has_inner_uppercase = surface[1:] != surface[1:].lower()
         if not capitalized_mid_segment and not has_inner_uppercase:
-            continue  # lowercase prose — style, not a claim
-        if tok in evidence_stems or _stem(tok) in evidence_stems:
-            continue
-        if tok in _GENERIC_PROFESSIONAL or _stem(tok) in _GENERIC_STEMS:
+            # Lowercase prose is ordinary rewording — NOT a checkable claim,
+            # EXCEPT a JD-sourced domain term the candidate's evidence never
+            # proves (GAP-TAIL-001). A lowercase JD keyword unsupported by the
+            # candidate corpus is an injected domain claim; everything else is
+            # style and passes untouched.
+            if jd_stems is not None and (tok in jd_stems or _stem(tok) in jd_stems):
+                novel.append(tok)
             continue
         novel.append(tok)
     return novel
@@ -526,12 +573,20 @@ class ResumeTailorService:
         job_description: str = "",
         evidence_extra: str = "",
     ) -> TailorResult:
+        # The anti-fabrication evidence corpus is the candidate's evidence ONLY
+        # (resume raw_text + consolidated career data). The job description is
+        # NEVER folded in here — it is the target to mirror, not proof of truth
+        # (GAP-TAIL-001). A rewrite token unsupported by this corpus is rejected
+        # even when it appears in the JD.
         evidence_source = (
             f"{resume_text}\n{evidence_extra}" if evidence_extra else resume_text
         )
         evidence_stems, evidence_numbers = _evidence_index(evidence_source)
         jd_ngrams = jd_ngram_index(job_description)
         evidence_ngrams = _ngram_set(_content_stems(evidence_source), _JD_ECHO_NGRAM)
+        #: JD content stems — a RISK signal (not evidence) that lets the guard
+        #: catch lowercase domain terms the LLM lifts from the posting.
+        jd_stems, _ = _evidence_index(job_description)
         #: JD keyword tokens (same tokenizer the ATS engine scores with) so a
         #: rewrite can be measured against the original for keyword coverage.
         jd_terms = set(_ats_content_tokens(job_description))
@@ -551,14 +606,17 @@ class ResumeTailorService:
                 result.rejected.append(text)
                 continue
             original = by_ref[ref]
-            if unsupported_tokens(text, evidence_stems, evidence_numbers):
-                # Fabrication guard (D-0015): a content token with no
-                # normalized evidence match → keep the original bullet.
+            if unsupported_tokens(text, evidence_stems, evidence_numbers, jd_stems):
+                # Fabrication guard (D-0015 / GAP-TAIL-001): a content token with
+                # no evidence match — including a lowercase domain term lifted
+                # from the JD ("financial crime", "core banking") — keeps the
+                # original bullet.
                 result.rejected.append(text)
                 text = original
-            elif _NUMBER_RE.search(original) and not _NUMBER_RE.search(text):
-                # Quantified-outcome guard: a rewrite that drops every metric
-                # from a quantified bullet weakens the resume — keep original.
+            elif _metrics_dropped(original, text):
+                # Quantified-outcome guard (GAP-TAIL-001): a rewrite that drops
+                # all/most of a quantified bullet's figures replaces evidence
+                # with generic filler — keep the metric-rich original.
                 result.rejected.append(text)
                 text = original
             elif jd_echoed_phrases(text, jd_ngrams, evidence_ngrams, evidence_stems):
