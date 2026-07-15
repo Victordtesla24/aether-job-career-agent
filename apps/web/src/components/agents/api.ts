@@ -225,22 +225,6 @@ export async function verifyUserCredential(
   );
 }
 
-/** The Anthropic subscription OAuth consent URL (GAP-D1). */
-export const OAuthStartSchema = z.object({
-  authorizeUrl: z.string(),
-  state: z.string(),
-});
-export type OAuthStart = z.infer<typeof OAuthStartSchema>;
-
-/**
- * Begin the Anthropic subscription OAuth flow: GET /agents/auth/anthropic/start.
- * Returns the claude.ai consent URL to redirect the user to. Throws when the
- * server has not configured OAuth (honest 501 — never a fabricated URL).
- */
-export async function startAnthropicOAuth(o: RequestOptions = {}): Promise<OAuthStart> {
-  return OAuthStartSchema.parse(await apiRequest<unknown>("/agents/auth/anthropic/start", o));
-}
-
 export async function updateProvider(
   id: string,
   patch: { status?: "connected" | "warning" | "unconfigured"; model?: string },

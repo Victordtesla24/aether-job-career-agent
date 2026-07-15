@@ -40,7 +40,7 @@ import { ApiError } from "../../lib/api/client";
 const anthropic: Provider = {
   id: "anthropic",
   name: "Anthropic Claude",
-  auth: "Subscription / API Key",
+  auth: "API Key",
   status: "unconfigured",
   model: "",
   detail: "Not configured",
@@ -78,7 +78,7 @@ describe("ProviderConfigModal", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("renders BOTH Anthropic auth modes (subscription token + API key)", () => {
+  it("Anthropic offers API key only — no subscription OAuth (GAP-AUTH-001)", () => {
     render(
       <ProviderConfigModal
         provider={anthropic}
@@ -87,8 +87,12 @@ describe("ProviderConfigModal", () => {
         onNotice={vi.fn()}
       />,
     );
-    expect(screen.getByRole("radio", { name: /claude subscription/i })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: /api key/i })).toBeTruthy();
+    // Consumer subscription OAuth is removed: no subscription radio, no connect
+    // button, and the API-key input is the sole credential entry.
+    expect(screen.queryByRole("radio", { name: /claude subscription/i })).toBeNull();
+    expect(screen.queryByTestId("authmode-subscription_oauth")).toBeNull();
+    expect(screen.queryByTestId("anthropic-oauth-connect")).toBeNull();
+    expect(screen.getByTestId("provider-secret-input")).toBeTruthy();
     // Billing implication must be legible: Anthropic bills to Anthropic, and
     // the crossover to OpenRouter for other models is stated.
     expect(screen.getByTestId("provider-config-billing").textContent).toMatch(/anthropic/i);
@@ -128,8 +132,7 @@ describe("ProviderConfigModal", () => {
       />,
     );
 
-    // Choose the API-key mode, then paste a key.
-    fireEvent.click(screen.getByRole("radio", { name: /api key/i }));
+    // API key is the only Anthropic mode now — just paste the key.
     fireEvent.change(screen.getByTestId("provider-secret-input"), {
       target: { value: "sk-ant-api-abc123" },
     });

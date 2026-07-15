@@ -194,12 +194,11 @@ class TestNoCrossProviderFallback:
 
 
 class TestAnthropicTransport:
-    def test_oauth_uses_bearer_plus_beta(self):
-        headers = anthropic_auth_headers("subscription_oauth", "sk-ant-oat-token")
-        assert headers["Authorization"] == "Bearer sk-ant-oat-token"
-        assert headers["anthropic-beta"] == "oauth-2025-04-20"
-        assert headers["anthropic-version"] == "2023-06-01"
-        assert "x-api-key" not in headers
+    def test_subscription_oauth_mode_is_rejected(self):
+        # Consumer subscription OAuth transport was removed (GAP-AUTH-001):
+        # x-api-key is the ONLY supported Anthropic auth, so this is a hard error.
+        with pytest.raises(RuntimeError):
+            anthropic_auth_headers("subscription_oauth", "sk-ant-oat-token")
 
     def test_api_key_uses_x_api_key_no_bearer(self):
         headers = anthropic_auth_headers("api_key", "sk-ant-api-key")
@@ -323,17 +322,18 @@ class TestCredentialEndpoints:
         )
         assert bad2.status_code == 422, bad2.text
 
-    def test_oauth_credential_reports_subscription_authmode(
+    def test_anthropic_subscription_oauth_write_is_rejected(
         self, client, auth_headers, monkeypatch, _clean_provider_credentials
     ):
+        # GAP-AUTH-001: saving an Anthropic subscription_oauth credential is no
+        # longer allowed — the write-path rejects it (422), never stores it.
         monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
         put = client.put(
             "/agents/providers/anthropic/credential",
             json={"authMode": "subscription_oauth", "secret": "sk-ant-oat-abcd1234"},
             headers=auth_headers,
         )
-        assert put.status_code == 200, put.text
-        assert put.json()["authMode"] == "subscription_oauth"
+        assert put.status_code == 422, put.text
 
     def test_delete_credential_falls_back_to_env_source(
         self, client, auth_headers, monkeypatch, _clean_provider_credentials

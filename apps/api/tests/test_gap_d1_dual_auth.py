@@ -1,15 +1,19 @@
-"""GAP-D1 / GAP-E5 / GAP-NEW-001 — per-user credentials, dual-auth Anthropic
-(API key vs subscription OAuth), PKCE flow, per-user resolution precedence,
-no cross-provider billing, and subscription quota exhaustion.
+"""GAP-D1 / GAP-E5 / GAP-NEW-001 — per-user encrypted credentials, native
+Anthropic API-key auth, per-user resolution precedence, and no cross-provider
+billing.
 
-Outbound HTTP (the Anthropic token exchange and the live Messages call) is
-mocked — these tests never touch the network. DB-backed tests use the shared
-``client`` / ``auth_headers`` / ``test_user_id`` fixtures.
+Consumer Anthropic subscription OAuth was REMOVED for compliance
+(GAP-AUTH-001) — its endpoint/header/quota-recording tests moved out and the
+compliance contract now lives in ``test_gap_p5_auth_compliance.py``. The
+retained (but unused) ``AnthropicOAuthState`` table is still exercised here to
+prove the additive, backward-compatible schema keeps working.
+
+Outbound HTTP (the live Messages call) is mocked — these tests never touch the
+network. DB-backed tests use the shared ``client`` / ``auth_headers`` /
+``test_user_id`` fixtures.
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -19,7 +23,6 @@ from app.repositories.user_provider_credential import (
     AnthropicOAuthStateRepository,
     UserProviderCredentialRepository,
 )
-from app.services import anthropic_oauth
 from app.services import credential_vault as vault
 from app.services.llm_client import (
     LLMClient,
@@ -41,11 +44,11 @@ def _vault_key(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_subscription_header_uses_bearer_not_x_api_key():
-    h = anthropic_auth_headers("subscription_oauth", "sk-ant-oat-token")
-    assert h["Authorization"] == "Bearer sk-ant-oat-token"
-    assert h["anthropic-beta"] == "oauth-2025-04-20"
-    assert "x-api-key" not in h
+def test_subscription_oauth_header_is_rejected():
+    # Subscription OAuth transport was removed (GAP-AUTH-001): the only
+    # supported Anthropic auth is x-api-key, so any other mode is a hard error.
+    with pytest.raises(RuntimeError):
+        anthropic_auth_headers("subscription_oauth", "sk-ant-oat-token")
 
 
 def test_api_key_header_uses_x_api_key_not_bearer():
@@ -56,39 +59,11 @@ def test_api_key_header_uses_x_api_key_not_bearer():
 
 
 # ---------------------------------------------------------------------------
-# 2. PKCE + signed state (pure)
-# ---------------------------------------------------------------------------
-
-
-def test_pkce_challenge_is_s256_of_verifier():
-    verifier, challenge = anthropic_oauth.generate_pkce()
-    expected = (
-        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
-        .decode()
-        .rstrip("=")
-    )
-    assert challenge == expected
-    assert 43 <= len(verifier) <= 128
-
-
-def test_state_sign_and_verify_roundtrip():
-    token = anthropic_oauth.sign_state("user-123")
-    assert anthropic_oauth.verify_state(token) == "user-123"
-
-
-def test_verify_state_rejects_tampered_token():
-    import jwt
-
-    with pytest.raises(jwt.PyJWTError):
-        anthropic_oauth.verify_state("not-a-jwt")
-
-
-# ---------------------------------------------------------------------------
 # 3. Per-user credential storage (encrypted, masked)
 # ---------------------------------------------------------------------------
 
 
-def test_upsert_user_credential_api_key_and_subscription(
+def test_upsert_user_credential_api_key_encrypts_and_masks(
     client, auth_headers, test_user_id
 ):
     repo = UserProviderCredentialRepository()
@@ -101,12 +76,20 @@ def test_upsert_user_credential_api_key_and_subscription(
     assert "secret1234" not in str(row)  # ciphertext/hint only, never plaintext
     assert repo.get_secret(test_user_id, "anthropic")["secret"] == "sk-ant-api-secret1234"
 
-    # Rotating to a subscription token replaces authMode + secret in place.
-    row2 = repo.upsert(
+
+def test_repo_retains_legacy_subscription_oauth_check(
+    client, auth_headers, test_user_id
+):
+    # GAP-AUTH-001: the write-path (router) rejects new subscription_oauth creds
+    # and resolution never uses them, but the storage CHECK is deliberately left
+    # relaxed (additive, backward-compatible) so a PRE-EXISTING legacy row still
+    # loads without a constraint error. This locks that retention in.
+    repo = UserProviderCredentialRepository()
+    row = repo.upsert(
         test_user_id, "anthropic", auth_mode="subscription_oauth",
         secret="sk-ant-oat-token9999",
     )
-    assert row2["authMode"] == "subscription_oauth"
+    assert row["authMode"] == "subscription_oauth"
     got = repo.get_secret(test_user_id, "anthropic")
     assert got["authMode"] == "subscription_oauth"
     assert got["secret"] == "sk-ant-oat-token9999"
@@ -212,71 +195,9 @@ def test_no_cross_provider_billing_for_user(
 
 
 # ---------------------------------------------------------------------------
-# 6. Anthropic OAuth endpoints (start / callback) — token exchange mocked
-# ---------------------------------------------------------------------------
-
-
-def test_oauth_start_501_when_not_configured(client, auth_headers, monkeypatch):
-    monkeypatch.delenv("AETHER_ANTHROPIC_OAUTH_CLIENT_ID", raising=False)
-    r = client.get("/agents/auth/anthropic/start", headers=auth_headers)
-    assert r.status_code == 501
-    assert r.json()["detail"]["error"] == "not_configured"
-
-
-def test_oauth_start_returns_authorize_url(client, auth_headers, monkeypatch):
-    monkeypatch.setenv("AETHER_ANTHROPIC_OAUTH_CLIENT_ID", "test-client-id")
-    r = client.get("/agents/auth/anthropic/start", headers=auth_headers)
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["authorizeUrl"].startswith("https://claude.ai/oauth/authorize")
-    assert "code_challenge=" in body["authorizeUrl"]
-    assert "code_challenge_method=S256" in body["authorizeUrl"]
-    assert "state=" in body["authorizeUrl"]
-
-
-def test_oauth_callback_exchanges_stores_and_masks(
-    client, auth_headers, test_user_id, monkeypatch
-):
-    monkeypatch.setenv("AETHER_ANTHROPIC_OAUTH_CLIENT_ID", "test-client-id")
-    start = client.get("/agents/auth/anthropic/start", headers=auth_headers).json()
-    state = start["state"]
-
-    monkeypatch.setattr(
-        anthropic_oauth, "_post_token",
-        lambda data, timeout=15.0: {
-            "access_token": "sk-ant-oat-SECRET7777",
-            "refresh_token": "sk-ant-ort-REFRESH",
-            "expires_in": 3600,
-            "scope": "user:inference",
-        },
-    )
-    r = client.get(
-        "/agents/auth/anthropic/callback",
-        params={"code": "auth-code-xyz", "state": state}, headers=auth_headers,
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["authMode"] == "subscription_oauth"
-    assert body["hint"].endswith("7777")
-    # The token itself is NEVER returned to the client.
-    assert "SECRET7777" not in str(body)
-
-    # It is now the user's resolvable subscription credential.
-    res = resolve_user_credential("anthropic", test_user_id)
-    assert res is not None and res.auth_mode == "subscription_oauth"
-
-
-def test_oauth_callback_rejects_bad_state(client, auth_headers, monkeypatch):
-    monkeypatch.setenv("AETHER_ANTHROPIC_OAUTH_CLIENT_ID", "test-client-id")
-    r = client.get(
-        "/agents/auth/anthropic/callback",
-        params={"code": "c", "state": "forged-state"}, headers=auth_headers,
-    )
-    assert r.status_code == 400
-
-
-# ---------------------------------------------------------------------------
-# 7. Subscription quota exhaustion (429) — no silent reroute
+# 6. Quota cooldown — a pre-existing block still short-circuits a live call
+#    honestly (backward-compat; new blocks are no longer recorded now that
+#    consumer subscription billing is removed — GAP-AUTH-001).
 # ---------------------------------------------------------------------------
 
 
@@ -290,30 +211,3 @@ def test_active_quota_block_prevents_live_call(client, auth_headers, test_user_i
     with user_credential_context(test_user_id, "resumeTailoring"):
         with pytest.raises(QuotaExhaustedError):
             llm._call_live("sys", "user", model="claude-haiku-4-5", temperature=0.0)
-
-
-def test_anthropic_429_records_quota_block(
-    client, auth_headers, test_user_id, monkeypatch
-):
-    import httpx
-
-    UserProviderCredentialRepository().upsert(
-        test_user_id, "anthropic", auth_mode="subscription_oauth",
-        secret="sk-ant-oat-sub12345",
-    )
-
-    class _FakeResp:
-        status_code = 429
-        text = '{"type":"error","error":{"type":"rate_limit_error","message":"quota"}}'
-
-        def json(self):  # pragma: no cover - not reached on 429 path
-            return {}
-
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResp())
-    llm = LLMClient(mode="live")
-    with user_credential_context(test_user_id, None):
-        with pytest.raises(QuotaExhaustedError):
-            llm._call_live("s", "u", model="claude-haiku-4-5", temperature=0.0)
-    assert (
-        AgentQuotaBlockRepository().get_active(test_user_id, "anthropic") is not None
-    )
