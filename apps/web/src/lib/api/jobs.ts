@@ -44,6 +44,18 @@ export const JobSchema = z.object({
 export type Job = z.infer<typeof JobSchema>;
 export type JobStatus = z.infer<typeof JobStatusSchema>;
 
+/** Per-source discovery sync status row (GAP-SRC-003), from the JobSourceStatus table. */
+export const ScoutSourceStatusSchema = z.object({
+  source: z.string().min(1),
+  lastSyncAt: z.string().nullish(),
+  lastFetched: z.number(),
+  lastPersisted: z.number(),
+  lastError: z.string().nullish(),
+  status: z.string().min(1),
+});
+
+export type ScoutSourceStatus = z.infer<typeof ScoutSourceStatusSchema>;
+
 export interface JobFilters {
   status?: JobStatus;
   source?: string;
@@ -127,4 +139,12 @@ export async function runScoutAgent(
     method: "POST",
     body: JSON.stringify({ query, location }),
   });
+}
+
+/** Per-source discovery sync status — counts, last sync time, ok/error/skipped. */
+export async function fetchScoutSources(
+  options: RequestOptions,
+): Promise<ScoutSourceStatus[]> {
+  const body = await request("/agents/scout/sources", options);
+  return z.array(ScoutSourceStatusSchema).parse(body);
 }

@@ -20,8 +20,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiRequest } from "../../../lib/api/client";
-import type { Job } from "../../../lib/api/jobs";
+import type { Job, ScoutSourceStatus } from "../../../lib/api/jobs";
 import MetricTooltip from "../../../components/MetricTooltip";
+import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
 
 // ---------------------------------------------------------------------------
 // Types (insights payload from GET /jobs/{id}/insights)
@@ -331,6 +332,22 @@ export default function JobsPage() {
       .catch(() => setLastSync(null));
   }, []);
 
+  // Per-source sync status (GAP-SRC-003): honest ok/error/skipped per board,
+  // independent of whether that source currently has any discovered jobs.
+  const [scoutSources, setScoutSources] = useState<ScoutSourceStatus[] | null>(null);
+  const loadSourceStatus = useCallback(async () => {
+    try {
+      const data = await apiRequest<ScoutSourceStatus[]>("/agents/scout/sources");
+      setScoutSources(data);
+    } catch {
+      // Sync status is enhancement-only; the rest of the page still works.
+      setScoutSources((prev) => prev ?? []);
+    }
+  }, []);
+  useEffect(() => {
+    void loadSourceStatus();
+  }, [loadSourceStatus]);
+
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   const selectedInsights = selected ? insights[selected.id] : undefined;
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
@@ -345,7 +362,7 @@ export default function JobsPage() {
       });
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       setInsights({});
-      await load();
+      await Promise.all([load(), loadSourceStatus()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Discovery run failed");
     } finally {
@@ -555,6 +572,63 @@ export default function JobsPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      {/* Per-source sync status (GAP-SRC-003) — ok/error/skipped per board,
+          independent of whether that source has any discovered jobs. */}
+      <section data-testid="source-status-panel" aria-label="Per-source sync status">
+        <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+          Sync Status
+        </span>
+        {scoutSources === null ? (
+          <div className="flex gap-2 overflow-x-auto pb-1" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="glass h-11 w-48 shrink-0 animate-pulse rounded-lg border border-white/10" />
+            ))}
+          </div>
+        ) : scoutSources.length === 0 ? (
+          <p className="text-[11px] text-aether-muted-dim">Sync status unavailable — run Sync Now to populate it.</p>
+        ) : (
+          <div className="flex flex-wrap items-stretch gap-2" data-testid="source-status-list">
+            {sourceStatusView(scoutSources).map((s) => (
+              <div
+                key={s.source}
+                data-testid="source-status-chip"
+                className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-[11px] ${
+                  s.badge === "error"
+                    ? "border-red-500/30 bg-red-500/10"
+                    : s.badge === "ok"
+                      ? "border-aether-green/20 bg-aether-green/[0.06]"
+                      : "border-white/10 bg-white/5"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    s.badge === "error" ? "bg-red-400" : s.badge === "ok" ? "bg-aether-green" : "bg-aether-muted-dim"
+                  }`}
+                />
+                <span className="shrink-0 font-semibold">{SOURCE_LABEL[s.source] ?? s.source}</span>
+                <span
+                  data-testid="source-status-badge"
+                  className={s.badge === "error" ? "text-red-300" : s.badge === "ok" ? "text-aether-green" : "text-aether-muted-dim"}
+                >
+                  {s.badgeLabel}
+                </span>
+                <span className="shrink-0 text-aether-muted-dim">· {s.lastSyncLabel}</span>
+                {s.errorText ? (
+                  <span
+                    data-testid="source-status-error"
+                    title={s.errorText}
+                    className="max-w-[220px] truncate text-red-300/90"
+                  >
+                    — {s.errorText}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Filters (jd04–jd08, jd29) */}
