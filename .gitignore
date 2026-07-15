@@ -48,3 +48,6 @@ Thumbs.db
 # Auto-generated previews for design docs (do not commit)
 design/*.pdf
 design/*.docx
+
+# Production remediation evidence (on-disk artifacts, not versioned)
+evidence/
