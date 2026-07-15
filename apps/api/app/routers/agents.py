@@ -20,12 +20,24 @@ from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.provider_credential import ProviderCredentialRepository
-from app.services import credential_vault
+from app.repositories.user_provider_credential import (
+    AgentQuotaBlockRepository,
+    AnthropicOAuthStateRepository,
+    UserProviderCredentialRepository,
+    _ensure_user_agent_tables,
+)
+from app.services import anthropic_oauth, credential_vault
 from app.services.llm_client import (
     LLMUnavailableError,
+    QuotaExhaustedError,
     _infer_anthropic_auth_mode,
     get_active_credential_env_var,
+    get_quota_block_hours,
+    resolve_provider,
+    resolve_user_credential,
+    user_credential_context,
     verify_provider_credential,
+    verify_user_credential,
 )
 
 router = APIRouter()
@@ -335,6 +347,26 @@ def _ensure_agents_tables() -> None:
                 )
                 '''
             )
+            # Per-user credential/config columns (GAP-D3) live with the table
+            # they extend so they are always present whenever AgentConfig is
+            # (re)created — even if the credential-tables guard is already set.
+            cur.execute(
+                'ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS "credentialRef" text'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS "provider" text'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS "authMode" text'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS '
+                '"temperature" double precision DEFAULT 0.7'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS '
+                '"thinkingEffort" text DEFAULT \'medium\''
+            )
         conn.commit()
     _tables_ready = True
 
@@ -345,18 +377,117 @@ def _to_output(result: Any) -> dict[str, Any]:
     return dict(result) if isinstance(result, dict) else {"result": str(result)}
 
 
+def _persist_billing_audit(
+    runs: AgentRunRepository, run_id: str, audit: dict[str, Any]
+) -> None:
+    """Best-effort write of the billing audit to AgentRun (never fails a run)."""
+    try:
+        _ensure_user_agent_tables()
+        runs.set_billing_audit(run_id, audit)
+    except Exception:  # noqa: BLE001 — audit is additive; a run stays valid
+        pass
+
+
+def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str | None]:
+    """Resolve the billing provenance for a run (GAP-D3) without side effects.
+
+    Returns ``(audit, provider)``. Deterministic (non-LLM) agents have no
+    provider and record ``{'quotaPath': 'none'}``. For LLM agents the audit
+    names the credential source, authMode and provider, and derives the
+    ``quotaPath`` — ``subscription`` for a Claude subscription-OAuth token,
+    ``metered_api`` for an API key.
+    """
+    model = _model_for_agent(agent_name)
+    if model is None:
+        return {"quotaPath": "none"}, None
+    provider = resolve_provider(model)
+    try:
+        cred = resolve_user_credential(provider, user_id, agent_name)
+    except Exception:  # noqa: BLE001 — audit must never break a run
+        cred = None
+    if cred is None:
+        return (
+            {"credentialSource": "none", "authMode": None,
+             "provider": provider, "quotaPath": "none"},
+            provider,
+        )
+    quota_path = "subscription" if cred.auth_mode == "subscription_oauth" else "metered_api"
+    return (
+        {"credentialSource": cred.source, "authMode": cred.auth_mode,
+         "provider": provider, "quotaPath": quota_path},
+        provider,
+    )
+
+
+def _quota_429(provider: str, expires_at: Any) -> HTTPException:
+    """Build the honest 429 raised when a subscription's quota is exhausted."""
+    from datetime import datetime, timezone
+
+    retry_after = int(get_quota_block_hours() * 3600)
+    if expires_at is not None:
+        try:
+            exp = expires_at
+            if getattr(exp, "tzinfo", None) is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            retry_after = max(1, int((exp - datetime.now(timezone.utc)).total_seconds()))
+        except (TypeError, ValueError):
+            pass
+    return HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "error": "subscription_quota_exceeded",
+            "message": (
+                f"Your {provider} subscription quota is exhausted. Runs are paused "
+                "until it resets."
+            ),
+            "retryAfter": retry_after,
+            "suggestion": "Switch this agent to API-key billing in Agent Settings.",
+        },
+    )
+
+
 def _record_run(
     user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
 ) -> dict[str, Any]:
-    """Execute ``fn`` under an AgentRun audit record."""
+    """Execute ``fn`` under an AgentRun audit record.
+
+    The run is executed inside a ``user_credential_context`` so the deep LLM
+    call path resolves THIS user's credential (GAP-E5). Billing provenance is
+    recorded to ``AgentRun.billingAuditJson`` (GAP-D3), and a prior
+    subscription-quota block short-circuits the run with an honest 429 (never a
+    silent reroute to another payer).
+    """
     runs = AgentRunRepository()
+    audit, provider = _billing_audit(user_id, agent_name)
+    # Quota cooldown check BEFORE starting a run row — a blocked user gets a
+    # clean 429 with no wasted audit record.
+    if provider is not None:
+        try:
+            block = AgentQuotaBlockRepository().get_active(user_id, provider)
+        except Exception:  # noqa: BLE001 — block store down → allow the run
+            block = None
+        if block is not None:
+            raise _quota_429(provider, block.get("expiresAt"))
     run = runs.start(user_id, agent_name, params)
+    _persist_billing_audit(runs, run["id"], audit)
     started = time.monotonic()
     try:
-        output = _to_output(fn())
+        with user_credential_context(user_id, agent_name):
+            output = _to_output(fn())
     except HTTPException:
         runs.finish(run["id"], "failed", error="http error")
         raise
+    except QuotaExhaustedError as exc:
+        # Subscription quota exhausted mid-run — record honestly and 429.
+        runs.finish(run["id"], "failed", error=str(exc))
+        expires_at = exc.expires_at
+        if expires_at is None:
+            try:
+                blk = AgentQuotaBlockRepository().get_active(user_id, exc.provider)
+                expires_at = blk.get("expiresAt") if blk else None
+            except Exception:  # noqa: BLE001
+                expires_at = None
+        raise _quota_429(exc.provider, expires_at) from exc
     except LLMUnavailableError as exc:
         # Live LLM failed and no fixture fallback exists — clean 503, never 500.
         runs.finish(run["id"], "failed", error=str(exc))
@@ -369,6 +500,7 @@ def _record_run(
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
     output["approvalRequired"] = agent_name in _APPROVAL_GATED
+    output["billingAudit"] = audit
     # Real cost estimate from the run's *measured* I/O size × the published
     # per-token price of the model the agent ACTUALLY ran on (≈4 chars/token).
     # Deterministic agents (scout/fitScorer/matcher/supervisor) make no LLM
@@ -730,16 +862,57 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def _config_map(user_id: str) -> dict[str, dict[str, Any]]:
+#: Full per-agent config projection (extended columns added by the lazy DDL).
+_AGENT_CONFIG_COLS = (
+    '"agentKey", "enabled", "model", "provider", "authMode", "credentialRef", '
+    '"temperature", "thinkingEffort"'
+)
+
+
+def _ensure_agent_config_schema() -> None:
+    """Ensure the AgentConfig table AND its per-user credential columns exist."""
     _ensure_agents_tables()
+    _ensure_user_agent_tables()
+
+
+def _config_map(user_id: str) -> dict[str, dict[str, Any]]:
+    _ensure_agent_config_schema()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "agentKey", "enabled", "model" FROM "AgentConfig" WHERE "userId" = %s',
+                f'SELECT {_AGENT_CONFIG_COLS} FROM "AgentConfig" WHERE "userId" = %s',
                 (user_id,),
             )
             rows = rows_to_dicts(cur)
     return {r["agentKey"]: r for r in rows}
+
+
+def _config_defaults(agent_key: str) -> dict[str, Any]:
+    """The default config for an agent with no persisted row."""
+    entry = _CATALOG_BY_KEY[agent_key]
+    return {
+        "key": agent_key,
+        "agentKey": agent_key,
+        "enabled": True,
+        "model": entry["recommended"],
+        "provider": None,
+        "authMode": None,
+        "credentialRef": None,
+        "temperature": 0.7,
+        "thinkingEffort": "medium",
+    }
+
+
+def _config_response(agent_key: str, row: dict[str, Any] | None) -> dict[str, Any]:
+    """Merge a persisted row over the agent defaults for GET/PUT responses."""
+    out = _config_defaults(agent_key)
+    if row:
+        for k in ("enabled", "model", "provider", "authMode", "credentialRef",
+                  "temperature", "thinkingEffort"):
+            if row.get(k) is not None:
+                out[k] = row[k]
+    out["key"] = agent_key
+    return out
 
 
 @router.get("/catalog")
@@ -811,43 +984,114 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
 class AgentConfigUpdate(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, min_length=1)
+    provider: str | None = None
+    authMode: str | None = Field(default=None, pattern="^(api_key|subscription_oauth)$")
+    #: Empty string clears the pinned credential; a non-empty value must
+    #: reference one of the caller's own stored credentials (validated below).
+    credentialRef: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    thinkingEffort: str | None = Field(default=None, pattern="^(none|low|medium|high)$")
+
+
+#: Deterministic (non-LLM) agents — their config panel disables temperature.
+_DETERMINISTIC_BACKENDS = frozenset(
+    {"scout", "fitScorer", "matcher", "supervisor"}
+)
+
+
+@router.get("/config")
+def list_agent_config(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """Full per-agent config for every catalog agent (persisted values merged)."""
+    cfg = _config_map(current_user["id"])
+    return [_config_response(a["key"], cfg.get(a["key"])) for a in AGENT_CATALOG]
+
+
+@router.get("/config/{agent_key}")
+def get_agent_config(agent_key: str, current_user: CurrentUser) -> dict[str, Any]:
+    """One agent's persisted config merged over defaults (was 405 — GAP-D3)."""
+    if agent_key not in _CATALOG_BY_KEY:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{agent_key}'")
+    cfg = _config_map(current_user["id"])
+    return _config_response(agent_key, cfg.get(agent_key))
 
 
 @router.put("/config/{agent_key}")
 def update_agent_config(
     agent_key: str, body: AgentConfigUpdate, current_user: CurrentUser
 ) -> dict[str, Any]:
-    """Enable/disable an agent or reassign its model (persisted)."""
+    """Persist ALL per-agent settings (partial update merges over existing).
+
+    Fields: enabled, model, provider, authMode, credentialRef, temperature
+    (0.0–2.0; out of range → 422), thinkingEffort (none|low|medium|high). A
+    non-empty ``credentialRef`` must reference one of the caller's own stored
+    credentials — a dangling ref is rejected 422 rather than silently pinned.
+    """
     if agent_key not in _CATALOG_BY_KEY:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{agent_key}'")
     entry = _CATALOG_BY_KEY[agent_key]
-    _ensure_agents_tables()
+    user_id = current_user["id"]
+    _ensure_agent_config_schema()
+
+    # Validate a non-empty credentialRef belongs to THIS user (never cross-user).
+    cred_ref_update = body.credentialRef
+    if cred_ref_update:
+        owned = {c["id"] for c in UserProviderCredentialRepository().list_masked(user_id)}
+        if cred_ref_update not in owned:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "credentialRef does not reference one of your stored credentials.",
+            )
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "enabled", "model" FROM "AgentConfig" '
+                f'SELECT {_AGENT_CONFIG_COLS} FROM "AgentConfig" '
                 'WHERE "userId" = %s AND "agentKey" = %s',
-                (current_user["id"], agent_key),
+                (user_id, agent_key),
             )
             existing = rows_to_dicts(cur)
-            cur_enabled = existing[0]["enabled"] if existing else True
-            cur_model = existing[0]["model"] if existing else entry["recommended"]
-            enabled = cur_enabled if body.enabled is None else body.enabled
-            model = cur_model if body.model is None else body.model
+            row0 = existing[0] if existing else {}
+            enabled = row0.get("enabled", True) if body.enabled is None else body.enabled
+            model = (
+                (row0.get("model") if existing else entry["recommended"])
+                if body.model is None else body.model
+            )
+            provider = row0.get("provider") if body.provider is None else body.provider
+            auth_mode = row0.get("authMode") if body.authMode is None else body.authMode
+            if body.credentialRef is None:
+                credential_ref = row0.get("credentialRef")
+            else:
+                credential_ref = cred_ref_update or None  # "" clears the pin
+            temperature = (
+                (row0.get("temperature") if existing else 0.7)
+                if body.temperature is None else body.temperature
+            )
+            thinking = (
+                (row0.get("thinkingEffort") if existing else "medium")
+                if body.thinkingEffort is None else body.thinkingEffort
+            )
             cur.execute(
-                '''
-                INSERT INTO "AgentConfig" ("userId", "agentKey", "enabled", "model", "updatedAt")
-                VALUES (%s, %s, %s, %s, NOW())
+                f'''
+                INSERT INTO "AgentConfig" ("userId", "agentKey", "enabled", "model",
+                    "provider", "authMode", "credentialRef", "temperature",
+                    "thinkingEffort", "updatedAt")
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT ("userId", "agentKey")
                 DO UPDATE SET "enabled" = EXCLUDED."enabled", "model" = EXCLUDED."model",
+                              "provider" = EXCLUDED."provider",
+                              "authMode" = EXCLUDED."authMode",
+                              "credentialRef" = EXCLUDED."credentialRef",
+                              "temperature" = EXCLUDED."temperature",
+                              "thinkingEffort" = EXCLUDED."thinkingEffort",
                               "updatedAt" = NOW()
-                RETURNING "agentKey", "enabled", "model"
+                RETURNING {_AGENT_CONFIG_COLS}
                 ''',
-                (current_user["id"], agent_key, enabled, model),
+                (user_id, agent_key, enabled, model, provider, auth_mode,
+                 credential_ref, temperature, thinking),
             )
             row = rows_to_dicts(cur)[0]
         conn.commit()
-    return {"key": row["agentKey"], "enabled": row["enabled"], "model": row["model"]}
+    return _config_response(agent_key, row)
 
 
 #: The provider ids that support stored (encrypted-vault) credentials — exactly
@@ -1160,6 +1404,188 @@ def verify_provider(provider: str, current_user: CurrentUser) -> dict[str, Any]:
     ok, status_token, detail = verify_provider_credential(provider)
     ProviderCredentialRepository().mark_verified(provider, "ok" if ok else "failed")
     return {"ok": ok, "status": status_token, "detail": detail}
+
+
+# ---------------------------------------------------------------------------
+# Per-user provider credentials (GAP-D1/E5) — encrypted, per-user, verified on
+# save (GAP-NEW-001). Distinct from the deployment-wide /providers/{p}/credential
+# routes above: these bill against the SIGNED-IN user's own key/subscription.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/user/providers")
+def list_user_credentials(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """This user's stored provider credentials, masked (never the secret)."""
+    rows = UserProviderCredentialRepository().list_masked(current_user["id"])
+    for r in rows:
+        r["lastVerifiedAt"] = _iso_or_none(r.get("lastVerifiedAt"))
+        r["expiresAt"] = _iso_or_none(r.get("expiresAt"))
+        r["createdAt"] = _iso_or_none(r.get("createdAt"))
+        r["updatedAt"] = _iso_or_none(r.get("updatedAt"))
+    return rows
+
+
+def _user_credential_masked(user_id: str, provider: str) -> dict[str, Any]:
+    row = UserProviderCredentialRepository().get_masked(user_id, provider) or {
+        "provider": provider,
+        "authMode": None,
+        "secretHint": None,
+        "lastVerifiedAt": None,
+        "lastVerifyStatus": None,
+    }
+    row["lastVerifiedAt"] = _iso_or_none(row.get("lastVerifiedAt"))
+    row["expiresAt"] = _iso_or_none(row.get("expiresAt"))
+    row["createdAt"] = _iso_or_none(row.get("createdAt"))
+    row["updatedAt"] = _iso_or_none(row.get("updatedAt"))
+    return row
+
+
+@router.put("/user/providers/{provider}/credential")
+def put_user_credential(
+    provider: str, body: ProviderCredentialBody, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Store THIS user's encrypted credential, then verify it (GAP-NEW-001).
+
+    After the secret is stored a real verify round-trip runs so the 'connected'
+    badge reflects a genuine result — a failed verify records ``failed`` (never
+    a fake ``ok``). The secret never leaves the server; only a last-4 hint and
+    the honest verify status are returned.
+    """
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support stored credentials.",
+        )
+    _validate_provider_auth(provider, body.authMode, body.secret)
+    if not credential_vault.key_present():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Credential encryption unavailable: AETHER_CREDENTIAL_KEY is not "
+            "configured on the server.",
+        )
+    user_id = current_user["id"]
+    repo = UserProviderCredentialRepository()
+    try:
+        repo.upsert(
+            user_id, provider, auth_mode=body.authMode,
+            secret=body.secret, base_url=body.baseUrl,
+        )
+    except credential_vault.CredentialVaultError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    # GAP-NEW-001: verify round-trip so the badge is truthful (best-effort).
+    try:
+        ok, _token, _detail = verify_user_credential(provider, user_id)
+        repo.mark_verified(user_id, provider, "ok" if ok else "failed")
+    except Exception:  # noqa: BLE001 — a verify outage must not fail the save
+        pass
+    return _user_credential_masked(user_id, provider)
+
+
+@router.delete("/user/providers/{provider}/credential")
+def delete_user_credential(
+    provider: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Remove THIS user's stored credential for a provider."""
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support stored credentials.",
+        )
+    UserProviderCredentialRepository().delete(current_user["id"], provider)
+    return _user_credential_masked(current_user["id"], provider)
+
+
+@router.post("/user/providers/{provider}/verify")
+def verify_user_provider(provider: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Real round-trip against THIS user's stored credential; honest result."""
+    if provider not in _CREDENTIAL_PROVIDERS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support verification.",
+        )
+    user_id = current_user["id"]
+    ok, status_token, detail = verify_user_credential(provider, user_id)
+    UserProviderCredentialRepository().mark_verified(
+        user_id, provider, "ok" if ok else "failed"
+    )
+    return {"ok": ok, "status": status_token, "detail": detail}
+
+
+# ---------------------------------------------------------------------------
+# Anthropic subscription OAuth (PKCE) — GAP-D1.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/auth/anthropic/start")
+def anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
+    """Begin the Anthropic subscription OAuth flow; return the consent URL.
+
+    Honest 501 when the deployment has no OAuth client id (never fakes a URL).
+    """
+    if not anthropic_oauth.is_configured():
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "error": "not_configured",
+                "message": (
+                    "Anthropic subscription OAuth is not configured on this "
+                    "server (AETHER_ANTHROPIC_OAUTH_CLIENT_ID is unset). Use an "
+                    "API key instead, or ask the operator to enable OAuth."
+                ),
+            },
+        )
+    user_id = current_user["id"]
+    verifier, challenge = anthropic_oauth.generate_pkce()
+    state_token = anthropic_oauth.sign_state(user_id)
+    AnthropicOAuthStateRepository().create(state_token, user_id, verifier)
+    return {
+        "authorizeUrl": anthropic_oauth.build_authorize_url(challenge, state_token),
+        "state": state_token,
+    }
+
+
+@router.get("/auth/anthropic/callback")
+def anthropic_oauth_callback(
+    current_user: CurrentUser, code: str, state: str
+) -> dict[str, Any]:
+    """Exchange the authorization code for tokens; store encrypted; masked reply.
+
+    Validates the signed state, single-uses the persisted state row, exchanges
+    the code with PKCE, encrypts the access+refresh tokens, and upserts both the
+    OAuth token store and the user's ``subscription_oauth`` credential. Returns
+    only ``{authMode, hint}`` — NEVER the token.
+    """
+    if not anthropic_oauth.is_configured():
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"error": "not_configured", "message": "OAuth is not configured."},
+        )
+    try:
+        state_user = anthropic_oauth.verify_state(state)
+    except Exception as exc:  # noqa: BLE001 — bad signature/expired state
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Invalid or expired OAuth state."
+        ) from exc
+    if state_user != current_user["id"]:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state user mismatch.")
+    row = AnthropicOAuthStateRepository().consume(state)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "OAuth state unknown or already used."
+        )
+    if not credential_vault.key_present():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Credential encryption unavailable: AETHER_CREDENTIAL_KEY is unset.",
+        )
+    try:
+        tokens = anthropic_oauth.exchange_code(code, row["codeVerifier"])
+    except anthropic_oauth.OAuthExchangeError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Anthropic token exchange failed: {exc}"
+        ) from exc
+    masked = anthropic_oauth.persist_tokens(current_user["id"], tokens)
+    return masked
 
 
 @router.get("/stats")

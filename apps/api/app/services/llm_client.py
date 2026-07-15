@@ -123,6 +123,23 @@ class LLMUnavailableError(RuntimeError):
     """
 
 
+class QuotaExhaustedError(RuntimeError):
+    """Raised when a subscription's provider quota is exhausted (HTTP 429).
+
+    This is NEVER swallowed into a fixture fallback and NEVER triggers a reroute
+    to a different credential/payer (that would be cross-provider billing). The
+    router maps it to an honest 429 telling the user to switch this agent to
+    API-key billing. Carries the provider and the cooldown expiry so the router
+    can compute a ``retryAfter``.
+    """
+
+    def __init__(self, provider: str, *, expires_at: Any = None, reason: str = "") -> None:
+        super().__init__(reason or f"{provider} subscription quota exhausted")
+        self.provider = provider
+        self.expires_at = expires_at
+        self.reason = reason or f"{provider} subscription quota exhausted"
+
+
 def get_mode() -> str:
     return os.environ.get("AETHER_LLM_MODE", "replay").strip().lower()
 
@@ -279,6 +296,149 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
     return None
 
 
+#: Per-run user context (userId, agentKey) so the deep live-call path can
+#: resolve the RIGHT user's credential (GAP-E5) without threading the ids
+#: through every agent/service constructor. Set by the Agents router around a
+#: run (see ``user_credential_context``); ``None`` means "no user context"
+#: (background/CLI callers) → the resolver falls back to deployment-wide creds.
+_user_cred_context: contextvars.ContextVar["tuple[str, str | None] | None"] = (
+    contextvars.ContextVar("aether_llm_user_cred", default=None)
+)
+
+
+@contextmanager
+def user_credential_context(user_id: str, agent_key: str | None = None) -> Iterator[None]:
+    """Bind the current user (and optional agent key) for credential resolution."""
+    token = _user_cred_context.set((user_id, agent_key))
+    try:
+        yield
+    finally:
+        _user_cred_context.reset(token)
+
+
+def _lookup_agent_credential_ref(user_id: str, agent_key: str) -> str | None:
+    """The ``AgentConfig.credentialRef`` this user pinned for ``agent_key``."""
+    try:
+        from app.db import get_connection, rows_to_dicts
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "credentialRef" FROM "AgentConfig" '
+                    'WHERE "userId" = %s AND "agentKey" = %s',
+                    (user_id, agent_key),
+                )
+                rows = rows_to_dicts(cur)
+    except Exception as exc:  # noqa: BLE001 — missing column/table → no override
+        logger.debug("agent credentialRef lookup failed: %s", exc)
+        return None
+    if rows:
+        return rows[0].get("credentialRef")
+    return None
+
+
+def resolve_user_credential(
+    provider: str, user_id: str | None = None, agent_key: str | None = None
+) -> "ProviderCredentialResolution | None":
+    """Resolve ``provider``'s credential for a specific user, honestly & scoped.
+
+    Resolution order (NEVER cross-provider — a mismatched provider is skipped,
+    not rerouted):
+
+    1. ``AgentConfig.credentialRef`` → that user's ``UserProviderCredential`` row
+       (only when its provider matches).
+    2. the user's ``UserProviderCredential`` for ``provider`` (subscription-OAuth
+       tokens are refreshed first when expiring).
+    3. the deployment-wide ``ProviderCredential`` row.
+    4. legacy provider-scoped env vars.
+
+    Steps 3–4 are delegated to :func:`resolve_credential` so the legacy path is
+    unchanged; passing ``user_id=None`` makes this function behave EXACTLY like
+    ``resolve_credential`` (backward compatibility).
+    """
+    if user_id:
+        from app.repositories.user_provider_credential import (
+            UserProviderCredentialRepository,
+        )
+
+        repo = UserProviderCredentialRepository()
+        # 1. Per-agent pinned credentialRef (only if it matches this provider).
+        if agent_key:
+            ref = _lookup_agent_credential_ref(user_id, agent_key)
+            if ref:
+                try:
+                    got = repo.get_secret_by_id(ref, user_id)
+                except Exception as exc:  # noqa: BLE001 — degrade to next source
+                    logger.warning("credentialRef resolve failed: %s", exc)
+                    got = None
+                if got and got.get("provider") == provider and got.get("secret"):
+                    return ProviderCredentialResolution(
+                        provider, got["authMode"], got["secret"],
+                        got.get("baseUrl"), "user_credential_ref",
+                    )
+        # 2. The user's own credential for this provider.
+        if provider == "anthropic":
+            try:
+                from app.services import anthropic_oauth
+
+                anthropic_oauth.refresh_if_needed(user_id)
+            except Exception as exc:  # noqa: BLE001 — best-effort refresh
+                logger.debug("anthropic token refresh skipped: %s", exc)
+        try:
+            got = repo.get_secret(user_id, provider)
+        except Exception as exc:  # noqa: BLE001 — DB hiccup → deployment fallback
+            logger.warning("user credential resolve failed: %s", exc)
+            got = None
+        if got and got.get("secret"):
+            return ProviderCredentialResolution(
+                provider, got["authMode"], got["secret"],
+                got.get("baseUrl"), "user_credential",
+            )
+    # 3 + 4. Deployment-wide DB row, then legacy env (unchanged legacy path).
+    return resolve_credential(provider)
+
+
+#: How long a subscription-quota cooldown lasts after a 429 (env-overridable).
+def get_quota_block_hours() -> float:
+    try:
+        return float(os.environ.get("AETHER_QUOTA_BLOCK_HOURS", "5"))
+    except ValueError:
+        return 5.0
+
+
+def _is_quota_body(body_text: str) -> bool:
+    """True when a 429 body indicates a quota / rate-limit exhaustion."""
+    low = (body_text or "").lower()
+    return any(
+        token in low
+        for token in ("quota", "rate_limit", "rate limit", "overloaded", "usage limit")
+    )
+
+
+def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
+    try:
+        from app.repositories.user_provider_credential import AgentQuotaBlockRepository
+
+        return AgentQuotaBlockRepository().get_active(user_id, provider)
+    except Exception as exc:  # noqa: BLE001 — never let the block store 500 a run
+        logger.debug("quota block lookup failed: %s", exc)
+        return None
+
+
+def _record_quota_block(user_id: str, provider: str, reason: str) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        from app.repositories.user_provider_credential import AgentQuotaBlockRepository
+
+        expires = datetime.now(timezone.utc) + timedelta(hours=get_quota_block_hours())
+        AgentQuotaBlockRepository().set_block(
+            user_id, provider, expires_at=expires, reason="subscription_quota_exceeded"
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort cooldown
+        logger.warning("failed to record quota block: %s", exc)
+
+
 def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
     """Auth/version headers for the native Anthropic Messages API.
 
@@ -398,11 +558,35 @@ def verify_provider_credential(
     never fabricated. Anthropic sends a 1-token Messages ping; OpenRouter lists
     models. Providers with no native transport report an honest ``'unsupported'``.
     """
-    import httpx
-
     cred = resolve_credential(provider)
     if cred is None:
         return (False, "no_credential", f"No credential configured for '{provider}'.")
+    return verify_resolved_credential(provider, cred, timeout=timeout)
+
+
+def verify_user_credential(
+    provider: str, user_id: str, *, timeout: float = 15.0
+) -> tuple[bool, str, str]:
+    """Verify a specific USER's stored credential with a real round-trip.
+
+    Resolves the credential through :func:`resolve_user_credential` (per-user
+    first), then performs the same honest ping as :func:`verify_provider_credential`.
+    """
+    cred = resolve_user_credential(provider, user_id)
+    if cred is None:
+        return (False, "no_credential", f"No credential configured for '{provider}'.")
+    return verify_resolved_credential(provider, cred, timeout=timeout)
+
+
+def verify_resolved_credential(
+    provider: str, cred: "ProviderCredentialResolution", *, timeout: float = 15.0
+) -> tuple[bool, str, str]:
+    """Real minimal round-trip against an already-resolved credential.
+
+    Returns ``(ok, status, detail)``; ``ok`` is True only on a genuine 2xx.
+    """
+    import httpx
+
     try:
         if provider == "anthropic":
             req = build_anthropic_request(
@@ -554,6 +738,11 @@ class LLMClient:
                     system, user, model=attempt_model, temperature=temperature,
                     max_seconds=remaining,
                 )
+            except QuotaExhaustedError:
+                # Subscription quota is exhausted — NEVER fall back to a fixture
+                # or another model/credential (that would fake success or shift
+                # the bill). Propagate so the router returns an honest 429.
+                raise
             except Exception as exc:  # 404/429/5xx/network/timeout/parse — try next
                 logger.warning(
                     "LLM live call failed (model=%s, prompt=%s): %s",
@@ -647,7 +836,21 @@ class LLMClient:
 
         model_id = model or get_model("REASONING")
         provider = resolve_provider(model_id)
-        cred = resolve_credential(provider)
+        ctx = _user_cred_context.get()
+        ctx_user_id = ctx[0] if ctx else None
+        ctx_agent_key = ctx[1] if ctx else None
+        # Quota cooldown: a prior 429 on this user+provider blocks live calls
+        # until it expires. We surface an honest QuotaExhaustedError rather than
+        # silently rerouting to a different (billable) credential (ADR-PC-2).
+        if ctx_user_id is not None:
+            block = _active_quota_block(ctx_user_id, provider)
+            if block is not None:
+                raise QuotaExhaustedError(
+                    provider,
+                    expires_at=block.get("expiresAt"),
+                    reason=block.get("reason") or "subscription_quota_exceeded",
+                )
+        cred = resolve_user_credential(provider, ctx_user_id, ctx_agent_key)
         if cred is None:
             raise RuntimeError(
                 f"No credential configured for provider '{provider}' "
@@ -692,6 +895,18 @@ class LLMClient:
                 # Don't block on a straggling request thread; let it finish
                 # in the background and be reaped when the response arrives.
                 executor.shutdown(wait=False)
+        if resp.status_code == 429 and provider == "anthropic":
+            # Subscription quota / rate limit exhausted. Record a cooldown block
+            # for this user+provider so subsequent runs fail fast with an honest
+            # 429 instead of hammering the provider — and NEVER fall back to a
+            # different credential (that would shift the bill to another payer).
+            body_text = resp.text[:400]
+            if _is_quota_body(body_text) and cred.auth_mode == "subscription_oauth":
+                if ctx_user_id is not None:
+                    _record_quota_block(ctx_user_id, provider, body_text)
+                raise QuotaExhaustedError(
+                    provider, reason="subscription_quota_exceeded"
+                )
         if resp.status_code >= 400:
             raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.json()
