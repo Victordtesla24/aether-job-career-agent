@@ -8,6 +8,7 @@ The source PDF is never modified — ``formatHash`` is carried through intact.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,6 +29,33 @@ _LIFT_EPSILON = 1e-6
 #: interview, used to scale the ATS-score delta into an estimated lift.
 #: Overridable via ``AETHER_CONVERSION_BASELINE_RATE`` for experimentation.
 _DEFAULT_POPULATION_BASELINE_RATE = 0.025
+
+#: Terminal punctuation a complete work bullet ends on, and trailing wrappers
+#: (closing bracket / quote) stripped before that check.
+_BULLET_TERMINAL = (".", "!", "?", ":")
+_BULLET_TRAIL = ")\"']"
+
+
+def _bullets_need_healing(texts: list[str]) -> bool:
+    """True when stored base bullets look mangled by the two-column layout.
+
+    A base persisted before the column-aware extractor stored each work bullet
+    truncated to its first visual line — a "Heading:" lead-in ending mid-
+    sentence — or with a hyphenated line break rejoined as a stray-space word
+    ("test- evidence"). Either signature means the stored bullets are unreliable
+    and should be re-derived from the source PDF on read (GAP-P5-PDF). Sidebar
+    skills / certification lines legitimately lack terminal punctuation and have
+    no "Heading:" lead-in, so they never trip the first check.
+    """
+    for text in texts:
+        t = (text or "").strip()
+        if not t:
+            continue
+        if ":" in t[:60] and not t.rstrip(_BULLET_TRAIL).endswith(_BULLET_TERMINAL):
+            return True
+        if re.search(r"[A-Za-z]- [A-Za-z]", t):
+            return True
+    return False
 
 
 def _compute_conversion_metrics(
@@ -103,7 +131,17 @@ class TailoringAgent:
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
         if base and (base.get("sections") or {}).get("raw_text"):
-            return base
+            stored = [
+                b.get("text", "")
+                for b in ((base.get("sections") or {}).get("bullets") or [])
+            ]
+            # A base persisted before the column-aware extractor holds truncated
+            # first-line fragments (or hyphen-corrupted bullets) even though its
+            # raw_text is complete. Re-derive COMPLETE bullets on read and heal
+            # in place — non-destructively, preserving the immutable raw_text and
+            # format hash (GAP-P5-PDF). A healthy base is returned untouched.
+            if stored and not _bullets_need_healing(stored):
+                return base
         base_path = get_base_resume_path()
         parsed = parse_resume_pdf(base_path)
         # Reconstruct COMPLETE bullets positionally from the PDF. The flat text
