@@ -5,7 +5,26 @@
     "head": "16575fa",
     "orchestrator": "opus-4-8 (orchestrator-only)",
     "evidence_root": "uat/reports/evidence/phase5/",
-    "note": "Fresh discovery; trusts no prior ledger (§2.1)."
+    "note": "Fresh discovery; trusts no prior ledger (§2.1).",
+    "final": {
+      "date": "2026-07-15",
+      "head": "80536f2",
+      "deployed": true,
+      "prod": "https://5cb5f0620.abacusai.cloud",
+      "gaps_verified_closed": 6,
+      "gaps_total": 6,
+      "gates_pass": 20,
+      "gates_fail": 0,
+      "backend_tests": "505 passed",
+      "frontend_tests": "263 vitest + build",
+      "model_governance": "clean (0 orchestrator-model spawns)",
+      "honest_residuals": [
+        "tailoring depth conservative/shallow (anti-fabrication-capped + base-resume sparsity)",
+        "Wellfound 403-blocked from VM",
+        "Indeed/LinkedIn fixture-only (skipped)",
+        "Ashby/Workable genuine-zero for narrow senior-AU profile this run — surfaced honestly in per-source status UI"
+      ]
+    }
   },
   "gaps": [
     {
@@ -51,12 +70,15 @@
         "uat/reports/evidence/phase5/probe-003-openapi.json",
         "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "GET+POST /api/agents/auth/anthropic/start return 404 on prod (subscription-OAuth removed end-to-end: anthropic_oauth.py deleted, routes gone, llm_client x-api-key only, FE OAuth button removed); api-key path intact. Gate 14 satisfied. 56 tests."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-hard",
-      "fixer_model": null,
+      "fixer_model": "opus (fixer-hard)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     },
     {
       "id": "GAP-SRC-001",
@@ -102,12 +124,15 @@
         "uat/reports/evidence/phase5/sourcing-pipeline-inventory.txt",
         "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "161 real jobs across 5 sources (seek 149, greenhouse 9, remoteok 1, remotive 1, lever 1) — exceeds >=25 jobs/>=4 sources; Ashby/Workable/Wellfound adapters + Seek pagination + 16 real curl-verified portal tokens + profile-driven role-family query. 10/10 sampled URLs resolve real."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-hard",
-      "fixer_model": null,
+      "fixer_model": "opus (fixer-hard) + sonnet (fixer-medium, gate 6)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     },
     {
       "id": "GAP-SRC-002",
@@ -149,12 +174,15 @@
         "uat/reports/evidence/phase5/probe-005-jobs-after-sync.txt",
         "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "GET /agents/scout/sources on prod: wellfound status=error lastError='HTTP 403 Forbidden', seek transient timeout recovered to ok, indeed/linkedin=skipped, ashby/workable=ok fetched=0 (genuine zero). No silent errors:[]; all fan-out adapters raise AdapterFetchError on total outage. 32 sourcing + 64 regression tests."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-hard",
-      "fixer_model": null,
+      "fixer_model": "opus (fixer-hard)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     },
     {
       "id": "GAP-SRC-003",
@@ -192,12 +220,15 @@
         "uat/reports/evidence/phase5/route-dashboard-jobs.png",
         "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "Per-source Sync Status UI on /dashboard/jobs consuming GET /agents/scout/sources via zod-validated fetchScoutSources; honest ok/error/skipped states; QA PASS, 7 tests; deployed + production screenshot gap-SRC-003-post-jobs.png."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-medium",
-      "fixer_model": null,
+      "fixer_model": "sonnet (fixer-medium)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     },
     {
       "id": "GAP-TAIL-001",
@@ -244,12 +275,15 @@
         "uat/reports/evidence/phase5/tailored_resume_full.json",
         "uat/reports/evidence/phase5/base_resume.json"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "Live: tailoredATS 38.21 >= baseline 37.89 (negative-lift regression reversed); craft 64/100 (beats 20); ZERO fabrication (JD excluded from evidence corpus, guard rejected 3 ungrounded candidates); metrics preserved; complete bullets restored (PDF soft-hyphen + heal-on-read fix). RESIDUAL (quality, non-blocking): tailoring is conservative/shallow (2/26 bullets, ~+0% lift, limited truthful JD-keyword mirroring) — capped by base-resume sparsity and the correct anti-fabrication strictness; does not fail the gate."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-hard",
-      "fixer_model": null,
+      "fixer_model": "opus (fixer-hard)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     },
     {
       "id": "GAP-COV-001",
@@ -292,12 +326,15 @@
         "uat/reports/evidence/phase5/cover_letter_text.txt",
         "uat/reports/evidence/phase5/coverletter_run_response.json"
       ],
-      "post_evidence": [],
-      "status": "TRIAGED",
+      "post_evidence": [
+        "Live: cover craft 82/100 (beats 60); specific role/company/program hook, JD-matched grounded evidence, specific CTA, first-person throughout (voice fix), grammatical opener, honest non-boastful tone; every quantifier verbatim-grounded."
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "CONFIRMED-FIXED",
       "assigned_role": "fixer-medium",
-      "fixer_model": null,
+      "fixer_model": "sonnet (fixer-medium) + opus (voice)",
       "reviewer_model": null,
-      "qa_model": null
+      "qa_model": "claude-opus (qa)"
     }
   ],
   "already_satisfied": [
@@ -537,141 +574,181 @@
       "id": "GATE-01",
       "gate_number": 1,
       "description": "Production health endpoint returns expected success.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-02",
       "gate_number": 2,
       "description": "Full route sweep completed with artifacts.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-03",
       "gate_number": 3,
       "description": "All dead/decorative critical controls fixed or explicitly marked out-of-scope by code truth and wireframe contract.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-04",
       "gate_number": 4,
       "description": "Wireframe fidelity matrix completed for all 17 screens.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-05",
       "gate_number": 5,
       "description": "Job sourcing ceiling root-caused and materially improved.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-06",
       "gate_number": 6,
       "description": "Post-fix sync yields substantially larger verified-real multi-board results.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-07",
       "gate_number": 7,
       "description": "No fake/stale/fabricated job rows remain in sampled verification set.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-08",
       "gate_number": 8,
       "description": "Tailored resume shows content-only inline changes with preserved layout.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-09",
       "gate_number": 9,
       "description": "Tailored resume shows before/after conversion metric with explanation.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-10",
       "gate_number": 10,
       "description": "Cover letter meets business-format and elite craft standard.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-11",
       "gate_number": 11,
       "description": "Resume and cover-letter PDFs export cleanly.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-12",
       "gate_number": 12,
       "description": "All displayed metrics have transparent explanations/tooltips.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-13",
       "gate_number": 13,
       "description": "Metric recomputations match or are honestly labeled estimated.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-14",
       "gate_number": 14,
       "description": "No unsupported Anthropic third-party consumer-subscription OAuth path remains; any Anthropic integration uses supported developer/commercial auth patterns.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-15",
       "gate_number": 15,
       "description": "Tokens and client credentials are stored securely per Google/industry guidance if applicable.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-16",
       "gate_number": 16,
       "description": "Full relevant backend tests pass.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "backend pytest 505 passed on deployed HEAD 80536f2 (final regression wf_b8fe33c9-f4e) + ruff clean"
+      ]
     },
     {
       "id": "GATE-17",
       "gate_number": 17,
       "description": "Full relevant frontend/unit tests pass.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "frontend 263 vitest + tsc/lint clean + pnpm build succeeded on 80536f2 (same regression)"
+      ]
     },
     {
       "id": "GATE-18",
       "gate_number": 18,
       "description": "E2E journeys pass on production.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     },
     {
       "id": "GATE-19",
       "gate_number": 19,
       "description": "Model-governance audit is clean: zero orchestrator-model sub-agent spawns.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "model-governance audit: 59 sub-agent dispatches all explicit haiku(13)/sonnet(31)/opus(15), ZERO fable-5/orchestrator-model spawns, zero inherit"
+      ]
     },
     {
       "id": "GATE-20",
       "gate_number": 20,
       "description": "Every closed gap has pre/post evidence and QA closure.",
-      "status": "PENDING",
-      "evidence": []
+      "status": "PASS",
+      "evidence": [
+        "PASS — independently QA-verified on production; deployed HEAD 80536f2 (2026-07-15)."
+      ]
     }
   ]
 }
