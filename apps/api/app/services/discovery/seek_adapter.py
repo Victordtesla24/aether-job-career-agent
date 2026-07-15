@@ -15,6 +15,7 @@ from html import unescape
 from typing import Any
 from urllib.parse import quote
 
+from app.services.discovery import relevance
 from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 
 logger = logging.getLogger(__name__)
@@ -367,11 +368,21 @@ class SeekAdapter(BaseAdapter):
         return {"data": [_search_record_to_item(record) for record in records]}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:
-        """Parse job data into JobRaw records.
+        """Parse job data into JobRaw records, then apply the shared relevance
+        filter (GAP-SRC-001).
 
         Accepts both the live-scrape shape (``company``/``description``/
         ``sourceUrl``) and the Seek API fixture shape (``advertiser``/
         ``teaser``/``shareLink``).
+
+        Seek's own ``keywords=`` search is fuzzy relevance-ranked, not an
+        exact filter — broadening the query to the full target-role family
+        (GAP-SRC-001) means Seek can surface loosely-matching noise. Every
+        other live adapter already runs its parsed jobs through
+        ``relevance.filter_relevant`` before returning; Seek was the one
+        outlier relying solely on the upstream search to be on-target. This
+        brings it in line so only on-target, AU-applicable roles reach the UI
+        regardless of how broad the query is.
         """
         jobs: list[JobRaw] = []
         for item in payload.get("data", []):
@@ -396,4 +407,4 @@ class SeekAdapter(BaseAdapter):
                     postedAt=item.get("postedAt") or item.get("listingDate"),
                 )
             )
-        return jobs
+        return relevance.filter_relevant(jobs)

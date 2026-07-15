@@ -31,6 +31,22 @@
       "salary": "$150,000 - $180,000",
       "listingDate": "2026-06-30T22:45:00Z",
       "shareLink": "https://www.seek.com.au/job/82655902"
+    },
+    {
+      "id": "82661174",
+      "title": "Senior Business Analyst",
+      "advertiser": { "description": "Real Employer Pty Ltd" },
+      "location": "Melbourne VIC",
+      "workArrangements": { "displayText": "Hybrid" },
+      "teaser": "Lead requirements analysis for a portfolio of delivery squads.",
+      "bulletPoints": [
+        "8+ years business analysis in financial services",
+        "Stakeholder facilitation across product and engineering",
+        "Confident with JIRA/Confluence and BABOK practices"
+      ],
+      "salary": "$150,000 - $170,000",
+      "listingDate": "2026-07-01T03:00:00Z",
+      "shareLink": "https://www.seek.com.au/job/82661174"
     }
   ]
 }

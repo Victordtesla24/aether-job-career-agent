@@ -13,7 +13,7 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "http"
 
-LIVE_SOURCES = ("greenhouse", "lever", "remotive", "remoteok")
+LIVE_SOURCES = ("greenhouse", "lever", "remotive", "remoteok", "seek")
 
 
 def _load_fixture(source: str) -> dict:
