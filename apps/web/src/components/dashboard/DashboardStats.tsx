@@ -6,6 +6,7 @@
  * data passed in by the page (single funnel fetch, REQ-TM-10). Exposes
  * buildStatCards for unit testing.
  */
+import MetricTooltip from "../MetricTooltip";
 import type { Funnel } from "../../lib/api/analytics";
 
 export interface StatCard {
@@ -17,6 +18,7 @@ export interface StatCard {
   note: string;
   noteColor: string;
   trendUp?: boolean;
+  tooltip: string;
 }
 
 export interface StatExtras {
@@ -44,6 +46,7 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       noteColor:
         weeklyApplied != null && weeklyApplied > 0 ? "text-aether-green" : "text-aether-muted",
       trendUp: weeklyApplied != null && weeklyApplied > 0,
+      tooltip: "Total roles you've applied to that haven't reached a terminal outcome yet.",
     },
     {
       label: "Interview Rate",
@@ -56,6 +59,7 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
           ? `${funnel.interviewed} of ${funnel.applied} applied`
           : "no applications yet",
       noteColor: "text-aether-muted",
+      tooltip: "Share of your applications that progressed to at least one interview (Application → Interview %).",
     },
     {
       label: "Offers",
@@ -64,6 +68,7 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       iconColor: "text-aether-amber",
       note: funnel.offers > 0 ? `${funnel.offers} pending decision` : "none yet — agents hunting",
       noteColor: "text-aether-muted",
+      tooltip: "Applications where an employer has extended a formal offer.",
     },
     {
       label: "AI Confidence",
@@ -73,6 +78,7 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       iconColor: "text-aether-coral",
       note: avgFit != null ? "avg match quality" : "no scored jobs yet",
       noteColor: "text-aether-muted",
+      tooltip: "Average ATS/AI fit score across all scored jobs — a 0–100 estimate of resume-to-role match quality.",
     },
   ];
 }
@@ -130,8 +136,15 @@ export default function DashboardStats({
             <i className={`${stat.icon} ${stat.iconColor} text-sm`} aria-hidden="true" />
           </div>
           <div className="mono text-3xl font-bold">
-            {stat.value}
-            {stat.unit ? <span className="text-lg text-aether-muted-dim">{stat.unit}</span> : null}
+            <MetricTooltip
+              value={
+                <>
+                  {stat.value}
+                  {stat.unit ? <span className="text-lg text-aether-muted-dim">{stat.unit}</span> : null}
+                </>
+              }
+              tooltip={stat.tooltip}
+            />
           </div>
           <div className={`mt-2 flex items-center gap-1 text-xs ${stat.noteColor}`}>
             {stat.trendUp ? <i className="fa-solid fa-arrow-up text-[10px]" aria-hidden="true" /> : null}
