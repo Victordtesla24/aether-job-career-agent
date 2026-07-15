@@ -51,3 +51,6 @@ design/*.docx
 
 # Production remediation evidence (on-disk artifacts, not versioned)
 evidence/
+
+# Local git worktrees (per-session, not deliverables)
+.claude/worktrees/
