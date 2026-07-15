@@ -49,8 +49,7 @@ def _extra_headers() -> dict[str, str]:
 
     Some OpenAI-compatible endpoints require additional headers on every
     request — e.g. Anthropic's compat endpoint needs
-    ``anthropic-version: 2023-06-01`` and (for OAuth tokens)
-    ``anthropic-beta: oauth-2025-04-20``. Set the env var to a JSON object,
+    ``anthropic-version: 2023-06-01``. Set the env var to a JSON object,
     e.g.::
 
         AETHER_LLM_EXTRA_HEADERS={"anthropic-version": "2023-06-01"}
@@ -188,7 +187,6 @@ def get_active_credential_env_var() -> str | None:
 #: Native Anthropic Messages API (NOT OpenAI-compatible).
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
-ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
 
 
 def get_anthropic_max_tokens() -> int:
@@ -213,8 +211,25 @@ def resolve_provider(model: str) -> str:
 
 
 def _infer_anthropic_auth_mode(secret: str) -> str:
-    """Anthropic authMode from the key prefix (``sk-ant-oat…`` = subscription)."""
+    """Anthropic authMode from the key prefix (``sk-ant-oat…`` = subscription).
+
+    Subscription OAuth is no longer a supported live-call mode (GAP-AUTH-001);
+    this classifier is retained so :func:`_resolution_is_supported` can DETECT a
+    legacy ``sk-ant-oat…`` secret and refuse to use it, rather than mislabel it.
+    """
     return "subscription_oauth" if secret.startswith("sk-ant-oat") else "api_key"
+
+
+def _resolution_is_supported(provider: str, auth_mode: str) -> bool:
+    """Whether a resolved credential may serve a live call (GAP-AUTH-001).
+
+    Consumer Anthropic subscription OAuth (``subscription_oauth``) was removed
+    for compliance: a pre-existing subscription credential/token must never be
+    used for a live request. Returning ``False`` makes the resolver fall through
+    to the next (api_key / env) source and ultimately surface an honest
+    'no credential' rather than a faked success.
+    """
+    return not (provider == "anthropic" and auth_mode == "subscription_oauth")
 
 
 @dataclass(frozen=True)
@@ -246,26 +261,34 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
         )
         row = None
     if row and row.get("secret"):
-        return ProviderCredentialResolution(
-            provider=provider,
-            auth_mode=row.get("authMode") or "api_key",
-            secret=row["secret"],
-            base_url=row.get("baseUrl"),
-            source="database",
-        )
+        auth_mode = row.get("authMode") or "api_key"
+        # A pre-existing subscription_oauth row is no longer usable (GAP-AUTH-001):
+        # skip it and fall through to the env fallback / honest no-credential.
+        if _resolution_is_supported(provider, auth_mode):
+            return ProviderCredentialResolution(
+                provider=provider,
+                auth_mode=auth_mode,
+                secret=row["secret"],
+                base_url=row.get("baseUrl"),
+                source="database",
+            )
     # 2. Legacy env fallback — strictly provider-scoped, never cross-provider.
     if provider == "anthropic":
         base = os.environ.get("AETHER_LLM_BASE_URL", "")
         direct = os.environ.get("AETHER_LLM_API_KEY")
         if direct and "anthropic.com" in base:
-            return ProviderCredentialResolution(
-                "anthropic", _infer_anthropic_auth_mode(direct), direct, base, "environment"
-            )
+            mode = _infer_anthropic_auth_mode(direct)
+            if _resolution_is_supported("anthropic", mode):
+                return ProviderCredentialResolution(
+                    "anthropic", mode, direct, base, "environment"
+                )
         key = os.environ.get("ANTHROPIC_API_KEY")
         if key:
-            return ProviderCredentialResolution(
-                "anthropic", _infer_anthropic_auth_mode(key), key, None, "environment"
-            )
+            mode = _infer_anthropic_auth_mode(key)
+            if _resolution_is_supported("anthropic", mode):
+                return ProviderCredentialResolution(
+                    "anthropic", mode, key, None, "environment"
+                )
         return None
     # openrouter (and every non-anthropic model, which is served via OpenRouter).
     # Strictly provider-scoped — the generic AETHER_LLM_* pair may hold a legacy
@@ -347,8 +370,8 @@ def resolve_user_credential(
 
     1. ``AgentConfig.credentialRef`` → that user's ``UserProviderCredential`` row
        (only when its provider matches).
-    2. the user's ``UserProviderCredential`` for ``provider`` (subscription-OAuth
-       tokens are refreshed first when expiring).
+    2. the user's ``UserProviderCredential`` for ``provider`` (a legacy
+       ``subscription_oauth`` credential is skipped — no longer supported).
     3. the deployment-wide ``ProviderCredential`` row.
     4. legacy provider-scoped env vars.
 
@@ -371,25 +394,30 @@ def resolve_user_credential(
                 except Exception as exc:  # noqa: BLE001 — degrade to next source
                     logger.warning("credentialRef resolve failed: %s", exc)
                     got = None
-                if got and got.get("provider") == provider and got.get("secret"):
+                if (
+                    got
+                    and got.get("provider") == provider
+                    and got.get("secret")
+                    and _resolution_is_supported(provider, got["authMode"])
+                ):
                     return ProviderCredentialResolution(
                         provider, got["authMode"], got["secret"],
                         got.get("baseUrl"), "user_credential_ref",
                     )
         # 2. The user's own credential for this provider.
-        if provider == "anthropic":
-            try:
-                from app.services import anthropic_oauth
-
-                anthropic_oauth.refresh_if_needed(user_id)
-            except Exception as exc:  # noqa: BLE001 — best-effort refresh
-                logger.debug("anthropic token refresh skipped: %s", exc)
         try:
             got = repo.get_secret(user_id, provider)
         except Exception as exc:  # noqa: BLE001 — DB hiccup → deployment fallback
             logger.warning("user credential resolve failed: %s", exc)
             got = None
-        if got and got.get("secret"):
+        # A pre-existing subscription_oauth credential is no longer usable
+        # (GAP-AUTH-001): skip it so live calls fall through to a supported
+        # api_key / env source instead of a faked success.
+        if (
+            got
+            and got.get("secret")
+            and _resolution_is_supported(provider, got["authMode"])
+        ):
             return ProviderCredentialResolution(
                 provider, got["authMode"], got["secret"],
                 got.get("baseUrl"), "user_credential",
@@ -406,15 +434,6 @@ def get_quota_block_hours() -> float:
         return 5.0
 
 
-def _is_quota_body(body_text: str) -> bool:
-    """True when a 429 body indicates a quota / rate-limit exhaustion."""
-    low = (body_text or "").lower()
-    return any(
-        token in low
-        for token in ("quota", "rate_limit", "rate limit", "overloaded", "usage limit")
-    )
-
-
 def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
     try:
         from app.repositories.user_provider_credential import AgentQuotaBlockRepository
@@ -425,38 +444,25 @@ def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
         return None
 
 
-def _record_quota_block(user_id: str, provider: str, reason: str) -> None:
-    from datetime import datetime, timedelta, timezone
-
-    try:
-        from app.repositories.user_provider_credential import AgentQuotaBlockRepository
-
-        expires = datetime.now(timezone.utc) + timedelta(hours=get_quota_block_hours())
-        AgentQuotaBlockRepository().set_block(
-            user_id, provider, expires_at=expires, reason="subscription_quota_exceeded"
-        )
-    except Exception as exc:  # noqa: BLE001 — best-effort cooldown
-        logger.warning("failed to record quota block: %s", exc)
-
-
 def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
     """Auth/version headers for the native Anthropic Messages API.
 
-    - ``'subscription_oauth'`` (Claude Max/Pro token, ``sk-ant-oat…``):
-      ``Authorization: Bearer <token>`` + ``anthropic-beta: oauth-2025-04-20``.
-    - ``'api_key'`` (``sk-ant-api…``): ``x-api-key: <key>`` (no Bearer).
+    Only server-side API-key auth is supported (``'api_key'``, ``sk-ant-api…``):
+    ``x-api-key: <key>``. Consumer subscription OAuth (``Bearer`` +
+    ``anthropic-beta: oauth-2025-04-20``) was removed for compliance
+    (GAP-AUTH-001) — any other ``auth_mode`` is an honest hard error.
     """
     headers = {
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    if auth_mode == "subscription_oauth":
-        headers["Authorization"] = f"Bearer {secret}"
-        headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA
-    elif auth_mode == "api_key":
+    if auth_mode == "api_key":
         headers["x-api-key"] = secret
     else:
-        raise RuntimeError(f"Unsupported Anthropic authMode '{auth_mode}'")
+        raise RuntimeError(
+            f"Unsupported Anthropic authMode '{auth_mode}'; only 'api_key' "
+            "(Claude Console) is supported."
+        )
     return headers
 
 
@@ -895,18 +901,6 @@ class LLMClient:
                 # Don't block on a straggling request thread; let it finish
                 # in the background and be reaped when the response arrives.
                 executor.shutdown(wait=False)
-        if resp.status_code == 429 and provider == "anthropic":
-            # Subscription quota / rate limit exhausted. Record a cooldown block
-            # for this user+provider so subsequent runs fail fast with an honest
-            # 429 instead of hammering the provider — and NEVER fall back to a
-            # different credential (that would shift the bill to another payer).
-            body_text = resp.text[:400]
-            if _is_quota_body(body_text) and cred.auth_mode == "subscription_oauth":
-                if ctx_user_id is not None:
-                    _record_quota_block(ctx_user_id, provider, body_text)
-                raise QuotaExhaustedError(
-                    provider, reason="subscription_quota_exceeded"
-                )
         if resp.status_code >= 400:
             raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.json()

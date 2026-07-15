@@ -116,27 +116,21 @@ def test_credential_ref_must_belong_to_user(client, auth_headers):
 # ---------------------------------------------------------------------------
 
 
-def test_billing_audit_records_authmode_both_paths(
+def test_billing_audit_records_api_key_metered_path(
     client, auth_headers, test_user_id, monkeypatch
 ):
+    # Consumer subscription OAuth was removed (GAP-AUTH-001): the only supported
+    # Anthropic credential is an API key, and it always audits as metered_api.
     monkeypatch.setenv("AETHER_MODEL_REASONING", "claude-haiku-4-5")
     repo = UserProviderCredentialRepository()
 
     repo.upsert(
-        test_user_id, "anthropic", auth_mode="subscription_oauth",
-        secret="sk-ant-oat-sub0001",
-    )
-    out = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
-    assert out["billingAudit"]["authMode"] == "subscription_oauth"
-    assert out["billingAudit"]["quotaPath"] == "subscription"
-    assert out["billingAudit"]["provider"] == "anthropic"
-
-    repo.upsert(
         test_user_id, "anthropic", auth_mode="api_key", secret="sk-ant-api-key0002",
     )
-    out2 = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
-    assert out2["billingAudit"]["authMode"] == "api_key"
-    assert out2["billingAudit"]["quotaPath"] == "metered_api"
+    out = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
+    assert out["billingAudit"]["authMode"] == "api_key"
+    assert out["billingAudit"]["quotaPath"] == "metered_api"
+    assert out["billingAudit"]["provider"] == "anthropic"
 
 
 def test_billing_audit_persisted_to_agent_run(

@@ -22,11 +22,10 @@ from app.repositories.agent_run import AgentRunRepository
 from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,
-    AnthropicOAuthStateRepository,
     UserProviderCredentialRepository,
     _ensure_user_agent_tables,
 )
-from app.services import anthropic_oauth, credential_vault
+from app.services import credential_vault
 from app.services.llm_client import (
     LLMUnavailableError,
     QuotaExhaustedError,
@@ -393,9 +392,9 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
 
     Returns ``(audit, provider)``. Deterministic (non-LLM) agents have no
     provider and record ``{'quotaPath': 'none'}``. For LLM agents the audit
-    names the credential source, authMode and provider, and derives the
-    ``quotaPath`` — ``subscription`` for a Claude subscription-OAuth token,
-    ``metered_api`` for an API key.
+    names the credential source, authMode and provider; the ``quotaPath`` is
+    ``metered_api`` for every supported credential (consumer subscription OAuth
+    was removed for compliance — GAP-AUTH-001).
     """
     model = _model_for_agent(agent_name)
     if model is None:
@@ -411,10 +410,11 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
              "provider": provider, "quotaPath": "none"},
             provider,
         )
-    quota_path = "subscription" if cred.auth_mode == "subscription_oauth" else "metered_api"
+    # Consumer subscription OAuth is removed (GAP-AUTH-001): every supported
+    # credential (api_key / env) bills as metered API usage.
     return (
         {"credentialSource": cred.source, "authMode": cred.auth_mode,
-         "provider": provider, "quotaPath": quota_path},
+         "provider": provider, "quotaPath": "metered_api"},
         provider,
     )
 
@@ -986,7 +986,7 @@ class AgentConfigUpdate(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, min_length=1)
     provider: str | None = None
-    authMode: str | None = Field(default=None, pattern="^(api_key|subscription_oauth)$")
+    authMode: str | None = Field(default=None, pattern="^(api_key)$")
     #: Empty string clears the pinned credential; a non-empty value must
     #: reference one of the caller's own stored credentials (validated below).
     credentialRef: str | None = None
@@ -1313,32 +1313,26 @@ class ProviderCredentialBody(BaseModel):
 def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> None:
     """Reject an authMode/secret that does not match the provider (REQ-PC-2/3).
 
-    Anthropic accepts ``api_key`` (``sk-ant-api…``) or ``subscription_oauth``
-    (``sk-ant-oat…``) with the matching key prefix; every other provider
-    accepts only ``api_key``.
+    Every provider — Anthropic included — accepts only ``api_key``. Consumer
+    Anthropic subscription OAuth (``subscription_oauth``) was removed for
+    compliance (GAP-AUTH-001): the only supported Anthropic auth is a Claude
+    Console API key (``sk-ant-api…``). A ``subscription_oauth`` write is a 422.
     """
-    if provider == "anthropic":
-        if auth_mode == "api_key":
-            if not secret.startswith("sk-ant-api"):
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "Anthropic api_key must start with 'sk-ant-api'.",
-                )
-        elif auth_mode == "subscription_oauth":
-            if not secret.startswith("sk-ant-oat"):
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "Anthropic subscription_oauth token must start with 'sk-ant-oat'.",
-                )
-        else:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Anthropic accepts authMode 'api_key' or 'subscription_oauth'.",
-            )
-    elif auth_mode != "api_key":
+    if auth_mode != "api_key":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Provider '{provider}' accepts only authMode 'api_key'.",
+            f"Provider '{provider}' accepts only authMode 'api_key'."
+            + (
+                " Anthropic subscription OAuth is not supported; use an API key "
+                "(Claude Console)."
+                if provider == "anthropic"
+                else ""
+            ),
+        )
+    if provider == "anthropic" and not secret.startswith("sk-ant-api"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Anthropic api_key must start with 'sk-ant-api'.",
         )
 
 
@@ -1513,80 +1507,14 @@ def verify_user_provider(provider: str, current_user: CurrentUser) -> dict[str, 
 
 
 # ---------------------------------------------------------------------------
-# Anthropic subscription OAuth (PKCE) — GAP-D1.
+# Anthropic subscription OAuth was REMOVED (GAP-AUTH-001 / Gate-14): consumer
+# Claude Free/Pro/Max subscription OAuth (claude.ai/oauth/authorize) is
+# non-compliant in a third-party product. The only supported Anthropic auth is
+# a server-side Claude Console API key (x-api-key), configured via the provider
+# credential endpoints above. The former /auth/anthropic/{start,callback}
+# routes are intentionally gone (they now 404). The AnthropicOAuthState /
+# AnthropicOAuthToken tables are retained but unused (additive, backward-compat).
 # ---------------------------------------------------------------------------
-
-
-@router.get("/auth/anthropic/start")
-def anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
-    """Begin the Anthropic subscription OAuth flow; return the consent URL.
-
-    Honest 501 when the deployment has no OAuth client id (never fakes a URL).
-    """
-    if not anthropic_oauth.is_configured():
-        raise HTTPException(
-            status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "error": "not_configured",
-                "message": (
-                    "Anthropic subscription OAuth is not configured on this "
-                    "server (AETHER_ANTHROPIC_OAUTH_CLIENT_ID is unset). Use an "
-                    "API key instead, or ask the operator to enable OAuth."
-                ),
-            },
-        )
-    user_id = current_user["id"]
-    verifier, challenge = anthropic_oauth.generate_pkce()
-    state_token = anthropic_oauth.sign_state(user_id)
-    AnthropicOAuthStateRepository().create(state_token, user_id, verifier)
-    return {
-        "authorizeUrl": anthropic_oauth.build_authorize_url(challenge, state_token),
-        "state": state_token,
-    }
-
-
-@router.get("/auth/anthropic/callback")
-def anthropic_oauth_callback(
-    current_user: CurrentUser, code: str, state: str
-) -> dict[str, Any]:
-    """Exchange the authorization code for tokens; store encrypted; masked reply.
-
-    Validates the signed state, single-uses the persisted state row, exchanges
-    the code with PKCE, encrypts the access+refresh tokens, and upserts both the
-    OAuth token store and the user's ``subscription_oauth`` credential. Returns
-    only ``{authMode, hint}`` — NEVER the token.
-    """
-    if not anthropic_oauth.is_configured():
-        raise HTTPException(
-            status.HTTP_501_NOT_IMPLEMENTED,
-            detail={"error": "not_configured", "message": "OAuth is not configured."},
-        )
-    try:
-        state_user = anthropic_oauth.verify_state(state)
-    except Exception as exc:  # noqa: BLE001 — bad signature/expired state
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Invalid or expired OAuth state."
-        ) from exc
-    if state_user != current_user["id"]:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state user mismatch.")
-    row = AnthropicOAuthStateRepository().consume(state)
-    if row is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "OAuth state unknown or already used."
-        )
-    if not credential_vault.key_present():
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Credential encryption unavailable: AETHER_CREDENTIAL_KEY is unset.",
-        )
-    try:
-        tokens = anthropic_oauth.exchange_code(code, row["codeVerifier"])
-    except anthropic_oauth.OAuthExchangeError as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, f"Anthropic token exchange failed: {exc}"
-        ) from exc
-    masked = anthropic_oauth.persist_tokens(current_user["id"], tokens)
-    return masked
 
 
 @router.get("/stats")
