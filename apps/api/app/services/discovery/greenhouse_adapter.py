@@ -12,22 +12,18 @@ URL — zero fabrication.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
-from app.services.discovery import relevance
+from app.services.discovery import portals, relevance
 from app.services.discovery.base_adapter import BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
 
-#: Verified live board tokens (HTTP 200 with jobs as of 2026-07-10).
-DEFAULT_BOARDS = "cultureamp,octopusdeploy,eucalyptus,easygo,prospa,montu,gitlab,stripe"
-
 
 def configured_boards() -> list[str]:
-    raw = os.environ.get("AETHER_GREENHOUSE_BOARDS", DEFAULT_BOARDS)
-    return [token.strip() for token in raw.split(",") if token.strip()]
+    """Curated board tokens (overridable via ``AETHER_GREENHOUSE_BOARDS``)."""
+    return portals.greenhouse_boards()
 
 
 class GreenhouseAdapter(BaseAdapter):

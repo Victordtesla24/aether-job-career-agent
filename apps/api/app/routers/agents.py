@@ -694,7 +694,19 @@ def run_scout(body: ScoutRunRequest, current_user: CurrentUser) -> dict[str, Any
         "persisted": output["persisted"],
         "updated": output.get("updated", 0),
         "errors": output["errors"],
+        # Honest per-source breakdown (GAP-SRC-002): {source, fetched,
+        # persisted, updated, error, status} — a failing source is surfaced
+        # here as status="error", never as a silent persisted=0.
+        "per_source": output.get("per_source", []),
     }
+
+
+@router.get("/scout/sources")
+def scout_sources(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """Latest per-source discovery sync status for the authenticated user."""
+    from app.repositories.job_source_status import JobSourceStatusRepository
+
+    return JobSourceStatusRepository().list_by_user(current_user["id"])
 
 
 @router.post("/fit-scorer/run")

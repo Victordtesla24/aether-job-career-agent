@@ -11,23 +11,19 @@ apply URL — zero fabrication.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Any
 
-from app.services.discovery import relevance
+from app.services.discovery import portals, relevance
 from app.services.discovery.base_adapter import BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
 
-#: Verified live Lever company slugs (HTTP 200 as of 2026-07-10).
-DEFAULT_COMPANIES = "immutable,deputy,atlassian"
-
 
 def configured_companies() -> list[str]:
-    raw = os.environ.get("AETHER_LEVER_COMPANIES", DEFAULT_COMPANIES)
-    return [slug.strip() for slug in raw.split(",") if slug.strip()]
+    """Curated company slugs (overridable via ``AETHER_LEVER_COMPANIES``)."""
+    return portals.lever_companies()
 
 
 def _posted_at(created_at_ms: Any) -> str:
