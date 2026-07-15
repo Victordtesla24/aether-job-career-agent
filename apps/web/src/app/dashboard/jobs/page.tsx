@@ -19,7 +19,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiRequest } from "../../../lib/api/client";
+import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
+import { fetchScoutSources } from "../../../lib/api/jobs";
 import type { Job, ScoutSourceStatus } from "../../../lib/api/jobs";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
@@ -337,7 +338,8 @@ export default function JobsPage() {
   const [scoutSources, setScoutSources] = useState<ScoutSourceStatus[] | null>(null);
   const loadSourceStatus = useCallback(async () => {
     try {
-      const data = await apiRequest<ScoutSourceStatus[]>("/agents/scout/sources");
+      const token = await getToken();
+      const data = await fetchScoutSources({ token, baseUrl: apiBaseUrl() });
       setScoutSources(data);
     } catch {
       // Sync status is enhancement-only; the rest of the page still works.
