@@ -13,6 +13,7 @@ import {
   fetchResumeDiff,
   fetchResumes,
   runTailorAgent,
+  type ConversionMetrics,
   type Resume,
   type ResumeDiff,
 } from "../../../lib/api/resumes";
@@ -37,6 +38,7 @@ export default function ResumePage() {
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
+  const [conversion, setConversion] = useState<ConversionMetrics | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
@@ -69,7 +71,8 @@ export default function ResumePage() {
     if (!selectedJob) return;
     setRunning(true);
     try {
-      await runTailorAgent(selectedJob);
+      const result = await runTailorAgent(selectedJob);
+      setConversion(result.conversionMetrics);
       await load();
       setError(null);
     } catch (e) {
@@ -224,6 +227,29 @@ export default function ResumePage() {
           </div>
         </div>
       </section>
+
+      {conversion ? (
+        <section
+          className="glass rounded-2xl border border-white/10 p-5"
+          data-design-id="conversion-metrics-rs16"
+          data-testid="conversion-metrics"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+            ATS Conversion Impact
+          </h2>
+          <p className="mt-2 text-sm text-aether-muted" data-testid="conversion-before-after">
+            Before: <span className="mono font-semibold text-white">{conversion.baselineATSScore}%</span>{" "}
+            → After: <span className="mono font-semibold text-aether-green">{conversion.tailoredATSScore}%</span>
+          </p>
+          <p className="mt-1 text-sm" data-testid="conversion-lift">
+            Estimated interview conversion improvement:{" "}
+            <span className="mono font-semibold text-aether-green">
+              {conversion.estimatedConversionLift}
+            </span>
+          </p>
+          <p className="mt-2 text-xs text-aether-muted-dim">{conversion.methodology}</p>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <section className="space-y-3">

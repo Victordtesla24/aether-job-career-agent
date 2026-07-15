@@ -7,16 +7,65 @@ The source PDF is never modified — ``formatHash`` is carried through intact.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
 from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
+from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
 from app.services.resume_tailor import ResumeTailorService
+
+#: Floor for the ATS-score denominator so a legitimate baseline of exactly
+#: 0.0 never raises ZeroDivisionError (GAP-E2).
+_LIFT_EPSILON = 1e-6
+
+#: Default share of applications with a tailored resume that convert to an
+#: interview, used to scale the ATS-score delta into an estimated lift.
+#: Overridable via ``AETHER_CONVERSION_BASELINE_RATE`` for experimentation.
+_DEFAULT_POPULATION_BASELINE_RATE = 0.025
+
+
+def _compute_conversion_metrics(
+    original_text: str,
+    tailored_bullets: list[dict[str, str]],
+    job_description: str,
+) -> dict[str, Any]:
+    """Deterministic before/after ATS re-score + estimated conversion lift.
+
+    ``baselineATSScore`` scores the ORIGINAL resume text against the job;
+    ``tailoredATSScore`` re-scores the TAILORED bullets against the same job.
+    Both come from the deterministic :class:`ATSEngine` — no extra LLM cost.
+    ``estimatedConversionLift`` scales the relative ATS-score delta by a
+    population baseline interview-conversion rate (``AETHER_CONVERSION_BASELINE_RATE``,
+    default 2.5%). A baseline of exactly 0.0 is floored to avoid a
+    ZeroDivisionError while still producing a (large) honest lift figure.
+    """
+    engine = ATSEngine()
+    baseline_score = engine.score(original_text, job_description).overall
+    tailored_text = "\n".join(b.get("text", "") for b in tailored_bullets)
+    tailored_score = engine.score(tailored_text, job_description).overall
+
+    population_rate = float(
+        os.environ.get("AETHER_CONVERSION_BASELINE_RATE", str(_DEFAULT_POPULATION_BASELINE_RATE))
+    )
+    lift_fraction = (
+        (tailored_score - baseline_score) / max(baseline_score, _LIFT_EPSILON)
+    ) * population_rate
+    lift_pct = lift_fraction * 100
+    sign = "+" if lift_pct >= 0 else ""
+
+    return {
+        "baselineATSScore": baseline_score,
+        "tailoredATSScore": tailored_score,
+        "estimatedConversionLift": f"{sign}{lift_pct:.1f}%",
+        "methodology": "ATS semantic score delta × population baseline (2.5%)",
+        "confidence": "model-estimated",
+    }
 
 
 @dataclass
@@ -24,6 +73,7 @@ class TailorRunResult:
     resume_id: str
     changes: int
     rejected: list[str]
+    conversionMetrics: dict[str, Any]
 
 
 class TailoringAgent:
@@ -106,6 +156,12 @@ class TailoringAgent:
             parent_id=base["id"],
             source_job_id=job_id,
         )
+        conversion_metrics = _compute_conversion_metrics(
+            resume_text, result.bullets, job.get("description") or ""
+        )
         return TailorRunResult(
-            resume_id=tailored["id"], changes=result.changes, rejected=result.rejected
+            resume_id=tailored["id"],
+            changes=result.changes,
+            rejected=result.rejected,
+            conversionMetrics=conversion_metrics,
         )
