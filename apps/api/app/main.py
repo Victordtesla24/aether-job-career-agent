@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.rate_limit import build_login_rate_limiter, build_register_rate_limiter
-from app.services.llm_client import get_mode
 from app.routers import (
     agents,
     analytics,
@@ -33,6 +32,7 @@ from app.routers import (
     stories,
     workspaces,
 )
+from app.services.llm_client import get_mode
 
 
 def _guard_production_replay_mode() -> None:
