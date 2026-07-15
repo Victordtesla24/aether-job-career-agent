@@ -94,7 +94,6 @@ export default function ProviderConfigModal({
   onNotice: (notice: Notice) => void;
 }) {
   const open = provider !== null;
-  const providerId = provider?.id ?? null;
 
   const [view, setView] = useState<Provider | null>(provider);
   const [mode, setMode] = useState<ProviderAuthMode>("api_key");
@@ -103,7 +102,12 @@ export default function ProviderConfigModal({
   const [busy, setBusy] = useState<"saving" | "removing" | "verifying" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Re-seed local state whenever a (different) provider is opened.
+  // Re-seed local state whenever a (different) provider is opened. The parent
+  // only ever swaps in a new `provider` object reference when the user opens
+  // a genuinely different provider (or closes the dialog, passing null) — it
+  // never mutates the object in place — so depending on the object itself
+  // (rather than just its id) reruns this exactly when intended, with no
+  // extra renders and no risk of looping.
   useEffect(() => {
     if (!provider) return;
     setView(provider);
@@ -113,8 +117,7 @@ export default function ProviderConfigModal({
     setReveal(false);
     setError(null);
     setBusy(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerId]);
+  }, [provider]);
 
   // Move focus into the dialog on open and restore it to the trigger on close.
   const dialogRef = useRef<HTMLDivElement>(null);
