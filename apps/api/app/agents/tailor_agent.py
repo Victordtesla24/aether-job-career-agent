@@ -18,7 +18,7 @@ from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
-from app.services.resume_tailor import ResumeTailorService
+from app.services.resume_tailor import ResumeTailorService, strip_bullet_lines
 
 #: Floor for the ATS-score denominator so a legitimate baseline of exactly
 #: 0.0 never raises ZeroDivisionError (GAP-E2).
@@ -32,13 +32,21 @@ _DEFAULT_POPULATION_BASELINE_RATE = 0.025
 
 def _compute_conversion_metrics(
     original_text: str,
+    original_bullets: list[dict[str, str]],
     tailored_bullets: list[dict[str, str]],
     job_description: str,
 ) -> dict[str, Any]:
     """Deterministic before/after ATS re-score + estimated conversion lift.
 
-    ``baselineATSScore`` scores the ORIGINAL resume text against the job;
-    ``tailoredATSScore`` re-scores the TAILORED bullets against the same job.
+    Both scores are computed on corpora that differ ONLY by the bullet wording
+    (GAP-TAIL-001). The keyword-dense resume context (skills, summary,
+    education) is stripped once via :func:`strip_bullet_lines` and re-attached
+    to each bullet set, so ``baselineATSScore`` (context + original bullets) and
+    ``tailoredATSScore`` (context + tailored bullets) are a true like-for-like
+    comparison. Scoring the full original resume against only the tailored
+    bullets previously discarded that shared context and produced a large,
+    dishonest negative delta regardless of rewrite quality.
+
     Both come from the deterministic :class:`ATSEngine` — no extra LLM cost.
     ``estimatedConversionLift`` scales the relative ATS-score delta by a
     population baseline interview-conversion rate (``AETHER_CONVERSION_BASELINE_RATE``,
@@ -46,9 +54,14 @@ def _compute_conversion_metrics(
     ZeroDivisionError while still producing a (large) honest lift figure.
     """
     engine = ATSEngine()
-    baseline_score = engine.score(original_text, job_description).overall
-    tailored_text = "\n".join(b.get("text", "") for b in tailored_bullets)
-    tailored_score = engine.score(tailored_text, job_description).overall
+    context = strip_bullet_lines(original_text)
+
+    def _corpus(bullets: list[dict[str, str]]) -> str:
+        bullet_text = "\n".join(b.get("text", "") for b in bullets)
+        return f"{context}\n{bullet_text}" if context else bullet_text
+
+    baseline_score = engine.score(_corpus(original_bullets), job_description).overall
+    tailored_score = engine.score(_corpus(tailored_bullets), job_description).overall
 
     population_rate = float(
         os.environ.get("AETHER_CONVERSION_BASELINE_RATE", str(_DEFAULT_POPULATION_BASELINE_RATE))
@@ -63,7 +76,7 @@ def _compute_conversion_metrics(
         "baselineATSScore": baseline_score,
         "tailoredATSScore": tailored_score,
         "estimatedConversionLift": f"{sign}{lift_pct:.1f}%",
-        "methodology": "ATS semantic score delta × population baseline (2.5%)",
+        "methodology": "Like-for-like ATS delta (shared context) × population baseline (2.5%)",
         "confidence": "model-estimated",
     }
 
@@ -157,7 +170,7 @@ class TailoringAgent:
             source_job_id=job_id,
         )
         conversion_metrics = _compute_conversion_metrics(
-            resume_text, result.bullets, job.get("description") or ""
+            resume_text, result.originals, result.bullets, job.get("description") or ""
         )
         return TailorRunResult(
             resume_id=tailored["id"],
