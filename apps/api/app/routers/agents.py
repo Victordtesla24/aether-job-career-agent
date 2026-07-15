@@ -26,6 +26,7 @@ from app.repositories.user_provider_credential import (
     _ensure_user_agent_tables,
 )
 from app.services import credential_vault
+from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
     LLMUnavailableError,
     QuotaExhaustedError,
@@ -43,7 +44,7 @@ router = APIRouter()
 
 #: Last-resort discovery targets used only when the user has NOT configured a
 #: target role/location on their profile (see ``_user_search_defaults``).
-_DEFAULT_QUERY = "delivery lead, product owner, business analyst, program manager"
+_DEFAULT_QUERY = ROLE_FAMILY_QUERY
 _DEFAULT_LOCATION = "Melbourne, Australia"
 
 #: Canonical agent registry (mirrors the LangGraph node names in
@@ -559,6 +560,11 @@ def _user_search_defaults(user_id: str) -> tuple[str, str]:
     module-level defaults only when the user has not configured them. This keeps
     scout runs targeted at the *user's* real goals rather than a hardcoded
     persona.
+
+    The returned ``query`` may still be a single narrow title (whatever the
+    user typed into their profile) — ``_dispatch`` runs it through
+    ``query_builder.build_scout_query`` afterwards to broaden it to the
+    user's whole target-role family (GAP-SRC-001).
     """
     query, location = _DEFAULT_QUERY, _DEFAULT_LOCATION
     ensure_user_profile_columns()
@@ -582,8 +588,13 @@ def _user_search_defaults(user_id: str) -> tuple[str, str]:
 def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
     if name == "scout":
         default_query, default_location = _user_search_defaults(user_id)
-        query = params.get("query") or default_query
+        raw_query = params.get("query") or default_query
         location = params.get("location") or default_location
+        # Broaden whatever query arrived (an explicit caller-supplied query,
+        # a cron/UI hardcode, or the profile-derived default above) into the
+        # user's full target-role family — GAP-SRC-001: a single narrow
+        # title starves discovery volume regardless of where it came from.
+        query = build_scout_query(raw_query)
         return _record_run(
             user_id, "scout", params, lambda: ScoutAgent().run(user_id, query, location)
         )

@@ -14,7 +14,12 @@ from app.services.discovery import relevance
 from app.services.discovery.base_adapter import BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
-_DEFAULT_LIMIT = "100"
+#: Remotive's entire live remote-jobs board currently sits well under this
+#: (see gap-6 sourcing notes) — set generously above today's total so a
+#: future-larger board isn't silently truncated (GAP-SRC-001 pagination
+#: depth). ``search`` is unreliable so this is a plain higher ceiling, not a
+#: filter.
+_DEFAULT_LIMIT = "250"
 
 
 class RemotiveAdapter(BaseAdapter):
