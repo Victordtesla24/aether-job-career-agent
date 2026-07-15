@@ -25,6 +25,10 @@ def _seed_job(client, auth_headers) -> dict:
 class TestConversionMetricsUnit:
     def test_baseline_and_tailored_scores_are_numeric_with_formatted_lift(self) -> None:
         original = "Led delivery for the Kookaburras squad. Reduced costs by 15%."
+        original_bullets = [
+            {"text": "Led delivery for the Kookaburras squad.", "evidenceRef": "bullet-0"},
+            {"text": "Reduced costs by 15%.", "evidenceRef": "bullet-1"},
+        ]
         tailored_bullets = [
             {"text": "Led delivery for the Kookaburras squad using Python.",
              "evidenceRef": "bullet-0"},
@@ -32,7 +36,7 @@ class TestConversionMetricsUnit:
              "evidenceRef": "bullet-1"},
         ]
         jd = "Looking for a Python engineer with delivery experience."
-        metrics = _compute_conversion_metrics(original, tailored_bullets, jd)
+        metrics = _compute_conversion_metrics(original, original_bullets, tailored_bullets, jd)
 
         assert isinstance(metrics["baselineATSScore"], (int, float))
         assert isinstance(metrics["tailoredATSScore"], (int, float))
@@ -42,7 +46,7 @@ class TestConversionMetricsUnit:
         assert metrics["estimatedConversionLift"].endswith("%")
         assert metrics["estimatedConversionLift"][0] in "+-"
         assert metrics["methodology"] == (
-            "ATS semantic score delta × population baseline (2.5%)"
+            "Like-for-like ATS delta (shared context) × population baseline (2.5%)"
         )
         assert metrics["confidence"] == "model-estimated"
 
@@ -52,11 +56,12 @@ class TestConversionMetricsUnit:
         # components all to zero, so baseline == 0.0 exactly.
         original = ""
         jd = "Requires 5+ years of Python experience building distributed systems."
+        original_bullets: list[dict[str, str]] = []
         tailored_bullets = [
             {"text": "Built distributed systems in Python for 6 years.",
              "evidenceRef": "bullet-0"}
         ]
-        metrics = _compute_conversion_metrics(original, tailored_bullets, jd)
+        metrics = _compute_conversion_metrics(original, original_bullets, tailored_bullets, jd)
 
         assert metrics["baselineATSScore"] == 0.0
         # Must not raise ZeroDivisionError and must still produce a formatted
@@ -66,6 +71,9 @@ class TestConversionMetricsUnit:
 
     def test_env_override_of_baseline_rate_is_respected(self) -> None:
         original = "Led delivery for the Kookaburras squad."
+        original_bullets = [
+            {"text": "Led delivery for the Kookaburras squad.", "evidenceRef": "bullet-0"}
+        ]
         tailored_bullets = [
             {"text": "Led delivery for the Kookaburras squad using Python and AWS.",
              "evidenceRef": "bullet-0"}
@@ -75,9 +83,13 @@ class TestConversionMetricsUnit:
         old = os.environ.get("AETHER_CONVERSION_BASELINE_RATE")
         try:
             os.environ["AETHER_CONVERSION_BASELINE_RATE"] = "0.025"
-            low_rate = _compute_conversion_metrics(original, tailored_bullets, jd)
+            low_rate = _compute_conversion_metrics(
+                original, original_bullets, tailored_bullets, jd
+            )
             os.environ["AETHER_CONVERSION_BASELINE_RATE"] = "0.25"
-            high_rate = _compute_conversion_metrics(original, tailored_bullets, jd)
+            high_rate = _compute_conversion_metrics(
+                original, original_bullets, tailored_bullets, jd
+            )
         finally:
             if old is None:
                 os.environ.pop("AETHER_CONVERSION_BASELINE_RATE", None)

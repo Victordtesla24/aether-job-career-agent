@@ -20,18 +20,38 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from app.services.ats_engine import _content_tokens as _ats_content_tokens
 from app.services.llm_client import LLMClient, get_model
 
 SYSTEM_PROMPT = (
-    "You are a precision resume editor. Only reword existing bullets to match "
-    "keywords. Never add skills, titles, employers not in original. Ground every "
-    "rewrite in the candidate's OWN evidence — do NOT copy distinctive phrases "
-    "from the job description into their experience; reuse the job's wording only "
-    "where the candidate's own bullet already demonstrates it. When the original "
-    "bullet contains a quantified outcome (%, $, headcount, timeframe) the "
-    "rewrite must keep at least one of those figures. Each rewritten bullet must "
-    "trace to the evidenceRef of exactly one original bullet — never reuse an "
-    "evidenceRef twice. Respond with JSON: "
+    "You are an elite resume editor optimising a resume to pass ATS keyword "
+    "screening for a specific job — while staying strictly truthful.\n"
+    "Your goal for EACH bullet: raise its overlap with the job description's "
+    "keywords and skills, using ONLY skills, tools and achievements the "
+    "candidate's own evidence already proves.\n"
+    "Rules:\n"
+    "1. SURFACE JD TERMINOLOGY the candidate genuinely has. When the job "
+    "description names a skill/tool/technology and the candidate's evidence "
+    "(their bullets AND the supplied career evidence) shows they have it, "
+    "rewrite the bullet to use the JD's exact word for it (e.g. evidence says "
+    "'containerised', JD says 'Docker' and the evidence shows Docker → say "
+    "'Docker'). Mirror the JD's verbs and nouns wherever truthful.\n"
+    "2. NEVER FABRICATE. Do not add a skill, tool, technology, employer, title, "
+    "certification or metric that the candidate's evidence does not support. If "
+    "the JD wants something the candidate lacks, leave it out — do not bluff.\n"
+    "3. PRESERVE EVERY METRIC. If the original bullet has a quantified outcome "
+    "(%, $, headcount, timeframe, volume) the rewrite MUST keep every one of "
+    "those figures. Never drop or soften a number.\n"
+    "4. NEVER WEAKEN. Keep every job-relevant keyword the original bullet "
+    "already contained; only add, never remove, JD-relevant terms.\n"
+    "5. Do not copy whole distinctive PHRASES verbatim from the posting — "
+    "surface individual truthful terms, phrased in the candidate's own voice.\n"
+    "6. Tune tone to the seniority of the role: confident and specific, never "
+    "boastful, no generic filler ('results-driven', 'team player'), no fluff.\n"
+    "7. Content only — do not invent new bullets, reorder, or change section "
+    "structure. Each rewritten bullet traces to the evidenceRef of exactly one "
+    "original bullet; never reuse an evidenceRef twice.\n"
+    "Respond with JSON: "
     '{"bullets": [{"text": "...", "evidenceRef": "bullet-N"}], '
     '"evidenceRefs": ["bullet-N", ...]}'
 )
@@ -237,6 +257,7 @@ def jd_echoed_phrases(
     text: str,
     jd_ngrams: set[tuple[str, ...]],
     evidence_ngrams: set[tuple[str, ...]],
+    evidence_stems: set[str] | None = None,
 ) -> list[str]:
     """Distinctive JD phrases a rewrite lifts that the user's evidence lacks.
 
@@ -248,9 +269,21 @@ def jd_echoed_phrases(
     :func:`unsupported_tokens`; this catches the lowercase phrase-level lifting
     the evidence-normalization guard is blind to (e.g. "first-class software",
     "high-traffic environment" echoed straight from the JD).
+
+    ``evidence_stems`` (GAP-TAIL-001) refines the guard so it no longer rejects
+    *truthful terminology mirroring*: a JD n-gram whose every content word is
+    individually supported by the candidate's evidence corpus is the candidate's
+    own vocabulary arranged to match the posting's wording — legitimate ATS
+    optimisation, not fabrication. Only grams containing at least one word the
+    evidence never uses are treated as lifted. When ``None`` the stricter
+    exact-n-gram behaviour is kept (backward compatible).
     """
     text_ngrams = _ngram_set(_content_stems(text), _JD_ECHO_NGRAM)
     lifted = text_ngrams & (jd_ngrams - evidence_ngrams)
+    if evidence_stems is not None:
+        lifted = {
+            gram for gram in lifted if any(word not in evidence_stems for word in gram)
+        }
     return sorted(" ".join(gram) for gram in lifted)
 
 
@@ -364,6 +397,43 @@ def extract_bullets(raw_text: str) -> list[str]:
     return bullets
 
 
+def strip_bullet_lines(raw_text: str) -> str:
+    """Return the resume text with bullet CONTENT removed.
+
+    Headers, the skills section, the summary and education survive; only the
+    lines that belong to experience bullets are dropped, using the same
+    line-walk state machine as :func:`extract_bullets`.
+
+    GAP-TAIL-001: the conversion-lift metric must score the baseline and the
+    tailored resume on corpora that differ *only* by the tailored bullets.
+    Scoring the full original resume against the JD but only the tailored
+    bullets stripped away the keyword-dense skills/summary context and produced
+    a large, dishonest negative delta. Rebuilding both sides as
+    ``strip_bullet_lines(resume) + <bullet set>`` keeps the shared context
+    identical, so the delta reflects the rewrite alone.
+    """
+    lines = [ln.strip() for ln in raw_text.splitlines()]
+    header = _job_header_indices(lines)
+    kept: list[str] = []
+    in_bullet = False
+    for i, line in enumerate(lines):
+        if not line:
+            continue
+        if _is_bullet_marker(line):
+            in_bullet = not _ends_bullet(line.lstrip("•●▪- ").strip())
+            continue
+        if not in_bullet:
+            kept.append(line)
+            continue
+        if _is_section_banner(line) or i in header:
+            in_bullet = False
+            kept.append(line)
+            continue
+        if _ends_bullet(line):
+            in_bullet = False
+    return "\n".join(kept)
+
+
 @dataclass
 class TailorResult:
     """Validated output of a tailoring run."""
@@ -373,6 +443,9 @@ class TailorResult:
     changes: int = 0
     #: Bullets the guard rejected (invented tokens / missing evidenceRef).
     rejected: list[str] = field(default_factory=list)
+    #: The structured ORIGINAL bullets (post-dedup), aligned 1:1 by evidenceRef
+    #: with :attr:`bullets`. Lets callers score a like-for-like baseline corpus.
+    originals: list[dict[str, str]] = field(default_factory=list)
 
 
 class ResumeTailorService:
@@ -459,6 +532,9 @@ class ResumeTailorService:
         evidence_stems, evidence_numbers = _evidence_index(evidence_source)
         jd_ngrams = jd_ngram_index(job_description)
         evidence_ngrams = _ngram_set(_content_stems(evidence_source), _JD_ECHO_NGRAM)
+        #: JD keyword tokens (same tokenizer the ATS engine scores with) so a
+        #: rewrite can be measured against the original for keyword coverage.
+        jd_terms = set(_ats_content_tokens(job_description))
         result = TailorResult()
         structured = self._structure_originals(originals, resume_text)
         by_ref = {b["evidenceRef"]: b["text"] for b in structured}
@@ -485,10 +561,22 @@ class ResumeTailorService:
                 # from a quantified bullet weakens the resume — keep original.
                 result.rejected.append(text)
                 text = original
-            elif jd_echoed_phrases(text, jd_ngrams, evidence_ngrams):
+            elif jd_echoed_phrases(text, jd_ngrams, evidence_ngrams, evidence_stems):
                 # JD-echo guard (GAP-P4-045): the rewrite lifts a distinctive
                 # phrase from the job posting that the candidate's own evidence
                 # never contained → keep the original, evidence-grounded bullet.
+                # A phrase whose every word is evidence-supported is truthful
+                # terminology mirroring and passes (GAP-TAIL-001).
+                result.rejected.append(text)
+                text = original
+            elif jd_terms & set(_ats_content_tokens(original)) - set(
+                _ats_content_tokens(text)
+            ):
+                # ATS non-regression floor (GAP-TAIL-001): a rewrite that drops
+                # a JD keyword the original bullet already covered would lower
+                # the tailored ATS score → keep the stronger original. Rewrites
+                # may only ADD JD-relevant terms, never remove them, which
+                # guarantees the aggregate tailoredATSScore >= baselineATSScore.
                 result.rejected.append(text)
                 text = original
             accepted[ref] = text
@@ -498,6 +586,7 @@ class ResumeTailorService:
         for b in structured:
             text = accepted.get(b["evidenceRef"], b["text"])
             result.bullets.append({"text": text, "evidenceRef": b["evidenceRef"]})
+            result.originals.append({"text": b["text"], "evidenceRef": b["evidenceRef"]})
             if text != b["text"]:
                 result.changes += 1
         return result
