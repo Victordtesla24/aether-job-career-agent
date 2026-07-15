@@ -32,10 +32,9 @@ from app.repositories.google_credential import GoogleCredentialRepository
 from app.services import google_oauth
 from app.services.gmail_service import ensure_email_thread_gmail_columns
 
-_REPO_SRC = pathlib.Path(
-    "app/repositories/gmail_account.py"
-)
-_MIGRATION = pathlib.Path("migrations/0021_multi_gmail_inbox.sql")
+_API_ROOT = pathlib.Path(__file__).resolve().parents[1]
+_REPO_SRC = _API_ROOT / "app" / "repositories" / "gmail_account.py"
+_MIGRATION = _API_ROOT / "migrations" / "0021_multi_gmail_inbox.sql"
 
 
 def _configure_oauth_env(monkeypatch) -> None:
