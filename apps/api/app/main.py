@@ -6,11 +6,15 @@ isolated instance) and mounts the routers. The module-level ``app`` is what
 """
 from __future__ import annotations
 
+import os
+import sys
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.rate_limit import build_login_rate_limiter, build_register_rate_limiter
+from app.services.llm_client import get_mode
 from app.routers import (
     agents,
     analytics,
@@ -31,8 +35,37 @@ from app.routers import (
 )
 
 
+def _guard_production_replay_mode() -> None:
+    """Fail fast if a production deploy would silently serve LLM fixtures.
+
+    ``AETHER_LLM_MODE`` defaults to ``replay`` (see
+    ``app.services.llm_client.get_mode``), which is correct for local
+    dev/tests but must never reach production — it would serve canned
+    fixture responses instead of real model output with no visible error
+    (§REC-04). Non-production replay mode only prints a warning.
+    """
+    mode = get_mode()
+    env = os.environ.get("AETHER_ENV", "development").strip().lower()
+    if mode != "replay":
+        return
+    if env == "production":
+        raise RuntimeError(
+            "§REC-04: AETHER_LLM_MODE=replay is not permitted when "
+            "AETHER_ENV=production — this would silently serve canned LLM "
+            "fixtures instead of real model output. Set AETHER_LLM_MODE to "
+            "'auto', 'live', or 'record' for production deploys."
+        )
+    print(
+        "WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not "
+        "live model output. This is expected in development/tests only; it "
+        "must never be used in production (§REC-04).",
+        file=sys.stderr,
+    )
+
+
 def create_app() -> FastAPI:
     """Construct and configure the FastAPI application."""
+    _guard_production_replay_mode()
     settings = get_settings()
 
     app = FastAPI(
