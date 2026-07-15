@@ -19,6 +19,17 @@ from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 
+class AdapterFetchError(RuntimeError):
+    """A live adapter fetch failed (network/HTTP/parse error).
+
+    Distinct from :class:`NotImplementedError`, which means the source has *no
+    live mode at all* (a legacy fixture-only source). The scout treats the two
+    differently: a ``NotImplementedError`` is a benign skip, while an
+    ``AdapterFetchError`` (or any other exception) is a REAL failure that must
+    be surfaced per-source rather than swallowed (GAP-SRC-002).
+    """
+
+
 class JobRaw(TypedDict):
     """Normalized job posting as produced by every adapter."""
 

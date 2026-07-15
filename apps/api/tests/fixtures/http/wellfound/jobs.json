@@ -1,0 +1,34 @@
+{
+  "jobs": [
+    {
+      "id": "12345",
+      "title": "Lead Business Analyst",
+      "company": {"name": "Canva", "slug": "canva"},
+      "url": "https://wellfound.com/jobs/12345-lead-business-analyst",
+      "remote": false,
+      "locations": [{"name": "Sydney"}],
+      "liveStartAt": "2026-07-06T00:00:00Z",
+      "description": "Drive requirements analysis across product squads."
+    },
+    {
+      "id": "12346",
+      "title": "Delivery Manager",
+      "company": {"name": "Airwallex", "slug": "airwallex"},
+      "url": "https://wellfound.com/jobs/12346-delivery-manager",
+      "remote": true,
+      "locations": [{"name": "Remote"}],
+      "liveStartAt": "2026-07-05T00:00:00Z",
+      "description": "Own delivery for the payments platform."
+    },
+    {
+      "id": "12347",
+      "title": "Software Engineer",
+      "company": {"name": "SafetyCulture", "slug": "safetyculture"},
+      "url": "https://wellfound.com/jobs/12347-software-engineer",
+      "remote": false,
+      "locations": [{"name": "Sydney"}],
+      "liveStartAt": "2026-07-04T00:00:00Z",
+      "description": "Build features in TypeScript and Go."
+    }
+  ]
+}
