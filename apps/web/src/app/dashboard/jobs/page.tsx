@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
+import MetricTooltip from "../../../components/MetricTooltip";
 
 // ---------------------------------------------------------------------------
 // Types (insights payload from GET /jobs/{id}/insights)
@@ -859,7 +860,12 @@ export default function JobsPage() {
                     </button>
                     <div className="text-center">
                       <MatchRing value={selected.fitScore} size={64} />
-                      <p className="mt-1 text-[10px] text-aether-muted-dim">match score</p>
+                      <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-aether-muted-dim">
+                        <MetricTooltip
+                          value="match score"
+                          tooltip="How well this posting matches your resume — a 0–100 blend of keyword, semantic and experience fit."
+                        />
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1111,7 +1117,15 @@ export default function JobsPage() {
             <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5 text-[12px]">
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Role</span><span className="text-[#C7C7D6]">{gateJob.title}</span></div>
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Company</span><span className="text-[#C7C7D6]">{gateJob.company}</span></div>
-              <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Match score</span><span className="mono font-semibold text-aether-green">{gateJob.fitScore != null ? Math.round(gateJob.fitScore) : "—"}</span></div>
+              <div className="flex items-center justify-between">
+                <span className="text-aether-muted-dim">Match score</span>
+                <span className="mono font-semibold text-aether-green">
+                  <MetricTooltip
+                    value={gateJob.fitScore != null ? Math.round(gateJob.fitScore) : "—"}
+                    tooltip="How well this posting matches your resume — a 0–100 blend of keyword, semantic and experience fit."
+                  />
+                </span>
+              </div>
             </div>
 
             {submitted ? (

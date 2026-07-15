@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchMarketPulse, type MarketPulse as MarketPulseData } from "../../lib/api/workspaces";
+import MetricTooltip from "../MetricTooltip";
 
 const HEAT = ["bg-white/5", "bg-aether-coral/20", "bg-aether-coral/40", "bg-aether-coral/70", "bg-aether-coral"];
 
@@ -67,6 +68,10 @@ export default function MarketPulse() {
         <span className="h-2 w-2 rounded-full bg-aether-violet live-dot" />
         <h2 className="text-[15px] font-semibold">Real-Time Market Pulse</h2>
         <span className="mono text-[11px] text-aether-muted-dim">hiring &amp; recruitment trends · AU</span>
+        <MetricTooltip
+          value=""
+          tooltip="A live snapshot of hiring-market activity in your target region — job-source mix, in-demand skills, employer and recruiter activity, and how your metrics compare to the market."
+        />
       </div>
 
       {/* Trend indicator tiles */}
@@ -77,9 +82,11 @@ export default function MarketPulse() {
           <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
-              <span className={`mono text-xs font-bold ${t.direction === "up" ? "text-aether-green" : "text-aether-coral"}`}>
-                {t.delta}
-              </span>
+              <MetricTooltip
+                value={t.delta}
+                tooltip={`${t.label}: percentage change vs. the prior period.`}
+                className={`mono text-xs font-bold ${t.direction === "up" ? "text-aether-green" : "text-aether-coral"}`}
+              />
             </div>
             <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
               <polyline
@@ -157,8 +164,12 @@ export default function MarketPulse() {
 
         {/* Job Probability Score */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="probability-score">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Your Job Probability Score
+          <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+            <MetricTooltip
+              label="Your Job Probability Score"
+              value=""
+              tooltip="An estimate of your likelihood of landing an offer, blending your fit scores, application activity, and current market conditions."
+            />
           </h3>
           <div className="flex items-center gap-5">
             <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" role="img" aria-label={`Probability ${data.probability.score}%`}>

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import MarketPulse from "../../../components/analytics/MarketPulse";
+import MetricTooltip from "../../../components/MetricTooltip";
 import {
   fetchAgentRoi,
   fetchAtsDistribution,
@@ -78,6 +79,23 @@ export default function AnalyticsPage() {
   const maxStage = funnelStages ? Math.max(1, ...funnelStages.map(([, v]) => v)) : 1;
   const maxBucket = ats ? Math.max(1, ...ats.buckets.map((b) => b.count)) : 1;
 
+  const SUMMARY_TIP: Record<string, string> = {
+    Applications: "Total roles you've applied to, across all sources and time periods.",
+    Interviews: "Applications that have progressed to at least one interview stage.",
+    Offers: "Applications where an employer has extended a formal offer.",
+    "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
+    "Avg Fit Score": "Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting.",
+    "Agent Runs": "Total number of agent executions (discovery, tailoring, scoring, etc.) in this period.",
+    "Agent Spend": "Total LLM API cost incurred by agent runs in this period.",
+  };
+
+  const CONVERSION_TIP: Record<string, string> = {
+    "Found → Applied": "Share of discovered jobs you went on to apply for.",
+    "Applied → Screened": "Share of applications that advanced to a recruiter screen.",
+    "Screened → Interview": "Share of screened applications that reached an interview.",
+    "Interview → Offer": "Share of interviews that resulted in a formal offer.",
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -124,7 +142,9 @@ export default function AnalyticsPage() {
           ).map(([label, value, color]) => (
             <div key={label} className="glass rounded-2xl border border-white/10 p-4">
               <dt className="text-xs text-aether-muted">{label}</dt>
-              <dd className={`mono mt-1 text-2xl font-bold ${color}`}>{value}</dd>
+              <dd className={`mono mt-1 text-2xl font-bold ${color}`}>
+                <MetricTooltip value={value} tooltip={SUMMARY_TIP[label] ?? "See the analytics glossary for how this metric is calculated."} />
+              </dd>
             </div>
           ))}
         </section>
@@ -176,7 +196,9 @@ export default function AnalyticsPage() {
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono text-2xl font-bold text-aether-violet">{value}%</dd>
+                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-violet">
+                  <MetricTooltip value={`${value}%`} tooltip={CONVERSION_TIP[label] ?? "Conversion rate between two consecutive funnel stages."} />
+                </dd>
                 <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
               </div>
             ))}
@@ -186,8 +208,12 @@ export default function AnalyticsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="glass rounded-2xl border border-white/10 p-5" data-testid="ats-distribution">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-            ATS score distribution
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+            <MetricTooltip
+              label="ATS score distribution"
+              value=""
+              tooltip="How your scored jobs are spread across ATS/AI fit-score bands (0–100) — higher bands mean stronger keyword and experience matches."
+            />
           </h2>
           {ats === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
@@ -224,18 +250,26 @@ export default function AnalyticsPage() {
           ) : (
             <dl className="mt-4 grid grid-cols-3 gap-4">
               <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono text-2xl font-bold text-aether-green">
-                  ${roi.total_cost_usd.toFixed(2)}
+                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-green">
+                  <MetricTooltip
+                    value={`$${roi.total_cost_usd.toFixed(2)}`}
+                    tooltip="Cumulative LLM API cost across all agent runs in this period."
+                  />
                 </dd>
                 <dt className="mt-1 text-xs text-aether-muted">Total spend</dt>
               </div>
               <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono text-2xl font-bold">{roi.total_runs}</dd>
+                <dd className="mono flex items-center justify-center text-2xl font-bold">
+                  <MetricTooltip value={roi.total_runs} tooltip="Total number of agent executions recorded in this period." />
+                </dd>
                 <dt className="mt-1 text-xs text-aether-muted">Agent runs</dt>
               </div>
               <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono text-2xl font-bold text-aether-amber">
-                  {(roi.avg_duration_ms / 1000).toFixed(1)}s
+                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-amber">
+                  <MetricTooltip
+                    value={`${(roi.avg_duration_ms / 1000).toFixed(1)}s`}
+                    tooltip="Average wall-clock time per agent run in this period."
+                  />
                 </dd>
                 <dt className="mt-1 text-xs text-aether-muted">Avg duration</dt>
               </div>
