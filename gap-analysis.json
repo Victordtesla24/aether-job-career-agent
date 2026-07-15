@@ -49,6 +49,15 @@
       "pre_evidence": "evidence/probe-06/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "PARTIAL",
+      "remaining_work": "(a) per-user credential storage — add UserProviderCredential(userId,provider,authMode,ciphertext,...) table via lazy idempotent DDL (ADR-TR-1); (b) resolve_user_credential(provider,user_id,agent_key) precedence path checked before the deployment-wide ProviderCredential row; (c) automated in-app Anthropic OAuth consent flow (PKCE): AnthropicOAuthState + AnthropicOAuthToken tables, GET /agents/auth/anthropic/start + /callback, encrypted token storage, refresh; (d) UI: \"Connect with Anthropic\" OAuth button vs \"Use API Key\" input, mutually exclusive.",
+      "key_files": [
+        "apps/api/app/repositories/provider_credential.py",
+        "apps/api/app/services/llm_client.py",
+        "apps/api/app/routers/agents.py",
+        "apps/web/src/app/dashboard/agents/page.tsx"
+      ],
+      "evidence": "Native Anthropic transport (Bearer + anthropic-beta oauth-2025-04-20 / x-api-key) AND billing separation (claude-*→anthropic only, no cross-provider) ALREADY EXIST in llm_client.py (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-hard",
       "fixer_model": "opus",
       "reviewer_model": "sonnet",
@@ -76,6 +85,15 @@
       "pre_evidence": "evidence/probe-07/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "CONFIRMED-OPEN",
+      "remaining_work": "GoogleCredential schema → id PK + accountEmail + isPrimary + partial-unique(one primary per user) + unique(userId,accountEmail); build_consent_url prompt=\"select_account\" (not \"consent\"); EmailThread.gmailAccountId column + backfill; endpoints GET /emails/accounts, POST /emails/accounts/connect, DELETE /emails/accounts/{id}, PATCH set-primary, GET sync-status; GET /emails ?account_id filter + unified view; account-switcher UI.",
+      "key_files": [
+        "apps/api/app/services/google_oauth.py",
+        "apps/api/app/routers/emails.py",
+        "apps/api/app/routers/auth.py",
+        "apps/web/src/app/dashboard/email/page.tsx"
+      ],
+      "evidence": "Multi-Gmail entirely missing (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-hard",
       "fixer_model": "opus",
       "reviewer_model": "sonnet",
@@ -101,6 +119,13 @@
       "pre_evidence": "evidence/probe-08/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "CONFIRMED-OPEN",
+      "remaining_work": "add temperature/thinkingEffort/provider/authMode/credentialRef columns to AgentConfig (lazy DDL); extend AgentConfigUpdate model + PUT /agents/config/{agentKey} to persist ALL fields; add GET /agents/config/{agentKey} (currently 405); billingAuditJson column on AgentRun + populate in _record_run/_dispatch; quota-exhaustion 429 handling + AgentQuotaBlock; all 22 catalog keys accepted; UI temperature slider + thinking selector + credential selector + billing-path indicator.",
+      "key_files": [
+        "apps/api/app/routers/agents.py",
+        "apps/web/src/app/dashboard/agents/page.tsx"
+      ],
+      "evidence": "PUT /agents/config/{agentKey} exists but silently drops temperature/thinkingEffort; no GET round-trip endpoint (405); AgentRun has no billingAuditJson column (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-hard",
       "fixer_model": "opus",
       "reviewer_model": "sonnet",
@@ -123,6 +148,12 @@
       "pre_evidence": "evidence/probe-05/env-check.txt",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "PARTIAL",
+      "remaining_work": "startup assertion in apps/api/app/main.py create_app() raising RuntimeError if AETHER_LLM_MODE=='replay' AND AETHER_ENV=='production' (REC-04); document in .env.example.",
+      "key_files": [
+        "apps/api/app/main.py"
+      ],
+      "evidence": "AETHER_LLM_MODE=auto in prod (OK) (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-medium",
       "fixer_model": "sonnet",
       "reviewer_model": "sonnet",
@@ -145,6 +176,14 @@
       "pre_evidence": "evidence/probe-09/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "PARTIAL",
+      "remaining_work": "compute before/after conversionMetrics (baselineATSScore, tailoredATSScore, estimatedConversionLift via §5.2 formula) in tailor pipeline; add to TailorRunResult + tailor API response; surface in resume UI.",
+      "key_files": [
+        "apps/api/app/agents/tailor_agent.py",
+        "apps/api/app/services/resume_tailor.py",
+        "apps/web/src/app/dashboard/resume/page.tsx"
+      ],
+      "evidence": "evidence_extra population already done via build_career_corpus(user_id) (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-medium",
       "fixer_model": "sonnet",
       "reviewer_model": "sonnet",
@@ -167,6 +206,13 @@
       "pre_evidence": "evidence/probe-12/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "CONFIRMED-OPEN",
+      "remaining_work": "build apps/web/src/components/MetricTooltip.tsx (accessible, value + info icon → popover) and attach to every metric on analytics/dashboard/jobs/resume/agents screens with §5.3 tooltip copy.",
+      "key_files": [
+        "apps/web/src/components/MetricTooltip.tsx",
+        "apps/web/src/app/dashboard/analytics/page.tsx"
+      ],
+      "evidence": "No MetricTooltip/InfoPopover anywhere (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-medium",
       "fixer_model": "sonnet",
       "reviewer_model": "sonnet",
@@ -189,6 +235,12 @@
       "pre_evidence": "evidence/probe-10/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "PARTIAL",
+      "remaining_work": "dedicated cover-letter rejection UI naming which guard (fabrication vs structural), listing rejected tokens/missing structural elements, remediation steps + Regenerate button.",
+      "key_files": [
+        "apps/web/src/app/dashboard/cover-letters/page.tsx"
+      ],
+      "evidence": "422 raised backend (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-medium",
       "fixer_model": "sonnet",
       "reviewer_model": "sonnet",
@@ -211,6 +263,13 @@
       "pre_evidence": null,
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "CONFIRMED-OPEN",
+      "remaining_work": "resolve_credential must read per-user AgentConfig.credentialRef / AgentProvider before deployment-wide fallback (currently AgentProvider is written but never read). SHARED with GAP-D1/GAP-D3 — same files, folded into lane A.",
+      "key_files": [
+        "apps/api/app/services/llm_client.py",
+        "apps/api/app/routers/agents.py"
+      ],
+      "evidence": "AgentProvider rows written by agents panel PUT but resolve_credential() never queries the table (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-hard",
       "fixer_model": "opus",
       "reviewer_model": "sonnet",
@@ -233,7 +292,14 @@
       "pre_evidence": "evidence/probe-06/",
       "post_evidence": null,
       "status": "OPEN",
-      "assigned_agent": "fixer-hard",
+      "verdict": "PARTIAL",
+      "remaining_work": "trigger verify automatically on credential save so the \"connected\" badge reflects a real verification (or show unverified state honestly).",
+      "key_files": [
+        "apps/api/app/routers/agents.py",
+        "apps/web/src/app/dashboard/agents/page.tsx"
+      ],
+      "evidence": "Verify round-trip + lastVerifyStatus fields exist, wired to POST /providers/{provider}/verify (fresh live-production evidence + code discovery, 2026-07-15).",
+      "assigned_agent": "fixer-medium",
       "fixer_model": "opus",
       "reviewer_model": "sonnet",
       "adjudication": "Flagged by probe-06 (STALE-CRED-001).",
@@ -254,7 +320,11 @@
       "verification_recipe": null,
       "pre_evidence": "evidence/probe-13/",
       "post_evidence": null,
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-FIXED",
+      "remaining_work": "None. 155 jobs / 149 seek jobs now have resolvable URLs; the earlier 0-seek reading was transient. REC-05 (flag expired postings) remains a forward-looking recommendation only, not a blocking gap.",
+      "key_files": [],
+      "evidence": "155 jobs / 149 seek with resolvable URLs; the earlier 0-seek reading was transient (fresh live-production evidence, 2026-07-15).",
       "assigned_agent": null,
       "fixer_model": null,
       "reviewer_model": null,
@@ -280,11 +350,53 @@
       "pre_evidence": "evidence/probe-10/",
       "post_evidence": null,
       "status": "OPEN",
+      "verdict": "CONFIRMED-OPEN",
+      "remaining_work": "wrap job['description'] in clearly-labeled delimiters + neutralize instruction-like content before interpolating into base_prompt; add an output-side check that injected control phrases are not echoed; add a regression test.",
+      "key_files": [
+        "apps/api/app/agents/cover_letter_agent.py"
+      ],
+      "evidence": "Empirical injection test passed (output did not echo injected text) but source has no delimiting/sanitization (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-medium",
       "fixer_model": "sonnet",
       "reviewer_model": "sonnet",
       "lane": "G",
       "adjudication": "New finding surfaced by PHASE-0 QA review of fresh evidence; in-scope under the zero-tolerance output-authenticity bar (§0.4, §9)."
     }
-  ]
+  ],
+  "evidence_summary": {
+    "phase0": {
+      "date": "2026-07-15",
+      "method": "fresh live-production evidence + code discovery",
+      "confirmed_already_implemented": [
+        "Native Anthropic transport (Bearer + anthropic-beta oauth-2025-04-20 / x-api-key) in llm_client.py (GAP-D1)",
+        "Billing separation: claude-* models route only to anthropic, no cross-provider leakage (GAP-D1)",
+        "evidence_extra population via build_career_corpus(user_id) already wired in tailor_agent (GAP-E2)",
+        "AETHER_LLM_MODE=auto confirmed in production (GAP-E1)",
+        "Verify round-trip + lastVerifyStatus fields exist, wired to POST /providers/{provider}/verify (GAP-NEW-001)",
+        "155 jobs / 149 seek jobs with resolvable URLs — earlier 0-seek reading was transient (GAP-NEW-002, now VERIFIED-CLOSED)"
+      ],
+      "gaps_by_status": {
+        "OPEN": 10,
+        "VERIFIED-CLOSED": 1,
+        "UNCONFIRMED": 0
+      }
+    },
+    "gates": [
+      { "id": "GATE-01", "description": "health", "status": "PASS" },
+      { "id": "GATE-02", "description": "AETHER_LLM_MODE=auto", "status": "PASS" },
+      { "id": "GATE-03", "description": "Anthropic OAuth round-trip", "status": "FAIL-open(D1)" },
+      { "id": "GATE-04", "description": "≥2 Gmail accounts", "status": "FAIL-open(D2)" },
+      { "id": "GATE-05", "description": "22 agents PUT config + billing audit", "status": "FAIL-open(D3)" },
+      { "id": "GATE-06", "description": "conversionMetrics in tailor response", "status": "FAIL-open(E2)" },
+      { "id": "GATE-07", "description": "MetricTooltip on analytics", "status": "FAIL-open(E3)" },
+      { "id": "GATE-08", "description": "zero console errors across 15 routes", "status": "UNKNOWN-pending-recon" },
+      { "id": "GATE-09", "description": "zero 5xx across 15 routes", "status": "UNKNOWN-pending-recon" },
+      { "id": "GATE-10", "description": "seek jobs resolve", "status": "PASS" },
+      { "id": "GATE-11", "description": "agent runs include billingAuditJson", "status": "FAIL-open(D3)" },
+      { "id": "GATE-12", "description": "pytest green", "status": "UNKNOWN-pending" },
+      { "id": "GATE-13", "description": "playwright green", "status": "UNKNOWN-pending" },
+      { "id": "GATE-14", "description": "no prohibited patterns", "status": "per-fix" },
+      { "id": "GATE-15", "description": "push + prod build", "status": "pending" }
+    ]
+  }
 }
