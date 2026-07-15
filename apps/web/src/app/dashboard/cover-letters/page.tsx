@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActionsPanel } from "../../../components/cover-letters/ActionsPanel";
 import { EvidenceTracePanel } from "../../../components/cover-letters/EvidenceTracePanel";
 import { KeywordCoveragePanel } from "../../../components/cover-letters/KeywordCoveragePanel";
+import { RejectionPanel } from "../../../components/cover-letters/RejectionPanel";
 import { VersionsPanel } from "../../../components/cover-letters/VersionsPanel";
 import { VoiceDnaPanel } from "../../../components/cover-letters/VoiceDnaPanel";
 import {
@@ -25,6 +26,10 @@ import {
   parseApiDate,
   wordCount,
 } from "../../../components/cover-letters/insights";
+import {
+  parseCoverLetterRejection,
+  type CoverLetterRejection,
+} from "../../../components/cover-letters/rejection";
 import { apiRequest } from "../../../lib/api/client";
 import {
   fetchCoverLetters,
@@ -53,6 +58,25 @@ export default function CoverLettersPage() {
   const [refining, setRefining] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 422 fabrication/structural rejections get their own dedicated panel
+  // (GAP-E4) instead of the generic top-of-page alert; `retry` re-runs
+  // whichever action produced the rejection.
+  const [rejection, setRejection] = useState<{
+    model: CoverLetterRejection;
+    retry: () => void;
+  } | null>(null);
+
+  /** Route a caught agent-run/refine error to the rejection panel or the generic alert. */
+  const handleAgentError = (e: unknown, fallbackMessage: string, retry: () => void) => {
+    const model = parseCoverLetterRejection(e);
+    if (model) {
+      setRejection({ model, retry });
+      setError(null);
+    } else {
+      setRejection(null);
+      setError(e instanceof Error ? e.message : fallbackMessage);
+    }
+  };
 
   const load = useCallback(async (selectId?: string) => {
     try {
@@ -108,8 +132,9 @@ export default function CoverLettersPage() {
       const result = await runCoverLetterAgent(selectedJob);
       await load(result.cover_letter_id);
       setError(null);
+      setRejection(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cover letter run failed");
+      handleAgentError(e, "Cover letter run failed", () => void generate());
     } finally {
       setRunning(false);
     }
@@ -122,8 +147,9 @@ export default function CoverLettersPage() {
       const result = await runCoverLetterAgent(letter.jobId);
       await load(result.cover_letter_id);
       setError(null);
+      setRejection(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Regenerate failed");
+      handleAgentError(e, "Regenerate failed", () => void regenerate(letter));
     } finally {
       setRegenerating(null);
     }
@@ -137,8 +163,9 @@ export default function CoverLettersPage() {
       const result = await refineCoverLetter(selected.id, { tone, formality });
       await load(result.cover_letter_id);
       setError(null);
+      setRejection(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Regenerate failed");
+      handleAgentError(e, "Regenerate failed", () => void regenerateSelected());
     } finally {
       setRegenerating(null);
     }
@@ -151,9 +178,13 @@ export default function CoverLettersPage() {
       const result = await refineCoverLetter(selected.id, { instructions, tone, formality });
       await load(result.cover_letter_id);
       setError(null);
+      setRejection(null);
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Change request failed");
+      // The refine form stays open with the typed instructions on failure, so
+      // the rejection panel's own "Regenerate" re-runs a plain redraft
+      // (tone/formality only) rather than resubmitting the flagged text.
+      handleAgentError(e, "Change request failed", () => void regenerateSelected());
       return false;
     } finally {
       setRefining(false);
@@ -247,7 +278,17 @@ export default function CoverLettersPage() {
         </div>
       </header>
 
-      {error ? (
+      {rejection ? (
+        <RejectionPanel
+          rejection={rejection.model}
+          regenerating={regenerating !== null}
+          onRegenerate={() => {
+            const { retry } = rejection;
+            setRejection(null);
+            retry();
+          }}
+        />
+      ) : error ? (
         <p
           role="alert"
           className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
