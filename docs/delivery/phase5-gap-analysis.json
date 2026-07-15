@@ -1,0 +1,677 @@
+{
+  "meta": {
+    "run": "phase5",
+    "date": "2026-07-15",
+    "head": "16575fa",
+    "orchestrator": "opus-4-8 (orchestrator-only)",
+    "evidence_root": "uat/reports/evidence/phase5/",
+    "note": "Fresh discovery; trusts no prior ledger (§2.1)."
+  },
+  "gaps": [
+    {
+      "id": "GAP-AUTH-001",
+      "title": "Anthropic consumer-subscription OAuth (PKCE) violates third-party auth policy",
+      "type": "AUTHENTICITY",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/agents",
+      "category": "auth",
+      "source": [
+        "OBSERVED-CODE",
+        "OBSERVED-LIVE"
+      ],
+      "observed": "Anthropic consumer-subscription OAuth (PKCE) is fully implemented and active: anthropic_oauth.py (lines 1-265) implements AUTHORIZE_URL=https://claude.ai/oauth/authorize and TOKEN_URL=https://api.anthropic.com/oauth/token with PKCE; endpoints GET /agents/auth/anthropic/{start,callback} (agents.py lines 1520-1589) are live; 3 DB tables persist state — UserProviderCredential (authMode='subscription_oauth'), AnthropicOAuthState, AnthropicOAuthToken; llm_client.py sends Bearer + anthropic-beta oauth header, performs token refresh, and reports subscription quota usage.",
+      "expected": "Per GT-3/§7/Gate-14 (Anthropic third-party auth policy [web:524]), consumer Free/Pro/Max subscription OAuth in a third-party product is non-compliant and must be removed. Anthropic access must use only server-side API-key auth (x-api-key via Claude Console/commercial credential), which is already implemented and functioning in this codebase.",
+      "root_cause": "The prior 'prud' remediation run (2026-07-14) built a subscription-OAuth PKCE flow believing it was a required enhancement; this predates the GT-3 compliance ruling surfaced fresh in this Phase-5 discovery. The API-key path already exists and works, so the OAuth path is pure non-compliant surface area, not a missing-feature gap.",
+      "files": [
+        "apps/api/app/services/anthropic_oauth.py",
+        "apps/api/app/services/llm_client.py",
+        "apps/api/app/routers/agents.py",
+        "apps/api/app/repositories/user_provider_credential.py",
+        "apps/web (agents provider UI)"
+      ],
+      "wireframes": [
+        "design/screens/agents.html"
+      ],
+      "fix_spec": "Remove apps/api/app/services/anthropic_oauth.py and the GET /agents/auth/anthropic/{start,callback} routes in agents.py (~lines 1520-1589). Remove the subscription_oauth authMode branch from UserProviderCredential and the Bearer+anthropic-beta oauth path (incl. refresh and subscription-quota reporting) from llm_client.py. Retire (do not drop) AnthropicOAuthState/AnthropicOAuthToken tables per additive-only migration policy — stop writing to them, leave schema in place for audit trail. Remove the 'Connect with Anthropic' OAuth UI affordance in apps/web agents provider screen, leaving only the existing, already-working API-key entry path. Confirm resolve_credential()/resolve_user_credential() never selects subscription_oauth mode.",
+      "tests_required": [
+        "pytest apps/api/tests -k anthropic_oauth (routes/service removed, 404 not 200)",
+        "pytest apps/api/tests -k provider_credential (authMode no longer accepts subscription_oauth on new writes)",
+        "playwright: /dashboard/agents shows no consumer-OAuth connect control",
+        "grep verification: zero references to claude.ai/oauth/authorize or subscription_oauth write paths outside historical/read-only code"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix.",
+        "2. GET /agents/auth/anthropic/start -> expect 404 (route removed).",
+        "3. GET /agents/auth/anthropic/callback -> expect 404 (route removed).",
+        "4. Confirm /agents/config and /agents/providers still return 200 and only advertise api_key auth mode for Anthropic.",
+        "5. Confirm existing x-api-key Anthropic path still succeeds end-to-end (unaffected).",
+        "6. Re-run OpenAPI inventory probe; confirm 0 anthropic oauth paths remain."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/probe-003-openapi.json",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-hard",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    },
+    {
+      "id": "GAP-SRC-001",
+      "title": "Job sourcing single-source concentration and missing ATS connectors (155 jobs, 96% Seek)",
+      "type": "CAPABILITY",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/jobs",
+      "category": "sourcing",
+      "source": [
+        "OBSERVED-LIVE",
+        "OBSERVED-CODE"
+      ],
+      "observed": "155 total jobs in production DB; 96% (149) single-source from Seek. 5 live adapters exist (Seek, Greenhouse, Lever, Remotive, RemoteOk); LinkedIn and Indeed adapters are fixture-only (not live); Workable, Ashby, Wellfound connectors are MISSING entirely. Seek adapter is hard-capped at 20 results/run (seek_adapter.py:281) with no pagination beyond that cap. No per-company/ATS portal configuration exists for direct-to-portal sourcing.",
+      "expected": "Per §11.1/Journey A: add Workable/Ashby/Wellfound connectors; implement pagination-to-exhaustion (or explicit documented cap) on all adapters including Seek; achieve >=25 net-new verified-real jobs across >=4 distinct sources on a full sync; fingerprint-based dedupe (normalized company+title+location+source URL); liveness/freshness validation so no expired/fabricated listings enter the UI.",
+      "root_cause": "(1) Missing connector implementations for Workable/Ashby/Wellfound. (2) seek_adapter.py:281 hardcodes a 20-result page cap with no next-page/offset logic. (3) No per-company ATS portal configuration equivalent to career-ops' portals.yml (GT-1/GT-2).",
+      "files": [
+        "apps/api/app/services/discovery/*",
+        "apps/api/app/agents/scout_agent.py"
+      ],
+      "wireframes": [
+        "design/screens/job-discovery.html"
+      ],
+      "fix_spec": "Implement new connector modules for Workable, Ashby, and Wellfound following the existing adapter interface in apps/api/app/services/discovery/. Remove the hard 20-result cap in seek_adapter.py:281; implement pagination-to-exhaustion (loop next-page/offset tokens until the source is exhausted or an explicit, documented cap is hit) across all adapters. Add a normalized fingerprint dedupe key (lower-cased company+title+location+source URL hash) at persistence time. Add liveness/freshness validation (reject postings past a staleness threshold or that fail a lightweight liveness check) before a job is surfaced in the UI. Borrow career-ops' portal-config and verification patterns (GT-1/GT-2) where applicable.",
+      "tests_required": [
+        "pytest: pagination across a multi-page source (mocked) proves exhaustion, not early-stop",
+        "pytest: source failure isolation — one adapter failing does not block others",
+        "pytest: dedupe correctness — identical fingerprint collapses, distinct fingerprints do not",
+        "pytest: expired posting rejection",
+        "pytest: new Workable/Ashby/Wellfound adapter unit tests (request shape, response parse, error handling)",
+        "playwright: /dashboard/jobs shows unified + per-source counts after sync"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix.",
+        "2. Trigger POST /agents/scout/run (on-demand sync).",
+        "3. Confirm persisted count >= 25 net-new jobs in this run.",
+        "4. Confirm jobs span >= 4 distinct sources (query DB group by source).",
+        "5. Cross-check >= 10 sampled jobs' sourceUrl against live postings (§10.4).",
+        "6. Confirm 0 fabricated/expired rows in the sampled verification set."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/probe-004-jobs-initial.json",
+        "uat/reports/evidence/phase5/probe-004-jobs-analysis.txt",
+        "uat/reports/evidence/phase5/sourcing-pipeline-inventory.txt",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-hard",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    },
+    {
+      "id": "GAP-SRC-002",
+      "title": "Scout swallows real source failures as NotImplementedError; silent persisted=0 for 24h",
+      "type": "DEFECT",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/jobs",
+      "category": "sourcing",
+      "source": [
+        "OBSERVED-LIVE",
+        "OBSERVED-CODE"
+      ],
+      "observed": "scout_agent.py catches real Seek 408/500 failures and re-wraps them as NotImplementedError, so the run reports errors:[] (empty) while persisted has been stuck at 0 for 24+ consecutive hours (40+ cron cycles per discovery.log). No per-source sync status (counts/last-sync/errors) is persisted or surfaced anywhere in the API or UI.",
+      "expected": "Per §7/§8: no silently swallowed sourcing failures; no silent zero-result syncs without a surfaced cause. Each source must report honest per-source errors and a persisted, queryable JobSourceStatus record (counts, last-sync timestamp, error detail).",
+      "root_cause": "scout_agent.py's exception handling catches source-specific errors (e.g., Seek 408/500) and re-wraps them generically as NotImplementedError instead of propagating or recording the true failure; there is no JobSourceStatus persistence model, so even if the true error were caught, nothing durable stores it.",
+      "files": [
+        "apps/api/app/agents/scout_agent.py",
+        "apps/api/app/services/discovery/*"
+      ],
+      "wireframes": [
+        "design/screens/job-discovery.html"
+      ],
+      "fix_spec": "Add a JobSourceStatus table (CREATE TABLE IF NOT EXISTS, additive) keyed by source name with columns for last_run_at, jobs_found, jobs_persisted, error_message, error_code. In scout_agent.py, stop swallowing/re-wrapping source exceptions as NotImplementedError; catch the real exception type, log it with full context, and write it to JobSourceStatus. Ensure the top-level run response's errors[] array is populated honestly whenever a source fails or a run persists 0 new jobs, with a human-readable reason (not a blank array).",
+      "tests_required": [
+        "pytest: simulated Seek 408/500 propagates as a real, typed error into JobSourceStatus.error_message (not NotImplementedError)",
+        "pytest: run with 0 net-new jobs but a real underlying error populates errors[] non-empty",
+        "pytest: JobSourceStatus round-trip (write then read) per source",
+        "pytest: no silent success on zero-job runs"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix.",
+        "2. Force/observe a source failure (or reproduce known Seek 408/500 condition).",
+        "3. Query the new per-source status table and confirm the real error is recorded, not NotImplementedError.",
+        "4. Confirm the scout run response's errors[] is non-empty when persisted=0 with an underlying failure.",
+        "5. Tail /var/log/aether/discovery.log across a sync cycle and correlate logged error with persisted JobSourceStatus row."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/probe-005-scout-trigger.json",
+        "uat/reports/evidence/phase5/probe-005-jobs-after-sync.txt",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-hard",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    },
+    {
+      "id": "GAP-SRC-003",
+      "title": "No per-source sync status indicator in jobs UI/API despite Sync Now button",
+      "type": "USABILITY",
+      "severity": "MEDIUM",
+      "surface": "/dashboard/jobs",
+      "category": "sourcing",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "The /dashboard/jobs screen has a functioning 'Sync Now' button, but there is no per-source sync status indicator (counts, last-sync time, errors) anywhere in the UI or a dedicated API endpoint to expose it.",
+      "expected": "Per §11.1 acceptance criteria: users can see unified and per-source results; each source reports counts/failures/timestamps honestly, surfaced in the UI.",
+      "root_cause": "No status API endpoint exists to serve per-source sync state, and no UI component consumes/renders it. Depends on the JobSourceStatus persistence introduced in GAP-SRC-002.",
+      "files": [
+        "apps/web/src/app/dashboard/jobs/page.tsx",
+        "apps/api/app/routers (jobs/discovery)"
+      ],
+      "wireframes": [
+        "design/screens/job-discovery.html"
+      ],
+      "fix_spec": "Add a GET /jobs/sources/status (or equivalent) endpoint in apps/api/app/routers that reads the JobSourceStatus table (GAP-SRC-002) and returns per-source counts, last-sync timestamp, and error detail. Add a per-source status panel/row to apps/web/src/app/dashboard/jobs/page.tsx that fetches and renders this endpoint, refreshing after Sync Now completes.",
+      "tests_required": [
+        "pytest: GET /jobs/sources/status returns per-source counts/timestamps/errors",
+        "vitest/playwright: jobs page renders per-source status panel with live data after sync"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix (depends on GAP-SRC-002 JobSourceStatus table).",
+        "2. Click Sync Now on /dashboard/jobs.",
+        "3. Confirm the per-source status panel updates with fresh counts/timestamps.",
+        "4. Confirm GET /jobs/sources/status returns matching data.",
+        "5. Confirm 0 console errors on the route."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/route-dashboard-jobs.png",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-medium",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    },
+    {
+      "id": "GAP-TAIL-001",
+      "title": "Tailored resume scores worse than baseline (craft_score 20/100, negative conversion lift)",
+      "type": "CAPABILITY",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/resume",
+      "category": "tailoring",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "writer-audit craft_score for a tailored resume = 20/100 — the tailored resume scores WORSE than the baseline resume (negative conversion lift). Rewriting is superficial; the anti-fabrication guard is too aggressive and rejects legitimate truthful rewrites, so bullets barely change from baseline.",
+      "expected": "Per §11.2/Journey B: content-only inline rewriting that raises ATS keyword coverage using truthful JD language, preserves quantified achievements, tailoredATS score >= baseline score, and writer-audit score above baseline. Every tailored artifact must show baseline score, tailored score, estimated conversion-change, and formula explanation.",
+      "root_cause": "The anti-fabrication/anti-hallucination guard in the tailoring pipeline is over-conservative: it blocks truthful, evidence-grounded rewrites (not just fabricated ones), collapsing the rewrite to near-baseline text and failing to incorporate real JD keywords the candidate's evidence actually supports.",
+      "files": [
+        "apps/api/app/services/resume_tailor.py",
+        "apps/api/app/agents/tailor_agent.py",
+        "apps/api/app/services/ats_engine.py",
+        "apps/api/app/services/career_data.py"
+      ],
+      "wireframes": [
+        "design/screens/resume-studio.html"
+      ],
+      "fix_spec": "Recalibrate the anti-fabrication guard in resume_tailor.py/tailor_agent.py so it rejects only claims unsupported by the career-evidence corpus (career_data.py), while permitting truthful JD-keyword mirroring and quantified-achievement-preserving rewrites. Ensure the ATS scoring engine (ats_engine.py) is invoked on both baseline and tailored text so tailoredATS >= baseline is enforced/verified before an artifact is returned. Surface baseline score, tailored score, estimated conversion-change, and a formula explanation in the tailor run response (§11.2 externalized explanation requirement).",
+      "tests_required": [
+        "pytest: no layout/template mutation on tailored output",
+        "pytest: evidence-grounding guard permits truthful JD-keyword mirroring while still rejecting unsupported skill insertion",
+        "pytest: tailoredATS score >= baselineATS score on a representative fixture set",
+        "pytest: conversion-metric explanation payload present and correctly labeled estimated",
+        "writer-audit: re-score a tailored artifact and confirm score exceeds the pre-fix 20/100 baseline",
+        "pytest: PDF export integrity preserved after tailoring changes"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix.",
+        "2. Tailor a resume for a real sourced job via POST /agents/tailor/run.",
+        "3. Capture before/after artifact and diff view.",
+        "4. Confirm tailoredATS >= baselineATS in the response payload.",
+        "5. Run writer-audit against the new output; confirm score exceeds prior 20/100.",
+        "6. Export PDF and visually confirm layout/template unchanged."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/tailor_run_response.json",
+        "uat/reports/evidence/phase5/tailor_diff.json",
+        "uat/reports/evidence/phase5/tailored_resume_full.json",
+        "uat/reports/evidence/phase5/base_resume.json"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-hard",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    },
+    {
+      "id": "GAP-COV-001",
+      "title": "Cover letter craft below elite standard (craft_score 60/100 — weak hook/CTA)",
+      "type": "ENHANCEMENT",
+      "severity": "HIGH",
+      "surface": "/dashboard/cover-letters",
+      "category": "cover_letter",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "writer-audit craft_score for a generated cover letter = 60/100. Business-letter skeleton is present but the role/company hook is weak, JD-requirement tie-in is loose, and the closing CTA is weak.",
+      "expected": "Per §11.3/Journey C: elite, honest craft — specific company/role hook in paragraph 1, JD-requirement-matched evidence in paragraph 2, elegant and specific CTA in paragraph 3, non-boastful tone throughout, clean business-letter structure.",
+      "root_cause": "The cover-letter generation prompt in cover_letter_agent.py produces generic content rather than pulling a specific company/role hook and JD-requirement mapping from the sourced job + career-evidence corpus, and lacks an explicit CTA-quality directive.",
+      "files": [
+        "apps/api/app/agents/cover_letter_agent.py"
+      ],
+      "wireframes": [
+        "design/screens/cover-letter-studio.html"
+      ],
+      "fix_spec": "Enhance the cover-letter generation prompt/pipeline in cover_letter_agent.py to require: (1) a specific company/role hook derived from the sourced job's JD and company context, (2) paragraph 2 evidence explicitly matched to stated JD requirements, (3) a specific, elegant CTA in the closing paragraph, all while maintaining non-boastful tone per GT-5. Follow the §11.3 required content structure (header/date/recipient/salutation/3-paragraph arc/sign-off).",
+      "tests_required": [
+        "pytest: business-letter structure validator (header/date/salutation/3-paragraph arc/sign-off present)",
+        "pytest: unsupported-claim rejection still enforced",
+        "pytest: role/company hook presence check (non-generic, references actual job/company fields)",
+        "pytest: CTA presence check",
+        "pytest: PDF rendering test",
+        "writer-audit: re-score output and confirm score exceeds pre-fix 60/100",
+        "pytest: approval item creation and accept/reject flow unaffected"
+      ],
+      "verification_recipe": [
+        "1. Deploy fix.",
+        "2. Generate a cover letter for a real sourced job via POST /agents/cover-letter/run.",
+        "3. Capture the draft text.",
+        "4. Run writer-audit; confirm score exceeds prior 60/100.",
+        "5. Approve the item through the approval workflow.",
+        "6. Export PDF and confirm typographically clean output."
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase5/cover_letter_text.txt",
+        "uat/reports/evidence/phase5/coverletter_run_response.json"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "assigned_role": "fixer-medium",
+      "fixer_model": null,
+      "reviewer_model": null,
+      "qa_model": null
+    }
+  ],
+  "already_satisfied": [
+    {
+      "id": "GAP-WIRE-001",
+      "title": "Dead/decorative primary controls audit — none found",
+      "type": "USABILITY",
+      "severity": "LOW",
+      "surface": "all audited routes (§1.2, 15 routes)",
+      "category": "wiring",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "Fresh full interaction sweep (§2.2.5) across all 15 audited routes found 0 dead primary controls; 343 controls exercised were functional (real network action + real state transition); 0 browser console errors and 0 HTTP 5xx responses observed.",
+      "expected": "0 dead primary controls on target routes (§8 threshold); §12 Gate 3.",
+      "root_cause": "N/A — no defect found against fresh evidence.",
+      "files": [],
+      "wireframes": [],
+      "fix_spec": "N/A — no fix required; prior remediation run's wiring fixes hold under fresh verification.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. Full interaction sweep across all 15 routes in §1.2.",
+        "2. Click every visible primary/secondary control; confirm real network action + state transition.",
+        "3. Capture console logs and network traces per route.",
+        "4. Confirm 0 dead controls, 0 console errors, 0 5xx."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/interaction-test-results.json",
+        "uat/reports/evidence/phase5/browser-sweep-report.json"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    },
+    {
+      "id": "GAP-MET-001",
+      "title": "Metric transparency and recomputation mismatch — none found",
+      "type": "DEFECT",
+      "severity": "LOW",
+      "surface": "/dashboard/analytics",
+      "category": "analytics",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "Analytics endpoints (GET /analytics, /analytics/funnel, /analytics/agent-roi) are wired to real computed data; spot-check recomputation from raw data found no mismatch; MetricTooltip components are present on displayed metrics (what it means / how it's calculated / why it matters, per §6).",
+      "expected": "0 metric recomputation mismatches (§8 threshold); §12 Gates 12-13.",
+      "root_cause": "N/A — no defect found against fresh evidence.",
+      "files": [],
+      "wireframes": [],
+      "fix_spec": "N/A — no fix required; prior remediation run's metrics wiring holds under fresh verification.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. GET /analytics, /analytics/funnel, /analytics/agent-roi.",
+        "2. Recompute each displayed value from raw underlying data/formula.",
+        "3. Confirm no mismatch.",
+        "4. Confirm MetricTooltip present on each displayed metric in the UI."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/probe-006-analytics-list.json",
+        "uat/reports/evidence/phase5/probe-006-analytics-funnel.json",
+        "uat/reports/evidence/phase5/probe-006-analytics-roi.json",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    },
+    {
+      "id": "GAP-PDF-001",
+      "title": "PDF export defects — none found",
+      "type": "DEFECT",
+      "severity": "LOW",
+      "surface": "/dashboard/resume, /dashboard/cover-letters",
+      "category": "wiring",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "GET /resumes/{id}/download returned a valid 189,113-byte %PDF-1.4 file; GET /cover-letters/{id}/pdf returned a valid 22,939-byte %PDF-1.4 file. Both have correct Content-Type and valid PDF headers.",
+      "expected": "0 broken PDF exports (§8 threshold); §12 Gate 11.",
+      "root_cause": "N/A — no defect found against fresh evidence.",
+      "files": [],
+      "wireframes": [],
+      "fix_spec": "N/A — no fix required; prior remediation run's PDF pipeline holds under fresh verification.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. GET /resumes/{id}/download; confirm %PDF header and non-trivial size.",
+        "2. GET /cover-letters/{id}/pdf; confirm %PDF header and non-trivial size."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/probe-008-resume.pdf",
+        "uat/reports/evidence/phase5/probe-008-coverletter.pdf",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    },
+    {
+      "id": "GAP-DATA-001",
+      "title": "Fake/stale/fabricated job data — none found (diversity tracked separately)",
+      "type": "AUTHENTICITY",
+      "severity": "LOW",
+      "surface": "/dashboard/jobs",
+      "category": "sourcing",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "All 5 sampled job sourceUrls resolved to real postings (remoteok 302 redirect; 3x seek 403 bot-block, expected/consistent with Seek's scraper defenses; all confirmed as legitimate, non-fabricated listings). NOTE: single-source concentration (96% Seek) is a DIVERSITY/ceiling concern, tracked under GAP-SRC-001 — it is not evidence of fake data.",
+      "expected": "0 fake/stale/fabricated job rows presented as current (§8 threshold); §12 Gate 7.",
+      "root_cause": "N/A — no authenticity defect found against fresh evidence; diversity ceiling is GAP-SRC-001.",
+      "files": [],
+      "wireframes": [],
+      "fix_spec": "N/A — no fix required for authenticity; see GAP-SRC-001 for diversity/volume remediation.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. Sample jobs from GET /jobs.",
+        "2. Resolve each sourceUrl against the live source.",
+        "3. Confirm each resolves to a real, matching posting (redirect or bot-block acceptable per §10.4)."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/probe-004-jobs-initial.json",
+        "uat/reports/evidence/phase5/EVIDENCE-SUMMARY.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    },
+    {
+      "id": "GAP-UI-001",
+      "title": "Wireframe fidelity gaps — none found",
+      "type": "USABILITY",
+      "severity": "LOW",
+      "surface": "all 17 wireframe screens",
+      "category": "wiring",
+      "source": [
+        "OBSERVED-LIVE"
+      ],
+      "observed": "All 17 wireframes in design/screens/ are implemented and mapped to their corresponding production routes/components; fidelity audit found no unmapped or missing wireframe elements.",
+      "expected": "Wireframe fidelity matrix completed for all 17 screens (§12 Gate 4).",
+      "root_cause": "N/A — no defect found against fresh evidence.",
+      "files": [],
+      "wireframes": [
+        "design/screens/agent-monitor.html",
+        "design/screens/agents.html",
+        "design/screens/analytics.html",
+        "design/screens/application-tracker.html",
+        "design/screens/approval-modal.html",
+        "design/screens/cover-letter-studio.html",
+        "design/screens/dashboard.html",
+        "design/screens/email-center.html",
+        "design/screens/interview-center.html",
+        "design/screens/job-discovery.html",
+        "design/screens/mobile-approval.html",
+        "design/screens/mobile-dashboard.html",
+        "design/screens/networking.html",
+        "design/screens/offer-comparison.html",
+        "design/screens/resume-studio.html",
+        "design/screens/settings.html",
+        "design/screens/story-bank.html"
+      ],
+      "fix_spec": "N/A — no fix required; prior remediation run's wireframe implementation holds under fresh verification.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. Enumerate all 17 files in design/screens/.",
+        "2. Map each to its production route/component.",
+        "3. Confirm each wireframe element has a matching implemented control."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/wireframe-fidelity-audit.txt",
+        "uat/reports/evidence/phase5/wireframe-fidelity-detailed.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    },
+    {
+      "id": "GAP-AGT-001",
+      "title": "Invalid or non-editable agent configuration — none found",
+      "type": "DEFECT",
+      "severity": "LOW",
+      "surface": "/dashboard/agents",
+      "category": "agents",
+      "source": [
+        "OBSERVED-LIVE",
+        "OBSERVED-CODE"
+      ],
+      "observed": "Agent configuration is editable and persisted via GET/PUT /agents/config and /agents/providers (confirmed live and via prior run's GAP-D1 VERIFIED-CLOSED closure). All 8 agent run endpoints (/agents/{scout,fit-scorer,tailor,cover-letter,story-extractor,email,pipeline,test-run}/run) are wired and functional.",
+      "expected": "Agent config editable/persisted per user (§12 Gate 2/3 scope).",
+      "root_cause": "N/A — no defect found against fresh evidence; carried forward from prior run's closed GAP-D1.",
+      "files": [],
+      "wireframes": [
+        "design/screens/agents.html",
+        "design/screens/agent-monitor.html"
+      ],
+      "fix_spec": "N/A — no fix required. NOTE: the Anthropic subscription-OAuth path within this same surface is separately flagged as non-compliant — see GAP-AUTH-001; that finding does not invalidate this configuration-editability verdict.",
+      "tests_required": [],
+      "verification_recipe": [
+        "1. GET /agents/config; confirm current configuration returned.",
+        "2. PUT a config change; confirm persistence on subsequent GET.",
+        "3. Confirm /agents/providers lists available providers correctly."
+      ],
+      "pre_evidence": [],
+      "post_evidence": [
+        "uat/reports/evidence/phase5/probe-003-openapi.json",
+        "uat/reports/evidence/phase5/interaction-test-results.json"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "verdict": "ALREADY-SATISFIED",
+      "assigned_role": null,
+      "fixer_model": null,
+      "reviewer_model": "sonnet",
+      "qa_model": "sonnet"
+    }
+  ],
+  "exit_gates": [
+    {
+      "id": "GATE-01",
+      "gate_number": 1,
+      "description": "Production health endpoint returns expected success.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-02",
+      "gate_number": 2,
+      "description": "Full route sweep completed with artifacts.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-03",
+      "gate_number": 3,
+      "description": "All dead/decorative critical controls fixed or explicitly marked out-of-scope by code truth and wireframe contract.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-04",
+      "gate_number": 4,
+      "description": "Wireframe fidelity matrix completed for all 17 screens.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-05",
+      "gate_number": 5,
+      "description": "Job sourcing ceiling root-caused and materially improved.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-06",
+      "gate_number": 6,
+      "description": "Post-fix sync yields substantially larger verified-real multi-board results.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-07",
+      "gate_number": 7,
+      "description": "No fake/stale/fabricated job rows remain in sampled verification set.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-08",
+      "gate_number": 8,
+      "description": "Tailored resume shows content-only inline changes with preserved layout.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-09",
+      "gate_number": 9,
+      "description": "Tailored resume shows before/after conversion metric with explanation.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-10",
+      "gate_number": 10,
+      "description": "Cover letter meets business-format and elite craft standard.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-11",
+      "gate_number": 11,
+      "description": "Resume and cover-letter PDFs export cleanly.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-12",
+      "gate_number": 12,
+      "description": "All displayed metrics have transparent explanations/tooltips.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-13",
+      "gate_number": 13,
+      "description": "Metric recomputations match or are honestly labeled estimated.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-14",
+      "gate_number": 14,
+      "description": "No unsupported Anthropic third-party consumer-subscription OAuth path remains; any Anthropic integration uses supported developer/commercial auth patterns.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-15",
+      "gate_number": 15,
+      "description": "Tokens and client credentials are stored securely per Google/industry guidance if applicable.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-16",
+      "gate_number": 16,
+      "description": "Full relevant backend tests pass.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-17",
+      "gate_number": 17,
+      "description": "Full relevant frontend/unit tests pass.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-18",
+      "gate_number": 18,
+      "description": "E2E journeys pass on production.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-19",
+      "gate_number": 19,
+      "description": "Model-governance audit is clean: zero orchestrator-model sub-agent spawns.",
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "id": "GATE-20",
+      "gate_number": 20,
+      "description": "Every closed gap has pre/post evidence and QA closure.",
+      "status": "PENDING",
+      "evidence": []
+    }
+  ]
+}
