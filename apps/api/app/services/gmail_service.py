@@ -1,11 +1,11 @@
 """Gmail API service — real send / sync / label operations for the Email Agent.
 
 Wraps the Gmail v1 API with the user's stored OAuth credentials
-(:class:`app.repositories.google_credential.GoogleCredentialRepository`). Access
-tokens are auto-refreshed from the long-lived refresh token and the new token is
-persisted back, so a session never dies mid-flight. A revoked/expired grant
-surfaces as :class:`GmailNotConnectedError` (the caller degrades honestly and
-tells the user to reconnect) — never as an opaque 500.
+(:class:`app.repositories.gmail_account.GmailAccountRepository`, the multi-account
+store — GAP-D2). Access tokens are auto-refreshed from the long-lived refresh
+token and the new token is persisted back, so a session never dies mid-flight. A
+revoked/expired grant surfaces as :class:`GmailNotConnectedError` (the caller
+degrades honestly and tells the user to reconnect) — never as an opaque 500.
 
 Google client libraries are imported lazily inside methods (matching the
 codebase's ``import httpx`` convention) so importing this module — e.g. from the
@@ -20,12 +20,12 @@ from email.mime.text import MIMEText
 from typing import Any, Optional
 
 from app.db import get_connection, new_id, rows_to_dicts
-from app.repositories.google_credential import GoogleCredentialRepository
+from app.repositories.gmail_account import GmailAccountRepository
 from app.services.google_oauth import GOOGLE_SCOPES
 
 #: Distinct advisory-lock id for the additive EmailThread columns
 #: (AgentConfig 711, User 712, CareerProfile 713, OutreachTask 714,
-#: GoogleCredential 715).
+#: GoogleCredential 715, EmailThread cols 716).
 _EMAIL_COLS_LOCK = 7420240716
 
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
@@ -52,12 +52,17 @@ def gmail_connected(user_id: str) -> bool:
     """Whether a Gmail credential exists for ``user_id`` (the send-gate's truth
     source). Does not verify token liveness — existence is the contract; a
     revoked token surfaces at call time as :class:`GmailNotConnectedError`."""
-    return GoogleCredentialRepository().is_connected(user_id)
+    return GmailAccountRepository().is_connected(user_id)
 
 
 def ensure_email_thread_gmail_columns() -> None:
     """Idempotently add the Gmail linkage columns to the Prisma-managed
-    ``EmailThread`` table (additive, backward-compatible; survives TRUNCATE)."""
+    ``EmailThread`` table (additive, backward-compatible; survives TRUNCATE).
+
+    ``gmailAccountId`` (GAP-D2) links each thread to the specific connected Gmail
+    inbox it came from, so the unified inbox can badge each thread and an
+    ``?account_id`` filter can narrow to one mailbox. Existing threads are
+    backfilled to the user's primary ``GmailAccount``."""
     global _cols_ready
     if _cols_ready:
         return
@@ -67,10 +72,11 @@ def ensure_email_thread_gmail_columns() -> None:
                 "SELECT count(*) FROM information_schema.columns"
                 " WHERE table_name = 'EmailThread'"
                 " AND table_schema = ANY(current_schemas(false))"
-                " AND column_name IN ('gmailThreadId', 'gmailMessageId', 'labels')"
+                " AND column_name IN ('gmailThreadId', 'gmailMessageId', 'labels',"
+                " 'gmailAccountId')"
             )
             row = cur.fetchone()
-            if row and row[0] == 3:
+            if row and row[0] == 4:
                 _cols_ready = True
                 return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (_EMAIL_COLS_LOCK,))
@@ -84,8 +90,30 @@ def ensure_email_thread_gmail_columns() -> None:
                 'ALTER TABLE "EmailThread" ADD COLUMN IF NOT EXISTS "labels" text[]'
             )
             cur.execute(
+                'ALTER TABLE "EmailThread" ADD COLUMN IF NOT EXISTS "gmailAccountId" text'
+            )
+            cur.execute(
                 'CREATE INDEX IF NOT EXISTS "idx_emailthread_gmail"'
                 ' ON "EmailThread" ("userId", "gmailThreadId")'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "idx_emailthread_account"'
+                ' ON "EmailThread" ("userId", "gmailAccountId")'
+            )
+        conn.commit()
+    # Backfill existing threads to the user's primary account (needs GmailAccount
+    # to exist first — its ensure also backfills legacy GoogleCredential rows).
+    GmailAccountRepository()._ensure_table()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                UPDATE "EmailThread" et SET "gmailAccountId" = ga."id"
+                FROM "GmailAccount" ga
+                WHERE et."gmailAccountId" IS NULL
+                  AND ga."userId" = et."userId"
+                  AND ga."isPrimary"
+                '''
             )
         conn.commit()
     _cols_ready = True
@@ -130,21 +158,36 @@ class GmailService:
     """Per-user Gmail client. Construct with the app ``user_id``."""
 
     def __init__(
-        self, user_id: str, creds_repo: GoogleCredentialRepository | None = None
+        self,
+        user_id: str,
+        creds_repo: GmailAccountRepository | None = None,
+        account_id: str | None = None,
     ) -> None:
         self._user_id = user_id
-        self._creds_repo = creds_repo or GoogleCredentialRepository()
+        self._creds_repo = creds_repo or GmailAccountRepository()
+        #: The specific connected inbox to operate on. ``None`` means the user's
+        #: primary account (backward-compatible single-account behaviour).
+        self._account_id = account_id
+        #: The account id actually resolved once credentials are loaded — used to
+        #: tag synced threads and to persist refreshed tokens to the right row.
+        self._resolved_account_id: str | None = account_id
         self._service: Any = None
 
     # ------------------------------------------------------------------ auth
     def _credentials(self) -> Any:
         import os
 
-        row = self._creds_repo.get(self._user_id)
+        # Pass account_id only when targeting a specific inbox so single-account
+        # repos/fakes with a one-arg get() keep working (backward compatible).
+        if self._account_id is not None:
+            row = self._creds_repo.get(self._user_id, self._account_id)
+        else:
+            row = self._creds_repo.get(self._user_id)
         if not row or not row.get("refreshToken"):
             raise GmailNotConnectedError(
                 "Gmail is not connected — connect your account to continue."
             )
+        self._resolved_account_id = row.get("id")
         from google.oauth2.credentials import Credentials
 
         creds = Credentials(
@@ -167,7 +210,10 @@ class GmailService:
                     "account."
                 ) from exc
             self._creds_repo.update_access_token(
-                self._user_id, creds.token, creds.expiry
+                self._user_id,
+                creds.token,
+                creds.expiry,
+                account_id=self._resolved_account_id,
             )
         return creds
 
@@ -383,7 +429,10 @@ class GmailService:
         constructed ``GmailService(uid)`` can call ``.sync_threads_to_db()``."""
         user_id = user_id or self._user_id
         ensure_email_thread_gmail_columns()
+        # list_threads loads credentials, which resolves the concrete account id
+        # so each synced thread is tagged with the inbox it came from (GAP-D2).
         threads = self.list_threads(query=query, max_results=max_results)
+        account_id = self._resolved_account_id
         written = 0
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -410,13 +459,16 @@ class GmailService:
                     if existing:
                         cur.execute(
                             'UPDATE "EmailThread" SET "subject" = %s, "messages" = %s::jsonb,'
-                            ' "gmailMessageId" = %s, "labels" = %s, "updatedAt" = now()'
+                            ' "gmailMessageId" = %s, "labels" = %s,'
+                            ' "gmailAccountId" = COALESCE(%s, "gmailAccountId"),'
+                            ' "updatedAt" = now()'
                             ' WHERE id = %s',
                             (
                                 t["subject"],
                                 messages,
                                 t["gmailMessageId"],
                                 t["labelIds"],
+                                account_id,
                                 existing[0]["id"],
                             ),
                         )
@@ -424,8 +476,9 @@ class GmailService:
                         cur.execute(
                             'INSERT INTO "EmailThread"'
                             ' ("id", "userId", "subject", "messages", "gmailThreadId",'
-                            '  "gmailMessageId", "labels", "createdAt", "updatedAt")'
-                            ' VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, now(), now())',
+                            '  "gmailMessageId", "labels", "gmailAccountId",'
+                            '  "createdAt", "updatedAt")'
+                            ' VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, now(), now())',
                             (
                                 new_id(),
                                 user_id,
@@ -434,8 +487,15 @@ class GmailService:
                                 t["gmailThreadId"],
                                 t["gmailMessageId"],
                                 t["labelIds"],
+                                account_id,
                             ),
                         )
                     written += 1
             conn.commit()
+        # Best-effort UI signal that this inbox just synced (never gates sending).
+        if account_id:
+            try:
+                self._creds_repo.mark_synced(account_id)
+            except Exception:  # noqa: BLE001 — a sync-status write must never fail the sync
+                pass
         return written

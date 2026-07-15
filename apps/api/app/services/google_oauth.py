@@ -178,10 +178,12 @@ def _build_flow() -> Any:
     return flow
 
 
-def build_consent_url(user_id: str) -> str:
-    """Google consent-screen URL. ``access_type=offline`` + ``prompt=consent``
-    force a refresh token on every grant so a re-connect can never come back
-    without one.
+def build_consent_url(user_id: str, login_hint: str | None = None) -> str:
+    """Google consent-screen URL. ``access_type=offline`` requests a refresh
+    token; ``prompt=select_account`` ALWAYS shows Google's account chooser so a
+    user can add a SECOND Gmail without the flow silently reusing (and then
+    overwriting) the first (GAP-D2). An optional ``login_hint`` pre-selects a
+    specific account when re-connecting a known one.
 
     Per ADR-PC-1, the PKCE ``code_verifier`` is generated explicitly (rather
     than relying on ``Flow.authorization_url``'s autogeneration) so it is
@@ -197,13 +199,36 @@ def build_consent_url(user_id: str) -> str:
     code_verifier = _generate_code_verifier()
     flow.code_verifier = code_verifier
     flow.autogenerate_code_verifier = False
-    url, _state = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-        state=encode_state(user_id, code_verifier),
-    )
+    kwargs: dict[str, Any] = {
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "select_account",
+        "state": encode_state(user_id, code_verifier),
+    }
+    if login_hint:
+        kwargs["login_hint"] = login_hint
+    url, _state = flow.authorization_url(**kwargs)
     return url
+
+
+def revoke_token(token: str) -> bool:
+    """Best-effort revocation of a Google OAuth token (refresh or access) at
+    Google's revoke endpoint. Returns True on a 200. Never raises and never
+    logs the token — a failed revoke must not block removing the local row."""
+    if not token:
+        return False
+    try:
+        import httpx
+
+        resp = httpx.post(
+            "https://oauth2.googleapis.com/revoke",
+            data={"token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10.0,
+        )
+        return resp.status_code == 200
+    except Exception:  # noqa: BLE001 — revoke is best-effort, never fatal
+        return False
 
 
 def _resolve_email(creds: Any) -> str | None:

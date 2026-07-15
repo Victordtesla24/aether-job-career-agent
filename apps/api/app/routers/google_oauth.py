@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from app.middleware.auth import CurrentUser
-from app.repositories.google_credential import GoogleCredentialRepository
+from app.repositories.gmail_account import GmailAccountRepository
 from app.services.google_oauth import (
     OAuthError,
     build_consent_url,
@@ -80,15 +80,24 @@ def google_callback(
         return _redirect(False, str(exc))
     except Exception as exc:  # noqa: BLE001 — never surface a 500 to the browser
         return _redirect(False, f"unexpected error: {exc}")
-    if not data.get("refresh_token"):
+    repo = GmailAccountRepository()
+    account_email = data["google_email"]
+    existing = repo.get_by_email(data["user_id"], account_email)
+    # A first-time link needs a refresh token (offline access). Re-connecting a
+    # KNOWN account may legitimately return none — the stored token is kept — so
+    # only reject when there is nothing to fall back on.
+    if not data.get("refresh_token") and not existing:
         return _redirect(
             False,
             "no refresh token returned — revoke prior access at "
             "myaccount.google.com/permissions and reconnect",
         )
-    GoogleCredentialRepository().upsert(
+    # Link by (userId, accountEmail): rotates tokens on a known account, INSERTs
+    # a brand-new row for a different account — never overwrites another inbox
+    # (GAP-D2). GoogleCredential is intentionally left untouched (rollback anchor).
+    repo.upsert_account(
         data["user_id"],
-        google_email=data["google_email"],
+        account_email=account_email,
         refresh_token=data["refresh_token"],
         access_token=data["access_token"],
         access_token_expires_at=data["expires_at"],

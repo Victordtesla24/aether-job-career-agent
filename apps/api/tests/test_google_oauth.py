@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from app.repositories.google_credential import GoogleCredentialRepository
+from app.repositories.gmail_account import GmailAccountRepository
 from app.services import google_oauth
 
 
@@ -204,16 +204,17 @@ def test_callback_success_persists_credential(
     monkeypatch.setattr(
         "app.routers.google_oauth.exchange_code", fake_exchange
     )
-    repo = GoogleCredentialRepository()
+    repo = GmailAccountRepository()
     try:
         resp = client.get(
             "/auth/google/callback?code=good&state=whatever", follow_redirects=False
         )
         assert resp.status_code == 302
         assert "gmail_connected=1" in resp.headers["location"]
+        # GAP-D2: the callback persists to the authoritative GmailAccount store.
         stored = repo.get(test_user_id)
         assert stored is not None
-        assert stored["googleEmail"] == "me@gmail.com"
+        assert stored["accountEmail"] == "me@gmail.com"
         assert stored["refreshToken"] == "refresh-xyz"
         # public_view never leaks the secret token.
         pub = repo.public_view(test_user_id)
@@ -242,4 +243,4 @@ def test_callback_without_refresh_token_fails_honestly(
     )
     assert resp.status_code == 302
     assert "gmail_connected=0" in resp.headers["location"]
-    assert GoogleCredentialRepository().get(test_user_id) is None
+    assert GmailAccountRepository().get(test_user_id) is None

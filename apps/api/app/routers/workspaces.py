@@ -27,16 +27,16 @@ def _email_provider_connected(user_id: str) -> bool:
     """Whether the user has a real outbound email provider (Gmail via Google
     OAuth) connected.
 
-    A ``GoogleCredential`` row — persisted by the in-app Google OAuth flow
-    (ADR D-0029, resolved in P4) — means Gmail send/sync is available for this
-    user. This is the single source of truth for "can we send an email?": both
-    the inbox ``accounts`` status and the send gate read it, so the two can
-    never drift apart. Absent a credential the send handler fails honestly
-    (409) instead of fabricating a ``sent`` status.
+    A ``GmailAccount`` row — persisted by the in-app Google OAuth flow
+    (ADR D-0029, resolved in P4; multi-account in GAP-D2) — means Gmail
+    send/sync is available for this user. This is the single source of truth for
+    "can we send an email?": both the inbox ``accounts`` status and the send gate
+    read it, so the two can never drift apart. Absent any connected account the
+    send handler fails honestly (409) instead of fabricating a ``sent`` status.
     """
-    from app.repositories.google_credential import GoogleCredentialRepository
+    from app.repositories.gmail_account import GmailAccountRepository
 
-    return GoogleCredentialRepository().is_connected(user_id)
+    return GmailAccountRepository().is_connected(user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -321,41 +321,50 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
     """
     uid = current_user["id"]
 
-    connected = _email_provider_connected(uid)
+    from app.repositories.gmail_account import GmailAccountRepository
+
+    creds_repo = GmailAccountRepository()
+    account_rows = creds_repo.list_accounts(uid)
+    connected = len(account_rows) > 0
+
     if connected:
-        try:
-            from app.services.gmail_service import (
-                GmailAuthError,
-                GmailNotConnectedError,
-                GmailService,
-            )
+        # Best-effort sync of EVERY connected inbox; a hiccup on one account must
+        # never 500 the inbox or block the others.
+        from app.services.gmail_service import (
+            GmailAuthError,
+            GmailNotConnectedError,
+            GmailService,
+        )
 
-            GmailService(uid).sync_threads_to_db()
-        except (GmailAuthError, GmailNotConnectedError):
-            connected = False
-        except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
-            pass
+        for acc in account_rows:
+            try:
+                GmailService(uid, account_id=acc.get("id")).sync_threads_to_db()
+            except (GmailAuthError, GmailNotConnectedError):
+                pass
+            except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
+                pass
 
-    account_email = current_user.get("email", "")
-    if connected:
-        from app.repositories.google_credential import GoogleCredentialRepository
+    # The inbox query reads/joins on the additive Gmail linkage columns; ensure
+    # they exist even for a user who has never connected (so the query never
+    # references a missing column).
+    from app.services.gmail_service import ensure_email_thread_gmail_columns
 
-        pub = GoogleCredentialRepository().public_view(uid)
-        if pub and pub.get("googleEmail"):
-            account_email = pub["googleEmail"]
+    ensure_email_thread_gmail_columns()
 
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT et.id, et.subject, et.messages, et.classification,
-                       et."createdAt", et."applicationId",
+                       et."createdAt", et."applicationId", et."gmailAccountId",
                        c.name AS contact_name, c.company AS contact_company,
-                       c.email AS contact_email
+                       c.email AS contact_email,
+                       ga."accountEmail" AS source_account
                 FROM "EmailThread" et
                 LEFT JOIN "Contact" c ON et."contactId" = c.id
+                LEFT JOIN "GmailAccount" ga ON et."gmailAccountId" = ga."id"
                 WHERE et."userId" = %s
-                ORDER BY et."createdAt" DESC
+                ORDER BY et."updatedAt" DESC
                 """,
                 (uid,),
             )
@@ -378,7 +387,7 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             "category": t.get("classification") or "all",
             "score": 0,
             "receivedAt": str(t["createdAt"])[:10] if t.get("createdAt") else "",
-            "account": "",
+            "account": t.get("source_account") or "",
             "body": latest.get("body") or "",
             "intelligence": None,
             "draftReply": "",
@@ -387,20 +396,36 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
 
     total = len(threads)
 
-    return {
-        "accounts": [
+    # One entry per connected inbox (for the account switcher). Falls back to a
+    # single not-connected placeholder so the UI can prompt the first connect.
+    if account_rows:
+        accounts = [
             {
-                "email": account_email,
+                "id": acc.get("id"),
+                "email": acc.get("accountEmail") or "",
                 "provider": "Gmail",
-                "status": "connected" if connected else "not_connected",
+                "status": "connected",
+                "isPrimary": bool(acc.get("isPrimary")),
                 "unread": 0,
-                "note": (
-                    "Gmail connected — your inbox is syncing."
-                    if connected
-                    else "Connect your Gmail account to see your inbox here."
-                ),
+                "note": "Gmail connected — your inbox is syncing.",
             }
-        ],
+            for acc in account_rows
+        ]
+    else:
+        accounts = [
+            {
+                "id": None,
+                "email": current_user.get("email", ""),
+                "provider": "Gmail",
+                "status": "not_connected",
+                "isPrimary": False,
+                "unread": 0,
+                "note": "Connect your Gmail account to see your inbox here.",
+            }
+        ]
+
+    return {
+        "accounts": accounts,
         "stats": {
             "received": total,
             "recruiterEmails": 0,
@@ -744,18 +769,20 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
         p_status, _model, detail, _models = _provider_env_state(seed["id"])
         if p_status == "connected":
             accounts.append({"name": seed["name"], "status": "connected", "detail": detail})
-    # Real Gmail connection (P4) — surfaced only when a GoogleCredential exists.
-    from app.repositories.google_credential import GoogleCredentialRepository
+    # Real Gmail connection (P4) — surfaced per connected inbox (GAP-D2).
+    from app.repositories.gmail_account import GmailAccountRepository
 
-    gpub = GoogleCredentialRepository().public_view(uid)
-    if gpub and gpub.get("googleEmail"):
-        accounts.append(
-            {
-                "name": "Google (Gmail)",
-                "status": "connected",
-                "detail": f"Connected as {gpub['googleEmail']}",
-            }
-        )
+    for gacc in GmailAccountRepository().list_accounts(uid):
+        gemail = gacc.get("accountEmail")
+        if gemail:
+            accounts.append(
+                {
+                    "name": "Google (Gmail)",
+                    "status": "connected",
+                    "detail": f"Connected as {gemail}"
+                    + (" (primary)" if gacc.get("isPrimary") else ""),
+                }
+            )
     result["connectedAccounts"] = accounts
     return result
 

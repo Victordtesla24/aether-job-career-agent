@@ -18,6 +18,7 @@ import {
   type EmailMessage,
 } from "../../../lib/api/workspaces";
 import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
+import { connectAnotherGmail, disconnectAccount, setPrimaryAccount } from "../../../lib/api/emails";
 
 const CATEGORIES = [
   { key: "priority", label: "Priority" },
@@ -49,6 +50,7 @@ export default function EmailCenterPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [connectNotice, setConnectNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [accountBusy, setAccountBusy] = useState<string | null>(null);
 
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -101,6 +103,66 @@ export default function EmailCenterPage() {
       });
     });
   }, []);
+
+  // Add ANOTHER Gmail inbox (Google always shows the account chooser, so this
+  // never overwrites an already-connected account — GAP-D2).
+  const addAccount = useCallback(() => {
+    setConnecting(true);
+    setConnectNotice(null);
+    void connectAnotherGmail().catch((e: unknown) => {
+      setConnecting(false);
+      setConnectNotice({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Could not start Gmail sign-in.",
+      });
+    });
+  }, []);
+
+  const refreshInbox = useCallback(() => {
+    fetchEmailInbox()
+      .then((data) => setInbox(data))
+      .catch(() => {});
+  }, []);
+
+  const makePrimary = useCallback(
+    async (id: string) => {
+      setAccountBusy(id);
+      setConnectNotice(null);
+      try {
+        await setPrimaryAccount(id);
+        refreshInbox();
+      } catch (e) {
+        setConnectNotice({
+          kind: "error",
+          message: e instanceof Error ? e.message : "Could not set primary inbox.",
+        });
+      } finally {
+        setAccountBusy(null);
+      }
+    },
+    [refreshInbox],
+  );
+
+  const removeAccount = useCallback(
+    async (id: string, email: string) => {
+      setAccountBusy(id);
+      setConnectNotice(null);
+      try {
+        await disconnectAccount(id);
+        setAccountFilter((prev) => (prev === email ? "all" : prev));
+        refreshInbox();
+        setConnectNotice({ kind: "success", message: `Disconnected ${email}.` });
+      } catch (e) {
+        setConnectNotice({
+          kind: "error",
+          message: e instanceof Error ? e.message : "Could not disconnect this inbox.",
+        });
+      } finally {
+        setAccountBusy(null);
+      }
+    },
+    [refreshInbox],
+  );
 
   const selected: EmailMessage | undefined = useMemo(
     () => inbox?.messages.find((m) => m.id === selectedId),
@@ -240,42 +302,91 @@ export default function EmailCenterPage() {
         </div>
       </header>
 
-      {/* Connected accounts */}
-      <div className="glass flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 p-3" data-testid="email-accounts">
-        <span className="text-xs uppercase tracking-wide text-aether-muted-dim">Accounts</span>
-        <button
-          type="button"
-          onClick={() => setAccountFilter("all")}
-          className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-            accountFilter === "all" ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
-          }`}
-        >
-          All accounts
-        </button>
-        {inbox.accounts.map((a) => (
+      {/* Inboxes — one entry per connected Gmail account, plus a unified view */}
+      <div className="glass rounded-2xl border border-white/10 p-3" data-testid="email-accounts">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs uppercase tracking-wide text-aether-muted-dim">Inboxes</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            key={a.email}
             type="button"
-            onClick={() => setAccountFilter(a.email)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition ${
-              accountFilter === a.email ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
+            data-testid="inbox-all"
+            onClick={() => setAccountFilter("all")}
+            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+              accountFilter === "all" ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
             }`}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-aether-green" />
-            {a.email}
-            <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+            All Inboxes
           </button>
-        ))}
-        <button
-          type="button"
-          data-testid="connect-gmail-btn"
-          onClick={startConnect}
-          disabled={connecting}
-          className="rounded-lg border border-dashed border-white/15 px-3 py-1.5 text-xs text-aether-muted-dim hover:text-white disabled:opacity-50"
-        >
-          <i className="fa-brands fa-google mr-1.5" aria-hidden="true" />
-          {connecting ? "Opening Google…" : "Connect Gmail"}
-        </button>
+
+          {inbox.accounts
+            .filter((a) => a.status === "connected")
+            .map((a) => (
+              <div
+                key={a.id ?? a.email}
+                data-testid="inbox-account"
+                className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${
+                  accountFilter === a.email ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAccountFilter(a.email)}
+                  className="flex items-center gap-2"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-aether-green" />
+                  {a.email}
+                  {a.isPrimary ? (
+                    <span className="rounded border border-aether-violet/30 bg-aether-violet/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-aether-violet">
+                      Primary
+                    </span>
+                  ) : null}
+                  <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+                </button>
+                {a.id ? (
+                  <span className="flex items-center gap-1">
+                    {!a.isPrimary ? (
+                      <button
+                        type="button"
+                        data-testid="inbox-set-primary"
+                        onClick={() => void makePrimary(a.id as string)}
+                        disabled={accountBusy === a.id}
+                        title="Make primary inbox"
+                        className="text-[10px] text-aether-muted-dim hover:text-white disabled:opacity-50"
+                      >
+                        Set primary
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      data-testid="inbox-disconnect"
+                      onClick={() => void removeAccount(a.id as string, a.email)}
+                      disabled={accountBusy === a.id}
+                      title="Disconnect this inbox"
+                      className="text-[10px] text-red-300/80 hover:text-red-300 disabled:opacity-50"
+                    >
+                      <i className="fa-solid fa-xmark" aria-hidden="true" />
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            ))}
+
+          <button
+            type="button"
+            data-testid="connect-gmail-btn"
+            onClick={inbox.accounts.some((a) => a.status === "connected") ? addAccount : startConnect}
+            disabled={connecting}
+            className="rounded-lg border border-dashed border-white/15 px-3 py-1.5 text-xs text-aether-muted-dim hover:text-white disabled:opacity-50"
+          >
+            <i className="fa-brands fa-google mr-1.5" aria-hidden="true" />
+            {connecting
+              ? "Opening Google…"
+              : inbox.accounts.some((a) => a.status === "connected")
+                ? "Add Gmail Account"
+                : "Connect Gmail"}
+          </button>
+        </div>
       </div>
 
       {connectNotice ? (
@@ -361,7 +472,19 @@ export default function EmailCenterPage() {
                   </div>
                   <p className="mt-0.5 truncate text-xs text-aether-coral">{m.subject}</p>
                   <p className="mt-0.5 truncate text-[11px] text-aether-muted-dim">{m.preview}</p>
-                  <p className="mono mt-1 text-[10px] text-aether-muted-dim">{m.receivedAt}</p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="mono text-[10px] text-aether-muted-dim">{m.receivedAt}</p>
+                    {m.account ? (
+                      <span
+                        data-testid="thread-source-account"
+                        title={`Received in ${m.account}`}
+                        className="truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-aether-muted-dim"
+                      >
+                        <i className="fa-brands fa-google mr-1" aria-hidden="true" />
+                        {m.account}
+                      </span>
+                    ) : null}
+                  </div>
                 </button>
               ))
             )}

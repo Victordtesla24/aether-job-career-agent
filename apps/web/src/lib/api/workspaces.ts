@@ -96,7 +96,14 @@ export function emailIntelligenceView(
 }
 
 export interface EmailInbox {
-  accounts: Array<{ email: string; provider: string; status: string; unread: number }>;
+  accounts: Array<{
+    id: string | null;
+    email: string;
+    provider: string;
+    status: string;
+    isPrimary: boolean;
+    unread: number;
+  }>;
   stats: {
     received: number;
     recruiterEmails: number;
