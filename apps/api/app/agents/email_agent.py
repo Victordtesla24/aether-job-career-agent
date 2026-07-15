@@ -31,7 +31,7 @@ from typing import Any, Optional
 from app.agents.fit_scorer import get_base_resume_path
 from app.db import get_connection, rows_to_dicts
 from app.repositories.approval import ApprovalRepository
-from app.repositories.google_credential import GoogleCredentialRepository
+from app.repositories.gmail_account import GmailAccountRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
 from app.services.resume_parser import parse_resume_pdf
@@ -96,13 +96,13 @@ class EmailAgent:
         llm: LLMClient | None = None,
         guard: FabricationGuard | None = None,
         approvals: ApprovalRepository | None = None,
-        credentials: GoogleCredentialRepository | None = None,
+        credentials: GmailAccountRepository | None = None,
         gmail: Any = None,
     ) -> None:
         self._llm = llm or LLMClient()
         self._guard = guard or FabricationGuard()
         self._approvals = approvals or ApprovalRepository()
-        self._credentials = credentials or GoogleCredentialRepository()
+        self._credentials = credentials or GmailAccountRepository()
         #: Optional injected GmailService (tests pass a fake); resolved lazily
         #: in production so importing this module needs no google libs.
         self._gmail = gmail

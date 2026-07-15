@@ -164,9 +164,9 @@ def _execute_email_send(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Approval payload is missing a recipient — cannot send.",
         )
-    from app.repositories.google_credential import GoogleCredentialRepository
+    from app.repositories.gmail_account import GmailAccountRepository
 
-    if not GoogleCredentialRepository().is_connected(user_id):
+    if not GmailAccountRepository().is_connected(user_id):
         raise HTTPException(
             http_status.HTTP_409_CONFLICT,
             detail={

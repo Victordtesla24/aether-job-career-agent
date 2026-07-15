@@ -7,7 +7,7 @@ Gmail API call itself is monkeypatched — no live send.
 from __future__ import annotations
 
 from app.db import get_connection, new_id
-from app.repositories.google_credential import GoogleCredentialRepository
+from app.repositories.gmail_account import GmailAccountRepository
 
 
 def test_send_gate_409_without_gmail(client, auth_headers):
@@ -48,10 +48,10 @@ def _seed_contact_thread(user_id: str, email: str) -> str:
 
 
 def test_send_real_when_gmail_connected(client, auth_headers, test_user_id, monkeypatch):
-    repo = GoogleCredentialRepository()
-    repo.upsert(
+    repo = GmailAccountRepository()
+    repo.upsert_account(
         test_user_id,
-        google_email="me@gmail.com",
+        account_email="me@gmail.com",
         refresh_token="refresh-xyz",
         scopes="gmail.send",
     )
@@ -80,10 +80,10 @@ def test_approved_send_attaches_pdfs_in_process(
     """An approved ``email_send`` resolves resume/CL PDFs in-process and hands
     them to Gmail as attachments. The approval card carries only ids (never the
     bytes), and a broken reference would fail before any send."""
-    repo = GoogleCredentialRepository()
-    repo.upsert(
+    repo = GmailAccountRepository()
+    repo.upsert_account(
         test_user_id,
-        google_email="me@gmail.com",
+        account_email="me@gmail.com",
         refresh_token="refresh-xyz",
         scopes="gmail.send",
     )
@@ -142,10 +142,10 @@ def test_approved_send_attaches_pdfs_in_process(
 def test_inbox_reports_connected_account(client, auth_headers, test_user_id, monkeypatch):
     """Once connected, the inbox account bar flips to connected + the Google
     email, and a Gmail sync hiccup never 500s the inbox."""
-    repo = GoogleCredentialRepository()
-    repo.upsert(
+    repo = GmailAccountRepository()
+    repo.upsert_account(
         test_user_id,
-        google_email="me@gmail.com",
+        account_email="me@gmail.com",
         refresh_token="refresh-xyz",
         scopes="gmail.modify",
     )
