@@ -11,23 +11,19 @@ apply URL — zero fabrication.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Any
 
-from app.services.discovery import relevance
-from app.services.discovery.base_adapter import BaseAdapter, JobRaw
+from app.services.discovery import portals, relevance
+from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
 
-#: Verified live Lever company slugs (HTTP 200 as of 2026-07-10).
-DEFAULT_COMPANIES = "immutable,deputy,atlassian"
-
 
 def configured_companies() -> list[str]:
-    raw = os.environ.get("AETHER_LEVER_COMPANIES", DEFAULT_COMPANIES)
-    return [slug.strip() for slug in raw.split(",") if slug.strip()]
+    """Curated company slugs (overridable via ``AETHER_LEVER_COMPANIES``)."""
+    return portals.lever_companies()
 
 
 def _posted_at(created_at_ms: Any) -> str:
@@ -43,16 +39,31 @@ class LeverAdapter(BaseAdapter):
     source = "lever"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        slugs = configured_companies()
         companies: list[dict[str, Any]] = []
-        for slug in configured_companies():
+        failures: list[str] = []
+        for slug in slugs:
             url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
             try:
                 postings = fetch_json(url)
             except Exception as exc:  # noqa: BLE001 — one bad company must not sink the run
                 logger.warning("lever: company %s failed: %s", slug, exc)
+                failures.append(f"{slug}: {type(exc).__name__}: {exc}")
                 continue
             if isinstance(postings, list):
                 companies.append({"company": slug, "postings": postings})
+            else:
+                failures.append(f"{slug}: unexpected payload type {type(postings).__name__}")
+        # GAP-SRC-002: companies were configured but EVERY one failed to fetch
+        # (or returned a malformed payload) => total outage; surface it as a
+        # real per-source error rather than an empty-but-ok result. A company
+        # that fetched OK but has zero open roles keeps ``companies``
+        # non-empty, so a genuine "fetched 0 jobs" stays a legitimate status=ok.
+        if slugs and not companies:
+            raise AdapterFetchError(
+                f"lever: all {len(slugs)} configured company(ies) failed: "
+                + "; ".join(failures)
+            )
         return {"companies": companies}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:

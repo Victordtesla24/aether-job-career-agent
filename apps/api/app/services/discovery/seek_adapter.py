@@ -13,8 +13,9 @@ import re
 import urllib.request
 from html import unescape
 from typing import Any
+from urllib.parse import quote
 
-from app.services.discovery.base_adapter import BaseAdapter, JobRaw
+from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,13 @@ def _get_abacus_credentials() -> tuple[str | None, str | None]:
 
 
 def _scrape_seek_page(api_key: str, firecrawl_url: str, search_url: str) -> dict:
-    """Use Firecrawl to scrape a Seek search results page."""
+    """Use Firecrawl to scrape a Seek search results page (raw HTML).
+
+    The rendered search page embeds every result in a ``window.SEEK_REDUX_DATA``
+    island, so a single search-page scrape yields the full job list — far more
+    reliable than scraping each job detail page (Seek blocks direct
+    ``/job/<id>`` fetches with an interstitial error page).
+    """
     import httpx
 
     response = httpx.post(
@@ -60,28 +67,74 @@ def _scrape_seek_page(api_key: str, firecrawl_url: str, search_url: str) -> dict
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={"url": search_url, "formats": ["markdown", "links"]},
+        json={"url": search_url, "formats": ["rawHtml"]},
         timeout=60,
     )
     response.raise_for_status()
     return response.json()
 
 
-def _scrape_job_detail(api_key: str, firecrawl_url: str, job_url: str) -> dict:
-    """Use Firecrawl to scrape a single job detail page."""
-    import httpx
+def _extract_search_results(html: str) -> list[dict[str, Any]]:
+    """Extract job records from a Seek search page's ``SEEK_REDUX_DATA`` island.
 
-    response = httpx.post(
-        f"{firecrawl_url}/v1/scrape",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={"url": job_url, "formats": ["markdown", "rawHtml"]},
-        timeout=30,
+    Returns the de-duplicated (by job id) list of result records — each a dict
+    with ``id``/``title``/``advertiser``/``locations``/``teaser``/
+    ``bulletPoints``/``listingDate``/``workArrangements``. Returns ``[]`` when
+    the data island is absent (e.g. Seek served an interstitial/error page) so
+    the caller can distinguish "blocked" from "genuinely zero results".
+    """
+    marker = html.find("window.SEEK_REDUX_DATA")
+    if marker == -1:
+        return []
+    try:
+        start = html.index("{", marker)
+        blob, _ = json.JSONDecoder().raw_decode(html[start:])
+    except (ValueError, json.JSONDecodeError):
+        return []
+
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if (
+                node.get("id")
+                and node.get("title")
+                and isinstance(node.get("advertiser"), dict)
+                and "locations" in node
+            ):
+                job_id = str(node["id"])
+                if job_id not in seen:
+                    seen.add(job_id)
+                    records.append(node)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(blob.get("results", blob))
+    return records
+
+
+def _search_record_to_item(record: dict[str, Any]) -> dict[str, Any]:
+    """Map a SEEK search Redux record into the shape ``_parse`` consumes."""
+    locations = record.get("locations") or []
+    location = ", ".join(
+        str((loc or {}).get("label", "")) for loc in locations if (loc or {}).get("label")
     )
-    response.raise_for_status()
-    return response.json()
+    advertiser = record.get("advertiser") or {}
+    company = str(advertiser.get("description") or record.get("companyName") or "")
+    return {
+        "title": str(record.get("title") or ""),
+        "company": company,
+        "location": location,
+        "description": str(record.get("teaser") or ""),
+        "requirements": [b for b in (record.get("bulletPoints") or []) if b],
+        "sourceUrl": f"https://www.seek.com.au/job/{record.get('id')}",
+        "postedAt": record.get("listingDate"),
+        "workArrangements": record.get("workArrangements"),
+    }
 
 
 def _apollo_field(record: dict[str, Any], name: str) -> Any:
@@ -235,7 +288,18 @@ class SeekAdapter(BaseAdapter):
     source = "seek"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
-        """Fetch real jobs from Seek using Firecrawl."""
+        """Fetch real jobs from Seek using Firecrawl, paginating result pages.
+
+        Walks Seek's paginated search (``?page=N``) accumulating unique job
+        URLs until a page yields no new jobs, a sane page/job cap is hit
+        (``AETHER_SEEK_MAX_PAGES`` / ``AETHER_SEEK_MAX_JOBS``, default 10 / 100),
+        or the search is exhausted — replacing the old hard 20-job cap.
+
+        A first-page scrape failure (e.g. a Firecrawl 408/500) raises
+        :class:`AdapterFetchError` so the scout surfaces it as a real per-source
+        error rather than swallowing it as a benign skip (GAP-SRC-002). Missing
+        credentials remain a ``NotImplementedError`` (no live mode available).
+        """
         api_key, firecrawl_url = _get_abacus_credentials()
 
         if not api_key or not firecrawl_url:
@@ -244,58 +308,63 @@ class SeekAdapter(BaseAdapter):
                 "(or running on Abacus SuperComputer with VM metadata access)"
             )
 
-        # Build search URL - Seek uses slug format
-        query_slug = query.lower().replace(" ", "-")
-        location_slug = location.replace(", ", "-").replace(" ", "-")
-        search_url = f"https://www.seek.com.au/{query_slug}-jobs/in-{location_slug}"
+        # Build the search URL. The keyword/where query form is used rather
+        # than the ``/<slug>-jobs/in-<slug>`` path form: the latter redirects to
+        # au.seek.com and scrapes an error page (a root cause of discovery being
+        # stuck at persisted=0). Pagination is ``&page=N`` on this query URL.
+        base_url = (
+            f"https://www.seek.com.au/jobs?keywords={quote(query)}&where={quote(location)}"
+        )
 
-        logger.info("seek: fetching %s", search_url)
+        max_pages = int(os.environ.get("AETHER_SEEK_MAX_PAGES", "10"))
+        max_jobs = int(os.environ.get("AETHER_SEEK_MAX_JOBS", "100"))
 
-        try:
-            result = _scrape_seek_page(api_key, firecrawl_url, search_url)
-        except Exception as exc:
-            logger.warning("seek: scrape failed: %s", exc)
-            raise NotImplementedError(f"Seek scrape failed: {exc}") from exc
-
-        if not result.get("success"):
-            raise NotImplementedError(f"Seek scrape returned failure: {result}")
-
-        data = result.get("data", {})
-        links = data.get("links", [])
-
-        # Extract unique job URLs
-        job_urls = set()
-        for link in links:
-            if "/job/" in link:
-                # Clean up URL - remove tracking params
-                clean_url = re.sub(r"[?#].*", "", link)
-                # Normalize to seek.com.au
-                clean_url = clean_url.replace("au.seek.com", "www.seek.com.au")
-                if clean_url not in job_urls:
-                    job_urls.add(clean_url)
-
-        logger.info("seek: found %d unique job URLs", len(job_urls))
-
-        # Scrape first N job details (limit to avoid rate limits)
-        jobs_data = []
-        max_jobs = int(os.environ.get("AETHER_SEEK_MAX_JOBS", "20"))
-
-        for job_url in list(job_urls)[:max_jobs]:
+        records: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for page in range(1, max_pages + 1):
+            page_url = base_url if page == 1 else f"{base_url}&page={page}"
+            logger.info("seek: fetching %s", page_url)
             try:
-                detail_result = _scrape_job_detail(api_key, firecrawl_url, job_url)
-                if detail_result.get("success"):
-                    data = detail_result.get("data", {})
-                    job_info = _parse_job_from_html(data.get("rawHtml", ""), job_url)
-                    if not job_info:
-                        job_info = _parse_job_from_markdown(data.get("markdown", ""), job_url)
-                    if job_info:
-                        jobs_data.append(job_info)
-                        logger.info("seek: scraped job: %s", job_info.get("title", "")[:50])
+                result = _scrape_seek_page(api_key, firecrawl_url, page_url)
             except Exception as exc:
-                logger.warning("seek: failed to scrape %s: %s", job_url, exc)
-                continue
+                if page == 1:
+                    logger.warning("seek: search scrape failed: %s", exc)
+                    raise AdapterFetchError(f"Seek search scrape failed: {exc}") from exc
+                logger.warning("seek: page %d scrape failed: %s", page, exc)
+                break
+            if not result.get("success"):
+                if page == 1:
+                    raise AdapterFetchError(f"Seek search returned failure: {result}")
+                break
 
-        return {"data": jobs_data}
+            html = result.get("data", {}).get("rawHtml", "") or ""
+            if "SEEK_REDUX_DATA" not in html and "SEEK_APOLLO_DATA" not in html:
+                # No data island → Seek served an interstitial/error page.
+                # Surface it honestly on the first page rather than persisting
+                # the error-page text as a bogus job (GAP-SRC-002).
+                if page == 1:
+                    raise AdapterFetchError(
+                        "Seek search page not reachable (no data island; likely blocked)"
+                    )
+                break
+
+            page_records = _extract_search_results(html)
+            new_on_page = 0
+            for record in page_records:
+                job_id = str(record.get("id") or "")
+                if not job_id or job_id in seen_ids:
+                    continue
+                seen_ids.add(job_id)
+                records.append(record)
+                new_on_page += 1
+            # A page with a data island but no new jobs means results are
+            # exhausted (page 1 with zero results is an honest empty run).
+            if new_on_page == 0 or len(records) >= max_jobs:
+                break
+
+        records = records[:max_jobs]
+        logger.info("seek: parsed %d jobs across search pages", len(records))
+        return {"data": [_search_record_to_item(record) for record in records]}
 
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:
         """Parse job data into JobRaw records.

@@ -25,3 +25,26 @@ def fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> Any:
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
         return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_json_post(
+    url: str, body: Any, timeout: int = DEFAULT_TIMEOUT_SECONDS
+) -> Any:
+    """POST a JSON ``body`` to ``url`` and decode the JSON response.
+
+    Used by sources whose keyless public API is a POST search (e.g. Workable's
+    ``/api/v3/accounts/<sub>/jobs``). Raises on HTTP/network errors.
+    """
+    data = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "User-Agent": _USER_AGENT,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        return json.loads(response.read().decode("utf-8"))

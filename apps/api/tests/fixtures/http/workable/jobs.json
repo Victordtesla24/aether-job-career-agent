@@ -1,0 +1,54 @@
+{
+  "accounts": [
+    {
+      "sub": "veriff",
+      "name": "Veriff",
+      "jobs": [
+        {
+          "id": "w1",
+          "title": "Technical Delivery Lead",
+          "shortcode": "ABC123",
+          "url": "https://apply.workable.com/veriff/j/ABC123/",
+          "remote": false,
+          "location": {
+            "city": "Melbourne",
+            "region": "Victoria",
+            "country": "Australia",
+            "workplaceType": "onsite"
+          },
+          "department": "Delivery",
+          "published_on": "2026-07-06",
+          "description": "Lead cross-functional delivery for our identity platform in APAC."
+        },
+        {
+          "id": "w2",
+          "title": "Product Owner",
+          "shortcode": "DEF456",
+          "url": "https://apply.workable.com/veriff/j/DEF456/",
+          "remote": true,
+          "location": {
+            "workplaceType": "remote"
+          },
+          "department": "Product",
+          "published_on": "2026-07-05",
+          "description": "Own the backlog for the verification product."
+        },
+        {
+          "id": "w3",
+          "title": "Backend Engineer",
+          "shortcode": "GHI789",
+          "url": "https://apply.workable.com/veriff/j/GHI789/",
+          "remote": true,
+          "location": {
+            "country": "Estonia",
+            "city": "Tallinn",
+            "workplaceType": "hybrid"
+          },
+          "department": "Engineering",
+          "published_on": "2026-07-04",
+          "description": "Build microservices in Python."
+        }
+      ]
+    }
+  ]
+}
