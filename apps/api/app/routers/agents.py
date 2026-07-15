@@ -720,6 +720,7 @@ def run_tailor(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, A
         "resume_id": output["resume_id"],
         "changes": output["changes"],
         "rejected": output["rejected"],
+        "conversionMetrics": output["conversionMetrics"],
     }
 
 

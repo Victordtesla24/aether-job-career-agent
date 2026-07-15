@@ -45,10 +45,20 @@ export async function fetchResumeDiff(id: string, options: RequestOptions = {}):
   return ResumeDiffSchema.parse(await apiRequest<unknown>(`/resumes/${id}/diff`, options));
 }
 
+/** Deterministic before/after ATS re-score + estimated conversion lift (GAP-E2). */
+export interface ConversionMetrics {
+  baselineATSScore: number;
+  tailoredATSScore: number;
+  estimatedConversionLift: string;
+  methodology: string;
+  confidence: string;
+}
+
 export interface TailorRunResult {
   resume_id: string;
   changes: number;
   rejected: string[];
+  conversionMetrics: ConversionMetrics;
 }
 
 /**
