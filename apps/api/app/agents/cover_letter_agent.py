@@ -51,6 +51,10 @@ SYSTEM_PROMPT = (
     "is a strong match for THIS role at THIS company, grounded in a concrete "
     "responsibility, technology or outcome named literally in the job "
     "description — never generic flattery about the company. "
+    "Write the ENTIRE letter in the FIRST PERSON as the candidate speaking "
+    "('I', 'my', 'me'). NEVER refer to the candidate in the third person: do "
+    "not use the candidate's name in the possessive ('<Name>'s ...') and never "
+    "use 'he', 'his', 'she', 'her' or 'him' to describe the candidate. "
     '"body": EXACTLY 2 paragraphs separated by a blank line. Paragraph 1: 2-3 '
     "specific requirements quoted or closely paraphrased from the job "
     "description, each matched to a concrete, evidence-grounded achievement "
@@ -208,6 +212,19 @@ def current_position(target_role: str | None) -> str:
     return role or _POSITION_FALLBACK
 
 
+def hook_position_phrase(position: str) -> str:
+    """Grammatical lead-in for the deterministic hook. A configured target role
+    is an actual job title, so it reads as "as a/an <role>" ("My background as a
+    Senior Technical Program Manager …"); the generic professional-focus
+    fallback reads as "in <focus>" ("My background in end-to-end delivery
+    leadership …"). Fixes the awkward "background in <role title>" phrasing the
+    writer-audit flagged (GAP-COV-VOICE)."""
+    if not position or position == _POSITION_FALLBACK:
+        return f"in {position}"
+    article = "an" if position[:1].lower() in "aeiou" else "a"
+    return f"as {article} {position}"
+
+
 def build_body(
     llm_body: str, job: dict[str, Any], position: str, hook_reason: str = ""
 ) -> str:
@@ -220,8 +237,8 @@ def build_body(
     turns the generic template into a specific, persuasive opener rather than
     a boilerplate "direct match" claim repeated for every company."""
     hook = (
-        f"My background in {position} is a direct match for the "
-        f"{job['title']} role at {job['company']}."
+        f"My background {hook_position_phrase(position)} is a direct match for "
+        f"the {job['title']} role at {job['company']}."
     )
     hook_reason = hook_reason.strip()
     if hook_reason:
@@ -250,6 +267,80 @@ def strip_banned_openers(body: str) -> str:
             rf"[^.\n]*{re.escape(phrase)}[^.\n]*\.\s*", "", body, flags=re.I
         )
     return body.strip()
+
+
+#: Sentence-terminating characters — a self-reference right after one of these
+#: (or at the very start of a paragraph) opens a sentence, so its first-person
+#: rewrite must be capitalized ("His facilitation …" -> "My facilitation …").
+_SENTENCE_ENDERS = ".!?:;\n\r\"'"
+
+
+def _opens_sentence(text: str, start: int) -> bool:
+    """True when the token at ``start`` begins the text or follows a sentence end."""
+    i = start - 1
+    while i >= 0 and text[i] in " \t":
+        i -= 1
+    return i < 0 or text[i] in _SENTENCE_ENDERS
+
+
+def enforce_first_person(body: str, signer: str) -> str:
+    """Deterministically rewrite any third-person reference to the candidate —
+    their own name in the possessive or as a bare subject, or he/his/she/her/him
+    — into the first person, so the letter speaks consistently as "I"/"my".
+
+    The writer-audit found drafts that opened and closed in the first person but
+    lapsed into the third person mid-letter ("Vikram's proven ability …", "his
+    orchestration …", "His facilitation …"). A cover letter is the candidate
+    speaking, so this is a hard voice error. The :data:`SYSTEM_PROMPT` already
+    forbids it; this is the deterministic backstop that runs after the
+    FabricationGuard (so the guard still adjudicates the model's real entities,
+    not our pronoun rewrite) and guarantees a consistent first-person voice
+    regardless of what the model emitted.
+
+    Rewrites are case-aware: a reference that opens a sentence is capitalized
+    ("His facilitation" -> "My facilitation"), one mid-sentence is not ("his
+    delivery" -> "my delivery"); first-person "I" forms are always capitalized.
+    Third-person auxiliaries stranded by a name→"I" rewrite are corrected for
+    agreement ("Vikram has led" -> "I have led")."""
+    if not body:
+        return body
+
+    name_parts = [p for p in re.split(r"\s+", signer.strip()) if p]
+    if signer.strip():
+        # Longest first so the full name wins over its individual components.
+        name_parts = sorted({signer.strip(), *name_parts}, key=len, reverse=True)
+    name_alt = "|".join(re.escape(p) for p in name_parts)
+
+    clauses = [r"(?P<contr>\b(?:he|she)'s\b)"]
+    if name_alt:
+        clauses.append(rf"(?P<namep>\b(?:{name_alt})'s\b)")
+        clauses.append(rf"(?P<name>\b(?:{name_alt})\b)")
+    clauses.append(r"(?P<possdet>\b(?:his|her)\b)")
+    clauses.append(r"(?P<subj>\b(?:he|she)\b)")
+    clauses.append(r"(?P<obj>\bhim\b)")
+    pattern = re.compile("|".join(clauses), re.I)
+
+    def _rewrite(match: re.Match[str]) -> str:
+        kind = match.lastgroup
+        if kind == "contr":
+            return "I'm"
+        if kind in ("namep", "possdet"):
+            base = "my"
+        elif kind in ("name", "subj"):
+            return "I"  # first-person subject is always capitalized
+        else:  # obj
+            base = "me"
+        if _opens_sentence(match.string, match.start()):
+            return base[:1].upper() + base[1:]
+        return base
+
+    text = pattern.sub(_rewrite, body)
+    # Repair third-person auxiliaries left behind by a name→"I" subject rewrite.
+    text = re.sub(r"\bI has\b", "I have", text)
+    text = re.sub(r"\bI is\b", "I am", text)
+    text = re.sub(r"\bI does\b", "I do", text)
+    # Collapse any double spaces the rewrites introduced (never touch newlines).
+    return re.sub(r"[ \t]{2,}", " ", text)
 
 
 @dataclass
@@ -460,6 +551,17 @@ class CoverLetterAgent:
         clean_body = strip_banned_openers(body)
         if clean_body != body:
             body = clean_body
+            letter = compose_letter(body, job, signer)
+
+        # GAP-COV-VOICE (§11.3): guarantee a consistent first-person voice —
+        # deterministically rewrite any third-person self-reference (the
+        # candidate's own name in the possessive, or he/his/she/her/him) the
+        # model may have emitted mid-letter back into "I"/"my". Runs AFTER the
+        # FabricationGuard above so the guard adjudicates the model's real
+        # entities, not this pronoun rewrite.
+        voice_body = enforce_first_person(body, signer)
+        if voice_body != body:
+            body = voice_body
             letter = compose_letter(body, job, signer)
 
         # GAP-NEW-003 output-side guard: even though the untrusted job
