@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteProviderCredential,
   putProviderCredential,
+  startAnthropicOAuth,
   verifyProvider,
   type Provider,
   type ProviderAuthMode,
@@ -222,6 +223,30 @@ export default function ProviderConfigModal({
     }
   };
 
+  // GAP-D1: one-click Anthropic subscription connect (OAuth PKCE). Redirects to
+  // the claude.ai consent screen; the callback stores the token server-side.
+  const connectOAuth = async () => {
+    if (busy) return;
+    setBusy("saving");
+    setError(null);
+    onNotice({
+      kind: "info",
+      text: "Redirecting to Anthropic to connect your Claude subscription…",
+    });
+    try {
+      const { authorizeUrl } = await startAnthropicOAuth();
+      window.location.href = authorizeUrl;
+    } catch (e) {
+      onNotice(providerCredentialErrorNotice(e, "Starting Anthropic OAuth"));
+      setError(
+        e instanceof Error
+          ? e.message.slice(0, 160)
+          : "Anthropic OAuth is not available.",
+      );
+      setBusy(null);
+    }
+  };
+
   const verify = async () => {
     if (busy) return;
     setBusy("verifying");
@@ -348,6 +373,28 @@ export default function ProviderConfigModal({
               ))}
             </div>
           </fieldset>
+        ) : null}
+
+        {view.id === "anthropic" && mode === "subscription_oauth" ? (
+          <div
+            data-testid="anthropic-oauth-connect-block"
+            className="mb-4 rounded-lg border border-aether-coral/25 bg-aether-coral/5 p-3"
+          >
+            <button
+              type="button"
+              onClick={() => void connectOAuth()}
+              disabled={busy !== null}
+              data-testid="anthropic-oauth-connect"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-coral px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:opacity-90 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-link text-[10px]" aria-hidden="true" />
+              {busy === "saving" ? "Connecting…" : "Connect with Anthropic"}
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed text-aether-muted">
+              One-click connect with your Claude subscription — no token to copy.
+              Or paste a subscription token below if you already have one.
+            </p>
+          </div>
         ) : null}
 
         <label

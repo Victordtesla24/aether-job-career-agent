@@ -111,12 +111,134 @@ export async function fetchAgentStats(o: RequestOptions = {}): Promise<AgentStat
   return StatsSchema.parse(await apiRequest<unknown>("/agents/stats", o));
 }
 
+/** Extended thinking effort levels a model may honour (GAP-D3). */
+export type ThinkingEffort = "none" | "low" | "medium" | "high";
+
+/** Full per-agent configuration (GAP-D3) merged over catalog defaults. */
+export const AgentConfigSchema = z.object({
+  key: z.string(),
+  enabled: z.boolean(),
+  model: z.string(),
+  provider: z.string().nullish(),
+  authMode: z.enum(["api_key", "subscription_oauth"]).nullish(),
+  credentialRef: z.string().nullish(),
+  temperature: z.number(),
+  thinkingEffort: z.enum(["none", "low", "medium", "high"]),
+});
+export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+
+/** Patch body for PUT /agents/config/{key}; every field is optional (merge). */
+export interface AgentConfigPatch {
+  enabled?: boolean;
+  model?: string;
+  provider?: string | null;
+  authMode?: ProviderAuthMode | null;
+  credentialRef?: string | null;
+  temperature?: number;
+  thinkingEffort?: ThinkingEffort;
+}
+
+export async function fetchAgentConfig(
+  key: string,
+  o: RequestOptions = {},
+): Promise<AgentConfig> {
+  return AgentConfigSchema.parse(await apiRequest<unknown>(`/agents/config/${key}`, o));
+}
+
+export async function fetchAgentConfigList(o: RequestOptions = {}): Promise<AgentConfig[]> {
+  return z.array(AgentConfigSchema).parse(await apiRequest<unknown>("/agents/config", o));
+}
+
 export async function updateAgentConfig(
   key: string,
-  patch: { enabled?: boolean; model?: string },
+  patch: AgentConfigPatch,
   o: RequestOptions = {},
-): Promise<{ key: string; enabled: boolean; model: string }> {
-  return apiRequest(`/agents/config/${key}`, { ...o, method: "PUT", body: patch });
+): Promise<AgentConfig> {
+  return AgentConfigSchema.parse(
+    await apiRequest<unknown>(`/agents/config/${key}`, { ...o, method: "PUT", body: patch }),
+  );
+}
+
+/** A user's own stored provider credential, masked (never the secret). */
+export const UserCredentialSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  authMode: z.enum(["api_key", "subscription_oauth"]),
+  secretHint: z.string().nullish(),
+  baseUrl: z.string().nullish(),
+  expiresAt: z.string().nullish(),
+  lastVerifiedAt: z.string().nullish(),
+  lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
+});
+export type UserCredential = z.infer<typeof UserCredentialSchema>;
+
+export async function listUserCredentials(o: RequestOptions = {}): Promise<UserCredential[]> {
+  return z.array(UserCredentialSchema).parse(
+    await apiRequest<unknown>("/agents/user/providers", o),
+  );
+}
+
+/**
+ * Store (or rotate) THIS user's own encrypted credential for a provider, then
+ * verify it server-side (GAP-NEW-001). Returns the masked row incl. the honest
+ * lastVerifyStatus — never the secret.
+ */
+export async function putUserCredential(
+  provider: string,
+  body: CredentialInput,
+  o: RequestOptions = {},
+): Promise<UserCredential> {
+  return UserCredentialSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/user/providers/${provider}/credential`, {
+        ...o,
+        method: "PUT",
+        body,
+      }),
+    ) as UserCredential;
+}
+
+export async function deleteUserCredential(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<UserCredential> {
+  return UserCredentialSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/user/providers/${provider}/credential`, {
+        ...o,
+        method: "DELETE",
+      }),
+    ) as UserCredential;
+}
+
+export async function verifyUserCredential(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<VerifyResult> {
+  return VerifyResultSchema.parse(
+    await apiRequest<unknown>(`/agents/user/providers/${provider}/verify`, {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
+/** The Anthropic subscription OAuth consent URL (GAP-D1). */
+export const OAuthStartSchema = z.object({
+  authorizeUrl: z.string(),
+  state: z.string(),
+});
+export type OAuthStart = z.infer<typeof OAuthStartSchema>;
+
+/**
+ * Begin the Anthropic subscription OAuth flow: GET /agents/auth/anthropic/start.
+ * Returns the claude.ai consent URL to redirect the user to. Throws when the
+ * server has not configured OAuth (honest 501 — never a fabricated URL).
+ */
+export async function startAnthropicOAuth(o: RequestOptions = {}): Promise<OAuthStart> {
+  return OAuthStartSchema.parse(await apiRequest<unknown>("/agents/auth/anthropic/start", o));
 }
 
 export async function updateProvider(

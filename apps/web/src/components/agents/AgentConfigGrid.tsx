@@ -9,8 +9,9 @@
  * Status + config are real: derived from GET /agents/catalog and mutated via
  * PUT /agents/config/{key} (see components/agents/api.ts).
  */
-import { useId } from "react";
+import { useId, useState } from "react";
 
+import AgentSettingsPanel from "./AgentSettingsPanel";
 import type { CatalogAgent } from "./api";
 import { agentRunDisabledReason } from "./logic";
 
@@ -62,6 +63,7 @@ function AgentCard({
 }) {
   const tipId = useId();
   const runLockReason = agentRunDisabledReason(agent);
+  const [showSettings, setShowSettings] = useState(false);
   return (
     <div
       data-testid={`agent-card-${agent.key}`}
@@ -111,6 +113,16 @@ function AgentCard({
         </span>
         {agent.status === "planned" ? null : (
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid={`agent-settings-toggle-${agent.key}`}
+            aria-expanded={showSettings}
+            aria-label={`${showSettings ? "Hide" : "Show"} settings for ${agent.name}`}
+            onClick={() => setShowSettings((s) => !s)}
+            className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 text-aether-muted-dim transition hover:border-white/30 hover:text-white"
+          >
+            <i className="fa-solid fa-sliders text-[10px]" aria-hidden="true" />
+          </button>
           {agent.runnable ? (
             <button
               type="button"
@@ -146,6 +158,10 @@ function AgentCard({
         </div>
         )}
       </div>
+
+      {agent.status !== "planned" && showSettings ? (
+        <AgentSettingsPanel agent={agent} />
+      ) : null}
     </div>
   );
 }

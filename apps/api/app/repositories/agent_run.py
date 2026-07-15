@@ -55,6 +55,24 @@ class AgentRunRepository:
             conn.commit()
         return rows[0] if rows else None
 
+    def set_billing_audit(
+        self, run_id: str, audit: dict[str, Any]
+    ) -> None:
+        """Persist the billing-provenance audit for a run (GAP-D3).
+
+        Writes the additive ``billingAuditJson`` column (created by the lazy DDL
+        in ``user_provider_credential._ensure_user_agent_tables``). Best-effort:
+        a missing column must never fail an otherwise-successful run, so the
+        caller guards this.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "AgentRun" SET "billingAuditJson" = %s WHERE "id" = %s',
+                    (json.dumps(audit), run_id),
+                )
+            conn.commit()
+
     def list_recent(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with get_connection() as conn:
             with conn.cursor() as cur:
