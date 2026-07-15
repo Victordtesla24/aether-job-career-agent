@@ -173,7 +173,7 @@ def _detect_blocks(page: Any) -> list[dict[str, Any]]:
                 break
         blocks.append({
             "first_line": first["text"],
-            "full_text": " ".join(ln["text"] for ln in kept),
+            "full_text": _join_wrapped([ln["text"] for ln in kept]),
             "prefix": _normalize(prefix),
             "x0": min(ln["x0"] for ln in kept),
             "top": min(mtop, first["top"]),
@@ -182,6 +182,31 @@ def _detect_blocks(page: Any) -> list[dict[str, Any]]:
             "next_top": nxt,
         })
     return blocks
+
+
+def _join_wrapped(parts: list[str]) -> str:
+    """Join a bullet's wrapped visual lines into one sentence.
+
+    A line that wraps at a hyphenated compound leaves the hyphen dangling
+    ("COBOL/mainframe test-" / "evidence automation"); rejoining those with a
+    space corrupts the word ("test- evidence"). So when a part ends in a hyphen
+    the next part is appended without a separator ("test-evidence"), exactly as
+    the flat-text reconstruction in
+    :func:`app.services.resume_tailor.extract_bullets` does; every other break
+    is a single space. This is the only join defect in the positional path — the
+    two-column de-interleave itself is already correct (GAP-P5-PDF).
+    """
+    out = ""
+    for part in parts:
+        if not part:
+            continue
+        if out.endswith("-"):
+            out += part
+        elif out:
+            out = f"{out} {part}"
+        else:
+            out = part
+    return out
 
 
 def _wrap(font: Any, size: float, words: list[str], width: float) -> list[str]:
