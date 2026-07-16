@@ -22,7 +22,12 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.services.ats_engine import _content_tokens as _ats_content_tokens
-from app.services.llm_client import LLMClient, get_model
+from app.services.llm_client import (
+    LLMClient,
+    get_entailment_budget_seconds,
+    get_model,
+    shared_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +200,31 @@ _GENERIC_STEMS = frozenset(
     stem for word in _GENERIC_PROFESSIONAL for stem in (word, _stem(word))
 )
 
+#: Common capitalised English words / generic acronyms that are NOT genuine
+#: proper-noun context anchors (an employer, program, or product name). Without
+#: this, ordinary title-case or acronym vocabulary — "Business", "BI", "SQL",
+#: "Data", "Team" — was mis-read as a context anchor, so a Story-Bank unit that
+#: merely shared such a generic word registered as "context-bound" and its
+#: evidence was wrongly excluded from its OWN home bullet (GAP-P6-TAIL-004:
+#: reproduced live on the NAB/SQL transplant, run8 bullet-10). Genuine names
+#: (ATO, NAB, Telstra, JIRA, Kubernetes, Payday, Kookaburras) are deliberately
+#: NOT here and stay anchors. Stems are folded in so plurals/inflections match.
+_GENERIC_CAPITALIZED_ANCHORS = frozenset(
+    token
+    for base in (
+        """
+        business bi intelligence data analytics analysis analyst reporting
+        report metrics dashboard team leadership management strategy strategic
+        governance operations delivery program project portfolio product
+        process quality testing automation compliance stakeholder workshop
+        platform system engineering transformation
+        it hr qa ux ui pm ba sql api etl kpi crm erp uat sdlc ci cd
+        agile scrum kanban devops cloud digital enterprise
+        """.split()
+    )
+    for token in (base, _stem(base))
+)
+
 
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(_fold(text)))
@@ -225,9 +255,13 @@ def proper_noun_anchors(text: str) -> set[str]:
     evidence are "same context" when they share a proper-noun anchor.
 
     An anchor is a surface token that is an ALL-CAPS acronym ("ATO", "NTP"), a
-    mixed-case product name ("PowerShell", "DevOps"), or a capitalised word used
-    mid-segment ("Payday", "Kookaburras") — i.e. a name, not sentence-initial
-    capitalisation or ordinary prose. Digits and stopwords are excluded.
+    mixed-case product name ("PowerShell", "PostgreSQL"), or a capitalised word
+    used mid-segment ("Payday", "Kookaburras") — i.e. a name, not sentence-initial
+    capitalisation or ordinary prose. Digits, stopwords, and GENERIC capitalised
+    vocabulary ("Business", "BI", "SQL", "Data", "Team") are excluded: those are
+    common words, not employer/program/product names, so treating them as
+    context anchors wrongly scoped a story's evidence away from its home bullet
+    (GAP-P6-TAIL-004).
     """
     folded = text.translate(_UNICODE_FOLD)
     segment_starts = {m.end() for m in _SEGMENT_START_RE.finditer(folded)}
@@ -236,6 +270,9 @@ def proper_noun_anchors(text: str) -> set[str]:
         surface = match.group(0)
         low = surface.lower()
         if low in _STOPWORDS or any(ch.isdigit() for ch in low):
+            continue
+        if low in _GENERIC_CAPITALIZED_ANCHORS or _stem(low) in _GENERIC_CAPITALIZED_ANCHORS:
+            # Generic capitalised vocabulary / acronyms are not context anchors.
             continue
         all_caps = len(surface) >= 2 and surface.isupper()
         inner_upper = surface[1:] != surface[1:].lower()
@@ -790,7 +827,16 @@ class ResumeTailorService:
             numbers = set(resume_numbers)
             for unit_anchors, unit_stems, unit_numbers in extra_units:
                 context_bound = bool(unit_anchors & all_bullet_anchors)
-                if not context_bound or (unit_anchors & own_anchors):
+                # A context-bound unit (it names an employer/program present in
+                # the résumé) lends its keywords only to bullets in THAT context.
+                # But a bullet with NO genuine anchors of its own names no
+                # context, so it can never safely EXCLUDE a unit — it must see
+                # the FULL corpus. Otherwise a story's own evidence is wrongly
+                # withheld from its home bullet when the employer name lives in a
+                # section header, not the bullet text (GAP-P6-TAIL-004, live
+                # NAB/SQL repro). Cross-context fabrication is still caught by the
+                # semantic entailment pass downstream.
+                if not context_bound or not own_anchors or (unit_anchors & own_anchors):
                     stems |= unit_stems
                     numbers |= unit_numbers
             return stems, numbers
@@ -931,13 +977,20 @@ class ResumeTailorService:
             "its own ORIGINAL):\n"
             + items
         )
-        raw = self._llm.complete_json(
-            "tailor_entailment",
-            ENTAILMENT_SYSTEM_PROMPT,
-            user_prompt,
-            model=get_model("STRUCTURED"),
-            temperature=0.0,
-        )
+        # GAP-P6-TAIL-004: run the verifier inside its OWN fresh budget window so
+        # a slow tailor generation that already ate the shared budget cannot
+        # starve it. The tailor call is finished by now, so this reservation is
+        # independent of (and not consumable by) it. Without this the verifier
+        # got 0-9s, timed out, and its conservative fail-safe reverted every
+        # edit — including genuinely-supported ones — for zero ATS lift.
+        with shared_budget(get_entailment_budget_seconds()):
+            raw = self._llm.complete_json(
+                "tailor_entailment",
+                ENTAILMENT_SYSTEM_PROMPT,
+                user_prompt,
+                model=get_model("STRUCTURED"),
+                temperature=0.0,
+            )
         verdicts = raw.get("results") if isinstance(raw, dict) else raw
         if not isinstance(verdicts, list):
             return set()
