@@ -66,6 +66,12 @@ os.environ["AETHER_DISCOVERY_FIXTURE_DIR"] = str(FIXTURE_DIR)
 # monkeypatch the env explicitly.
 os.environ["AETHER_LLM_MODE"] = "replay"
 
+# The paid-subscription entitlement gate (GAP-P6-PAYWALL) defaults ON in
+# production. The bulk of the suite exercises the freemium (Free-tier) agent-run
+# paths, so pin the gate OFF here — exactly like AETHER_LLM_MODE above. The
+# dedicated gate suite (test_gap_p6_paywall) sets the flag EXPLICITLY per test.
+os.environ["AETHER_REQUIRE_PAID_SUBSCRIPTION"] = "false"
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

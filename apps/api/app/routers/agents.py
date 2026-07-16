@@ -19,7 +19,11 @@ from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
-from app.repositories.billing import UsageQuotaRepository
+from app.repositories.billing import (
+    SubscriptionRepository,
+    UsageQuotaRepository,
+    subscription_gate_enabled,
+)
 from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,
@@ -481,6 +485,33 @@ def _plan_quota_429(code: str, quota: dict[str, Any] | None) -> HTTPException:
     )
 
 
+def _require_active_subscription(user_id: str) -> None:
+    """Entitlement gate (GAP-P6-PAYWALL): Aether is subscription-gated.
+
+    Runs BEFORE any billing/quota work in ``_record_run`` so a user without an
+    ACTIVE PAID subscription cannot execute ANY actionable agent (metered LLM
+    agents AND deterministic ones — the whole pipeline is walled). Raises an
+    honest HTTP 402 ``subscription_required`` pointing at ``/pricing``; it never
+    fabricates access. Gated behind ``AETHER_REQUIRE_PAID_SUBSCRIPTION`` (default
+    ON) — when the operator sets it 'false' the freemium Free-tier path applies.
+    """
+    if not subscription_gate_enabled():
+        return
+    if SubscriptionRepository().has_active_paid_subscription(user_id):
+        return
+    raise HTTPException(
+        status.HTTP_402_PAYMENT_REQUIRED,
+        detail={
+            "error": "subscription_required",
+            "message": (
+                "An active subscription is required to use Aether. "
+                "Subscribe to unlock."
+            ),
+            "upgradeUrl": "/pricing",
+        },
+    )
+
+
 def _record_run(
     user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
 ) -> dict[str, Any]:
@@ -492,6 +523,9 @@ def _record_run(
     subscription-quota block short-circuits the run with an honest 429 (never a
     silent reroute to another payer).
     """
+    # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
+    # honest 402 before any audit row, quota reserve, or LLM call.
+    _require_active_subscription(user_id)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
     # Quota cooldown check BEFORE starting a run row — a blocked user gets a
