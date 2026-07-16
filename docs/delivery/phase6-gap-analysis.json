@@ -228,7 +228,7 @@
         "signup toggle 403s register",
         "audit log append-only"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "PROD-FLOW-VERIFIED / GATE-17-human-gated",
       "branch": "fix/p6-admin",
       "build": "10 admin endpoints + admin FE (8 routes) + isAdmin/suspended/lastLoginAt cols + AdminSetting table; spend=SUM(costUsd); 13 admin tests + 7 FE, regression 68/68+84/84, tsc/lint/build clean. GATE-17 full production verify (login as rotated admin, click flows) needs AETHER_ADMIN_EMAIL/PASSWORD_HASH env (human) OR a controlled QA-admin provisioning.",
       "human_gated": false,
@@ -237,7 +237,8 @@
       ],
       "fixer_role": "fixer-hard",
       "merged_sha": "f735f50",
-      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy.",
+      "close_evidence": "qa-prod-console-admin.json: temp-QA-admin proved live \u2014 admin login isAdmin=true, GET /admin/users (USD spend) + /admin/health real data, spend-cap $0 -> 429 spend_cap_exceeded with 0 AgentRun row (LLM never invoked), signup toggle 403/201, suspend->403, audit rows written; then temp admin+test users DELETED, .env restored byte-identical, 0 isAdmin=true remain. Admin panel COMPLETE+proven; GATE-17 formal closure awaits operator's own admin credential (\u00a72 human)."
     },
     {
       "id": "GAP-P6-ADMIN-003",
@@ -257,7 +258,7 @@
         "every admin action writes audit row",
         "audit log no-delete/no-edit"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "PROD-FLOW-VERIFIED / GATE-17-human-gated",
       "branch": "fix/p6-admin",
       "build": "AdminAuditLog written on every mutation (spend-cap/suspend/settings), append-only (no delete/edit endpoint, not truncated in prod). Tier 2 export/delete deferred (\u00a715 Tier 2, after Tier 1 VERIFIED-CLOSED).",
       "human_gated": false,
@@ -266,7 +267,8 @@
       ],
       "fixer_role": "fixer-hard",
       "merged_sha": "f735f50",
-      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy.",
+      "close_evidence": "qa-prod-console-admin.json: AdminAuditLog append-only, 3 rows written (set_spend_cap + 2x update_settings) attributed to admin; no delete/edit endpoint. Tier 2 export/delete deferred (\u00a715). Verified live via temp admin, cleaned up."
     },
     {
       "id": "GAP-P6-SEC-001",
@@ -286,7 +288,7 @@
         "admin/admin123 gets isAdmin=false",
         "env-configured admin gets isAdmin=true"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "branch": "fix/p6-admin",
       "build": "Rotation in FastAPI lifespan: ALWAYS demotes admin/admin123 to isAdmin=false on boot (GATE-31 autonomously verifiable post-deploy); creates env admin isAdmin=true only when AETHER_ADMIN_EMAIL+AETHER_ADMIN_PASSWORD_HASH set (bcrypt). GATE-31 verifiable WITHOUT the env (demotion is unconditional). GATE-17 admin-login flows need the env admin (human) \u2014 until set, panel has zero admins by design.",
       "human_gated": true,
@@ -300,7 +302,9 @@
       ],
       "fixer_role": "fixer-hard",
       "merged_sha": "f735f50",
-      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy.",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "qa-prod-console-admin.json GATE-31: admin/admin123 login isAdmin=false, /api/admin/users 403. Rotation demotes on boot (unconditional). NOTE: provisioning the operator's OWN permanent admin (AETHER_ADMIN_EMAIL/PASSWORD_HASH) is human-gated (GATE-17) \u2014 but the security requirement (admin/admin123 holds NO admin) is CLOSED and proven live."
     },
     {
       "id": "GAP-P6-SRC-001",
@@ -322,7 +326,7 @@
         "0 dup externalUrl",
         "per-source status honest"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "merged_sha": "55effc6",
       "review": "PASS (review-sourcing.json) \u2014 10/17 tokens curled live HTTP 200, tests 22/0. GATE-07 CLOSURE RISK (reviewer): live-verified 40 relevant/29 fresh but decaying (Lever exactly 5, Adzuna 0 without creds, several postings 20-28d). Code correct; GATE-07/08 closed by production QA via a LIVE scout run at deploy time, NOT this snapshot. If live volume <25 at QA: broaden tokens or enable Adzuna creds \u2014 never fake counts.",
       "human_gated": false,
@@ -333,7 +337,9 @@
       "fixer_role": "fixer-hard",
       "depends_on": [
         "GAP-P6-SRC-002"
-      ]
+      ],
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "VERIFIED-CLOSED (qa-prod-sourcing.json): live scout run persisted 29 new; active feed 30 jobs / 5 sources (ashby7/greenhouse16/lever5/remoteok1/remotive1), 3 sources >=5, 30/30 within 30d, 0 dup URL. GATE-07 PASS. Residual: thin margin (Adzuna 0 creds)."
     },
     {
       "id": "GAP-P6-SRC-002",
@@ -354,7 +360,7 @@
         "Adzuna adapter fetches AU jobs",
         "no seek.com.au scraping call in sync path"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "merged_sha": "55effc6",
       "review": "PASS \u2014 Seek moved to _COMPLIANCE_GATED, excluded from ADAPTERS=build_live_registry() unless AETHER_ENABLE_SEEK truthy (default OFF); scout iterates the filtered registry; no other reachable seek.com.au scrape call. Adzuna adapter env-gated with honest skip.",
       "human_gated": false,
@@ -363,7 +369,9 @@
         "GATE-07",
         "GATE-08"
       ],
-      "fixer_role": "fixer-hard"
+      "fixer_role": "fixer-hard",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "VERIFIED-CLOSED (qa-prod-sourcing.json): Seek excluded from live registry (3-way confirmed); wellfound 403=status:error, adzuna no-creds=status:skipped \u2014 honest surfacing, no silent-swallow."
     },
     {
       "id": "GAP-P6-DATA-001",
@@ -383,14 +391,16 @@
         "active feed contains only live+fresh jobs",
         "GATE-08 cross-check passes on >=10 sampled cards"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "merged_sha": "55effc6",
       "review": "PASS \u2014 active_feed excludes prohibited sources (Seek) + >30d STALE + dead rows; the probe-13 dead Seek cards are removed from the active feed. GATE-08 sampled-card cross-check re-run by production QA at deploy. Per-URL liveness-revalidation cron deferred as documented future enhancement (out of hot GET /jobs path).",
       "human_gated": false,
       "gates": [
         "GATE-08"
       ],
-      "fixer_role": "fixer-hard"
+      "fixer_role": "fixer-hard",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "VERIFIED-CLOSED (qa-prod-sourcing.json, GATE-08): 10/10 sampled cards LIVE (0 expired/unreachable/seek); active-feed filter demonstrably hides 149 legacy stale Seek rows."
     },
     {
       "id": "GAP-P6-WIRE-001",
@@ -409,14 +419,16 @@
       "tests_required": [
         "each formerly-dead control emits a call or is gone"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "resolution": "PROBE-FALSE-POSITIVE \u2014 all 6 controls verified functional in source (setMarket/setView handlers since 2026-07-12) AND live production Playwright (reproduced probe badge counts AU=155/Intl=6/Saved=3 + real /applications/funnel/sankey call). No functional change; 2 RTL regression tests added (fix/p6-wire merged to main @ 851a426, 265/265 vitest). Final GATE-03/26 production regression re-confirms 0 dead controls.",
       "human_gated": false,
       "gates": [
         "GATE-03"
       ],
       "fixer_role": "fixer-medium",
-      "merged_sha": "851a426"
+      "merged_sha": "851a426",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "qa-prod-console-admin.json GATE-03: 16 routes 0 console errors/0 failed req; 6 view-toggle controls confirmed change aria-selected + sankey fires /api/applications/funnel/sankey. Probe-false-positive confirmed; controls genuinely functional live."
     },
     {
       "id": "GAP-P6-AGCONF-001",
@@ -526,7 +538,7 @@
         "writer-audit >= baseline",
         "STRICT tailoredATS > baselineATS on evidence-supported fixture"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFY-FAILED-REENTERED",
       "merged_sha": "ef054d1",
       "verify_finding": "writer-audit-G FAIL 58/100: tailoredATS==baselineATS 3/3; guard rejected genuine JD-keyword bullets, zero lift.",
       "fix": "fix/p6-quality: ROOT CAUSE was evidence_extra reaching only the guard, never the LLM prompt (model never saw career evidence). Now evidence_extra + Story Bank fold into prompt; STRICT tailoredATS>baselineATS achievable when evidence proves a JD keyword absent from resume text (unproven still rejected). Reviewer PASS (review-quality.json), 68 tests. RESIDUAL (by design, honest): strict lift requires the account to HAVE story-bank/career evidence \u2014 audited admin/sarkar accounts had EMPTY story banks so +0.0% was CORRECT-for-no-evidence. Production QA must re-verify with >=1 SEEDED real story proving a JD keyword absent from the resume.",
@@ -536,7 +548,8 @@
         "GATE-10"
       ],
       "fixer_role": "fixer-hard",
-      "branch": "fix/p6-quality"
+      "branch": "fix/p6-quality",
+      "verify_finding_2": "qa-prod-craft.json: architecturally works on a GENUINE live run (real strict lift 30.81->35.14, guard rejected 2/18 overreach) BUT (a) contaminated by the CRITICAL silent fixture-fallback (GAP-P6-AUTH-002) which masked tailoring as canned output, (b) one fabrication slipped (GAP-P6-TAIL-002). Re-verify after AUTH-002+TAIL-002 fixed."
     },
     {
       "id": "GAP-P6-COV-001",
@@ -558,7 +571,7 @@
         "no fabrication",
         "fabrication-guard catches JD-tempting unsupported claims"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFY-INCONCLUSIVE-REENTERED",
       "merged_sha": "ef054d1",
       "verify_finding": "writer-audit-G FAIL 60/100: business format OK but one run fabricated 3 claims absent from source (guard inconsistent on cover path). \u00a79 zero-tolerance.",
       "fix": "fix/p6-quality: anti-fabrication guard applied to cover path, JD EXCLUDED from candidate-evidence corpus; catches JD-role-term fabrications (audited 'intake'). Reviewer PASS (review-quality.json).",
@@ -569,7 +582,8 @@
         "GATE-12"
       ],
       "fixer_role": "fixer-hard",
-      "branch": "fix/p6-quality"
+      "branch": "fix/p6-quality",
+      "verify_finding_2": "qa-prod-craft.json GATE-11/12 INCONCLUSIVE: served cover artifact was CLEAN (business format + zero fabrication + clean PDF) BUT proven to be a FIXTURE-REPLAY (GAP-P6-AUTH-002), so the live fabrication guard was never genuinely exercised. Re-verify after AUTH-002 fixed + quota reset."
     },
     {
       "id": "GAP-P6-CONV-001",
@@ -589,7 +603,7 @@
         "methodology non-null",
         "MetricTooltip renders on conversion field"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "verify_finding": "qa-E FAIL: API returns methodology non-null + 'Estimated...' label, but a live DOM query found ZERO MetricTooltip on the conversion-metrics section of resume/page.tsx:231-252 (component exists, used on analytics/jobs, not wired here).",
       "fix": "fix/p6-conv merged @ 3a67b2e: MetricTooltip wired onto conversion estimate surfacing methodology, labeled illustrative estimate; TDD fail-before/pass-after, vitest 266 green. Production qa re-verifies GATE-10 live post-deploy.",
       "human_gated": false,
@@ -598,7 +612,9 @@
       ],
       "fixer_role": "fixer-medium",
       "branch": "fix/p6-conv",
-      "merged_sha": "3a67b2e"
+      "merged_sha": "3a67b2e",
+      "closed_by": "qa (production)",
+      "close_evidence": "qa-prod-craft.json GATE-10: resume/page.tsx:246-254 wires MetricTooltip to conversion.methodology with 'illustrative estimate, not a measured outcome' disclaimer; ATS before/after shown. UI-surface requirements PASS."
     },
     {
       "id": "GAP-P6-MET-001",
@@ -722,6 +738,66 @@
         "GATE-28"
       ],
       "fixer_role": "doc-updater"
+    },
+    {
+      "id": "GAP-P6-AUTH-002",
+      "title": "Silent fixture-fallback serves canned test fixtures as live LLM output",
+      "type": "AUTHENTICITY",
+      "severity": "CRITICAL",
+      "surface": "tailoring/cover/all LLM agents",
+      "category": "authenticity",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "qa-prod-craft.json + qa-prod-craft-raw/",
+      "observed": "On LIVE production (mode=auto), 3/5 agent runs took ~58-62s (near 60s AETHER_LLM_BUDGET_SECONDS cap) and returned content BYTE-FOR-BYTE identical to checked-in test fixtures (apps/api/tests/fixtures/llm/tailor/default.json, cover_letter/retry.json) with NO indication in the API response. A paying user hitting the budget/timeout receives a STALE GENERIC fixture presented as their real tailored output.",
+      "expected": "In production (mode=auto/live), an LLM timeout/budget-exhaustion/error must NEVER be satisfied by loading a test fixture. Fixtures load ONLY in explicit mode=replay (tests). On live failure: raise an honest error / honest degraded 'generation did not complete, please retry' AND refund the reserved quota run. Zero canned content presented as real (\u00a70.5/\u00a78 zero-tolerance).",
+      "root_cause": "llm_client.py auto-mode fallback chain / base_adapter falls back to replay-fixtures on live failure and returns them as success.",
+      "cluster": "A-REENTRY",
+      "fix_spec": "Remove fixture-fallback from the live/auto path; fixtures only in explicit replay mode. Honest error + quota refund on live failure. Consider raising AETHER_LLM_BUDGET_SECONDS if 60s is too tight for multi-call tailoring (secondary).",
+      "tests_required": [
+        "mode=auto live timeout raises honest error, does NOT return a fixture",
+        "fixture load ONLY when mode=replay",
+        "quota refunded on LLM failure",
+        "no fixture bytes served in production response"
+      ],
+      "status": "FIX-READY-MERGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-02",
+        "GATE-09",
+        "GATE-11"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-authenticity2",
+      "merged_sha": "4d63fc5",
+      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy."
+    },
+    {
+      "id": "GAP-P6-TAIL-002",
+      "title": "Tailoring cross-context keyword-bleed fabrication + persisted raw_text not regenerated",
+      "type": "AUTHENTICITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/resume",
+      "category": "tailoring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "qa-prod-craft.json",
+      "observed": "On a genuine live tailor run: (a) a Telstra bullet was rewritten to claim 'payment platform delivery teams' \u2014 a cross-context keyword bleed from another job's evidence with no evidentiary basis for that employer; (b) the persisted resume raw_text is never regenerated from tailored bullets, so a later independent GET /resumes/{id}/ats reverts to the stale baseline score even though the PDF reflects tailored content.",
+      "expected": "Fabrication guard scopes evidence to the correct employer/context \u2014 a capability may only be attributed to an employer/bullet the source evidence supports (no cross-context bleed). Persisted resume raw_text (or ATS-scored text) regenerated from tailored content so re-read reflects the tailored score.",
+      "root_cause": "Guard evidence corpus is global not context-scoped; raw_text not updated post-tailor.",
+      "cluster": "A-REENTRY",
+      "fix_spec": "Context-scope the anti-fabrication evidence per bullet/employer; regenerate persisted raw_text from tailored sections.",
+      "tests_required": [
+        "cross-context keyword attributed to wrong employer is rejected",
+        "GET /resumes/{id}/ats after tailor reflects tailored score not baseline"
+      ],
+      "status": "FIX-READY-MERGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-09"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-authenticity2",
+      "merged_sha": "4d63fc5",
+      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy."
     }
   ],
   "rejected_hypotheses": [
@@ -776,39 +852,39 @@
     }
   ],
   "gate_status": {
-    "GATE-01": "PASS (probe-01)",
-    "GATE-02": "PASS (probe-03 mode=auto)",
-    "GATE-03": "PASS (probe-05 0 console errors)",
+    "GATE-01": "PASS (deploy-verify: health ok v0.2.0)",
+    "GATE-02": "RE-OPEN (mode=auto but silently serves fixtures on timeout \u2014 AUTH-002 must fix before GATE-02 is honestly PASS)",
+    "GATE-03": "PASS (qa-prod-console-admin.json: 16 routes, 0 console errors, 0 failed requests)",
     "GATE-04": "CONDITIONALLY-CLOSED-PENDING (ADR-P6-OAUTH; verify in Cluster E)",
     "GATE-05": "BLOCKED-ON-HUMAN (2 Gmail)",
     "GATE-06": "OPEN (verify Cluster E)",
-    "GATE-07": "FAIL (6 jobs; Cluster C)",
-    "GATE-08": "FAIL (Seek 403; Cluster C)",
-    "GATE-09": "OPEN (Cluster G)",
-    "GATE-10": "OPEN (Cluster G)",
-    "GATE-11": "OPEN (Cluster G)",
+    "GATE-07": "PASS (qa-prod-sourcing.json: 30 jobs, 3 sources >=5, 30/30 fresh, 0 dup \u2014 live scout run)",
+    "GATE-08": "PASS (qa-prod-sourcing.json: 10/10 sampled cards LIVE, 0 seek, 0 expired)",
+    "GATE-09": "FAIL-REENTERED (fixture-fallback GAP-P6-AUTH-002 + fabrication slip GAP-P6-TAIL-002; re-fix+re-verify)",
+    "GATE-10": "PASS (qa-prod-craft.json: MetricTooltip + methodology + before/after ATS shown; UI-surface requirements)",
+    "GATE-11": "INCONCLUSIVE-REENTERED (cover served as fixture-replay; re-verify after AUTH-002)",
     "GATE-12": "LIKELY-PASS (probe-14; confirm G)",
     "GATE-13": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-14": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-15": "BLOCKED-ON-HUMAN (Stripe Tax)",
     "GATE-16": "BLOCKED-ON-HUMAN (Stripe)",
-    "GATE-17": "OPEN (Cluster D+F; verify needs admin rotation env)",
+    "GATE-17": "FUNCTIONALITY-VERIFIED-LIVE / FORMAL-CLOSURE-HUMAN-GATED (qa-prod: spend-cap 429-before-LLM proven via temp admin, all flows work + cleaned up; final closure needs operator AETHER_ADMIN_EMAIL/PASSWORD_HASH per \u00a72)",
     "GATE-18": "OPEN (Cluster H user-scoped)",
     "GATE-19": "OPEN (Cluster H)",
     "GATE-20": "OPEN (Cluster H)",
     "GATE-21": "FAIL (12 open PRs; Cluster H)",
     "GATE-22": "FAIL (stale branches; Cluster H)",
     "GATE-23": "LIKELY-PASS (probe-12; confirm at close)",
-    "GATE-24": "OPEN (full pytest at close)",
-    "GATE-25": "OPEN (vitest at close)",
-    "GATE-26": "OPEN (Playwright at close)",
+    "GATE-24": "PASS (576 backend pytest passed, 0 failed \u2014 full suite 667s; order-dependency flake resolved on clean run)",
+    "GATE-25": "PASS (vitest 276 + tsc + lint + build 28 pages)",
+    "GATE-26": "PENDING production Playwright/UAT sweeps post-deploy",
     "GATE-27": "PASS-SO-FAR (0 fable spawns)",
     "GATE-28": "OPEN (Cluster H)",
-    "GATE-29": "OPEN (deploy verify)",
+    "GATE-29": "PASS (prod serves pushed build -sOHDHymuYvjj6-YNj31B; deploy-verify.json)",
     "GATE-30": "OPEN (all gaps closed)",
-    "GATE-31": "PASS-NOW/RE-VERIFY-AFTER-F (probe-17)",
+    "GATE-31": "PASS (qa-prod-console-admin.json: admin/admin123 isAdmin=false live, admin routes 403)",
     "GATE-32": "PASS (probe-18)",
     "GATE-33": "BLOCKED-ON-HUMAN (Stripe webhook)",
-    "GATE-34": "OPEN (Cluster D backfill)"
+    "GATE-34": "PASS (backfill: 2 users -> 2 Subscriptions + 2 UsageQuota, deploy-verify.json)"
   }
 }
