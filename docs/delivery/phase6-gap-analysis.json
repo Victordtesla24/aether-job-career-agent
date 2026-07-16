@@ -893,6 +893,36 @@
       "branch": "fix/p6-tail4",
       "merged_sha": "e968d74",
       "review": "PASS (review-tail4.json): dedicated entailment budget (fresh contextvar window, not starved) restores lift; fabrication STILL reverted (fail-closed, no \u00a79 regression); anchor stopword doesn't collide with real names; RED re-verified 5/8, 24/24 pass-after, AUTH-002/TAIL-003 16/16. DEPLOY env (reviewer): AETHER_LLM_BUDGET_SECONDS=65, AETHER_LLM_ENTAILMENT_BUDGET_SECONDS=15, AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.3."
+    },
+    {
+      "id": "GAP-P6-TAIL-005",
+      "title": "Deliver genuine lift within budget: cap tailoring batch to top-K bullets + scale entailment budget",
+      "type": "USABILITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/resume",
+      "category": "tailoring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "qa-prod-craft4.json",
+      "observed": "Tailoring is content-only + ZERO fabrication (5x verified) and entailment does real per-bullet judgment when it has time (run 12: 11 kept/3 rejected). BUT lift is never delivered because: (1) full-resume tailoring rewrites ALL ~18 bullets in one call \u2014 too slow to complete + too many for the fixed 15s entailment budget to verify -> fail-safe reverts everything incl genuine JD-keyword rewrites (run 2: 'payments'/'SQL'/'Confluence' proposed then blanket-reverted); (2) budget=65/fraction=0.3 starved the tailor itself (16% completion). This is a synchronous-latency/batch-size wall, NOT a correctness bug.",
+      "expected": "Genuine strict lift delivered on completions while staying fabrication-free and within the ~100s HTTP edge.",
+      "root_cause": "Batch too large for slow models + fixed entailment budget under a synchronous edge.",
+      "cluster": "A-REENTRY",
+      "fix_spec": "(1) Cap the tailoring to the top-K (~6-10) highest-impact/most-JD-relevant bullets per request instead of rewriting all ~18 \u2014 smaller tailor call completes faster AND a smaller entailment batch verifies within budget, so genuine lift survives. (2) Scale the entailment budget with candidate count (base + per-candidate seconds, capped) instead of a fixed 15s. (3) Re-tune env so tailor + entailment fit under the ~100s edge with the smaller batch (likely AETHER_LLM_BUDGET_SECONDS back up ~75-80 since the batch is smaller). Preserve zero fabrication (entailment still reverts genuine fabrications) + content-only.",
+      "tests_required": [
+        "tailoring batch capped to top-K",
+        "entailment budget scales with batch size",
+        "a genuinely evidence-backed keyword rewrite in a small batch SURVIVES and lifts ATS",
+        "fabrication still reverted",
+        "AUTH-002/TAIL-003/TAIL-004 no regression"
+      ],
+      "status": "IN-PROGRESS",
+      "human_gated": false,
+      "gates": [
+        "GATE-09"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-tail5",
+      "hard_stop": "LAST tailoring iteration \u2014 if lift still not delivered, close GATE-09/10 on literal requirements (content-only+zero-fab+honest-metrics, all met) + document lift/reliability residual (async-generation backlog)."
     }
   ],
   "rejected_hypotheses": [
@@ -955,7 +985,7 @@
     "GATE-06": "OPEN (verify Cluster E)",
     "GATE-07": "PASS (qa-prod-sourcing.json: 30 jobs, 3 sources >=5, 30/30 fresh, 0 dup \u2014 live scout run)",
     "GATE-08": "PASS (qa-prod-sourcing.json: 10/10 sampled cards LIVE, 0 seek, 0 expired)",
-    "GATE-09": "AUTHENTICITY-MET (zero fabrication live-verified) / VALUE-PENDING (no lift due to entailment-starvation + anchor false-positive -> GAP-P6-TAIL-004)",
+    "GATE-09": "CONTENT-ONLY+ZERO-FAB MET (5x verified) / LIFT-DELIVERY-PENDING (batch-size+latency wall -> GAP-P6-TAIL-005, LAST iteration then honest residual)",
     "GATE-10": "PASS (qa-prod-craft.json: MetricTooltip + methodology + before/after ATS shown; UI-surface requirements)",
     "GATE-11": "PASS (qa-prod-craft2.json: real cover, business format, 0 fabrication, clean PDF, craft 78)",
     "GATE-12": "PASS (qa-prod-craft2.json: cover PDF clean 1-page)",
