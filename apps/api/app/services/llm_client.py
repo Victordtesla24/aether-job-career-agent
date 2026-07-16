@@ -123,6 +123,36 @@ def get_budget_seconds() -> float:
         return 180.0
 
 
+def get_entailment_budget_seconds() -> float:
+    """Dedicated wall-clock budget (seconds) for the ENTAILMENT-verification LLM
+    call, independent of and NOT consumable by the tailor GENERATION call that
+    precedes it on the same client (GAP-P6-TAIL-004).
+
+    The tailor generation and the entailment verification previously shared ONE
+    ``AETHER_LLM_BUDGET_SECONDS`` deadline (via the per-client budget or the
+    pipeline-level :func:`shared_budget`). A slow reasoning primary consumed
+    nearly all of it and left the verifier 0-9s, so it timed out and its
+    conservative fail-safe reverted EVERY changed bullet — including genuinely
+    supported ones — producing ZERO ATS lift (live evidence
+    qa-prod-craft3.json: tailoredATS == baseline in 17/17 completions).
+
+    Reserving the verifier its own FRESH budget window (the tailor call is
+    already finished when the window opens, so it cannot consume it) lets the
+    verifier actually run and KEEP legitimate edits while STILL reverting real
+    fabrications. Keep the combined ceiling under the ~100s HTTP edge: set the
+    tailor budget (``AETHER_LLM_BUDGET_SECONDS``) and this reservation so their
+    sum has margin (e.g. 60s tailor + 20s entailment = 80s). Env-overridable
+    (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``); a missing/malformed value falls
+    back to 20s, and a ``_MIN_ATTEMPT_SECONDS`` floor is enforced so a
+    tiny/negative config can never re-starve the verifier.
+    """
+    try:
+        seconds = float(os.environ.get("AETHER_LLM_ENTAILMENT_BUDGET_SECONDS", "20"))
+    except ValueError:
+        return 20.0
+    return max(_MIN_ATTEMPT_SECONDS, seconds)
+
+
 def get_primary_budget_fraction() -> float:
     """Fraction of the live budget the PRIMARY model attempt may consume before
     it is abandoned so the faster FALLBACK model still gets a turn within the
