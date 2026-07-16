@@ -833,6 +833,34 @@
       "branch": "fix/p6-tail3",
       "merged_sha_pending": true,
       "review": "PASS (review-tail3.json): entailment reverts fabrication, no over-revert, conservative+no-fixture on failure, budget cap fixes 503 starvation. 40+58 tests, no AUTH-002 regression. DEPLOY: set AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.4 (give fast fallback more room). Re-QA tailoring after redeploy."
+    },
+    {
+      "id": "GAP-P6-DOCS-002",
+      "title": "Live /privacy-policy + /terms pages inaccurate (false self-service-deletion claim, no subscription/GST terms)",
+      "type": "AUTHENTICITY",
+      "severity": "MEDIUM",
+      "surface": "/privacy-policy, /terms",
+      "category": "docs",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "doc-updater finding (aeaaeff2f6522335a) cross-checked vs code",
+      "observed": "The live user-facing /privacy-policy and /terms pages (last updated 2026-07-11, predate Phase 6) claim self-service 'delete your data via Settings' \u2014 no such endpoint exists in code \u2014 and do NOT mention AUD/GST/Stripe/subscription terms now that billing is built. A live page asserting a non-existent feature is a \u00a79-adjacent authenticity/compliance issue for a paid product.",
+      "expected": "Live legal pages honest + aligned: remove the unsupported self-service-deletion claim (replace with the real process \u2014 e.g. request-based deletion / note admin data-delete is planned), add subscription terms (4 tiers AUD GST-inclusive, 10% GST, monthly/annual, quota model, cancellation via Stripe portal at period end), keep operator placeholders (ABN/business name).",
+      "root_cause": "Legal pages not updated when billing/subscription shipped.",
+      "cluster": "H",
+      "fix_spec": "Update apps/web/src/app/privacy-policy/page.tsx + terms/page.tsx to match the honest docs/subscription/privacy-policy.md + terms-of-service.md; no fabricated legal identity (placeholders).",
+      "tests_required": [
+        "pages render",
+        "no false self-service-deletion claim",
+        "GST/subscription terms present"
+      ],
+      "status": "FIX-READY-MERGED-FE-DEPLOY-PENDING",
+      "human_gated": false,
+      "gates": [
+        "GATE-19"
+      ],
+      "fixer_role": "fixer-medium",
+      "branch": "fix/p6-legalpages",
+      "review": "Content/authenticity fix: false self-service-deletion claim removed from /privacy-policy + /terms + dashboard/settings; subscription/GST terms added; honest 'Stripe not yet active' caveat; operator placeholders. 14 TDD tests, web 292 green. FE deploy in final Cluster H batch; production console re-sweep re-confirms."
     }
   ],
   "rejected_hypotheses": [
@@ -905,7 +933,7 @@
     "GATE-16": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-17": "FUNCTIONALITY-VERIFIED-LIVE / FORMAL-CLOSURE-HUMAN-GATED (qa-prod: spend-cap 429-before-LLM proven via temp admin, all flows work + cleaned up; final closure needs operator AETHER_ADMIN_EMAIL/PASSWORD_HASH per \u00a72)",
     "GATE-18": "OPEN (Cluster H user-scoped)",
-    "GATE-19": "OPEN (Cluster H)",
+    "GATE-19": "IN-PROGRESS (new docs/subscription/{admin-guide,privacy-policy,terms-of-service}.md written + billing-architecture.md; live legal-page reconciliation GAP-P6-DOCS-002; delivery-doc refresh + README pending)",
     "GATE-20": "OPEN (Cluster H)",
     "GATE-21": "FAIL (12 open PRs; Cluster H)",
     "GATE-22": "FAIL (stale branches; Cluster H)",
