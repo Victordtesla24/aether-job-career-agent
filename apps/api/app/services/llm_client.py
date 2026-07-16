@@ -6,10 +6,15 @@ Modes (``AETHER_LLM_MODE`` env var):
 - ``record``: call the live endpoint and persist the response as a fixture.
 - ``live``: call the live endpoint (OpenRouter-compatible) directly.
 - ``auto``: try the live endpoint first (recording the fixture on success);
-  on ANY live failure (404 stale model id, 429 rate limit, 5xx, network),
-  retry once with the fallback model, then fall back to the recorded fixture
-  if one exists, otherwise raise :class:`LLMUnavailableError` (mapped to
-  HTTP 503 by the routers — never an unhandled 500).
+  on ANY live failure (404 stale model id, 429 rate limit, 5xx, network,
+  budget/timeout, malformed JSON), retry once with the fallback model, then
+  raise an honest :class:`LLMUnavailableError` (mapped to HTTP 503 by the
+  routers — never an unhandled 500). It NEVER serves a recorded fixture as if
+  it were live output (GAP-P6-AUTH-002): a fixture recorded before a fix would
+  otherwise be delivered to a paying user as their "tailored" résumé with no
+  signal it is stale, canned content. Fixtures are served ONLY in ``replay``
+  mode. Recording a fixture on live SUCCESS in ``auto`` mode is harmless and
+  retained.
 
 Fixtures live under ``AETHER_LLM_FIXTURE_DIR`` (defaults to
 ``apps/api/tests/fixtures/llm``) as ``<prompt_name>/<key>.json`` with shape
@@ -104,11 +109,18 @@ def get_budget_seconds() -> float:
 
     One :class:`LLMClient` instance is created per agent run, so this bounds
     the whole fallback chain (primary + fallback model x corrective retries).
+
+    Default raised to 180s (GAP-P6-AUTH-002): removing the fixture-fallback on
+    failure means a genuine multi-call generation that would previously exhaust
+    a 60s cap and silently serve a stale fixture now surfaces an honest error
+    instead. QA observed real 58-62s tailoring runs hitting the old 60s cap; a
+    180s budget gives multi-call tailoring/cover-letter runs room to complete
+    live. Overridable via the env var (the production .env sets it at deploy).
     """
     try:
-        return float(os.environ.get("AETHER_LLM_BUDGET_SECONDS", "60"))
+        return float(os.environ.get("AETHER_LLM_BUDGET_SECONDS", "180"))
     except ValueError:
-        return 60.0
+        return 180.0
 
 
 class LLMFixtureMissingError(RuntimeError):
@@ -678,28 +690,26 @@ class LLMClient:
     def complete_json(self, prompt_name: str, system: str, user: str, **kwargs: Any) -> Any:
         """Like :meth:`complete` but parses the response as JSON.
 
-        In ``auto`` mode a malformed/truncated live response (e.g. the model
-        hit its token limit mid-object) falls back to the recorded fixture
-        instead of surfacing an unhandled ``JSONDecodeError`` as a 500.
+        In ``auto`` mode a malformed/truncated live response (e.g. the model hit
+        its token limit mid-object) is an honest live FAILURE — it raises
+        :class:`LLMUnavailableError` (mapped to 503, run refunded). It is NEVER
+        answered with a recorded fixture masqueraded as live output
+        (GAP-P6-AUTH-002); fixtures serve only in ``replay`` mode.
         """
         raw = self.complete(prompt_name, system, user, **kwargs)
         try:
             return json.loads(self._strip_fences(raw))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             if self.mode != "auto":
                 raise
-        fixture_key = str(kwargs.get("fixture_key", "default"))
-        logger.warning(
-            "LLM returned malformed JSON for prompt '%s'; falling back to fixture",
-            prompt_name,
-        )
-        try:
-            fixture_raw = self._replay_with_default(prompt_name, fixture_key)
-            return json.loads(self._strip_fences(fixture_raw))
-        except (LLMFixtureMissingError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "LLM returned malformed JSON for prompt '%s' in auto mode; "
+                "raising honest error (no fixture fallback on failure)",
+                prompt_name,
+            )
             raise LLMUnavailableError(
                 f"LLM backend unavailable: live call for '{prompt_name}' returned "
-                "malformed JSON and no valid fixture exists"
+                "malformed JSON"
             ) from exc
 
     @staticmethod
@@ -722,22 +732,30 @@ class LLMClient:
         temperature: float,
         fixture_key: str,
     ) -> str:
-        """Live-first with model fallback, then fixture fallback (D-0014).
+        """Live-first with one model-fallback retry, then an HONEST error.
 
         Every live attempt is bounded by per-call HTTP timeouts AND the
-        client-wide wall-clock budget; once the budget is exhausted we stop
-        making live calls and fall straight to fixture replay / typed error
-        instead of hanging the request.
+        client-wide wall-clock budget. When the real retry chain is exhausted
+        (all attempts failed, or the budget ran out before an attempt could
+        start), this raises :class:`LLMUnavailableError` — it NEVER serves a
+        recorded fixture as if it were a live generation (GAP-P6-AUTH-002).
+        Serving a stale fixture on failure silently handed paying users canned,
+        generic content with no signal; the honest error propagates so the run
+        is recorded failed and the reserved quota is refunded. Fixtures are for
+        ``replay`` mode only. Recording on live SUCCESS below is harmless.
         """
         primary = model or get_model("REASONING")
+        last_error: Exception | None = None
+        budget_exhausted = False
         for attempt_model in self._model_chain(primary):
             remaining = self._remaining_budget()
             if remaining < _MIN_ATTEMPT_SECONDS:
                 logger.warning(
                     "LLM budget exhausted before model %s (prompt=%s); "
-                    "falling back to fixture",
+                    "raising honest error (no fixture fallback on failure)",
                     attempt_model, prompt_name,
                 )
+                budget_exhausted = True
                 break
             try:
                 content = self._call_live(
@@ -750,6 +768,7 @@ class LLMClient:
                 # the bill). Propagate so the router returns an honest 429.
                 raise
             except Exception as exc:  # 404/429/5xx/network/timeout/parse — try next
+                last_error = exc
                 logger.warning(
                     "LLM live call failed (model=%s, prompt=%s): %s",
                     attempt_model, prompt_name, exc,
@@ -760,18 +779,15 @@ class LLMClient:
             if not self._fixture_path(prompt_name, fixture_key).is_file():
                 self._record(prompt_name, fixture_key, content)
             return content
-        # All live attempts failed — fall back to the recorded fixture.
-        try:
-            content = self._replay_with_default(prompt_name, fixture_key)
-        except LLMFixtureMissingError as exc:
-            raise LLMUnavailableError(
-                "LLM backend unavailable: live call failed for "
-                f"'{prompt_name}' and no recorded fixture exists"
-            ) from exc
-        logger.warning(
-            "LLM auto mode: served fixture fallback for prompt '%s'", prompt_name
+        # Live retry chain exhausted — surface an HONEST failure, never a fixture.
+        detail = (
+            "budget exhausted before any live attempt could complete"
+            if budget_exhausted
+            else f"live call failed{f': {last_error}' if last_error else ''}"
         )
-        return content
+        raise LLMUnavailableError(
+            f"LLM backend unavailable: {detail} for '{prompt_name}'"
+        )
 
     @staticmethod
     def _model_chain(primary: str) -> list[str]:
@@ -781,25 +797,6 @@ class LLMClient:
 
     def _fixture_path(self, prompt_name: str, key: str) -> Path:
         return self.fixture_dir / prompt_name / f"{key}.json"
-
-    def _replay_with_default(self, prompt_name: str, key: str) -> str:
-        """Replay ``key``; if missing, degrade to the ``default`` fixture.
-
-        Corrective-retry prompts use per-attempt fixture keys (``retry``,
-        ``retry2``) that may never have been recorded — the default fixture is
-        still a valid, guard-checked response for the prompt, so serving it is
-        strictly better than a 503.
-        """
-        try:
-            return self._replay(prompt_name, key)
-        except LLMFixtureMissingError:
-            if key == "default":
-                raise
-            logger.warning(
-                "LLM fixture '%s/%s' missing; degrading to default fixture",
-                prompt_name, key,
-            )
-            return self._replay(prompt_name, "default")
 
     def _replay(self, prompt_name: str, key: str) -> str:
         path = self._fixture_path(prompt_name, key)

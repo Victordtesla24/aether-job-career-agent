@@ -377,6 +377,26 @@ def test_failed_run_refunds_reserved_run(client, auth_headers, test_user_id):
     assert int(q["runsUsed"]) == 0  # reserved then refunded
 
 
+def test_honest_llm_failure_refunds_reserved_run_and_503(
+    client, auth_headers, test_user_id
+):
+    """GAP-P6-AUTH-002: an honest LLM-unavailable failure (raised now instead of
+    a fixture served as fake 200 content) maps to a clean 503 AND refunds the
+    reserved run — the user is never billed for canned/stale content."""
+    from app.services.llm_client import LLMUnavailableError
+
+    ensure_user_billing(test_user_id)
+
+    def _fail():
+        raise LLMUnavailableError("LLM backend unavailable: live call failed")
+
+    with pytest.raises(HTTPException) as exc:
+        _record_run(test_user_id, "tailor", {"job_id": "j"}, _fail)
+    assert exc.value.status_code == 503
+    q = UsageQuotaRepository().get_by_user(test_user_id)
+    assert int(q["runsUsed"]) == 0  # reserved then refunded on the honest failure
+
+
 def test_successful_run_records_spend_and_consumes_one_run(
     client, auth_headers, test_user_id
 ):

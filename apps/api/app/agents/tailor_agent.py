@@ -20,7 +20,11 @@ from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
-from app.services.resume_tailor import ResumeTailorService, strip_bullet_lines
+from app.services.resume_tailor import (
+    ResumeTailorService,
+    render_tailored_raw_text,
+    strip_bullet_lines,
+)
 
 #: Floor for the ATS-score denominator so a legitimate baseline of exactly
 #: 0.0 never raises ZeroDivisionError (GAP-E2).
@@ -231,9 +235,15 @@ class TailoringAgent:
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )
 
+        # GAP-P6-TAIL-002: regenerate the persisted raw_text from the TAILORED
+        # bullets (not the parent's verbatim raw_text) so a later independent
+        # GET /resumes/{id}/ats — which scores raw_text preferentially —
+        # reflects the tailored score, matching the PDF and the run's reported
+        # tailoredATSScore instead of reverting to the stale baseline.
+        tailored_raw_text = render_tailored_raw_text(resume_text, result.bullets)
         tailored = self._resumes.create(
             user_id,
-            {"bullets": result.bullets, "raw_text": resume_text},
+            {"bullets": result.bullets, "raw_text": tailored_raw_text},
             base["formatHash"],  # source PDF untouched → hash carried through
             label=f"Tailored — {job['title']} @ {job['company']}",
             version=self._resumes.next_version(user_id),
