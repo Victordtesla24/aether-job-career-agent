@@ -42,7 +42,7 @@ export default function TermsPage() {
         <div className="glass-raised rounded-2xl border border-white/10 p-8 md:p-10">
           <h1 className="text-3xl font-extrabold tracking-tight">Terms &amp; Conditions</h1>
           <p className="mt-2 text-sm text-aether-muted-dim mono">
-            Last updated: July 11, 2026
+            Last updated: July 16, 2026
           </p>
 
           <p className="mt-6 text-[15px] leading-relaxed text-aether-muted">
@@ -104,7 +104,114 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="5. Acceptable Use">
+          <Section title="5. Subscription Plans &amp; Pricing">
+            <p>
+              Aether Career Agent is offered on four plans, priced in Australian dollars (AUD)
+              and inclusive of the 10% Goods and Services Tax (GST):
+            </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>
+                <strong className="text-aether-text">Free</strong> — A$0/month · 5 agent runs
+                per month.
+              </li>
+              <li>
+                <strong className="text-aether-text">Starter</strong> — A$19/month or
+                A$179/year · 30 agent runs per month.
+              </li>
+              <li>
+                <strong className="text-aether-text">Pro</strong> — A$39/month or A$359/year ·
+                100 agent runs per month.
+              </li>
+              <li>
+                <strong className="text-aether-text">Power</strong> — A$69/month or A$649/year
+                · 300 agent runs per month.
+              </li>
+            </ul>
+            <p className="mt-4">
+              <strong className="text-aether-text">GST disclosure:</strong> all prices above are
+              GST-inclusive. The GST component of any price is computed as{" "}
+              <code className="text-aether-text">gst = round(total / 11, 2)</code>, with the net
+              (ex-GST) amount equal to the total minus the GST. This computation is shown on
+              every invoice and is available for each plan from the pricing page.
+            </p>
+            <p className="mt-4">
+              Tax invoices require a registered Australian Business Number.{" "}
+              <strong className="text-aether-text">[Operator ABN]</strong> and{" "}
+              <strong className="text-aether-text">[Business Name]</strong> are placeholders the
+              operator must supply before GST tax invoices are legally complete.
+            </p>
+          </Section>
+
+          <Section title="6. Billing Cycle &amp; Payment">
+            <ul className="list-disc space-y-2 pl-5">
+              <li>You choose monthly or annual billing at checkout for any paid plan.</li>
+              <li>
+                Payment is processed by Stripe; the current billing period and renewal are
+                managed by Stripe and kept in sync with your Aether account automatically.
+              </li>
+              <li>
+                <strong className="text-aether-text">
+                  Live payment processing is not yet active
+                </strong>{" "}
+                in production. Going live requires the operator to complete Stripe account
+                setup (secret key, product/price configuration, and webhook registration).
+                Until then, starting checkout or opening the billing portal returns an honest
+                error rather than pretending to process a payment.
+              </li>
+            </ul>
+          </Section>
+
+          <Section title="7. Agent-Run Quota">
+            <p>
+              Each plan includes a monthly quota of metered agent runs — actions that invoke the
+              LLM, such as resume tailoring, cover letter drafting, story extraction, and email
+              drafting (see the plan quotas in §5 above: 5 agent runs per month on Free, 30
+              agent runs per month on Starter, 100 agent runs per month on Pro, and 300 agent
+              runs per month on Power).
+            </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>
+                Your quota resets automatically at the start of each billing period — no
+                manual action is needed.
+              </li>
+              <li>
+                When your quota is exhausted, further metered runs are blocked and the app will
+                prompt you to upgrade your plan.
+              </li>
+              <li>
+                A run that fails or errors does not count against your quota.
+              </li>
+            </ul>
+          </Section>
+
+          <Section title="8. Cancellation">
+            <p>
+              You can manage or cancel a paid subscription at any time through the{" "}
+              <strong className="text-aether-text">Stripe Billing Portal</strong> (&ldquo;Manage
+              billing&rdquo; from your dashboard). From the portal you can change plan, update
+              your payment method, or cancel.
+            </p>
+            <p className="mt-3">
+              Cancellation takes effect at the end of your current billing period — you keep
+              your plan&rsquo;s access (run quota and model tier) through that date; there is no
+              pro-rated mid-period cutoff. When the period ends, your account is automatically
+              moved to the Free plan.
+            </p>
+          </Section>
+
+          <Section title="9. Refunds">
+            <p>
+              No automated refund flow is built into the service. There is no self-service
+              &ldquo;request a refund&rdquo; option. Refund requests, if the operator chooses to
+              honor any, are handled manually by the operator.{" "}
+              <strong className="text-aether-text">
+                [Operator: state your refund policy here — e.g., pro-rated refunds within X
+                days, or no refunds — before relying on this page as final.]
+              </strong>
+            </p>
+          </Section>
+
+          <Section title="10. Acceptable Use">
             <p>When using Aether Career Agent, you agree that you will not:</p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>
@@ -120,11 +227,18 @@ export default function TermsPage() {
                 Reverse engineer, decompile, or attempt to derive the source code of the platform
                 or its AI models.
               </li>
+              <li>
+                Circumvent your plan&rsquo;s agent-run quota by any technical means.
+              </li>
+              <li>
+                Share your account credentials or a single paid subscription across multiple
+                distinct users.
+              </li>
               <li>Use the service for any unlawful purpose or in violation of any applicable law.</li>
             </ul>
           </Section>
 
-          <Section title="6. Gmail &amp; Third-Party Integrations">
+          <Section title="11. Gmail &amp; Third-Party Integrations">
             <ul className="list-disc space-y-2 pl-5">
               <li>Gmail access is entirely optional and is never required to use the service.</li>
               <li>
@@ -132,14 +246,13 @@ export default function TermsPage() {
                 read, send, and modify emails solely to operate the Email Center feature.
               </li>
               <li>
-                You may revoke Gmail access at any time via the{" "}
-                <strong className="text-aether-text">Settings</strong> page.
+                You may revoke Gmail access at any time from the Email Center.
               </li>
               <li>We do not sell or share your email content with any third party.</li>
             </ul>
           </Section>
 
-          <Section title="7. AI-Generated Content">
+          <Section title="12. AI-Generated Content">
             <p>
               Resume enhancements, cover letters, and interview answers produced by Aether Career
               Agent are AI-generated suggestions. You are solely responsible for reviewing the
@@ -149,7 +262,7 @@ export default function TermsPage() {
             </p>
           </Section>
 
-          <Section title="8. Intellectual Property">
+          <Section title="13. Intellectual Property">
             <p>
               Your resume data and any content you upload remain your property. Aether Career
               Agent retains all rights, title, and interest in the platform, its user interface,
@@ -158,7 +271,7 @@ export default function TermsPage() {
             </p>
           </Section>
 
-          <Section title="9. Disclaimers &amp; Limitation of Liability">
+          <Section title="14. Disclaimers &amp; Limitation of Liability">
             <ul className="list-disc space-y-2 pl-5">
               <li>
                 The service is provided on an &ldquo;as is&rdquo; and &ldquo;as available&rdquo;
@@ -178,15 +291,16 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="10. Termination">
+          <Section title="15. Termination">
             <p>
               We may suspend or terminate accounts that violate these Terms, at our discretion and
-              without prior notice where reasonably necessary. You may delete your account at any
-              time via the <strong className="text-aether-text">Settings</strong> page.
+              without prior notice where reasonably necessary. There is currently no self-service
+              option to delete your account from within the app. If you wish to close your
+              account, contact us (see Contact below) and we will process the closure manually.
             </p>
           </Section>
 
-          <Section title="11. Changes to These Terms">
+          <Section title="16. Changes to These Terms">
             <p>
               We may update these Terms from time to time. If we make material changes, we will
               notify you through an in-app notification. Your continued use of the service after
@@ -194,14 +308,14 @@ export default function TermsPage() {
             </p>
           </Section>
 
-          <Section title="12. Governing Law">
+          <Section title="17. Governing Law">
             <p>
               These Terms are governed by and construed in accordance with the laws of the State
               of Delaware, USA, without regard to its conflict-of-law principles.
             </p>
           </Section>
 
-          <Section title="13. Contact">
+          <Section title="18. Contact">
             <p>
               If you have questions about these Terms, you can reach us via the{" "}
               <strong className="text-aether-text">Settings</strong> page or the in-app support
