@@ -1014,3 +1014,263 @@ replaces the misleading `X-Forwarded-For` test with honest body-keyed tests (per
 lockout + reset, per-email register cap, and case-insensitive keying). **Reversible?** Yes — the
 limiter is in-process and self-contained; caps are env-tunable and a future IP/CAPTCHA layer can be
 added alongside it without changing the identifier-keyed core.
+
+---
+
+## D-0034 — ADR-P6-SEEK: Seek scraping is ToS-prohibited; sourcing volume moves to licensed/official APIs
+
+**Date:** 2026-07-16 · **Author:** Phase 6 orchestrator (researcher + fixer-hard) · **Status:** Adopted
+
+**Context.** Phase 6 PROBE-13 and a dedicated live-research pass (`uat/reports/evidence/phase6/seek-tos-check.md`)
+established that automated scraping of seek.com.au is explicitly prohibited: Seek's Terms of Service
+clause 4(d) bans automated data gathering without written consent, and Seek's `robots.txt` blocks
+`*/job/` and `/api/jobsearch/` and names `anthropic-ai` (alongside GPTBot/Bytespider) as disallowed
+agents. Production was, at the time, sourcing Seek jobs via a Firecrawl-based scraper — a live compliance
+exposure, not a hypothetical one. Simultaneously, `GAP-P6-SRC-001` required restoring job-sourcing volume
+(a pre-fix baseline of only 6 live jobs across 4 sources failed the ≥25-job threshold).
+
+**Decision.** Aether must **not** add to or continue automated scraping of seek.com.au. The `SeekAdapter`
+is moved behind a compliance gate (`AETHER_ENABLE_SEEK`, default **OFF**) and excluded from the live
+adapter registry (`apps/api/app/services/discovery/adapter_registry.py`) by construction — the scout
+agent's live sync path cannot reach it unless the flag is explicitly set truthy. Sourcing volume is
+restored instead through **ToS-compliant sources only**: Adzuna AU (a licensed aggregator API, optional
+`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`) plus official ATS job-board APIs (Greenhouse, Lever, Ashby, Workable)
+and public aggregators (Remotive, RemoteOK). Historical Seek rows already in the database are retained
+(never deleted) but are excluded from every user-facing "active feed" list by a display-time freshness/
+source filter (`GAP-P6-DATA-001`), so stale/non-compliant data is never shown as live.
+
+**Alternatives.** (a) Obtain Seek's written consent for automated access — rejected: no such consent
+exists today and pursuing it is a business/legal process outside this engineering effort's scope or
+timeline. (b) Keep scraping but reduce volume/frequency to "look" more compliant — rejected: the ToS
+prohibition is categorical (any automated gathering without consent), not a rate-limit question; a
+smaller violation is still a violation. (c) Drop Seek entirely (delete historical data too) — rejected:
+unnecessarily destructive; retaining history with a display-time filter satisfies both compliance
+(nothing new is scraped, nothing stale is shown as live) and non-destructiveness.
+
+**Consequences.** `GAP-P6-SRC-001`/`GAP-P6-SRC-002`/`GAP-P6-DATA-001` are VERIFIED-CLOSED: a live
+production re-probe after this fix shows 30 active-feed jobs across 5 compliant sources (up from the
+6-job/4-source baseline), 100% fresh within 30 days, 0 duplicate URLs, 0 Seek rows in the active feed —
+while 149 legacy Seek rows remain retrievable via an explicit `include_stale=true` query, proving the
+filter does real work rather than coincidentally passing on empty data. The compliant-source margin is
+real but not large (documented honestly in `docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`'s GATE-07 risk
+note) — Adzuna credentials, when supplied by an operator, would add independent source diversity.
+**Reversible?** Yes — `AETHER_ENABLE_SEEK` is a single env flag; re-enabling Seek (if a consent
+arrangement is ever reached) requires no code change, only a documented compliance decision.
+
+---
+
+## D-0035 — ADR-P6-OAUTH: Anthropic third-party subscription OAuth is prohibited; API-key-only enforced
+
+**Date:** 2026-07-16 · **Author:** Phase 6 orchestrator (researcher) · **Status:** Adopted — reverses the
+prior Phase-5 "USER-GATED, pending human OAuth consent" framing for this feature.
+
+**Context.** Earlier phases (see the repo-root `EXECUTION-REPORT.md`, GATE-03) treated an Anthropic
+subscription OAuth connection (letting a user's own Claude Free/Pro/Max subscription pay for LLM calls,
+via PKCE) as a legitimate feature blocked only on a human clicking through a real OAuth consent screen.
+Phase 6 commissioned a dedicated live-research verification (`uat/reports/evidence/phase6/anthropic-oauth-verification.md`)
+of whether this is actually supported. It is not: `platform.claude.com`'s auth documentation lists only
+API keys and Workload Identity Federation for third-party integrations; Anthropic's published Consumer
+Terms of Service (as of Feb 2026) explicitly prohibit using a Free/Pro/Max subscription OAuth token in
+any product, tool, or service other than Anthropic's own first-party clients (including via the Agent
+SDK); and the API has server-side blocked tokens matching the `sk-ant-oat01-*` prefix since 2026-01-09.
+
+**Decision.** Building or shipping an active third-party consumer-subscription-OAuth flow would have
+Aether facilitate a Terms-of-Service violation against its own users and against Anthropic. Therefore:
+API-key authentication is the **only** supported and enforced production path for Anthropic-model calls
+(routed through OpenRouter per the existing runtime-provider architecture, `D-0014`/probe-03). Any
+OAuth-flavored code in the repository stays behind `AETHER_ANTHROPIC_OAUTH_ENABLED=false` and the UI
+surfaces it, if at all, only as a disabled "coming soon — pending official Anthropic support" affordance
+— never as a clickable, functioning consent flow. `GATE-04` (Phase 6's numbering; historically GATE-03 in
+the Phase-5 report) is **CONDITIONALLY-CLOSED** with the verification artifact as evidence; it is
+explicitly **not** a human-gated item awaiting consent — no human action is being awaited on it at all,
+because the feature must not be built as active.
+
+**Alternatives.** (a) Ship it anyway and let the human decide whether to click through — rejected: this
+platform does not knowingly build features whose only live-verification path requires a user to violate
+a third party's terms of service. (b) Wait and re-check periodically in case Anthropic changes policy —
+partially adopted: the flag-gated stub can be flipped on without a redeploy if/when official support
+exists, but no engineering effort is spent building toward it now beyond keeping the stub honestly
+disabled.
+
+**Consequences.** This **reverses** the Phase-5 `EXECUTION-REPORT.md`'s framing of GATE-03/"Remaining
+User Action #1" (register an OAuth client, click "Connect with Anthropic") — that action item is
+withdrawn and marked, in that report, as something a human must **not** attempt. Billing separation
+remains absolute regardless: `claude-*` model calls only ever route through a configured credential
+(API key today), never a consumer subscription token, so quota/spend-cap accounting is unaffected.
+**Reversible?** Yes — flipping `AETHER_ANTHROPIC_OAUTH_ENABLED` requires no schema or architecture
+change, only a policy decision if Anthropic later publishes official third-party OAuth support.
+
+---
+
+## D-0036 — ADR-P6-STRIPE-MOCK: build billing now against a mocked Stripe SDK; live round-trip gates are human-gated
+
+**Date:** 2026-07-16 · **Author:** Phase 6 orchestrator · **Status:** Adopted
+
+**Context.** Subscription billing (`GAP-P6-BILL-001`/`002`, `GAP-P6-PRICING-001`) requires a real Stripe
+account, test-mode API keys, a registered webhook endpoint + signing secret, and Product/Price objects to
+genuinely exercise checkout → webhook → entitlement. None of these can be created by an autonomous agent
+(they require a human to sign up for/administer a Stripe account) and the platform's own §0.5 rule
+prohibits ever faking a live invoice or webhook event to manufacture a gate closure.
+
+**Decision.** All billing code — schema, quota reserve/refund, GST math, webhook signature verification
+and in-transaction idempotency, checkout create-or-reuse-customer logic, the `/pricing` page — is built
+and unit-tested now against a **mocked** Stripe SDK (dependency-injected `stripe_gateway`), so the entire
+system is provably correct in isolation (webhook ordering, idempotency-on-replay, atomic quota
+reserve-then-refund, exact GST figures) without ever touching a real Stripe endpoint. The live
+round-trip gates that require an actual Stripe account (`GATE-13` checkout, `GATE-14` webhook, `GATE-15`
+GST-on-invoice/Stripe-Tax, `GATE-16` cancellation, `GATE-33` webhook-signature-in-production, `GATE-34`
+backfill) are explicitly marked **BLOCKED-ON-HUMAN** in `docs/delivery/phase6-gap-analysis.json` and
+`docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`, and are never closed by inference — `GATE-34` (backfill) is
+the one exception verifiable without live Stripe, and was independently confirmed on production
+(2 existing users backfilled to 2 Subscriptions + 2 UsageQuota rows, additive/idempotent).
+
+**Alternatives.** (a) Fabricate a fake Stripe webhook payload signed with a dummy secret to "prove" the
+live path — explicitly rejected: this is exactly the prohibited pattern of faking a live invoice/webhook
+event, and would produce false confidence about a code path (real signature verification against
+Stripe's actual signing algorithm and key format) that was never truly exercised. (b) Defer all billing
+code until a human provides Stripe credentials — rejected: this would block Cluster D and everything
+that depends on its schema (admin panel spend/quota views) for no benefit, since the mocked-SDK approach
+already proves every piece of logic that doesn't require an actual external Stripe account.
+
+**Consequences.** `GAP-P6-BILL-001`/`002`/`GAP-P6-PRICING-001` are `FIX-READY-MERGED`: code complete,
+reviewed (`uat/reports/evidence/phase6/review-billing.json`, verdict PASS), 18 backend + 3 frontend tests
+green, deployed to production (`/pricing` returns 200, billing schema materialized, GATE-34 backfill
+verified) — but not `VERIFIED-CLOSED`, because the live Stripe round-trip has not actually happened.
+Closure of GATE-13/14/15/16/33 requires an operator to supply Stripe test-mode credentials per
+`docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md` item 1–4, after which a QA sub-agent re-runs the real
+checkout→webhook→cancel flow. **Reversible?** Yes — swapping the mocked SDK for the real one at that
+point requires no application-logic change, only supplying the real credentials via environment
+variables.
+
+---
+
+## D-0037 — ADR-P6-PRICING: ratified subscription tiers (binding — overrides the billing-architecture design doc's proposed quotas/annual pricing)
+
+**Date:** 2026-07-16 · **Author:** Phase 6 orchestrator (fable-5), ratifying over `billing-arch` (opus) · **Status:** Adopted
+
+**Context.** The `billing-arch` sub-agent's design (`docs/subscription/billing-architecture.md`) proposed
+monthly run-quotas of 50/200/600 and annual prices of A$190/390/690, reasoning from its own unit-economics
+model. The originating prompt's §14.1, however, specified explicit tiers (A$0/19/39/69 monthly,
+30/100/300 runs), and Phase 6 STEP 3 commissioned live-verified cost/pricing research
+(`anthropic-pricing-verified.md`, `stripe-au-fees-verified.md`, `competitor-pricing-verified.md`) to check
+whether the prompt's figures were still defensible against current reality.
+
+**Decision.** The live research **confirms** rather than contradicts the prompt's figures: verified
+Anthropic per-token pricing puts a Free-tier user's LLM cost at under A$1.32/month (comfortably inside a
+A$0 tier at 5 runs/month), and the resulting margins on GST-exclusive net revenue (`net = total ÷ 1.1`)
+range 82–89% across paid tiers; verified competitor pricing (7 competitors, live-fetched) places the
+proposed A$19–69/month range solidly mid-market with a genuine agentic-automation differentiator no
+competitor offers. Per the platform's "maximum prompt execution accuracy" governance rule, an explicit
+prompt figure that is independently confirmed by live evidence is **ratified as-is**, overriding a
+sub-agent design's alternative proposal. The binding tiers:
+
+| Tier | Monthly (GST-inc AUD) | Annual (GST-inc AUD) | Agent runs/mo | Model-tier routing |
+|---|---|---|---|---|
+| Free | A$0 | — | 5 | light (Haiku-equivalent) |
+| Starter | A$19 | A$179 | 30 | light + standard (Haiku + Sonnet-equivalent) |
+| Pro | A$39 | A$359 | 100 | light + standard |
+| Power | A$69 | A$649 | 300 | full model access |
+
+GST per the prompt's §14.2 formula: `gst = round(total/11, 2)`, `net = total - gst` — e.g. A$19 →
+gst A$1.73 / net A$17.27; A$39 → gst A$3.55 / net A$35.45; A$69 → gst A$6.27 / net A$62.73. Annual GST
+uses the identical formula against the annual total. "Model tier" describes the app's own OpenRouter
+model-routing policy per plan; it does not imply a direct Anthropic API/OAuth connection (see
+`ADR-P6-OAUTH`).
+
+**Alternatives.** (a) Adopt the billing-arch design's 50/200/600-run, A$190/390/690-annual proposal —
+rejected: it isn't wrong on its own unit-economics logic, but the prompt's explicit, now-confirmed
+figures take precedence per the governance rule, and adopting a different number without a documented
+reason would itself be an undisclosed scope deviation. (b) Split the difference (e.g. average the two
+quota schemes) — rejected: arbitrary, and defeats the purpose of ratifying against verified evidence.
+
+**Consequences.** `apps/api/app/repositories/billing.py`'s `RATIFIED_PLANS` seeds exactly these four
+tiers' prices/quotas/spend-caps (Free cap A$1, Starter A$5, Pro A$15, Power A$40 — admin-adjustable);
+`test_plans_endpoint_is_public_and_returns_ratified_tiers` asserts all twelve headline numbers through
+`GET /billing/plans` live. Stripe Tax is **off** at launch (its ~A$140/month floor is disproportionate at
+launch volume; GST math is identical either way via the `round(total/11,2)` formula) — see
+`docs/subscription/BILLING-ARCH-APPROVAL.md`. **Reversible?** Yes — pricing/quota changes are a `Plan`
+row update, not a schema change; Stripe Tax can be enabled later without touching the GST calculation.
+
+---
+
+## D-0038 — Tailoring anti-fabrication: dedicated entailment-verification budget, separate from generation
+
+**Date:** 2026-07-16 · **Author:** Phase 6 fixer-hard / reviewer (GAP-P6-TAIL-003/004) · **Status:** Adopted
+
+**Context.** Resume tailoring already guarded against fabrication via keyword/evidence-token matching, but
+a live QA round (`qa-prod-craft2.json`) found one unsupported claim ("for financial institutions") slip
+through on an otherwise genuine lift. The robust fix — an LLM-based entailment-verification pass that
+checks each proposed bullet rewrite against the evidence corpus before accepting it — initially
+introduced a **new** regression: the entailment call shared the single `AETHER_LLM_BUDGET_SECONDS` wall
+clock with the tailor-generation call itself, so a slow generation call left the verifier 0–9 seconds —
+it timed out and, being fail-closed, conservatively reverted **every** proposed change, including
+genuinely evidence-backed ones (`qa-prod-craft3.json`: zero fabrication, but zero lift either, in 17/17
+completions). A second contributing defect: `proper_noun_anchors()`/`_scoped_evidence()` treated generic
+capitalized words (e.g. "Business", "BI") as context anchors, incorrectly excluding a story's own
+evidence from its home bullet.
+
+**Decision.** Give entailment verification its **own** dedicated budget reservation
+(`AETHER_LLM_ENTAILMENT_BUDGET_SECONDS`), carved out separately from the tailor-generation budget rather
+than sharing one wall clock — so a slow generation call cannot starve the verifier to zero. Narrow the
+anchor heuristic to genuine proper nouns (employer/program names), excluding generic capitalized words,
+so a bullet with no real anchors can draw on the full evidence corpus rather than being wrongly scoped
+out. Zero-fabrication behavior is preserved (the entailment pass still reverts genuine fabrications
+fail-closed); this fix targets only the false-positive over-reversion and budget-starvation failure
+modes, per `review-tail4.json` (verdict PASS).
+
+**Alternatives.** (a) Give entailment a fixed, generous budget regardless of batch size (e.g. flat 15s) —
+partially adopted as an intermediate step, but superseded by `D-0039`'s batch-size-scaled budget once the
+underlying "full-resume batch is too large to complete + verify under one edge timeout" cause was
+identified. (b) Drop entailment verification and rely solely on token-matching — rejected: token-matching
+alone already let one fabrication through; entailment is the more robust check §9's zero-tolerance
+requires.
+
+**Consequences.** Deploy configuration: `AETHER_LLM_BUDGET_SECONDS=65`,
+`AETHER_LLM_ENTAILMENT_BUDGET_SECONDS=15`, `AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.3` (per reviewer
+recommendation in `review-tail4.json`). `GAP-P6-TAIL-003`/`004` VERIFIED-CLOSED; lift restored without
+reintroducing fabrication risk, later refined further by `D-0039`. **Reversible?** Yes — both budgets are
+env-tunable; no schema change.
+
+---
+
+## D-0039 — Tailoring top-K batch cap + scaled entailment budget: genuine lift within the synchronous HTTP edge
+
+**Date:** 2026-07-16 · **Author:** Phase 6 fixer-hard / reviewer (GAP-P6-TAIL-005) · **Status:** Adopted
+
+**Context.** Even with `D-0038`'s dedicated entailment budget, tailoring a full ~18-21-bullet resume in
+one LLM call was itself too slow (and the resulting large candidate set too slow to verify) under
+production's fixed HTTP edge (~100 seconds, not under application control — see `DEFECTS-PHASE-2-AUDIT.md`
+D1, `DECISIONS.md` prior discussion). This produced two failure modes depending on how the shared budget
+was split: either the tailor-generation call was starved (16% completion rate observed in
+`qa-prod-craft4.json`) or a genuinely evidence-backed batch of proposed edits ran out of entailment time
+and was blanket-reverted (fail-safe correctly avoiding fabrication, but delivering zero measurable ATS
+lift — a value problem, not a correctness one).
+
+**Decision.** Cap tailoring generation to the top-`K` (8) highest-impact/most-JD-relevant bullets per
+request instead of rewriting the entire resume, and scale the entailment-verification budget with the
+actual candidate count (`base_seconds + per_candidate_seconds × N`, capped) instead of a fixed budget. A
+smaller batch both generates faster and produces a smaller entailment workload that reliably completes
+within budget, so genuine lift can survive verification rather than being reverted for lack of time.
+Zero-fabrication is preserved end-to-end — the entailment pass still reverts any genuinely unsupported
+claim, fail-closed, regardless of batch size.
+
+**Alternatives.** (a) Increase the overall wall-clock budget instead of capping batch size — rejected:
+the ~100s edge timeout is fixed and outside application control; a longer in-app budget only replaces a
+clean 503 with a raw edge-level gateway timeout on the slowest calls (this exact tradeoff is documented in
+`review-authenticity2.json`'s deploy-budget-recommendation). (b) Cap the batch size but keep a fixed
+entailment budget — rejected: a fixed budget either wastes headroom on small batches or still starves on
+the largest allowed batch; scaling with candidate count is the more precise fix.
+
+**Consequences.** Deploy configuration: `AETHER_LLM_BUDGET_SECONDS=65`,
+`AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.4`, `AETHER_TAILOR_MAX_BULLETS=8`,
+`AETHER_LLM_ENTAILMENT_BASE_SECONDS=6`, `AETHER_LLM_ENTAILMENT_PER_CANDIDATE_SECONDS=2.5`,
+`AETHER_LLM_ENTAILMENT_MAX_SECONDS=25` (worst case ~90s, leaving ~10s edge margin — per
+`review-tail5.json`). `GAP-P6-TAIL-005` VERIFIED-CLOSED: a fresh 10-attempt live production QA round
+(`qa-prod-craft5.json`) showed 8/10 honest completions (80%, up from 16% pre-fix), 2 with a genuine,
+independently GET-`/ats`-reconfirmed lift (30.81→32.97), and **zero** fabrication survivors across all 8.
+**Accepted, documented residual:** the remaining ~20% of attempts still return a clean HTTP 503 (the
+honest `AETHER-AUTH-002` fail-closed path, never a fixture) because some LLM calls simply run longer than
+the capped batch's budget even after this fix — this is a genuine synchronous-latency ceiling, not a
+correctness defect, and is tracked as `BACKLOG-P6-02` (durable fix: asynchronous submit→poll generation,
+out of Phase 6 scope). **Reversible?** Yes — all four env vars are tunable; the batch cap and budget
+formula are config, not architecture, changes.

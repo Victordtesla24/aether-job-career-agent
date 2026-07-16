@@ -1,7 +1,85 @@
 # Aether Delivery Progress
-Last updated: 2026-07-10 by Aether Delivery Agent Session 4
-Current phase: Phase 2 — Intelligence (session started 2026-07-02)  |  Current slice: P2-S10 complete; Phase 2 deployed (frontend + API live)
-Branch: phase-2/intelligence (from main after Phase 1 merge)  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
+Last updated: 2026-07-16 by doc-updater sub-agent (Phase 6 documentation refresh, GAP-P6-DOCS-001/GATE-19)
+Current phase: Phase 6 — Subscription/billing/admin/sourcing-compliance/quality (production, `main`, https://5cb5f0620.abacusai.cloud)
+Branch: `main`  |  CI: workflow active at `.github/workflows/ci.yml` (mirror kept at `ci/github-actions-ci.yml`)
+
+## Phases 3–5 — tracked in dedicated per-phase documents, not this file
+
+This file (`PROGRESS.md`) was the single delivery log through Phase 2. Starting with Phase 3, each phase's
+gap ledger, execution summary, and decisions were recorded in their own dedicated document instead of being
+appended here — this section restores the pointer trail so a reader starting from `PROGRESS.md` can still
+find every phase:
+
+- **Phase 3** — `docs/delivery/PHASE3-GAP-LEDGER.md`
+- **Phase 4** — `docs/delivery/PHASE4-GAP-ANALYSIS.md`
+- **Provider-config run** (Anthropic-subscription-vs-API-key provider configuration, Gmail PKCE fix) — `docs/delivery/PROVIDER-CONFIG-RUN.md`
+- **Phase 5** ("prud-remediation" + separately, "prod-remediation" runs) — `docs/delivery/PHASE5-GAP-ANALYSIS.md`, `docs/delivery/PHASE5-EXECUTION-SUMMARY.md`, and the repo-root `EXECUTION-REPORT.md` (2026-07-15 remediation run; superseded in part by Phase 6 — see the correction note at the top of that file)
+- **Requirements traceability** (production, cumulative) — `docs/delivery/REQUIREMENTS-TRACEABILITY-PRODUCTION.md`
+
+## Phase 6 — Subscription, billing, admin, sourcing-compliance, quality (2026-07-16)
+
+**Prompt:** `aether-subscription-prompt.md` · **Orchestrator:** `claude-fable-5 (xhigh)`, decision points only.
+**Machine ledger:** `docs/delivery/phase6-gap-analysis.json` (27 gaps) · **Narrative ledger:**
+`docs/delivery/PHASE6-GAP-ANALYSIS.md` · **Human-gated checklist:** `docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md` ·
+**Model governance:** `docs/delivery/PHASE6-GOVERNANCE-AUDIT.md` · **Evidence:** `uat/reports/evidence/phase6/`.
+
+**Binding ADRs (recorded in `docs/delivery/DECISIONS.md`):** `ADR-P6-SEEK` (Seek scraping is ToS-prohibited;
+sourcing volume via Adzuna AU + ATS APIs instead), `ADR-P6-OAUTH` (Anthropic third-party subscription OAuth
+is prohibited by Anthropic's own Consumer ToS; API-key-only enforced, OAuth stays flag-disabled),
+`ADR-P6-STRIPE-MOCK` (billing built now against a mocked Stripe SDK; live round-trip gates human-gated),
+`ADR-P6-PRICING` (ratified subscription tiers, overriding the billing-architecture design doc's proposed
+quotas/annual pricing), plus the tailoring entailment-verification and top-K batch-cap decisions.
+
+**Gap ledger final status (27 gaps):**
+
+| Status | Count |
+|---|---|
+| VERIFIED-CLOSED | 17 |
+| FIX-READY-MERGED (billing — code+tests complete, live Stripe round-trip blocked-on-human) | 3 |
+| PROD-FLOW-VERIFIED / GATE-17-human-gated (admin panel) | 2 |
+| CODE-VERIFIED-CLOSED / LIVE-BLOCKED-ON-HUMAN (multi-Gmail) | 1 |
+| TRIAGED (Cluster H — repo/branch cleanup, directory reorg, this doc refresh, EXECUTION-REPORT re-verify) | 4 |
+
+**Shipped:**
+- **Subscription billing** — Free/Starter/Pro/Power tiers (A$0/19/39/69 monthly, A$179/359/649 annual,
+  GST-inclusive, `gst=round(total/11,2)` per `ADR-P6-PRICING`), Stripe Checkout/webhook/portal, atomic
+  quota reserve-before-run + refund-on-failure, `/pricing` page live. Built + unit-tested against mocked
+  Stripe (`ADR-P6-STRIPE-MOCK`); live verification (checkout, webhook, GST-on-invoice, Stripe Tax) is
+  BLOCKED-ON-HUMAN pending operator Stripe test credentials. Evidence: `review-billing.json`,
+  `docs/subscription/billing-architecture.md`.
+- **Admin panel (Tier 1)** — users/spend, spend-cap, suspend/unsuspend, settings, append-only audit log,
+  health; all routes gated server-side on `isAdmin`. Spend-cap-before-LLM proven live (429 fired before any
+  `AgentRun` row was created). `admin/admin123` demoted to `isAdmin=false` unconditionally on every boot
+  (GATE-31 verified live). Full GATE-17 closure needs operator-rotated `AETHER_ADMIN_EMAIL`/`AETHER_ADMIN_PASSWORD_HASH`.
+  Evidence: `review-admin.json`, `gate17-admin-verification-raw.json`.
+- **Sourcing ToS compliance** — Seek scraping (confirmed ToS-prohibited: `seek-tos-check.md`, `robots.txt`
+  names `anthropic-ai`) excluded from the live adapter registry by default. Volume restored via Adzuna AU
+  (licensed API, optional creds) + Greenhouse/Lever/Ashby/Workable + Remotive/RemoteOK: live re-probe shows
+  30 active-feed jobs / 5 sources, 100% fresh ≤30d, 0 duplicates, 0 Seek. Evidence: `qa-prod-sourcing.json`.
+- **Tailoring & cover-letter quality** — removed a fixture-fallback defect (auto mode no longer silently
+  serves canned fixtures on live-LLM failure; honest 503 + quota refund instead); added entailment
+  verification so an unsupported claim is reverted rather than shipped; a top-8 batch cap + scaled
+  entailment budget resolved the resulting reliability regression. Live QA (`qa-prod-craft5.json`): 8/10
+  honest completions, 2 with a genuine, independently-reconfirmed ATS lift (30.81→32.97), **zero**
+  fabrication survivors across all 8. **Honest residual:** ~20% of attempts return a clean HTTP 503 (never
+  a fixture) — synchronous generation under the ~100s HTTP edge; durable fix is async generation
+  (`BACKLOG-P6-02`, out of Phase 6 scope).
+
+**Human-gated (pending operator action, not fixable by an agent):** Stripe test-mode keys + webhook secret
++ Price IDs + ABN/Tax (unblocks GATE-13/14/15/16/33); `AETHER_ADMIN_EMAIL`/`AETHER_ADMIN_PASSWORD_HASH`
+(closes GATE-17); a second real Gmail account's OAuth consent (closes GATE-05). Full instructions:
+`docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`.
+
+**Honest residuals (tracked backlog, non-blocking):** `BACKLOG-P6-01` (per-run Cost column not surfaced in
+the `/dashboard/agents` Recent Runs table — an aggregate avg-cost stat is shown instead); `BACKLOG-P6-02`
+(the ~20% honest tailoring/cover-letter 503 rate above); the sourcing volume margin is real but thin
+(remoteok/remotive contribute 1 job each, lever sits exactly at the 5-job floor, Adzuna contributes 0
+without operator credentials — not required for today's GATE-07 pass).
+
+**Cluster H (this update):** documentation refresh (`README.md`, `EXECUTION-REPORT.md`, `PROGRESS.md`,
+`DECISIONS.md`, `TRACEABILITY-MATRIX.md`, new `docs/subscription/`) targets GATE-19/20/28. Gate closure
+itself is the reviewer/QA sub-agent's sole authority (no self-approval) — this entry documents what was
+written and re-verified, not a claimed gate closure.
 
 ## Phase-2 adversarial audit + fix loop (2026-07-09)
 

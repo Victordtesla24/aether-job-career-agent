@@ -65,3 +65,47 @@ Intentionally UI-less routes: `/health`, `/auth/login` (used by the login page),
 | J5 Story extraction + manual add | ✅ (was partial, D6) | 21→33 extracted; live manual create verified |
 | J6 Analytics funnel + conversion | ✅ (D9 fixed) | funnel counts consistent; conversion rates render |
 | J7 Auth (login/bad password/persist) | ✅ | audit steps 1–3 |
+
+---
+
+## Phase 6 — Requirements → Evidence Matrix (Subscription/Billing/Admin/Sourcing-Compliance/Quality, 2026-07-16)
+
+**Method:** each Phase-6 gap in `docs/delivery/phase6-gap-analysis.json` is mapped to the production
+evidence artifact that verifies it (all under `uat/reports/evidence/phase6/` unless noted). Status values
+are copied verbatim from the machine ledger, not re-derived — this table does not itself close any gate
+(gate closure is the QA/reviewer sub-agent's sole authority).
+
+| Gap | Requirement | Status | Gate(s) | Evidence artifact |
+|---|---|---|---|---|
+| GAP-P6-BILL-001 | Subscription/billing architecture (schema, endpoints, GST, webhook) | FIX-READY-MERGED (live verify blocked-on-human) | GATE-13/14/15/16/33/34 | `review-billing.json`, `docs/subscription/billing-architecture.md` |
+| GAP-P6-BILL-002 | Per-user LLM spend-cap / agent-run quota enforcement | FIX-READY-MERGED | GATE-17 | `review-billing.json` (checklist item 4), `deploy-verify.json` |
+| GAP-P6-PRICING-001 | Public `/pricing` page | FIX-READY-MERGED | GATE-13 | `deploy-verify.json` (`pricing` endpoint 200) |
+| GAP-P6-ADMIN-001 | Admin panel (users, spend, health, settings) | PROD-FLOW-VERIFIED / GATE-17-human-gated | GATE-17 | `review-admin.json`, `gate17-admin-verification-raw.json` |
+| GAP-P6-ADMIN-003 | Audit log + per-user data export/delete | PROD-FLOW-VERIFIED / GATE-17-human-gated | GATE-17 | `review-admin.json` (checklist item 4), `gate17-admin-verification-raw.json` (`audit_log_test`) |
+| GAP-P6-SEC-001 | `admin/admin123` must not hold admin privilege | VERIFIED-CLOSED | GATE-31, GATE-17 | `review-admin.json` (checklist item 5), `deploy-verify.json` (`admin_rotation_gate_31`) |
+| GAP-P6-SRC-001 | Job-sourcing volume ≥25, ≥2 sources with ≥5 each | VERIFIED-CLOSED | GATE-07, GATE-08 | `qa-prod-sourcing.json` (`gate07`) |
+| GAP-P6-SRC-002 | Seek adapter ToS-prohibited scraping removed | VERIFIED-CLOSED | GATE-07, GATE-08 | `qa-prod-sourcing.json` (`seek_verification`), `seek-tos-check.md`, `review-sourcing.json` |
+| GAP-P6-DATA-001 | Stale/unreachable Seek cards not shown to users | VERIFIED-CLOSED | GATE-08 | `qa-prod-sourcing.json` (`gate08`) |
+| GAP-P6-WIRE-001 | Dead/decorative view-toggle controls wired | VERIFIED-CLOSED | GATE-03 | `qa-prod-console-admin.json` |
+| GAP-P6-AGCONF-001 | All runtime agents PUT-config + billing routing | VERIFIED-CLOSED | GATE-06 | `probe-16-agent-keys.json` |
+| GAP-P6-AUTH-OAUTH-001 | Anthropic OAuth API-key-only + flag-gated | VERIFIED-CLOSED | GATE-04 | `anthropic-oauth-verification.md` |
+| GAP-P6-MULTI-001 | Multi-Gmail inbox (simultaneous accounts, `select_account`) | CODE-VERIFIED-CLOSED / LIVE-BLOCKED-ON-HUMAN | GATE-05 | `docs/delivery/phase6-gap-analysis.json` (code-level tests only; live 2nd-account consent pending) |
+| GAP-P6-TAIL-001 | Resume tailoring craft (writer-audit) | VERIFIED-CLOSED | GATE-09, GATE-10 | `qa-prod-craft5.json` |
+| GAP-P6-COV-001 | Cover-letter craft (writer-audit) | VERIFIED-CLOSED | GATE-11, GATE-12 | `qa-prod-craft2.json`, `review-quality.json` |
+| GAP-P6-CONV-001 | Conversion-estimate label + methodology + tooltip | VERIFIED-CLOSED | GATE-10 | `qa-prod-craft2.json`, `qa-prod-craft5.json` (`methodology_present`) |
+| GAP-P6-MET-001 | Metric recomputation delta, user-scoped | VERIFIED-CLOSED | GATE-18 | `user-scoped-sql-recompute.txt` |
+| GAP-P6-AUTH-002 | Fixture-fallback removed from live-failure path | VERIFIED-CLOSED | GATE-02, GATE-09, GATE-11 | `review-authenticity2.json` |
+| GAP-P6-TAIL-002 | Cross-context keyword-bleed / raw_text regeneration | VERIFIED-CLOSED | GATE-09 | `review-authenticity2.json` (checklist items 4–5) |
+| GAP-P6-TAIL-003 | Entailment verification eliminates fabrication | VERIFIED-CLOSED | GATE-09 | `qa-prod-craft3.json`, `review-tail3.json` |
+| GAP-P6-DOCS-002 | Live `/privacy-policy` + `/terms` honesty (GST/subscription terms, no false self-service-deletion claim) | VERIFIED-CLOSED | GATE-19 | `docs/subscription/privacy-policy.md`, `docs/subscription/terms-of-service.md` |
+| GAP-P6-TAIL-004 | Dedicated entailment budget + anchor-collision fix | VERIFIED-CLOSED | GATE-09 | `review-tail4.json` |
+| GAP-P6-TAIL-005 | Top-K batch cap + scaled entailment budget → genuine lift | VERIFIED-CLOSED | GATE-09 | `qa-prod-craft5.json`, `review-tail5.json` |
+| GAP-P6-REPO-002 | Stale branches / open PRs cleaned up | TRIAGED (Cluster H, deployer) | GATE-21, GATE-22 | `probe-11-branches.txt`, `probe-11-prs.json` |
+| GAP-P6-DIR-001 | Monorepo directory reorganisation | TRIAGED (Cluster H, fixer-medium) | — | `inventory-backend.json`, `inventory-frontend-docs.json` |
+| GAP-P6-DOCS-001 | Docs updated to post-implementation truth + `docs/subscription/` created | TRIAGED → in progress this update (doc-updater) | GATE-19, GATE-20 | `docs/subscription/*.md` (this update), `inventory-frontend-docs.json` |
+| GAP-P6-EXEC-001 | `EXECUTION-REPORT.md` claims re-verified, honest agent-count wording | TRIAGED → in progress this update (doc-updater) | GATE-28 | `EXECUTION-REPORT.md` §9 (this update), `probe-16-agent-keys.json` |
+
+**Honest backlog (not gap-tracked, non-blocking):** `BACKLOG-P6-01` (per-run Cost column absent from
+`/dashboard/agents` Recent Runs table) and `BACKLOG-P6-02` (~20% honest tailoring/cover-letter 503 rate,
+durable fix is async generation) — both recorded in `docs/delivery/phase6-gap-analysis.json`'s `backlog`
+array, deliberately out of Phase 6 scope.
