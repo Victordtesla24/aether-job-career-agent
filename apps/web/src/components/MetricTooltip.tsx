@@ -58,8 +58,14 @@ export default function MetricTooltip({ label, value, tooltip, className }: Metr
           id={tipId}
           role="tooltip"
           data-testid="metric-tooltip-popover"
-          className={`pointer-events-none absolute left-1/2 top-6 z-20 w-56 -translate-x-1/2 rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] font-normal leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
-            open ? "opacity-100" : "opacity-0"
+          className={`pointer-events-none absolute left-1/2 top-6 z-20 w-56 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] font-normal leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
+            /* GAP-P6-UI-001: closed popovers must be display:none (not just
+             * opacity-0) — an absolutely positioned w-56 box left in the
+             * layout still inflates the ancestor's scrollWidth even while
+             * invisible, which is exactly what produced the horizontal
+             * overflow on /dashboard at a 390px mobile viewport (multiple
+             * MetricTooltip instances in DashboardStats + MarketPulse). */
+            open ? "opacity-100" : "hidden opacity-0"
           }`}
         >
           {tooltip}
