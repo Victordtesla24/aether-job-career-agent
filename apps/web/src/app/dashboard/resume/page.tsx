@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+import MetricTooltip from "../../../components/MetricTooltip";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import {
@@ -242,12 +243,16 @@ export default function ResumePage() {
             → After: <span className="mono font-semibold text-aether-green">{conversion.tailoredATSScore}%</span>
           </p>
           <p className="mt-1 text-sm" data-testid="conversion-lift">
-            Estimated interview conversion improvement:{" "}
-            <span className="mono font-semibold text-aether-green">
-              {conversion.estimatedConversionLift}
-            </span>
+            <MetricTooltip
+              label="Estimated interview conversion improvement"
+              value={
+                <span className="mono font-semibold text-aether-green">
+                  {conversion.estimatedConversionLift}
+                </span>
+              }
+              tooltip={`${conversion.methodology} This is an illustrative estimate, not a measured outcome.`}
+            />
           </p>
-          <p className="mt-2 text-xs text-aether-muted-dim">{conversion.methodology}</p>
         </section>
       ) : null}
 
