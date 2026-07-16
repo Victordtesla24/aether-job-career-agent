@@ -990,13 +990,15 @@
       "tests_required": [
         "/dashboard has no horizontal overflow at 390px"
       ],
-      "status": "IN-PROGRESS",
+      "status": "FIX-READY-MERGED-FE-DEPLOY-PENDING",
       "human_gated": false,
       "gates": [
         "GATE-26"
       ],
       "fixer_role": "fixer-medium",
-      "branch": "fix/p6-ui1"
+      "branch": "fix/p6-ui1",
+      "merged_sha": "232063e",
+      "review": "MetricTooltip closed popover display:none (hidden) + viewport clamp; root cause = w-56 box in layout at opacity-0 inflating scrollWidth. Verified 390/390 local; vitest 293 green. FE deploy + production 390px re-verify pending (batched with COV-002 final deploy)."
     }
   ],
   "rejected_hypotheses": [
