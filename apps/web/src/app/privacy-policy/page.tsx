@@ -42,7 +42,7 @@ export default function PrivacyPolicyPage() {
         <div className="glass-raised rounded-2xl border border-white/10 p-8 md:p-10">
           <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
           <p className="mt-2 text-sm text-aether-muted-dim mono">
-            Last updated: July 11, 2026
+            Last updated: July 16, 2026
           </p>
 
           <p className="mt-6 text-[15px] leading-relaxed text-aether-muted">
@@ -68,6 +68,12 @@ export default function PrivacyPolicyPage() {
               <li>
                 <strong className="text-aether-text">Job applications</strong> — the roles
                 you save, apply to, and track, along with their status and related notes.
+              </li>
+              <li>
+                <strong className="text-aether-text">Subscription &amp; billing metadata</strong>{" "}
+                — your selected plan (Free, Starter, Pro, or Power), billing interval,
+                subscription status, and monthly agent-run usage, used to enforce plan
+                limits and, once payment processing is active, to bill you.
               </li>
               <li>
                 <strong className="text-aether-text">Gmail messages</strong> — if you
@@ -124,17 +130,29 @@ export default function PrivacyPolicyPage() {
               <li>
                 <strong className="text-aether-text">Google Gmail API (OAuth2)</strong> —
                 used, with your explicit consent, to read and manage job-related email.
-                Access can be revoked at any time.
+                OAuth tokens are encrypted at rest, and access can be revoked at any time.
               </li>
               <li>
-                <strong className="text-aether-text">AI model providers</strong> — large
-                language model inference is used to generate resumes, cover letters, and
-                interview material. Content is sent to these providers only as needed to
-                produce your requested output.
+                <strong className="text-aether-text">Stripe</strong> — processes payment
+                for paid subscription plans. Live payment processing is not yet active in
+                production; it goes live once we finish our Stripe account setup. Until
+                then, no payment data is transmitted to Stripe. See our{" "}
+                <Link href="/terms" className="text-aether-coral hover:underline">
+                  Terms &amp; Conditions
+                </Link>{" "}
+                for full pricing, GST, and billing details.
               </li>
               <li>
-                <strong className="text-aether-text">PostgreSQL database hosting</strong> —
-                your account and application data is stored in a managed PostgreSQL database.
+                <strong className="text-aether-text">LLM provider</strong> — large
+                language model inference (our configured provider, currently OpenRouter)
+                is used to generate resumes, cover letters, and interview material.
+                Content is sent to this provider only as needed to produce your
+                requested output.
+              </li>
+              <li>
+                <strong className="text-aether-text">Hosted PostgreSQL database</strong> —
+                your account and application data is stored in a single hosted
+                PostgreSQL database.
               </li>
             </ul>
           </Section>
@@ -143,37 +161,72 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc space-y-2 pl-5">
               <li>Account data is retained for as long as your account remains active.</li>
               <li>
-                Gmail access tokens are revocable at any time from the{" "}
-                <strong className="text-aether-text">Settings</strong> page; revoking access
-                immediately stops all Gmail data access.
+                A connected Gmail account can be disconnected at any time from the Email
+                Center; disconnecting immediately deletes that account&rsquo;s stored
+                (encrypted) tokens and stops all Gmail data access for that account.
               </li>
               <li>
-                Upon an account deletion request, your data is permanently deleted within 30
-                days.
+                Full account data export or deletion is not yet a self-service, in-app
+                feature (see &ldquo;Your Rights&rdquo; below) — there is no automatic
+                deletion timeline guaranteed by the app; requests are handled manually by
+                us.
               </li>
             </ul>
           </Section>
 
           <Section title="5. Your Rights">
-            <p>You remain in control of your data. At any time you can:</p>
+            <p>You remain in control of your data.</p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
-              <li>Access and export the data associated with your account.</li>
-              <li>Correct inaccurate account or resume information.</li>
               <li>
-                Delete your data via the{" "}
-                <strong className="text-aether-text">Settings</strong> page.
+                <strong className="text-aether-text">Correction (self-service)</strong> —
+                you can correct inaccurate account, profile, or resume information
+                directly in the app at any time.
               </li>
-              <li>Revoke Gmail access at any time, independently of your account.</li>
+              <li>
+                <strong className="text-aether-text">
+                  Gmail access revocation (self-service)
+                </strong>{" "}
+                — you can disconnect any connected Gmail account at any time from the
+                Email Center, which immediately deletes that account&rsquo;s stored
+                tokens.
+              </li>
+              <li>
+                <strong className="text-aether-text">
+                  Data export or full account deletion
+                </strong>{" "}
+                — there is currently no self-service &ldquo;export my data&rdquo; or
+                &ldquo;delete my account&rdquo; button in the app. To request an export
+                or deletion of your data, contact us (see{" "}
+                <strong className="text-aether-text">Contact</strong> below) and we will
+                process your request manually.
+              </li>
             </ul>
           </Section>
 
           <Section title="6. Security">
             <ul className="list-disc space-y-2 pl-5">
               <li>All data is encrypted in transit using TLS.</li>
-              <li>Stored data is encrypted at rest.</li>
               <li>
-                OAuth tokens are stored server-side only and are never exposed to the
-                browser or third parties.
+                OAuth tokens and any LLM provider API keys you supply are encrypted at
+                rest (Fernet symmetric encryption) and stored server-side only, never
+                exposed to the browser or third parties.
+              </li>
+              <li>
+                Passwords are never stored in plaintext — they are one-way hashed
+                (bcrypt).
+              </li>
+              <li>
+                Login and registration are rate-limited to slow automated abuse; billing
+                actions (checkout, billing portal) are separately rate-limited.
+              </li>
+              <li>
+                No secrets or API keys are stored in our source code — they are
+                configured through environment variables only.
+              </li>
+              <li>
+                An administrator can suspend an account found to violate our Terms &amp;
+                Conditions, which blocks that account&rsquo;s access until the
+                suspension is lifted.
               </li>
             </ul>
           </Section>
