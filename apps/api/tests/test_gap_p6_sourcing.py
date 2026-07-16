@@ -192,6 +192,82 @@ class TestExpandedPortalTokens:
 
 
 # ---------------------------------------------------------------------------
+# JD ingestion truncation (Cluster G quality DEFECT 3, handed off to Phase 6):
+# every compliant adapter fed the description straight through
+# ``relevance.snippet(text, limit=500)`` before storage, truncating the
+# stored JD to 500 chars. Resume-tailoring and cover-letter agents only ever
+# read the already-persisted ``job['description']``, so they were starved of
+# keywords beyond the first 500 chars of any real posting. Adapters must
+# persist the (near-)full JD, not a short preview.
+# ---------------------------------------------------------------------------
+
+_DESCRIPTION_COMPLIANT_SOURCES = (
+    "greenhouse", "lever", "ashby", "workable", "adzuna",
+    "remotive", "remoteok", "wellfound",
+)
+
+#: The field each source's raw item stores its free-text JD under — the
+#: FIRST field name here is the one every adapter's ``.get(...) or .get(...)``
+#: chain consults first.
+_DESCRIPTION_FIELDS = {
+    "greenhouse": ("content",),
+    "lever": ("descriptionPlain", "description"),
+    "ashby": ("descriptionPlain", "descriptionHtml"),
+    "workable": ("description",),
+    "adzuna": ("description",),
+    "remotive": ("description",),
+    "remoteok": ("description",),
+    "wellfound": ("description",),
+}
+
+
+def _all_source_items(source: str, payload: dict) -> list[dict]:
+    """Flatten each source's nested fixture payload to raw item dicts."""
+    if source == "greenhouse":
+        return [item for board in payload.get("boards", []) for item in board.get("jobs", [])]
+    if source == "lever":
+        return [item for company in payload.get("companies", []) for item in company.get("postings", [])]
+    if source == "ashby":
+        return [item for board in payload.get("boards", []) for item in board.get("jobs", [])]
+    if source == "workable":
+        return [item for account in payload.get("accounts", []) for item in account.get("jobs", [])]
+    return payload.get("jobs", []) or payload.get("results", [])
+
+
+class TestDescriptionStorageNotTruncated:
+    """A prior fixer confirmed relevance.py:129 ``snippet(text, limit=500)``
+    truncates every adapter's stored description to 500 chars BEFORE it ever
+    reaches the DB. This must be fixed so the full (or near-full) JD reaches
+    storage, bounded to a sane cap rather than an unbounded/None limit."""
+
+    @pytest.mark.parametrize("source", _DESCRIPTION_COMPLIANT_SOURCES)
+    def test_long_source_description_is_not_truncated_to_500(self, source):
+        payload = _load_fixture(source)
+        long_text = "Own the roadmap and delivery cadence end to end. " * 30  # ~1530 chars
+        assert len(long_text) > 500
+
+        items = _all_source_items(source, payload)
+        assert items, f"{source}: fixture has no items to mutate"
+        primary_field = _DESCRIPTION_FIELDS[source][0]
+        for item in items:
+            if isinstance(item, dict):
+                item[primary_field] = long_text
+
+        from app.services.discovery.adapter_registry import get_adapter_class
+
+        jobs = get_adapter_class(source)(fixture=payload).fetch(
+            query="delivery lead, product owner, business analyst",
+            location="Melbourne, Australia",
+        )
+        assert jobs, f"{source}: fixture produced no relevant jobs to check"
+        for job in jobs:
+            assert len(job["description"]) > 500, (
+                f"{source}: description truncated to <=500 chars despite a "
+                f"{len(long_text)}-char source JD (JD ingestion truncation defect)"
+            )
+
+
+# ---------------------------------------------------------------------------
 # GAP-P6-DATA-001 — active-feed liveness + freshness + fingerprint dedupe
 # ---------------------------------------------------------------------------
 

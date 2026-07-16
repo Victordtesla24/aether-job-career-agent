@@ -126,7 +126,24 @@ def filter_relevant(jobs: list[JobRaw]) -> list[JobRaw]:
     return kept
 
 
+#: Cap for the description PERSISTED to storage by every source adapter. Job
+#: descriptions feed the resume-tailoring and cover-letter agents, which only
+#: ever read the already-stored ``job['description']`` — truncating it to a
+#: short preview length before storage starves them of JD keywords (JD
+#: ingestion truncation defect). 8000 chars comfortably fits a full real-world
+#: posting while still bounding pathologically large payloads. This is
+#: distinct from ``snippet()``'s own short default, which stays small for
+#: any short-preview/relevance-only caller.
+DESCRIPTION_STORAGE_LIMIT = 8000
+
+
 def snippet(text: str | None, limit: int = 500) -> str:
-    """Strip HTML tags/entities and collapse whitespace into a short snippet."""
+    """Strip HTML tags/entities and collapse whitespace into a snippet.
+
+    ``limit`` defaults to a short preview size. Callers that persist the
+    description for downstream agents (resume tailoring, cover letters) must
+    pass ``limit=DESCRIPTION_STORAGE_LIMIT`` so the full JD reaches storage
+    instead of a 500-char preview.
+    """
     plain = _WS_RE.sub(" ", _TAG_RE.sub(" ", html.unescape(text or ""))).strip()
     return plain[:limit].rstrip()

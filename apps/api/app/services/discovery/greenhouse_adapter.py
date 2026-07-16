@@ -71,7 +71,9 @@ class GreenhouseAdapter(BaseAdapter):
                         company=str(item.get("company_name") or token.title()),
                         location=location,
                         remote="remote" in location.lower(),
-                        description=relevance.snippet(item.get("content")),
+                        description=relevance.snippet(
+                            item.get("content"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
+                        ),
                         requirements=[],
                         source=self.source,
                         sourceUrl=apply_url,

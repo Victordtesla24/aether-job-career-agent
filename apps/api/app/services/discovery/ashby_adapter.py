@@ -69,7 +69,8 @@ class AshbyAdapter(BaseAdapter):
                         location=location,
                         remote=remote,
                         description=relevance.snippet(
-                            item.get("descriptionPlain") or item.get("descriptionHtml")
+                            item.get("descriptionPlain") or item.get("descriptionHtml"),
+                            limit=relevance.DESCRIPTION_STORAGE_LIMIT,
                         ),
                         requirements=[],
                         source=self.source,

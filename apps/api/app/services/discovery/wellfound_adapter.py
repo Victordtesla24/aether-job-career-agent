@@ -63,7 +63,9 @@ class WellfoundAdapter(BaseAdapter):
                     company=company_name,
                     location=location or "Remote",
                     remote=bool(item.get("remote")),
-                    description=relevance.snippet(item.get("description")),
+                    description=relevance.snippet(
+                        item.get("description"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
+                    ),
                     requirements=[],
                     source=self.source,
                     sourceUrl=apply_url,
