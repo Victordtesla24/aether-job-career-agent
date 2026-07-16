@@ -15,6 +15,7 @@ from typing import Any
 from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
+from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.resume_parser import parse_resume_pdf
@@ -109,6 +110,31 @@ def _compute_conversion_metrics(
     }
 
 
+def build_story_evidence(user_id: str, repo: StoryRepository | None = None) -> str:
+    """Flatten the user's Story Bank into evidence text (GAP-P6-TAIL-001).
+
+    The Story Bank holds real, user-authored STAR achievements whose skills are
+    often absent from the polished résumé TEXT. Folding them into the tailoring
+    evidence corpus is what lets the model surface a JD keyword the candidate
+    genuinely proves (and pass the fabrication guard) — the only way a
+    like-for-like ATS re-score can rise strictly without inventing anything.
+    Every quantified result is kept so metric-bearing evidence survives. Empty
+    when the user has no stories (backward compatible)."""
+    repo = repo or StoryRepository()
+    parts: list[str] = []
+    for story in repo.list_by_user(user_id):
+        fields = [str(story.get("title") or ""), " ".join(story.get("tags") or [])]
+        for key in ("situation", "task", "action", "result"):
+            fields.append(str(story.get(key) or ""))
+        metrics = story.get("metrics")
+        if isinstance(metrics, dict):
+            fields.extend(f"{k} {v}" for k, v in metrics.items())
+        text = " ".join(f for f in fields if f).strip()
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
 @dataclass
 class TailorRunResult:
     resume_id: str
@@ -123,10 +149,12 @@ class TailoringAgent:
         resumes: ResumeRepository | None = None,
         jobs: JobRepository | None = None,
         service: ResumeTailorService | None = None,
+        stories: StoryRepository | None = None,
     ) -> None:
         self._resumes = resumes or ResumeRepository()
         self._jobs = jobs or JobRepository()
         self._service = service or ResumeTailorService()
+        self._stories = stories or StoryRepository()
 
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
@@ -194,8 +222,13 @@ class TailoringAgent:
         # widens the anti-fabrication corpus so a rewrite may draw on skills the
         # user's public work proves. Empty when no career data is ingested.
         career_corpus = build_career_corpus(user_id)
+        # GAP-P6-TAIL-001: the Story Bank is real, evidence-grounded career
+        # signal usually absent from the polished résumé text — the source of
+        # truthful JD keywords the tailor can surface for a genuine ATS lift.
+        story_evidence = build_story_evidence(user_id, self._stories)
+        evidence_extra = "\n\n".join(p for p in (career_corpus, story_evidence) if p)
         result = self._service.tailor(
-            resume_text, jd, originals=parent_bullets, evidence_extra=career_corpus
+            resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )
 
         tailored = self._resumes.create(
