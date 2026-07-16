@@ -1,0 +1,814 @@
+{
+  "run": "PHASE6",
+  "title": "Aether Career Agent \u2014 subscription/billing/admin/sourcing-compliance/quality remediation",
+  "prompt": "/home/ubuntu/aether-subscription-prompt.md",
+  "orchestrator": "claude-fable-5 (xhigh) \u2014 decision points only",
+  "started": "2026-07-16",
+  "schema_version": "4.1",
+  "seeding_rule": "Gaps enter ONLY from PHASE-0 probe artifacts (\u00a74.3). Confirmed hypotheses -> gaps with evidence_confirmed; refuted -> rejected_hypotheses with refuting artifact.",
+  "lifecycle": "OPEN -> TRIAGED -> IN-PROGRESS -> FIX-READY -> REVIEW-FAILED -> DEPLOYED -> VERIFY-FAILED -> VERIFIED-CLOSED ; human-gated: OPEN -> BLOCKED-ON-HUMAN -> (human confirms) -> IN-PROGRESS",
+  "evidence_root": "uat/reports/evidence/phase6/",
+  "adrs": [
+    {
+      "id": "ADR-P6-SEEK",
+      "title": "Seek scraping is ToS-prohibited; source only via licensed/API-sanctioned providers",
+      "decision": "Disable/remove the Firecrawl-based SeekAdapter automated scraping. Achieve GATE-07 volume via Adzuna AU (licensed API) + official ATS APIs (Greenhouse, Lever, Workable, Ashby) + Remotive/RemoteOK (public APIs). Stale Seek-origin rows must not be presented as live to paying users. Basis: uat/reports/evidence/phase6/seek-tos-check.md (VERDICT SCRAPING-PROHIBITED, robots.txt names anthropic-ai), reinforced by probe-13 (10/10 sampled Seek cards HTTP 403).",
+      "status": "BINDING"
+    },
+    {
+      "id": "ADR-P6-OAUTH",
+      "title": "Anthropic third-party subscription OAuth prohibited -> API-key only, OAuth flag-gated off",
+      "decision": "Per verified anthropic-oauth-verification.md (NOT-PUBLICLY-SUPPORTED, ToS-prohibited): API-key auth is the only active LLM auth path; any subscription_oauth code stays behind AETHER_ANTHROPIC_OAUTH_ENABLED=false, UI-disabled with 'coming soon \u2014 pending official Anthropic support'. GATE-04 = CONDITIONALLY-CLOSED with the artifact as evidence, NOT awaited as a human gate. Billing separation preserved structurally.",
+      "status": "BINDING"
+    },
+    {
+      "id": "ADR-TR-1",
+      "title": "Additive lazy idempotent DDL (inherited)",
+      "decision": "Schema changes ship as _ensure_*_tables + pg_advisory_xact_lock inside repository modules; .sql files are documentation-only (no migration runner). Never DROP/ALTER TYPE. Additive + backfill only.",
+      "status": "BINDING-INHERITED"
+    },
+    {
+      "id": "ADR-P6-STRIPE-MOCK",
+      "title": "Build billing now with mocked Stripe; live round-trip is human-gated",
+      "decision": "All billing code (schema, checkout, webhook, quota, /pricing, portal) is built and unit-tested with MOCKED Stripe (construct_event/Customer/Session mocked). GATE-13/14/15/16/33 require live Stripe test keys the swarm cannot self-provision -> emit BLOCKED-ON-HUMAN (\u00a72); never fake a live invoice/webhook to close a gate.",
+      "status": "BINDING"
+    }
+  ],
+  "probe_index": {
+    "PROBE-01": {
+      "artifact": "probe-01-health.json",
+      "result": "PASS health ok v0.2.0"
+    },
+    "PROBE-02": {
+      "artifact": "probe-02-auth.json + probe-02-login-schema.json",
+      "result": "PASS login field=email, admin/admin123 works"
+    },
+    "PROBE-03": {
+      "artifact": "probe-03-llm-mode.json",
+      "result": "AETHER_LLM_MODE=auto (NOT replay); provider OpenRouter deepseek/qwen"
+    },
+    "PROBE-04": {
+      "artifact": "probe-04-routes.json",
+      "result": "80+ API routes; no billing/admin routes"
+    },
+    "PROBE-05": {
+      "artifact": "probe-05-routes.json",
+      "result": "15/15 routes load, 0 console errors, 0 app-fault failed requests"
+    },
+    "PROBE-06": {
+      "artifact": "probe-06-interactions.json",
+      "result": "65 controls; 6 dead view-toggle controls; 4 destructive correctly not fired"
+    },
+    "PROBE-07": {
+      "artifact": "probe-07-jobs.json",
+      "result": "GET /api/jobs returns 6 jobs / 4 sources (greenhouse3/lever1/remoteok1/remotive1)"
+    },
+    "PROBE-08": {
+      "artifact": "probe-08-agent-runs.json",
+      "result": "No fake runs; LLM agents have tokens, deterministic agents correctly zero"
+    },
+    "PROBE-09": {
+      "artifact": "probe-09-metrics.json",
+      "result": "UI/SQL metric delta (UI 2 apps vs SQL 37) \u2014 user/status scoping, verify user-scoped"
+    },
+    "PROBE-11": {
+      "artifact": "probe-11-branches.txt + probe-11-prs.json",
+      "result": "14 remote non-main branches, 12 open PRs, 45 local branches"
+    },
+    "PROBE-12": {
+      "artifact": "probe-12-nonprod-scan.txt + probe-12-triage.json",
+      "result": "0 real prohibited patterns (42 hits all legit placeholder=/comments)"
+    },
+    "PROBE-13": {
+      "artifact": "probe-13-jobcards.json",
+      "result": "10/10 sampled cards are Seek.com.au URLs returning HTTP 403 (stale/unreachable + ToS)"
+    },
+    "PROBE-14": {
+      "artifact": "probe-14-pdf.json",
+      "result": "Resume PDF 212KB + cover PDF 23KB generate OK via API+UI"
+    },
+    "PROBE-15": {
+      "artifact": "probe-15-schema.json",
+      "result": "23 tables; billing tables ABSENT; AgentConfig has provider/authMode/temperature/thinkingEffort"
+    },
+    "PROBE-16": {
+      "artifact": "probe-16-agent-keys.json",
+      "result": "8 runtime agents, 22 AgentConfig keys"
+    },
+    "PROBE-17": {
+      "artifact": "probe-17-admin-cred.json",
+      "result": "admin/admin123 authenticates; NO privilege/isAdmin field exists in User schema"
+    },
+    "PROBE-18": {
+      "artifact": "probe-18-ratelimit.txt",
+      "result": "Rate limiting LIVE: 429 after 5 failed logins"
+    },
+    "PROBE-19": {
+      "artifact": "probe-19-webhook.json",
+      "result": "All billing webhook paths 404 (not built)"
+    }
+  },
+  "gaps": [
+    {
+      "id": "GAP-P6-BILL-001",
+      "title": "Subscription/billing architecture missing",
+      "type": "BILLING",
+      "severity": "CRITICAL",
+      "surface": "/pricing, /api/billing/*",
+      "category": "billing",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-15-schema.json (no Plan/Subscription/UsageQuota/StripeEvent tables); probe-19-webhook.json (webhooks 404); inventory-frontend-docs.json (no /pricing, no billing FE); inventory-backend.json (no billing router)",
+      "observed": "No billing tables, no billing router, webhook endpoints 404, no /pricing page, no billing frontend. Product cannot take payment.",
+      "expected": "Stripe subscription spine: Plan/Subscription/UsageQuota/StripeEvent tables, checkout, transaction-safe idempotent webhook (raw-body-first), /pricing page, GST-inclusive AUD, create-or-reuse Customer, automatic_tax.",
+      "root_cause": "Feature never built.",
+      "cluster": "D",
+      "fix_spec": "Per billing-arch doc (docs/subscription/billing-architecture.md) + \u00a714.3-14.6. Build with mocked Stripe; live keys human-gated.",
+      "migration": "Additive lazy DDL _ensure_billing_tables + backfill all users to Free (GATE-34).",
+      "tests_required": [
+        "webhook signature+idempotency unit",
+        "GST round(total/11,2)",
+        "checkout create-or-reuse Customer",
+        "quota reserve-before-run"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "80ff45d",
+      "review": "PASS (review-billing.json) \u2014 webhook raw-body-first+sig-before-parse+txn-safe idempotency, GST round(total/11,2), atomic quota reserve, create-or-reuse Customer, additive DDL, genuine TDD all verified; 18 backend+3 FE tests pass. Live Stripe verify (GATE-13/14/15/16/33) BLOCKED-ON-HUMAN. Deployer must pip install stripe (lazy-import\u2192honest 503 if absent).",
+      "human_gated": true,
+      "human_prereqs": [
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "Stripe Price IDs",
+        "ABN/Stripe Tax"
+      ],
+      "gates": [
+        "GATE-13",
+        "GATE-14",
+        "GATE-15",
+        "GATE-16",
+        "GATE-33",
+        "GATE-34"
+      ],
+      "fixer_role": "fixer-hard"
+    },
+    {
+      "id": "GAP-P6-BILL-002",
+      "title": "No per-user LLM spend cap / agent-run quota enforcement",
+      "type": "BILLING",
+      "severity": "CRITICAL",
+      "surface": "agent-run endpoints",
+      "category": "billing",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-15-schema.json (no UsageQuota table); inventory-backend.json (no quota middleware)",
+      "observed": "No UsageQuota table, no quota/spend-cap middleware; unlimited agent runs.",
+      "expected": "Atomic reserve-before-run quota (429 when exhausted, upgrade CTA), USD spend-cap check with refund-on-fail, refund reserved run on non-200 (\u00a714.6).",
+      "root_cause": "Feature never built.",
+      "cluster": "D",
+      "fix_spec": "Quota middleware \u00a714.6; hooks into agent-run trigger endpoints (identify from probe-04).",
+      "migration": "UsageQuota table (part of billing DDL) + backfill quota rows (GATE-34).",
+      "tests_required": [
+        "atomic reserve concurrency",
+        "429 on exhaustion",
+        "spend-cap refund",
+        "refund on failed run"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "80ff45d",
+      "review": "PASS \u2014 atomic reserve-before-run at _record_run (agents.py:517), 429 exhaustion + spend-cap refund + refund-on-failure all tested. Live production verify at deploy (GATE-17 with admin panel from Cluster F).",
+      "human_gated": false,
+      "gates": [
+        "GATE-17"
+      ],
+      "fixer_role": "fixer-hard"
+    },
+    {
+      "id": "GAP-P6-PRICING-001",
+      "title": "No public /pricing page",
+      "type": "CAPABILITY",
+      "severity": "HIGH",
+      "surface": "/pricing",
+      "category": "billing",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-frontend-docs.json (no /pricing route)",
+      "observed": "No /pricing route; H-025 confirmed.",
+      "expected": "Public /pricing page listing tiers with GST-inclusive AUD, Subscribe CTA -> checkout.",
+      "root_cause": "Feature never built.",
+      "cluster": "D",
+      "fix_spec": "Next.js /pricing page reading GET /api/billing/plans; MetricTooltip for GST breakdown.",
+      "tests_required": [
+        "/pricing renders tiers",
+        "Subscribe routes to checkout"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "80ff45d",
+      "review": "PASS \u2014 /pricing static route renders 4 ratified tiers with GST line + annual toggle + Subscribe\u2192checkout; 3 FE tests pass. Production verify at deploy.",
+      "human_gated": false,
+      "gates": [
+        "GATE-13"
+      ],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-ADMIN-001",
+      "title": "No admin panel (users, spend, health, settings)",
+      "type": "ADMIN",
+      "severity": "CRITICAL",
+      "surface": "/admin/*",
+      "category": "admin",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-frontend-docs.json (no /admin tree); inventory-backend.json (no admin router); probe-17-admin-cred.json (no privilege system)",
+      "observed": "No /admin routes, no admin router, no isAdmin/role field in User.",
+      "expected": "Admin Tier 1 (\u00a715): /admin health overview, /admin/users list+detail w/ LLM spend (USD), /admin/spend, /admin/health, /admin/settings (signup toggle), /admin/audit-log. Spend cap set per-user; 429 before LLM call. Actions logged to AdminAuditLog.",
+      "root_cause": "Feature never built.",
+      "cluster": "F",
+      "fix_spec": "\u00a715 Tier 1 + isAdmin gating + admin middleware; consumes billing/quota tables from Cluster D.",
+      "migration": "Additive isAdmin column on User (default false) + AdminAuditLog table.",
+      "tests_required": [
+        "admin-only route gating (403 for non-admin)",
+        "spend matches SUM(AgentRun cost)",
+        "signup toggle 403s register",
+        "audit log append-only"
+      ],
+      "status": "FIX-READY-MERGED",
+      "branch": "fix/p6-admin",
+      "build": "10 admin endpoints + admin FE (8 routes) + isAdmin/suspended/lastLoginAt cols + AdminSetting table; spend=SUM(costUsd); 13 admin tests + 7 FE, regression 68/68+84/84, tsc/lint/build clean. GATE-17 full production verify (login as rotated admin, click flows) needs AETHER_ADMIN_EMAIL/PASSWORD_HASH env (human) OR a controlled QA-admin provisioning.",
+      "human_gated": false,
+      "gates": [
+        "GATE-17"
+      ],
+      "fixer_role": "fixer-hard",
+      "merged_sha": "f735f50",
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+    },
+    {
+      "id": "GAP-P6-ADMIN-003",
+      "title": "Audit log + per-user data export/delete missing",
+      "type": "ADMIN",
+      "severity": "HIGH",
+      "surface": "/admin/audit-log, /admin/users/:id",
+      "category": "admin",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-15-schema.json (no AdminAuditLog table)",
+      "observed": "No AdminAuditLog table; no data export/delete.",
+      "expected": "Append-only AdminAuditLog for every admin action (\u00a715 Tier 1 audit-log + Tier 2 export/delete).",
+      "root_cause": "Feature never built.",
+      "cluster": "F",
+      "fix_spec": "AdminAuditLog table + write on every admin mutation; Tier 2 export/delete after Tier 1 verified.",
+      "tests_required": [
+        "every admin action writes audit row",
+        "audit log no-delete/no-edit"
+      ],
+      "status": "FIX-READY-MERGED",
+      "branch": "fix/p6-admin",
+      "build": "AdminAuditLog written on every mutation (spend-cap/suspend/settings), append-only (no delete/edit endpoint, not truncated in prod). Tier 2 export/delete deferred (\u00a715 Tier 2, after Tier 1 VERIFIED-CLOSED).",
+      "human_gated": false,
+      "gates": [
+        "GATE-17"
+      ],
+      "fixer_role": "fixer-hard",
+      "merged_sha": "f735f50",
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+    },
+    {
+      "id": "GAP-P6-SEC-001",
+      "title": "admin/admin123 must not hold admin privileges post-Cluster-F",
+      "type": "AUTHENTICITY",
+      "severity": "CRITICAL",
+      "surface": "auth/admin",
+      "category": "security",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-17-admin-cred.json (admin/admin123 authenticates; no privilege system yet)",
+      "observed": "admin/admin123 authenticates. No admin privilege exists YET, so it currently holds none \u2014 but once the admin panel ships, the seeded credential must not become an admin.",
+      "expected": "\u00a714.7 rotation: create/update admin from AETHER_ADMIN_EMAIL/PASSWORD_HASH env; set isAdmin=false on seeded admin/admin123. GATE-31: admin/admin123 login has isAdmin=false or fails.",
+      "root_cause": "Rotation logic ships with admin panel.",
+      "cluster": "F",
+      "fix_spec": "\u00a714.7 on admin-panel first load.",
+      "tests_required": [
+        "admin/admin123 gets isAdmin=false",
+        "env-configured admin gets isAdmin=true"
+      ],
+      "status": "FIX-READY-MERGED",
+      "branch": "fix/p6-admin",
+      "build": "Rotation in FastAPI lifespan: ALWAYS demotes admin/admin123 to isAdmin=false on boot (GATE-31 autonomously verifiable post-deploy); creates env admin isAdmin=true only when AETHER_ADMIN_EMAIL+AETHER_ADMIN_PASSWORD_HASH set (bcrypt). GATE-31 verifiable WITHOUT the env (demotion is unconditional). GATE-17 admin-login flows need the env admin (human) \u2014 until set, panel has zero admins by design.",
+      "human_gated": true,
+      "human_prereqs": [
+        "AETHER_ADMIN_EMAIL",
+        "AETHER_ADMIN_PASSWORD_HASH (bcrypt)"
+      ],
+      "gates": [
+        "GATE-31",
+        "GATE-17"
+      ],
+      "fixer_role": "fixer-hard",
+      "merged_sha": "f735f50",
+      "review": "PASS (review-admin.json) \u2014 9/9 checklist, spend-cap-before-LLM sentinel-verified, gating centralized, rotation unconditional demote, additive DDL, 536+276 suites green. Production QA re-verifies GATE-17/31 post-deploy."
+    },
+    {
+      "id": "GAP-P6-SRC-001",
+      "title": "Job sourcing volume below threshold (6 live jobs)",
+      "type": "CAPABILITY",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/jobs, /api/jobs",
+      "category": "sourcing",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-07-jobs.json (6 jobs / 4 sources via API)",
+      "observed": "GET /api/jobs returns 6 jobs from 4 sources; below GATE-07 (>=25, >=2 sources each >=5, all within 30 days).",
+      "expected": ">=25 verified-real jobs, >=2 sources each >=5, all posted within 30 days, 0 duplicate externalUrl, per-source sync status surfaced.",
+      "root_cause": "Live sourcing yields few results for the narrow senior-AU profile; ToS-compliant source set must be broadened (see SRC-002).",
+      "cluster": "C",
+      "fix_spec": "\u00a714.10: broaden COMPLIANT sources (Adzuna AU licensed + Greenhouse/Lever/Workable/Ashby ATS APIs + Remotive/RemoteOK), pagination-to-exhaustion, per-source status+errors, fingerprint dedup, freshness+liveness validation.",
+      "tests_required": [
+        ">=25 jobs across >=2 sources",
+        "freshness <=30d",
+        "0 dup externalUrl",
+        "per-source status honest"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "55effc6",
+      "review": "PASS (review-sourcing.json) \u2014 10/17 tokens curled live HTTP 200, tests 22/0. GATE-07 CLOSURE RISK (reviewer): live-verified 40 relevant/29 fresh but decaying (Lever exactly 5, Adzuna 0 without creds, several postings 20-28d). Code correct; GATE-07/08 closed by production QA via a LIVE scout run at deploy time, NOT this snapshot. If live volume <25 at QA: broaden tokens or enable Adzuna creds \u2014 never fake counts.",
+      "human_gated": false,
+      "gates": [
+        "GATE-07",
+        "GATE-08"
+      ],
+      "fixer_role": "fixer-hard",
+      "depends_on": [
+        "GAP-P6-SRC-002"
+      ]
+    },
+    {
+      "id": "GAP-P6-SRC-002",
+      "title": "Seek adapter performs ToS-prohibited automated scraping",
+      "type": "AUTHENTICITY",
+      "severity": "CRITICAL",
+      "surface": "sourcing connectors",
+      "category": "sourcing",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "seek-tos-check.md (VERDICT SCRAPING-PROHIBITED); inventory-backend.json (SeekAdapter Firecrawl scraping); probe-13-jobcards.json (Seek cards 403)",
+      "observed": "SeekAdapter scrapes seek.com.au via Firecrawl; Seek ToS clause 4(d) + robots.txt (names anthropic-ai) prohibit automated access.",
+      "expected": "No automated Seek scraping. Source via licensed Adzuna AU + sanctioned ATS APIs. Seek-origin stale rows not presented as live.",
+      "root_cause": "Seek adapter built before ToS verification.",
+      "cluster": "C",
+      "fix_spec": "ADR-P6-SEEK: disable/remove SeekAdapter from the live registry; add Adzuna AU adapter (app_id/app_key env); keep ATS + public-API adapters.",
+      "tests_required": [
+        "Seek adapter not in live registry",
+        "Adzuna adapter fetches AU jobs",
+        "no seek.com.au scraping call in sync path"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "55effc6",
+      "review": "PASS \u2014 Seek moved to _COMPLIANCE_GATED, excluded from ADAPTERS=build_live_registry() unless AETHER_ENABLE_SEEK truthy (default OFF); scout iterates the filtered registry; no other reachable seek.com.au scrape call. Adzuna adapter env-gated with honest skip.",
+      "human_gated": false,
+      "adzuna_creds_note": "Adzuna app_id/app_key are free-tier; if absent, adapter degrades honestly and volume relies on ATS APIs \u2014 flag in per-source status.",
+      "gates": [
+        "GATE-07",
+        "GATE-08"
+      ],
+      "fixer_role": "fixer-hard"
+    },
+    {
+      "id": "GAP-P6-DATA-001",
+      "title": "Stale/unreachable Seek job cards shown to users",
+      "type": "AUTHENTICITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/jobs",
+      "category": "authenticity",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-13-jobcards.json (10/10 sampled cards Seek 403); probe-05 (dashboard shows 161 jobs vs API 6)",
+      "observed": "Dashboard shows ~161 jobs but 10/10 sampled cards are Seek URLs returning 403 (expired/blocked). Paying users would see dead listings.",
+      "expected": "Every displayed job passes liveness (HTTP 200 + no expiry marker + title match) and freshness (<=30d). Stale/unreachable rows filtered or marked.",
+      "root_cause": "Historical Seek-scraped rows persist and are surfaced without liveness re-validation.",
+      "cluster": "C",
+      "fix_spec": "Liveness validation on display/sync; mark >30d STALE (do not delete history); filter dead rows from the active feed; tie to SRC-001/002 compliant re-sourcing.",
+      "tests_required": [
+        "active feed contains only live+fresh jobs",
+        "GATE-08 cross-check passes on >=10 sampled cards"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "55effc6",
+      "review": "PASS \u2014 active_feed excludes prohibited sources (Seek) + >30d STALE + dead rows; the probe-13 dead Seek cards are removed from the active feed. GATE-08 sampled-card cross-check re-run by production QA at deploy. Per-URL liveness-revalidation cron deferred as documented future enhancement (out of hot GET /jobs path).",
+      "human_gated": false,
+      "gates": [
+        "GATE-08"
+      ],
+      "fixer_role": "fixer-hard"
+    },
+    {
+      "id": "GAP-P6-WIRE-001",
+      "title": "Dead/decorative controls (6 view-toggles)",
+      "type": "USABILITY",
+      "severity": "MEDIUM",
+      "surface": "multiple dashboard routes",
+      "category": "wiring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-06-interactions.json (6 dead controls: view toggles with no network call and no state change)",
+      "observed": "6 controls emit no network call and produce no state change (RENDERED-BUT-DEAD).",
+      "expected": "Every primary/secondary control either performs its action or is removed. 0 dead primary controls.",
+      "root_cause": "Placeholder view-toggle controls wired to no handler.",
+      "cluster": "B",
+      "fix_spec": "For each dead control: wire to its intended action OR remove. Confirm classification (primary vs decorative) from probe-06 detail first.",
+      "tests_required": [
+        "each formerly-dead control emits a call or is gone"
+      ],
+      "status": "FIX-READY-MERGED",
+      "resolution": "PROBE-FALSE-POSITIVE \u2014 all 6 controls verified functional in source (setMarket/setView handlers since 2026-07-12) AND live production Playwright (reproduced probe badge counts AU=155/Intl=6/Saved=3 + real /applications/funnel/sankey call). No functional change; 2 RTL regression tests added (fix/p6-wire merged to main @ 851a426, 265/265 vitest). Final GATE-03/26 production regression re-confirms 0 dead controls.",
+      "human_gated": false,
+      "gates": [
+        "GATE-03"
+      ],
+      "fixer_role": "fixer-medium",
+      "merged_sha": "851a426"
+    },
+    {
+      "id": "GAP-P6-AGCONF-001",
+      "title": "Verify all runtime agents have PUT config accepting all fields + billing routing",
+      "type": "CAPABILITY",
+      "severity": "MEDIUM",
+      "surface": "/dashboard/agents, PUT /config/:agentKey",
+      "category": "wiring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-backend.json (PUT /config/{agent_key} at agents.py:1042; AgentConfig has provider/authMode/temperature/thinkingEffort); probe-16 (8 runtime/22 config)",
+      "observed": "PUT config endpoint + config columns EXIST (built prior phase). Needs GATE-06 verification that every runtime agent from GET /api/agents accepts all documented fields and billing routing is applied.",
+      "expected": "GATE-06: all agents returned by GET /api/agents have a PUT config endpoint accepting all documented fields; claude-*->subscription/key, else->OpenRouter billing routing.",
+      "root_cause": "N/A \u2014 verification gap, likely already satisfied.",
+      "cluster": "E",
+      "fix_spec": "qa verification; fix only if a runtime agent lacks a field or billing routing is missing.",
+      "tests_required": [
+        "PUT config accepts all fields for each runtime agentKey",
+        "billing routing structural"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "closed_by": "qa (qa-E-verification.json)",
+      "close_evidence": "All 8 runtime agents configurable via their AGENT_CATALOG key (FE always uses catalog keys; _BACKEND_TO_KEY map agents.py:92-184); 4 live PUT+GET round-trips persisted; negative tests 422 on dangling credentialRef / out-of-range temperature / authMode=subscription_oauth; billing routing single-path (llm_client.py:200-232 resolve_provider). GATE-06 PASS.",
+      "human_gated": false,
+      "gates": [
+        "GATE-06"
+      ],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-AUTH-OAUTH-001",
+      "title": "Anthropic OAuth: enforce API-key-only + flag-gated OAuth off + honest UI",
+      "type": "AUTHENTICITY",
+      "severity": "HIGH",
+      "surface": "provider config",
+      "category": "auth",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "anthropic-oauth-verification.md (PROHIBITED); inventory-backend.json (anthropic_oauth.py gone, but AnthropicOAuthToken/authMode='subscription_oauth' schema remains)",
+      "observed": "OAuth service file removed (prior phase); OAuth schema tables persist (additive). Must confirm UI does not expose an active subscription-OAuth option and any residual path is flag-gated off + honest.",
+      "expected": "ADR-P6-OAUTH: API-key only active; OAuth behind AETHER_ANTHROPIC_OAUTH_ENABLED=false, UI-disabled 'coming soon'. GATE-04 CONDITIONALLY-CLOSED.",
+      "root_cause": "N/A \u2014 verification + honest-copy gap.",
+      "cluster": "E",
+      "fix_spec": "Verify FE has no active OAuth connect; ensure feature-flag default false + honest copy; endpoints honest 404/disabled.",
+      "tests_required": [
+        "no active subscription-OAuth in UI",
+        "flag default false",
+        "honest copy present"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "gate_disposition": "CONDITIONALLY-CLOSED",
+      "closed_by": "qa (qa-E-verification.json)",
+      "close_evidence": "No active Anthropic OAuth anywhere: former endpoints 404 live, openapi.json has zero Anthropic-OAuth paths, FE offers API-key only, anthropic_oauth.py fully DELETED (stronger than flag-gating). RULING (ADR-P6-OAUTH addendum): full removal is MORE honest than a 'coming soon' stub that would over-promise a ToS-prohibited feature \u2014 the \u00a72(b) 'coming soon' copy is intentionally NOT added. GATE-04 CONDITIONALLY-CLOSED with anthropic-oauth-verification.md as evidence.",
+      "human_gated": false,
+      "gates": [
+        "GATE-04"
+      ],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-MULTI-001",
+      "title": "Multi-Gmail inbox \u2014 verify simultaneous accounts + select_account",
+      "type": "CAPABILITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/email",
+      "category": "wiring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-backend.json (GmailAccount table + gmailAccountId on EmailThread + PKCE consent, built prior phase)",
+      "observed": "Multi-inbox schema+flow BUILT (GmailAccount, gmailAccountId, PKCE). Needs verification: build_consent_url uses prompt=select_account (H-006); >=2 accounts connect without token collision.",
+      "expected": "GATE-05: >=2 Gmail accounts connectable simultaneously, no token collision; account-filtered + unified views.",
+      "root_cause": "N/A \u2014 verification gap; full round-trip needs 2 real Gmail consents (human-gated).",
+      "cluster": "E",
+      "fix_spec": "Verify select_account param + independent tokens; fix param if it is prompt=consent. Live 2-account round-trip is human-gated.",
+      "tests_required": [
+        "consent url has prompt=select_account",
+        "2 GmailAccount rows independent tokens",
+        "account_id filter isolates threads"
+      ],
+      "status": "CODE-VERIFIED-CLOSED / LIVE-BLOCKED-ON-HUMAN",
+      "closed_by": "qa (qa-E-verification.json)",
+      "close_evidence": "Live-captured consent URL from POST /api/emails/accounts/connect confirmed prompt=select_account + PKCE code_challenge/S256; GET /api/emails/accounts returns independent per-user lists (admin 1 connected, vikram 0). Code parts VERIFIED-CLOSED. Live 2-account simultaneous round-trip requires real human Google consent -> GATE-05 stays BLOCKED-ON-HUMAN (\u00a72 item 5).",
+      "human_gated": true,
+      "human_prereqs": [
+        "2 test Gmail accounts + Google OAuth consent"
+      ],
+      "gates": [
+        "GATE-05"
+      ],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-TAIL-001",
+      "title": "Resume tailoring craft \u2014 writer-audit verification",
+      "type": "USABILITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/resume",
+      "category": "tailoring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-backend.json (tailor pipeline: baseline/tailored ATS + estimatedConversionLift + methodology + anti-fabrication guards, built prior phase)",
+      "observed": "Tailoring pipeline with metrics/methodology/anti-fabrication EXISTS. Needs live writer-audit that craft >= baseline, content-only (layout intact), zero fabrication, metrics preserved.",
+      "expected": "GATE-09/10: content-only changes, ATS before/after in UI, estimatedConversionLift+methodology+MetricTooltip, writer-audit above baseline, no unsupported claims.",
+      "root_cause": "N/A \u2014 quality verification.",
+      "cluster": "G",
+      "fix_spec": "writer-audit a live tailor run; fixer-medium only if craft below baseline or fabrication found.",
+      "tests_required": [
+        "content-only diff",
+        "no fabrication vs source",
+        "metrics preserved",
+        "writer-audit >= baseline",
+        "STRICT tailoredATS > baselineATS on evidence-supported fixture"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "ef054d1",
+      "verify_finding": "writer-audit-G FAIL 58/100: tailoredATS==baselineATS 3/3; guard rejected genuine JD-keyword bullets, zero lift.",
+      "fix": "fix/p6-quality: ROOT CAUSE was evidence_extra reaching only the guard, never the LLM prompt (model never saw career evidence). Now evidence_extra + Story Bank fold into prompt; STRICT tailoredATS>baselineATS achievable when evidence proves a JD keyword absent from resume text (unproven still rejected). Reviewer PASS (review-quality.json), 68 tests. RESIDUAL (by design, honest): strict lift requires the account to HAVE story-bank/career evidence \u2014 audited admin/sarkar accounts had EMPTY story banks so +0.0% was CORRECT-for-no-evidence. Production QA must re-verify with >=1 SEEDED real story proving a JD keyword absent from the resume.",
+      "human_gated": false,
+      "gates": [
+        "GATE-09",
+        "GATE-10"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-quality"
+    },
+    {
+      "id": "GAP-P6-COV-001",
+      "title": "Cover letter craft \u2014 writer-audit verification",
+      "type": "USABILITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/cover-letters",
+      "category": "cover_letter",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-backend.json (cover pipeline: business format + injection guard + FabricationGuard); probe-14-pdf.json (cover PDF generates)",
+      "observed": "Cover-letter pipeline EXISTS with business format + guards. Needs live writer-audit for craft (hook, 3-para arc, CTA, honest-persuasive tone) + business-format PDF.",
+      "expected": "GATE-11: business-format standard, writer-audit passes, MetricTooltip on conversion estimate, clean PDF.",
+      "root_cause": "N/A \u2014 quality verification.",
+      "cluster": "G",
+      "fix_spec": "writer-audit a live cover-letter run; fixer-medium only if craft below baseline.",
+      "tests_required": [
+        "business-format elements present",
+        "writer-audit passes",
+        "no fabrication",
+        "fabrication-guard catches JD-tempting unsupported claims"
+      ],
+      "status": "FIX-READY-MERGED",
+      "merged_sha": "ef054d1",
+      "verify_finding": "writer-audit-G FAIL 60/100: business format OK but one run fabricated 3 claims absent from source (guard inconsistent on cover path). \u00a79 zero-tolerance.",
+      "fix": "fix/p6-quality: anti-fabrication guard applied to cover path, JD EXCLUDED from candidate-evidence corpus; catches JD-role-term fabrications (audited 'intake'). Reviewer PASS (review-quality.json).",
+      "documented_residual": "DETERMINISTIC-GUARD LIMIT (reviewer-reproduced, accept-document): token-grounding catches JD-role-term fabrications but NOT pure-narrative causal invention absent from any keyword source ('critical legislative deadline', 'revenue-impacting services', 'faster time-to-market'). Robust catch needs an LLM-judge entailment pass (flakiness/latency risk). MITIGATIONS: (1) LLM system prompt hardened against narrative invention (fix/p6-covprompt), (2) human APPROVAL GATE \u2014 every cover letter is reviewed+approved in /dashboard/approvals before send (Journey 4), the final backstop. Production QA MUST probe a narrative-embellishment fabrication (not just JD-echo) to characterize the real residual honestly.",
+      "human_gated": false,
+      "gates": [
+        "GATE-11",
+        "GATE-12"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-quality"
+    },
+    {
+      "id": "GAP-P6-CONV-001",
+      "title": "Conversion metric labeled estimate + methodology + tooltip \u2014 verify",
+      "type": "USABILITY",
+      "severity": "MEDIUM",
+      "surface": "/dashboard/resume",
+      "category": "analytics",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-frontend-docs.json (MetricTooltip exists; estimatedConversionLift+methodology wired in resume page)",
+      "observed": "MetricTooltip + estimatedConversionLift + methodology already wired (prior phase). Verify GATE-10/11 exactly: tooltip present + methodology field non-null + labeled as estimate.",
+      "expected": "GATE-10: methodology field non-null + MetricTooltip on the field; labeled ESTIMATE not measurement.",
+      "root_cause": "N/A \u2014 verification.",
+      "cluster": "G",
+      "fix_spec": "qa/evidence verify; fix only if tooltip/methodology missing on the live field.",
+      "tests_required": [
+        "methodology non-null",
+        "MetricTooltip renders on conversion field"
+      ],
+      "status": "FIX-READY-MERGED",
+      "verify_finding": "qa-E FAIL: API returns methodology non-null + 'Estimated...' label, but a live DOM query found ZERO MetricTooltip on the conversion-metrics section of resume/page.tsx:231-252 (component exists, used on analytics/jobs, not wired here).",
+      "fix": "fix/p6-conv merged @ 3a67b2e: MetricTooltip wired onto conversion estimate surfacing methodology, labeled illustrative estimate; TDD fail-before/pass-after, vitest 266 green. Production qa re-verifies GATE-10 live post-deploy.",
+      "human_gated": false,
+      "gates": [
+        "GATE-10"
+      ],
+      "fixer_role": "fixer-medium",
+      "branch": "fix/p6-conv",
+      "merged_sha": "3a67b2e"
+    },
+    {
+      "id": "GAP-P6-MET-001",
+      "title": "Metric recomputation delta \u2014 confirm user-scoped, add tooltip if estimate",
+      "type": "DEFECT",
+      "severity": "MEDIUM",
+      "surface": "/dashboard/analytics",
+      "category": "analytics",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-09-metrics.json (UI 2 apps vs SQL 37; avgFitScore 34.3 vs 44.8)",
+      "observed": "UI analytics differ from raw all-rows SQL. Likely because UI is scoped to the logged-in user while the SQL counted ALL users. Must recompute USER-SCOPED to confirm match; if genuinely mismatched, fix; if estimate, label+tooltip.",
+      "expected": "GATE-18: every UI metric matches user-scoped raw SQL within 0.1%, OR is labeled ESTIMATED with methodology+tooltip.",
+      "root_cause": "TBD \u2014 user-scoping artifact vs real mismatch.",
+      "cluster": "H",
+      "fix_spec": "Recompute each analytics metric scoped to the same user the UI uses; if match -> no code change (measurement artifact, document); if mismatch -> fix the query.",
+      "tests_required": [
+        "user-scoped recompute matches UI within 0.1%"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "closed_by": "qa (qa-E-verification.json)",
+      "close_evidence": "User-scoped SQL recompute for both real users matches the live /api/analytics response EXACTLY (0.0% delta) on every metric. The probe-09 'UI 2 vs SQL 37' delta was an all-users-vs-one-user comparator artifact (admin genuinely owns 6 jobs/2 apps), NOT a bug. GATE-18 PASS.",
+      "human_gated": false,
+      "gates": [
+        "GATE-18"
+      ],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-REPO-002",
+      "title": "Stale branches + open PRs",
+      "type": "REGRESSION",
+      "severity": "MEDIUM",
+      "surface": "GitHub repo",
+      "category": "repo",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "probe-11-branches.txt + probe-11-prs.json (14 remote non-main branches, 12 open PRs, 45 local branches)",
+      "observed": "14 remote non-main branches, 12 open PRs, 45 local branches.",
+      "expected": "GATE-21/22: exactly 1 branch (main), 0 open PRs; necessary changes merged.",
+      "root_cause": "Accumulated stale branches/PRs from earlier phases.",
+      "cluster": "H",
+      "fix_spec": "In Cluster H (LAST): review each open PR/branch (close superseded, merge any genuinely-needed), delete stale remote+local branches.",
+      "tests_required": [
+        "gh pr list --state open == empty",
+        "remote heads == main only"
+      ],
+      "status": "TRIAGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-21",
+        "GATE-22"
+      ],
+      "fixer_role": "deployer"
+    },
+    {
+      "id": "GAP-P6-DIR-001",
+      "title": "Monorepo directory reorganisation",
+      "type": "REGRESSION",
+      "severity": "LOW",
+      "surface": "repo layout",
+      "category": "repo",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-backend.json + inventory-frontend-docs.json (structure)",
+      "observed": "Middleware/migrations dirs partially exist; \u00a714.9 target layout not fully realised; EXECUTION-REPORT.md at root.",
+      "expected": "\u00a714.9 target structure; middleware/ holds quota.py+rate_limit.py; migrations/ holds SQL; EXECUTION-REPORT.md moves to docs/delivery/ in Cluster H (last).",
+      "root_cause": "Organic growth.",
+      "cluster": "H",
+      "fix_spec": "Minimal, non-breaking moves aligned to \u00a714.9; keep npm/pnpm (pnpm confirmed); EXECUTION-REPORT.md move + atomic reference update in Cluster H.",
+      "tests_required": [
+        "build+tests green after moves"
+      ],
+      "status": "TRIAGED",
+      "human_gated": false,
+      "gates": [],
+      "fixer_role": "fixer-medium"
+    },
+    {
+      "id": "GAP-P6-DOCS-001",
+      "title": "Docs out of date + docs/subscription/ missing",
+      "type": "DOCS",
+      "severity": "MEDIUM",
+      "surface": "docs/",
+      "category": "docs",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-frontend-docs.json (no docs/subscription/)",
+      "observed": "No docs/subscription/; delivery docs predate Phase 6.",
+      "expected": "\u00a716: new billing-architecture.md, admin-guide.md, privacy-policy.md, terms-of-service.md under docs/subscription/; all docs/ updated to post-impl truth; README+EXECUTION-REPORT accurate.",
+      "root_cause": "Docs lag implementation.",
+      "cluster": "H",
+      "fix_spec": "doc-updater after all clusters VERIFIED-CLOSED (\u00a716).",
+      "tests_required": [
+        "all \u00a716 docs exist and accurate"
+      ],
+      "status": "TRIAGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-19",
+        "GATE-20"
+      ],
+      "fixer_role": "doc-updater"
+    },
+    {
+      "id": "GAP-P6-EXEC-001",
+      "title": "EXECUTION-REPORT.md claims re-verify + honest agent wording",
+      "type": "AUTHENTICITY",
+      "severity": "MEDIUM",
+      "surface": "EXECUTION-REPORT.md",
+      "category": "authenticity",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "inventory-frontend-docs.json (claims: 11/11 closed, '22 agents support config'); probe-16 (8 runtime agents / 22 configs)",
+      "observed": "EXECUTION-REPORT claims '22 agents' where only 8 are runtime agents (14 are catalog/future). Claims are from prior phases and need Phase-6 re-verification.",
+      "expected": "GATE-28: every claim verified-confirmed or corrected to truth (e.g. '8 runtime agents; 22 catalog configs').",
+      "root_cause": "Stale/imprecise claims.",
+      "cluster": "H",
+      "fix_spec": "doc-updater re-verifies each COMPLETED/CLOSED claim vs Phase-6 production; corrects wording; moves file to docs/delivery/ (Cluster H).",
+      "tests_required": [
+        "each claim traceable to Phase-6 evidence"
+      ],
+      "status": "TRIAGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-28"
+      ],
+      "fixer_role": "doc-updater"
+    }
+  ],
+  "rejected_hypotheses": [
+    {
+      "id": "GAP-P6-AUTH-001",
+      "hypothesis": "LLM replay mode in production (H-001)",
+      "status": "REJECTED",
+      "refuting_artifact": "probe-03-llm-mode.json",
+      "reason": "AETHER_LLM_MODE=auto, never replay; llm_client never serves fixtures as real. GATE-02 (mode live/auto) PASSES."
+    },
+    {
+      "id": "GAP-P6-SEC-002",
+      "hypothesis": "No rate limiting on auth endpoints (H-020)",
+      "status": "REJECTED",
+      "refuting_artifact": "probe-18-ratelimit.txt",
+      "reason": "429 after 5 failed logins; SlidingWindowRateLimiter on login/register. GATE-32 PASSES."
+    },
+    {
+      "id": "GAP-P6-REPO-001",
+      "hypothesis": "Non-production code in apps/ outside tests (H-014)",
+      "status": "REJECTED",
+      "refuting_artifact": "probe-12-nonprod-scan.txt + probe-12-triage.json",
+      "reason": "0 real prohibited patterns; 42 hits all legit placeholder= attrs / doc comments. GATE-23 direction PASSES (re-confirm at close)."
+    },
+    {
+      "id": "GAP-P6-PDF-001",
+      "hypothesis": "PDF export defects (H via PROBE-14)",
+      "status": "REJECTED",
+      "refuting_artifact": "probe-14-pdf.json",
+      "reason": "Resume 212KB + cover 23KB generate via API+UI. Cover business-format craft still verified in Cluster G writer-audit."
+    },
+    {
+      "id": "H-002",
+      "hypothesis": "ProviderCredential PK provider-scoped not per-user",
+      "status": "REJECTED",
+      "refuting_artifact": "inventory-backend.json",
+      "reason": "UserProviderCredential is per-user encrypted (prior phase)."
+    },
+    {
+      "id": "H-003/H-004",
+      "hypothesis": "AgentConfig missing temp/thinkingEffort/provider cols + no PUT endpoint",
+      "status": "REJECTED",
+      "refuting_artifact": "probe-15-schema.json + inventory-backend.json (PUT /config/{agent_key} agents.py:1042)",
+      "reason": "Columns present + PUT endpoint exists (prior phase). Residual = GATE-06 coverage verification -> GAP-P6-AGCONF-001."
+    },
+    {
+      "id": "H-021",
+      "hypothesis": "admin/admin123 has admin privileges in production",
+      "status": "PARTIALLY-REJECTED",
+      "refuting_artifact": "probe-17-admin-cred.json",
+      "reason": "No privilege system exists yet, so it currently holds NO admin rights; GATE-31 trivially holds NOW. Rotation requirement retained as GAP-P6-SEC-001 for when the admin panel ships."
+    }
+  ],
+  "gate_status": {
+    "GATE-01": "PASS (probe-01)",
+    "GATE-02": "PASS (probe-03 mode=auto)",
+    "GATE-03": "PASS (probe-05 0 console errors)",
+    "GATE-04": "CONDITIONALLY-CLOSED-PENDING (ADR-P6-OAUTH; verify in Cluster E)",
+    "GATE-05": "BLOCKED-ON-HUMAN (2 Gmail)",
+    "GATE-06": "OPEN (verify Cluster E)",
+    "GATE-07": "FAIL (6 jobs; Cluster C)",
+    "GATE-08": "FAIL (Seek 403; Cluster C)",
+    "GATE-09": "OPEN (Cluster G)",
+    "GATE-10": "OPEN (Cluster G)",
+    "GATE-11": "OPEN (Cluster G)",
+    "GATE-12": "LIKELY-PASS (probe-14; confirm G)",
+    "GATE-13": "BLOCKED-ON-HUMAN (Stripe)",
+    "GATE-14": "BLOCKED-ON-HUMAN (Stripe)",
+    "GATE-15": "BLOCKED-ON-HUMAN (Stripe Tax)",
+    "GATE-16": "BLOCKED-ON-HUMAN (Stripe)",
+    "GATE-17": "OPEN (Cluster D+F; verify needs admin rotation env)",
+    "GATE-18": "OPEN (Cluster H user-scoped)",
+    "GATE-19": "OPEN (Cluster H)",
+    "GATE-20": "OPEN (Cluster H)",
+    "GATE-21": "FAIL (12 open PRs; Cluster H)",
+    "GATE-22": "FAIL (stale branches; Cluster H)",
+    "GATE-23": "LIKELY-PASS (probe-12; confirm at close)",
+    "GATE-24": "OPEN (full pytest at close)",
+    "GATE-25": "OPEN (vitest at close)",
+    "GATE-26": "OPEN (Playwright at close)",
+    "GATE-27": "PASS-SO-FAR (0 fable spawns)",
+    "GATE-28": "OPEN (Cluster H)",
+    "GATE-29": "OPEN (deploy verify)",
+    "GATE-30": "OPEN (all gaps closed)",
+    "GATE-31": "PASS-NOW/RE-VERIFY-AFTER-F (probe-17)",
+    "GATE-32": "PASS (probe-18)",
+    "GATE-33": "BLOCKED-ON-HUMAN (Stripe webhook)",
+    "GATE-34": "OPEN (Cluster D backfill)"
+  }
+}

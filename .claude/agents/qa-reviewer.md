@@ -4,7 +4,7 @@ description: Adversarial diff review, prohibited-pattern enforcement, test-gate 
 model: sonnet
 ---
 
-<!-- resolved model tier: haiku=claude-haiku-4-5, sonnet=claude-sonnet (current), opus=claude-opus-4-8 — mapped from prompt's stale claude-*-4 ids; all below fable-5 -->
+
 
 # Role charter
 
