@@ -123,6 +123,31 @@ def get_budget_seconds() -> float:
         return 180.0
 
 
+def get_primary_budget_fraction() -> float:
+    """Fraction of the live budget the PRIMARY model attempt may consume before
+    it is abandoned so the faster FALLBACK model still gets a turn within the
+    same overall budget (GAP-P6-TAIL-003).
+
+    Production runs a heavy reasoning primary (deepseek-v4-pro, measured
+    ~110-120s for a large tailoring prompt) under an ~85s budget. Without a cap
+    the primary's single attempt consumes the ENTIRE budget and the faster
+    fallback (deepseek-v4-flash, ~37-58s) never runs, so the request 503s even
+    though the fallback would have completed within the budget (live QA:
+    3/5 attempts 503'd). Capping the primary to ~55% of the remaining budget
+    reserves the rest for the fallback while the total still respects the overall
+    budget/edge (~100s). Env-overridable (``AETHER_LLM_PRIMARY_BUDGET_FRACTION``);
+    a missing/malformed/out-of-band value falls back to the 0.55 default so a bad
+    config can never starve either attempt.
+    """
+    try:
+        frac = float(os.environ.get("AETHER_LLM_PRIMARY_BUDGET_FRACTION", "0.55"))
+    except ValueError:
+        return 0.55
+    if not 0.1 <= frac <= 0.9:
+        return 0.55
+    return frac
+
+
 class LLMFixtureMissingError(RuntimeError):
     """Raised in replay mode when no fixture exists for a prompt."""
 
@@ -745,9 +770,11 @@ class LLMClient:
         ``replay`` mode only. Recording on live SUCCESS below is harmless.
         """
         primary = model or get_model("REASONING")
+        chain = self._model_chain(primary)
+        has_fallback = len(chain) > 1
         last_error: Exception | None = None
         budget_exhausted = False
-        for attempt_model in self._model_chain(primary):
+        for idx, attempt_model in enumerate(chain):
             remaining = self._remaining_budget()
             if remaining < _MIN_ATTEMPT_SECONDS:
                 logger.warning(
@@ -757,10 +784,20 @@ class LLMClient:
                 )
                 budget_exhausted = True
                 break
+            attempt_seconds = remaining
+            if idx == 0 and has_fallback:
+                # GAP-P6-TAIL-003: cap the PRIMARY attempt so a slow reasoning
+                # model can't eat the whole budget and starve the faster
+                # fallback. remaining at the first attempt is the full (possibly
+                # shared) budget, so this is a fraction of the total; the
+                # fallback (last attempt) keeps the entire remaining budget.
+                attempt_seconds = max(
+                    _MIN_ATTEMPT_SECONDS, remaining * get_primary_budget_fraction()
+                )
             try:
                 content = self._call_live(
                     system, user, model=attempt_model, temperature=temperature,
-                    max_seconds=remaining,
+                    max_seconds=attempt_seconds,
                 )
             except QuotaExhaustedError:
                 # Subscription quota is exhausted — NEVER fall back to a fixture
