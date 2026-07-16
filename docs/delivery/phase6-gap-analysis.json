@@ -915,14 +915,16 @@
         "fabrication still reverted",
         "AUTH-002/TAIL-003/TAIL-004 no regression"
       ],
-      "status": "IN-PROGRESS",
+      "status": "FIX-READY-MERGED",
       "human_gated": false,
       "gates": [
         "GATE-09"
       ],
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-tail5",
-      "hard_stop": "LAST tailoring iteration \u2014 if lift still not delivered, close GATE-09/10 on literal requirements (content-only+zero-fab+honest-metrics, all met) + document lift/reliability residual (async-generation backlog)."
+      "hard_stop": "LAST tailoring iteration \u2014 if lift still not delivered, close GATE-09/10 on literal requirements (content-only+zero-fab+honest-metrics, all met) + document lift/reliability residual (async-generation backlog).",
+      "merged_sha": "325c0fc",
+      "review": "PASS (review-tail5.json): batch-cap content-only (allowed_refs, non-selected byte-identical), lift survives small batch, fabrication still reverted (fail-closed), entailment scaling used at call site, no-arg preserves TAIL-004; 152/152 no-regression. must_fix (deploy conditions): set ALL entailment env vars same deploy + fresh live QA before GATE-09 closes. Deploy env: budget=65, fraction=0.4, entailment base=6/per=2.5/max=25, MAX_BULLETS=8 (90s worst-case, ~10s edge margin)."
     }
   ],
   "rejected_hypotheses": [
