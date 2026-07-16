@@ -1,8 +1,13 @@
 # Aether Billing & Subscription Architecture
 
-**Status:** DESIGN — requires fable-5 approval before any Cluster D/F implementation.
+**Status:** ✅ **AS-BUILT** — this design was approved (`BILLING-ARCH-APPROVAL.md`, ratified per `ADR-P6-PRICING`)
+and **implemented, tested (mocked Stripe), and deployed to production in Phase 6**. The live payment
+round-trip is **pending operator Stripe keys** (see `docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`); all code,
+schema, quota/spend-cap enforcement, and `/pricing` are live. This document is the architecture reference
+for what shipped — the `§0.1` "green-field / tables ABSENT" schema facts below describe the *pre-build*
+state observed at design time (probe-15) and are annotated inline where the built system now differs.
 **Author:** `billing-arch` sub-agent (Phase 6 Aether run).
-**Date:** 2026-07-16.
+**Date:** 2026-07-16 (design); implemented + deployed same run.
 **Repo:** `/home/ubuntu/github_repos/aether-job-career-agent`.
 **Production:** https://5cb5f0620.abacusai.cloud (health `0.2.0`).
 
@@ -32,8 +37,8 @@ All non-trivial claims carry a tag. No inference is presented as observation.
 
 - **`User` primary key: column `id`, type `text`, NOT NULL, no default** (cuid-shaped, minted by app `new_id()`). All billing `userId` columns are therefore **`text`** — *not* uuid, *not* integer.
 - **`AgentRun` spend column: `costUsd numeric` (nullable)** — this is the authoritative per-run USD cost already populated on completion. It is the spend-tracking source of truth. `AgentRun` also has `userId text`, `agentName text`, `status "AgentRunStatus"`, `createdAt timestamp`, `billingAuditJson jsonb`.
-- **Billing tables ABSENT:** `Plan`, `Subscription`, `UsageQuota`, `StripeEvent`, `AdminAuditLog` all report `false` in `billing_tables_present`. Green-field additive build.
-- **No privilege/role column on `User`** (`probe-17`: `isAdmin`/`role` absent; H-021 admin-authz deferred). `AdminAuditLog` ships now; admin *authorization* is a Cluster F prerequisite (see §8).
+- **Billing tables ABSENT (at design time):** `Plan`, `Subscription`, `UsageQuota`, `StripeEvent`, `AdminAuditLog` reported `false` in probe-15. Green-field additive build. **[AS-BUILT: all five tables now EXIST in production** — created via additive lazy DDL `_ensure_billing_tables()` (advisory lock 7420240719) + backfill; deploy-verify.json confirms them live.**]**
+- **No privilege/role column on `User` (at design time)** (`probe-17`: `isAdmin`/`role` absent). **[AS-BUILT: Cluster F shipped** — additive `isAdmin` (default false), `suspended`, `lastLoginAt` columns on `User` + the `AdminSetting` table + credential rotation now exist in production (`admin/admin123` demoted to `isAdmin=false`); admin panel Tier 1 is live, formal closure pending the operator's own admin credential.**]**
 - **DB access is raw psycopg2** via `app.db.get_connection()` (short-lived connections, 25-conn cap), `new_id()`, `rows_to_dicts()`. No ORM at the API layer; Prisma owns the base schema only.
 
 ---
