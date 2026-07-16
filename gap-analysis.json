@@ -4,7 +4,7 @@
     "orchestrator": "claude-fable-5",
     "prompt": "/home/ubuntu/aether-prud-trmediation-prompt.md",
     "head_at_start": "8a9c2e3",
-    "status_lifecycle": "OPEN → IN-PROGRESS → FIX-DEPLOYED → VERIFIED-CLOSED",
+    "status_lifecycle": "OPEN \u2192 IN-PROGRESS \u2192 FIX-DEPLOYED \u2192 VERIFIED-CLOSED",
     "rules": [
       "Only qa-reviewer may set VERIFIED-CLOSED",
       "Only fable-5 (orchestrator) may set IN-PROGRESS"
@@ -19,13 +19,13 @@
       "id": "ADR-TR-1",
       "title": "Schema via lazy idempotent DDL, not a migrations runner",
       "decision": "The repo has NO migrations runner/dir; production schema is created by lazy _ensure_*_tables() functions using CREATE TABLE/ALTER TABLE IF NOT EXISTS under pg_advisory_xact_lock (google_credential.py is the template). Fixers implement all new DDL via this ACTUAL mechanism (the only one that executes in prod). The prompt-specified files apps/api/migrations/0020_per_user_agent_creds.sql and 0021_multi_gmail_inbox.sql are ALSO written verbatim as documentation/record artifacts, but the executable path is lazy DDL.",
-      "rationale": "Faithful-to-running-system beats faithful-to-prompt-path; a .sql file in a non-existent migrations pipeline would be dead code that never runs (violates §9)."
+      "rationale": "Faithful-to-running-system beats faithful-to-prompt-path; a .sql file in a non-existent migrations pipeline would be dead code that never runs (violates \u00a79)."
     },
     {
       "id": "ADR-TR-2",
       "title": "Automated Anthropic OAuth consent flow is env-gated; honest paste-token path is the default",
-      "decision": "§4.1's automated Anthropic OAuth consent flow (GET /agents/auth/anthropic/start + /callback, PKCE, token exchange at api.anthropic.com/oauth/token) is IMPLEMENTED but GATED on an ANTHROPIC_OAUTH_CLIENT_ID env var. No public Anthropic third-party OAuth client is provisioned for this app, so when the env var is unset the UI keeps the already-live honest subscription path: user pastes their sk-ant-oat… subscription token (stored encrypted, sent as Authorization: Bearer + anthropic-beta: oauth-2025-04-20). The 'Connect with Anthropic' button appears only when the client_id is configured.",
-      "rationale": "§9 + §0.4 forbid fabricated credentials/simulated flows. A hardcoded or fake OAuth client_id would be exactly that. Gating on a real env var is honest degradation and keeps subscription billing working today via the paste-token path."
+      "decision": "\u00a74.1's automated Anthropic OAuth consent flow (GET /agents/auth/anthropic/start + /callback, PKCE, token exchange at api.anthropic.com/oauth/token) is IMPLEMENTED but GATED on an ANTHROPIC_OAUTH_CLIENT_ID env var. No public Anthropic third-party OAuth client is provisioned for this app, so when the env var is unset the UI keeps the already-live honest subscription path: user pastes their sk-ant-oat\u2026 subscription token (stored encrypted, sent as Authorization: Bearer + anthropic-beta: oauth-2025-04-20). The 'Connect with Anthropic' button appears only when the client_id is configured.",
+      "rationale": "\u00a79 + \u00a70.4 forbid fabricated credentials/simulated flows. A hardcoded or fake OAuth client_id would be exactly that. Gating on a real env var is honest degradation and keeps subscription billing working today via the paste-token path."
     }
   ],
   "gaps": [
@@ -41,29 +41,29 @@
         "apps/api/app/routers/agents.py",
         "apps/web/src/app/dashboard/agents/page.tsx (or equivalent)"
       ],
-      "observed": "ProviderCredential table uses PRIMARY KEY (provider) — one deployment-wide credential row per provider. No per-user OAuth flow for Anthropic subscription tokens. UI has no automated OAuth consent flow — user must paste manually obtained token. AgentConfig table lacks provider, authMode, credentialRef columns. All agents share one billing path regardless of intended auth mode.",
-      "expected": "Two clean mutually-exclusive modes per provider per agent: (a) Subscription mode — automated OAuth consent flow captures token, stores encrypted per-user, refresh auto-handled; (b) API-key mode — single plain key entered once, stored encrypted. UI never demands both. Billing routes through exactly the credential type the user selected for that agent.",
-      "rca": "ProviderCredential.provider is PRIMARY KEY (deployment-wide, not per-user). resolve_credential() reads this single row for all users. AgentConfig schema has no authMode/credentialRef. _infer_anthropic_auth_mode() can distinguish token types but is never called in an OAuth flow — only as an inference from a manually pasted token.",
-      "fix_spec": "See §4.1 Fix Blueprint — Defect 1",
-      "verification_recipe": "See §8.1 Verification — Defect 1",
+      "observed": "ProviderCredential table uses PRIMARY KEY (provider) \u2014 one deployment-wide credential row per provider. No per-user OAuth flow for Anthropic subscription tokens. UI has no automated OAuth consent flow \u2014 user must paste manually obtained token. AgentConfig table lacks provider, authMode, credentialRef columns. All agents share one billing path regardless of intended auth mode.",
+      "expected": "Two clean mutually-exclusive modes per provider per agent: (a) Subscription mode \u2014 automated OAuth consent flow captures token, stores encrypted per-user, refresh auto-handled; (b) API-key mode \u2014 single plain key entered once, stored encrypted. UI never demands both. Billing routes through exactly the credential type the user selected for that agent.",
+      "rca": "ProviderCredential.provider is PRIMARY KEY (deployment-wide, not per-user). resolve_credential() reads this single row for all users. AgentConfig schema has no authMode/credentialRef. _infer_anthropic_auth_mode() can distinguish token types but is never called in an OAuth flow \u2014 only as an inference from a manually pasted token.",
+      "fix_spec": "See \u00a74.1 Fix Blueprint \u2014 Defect 1",
+      "verification_recipe": "See \u00a78.1 Verification \u2014 Defect 1",
       "pre_evidence": "evidence/probe-06/",
-      "post_evidence": "Per-user credential storage (UserProviderCredential) + resolve_user_credential precedence + Anthropic OAuth PKCE code path all live: GET /agents/auth/anthropic/start returns honest 501 not_configured (client_id unset), PUT per-user credential round-trips with honest lastVerifyStatus. eslint-disable zero-tolerance violation (ProviderConfigModal.tsx) removed + fixed properly (react-hooks/exhaustive-deps), lint/tsc clean, 31/31 modal tests, QA re-review PASS. NOTE: the live human OAuth CONSENT click is USER-GATED (GATE-03) — requires a registered AETHER_ANTHROPIC_OAUTH_CLIENT_ID + a real Anthropic account approval on production; code/endpoints/refresh built + unit-tested with mocked exchange.",
+      "post_evidence": "Per-user credential storage (UserProviderCredential) + resolve_user_credential precedence + Anthropic OAuth PKCE code path all live: GET /agents/auth/anthropic/start returns honest 501 not_configured (client_id unset), PUT per-user credential round-trips with honest lastVerifyStatus. eslint-disable zero-tolerance violation (ProviderConfigModal.tsx) removed + fixed properly (react-hooks/exhaustive-deps), lint/tsc clean, 31/31 modal tests, QA re-review PASS. NOTE: the live human OAuth CONSENT click is USER-GATED (GATE-03) \u2014 requires a registered AETHER_ANTHROPIC_OAUTH_CLIENT_ID + a real Anthropic account approval on production; code/endpoints/refresh built + unit-tested with mocked exchange.",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
-      "remaining_work": "(a) per-user credential storage — add UserProviderCredential(userId,provider,authMode,ciphertext,...) table via lazy idempotent DDL (ADR-TR-1); (b) resolve_user_credential(provider,user_id,agent_key) precedence path checked before the deployment-wide ProviderCredential row; (c) automated in-app Anthropic OAuth consent flow (PKCE): AnthropicOAuthState + AnthropicOAuthToken tables, GET /agents/auth/anthropic/start + /callback, encrypted token storage, refresh; (d) UI: \"Connect with Anthropic\" OAuth button vs \"Use API Key\" input, mutually exclusive.",
+      "remaining_work": "(a) per-user credential storage \u2014 add UserProviderCredential(userId,provider,authMode,ciphertext,...) table via lazy idempotent DDL (ADR-TR-1); (b) resolve_user_credential(provider,user_id,agent_key) precedence path checked before the deployment-wide ProviderCredential row; (c) automated in-app Anthropic OAuth consent flow (PKCE): AnthropicOAuthState + AnthropicOAuthToken tables, GET /agents/auth/anthropic/start + /callback, encrypted token storage, refresh; (d) UI: \"Connect with Anthropic\" OAuth button vs \"Use API Key\" input, mutually exclusive.",
       "key_files": [
         "apps/api/app/repositories/provider_credential.py",
         "apps/api/app/services/llm_client.py",
         "apps/api/app/routers/agents.py",
         "apps/web/src/app/dashboard/agents/page.tsx"
       ],
-      "evidence": "Native Anthropic transport (Bearer + anthropic-beta oauth-2025-04-20 / x-api-key) AND billing separation (claude-*→anthropic only, no cross-provider) ALREADY EXIST in llm_client.py (fresh live-production evidence + code discovery, 2026-07-15).",
+      "evidence": "Native Anthropic transport (Bearer + anthropic-beta oauth-2025-04-20 / x-api-key) AND billing separation (claude-*\u2192anthropic only, no cross-provider) ALREADY EXIST in llm_client.py (fresh live-production evidence + code discovery, 2026-07-15).",
       "assigned_agent": "fixer-hard",
       "fixer_model": "claude-opus (fixer-hard)",
       "reviewer_model": "claude-sonnet (qa-reviewer)",
       "adjudication": "Partially confirmed; in-UI provider config + paste-token subscription mode already live since 2026-07-14 (commit 8a9c2e3, 7 providers via GET /agents/providers). Remaining scope: per-user credential storage (UserProviderCredential), per-agent credentialRef routing in resolve_credential, and automated Anthropic OAuth consent flow GATED on ANTHROPIC_OAUTH_CLIENT_ID env (no public Anthropic third-party OAuth client is provisioned for this app; when unset the UI keeps the honest paste-token subscription path). Exact per-user vs deployment-wide storage pending PHASE-1 scout.",
       "lane": "A",
-      "rca_confirmed": "CONFIRMED (scout-1): ProviderCredential PRIMARY KEY(provider) deployment-wide (provider_credential.py); no UserProviderCredential table; AgentProvider per-user table exists but resolve_credential() in llm_client.py never reads it (reads ProviderCredential + env only); Anthropic sk-ant-oat→Bearer+anthropic-beta, api key→x-api-key already implemented; AgentConfig.model NOT honored at runtime (agents call get_model(tier) from env)."
+      "rca_confirmed": "CONFIRMED (scout-1): ProviderCredential PRIMARY KEY(provider) deployment-wide (provider_credential.py); no UserProviderCredential table; AgentProvider per-user table exists but resolve_credential() in llm_client.py never reads it (reads ProviderCredential + env only); Anthropic sk-ant-oat\u2192Bearer+anthropic-beta, api key\u2192x-api-key already implemented; AgentConfig.model NOT honored at runtime (agents call get_model(tier) from env)."
     },
     {
       "id": "GAP-D2",
@@ -78,15 +78,15 @@
         "apps/web/src/app/dashboard/email/page.tsx (or equivalent)"
       ],
       "observed": "GoogleCredential table stores one token per user. build_consent_url() uses prompt=consent not prompt=select_account. EmailThread has no accountId column. No MailAccount/GmailAccount table exists. Adding second Gmail overwrites first.",
-      "expected": "Users can connect multiple Gmail accounts. Data model: one-to-many User→GmailAccount. OAuth: prompt=select_account forces account picker. Per-account token storage with no collisions. UI: account switcher, per-inbox sync status, add/remove inbox, unified + per-inbox views.",
-      "rca": "google_oauth.py:build_consent_url() sets prompt=consent (refreshes token) but no multi-account routing exists. Single GoogleCredential row per user. EmailThread.userId FK has no accountId — all threads are user-scoped, not inbox-scoped.",
-      "fix_spec": "See §4.2 Fix Blueprint — Defect 2",
-      "verification_recipe": "See §8.2 Verification — Defect 2",
+      "expected": "Users can connect multiple Gmail accounts. Data model: one-to-many User\u2192GmailAccount. OAuth: prompt=select_account forces account picker. Per-account token storage with no collisions. UI: account switcher, per-inbox sync status, add/remove inbox, unified + per-inbox views.",
+      "rca": "google_oauth.py:build_consent_url() sets prompt=consent (refreshes token) but no multi-account routing exists. Single GoogleCredential row per user. EmailThread.userId FK has no accountId \u2014 all threads are user-scoped, not inbox-scoped.",
+      "fix_spec": "See \u00a74.2 Fix Blueprint \u2014 Defect 2",
+      "verification_recipe": "See \u00a78.2 Verification \u2014 Defect 2",
       "pre_evidence": "evidence/probe-07/",
-      "post_evidence": "Additive GmailAccount table (GoogleCredential untouched, rollback-safe, byte-for-byte invariant test); GET /emails/accounts 200, /emails/oauth/status 200 {configured:true}, POST /emails/accounts/connect returns authUrl containing prompt=select_account; ?account_id filter + unified inbox; account-switcher UI live. NOTE: connecting a 2nd REAL Gmail is USER-GATED (GATE-04) — needs interactive Google consent; endpoints+schema+select_account verified, 77 tests green.",
+      "post_evidence": "Additive GmailAccount table (GoogleCredential untouched, rollback-safe, byte-for-byte invariant test); GET /emails/accounts 200, /emails/oauth/status 200 {configured:true}, POST /emails/accounts/connect returns authUrl containing prompt=select_account; ?account_id filter + unified inbox; account-switcher UI live. NOTE: connecting a 2nd REAL Gmail is USER-GATED (GATE-04) \u2014 needs interactive Google consent; endpoints+schema+select_account verified, 77 tests green.",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
-      "remaining_work": "GoogleCredential schema → id PK + accountEmail + isPrimary + partial-unique(one primary per user) + unique(userId,accountEmail); build_consent_url prompt=\"select_account\" (not \"consent\"); EmailThread.gmailAccountId column + backfill; endpoints GET /emails/accounts, POST /emails/accounts/connect, DELETE /emails/accounts/{id}, PATCH set-primary, GET sync-status; GET /emails ?account_id filter + unified view; account-switcher UI.",
+      "remaining_work": "GoogleCredential schema \u2192 id PK + accountEmail + isPrimary + partial-unique(one primary per user) + unique(userId,accountEmail); build_consent_url prompt=\"select_account\" (not \"consent\"); EmailThread.gmailAccountId column + backfill; endpoints GET /emails/accounts, POST /emails/accounts/connect, DELETE /emails/accounts/{id}, PATCH set-primary, GET sync-status; GET /emails ?account_id filter + unified view; account-switcher UI.",
       "key_files": [
         "apps/api/app/services/google_oauth.py",
         "apps/api/app/routers/emails.py",
@@ -111,11 +111,11 @@
         "apps/api/app/routers/agents.py",
         "apps/web/src/app/dashboard/agents/page.tsx (or equivalent)"
       ],
-      "observed": "AgentConfig DDL: (userId, agentKey, enabled, model, updatedAt). Missing: temperature, thinkingEffort, provider, authMode, credentialRef. CORRECTED (probe-08, 2026-07-15): PUT /agents/config/{agentKey} endpoint EXISTS and returns 200 (not absent as originally claimed), but silently drops temperature and thinkingEffort on write — only enabled and model round-trip. No GET /agents/config/{agentKey} endpoint exists to verify persistence (405 Method Not Allowed). No billing path audit logging. Subscription vs API-key routing never checked per-agent. Quota exhaustion → generic 503.",
+      "observed": "AgentConfig DDL: (userId, agentKey, enabled, model, updatedAt). Missing: temperature, thinkingEffort, provider, authMode, credentialRef. CORRECTED (probe-08, 2026-07-15): PUT /agents/config/{agentKey} endpoint EXISTS and returns 200 (not absent as originally claimed), but silently drops temperature and thinkingEffort on write \u2014 only enabled and model round-trip. No GET /agents/config/{agentKey} endpoint exists to verify persistence (405 Method Not Allowed). No billing path audit logging. Subscription vs API-key routing never checked per-agent. Quota exhaustion \u2192 generic 503.",
       "expected": "All 22 agents fully configurable: enable/disable, provider+model picker, temperature, thinking/reasoning slider where model supports it. PUT /agents/config/:agentKey persists all fields. Billing routes through each agent's configured credentialRef. Quota exhaustion: graceful degrade + user notification, never silent fallback. Every agent run audit-logs which credential path served it.",
       "rca": "AgentConfig DDL was scoped minimally (key, enabled, model). No credentialRef concept. _LLM_TIER_BY_BACKEND is static and cannot be overridden per agent per user. _record_run() logs model but not authMode/credentialSource/quotaPath.",
-      "fix_spec": "See §4.3 Fix Blueprint — Defect 3",
-      "verification_recipe": "See §8.3 Verification — Defect 3",
+      "fix_spec": "See \u00a74.3 Fix Blueprint \u2014 Defect 3",
+      "verification_recipe": "See \u00a78.3 Verification \u2014 Defect 3",
       "pre_evidence": "evidence/probe-08/",
       "post_evidence": "22/22 agents accept PUT /agents/config/{key} and persist temperature+thinkingEffort (GET back confirmed); GET /agents/config[/{key}] live (was 405); AgentRun.billingAuditJson populated on runs (authMode/provider/quotaPath/credentialSource); quota-exhaustion 429 code-present + unit-tested; per-agent config UI (temperature slider, thinking selector, credential selector) live.",
       "status": "VERIFIED-CLOSED",
@@ -129,7 +129,7 @@
       "assigned_agent": "fixer-hard",
       "fixer_model": "claude-opus (fixer-hard)",
       "reviewer_model": "claude-sonnet (qa-reviewer)",
-      "adjudication": "Confirmed with correction: PUT /agents/config/{agentKey} EXISTS (200) but silently drops temperature and thinkingEffort; no GET round-trip endpoint (405). Schema columns missing as claimed. CLEANUP-001: probe-08 persisted model='claude-sonnet-4' (nonexistent id) into coverLetter AgentConfig on production — fixer must reset it to a valid/default value.",
+      "adjudication": "Confirmed with correction: PUT /agents/config/{agentKey} EXISTS (200) but silently drops temperature and thinkingEffort; no GET round-trip endpoint (405). Schema columns missing as claimed. CLEANUP-001: probe-08 persisted model='claude-sonnet-4' (nonexistent id) into coverLetter AgentConfig on production \u2014 fixer must reset it to a valid/default value.",
       "lane": "A",
       "rca_confirmed": "CONFIRMED (scout-1): AgentConfig persists only enabled+model; PUT /agents/config/{k} exists but drops temperature/thinkingEffort/provider/authMode/credentialRef; no GET single-config endpoint; _record_run logs model/tokens/cost but no billing audit; AgentRun has no billingAuditJson column; no AgentQuotaBlock/429-quota handling."
     },
@@ -140,7 +140,7 @@
       "screen": null,
       "component": null,
       "files": null,
-      "observed": "get_mode() defaults to 'replay' — if AETHER_LLM_MODE unset, all LLM calls return static fixtures",
+      "observed": "get_mode() defaults to 'replay' \u2014 if AETHER_LLM_MODE unset, all LLM calls return static fixtures",
       "expected": "Production MUST have AETHER_LLM_MODE=auto or live. CI/test uses replay. Never default to replay in production env.",
       "rca": null,
       "fix_spec": "Verify env var in production. Add startup assertion in main.py: if not AETHER_LLM_MODE in ('live','auto','record'): raise RuntimeError. Document in .env.example.",
@@ -171,13 +171,13 @@
       "observed": "TailoringAgent.run() calls ResumeTailorService.tailor() with evidence_extra='' always",
       "expected": "evidence_extra populated from user's consolidated career data: GitHub repos, portfolio, LinkedIn (career profile fields). Widens anti-fabrication corpus. Before/after conversion % shown in UI.",
       "rca": null,
-      "fix_spec": "See §5 Resume Tailoring improvements",
+      "fix_spec": "See \u00a75 Resume Tailoring improvements",
       "verification_recipe": null,
       "pre_evidence": "evidence/probe-09/",
       "post_evidence": "POST /agents/tailor/run returns conversionMetrics {baselineATSScore, tailoredATSScore, estimatedConversionLift, methodology, confidence} with real computed values.",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
-      "remaining_work": "compute before/after conversionMetrics (baselineATSScore, tailoredATSScore, estimatedConversionLift via §5.2 formula) in tailor pipeline; add to TailorRunResult + tailor API response; surface in resume UI.",
+      "remaining_work": "compute before/after conversionMetrics (baselineATSScore, tailoredATSScore, estimatedConversionLift via \u00a75.2 formula) in tailor pipeline; add to TailorRunResult + tailor API response; surface in resume UI.",
       "key_files": [
         "apps/api/app/agents/tailor_agent.py",
         "apps/api/app/services/resume_tailor.py",
@@ -189,7 +189,7 @@
       "reviewer_model": "claude-sonnet (qa-reviewer)",
       "adjudication": "Confirmed: tailor run (probe-09) returned changes=21 with no conversionMetrics field; analytics summary has no lift metric.",
       "lane": "E",
-      "rca_confirmed": "PARTIALLY CONFIRMED (scout-3): tailor() accepts evidence_extra and tailor_agent already passes build_career_corpus(user_id) (evidence_extra is NOT always empty — corrects FINDING-004 wording); BUT no FitScorer re-run after tailoring and no conversionMetrics in TailorResult/response; CareerProfile stores profile in content JSONB (no discrete githubUrl/linkedinUrl columns)."
+      "rca_confirmed": "PARTIALLY CONFIRMED (scout-3): tailor() accepts evidence_extra and tailor_agent already passes build_career_corpus(user_id) (evidence_extra is NOT always empty \u2014 corrects FINDING-004 wording); BUT no FitScorer re-run after tailoring and no conversionMetrics in TailorResult/response; CareerProfile stores profile in content JSONB (no discrete githubUrl/linkedinUrl columns)."
     },
     {
       "id": "GAP-E3",
@@ -201,13 +201,13 @@
       "observed": "No MetricTooltip/InfoPopover component exists in apps/web/",
       "expected": "Every score and metric has an info-icon popover explaining: what it means, how calculated, why it matters",
       "rca": null,
-      "fix_spec": "See §5.3 Metrics Transparency",
+      "fix_spec": "See \u00a75.3 Metrics Transparency",
       "verification_recipe": null,
       "pre_evidence": "evidence/probe-12/",
       "post_evidence": "MetricTooltip info-icons render on all 7 analytics metric tiles (production screenshot); accessible component; 256 vitest green.",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
-      "remaining_work": "build apps/web/src/components/MetricTooltip.tsx (accessible, value + info icon → popover) and attach to every metric on analytics/dashboard/jobs/resume/agents screens with §5.3 tooltip copy.",
+      "remaining_work": "build apps/web/src/components/MetricTooltip.tsx (accessible, value + info icon \u2192 popover) and attach to every metric on analytics/dashboard/jobs/resume/agents screens with \u00a75.3 tooltip copy.",
       "key_files": [
         "apps/web/src/components/MetricTooltip.tsx",
         "apps/web/src/app/dashboard/analytics/page.tsx"
@@ -233,7 +233,7 @@
       "fix_spec": null,
       "verification_recipe": null,
       "pre_evidence": "evidence/probe-10/",
-      "post_evidence": "RejectionPanel + parseCoverLetterRejection deployed; observed rendering on production /dashboard/cover-letters for a 422 fabrication-guard response (route-intercepted contract test — real 422 not naturally triggerable due to the agent corrective loop); unit tests cover fabrication + structural mappings.",
+      "post_evidence": "RejectionPanel + parseCoverLetterRejection deployed; observed rendering on production /dashboard/cover-letters for a 422 fabrication-guard response (route-intercepted contract test \u2014 real 422 not naturally triggerable due to the agent corrective loop); unit tests cover fabrication + structural mappings.",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
       "remaining_work": "dedicated cover-letter rejection UI naming which guard (fabrication vs structural), listing rejected tokens/missing structural elements, remediation steps + Regenerate button.",
@@ -246,7 +246,7 @@
       "reviewer_model": "claude-sonnet (qa-reviewer)",
       "adjudication": "Unconfirmed by probes (no 422 observed; probe-10 cover letter run succeeded 200 with approval pending). FE 422 handling to be verified by PHASE-1 scout; fix only if scout confirms generic toast.",
       "lane": "F",
-      "rca_confirmed": "CONFIRMED (scout-3): cover-letters/page.tsx catches errors into a generic toast; backend 422 detail is a plain string ('Cover letter rejected by fabrication guard: [flagged]' / '...§10.2 format contract not met: [issues]') from agents.py:603-612; FabricationError.flagged / StructuralError.issues lists exist but are not surfaced structurally to the UI."
+      "rca_confirmed": "CONFIRMED (scout-3): cover-letters/page.tsx catches errors into a generic toast; backend 422 detail is a plain string ('Cover letter rejected by fabrication guard: [flagged]' / '...\u00a710.2 format contract not met: [issues]') from agents.py:603-612; FabricationError.flagged / StructuralError.issues lists exist but are not surfaced structurally to the UI."
     },
     {
       "id": "GAP-E5",
@@ -264,7 +264,7 @@
       "post_evidence": "resolve_user_credential consulted on the live call path; billingAudit honestly reports credentialSource/provider per run (environment/openrouter for the run with only a fake Anthropic key on file).",
       "status": "VERIFIED-CLOSED",
       "verdict": "CONFIRMED-FIXED",
-      "remaining_work": "resolve_credential must read per-user AgentConfig.credentialRef / AgentProvider before deployment-wide fallback (currently AgentProvider is written but never read). SHARED with GAP-D1/GAP-D3 — same files, folded into lane A.",
+      "remaining_work": "resolve_credential must read per-user AgentConfig.credentialRef / AgentProvider before deployment-wide fallback (currently AgentProvider is written but never read). SHARED with GAP-D1/GAP-D3 \u2014 same files, folded into lane A.",
       "key_files": [
         "apps/api/app/services/llm_client.py",
         "apps/api/app/routers/agents.py"
@@ -284,7 +284,7 @@
       "screen": "/dashboard/agents",
       "component": "ProviderCredential verify",
       "files": null,
-      "observed": "GET /agents/providers shows openrouter and abacus with status='connected' but lastVerifyStatus=null — connected badge not backed by a verification round-trip",
+      "observed": "GET /agents/providers shows openrouter and abacus with status='connected' but lastVerifyStatus=null \u2014 connected badge not backed by a verification round-trip",
       "expected": "status='connected' only with a fresh successful verify, or show honest 'unverified' state",
       "rca": "pending PHASE-1 scout",
       "fix_spec": "verify-on-save or honest badge state",
@@ -360,7 +360,7 @@
       "fixer_model": "claude-sonnet (fixer-medium)",
       "reviewer_model": "claude-sonnet (qa-reviewer)",
       "lane": "G",
-      "adjudication": "New finding surfaced by PHASE-0 QA review of fresh evidence; in-scope under the zero-tolerance output-authenticity bar (§0.4, §9)."
+      "adjudication": "New finding surfaced by PHASE-0 QA review of fresh evidence; in-scope under the zero-tolerance output-authenticity bar (\u00a70.4, \u00a79)."
     }
   ],
   "evidence_summary": {
@@ -373,7 +373,7 @@
         "evidence_extra population via build_career_corpus(user_id) already wired in tailor_agent (GAP-E2)",
         "AETHER_LLM_MODE=auto confirmed in production (GAP-E1)",
         "Verify round-trip + lastVerifyStatus fields exist, wired to POST /providers/{provider}/verify (GAP-NEW-001)",
-        "155 jobs / 149 seek jobs with resolvable URLs — earlier 0-seek reading was transient (GAP-NEW-002, now VERIFIED-CLOSED)"
+        "155 jobs / 149 seek jobs with resolvable URLs \u2014 earlier 0-seek reading was transient (GAP-NEW-002, now VERIFIED-CLOSED)"
       ],
       "gaps_by_status": {
         "OPEN": 10,
@@ -382,21 +382,83 @@
       }
     },
     "gates": [
-      { "id": "GATE-01", "description": "health", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-02", "description": "AETHER_LLM_MODE=auto", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-03", "description": "Anthropic OAuth round-trip", "status": "USER-GATED", "note": "Code path (PKCE start/callback/refresh), per-user credential storage, and an honest 501 not_configured response are independently verified. Only the live human OAuth consent click remains, which requires a registered AETHER_ANTHROPIC_OAUTH_CLIENT_ID plus a real Anthropic account approval on production — a human action outside agent control." },
-      { "id": "GATE-04", "description": "≥2 Gmail accounts", "status": "USER-GATED", "note": "Endpoints, the additive GmailAccount schema, and prompt=select_account are independently verified. Only the live interactive Google consent to connect a 2nd real Gmail account remains, which requires a human action outside agent control." },
-      { "id": "GATE-05", "description": "22 agents PUT config + billing audit", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-06", "description": "conversionMetrics in tailor response", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-07", "description": "MetricTooltip on analytics", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-08", "description": "zero console errors across 15 routes", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-09", "description": "zero 5xx across 15 routes", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-10", "description": "seek jobs resolve", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-11", "description": "agent runs include billingAuditJson", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-12", "description": "pytest green", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-13", "description": "playwright green", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-14", "description": "no prohibited patterns", "status": "VERIFIED-CLOSED" },
-      { "id": "GATE-15", "description": "push + prod build", "status": "VERIFIED-CLOSED" }
+      {
+        "id": "GATE-01",
+        "description": "health",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-02",
+        "description": "AETHER_LLM_MODE=auto",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-03",
+        "description": "Anthropic OAuth round-trip",
+        "status": "USER-GATED",
+        "note": "Code path (PKCE start/callback/refresh), per-user credential storage, and an honest 501 not_configured response are independently verified. Only the live human OAuth consent click remains, which requires a registered AETHER_ANTHROPIC_OAUTH_CLIENT_ID plus a real Anthropic account approval on production \u2014 a human action outside agent control."
+      },
+      {
+        "id": "GATE-04",
+        "description": "\u22652 Gmail accounts",
+        "status": "USER-GATED",
+        "note": "Endpoints, the additive GmailAccount schema, and prompt=select_account are independently verified. Only the live interactive Google consent to connect a 2nd real Gmail account remains, which requires a human action outside agent control."
+      },
+      {
+        "id": "GATE-05",
+        "description": "22 agents PUT config + billing audit",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-06",
+        "description": "conversionMetrics in tailor response",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-07",
+        "description": "MetricTooltip on analytics",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-08",
+        "description": "zero console errors across 15 routes",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-09",
+        "description": "zero 5xx across 15 routes",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-10",
+        "description": "seek jobs resolve",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-11",
+        "description": "agent runs include billingAuditJson",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-12",
+        "description": "pytest green",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-13",
+        "description": "playwright green",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-14",
+        "description": "no prohibited patterns",
+        "status": "VERIFIED-CLOSED"
+      },
+      {
+        "id": "GATE-15",
+        "description": "push + prod build",
+        "status": "VERIFIED-CLOSED"
+      }
     ],
     "final": {
       "date": "2026-07-15",
@@ -410,5 +472,6 @@
       "vitest": "256 passed",
       "note": "All fixes QA-passed with independent fail-before/pass-after; production re-verified; zero fable-5 sub-agents (governance)."
     }
-  }
+  },
+  "_SUPERSEDED_NOTE": "HISTORICAL \u2014 this is the 2026-07-15 PRUD-remediation run ledger (prompt aether-prud-trmediation-prompt.md), superseded by docs/delivery/phase6-gap-analysis.json (the current, gate-verified Phase-6 ledger). Kept as a historical run record."
 }

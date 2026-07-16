@@ -1,3 +1,9 @@
+> **⚠️ HISTORICAL — SUPERSEDED (2026-07-12 wireframe-to-implementation audit).**
+> This was an early Phase-0/1 audit of Dashboard/Jobs/Applications wireframe elements and does
+> NOT reflect the current shipped product. The authoritative, current, gate-verified delivery
+> record is **`docs/delivery/phase6-gap-analysis.json`** + **`docs/delivery/PHASE6-EXECUTION-SUMMARY.md`**
+> (Phases 1–6 shipped to production). Kept for historical continuity only.
+
 # Wireframe-to-Implementation Gap Analysis for Aether Career Agent
 **Production URL:** https://5cb5f0620.abacusai.cloud  
 **Audit Date:** 2026-07-12  
