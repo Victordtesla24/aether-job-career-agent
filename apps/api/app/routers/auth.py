@@ -79,6 +79,16 @@ class TokenResponse(BaseModel):
     status_code=status.HTTP_201_CREATED,
 )
 def register(request: Request, body: RegisterRequest) -> UserResponse:
+    # Public-registration gate (§15 admin settings): when an admin has turned
+    # signup off, self-service registration is refused. Checked before the rate
+    # limiter so a disabled signup returns a clean 403.
+    from app.repositories.admin import signup_enabled
+
+    if not signup_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is currently disabled",
+        )
     # Rate-limit keyed on the normalized submitted email (never client IP):
     # caps re-registration spam on one address. Runs after Pydantic validation,
     # so a malformed/weak-password request 422s without consuming budget.
@@ -119,6 +129,12 @@ def login(request: Request, body: LoginRequest) -> TokenResponse:
     # A successful login clears the counter so a legit user is never locked out
     # by their own earlier typos.
     reset_login_failures(request, body.email)
+    # Stamp last-login for the admin user list (§15). Best-effort: an additive
+    # column write must never fail an otherwise-valid login.
+    try:
+        UserRepository().touch_last_login(user["id"])
+    except Exception:  # noqa: BLE001
+        pass
     token = create_access_token(user["id"], user["email"])
     return TokenResponse(access_token=token, userId=user["id"], email=user["email"])
 
@@ -144,4 +160,7 @@ def me(current_user: CurrentUser) -> dict[str, Any]:
         "name": u.get("name") or "",
         "targetRole": u.get("targetRole") or "",
         "location": u.get("location") or "",
+        # Surface the privilege flag so the frontend can gate the /admin UI
+        # (resolved live from the row by the auth dependency).
+        "isAdmin": bool(current_user.get("isAdmin")),
     }

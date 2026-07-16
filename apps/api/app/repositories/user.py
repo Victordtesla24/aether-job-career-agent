@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from app.db import (
+    ensure_admin_user_columns,
     ensure_user_profile_columns,
     get_connection,
     new_id,
@@ -68,6 +69,39 @@ class UserRepository:
 
     def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return self._get_one('"id" = %s', (user_id,))
+
+    def get_auth_context(self, user_id: str) -> dict[str, Any] | None:
+        """User row plus the additive admin/security flags for the auth guard.
+
+        Projects ``isAdmin`` + ``suspended`` (default ``false``) so the auth
+        dependency can enforce suspension (403) and admin gating in one query.
+        ``ensure_admin_user_columns`` keeps the read safe on the older test
+        schema that predates the columns.
+        """
+        ensure_admin_user_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_USER_COLUMNS}, "isAdmin", "suspended" '
+                    'FROM "User" WHERE "id" = %s',
+                    (user_id,),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
+
+    def touch_last_login(self, user_id: str) -> None:
+        """Best-effort stamp of the user's last successful login (§15 list).
+
+        Additive column write; a failure must never block login, so callers
+        guard this. ``ensure_admin_user_columns`` guarantees the column exists.
+        """
+        ensure_admin_user_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "User" SET "lastLoginAt"=now() WHERE "id"=%s', (user_id,)
+                )
+            conn.commit()
 
     def get_by_username_or_email(self, identifier: str) -> dict[str, Any] | None:
         """Resolve a user by exact ``email`` or case-insensitive ``username``.

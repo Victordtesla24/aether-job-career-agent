@@ -119,3 +119,57 @@ def ensure_user_profile_columns() -> None:
             )
         conn.commit()
     _user_profile_columns_ready = True
+
+
+#: Guard so the additive admin/security columns are only ensured once per worker
+#: process (see ``ensure_admin_user_columns``).
+_admin_user_columns_ready = False
+
+
+def ensure_admin_user_columns() -> None:
+    """Idempotently add the additive admin/security columns to ``User``.
+
+    ``isAdmin`` (privilege gate, GAP-P6-ADMIN-001), ``suspended`` (GAP-P6 §15
+    account suspension) and ``lastLoginAt`` (§15 user list) are additive columns.
+    They are introduced by lazy DDL (ADR-TR-1) — there is no migration runner —
+    so every admin/auth read path calls this first, mirroring
+    ``ensure_user_profile_columns``.
+
+    ``ADD COLUMN ... NOT NULL DEFAULT false`` is a metadata-only change on
+    PostgreSQL (the constant default is not rewritten across existing rows), so
+    it is fast and safe on the production ``User`` table and backfills the shared
+    test schema. A transaction-scoped advisory lock serializes concurrent
+    first-hit callers so the DDL cannot race; ``TRUNCATE`` never drops columns,
+    so this survives the test-suite teardown.
+    """
+    global _admin_user_columns_ready
+    if _admin_user_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER when both
+            # columns already exist (production / warm test schema).
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('isAdmin', 'suspended', 'lastLoginAt')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _admin_user_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240720,))
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isAdmin" boolean'
+                " NOT NULL DEFAULT false"
+            )
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "suspended" boolean'
+                " NOT NULL DEFAULT false"
+            )
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLoginAt" timestamptz'
+            )
+        conn.commit()
+    _admin_user_columns_ready = True

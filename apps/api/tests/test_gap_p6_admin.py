@@ -162,7 +162,7 @@ def test_spend_endpoint_totals_and_per_user(client):
     per = {p["userId"]: float(p["spendUsd"]) for p in body["perUser"]}
     assert per[uid_a] == pytest.approx(sum_a, abs=1e-6)
     assert per[uid_b] == pytest.approx(sum_b, abs=1e-6)
-    assert float(body["totalUsd"]) >= pytest.approx(sum_a + sum_b, abs=1e-6)
+    assert float(body["totalUsd"]) + 1e-6 >= sum_a + sum_b
 
 
 # --------------------------------------------------------------------------- #
