@@ -27,6 +27,13 @@ import os
 #: >=1 title matching the target role family — see gap-6 sourcing notes):
 #: canonical, asana, elastic, datadog, cloudflare, mongodb, figma, okta, brex,
 #: block. All tokens verified live (200, non-empty board) 2026-07-15.
+#:
+#: Phase-6 GATE-07 volume expansion (2026-07-16): grafanalabs, twilio,
+#: databricks, samsara, peloton, mozilla, wikimedia — each curled live against
+#: boards-api (HTTP 200, non-empty board) and confirmed to carry AU/remote
+#: target-role postings that survive relevance.filter_relevant at verification
+#: time. Greenhouse's ``updated_at`` keeps live listings fresh, so it is the
+#: most reliable within-30-days source (see token_verification.json evidence).
 GREENHOUSE_BOARDS: tuple[str, ...] = (
     "cultureamp",
     "eucalyptus",
@@ -47,22 +54,47 @@ GREENHOUSE_BOARDS: tuple[str, ...] = (
     "okta",
     "brex",
     "block",
+    # Phase-6 GATE-07 volume expansion — verified live 2026-07-16.
+    "grafanalabs",
+    "twilio",
+    "databricks",
+    "samsara",
+    "peloton",
+    "mozilla",
+    "wikimedia",
 )
 
 #: Lever company slugs — https://api.lever.co/v0/postings/<slug>?mode=json
 #: Verified live 2026-07-15 (immutable + deputy are AU). ``palantir`` verified
 #: live 2026-07-15 with real Technical Program Manager postings.
+#:
+#: Phase-6 GATE-07 volume expansion (2026-07-16): brighte/mable/plenti are AU
+#: employers (Sydney/Melbourne fintech + care marketplace) with real AU-located
+#: BA/PM/PO postings; ``voltus`` is a fully-remote employer with an unblocked
+#: remote target-role posting. All curled live (HTTP 200, real board) before
+#: being added — see token_verification.json evidence.
 LEVER_COMPANIES: tuple[str, ...] = (
     "immutable",
     "deputy",
     "spotify",
     "palantir",
+    # Phase-6 GATE-07 volume expansion — verified live 2026-07-16.
+    "brighte",
+    "mable",
+    "plenti",
+    "voltus",
 )
 
 #: Ashby job-board tokens — https://api.ashbyhq.com/posting-api/job-board/<token>
 #: Tokens are CASE-SENSITIVE. ``openai`` verified live 2026-07-15 with dozens
 #: of real Technical Program Manager postings; ``Substack``/``Watershed``
 #: verified live 2026-07-15 with real Product/Project Manager postings.
+#:
+#: Phase-6 GATE-07 volume expansion (2026-07-16): airwallex is a Melbourne-HQ
+#: fintech (real AU-located PM/delivery postings); supabase/cohere/replit/
+#: decagon/harvey are remote-first employers with unblocked remote target-role
+#: postings. All curled live (HTTP 200, real board) before being added — see
+#: token_verification.json evidence.
 ASHBY_BOARDS: tuple[str, ...] = (
     "ashby",
     "Ramp",
@@ -73,6 +105,13 @@ ASHBY_BOARDS: tuple[str, ...] = (
     "openai",
     "Substack",
     "Watershed",
+    # Phase-6 GATE-07 volume expansion — verified live 2026-07-16.
+    "airwallex",
+    "supabase",
+    "cohere",
+    "replit",
+    "decagon",
+    "harvey",
 )
 
 #: Workable account subdomains — POST https://apply.workable.com/api/v3/accounts/<sub>/jobs
