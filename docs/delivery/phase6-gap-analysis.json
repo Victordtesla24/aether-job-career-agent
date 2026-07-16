@@ -860,14 +860,16 @@
         "no false self-service-deletion claim",
         "GST/subscription terms present"
       ],
-      "status": "FIX-READY-MERGED-FE-DEPLOY-PENDING",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [
         "GATE-19"
       ],
       "fixer_role": "fixer-medium",
       "branch": "fix/p6-legalpages",
-      "review": "Content/authenticity fix: false self-service-deletion claim removed from /privacy-policy + /terms + dashboard/settings; subscription/GST terms added; honest 'Stripe not yet active' caveat; operator placeholders. 14 TDD tests, web 292 green. FE deploy in final Cluster H batch; production console re-sweep re-confirms."
+      "review": "Content/authenticity fix: false self-service-deletion claim removed from /privacy-policy + /terms + dashboard/settings; subscription/GST terms added; honest 'Stripe not yet active' caveat; operator placeholders. 14 TDD tests, web 292 green. FE deploy in final Cluster H batch; production console re-sweep re-confirms.",
+      "closed_by": "deployer+evidence (production)",
+      "close_evidence": "redeploy-fe-legal.json: FE deployed (BUILD_ID iNtqe7NVLxfWtTC5fXxlw); live /privacy-policy + /terms 200; 'delete your data' self-service false claim = 0 matches (removed); GST present in /terms. Honest legal pages live."
     },
     {
       "id": "GAP-P6-TAIL-004",
