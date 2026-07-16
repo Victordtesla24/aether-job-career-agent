@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,7 @@ from app.rate_limit import (
     build_register_rate_limiter,
 )
 from app.routers import (
+    admin,
     agents,
     analytics,
     applications,
@@ -68,6 +71,27 @@ def _guard_production_replay_mode() -> None:
     )
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
+
+    Demotes the seeded ``admin/admin123`` credential to non-admin and, when
+    ``AETHER_ADMIN_EMAIL``/``AETHER_ADMIN_PASSWORD_HASH`` are set, grants the
+    configured operator admin. Best-effort: a rotation failure (e.g. DB briefly
+    unavailable at boot) logs a warning and never blocks startup.
+    """
+    try:
+        from app.repositories.admin import apply_admin_rotation
+
+        apply_admin_rotation()
+    except Exception as exc:  # noqa: BLE001 — never let rotation break boot
+        print(
+            f"WARNING: §14.7 admin credential rotation skipped at startup: {exc}",
+            file=sys.stderr,
+        )
+    yield
+
+
 def create_app() -> FastAPI:
     """Construct and configure the FastAPI application."""
     _guard_production_replay_mode()
@@ -80,6 +104,7 @@ def create_app() -> FastAPI:
             "Aether autonomous job & career agent backend — discovery, "
             "resume tailoring, applications, and approvals."
         ),
+        lifespan=_lifespan,
     )
 
     # Per-app auth rate limiters (see app.rate_limit), keyed on the submitted
@@ -126,6 +151,7 @@ def create_app() -> FastAPI:
     app.include_router(networking.router, prefix="/networking", tags=["networking"])
     app.include_router(offers.router, prefix="/offers", tags=["offers"])
     app.include_router(billing.router, prefix="/billing", tags=["billing"])
+    app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     return app
 

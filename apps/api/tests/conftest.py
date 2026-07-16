@@ -83,6 +83,10 @@ _TABLES_TO_CLEAN = (
     '"User"',
     '"EmailThread"',
     '"Contact"',
+    # AdminSetting (signup toggle etc.) is created lazily; truncating it between
+    # tests keeps the signup-enabled default (true) isolated per test. Append-only
+    # AdminAuditLog is deliberately NOT truncated (tests filter by actor id).
+    '"AdminSetting"',
     # '"OutreachTask"',  # created lazily; may not exist yet
     # '"InterviewSchedule"',  # created lazily; may not exist yet
 )
