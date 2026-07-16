@@ -58,16 +58,16 @@ Margins in §1.4 are computed on **GST-exclusive net revenue = total / 1.1** `[p
 
 ### 1.2 Final tier table
 
-Tier slugs and monthly AUD prices are `[INFERRED-FROM-PROMPT §14.1]`, **market-validated** against the verified competitor band A$19.99–A$71.43/mo, none agentic `[VERIFIED-WITH-SOURCE competitor-pricing]`; fable-5 §3d ruling: "§14.1 tiers (A$19/39/69 + Free) are market-valid; keep as-is." Annual = **10 × monthly (2 months free)** `[DESIGN-DECISION]` — the prompt gave no explicit annual figure; this multiplier is adjustable. Run quotas and model-tier mapping are `[DESIGN-DECISION]` (see §1.3).
+Tier slugs and monthly AUD prices are `[INFERRED-FROM-PROMPT §14.1]`, **market-validated** against the verified competitor band A$19.99–A$71.43/mo, none agentic `[VERIFIED-WITH-SOURCE competitor-pricing]`; fable-5 §3d ruling: "§14.1 tiers (A$19/39/69 + Free) are market-valid; keep as-is." **[AS-BUILT per `ADR-P6-PRICING`:** the ratified/shipped figures are the prompt's §14.1 exact values — annual **A$179 / A$359 / A$649** (≈9.4× monthly, ~2 months free) and run quotas **30 / 100 / 300** — NOT the design's originally-proposed 10× annual (A$190/390/690) or 50/200/600 quotas, which were rejected. The tables and DDL below reflect the shipped values.**]** Model-tier mapping is `[DESIGN-DECISION]` (see §1.3).
 
 | Plan | Monthly (incl. GST) | Monthly GST `round(t/11,2)` | Monthly net `t−gst` | Annual (incl. GST) | Annual GST | Annual net | Metered runs/mo | Model tier (app routing) |
 |------|--------------------:|----------------------------:|--------------------:|-------------------:|-----------:|-----------:|----------------:|--------------------------|
 | **Free**    | A$0.00  | A$0.00 | A$0.00  | —        | —      | —        | 5   | `light` |
-| **Starter** | A$19.00 | A$1.73 | A$17.27 | A$190.00 | A$17.27 | A$172.73 | 50  | `standard` |
-| **Pro**     | A$39.00 | A$3.55 | A$35.45 | A$390.00 | A$35.45 | A$354.55 | 200 | `advanced` |
-| **Power**   | A$69.00 | A$6.27 | A$62.73 | A$690.00 | A$62.73 | A$627.27 | 600 | `premium` |
+| **Starter** | A$19.00 | A$1.73 | A$17.27 | A$179.00 | A$16.27 | A$162.73 | 30  | `standard` |
+| **Pro**     | A$39.00 | A$3.55 | A$35.45 | A$359.00 | A$32.64 | A$326.36 | 100 | `advanced` |
+| **Power**   | A$69.00 | A$6.27 | A$62.73 | A$649.00 | A$59.00 | A$590.00 | 300 | `premium` |
 
-GST arithmetic (shown so it is auditable): `19/11=1.7273→1.73`, `39/11=3.5455→3.55`, `69/11=6.2727→6.27`; annual `190/11=17.27`, `390/11=35.45`, `690/11=62.73`. Every `net` equals `total/1.1` to the cent.
+GST arithmetic (shown so it is auditable): `19/11=1.7273→1.73`, `39/11=3.5455→3.55`, `69/11=6.2727→6.27`; annual `179/11=16.27`, `359/11=32.64`, `649/11=59.00`. Every `net` equals `total/1.1` to the cent.
 
 **"Metered runs"** = agent runs that actually invoke the LLM and therefore incur COGS. Per `probe-08` + `apps/api/app/routers/agents.py::_LLM_TIER_BY_BACKEND` `[VERIFIED-FROM-PROBE]`, those are **`tailor`, `coverLetter`, `storyExtractor`, `emailAgent`**. Deterministic agents (`scout`, `fitScorer`, `matcher`, `supervisor`) make **zero LLM calls / zero spend** and are therefore **not** counted against a plan's run quota (charging for a $0 deterministic run would be dishonest). This is the metering rule the quota middleware (§4) enforces.
 
@@ -98,7 +98,7 @@ Inputs, all cited:
 | **Pro**     | 35.45 | 0.96 (`39×1.7%+0.30`) | Opus Avg $2.20 → A$3.15 | 200K tok/mo | **31.34** | **88.4 %** |
 | **Power**   | 62.73 | 1.47 (`69×1.7%+0.30`) | Opus Heavy $6.60 → A$9.44 | 600K tok/mo | **51.82** | **82.6 %** |
 
-Annual (Stripe fee charged once on the annual total; COGS ×12): Starter **A$154.08 (89.2 %)**, Pro **A$309.82 (87.4 %)**, Power **A$501.96 (80.0 %)**.
+Annual (Stripe fee charged once on the annual total; COGS ×12), recomputed on the ratified annual prices A$179/359/649: Starter **≈A$144 (≈88.6 %)**, Pro **≈A$282 (≈86.4 %)**, Power **≈A$465 (≈78.9 %)**. *(Illustrative unit economics; exact COGS varies with live token usage.)*
 
 **Sensitivity notes:**
 - *International card* (3.5% + A$0.30 `[VERIFIED-WITH-SOURCE]`) worst case: Power fee A$2.72 → contribution A$50.57 (80.6 %). Margins stay >80 %.
@@ -223,9 +223,9 @@ INSERT INTO "Plan" ("id","name","priceAudMonthly","priceAudAnnual","runsPerMonth
                     "modelTier","spendCapUsdMonthly","sortOrder")
 VALUES
   ('free',    'Free',    0,   NULL, 5,   'light',    1.00, 0),
-  ('starter', 'Starter', 19,  190,  50,  'standard', 5.00, 1),
-  ('pro',     'Pro',     39,  390,  200, 'advanced', 15.00,2),
-  ('power',   'Power',   69,  690,  600, 'premium',  40.00,3)
+  ('starter', 'Starter', 19,  179,  30,  'standard', 5.00, 1),
+  ('pro',     'Pro',     39,  359,  100, 'advanced', 15.00,2),
+  ('power',   'Power',   69,  649,  300, 'premium',  40.00,3)
 ON CONFLICT ("id") DO UPDATE SET
   "name"=EXCLUDED."name",
   "priceAudMonthly"=EXCLUDED."priceAudMonthly",
@@ -289,10 +289,10 @@ Returns active plans with the GST breakdown pre-computed server-side (frontend n
 ```jsonc
 // 200 OK
 { "currency": "AUD", "gstIncluded": true, "plans": [
-  { "id":"starter","name":"Starter","modelTier":"standard","runsPerMonth":50,
+  { "id":"starter","name":"Starter","modelTier":"standard","runsPerMonth":30,
     "monthly": { "total": 19.00, "gst": 1.73, "net": 17.27 },
-    "annual":  { "total": 190.00,"gst": 17.27,"net": 172.73 },
-    "features": ["50 tailored agent runs / month","Standard model tier","Cover letters","Priority email agent"] },
+    "annual":  { "total": 179.00,"gst": 16.27,"net": 162.73 },
+    "features": ["30 tailored agent runs / month","Standard model tier","Cover letters","Priority email agent"] },
   /* ...pro, power; free has monthly.total 0 and annual: null ... */
 ]}
 ```
@@ -361,7 +361,7 @@ Handlers by `event["type"]` (§5 enumerates the event set):
 { "plan": { "id":"pro","name":"Pro","modelTier":"advanced" },
   "status":"active","interval":"month",
   "currentPeriodEnd":"2026-08-16T00:00:00Z","cancelAtPeriodEnd":false,
-  "quota": { "runsUsed":37,"runsAllowed":200,
+  "quota": { "runsUsed":37,"runsAllowed":100,
              "spendUsedUsd":2.14,"spendCapUsd":15.00,
              "periodEnd":"2026-08-01T00:00:00Z" } }
 ```
@@ -429,8 +429,8 @@ Insertion map inside `_record_run` (metered agents only):
 ```jsonc
 // 429 Too Many Requests
 { "detail": { "code": "quota_exhausted",        // or "spend_cap_reached"
-              "message": "You've used all 50 agent runs this period.",
-              "runsUsed": 50, "runsAllowed": 50,
+              "message": "You've used all 30 agent runs this period.",
+              "runsUsed": 30, "runsAllowed": 30,
               "resetsAt": "2026-08-01T00:00:00Z" } }
 ```
 
@@ -446,9 +446,9 @@ One **Product** per paid tier; two recurring **Prices** each, `currency='aud'`, 
 
 | Product | Price (monthly) | Price (annual) |
 |---------|-----------------|----------------|
-| Aether Starter | A$19.00 / month recurring | A$190.00 / year recurring |
-| Aether Pro | A$39.00 / month recurring | A$390.00 / year recurring |
-| Aether Power | A$69.00 / month recurring | A$690.00 / year recurring |
+| Aether Starter | A$19.00 / month recurring | A$179.00 / year recurring |
+| Aether Pro | A$39.00 / month recurring | A$359.00 / year recurring |
+| Aether Power | A$69.00 / month recurring | A$649.00 / year recurring |
 
 Resulting price IDs are written to `Plan.stripePriceIdMonthly/Annual` (via env or a one-time admin write; the seed uses `COALESCE` so ids survive redeploys).
 
