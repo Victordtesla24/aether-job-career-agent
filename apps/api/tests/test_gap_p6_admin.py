@@ -327,8 +327,8 @@ def test_rotation_demotes_seeded_admin_admin123(client):
 
 
 def test_rotation_promotes_env_admin_and_keeps_seed_nonadmin(client, monkeypatch):
-    from scripts.seed_demo import ADMIN_EMAIL, seed_admin_user
     from app.security import hash_password
+    from scripts.seed_demo import ADMIN_EMAIL, seed_admin_user
 
     seed_admin_user()
     env_email = f"owner-{uuid.uuid4().hex[:8]}@aether.io"

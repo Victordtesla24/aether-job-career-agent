@@ -22,7 +22,13 @@ import json
 import os
 from typing import Any, Optional
 
-from app.db import ensure_admin_user_columns, get_connection, new_id, rows_to_dicts
+from app.db import (
+    ensure_admin_user_columns,
+    ensure_user_profile_columns,
+    get_connection,
+    new_id,
+    rows_to_dicts,
+)
 from app.repositories.billing import _ensure_billing_tables, ensure_user_billing
 
 #: Distinct advisory-lock id for the admin schema (next free after billing's 719).
@@ -58,6 +64,10 @@ def _ensure_admin_schema() -> None:
     # Billing owns AdminAuditLog + UsageQuota; ensure them first.
     _ensure_billing_tables()
     ensure_admin_user_columns()
+    # ``username`` (used by the §14.7 rotation demote) is an additive User column
+    # from the other lazy-DDL family — ensure it so rotation never references a
+    # missing column on the older test schema.
+    ensure_user_profile_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (_ADMIN_LOCK,))
@@ -240,7 +250,7 @@ def list_users(
     sql = f'''
         SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",
                u."createdAt", u."lastLoginAt",
-               s."planId" AS plan, s."status" AS "subStatus",
+               COALESCE(s."planId", 'free') AS plan, s."status" AS "subStatus",
                COALESCE(sp.spend, 0) AS spend, COALESCE(sp.runs, 0) AS runs
         FROM "User" u
         LEFT JOIN "Subscription" s ON s."userId" = u."id"
@@ -284,7 +294,7 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
             cur.execute(
                 'SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",'
                 ' u."createdAt", u."lastLoginAt",'
-                ' s."planId" AS plan, s."status" AS "subStatus",'
+                ' COALESCE(s."planId", \'free\') AS plan, s."status" AS "subStatus",'
                 ' COALESCE(sp.spend,0) AS spend, COALESCE(sp.runs,0) AS runs'
                 ' FROM "User" u'
                 ' LEFT JOIN "Subscription" s ON s."userId" = u."id"'
