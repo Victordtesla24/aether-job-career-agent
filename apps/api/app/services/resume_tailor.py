@@ -16,6 +16,7 @@ tests and CI never hit the network.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -667,6 +668,122 @@ def render_tailored_raw_text(
     return "\n".join(lines)
 
 
+#: Default cap on how many bullets one tailoring request rewrites
+#: (``AETHER_TAILOR_MAX_BULLETS``). Rewriting ALL ~18 résumé bullets in one call
+#: was both too slow to complete inside the tailor budget AND too large a batch
+#: for the entailment verifier to check inside its window, so the fail-safe
+#: reverted everything — including genuine JD-keyword lift (GAP-P6-TAIL-005, live
+#: qa-prod-craft4.json). Capping to the top-K highest-impact bullets makes the
+#: tailor call faster and the entailment batch small enough to survive.
+_DEFAULT_TAILOR_MAX_BULLETS = 8
+
+
+def get_tailor_max_bullets() -> int:
+    """Max bullets rewritten per tailoring request (``AETHER_TAILOR_MAX_BULLETS``).
+
+    Default 8. A value ``<= 0`` disables the cap (rewrite every bullet — the
+    pre-TAIL-005 behaviour). A missing/malformed value falls back to the default.
+    """
+    try:
+        return int(os.environ.get("AETHER_TAILOR_MAX_BULLETS", str(_DEFAULT_TAILOR_MAX_BULLETS)))
+    except ValueError:
+        return _DEFAULT_TAILOR_MAX_BULLETS
+
+
+def _scoped_evidence_map(
+    structured: Sequence[dict[str, str]], resume_text: str, evidence_extra: str
+) -> dict[str, tuple[set[str], set[str]]]:
+    """Per-bullet ``(evidence_stems, evidence_numbers)`` scoped by proper-noun
+    anchors (GAP-P6-TAIL-002 / GAP-P6-TAIL-004).
+
+    The whole résumé (every bullet + skills/summary/headers) is SHARED context.
+    An extra evidence UNIT (a Story-Bank entry / career chunk) that NAMES an
+    employer/program present in the résumé (shares a proper-noun anchor with some
+    bullet) is context-bound: it lends its keywords only to bullets in THAT
+    context. A unit whose anchors match no bullet is a candidate-wide capability
+    and applies to every bullet. A bullet with NO genuine anchors of its own
+    names no context and therefore sees the FULL corpus (a story's own evidence
+    is never withheld from its home bullet when the employer name lives only in a
+    header). Extracted here so both the anti-fabrication guard and the top-K
+    selector (GAP-P6-TAIL-005) share one definition.
+    """
+    resume_stems, resume_numbers = _evidence_index(resume_text)
+    bullet_anchors = {b["evidenceRef"]: proper_noun_anchors(b["text"]) for b in structured}
+    all_bullet_anchors: set[str] = set()
+    for anchors in bullet_anchors.values():
+        all_bullet_anchors |= anchors
+    extra_units: list[tuple[set[str], set[str], set[str]]] = []
+    for unit in re.split(r"\n\s*\n", evidence_extra):
+        if not unit.strip():
+            continue
+        unit_stems, unit_numbers = _evidence_index(unit)
+        extra_units.append((proper_noun_anchors(unit), unit_stems, unit_numbers))
+    scoped: dict[str, tuple[set[str], set[str]]] = {}
+    for b in structured:
+        ref = b["evidenceRef"]
+        own_anchors = bullet_anchors.get(ref, set())
+        stems = set(resume_stems)
+        numbers = set(resume_numbers)
+        for unit_anchors, unit_stems, unit_numbers in extra_units:
+            context_bound = bool(unit_anchors & all_bullet_anchors)
+            if not context_bound or not own_anchors or (unit_anchors & own_anchors):
+                stems |= unit_stems
+                numbers |= unit_numbers
+        scoped[ref] = (stems, numbers)
+    return scoped
+
+
+def select_bullets_to_tailor(
+    structured: Sequence[dict[str, str]],
+    job_description: str,
+    resume_text: str,
+    evidence_extra: str = "",
+    max_bullets: int | None = None,
+) -> list[dict[str, str]]:
+    """Deterministically pick the ``<= K`` highest-impact bullets to rewrite
+    (GAP-P6-TAIL-005), returned in document order.
+
+    Rewriting ALL bullets in one call is the batch-size/latency wall that
+    prevents genuine lift from ever being delivered. This selects the bullets
+    that can actually move the ATS score truthfully, ranked by:
+
+    1. **Strict-lift levers first** — the count of JD keywords that the bullet's
+       OWN-context evidence (résumé + in-scope Story-Bank/career units) supports
+       but which are ABSENT from the whole résumé corpus. Adding one of these is
+       exactly what raises a like-for-like ATS re-score without fabricating.
+    2. **Existing JD overlap** — how many JD keywords the bullet already carries;
+       an already-relevant bullet has the most surface to mirror JD terminology.
+    3. **Document order** — a stable, explainable tiebreak.
+
+    The unselected bullets pass through UNCHANGED (content-only). ``max_bullets``
+    defaults to :func:`get_tailor_max_bullets`; ``<= 0`` or a batch already within
+    the cap returns every bullet (no cap). The selection is a superset filter —
+    the strict per-context fabrication guard and entailment pass still run over
+    whatever the model returns, so an over-selected bullet that cannot be
+    truthfully improved simply comes back unchanged.
+    """
+    ordered = list(structured)
+    k = get_tailor_max_bullets() if max_bullets is None else max_bullets
+    if k <= 0 or len(ordered) <= k:
+        return ordered
+    jd_key_stems = {_stem(t) for t in _ats_content_tokens(job_description)}
+    resume_stems, _ = _evidence_index(resume_text)
+    scoped = _scoped_evidence_map(ordered, resume_text, evidence_extra)
+    ranked: list[tuple[int, int, int, str]] = []
+    for idx, b in enumerate(ordered):
+        ref = b["evidenceRef"]
+        ev_stems, _ = scoped.get(ref, (resume_stems, set()))
+        addable = sum(
+            1 for s in jd_key_stems if s in ev_stems and s not in resume_stems
+        )
+        bullet_stems = {_stem(t) for t in _ats_content_tokens(b["text"])}
+        jd_overlap = len(jd_key_stems & bullet_stems)
+        ranked.append((addable, jd_overlap, idx, ref))
+    ranked.sort(key=lambda r: (-r[0], -r[1], r[2]))
+    chosen_refs = {r[3] for r in ranked[:k]}
+    return [b for b in ordered if b["evidenceRef"] in chosen_refs]
+
+
 @dataclass
 class TailorResult:
     """Validated output of a tailoring run."""
@@ -709,9 +826,19 @@ class ResumeTailorService:
         so users with no career data see identical behaviour to before.
         """
         structured = self._structure_originals(originals, resume_text)
+        # GAP-P6-TAIL-005: cap the rewrite to the top-K highest-impact bullets
+        # instead of the whole résumé. The full-résumé batch was both too slow to
+        # generate inside the tailor budget AND too large for the entailment
+        # verifier's window, so the fail-safe reverted everything — genuine lift
+        # included. Only the selected bullets are shown to the model and are
+        # eligible to change; the rest pass through unchanged (content-only).
+        selected = select_bullets_to_tailor(
+            structured, job_description, resume_text, evidence_extra
+        )
+        selected_refs = {b["evidenceRef"] for b in selected}
         user_prompt = (
             "Job description:\n" + job_description + "\n\nOriginal bullets:\n"
-            + "\n".join(f"{b['evidenceRef']}: {b['text']}" for b in structured)
+            + "\n".join(f"{b['evidenceRef']}: {b['text']}" for b in selected)
         )
         if evidence_extra.strip():
             # GAP-P6-TAIL-001: the consolidated candidate evidence (Story Bank +
@@ -734,7 +861,8 @@ class ResumeTailorService:
             temperature=0.0,
         )
         result = self._validate(
-            raw, structured, resume_text, job_description, evidence_extra
+            raw, structured, resume_text, job_description, evidence_extra,
+            allowed_refs=selected_refs,
         )
         # GAP-P6-TAIL-003: a final semantic-entailment pass over the CHANGED
         # bullets catches the fabrication class the deterministic token guards
@@ -775,6 +903,7 @@ class ResumeTailorService:
         resume_text: str,
         job_description: str = "",
         evidence_extra: str = "",
+        allowed_refs: set[str] | None = None,
     ) -> TailorResult:
         # The anti-fabrication evidence corpus is the candidate's evidence ONLY
         # (resume raw_text + consolidated career data). The job description is
@@ -803,43 +932,12 @@ class ResumeTailorService:
         # bullet. But an extra evidence UNIT (a Story-Bank entry or career-data
         # chunk) that NAMES a specific employer/program present in the résumé
         # (shares a proper-noun anchor with some bullet) is context-bound: it may
-        # only lend its keywords to bullets in THAT context. A unit whose anchors
-        # match no bullet is a general capability that applies candidate-wide.
-        # This is what stops a payments story about the ATO/Payday-Super program
-        # from licensing "payment" on an unrelated Telstra bullet.
-        resume_stems, resume_numbers = _evidence_index(resume_text)
-        bullet_anchors = {
-            b["evidenceRef"]: proper_noun_anchors(b["text"]) for b in structured
-        }
-        all_bullet_anchors: set[str] = set()
-        for anchors in bullet_anchors.values():
-            all_bullet_anchors |= anchors
-        extra_units: list[tuple[set[str], set[str], set[str]]] = []
-        for unit in re.split(r"\n\s*\n", evidence_extra):
-            if not unit.strip():
-                continue
-            unit_stems, unit_numbers = _evidence_index(unit)
-            extra_units.append((proper_noun_anchors(unit), unit_stems, unit_numbers))
-
-        def _scoped_evidence(ref: str) -> tuple[set[str], set[str]]:
-            own_anchors = bullet_anchors.get(ref, set())
-            stems = set(resume_stems)
-            numbers = set(resume_numbers)
-            for unit_anchors, unit_stems, unit_numbers in extra_units:
-                context_bound = bool(unit_anchors & all_bullet_anchors)
-                # A context-bound unit (it names an employer/program present in
-                # the résumé) lends its keywords only to bullets in THAT context.
-                # But a bullet with NO genuine anchors of its own names no
-                # context, so it can never safely EXCLUDE a unit — it must see
-                # the FULL corpus. Otherwise a story's own evidence is wrongly
-                # withheld from its home bullet when the employer name lives in a
-                # section header, not the bullet text (GAP-P6-TAIL-004, live
-                # NAB/SQL repro). Cross-context fabrication is still caught by the
-                # semantic entailment pass downstream.
-                if not context_bound or not own_anchors or (unit_anchors & own_anchors):
-                    stems |= unit_stems
-                    numbers |= unit_numbers
-            return stems, numbers
+        # only lend its keywords to bullets in THAT context. This is what stops a
+        # payments story about the ATO/Payday-Super program from licensing
+        # "payment" on an unrelated Telstra bullet. Scoping is shared with the
+        # top-K selector via :func:`_scoped_evidence_map` (GAP-P6-TAIL-005).
+        scoped_map = _scoped_evidence_map(structured, resume_text, evidence_extra)
+        _default_scope = _evidence_index(resume_text)  # résumé-only fallback
 
         accepted: dict[str, str] = {}
         for item in raw.get("bullets", []):
@@ -848,13 +946,19 @@ class ResumeTailorService:
             if not text or not ref or ref not in by_ref:
                 result.rejected.append(text or "<empty>")
                 continue
+            if allowed_refs is not None and ref not in allowed_refs:
+                # GAP-P6-TAIL-005: only the top-K bullets shown to the model are
+                # eligible to change this request. A rewrite for a bullet outside
+                # the batch is ignored (it keeps its original) so the batch cap is
+                # strictly enforced even if the model volunteers extra refs.
+                continue
             if ref in accepted:
                 # A second rewrite of the same source bullet would duplicate
                 # content in the stored version — keep the first only.
                 result.rejected.append(text)
                 continue
             original = by_ref[ref]
-            scoped_stems, scoped_numbers = _scoped_evidence(ref)
+            scoped_stems, scoped_numbers = scoped_map.get(ref, _default_scope)
             if unsupported_tokens(text, scoped_stems, scoped_numbers, jd_stems):
                 # Fabrication guard (D-0015 / GAP-TAIL-001 / GAP-P6-TAIL-002): a
                 # content token with no evidence match FOR THIS BULLET'S CONTEXT
@@ -983,7 +1087,10 @@ class ResumeTailorService:
         # independent of (and not consumable by) it. Without this the verifier
         # got 0-9s, timed out, and its conservative fail-safe reverted every
         # edit — including genuinely-supported ones — for zero ATS lift.
-        with shared_budget(get_entailment_budget_seconds()):
+        # GAP-P6-TAIL-005: scale the window with the CHANGED-bullet count so a
+        # small batch (now the norm under the top-K cap) verifies comfortably;
+        # the scaling is capped so a large batch still can't blow the HTTP edge.
+        with shared_budget(get_entailment_budget_seconds(len(changed))):
             raw = self._llm.complete_json(
                 "tailor_entailment",
                 ENTAILMENT_SYSTEM_PROMPT,
