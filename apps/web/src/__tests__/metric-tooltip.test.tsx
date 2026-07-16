@@ -46,6 +46,27 @@ describe("MetricTooltip", () => {
     expect(tooltip.className).toMatch(/opacity-0/);
   });
 
+  // GAP-P6-UI-001: a live mobile E2E found horizontal overflow on /dashboard
+  // at a 390x844 viewport (uat/reports/evidence/phase6/qa-final-gates.json
+  // GATE-26 UAT-08). Root cause: the closed popover was only opacity-0 — an
+  // absolutely positioned w-56 (224px) box left in the layout still inflates
+  // the ancestor's scrollWidth even while invisible. It must also be
+  // `display:none` (Tailwind `hidden`) while closed so it never contributes
+  // to the page's scrollable overflow — opacity/visibility alone don't
+  // remove an element's box from layout, only `display:none` does.
+  it("removes the closed popover from layout (display:none) so it can't cause horizontal page overflow", () => {
+    render(<MetricTooltip label="Market Pulse" value="72" tooltip="A blended read of hiring-market momentum." />);
+    const trigger = screen.getByRole("button", { name: /market pulse/i });
+    const describedBy = trigger.getAttribute("aria-describedby") as string;
+    const tooltip = document.getElementById(describedBy) as HTMLElement;
+
+    expect(tooltip.className).toMatch(/\bhidden\b/);
+    fireEvent.mouseEnter(trigger);
+    expect(tooltip.className).not.toMatch(/\bhidden\b/);
+    fireEvent.mouseLeave(trigger);
+    expect(tooltip.className).toMatch(/\bhidden\b/);
+  });
+
   it("shows the popover on keyboard focus and closes on Escape, returning focus to the trigger", () => {
     render(<MetricTooltip label="ATS distribution" value="120 jobs" tooltip="Distribution of ATS match scores across scored jobs." />);
     const trigger = screen.getByRole("button", { name: /ats distribution/i });
