@@ -13,13 +13,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.rate_limit import build_login_rate_limiter, build_register_rate_limiter
+from app.rate_limit import (
+    SlidingWindowRateLimiter,
+    build_login_rate_limiter,
+    build_register_rate_limiter,
+)
 from app.routers import (
     agents,
     analytics,
     applications,
     approvals,
     auth,
+    billing,
     cover_letters,
     emails,
     google_oauth,
@@ -85,6 +90,14 @@ def create_app() -> FastAPI:
     # identifier; ``register_rate_limiter`` caps register attempts per email.
     app.state.login_rate_limiter = build_login_rate_limiter()
     app.state.register_rate_limiter = build_register_rate_limiter()
+    # Billing limiters, keyed by user id (per-worker): checkout 5/hr, portal
+    # 10/hr — blunt double-click session minting / portal abuse (billing §3).
+    app.state.checkout_rate_limiter = SlidingWindowRateLimiter(
+        max_calls=5, window_seconds=60 * 60.0
+    )
+    app.state.portal_rate_limiter = SlidingWindowRateLimiter(
+        max_calls=10, window_seconds=60 * 60.0
+    )
 
     # Permit the Next.js dashboard (and other same-origin tooling) to call the
     # API during development. Origins are tightened per-environment later.
@@ -112,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(emails.router, prefix="/emails", tags=["emails"])
     app.include_router(networking.router, prefix="/networking", tags=["networking"])
     app.include_router(offers.router, prefix="/offers", tags=["offers"])
+    app.include_router(billing.router, prefix="/billing", tags=["billing"])
 
     return app
 

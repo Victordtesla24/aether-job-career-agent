@@ -1,0 +1,104 @@
+/**
+ * Billing API client (GAP-P6-BILL-001 / PRICING-001).
+ *
+ * `fetchPlans` is PUBLIC — it hits GET /billing/plans with no bearer token, so
+ * the /pricing page renders for logged-out visitors (the generic authenticated
+ * `apiRequest` would redirect them to /login). `startCheckout`,
+ * `fetchSubscription` and `openBillingPortal` are authenticated and reuse the
+ * shared `apiRequest`.
+ */
+import { z } from "zod";
+
+import { apiBaseUrl, apiRequest, type RequestOptions } from "./client";
+
+export const GstBreakdownSchema = z.object({
+  total: z.number(),
+  gst: z.number(),
+  net: z.number(),
+});
+export type GstBreakdown = z.infer<typeof GstBreakdownSchema>;
+
+export const PlanSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  modelTier: z.string(),
+  runsPerMonth: z.number(),
+  monthly: GstBreakdownSchema,
+  annual: GstBreakdownSchema.nullable(),
+  features: z.array(z.string()),
+  purchasable: z.boolean(),
+});
+export type Plan = z.infer<typeof PlanSchema>;
+
+export const PlansResponseSchema = z.object({
+  currency: z.string(),
+  gstIncluded: z.boolean(),
+  plans: z.array(PlanSchema),
+});
+export type PlansResponse = z.infer<typeof PlansResponseSchema>;
+
+/** PUBLIC — no auth token attached. */
+export async function fetchPlans(baseUrl: string = apiBaseUrl()): Promise<PlansResponse> {
+  const res = await fetch(`${baseUrl}/billing/plans`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load plans (${res.status})`);
+  }
+  return PlansResponseSchema.parse(await res.json());
+}
+
+export interface CheckoutResult {
+  checkoutUrl: string;
+  sessionId: string;
+}
+
+export async function startCheckout(
+  planId: string,
+  interval: "month" | "year",
+  options: RequestOptions = {},
+): Promise<CheckoutResult> {
+  return apiRequest<CheckoutResult>("/billing/checkout", {
+    ...options,
+    method: "POST",
+    body: { planId, interval },
+  });
+}
+
+export const SubscriptionStateSchema = z.object({
+  plan: z
+    .object({ id: z.string(), name: z.string(), modelTier: z.string() })
+    .nullable(),
+  status: z.string().nullable(),
+  interval: z.string().nullable(),
+  currentPeriodEnd: z.string().nullable(),
+  cancelAtPeriodEnd: z.boolean(),
+  quota: z
+    .object({
+      runsUsed: z.number(),
+      runsAllowed: z.number(),
+      spendUsedUsd: z.number(),
+      spendCapUsd: z.number(),
+      periodEnd: z.string().nullable(),
+    })
+    .nullable(),
+});
+export type SubscriptionState = z.infer<typeof SubscriptionStateSchema>;
+
+export async function fetchSubscription(
+  options: RequestOptions = {},
+): Promise<SubscriptionState> {
+  return SubscriptionStateSchema.parse(
+    await apiRequest<unknown>("/billing/subscription", options),
+  );
+}
+
+export async function openBillingPortal(
+  options: RequestOptions = {},
+): Promise<{ portalUrl: string }> {
+  return apiRequest<{ portalUrl: string }>("/billing/portal", {
+    ...options,
+    method: "POST",
+    body: {},
+  });
+}

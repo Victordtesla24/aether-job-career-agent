@@ -30,7 +30,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import get_connection, new_id
-from app.repositories import billing as billing_repo
 from app.repositories.billing import (
     PlanRepository,
     SubscriptionRepository,
