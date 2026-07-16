@@ -549,7 +549,8 @@
       ],
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-quality",
-      "verify_finding_2": "qa-prod-craft.json: architecturally works on a GENUINE live run (real strict lift 30.81->35.14, guard rejected 2/18 overreach) BUT (a) contaminated by the CRITICAL silent fixture-fallback (GAP-P6-AUTH-002) which masked tailoring as canned output, (b) one fabrication slipped (GAP-P6-TAIL-002). Re-verify after AUTH-002+TAIL-002 fixed."
+      "verify_finding_2": "qa-prod-craft.json: architecturally works on a GENUINE live run (real strict lift 30.81->35.14, guard rejected 2/18 overreach) BUT (a) contaminated by the CRITICAL silent fixture-fallback (GAP-P6-AUTH-002) which masked tailoring as canned output, (b) one fabrication slipped (GAP-P6-TAIL-002). Re-verify after AUTH-002+TAIL-002 fixed.",
+      "verify_finding_3": "qa-prod-craft2.json: genuine strict lift 30.81->32.97 content-only metrics-preserved, BUT one unsupported claim 'for financial institutions' on an InfoCentric bullet (no evidence). \u00a79 zero-tolerance. Robust fix = entailment verification (GAP-P6-TAIL-003)."
     },
     {
       "id": "GAP-P6-COV-001",
@@ -571,7 +572,7 @@
         "no fabrication",
         "fabrication-guard catches JD-tempting unsupported claims"
       ],
-      "status": "VERIFY-INCONCLUSIVE-REENTERED",
+      "status": "VERIFIED-CLOSED",
       "merged_sha": "ef054d1",
       "verify_finding": "writer-audit-G FAIL 60/100: business format OK but one run fabricated 3 claims absent from source (guard inconsistent on cover path). \u00a79 zero-tolerance.",
       "fix": "fix/p6-quality: anti-fabrication guard applied to cover path, JD EXCLUDED from candidate-evidence corpus; catches JD-role-term fabrications (audited 'intake'). Reviewer PASS (review-quality.json).",
@@ -583,7 +584,9 @@
       ],
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-quality",
-      "verify_finding_2": "qa-prod-craft.json GATE-11/12 INCONCLUSIVE: served cover artifact was CLEAN (business format + zero fabrication + clean PDF) BUT proven to be a FIXTURE-REPLAY (GAP-P6-AUTH-002), so the live fabrication guard was never genuinely exercised. Re-verify after AUTH-002 fixed + quota reset."
+      "verify_finding_2": "qa-prod-craft.json GATE-11/12 INCONCLUSIVE: served cover artifact was CLEAN (business format + zero fabrication + clean PDF) BUT proven to be a FIXTURE-REPLAY (GAP-P6-AUTH-002), so the live fabrication guard was never genuinely exercised. Re-verify after AUTH-002 fixed + quota reset.",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "qa-prod-craft2.json GATE-11/12: real cover (62s billed, not fixture), full business format, ZERO fabrication on rigorous narrative probe, clean 1-page PDF, craft 78/100."
     },
     {
       "id": "GAP-P6-CONV-001",
@@ -759,7 +762,7 @@
         "quota refunded on LLM failure",
         "no fixture bytes served in production response"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [
         "GATE-02",
@@ -769,7 +772,9 @@
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-authenticity2",
       "merged_sha": "4d63fc5",
-      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy."
+      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy.",
+      "closed_by": "qa (production, sole authority)",
+      "close_evidence": "qa-prod-craft2.json: 5/5 live attempts zero fixture masquerade (3 honest 503+quota-refund+bill-nothing, 2 genuine 200 real-cost content with 0 byte-overlap vs fixtures). Silent fake-data path eliminated. GATE-02 honest."
     },
     {
       "id": "GAP-P6-TAIL-002",
@@ -789,7 +794,7 @@
         "cross-context keyword attributed to wrong employer is rejected",
         "GET /resumes/{id}/ats after tailor reflects tailored score not baseline"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "PARTIALLY-VERIFIED",
       "human_gated": false,
       "gates": [
         "GATE-09"
@@ -797,7 +802,37 @@
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-authenticity2",
       "merged_sha": "4d63fc5",
-      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy."
+      "review": "PASS (review-authenticity2.json) \u2014 every auto/live failure path raises LLMUnavailableError->503+refund, _replay_with_default deleted, replay mode intact, context-scoped guard rejects cross-context+preserves same-context lift, raw_text regenerated. 53 targeted + 587 full suite pass. DEPLOY: set AETHER_LLM_BUDGET_SECONDS=85 (under ~100s edge). Re-QA craft on prod after redeploy.",
+      "close_evidence": "qa-prod-craft2.json: cross-context bleed FIXED+verified (guard rejects re-engineered Telstra/payment twice); raw_text regen FIXED+verified (GET /resumes/ats reflects tailored score). Residual general fabrication moved to GAP-P6-TAIL-003."
+    },
+    {
+      "id": "GAP-P6-TAIL-003",
+      "title": "Robust anti-fabrication via entailment verification + budget-allocation reliability",
+      "type": "AUTHENTICITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/resume, llm_client",
+      "category": "tailoring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "qa-prod-craft2.json",
+      "observed": "After 3 deterministic-guard cycles, tailoring still occasionally adds an unsupported qualifier to a bullet ('for financial institutions' on InfoCentric) \u2014 a semantic fabrication the keyword-grounding guard cannot catch (whack-a-mole). SEPARATELY: deployed budget 85s < deepseek-v4-pro's ~110-120s need, so the primary model eats the whole budget before the faster fallback runs -> 3/5 live attempts 503.",
+      "expected": "\u00a79 zero unsupported claims in tailored resumes \u2014 robust semantic verification. AND reliable completion (primary must not starve fallback).",
+      "root_cause": "Deterministic token-grounding cannot catch all semantic fabrication; budget not split between primary/fallback attempts.",
+      "cluster": "A-REENTRY",
+      "fix_spec": "(1) Add an LLM-judge ENTAILMENT verification pass on CHANGED tailored bullets: each changed bullet's factual claims must be entailed by the source resume+stories; un-entailed bullets REVERT to their original. Use the fast/structured model, one bounded batched call, so it fits the budget. (2) Budget allocation: cap the PRIMARY model attempt (e.g. ~55-60% of budget) so the faster fallback still gets a turn within the total; keep total under the ~100s edge.",
+      "tests_required": [
+        "a tailored bullet with an unsupported qualifier is reverted (entailment reject)",
+        "a genuinely-supported tailored bullet is kept (no over-revert, strict lift preserved)",
+        "primary-attempt cap leaves time for fallback within budget"
+      ],
+      "status": "FIX-READY-MERGED",
+      "human_gated": false,
+      "gates": [
+        "GATE-09"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-tail3",
+      "merged_sha_pending": true,
+      "review": "PASS (review-tail3.json): entailment reverts fabrication, no over-revert, conservative+no-fixture on failure, budget cap fixes 503 starvation. 40+58 tests, no AUTH-002 regression. DEPLOY: set AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.4 (give fast fallback more room). Re-QA tailoring after redeploy."
     }
   ],
   "rejected_hypotheses": [
@@ -853,17 +888,17 @@
   ],
   "gate_status": {
     "GATE-01": "PASS (deploy-verify: health ok v0.2.0)",
-    "GATE-02": "RE-OPEN (mode=auto but silently serves fixtures on timeout \u2014 AUTH-002 must fix before GATE-02 is honestly PASS)",
+    "GATE-02": "PASS (qa-prod-craft2.json: auto mode honest \u2014 no fixture served, honest 503 on failure)",
     "GATE-03": "PASS (qa-prod-console-admin.json: 16 routes, 0 console errors, 0 failed requests)",
     "GATE-04": "CONDITIONALLY-CLOSED-PENDING (ADR-P6-OAUTH; verify in Cluster E)",
     "GATE-05": "BLOCKED-ON-HUMAN (2 Gmail)",
     "GATE-06": "OPEN (verify Cluster E)",
     "GATE-07": "PASS (qa-prod-sourcing.json: 30 jobs, 3 sources >=5, 30/30 fresh, 0 dup \u2014 live scout run)",
     "GATE-08": "PASS (qa-prod-sourcing.json: 10/10 sampled cards LIVE, 0 seek, 0 expired)",
-    "GATE-09": "FAIL-REENTERED (fixture-fallback GAP-P6-AUTH-002 + fabrication slip GAP-P6-TAIL-002; re-fix+re-verify)",
+    "GATE-09": "FAIL-REENTERED-AGAIN (tailoring fabrication residual 'for financial institutions'; robust entailment fix GAP-P6-TAIL-003)",
     "GATE-10": "PASS (qa-prod-craft.json: MetricTooltip + methodology + before/after ATS shown; UI-surface requirements)",
-    "GATE-11": "INCONCLUSIVE-REENTERED (cover served as fixture-replay; re-verify after AUTH-002)",
-    "GATE-12": "LIKELY-PASS (probe-14; confirm G)",
+    "GATE-11": "PASS (qa-prod-craft2.json: real cover, business format, 0 fabrication, clean PDF, craft 78)",
+    "GATE-12": "PASS (qa-prod-craft2.json: cover PDF clean 1-page)",
     "GATE-13": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-14": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-15": "BLOCKED-ON-HUMAN (Stripe Tax)",
@@ -886,5 +921,18 @@
     "GATE-32": "PASS (probe-18)",
     "GATE-33": "BLOCKED-ON-HUMAN (Stripe webhook)",
     "GATE-34": "PASS (backfill: 2 users -> 2 Subscriptions + 2 UsageQuota, deploy-verify.json)"
+  },
+  "backlog": [
+    {
+      "id": "BACKLOG-P6-01",
+      "title": "Per-run Cost column in agents Recent Runs table",
+      "severity": "LOW",
+      "source": "repo-content-verification.json (AGT-AGENTS/crvv commit 552cd4a, the one genuinely-unique item)",
+      "detail": "costUsd is parsed and an aggregate avg-cost stat is shown, but not surfaced per-row in the /dashboard/agents Recent Runs table. Out of Phase-6 scope (subscription/billing/admin/sourcing/quality); logged honestly as backlog, not a gate blocker. The AGT-AGENTS/crvv branch is otherwise superseded and safe to delete.",
+      "disposition": "BACKLOG"
+    }
+  ],
+  "cluster_H_repo_cleanup": {
+    "content_verification": "repo-content-verification.json: ALL 12 open PRs + 14 remote branches SUPERSEDED (verified content-by-content, not SHA) \u2014 safe to close/delete for GATE-21/22. phase-1/foundation empty diff; 6 branches only touch non-served design/screens/*.html; rest rebuilt better in prod. One backlog item logged (BACKLOG-P6-01)."
   }
 }
