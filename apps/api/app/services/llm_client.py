@@ -123,6 +123,40 @@ def get_budget_seconds() -> float:
         return 180.0
 
 
+def get_cover_budget_seconds() -> float:
+    """Dedicated wall-clock budget (seconds) for a COVER-LETTER / pipeline
+    generation, decoupled from the tailoring-tuned global budget (GAP-P6-COV-002).
+
+    The tailoring path deliberately runs a small global budget
+    (``AETHER_LLM_BUDGET_SECONDS``, 65s in production) so the tailor GENERATION
+    plus its dedicated ENTAILMENT window (:func:`get_entailment_budget_seconds`)
+    both fit under the ~100s HTTP edge. The cover-letter path, however, is a
+    SINGLE long generation call with NO entailment step, so that 65s needlessly
+    starved it (the heavy reasoning primary fails, then the faster fallback runs
+    out of budget) and the request chronically 503'd (live evidence
+    qa-final-gates.json GATE-26, UAT-RESULTS-20260716-173502.json). The cover
+    feature itself is sound (craft QA: a real 62s, 78-craft, zero-fabrication
+    letter) — this is pure budget starvation.
+
+    Because the cover path has no entailment reservation to leave room for, it can
+    safely claim up to ~85-90s of the single-request ~100s edge. Applied as a
+    fresh :func:`shared_budget` window around the cover drafting loop (exactly
+    mirroring the TAIL-004 dedicated entailment window), it overrides the
+    tailoring-constrained deadline for the cover generation ONLY — standalone
+    cover gets the full window, and in the pipeline the cover no longer inherits
+    the already-drained tailoring budget. Env-overridable
+    (``AETHER_LLM_COVER_BUDGET_SECONDS``, default 88s); a missing/malformed value
+    falls back to 88 and the result is floored at ``_MIN_ATTEMPT_SECONDS`` so a
+    bad config can never drive it below a usable attempt. Ops MUST keep it under
+    the single-request HTTP edge (~100s).
+    """
+    try:
+        seconds = float(os.environ.get("AETHER_LLM_COVER_BUDGET_SECONDS", "88"))
+    except ValueError:
+        seconds = 88.0
+    return max(_MIN_ATTEMPT_SECONDS, seconds)
+
+
 def _entailment_budget_base_seconds() -> float:
     """Base seconds for the entailment window (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``)."""
     try:

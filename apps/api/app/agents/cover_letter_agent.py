@@ -27,7 +27,13 @@ from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
 from app.services.fabrication_guard import FabricationGuard
-from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
+from app.services.llm_client import (
+    LLMClient,
+    LLMFixtureMissingError,
+    get_cover_budget_seconds,
+    get_model,
+    shared_budget,
+)
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_tailor import unsupported_claim_tokens
 
@@ -550,48 +556,59 @@ class CoverLetterAgent:
         # letter-format violations so the model fixes all three. A draft that
         # still fails the guard (422), asserts an unsupported claim, or violates
         # the structural contract after every retry is REJECTED — never shipped.
-        letter, body, flagged, claim_flags, issues = self._draft(
-            base_prompt, job, corpus, signer, position, fixture_key="default",
-            claim_evidence=claim_evidence, jd_risk=jd_risk,
-        )
-        all_flagged: list[str] = list(flagged)
-        all_claims: list[str] = list(claim_flags)
-        for attempt in ("retry", "retry2"):
-            if not flagged and not claim_flags and not issues:
-                break
-            feedback: list[str] = []
-            if all_flagged:
-                feedback.append(
-                    f"your previous draft mentioned terms with no evidence in the "
-                    f"resume or job description: {all_flagged}. Rewrite the letter "
-                    "WITHOUT those terms. Use ONLY words, exact spellings and "
-                    "numbers that appear verbatim in the resume or job description "
-                    "above (e.g. never abbreviate or restate a metric). Do not "
-                    "introduce any other skill, tool, company or figure."
-                )
-            if all_claims:
-                feedback.append(
-                    f"your previous draft claimed the candidate PERSONALLY has "
-                    f"experience their résumé, story bank and profile do NOT prove: "
-                    f"{all_claims}. These are terms from the job posting, which is "
-                    "NOT evidence the candidate has them. Remove every claim to "
-                    "personally possess them (you may still describe the role); "
-                    "write only what the candidate's own evidence proves."
-                )
-            if issues:
-                feedback.append("fix these format violations: " + "; ".join(issues))
-            retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
-            try:
-                letter, body, flagged, claim_flags, issues = self._draft(
-                    retry_prompt, job, corpus, signer, position, fixture_key=attempt,
-                    claim_evidence=claim_evidence, jd_risk=jd_risk,
-                )
-            except LLMFixtureMissingError:
-                # Replay mode with no recorded retry fixture — keep the last
-                # draft; the guard and structural gates below still adjudicate it.
-                break
-            all_flagged.extend(t for t in flagged if t not in all_flagged)
-            all_claims.extend(t for t in claim_flags if t not in all_claims)
+        # GAP-P6-COV-002: run the ENTIRE corrective drafting loop (every
+        # generation + retry) inside ONE dedicated cover-budget window, decoupled
+        # from the tailoring-tuned global budget. Cover is a single long
+        # generation with NO entailment step, so the 65s the tailoring path is
+        # tuned to (generation + its own entailment window under the ~100s edge)
+        # needlessly starved it -> chronic 503. A fresh shared_budget window
+        # overrides that deadline for the cover generation ONLY — standalone cover
+        # gets the full ~88s, and in the pipeline the cover no longer inherits the
+        # already-drained tailoring budget. Tailoring is untouched. One window for
+        # all retries keeps the whole request under the single-request HTTP edge.
+        with shared_budget(get_cover_budget_seconds()):
+            letter, body, flagged, claim_flags, issues = self._draft(
+                base_prompt, job, corpus, signer, position, fixture_key="default",
+                claim_evidence=claim_evidence, jd_risk=jd_risk,
+            )
+            all_flagged: list[str] = list(flagged)
+            all_claims: list[str] = list(claim_flags)
+            for attempt in ("retry", "retry2"):
+                if not flagged and not claim_flags and not issues:
+                    break
+                feedback: list[str] = []
+                if all_flagged:
+                    feedback.append(
+                        f"your previous draft mentioned terms with no evidence in the "
+                        f"resume or job description: {all_flagged}. Rewrite the letter "
+                        "WITHOUT those terms. Use ONLY words, exact spellings and "
+                        "numbers that appear verbatim in the resume or job description "
+                        "above (e.g. never abbreviate or restate a metric). Do not "
+                        "introduce any other skill, tool, company or figure."
+                    )
+                if all_claims:
+                    feedback.append(
+                        f"your previous draft claimed the candidate PERSONALLY has "
+                        f"experience their résumé, story bank and profile do NOT prove: "
+                        f"{all_claims}. These are terms from the job posting, which is "
+                        "NOT evidence the candidate has them. Remove every claim to "
+                        "personally possess them (you may still describe the role); "
+                        "write only what the candidate's own evidence proves."
+                    )
+                if issues:
+                    feedback.append("fix these format violations: " + "; ".join(issues))
+                retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
+                try:
+                    letter, body, flagged, claim_flags, issues = self._draft(
+                        retry_prompt, job, corpus, signer, position, fixture_key=attempt,
+                        claim_evidence=claim_evidence, jd_risk=jd_risk,
+                    )
+                except LLMFixtureMissingError:
+                    # Replay mode with no recorded retry fixture — keep the last
+                    # draft; the guard and structural gates below still adjudicate it.
+                    break
+                all_flagged.extend(t for t in flagged if t not in all_flagged)
+                all_claims.extend(t for t in claim_flags if t not in all_claims)
         if flagged:
             raise FabricationError(flagged)
         if claim_flags:

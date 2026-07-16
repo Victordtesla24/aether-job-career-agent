@@ -36,7 +36,13 @@ from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.fabrication_guard import FabricationGuard
-from app.services.llm_client import LLMClient, LLMUnavailableError, get_model
+from app.services.llm_client import (
+    LLMClient,
+    LLMUnavailableError,
+    get_cover_budget_seconds,
+    get_model,
+    shared_budget,
+)
 from app.services.resume_parser import parse_resume_pdf
 
 router = APIRouter()
@@ -321,15 +327,20 @@ def refine_cover_letter(
         return full, guard.check(full, corpus)
 
     try:
-        revised, flagged = _draft(base_prompt, "default")
-        if flagged:
-            retry_prompt = (
-                f"{base_prompt}\n\nIMPORTANT: your previous draft mentioned terms "
-                f"with no evidence in the resume or job description: {flagged}. "
-                "Rewrite WITHOUT those terms, using ONLY words that appear "
-                "verbatim in the resume or job description above."
-            )
-            revised, flagged = _draft(retry_prompt, "retry")
+        # GAP-P6-COV-002: the cover-letter refine path is generation-only (no
+        # entailment step), so give its drafting (default + one retry) the
+        # dedicated cover-budget window rather than the tailoring-tuned global
+        # budget that chronically 503'd it. One window covers both drafts.
+        with shared_budget(get_cover_budget_seconds()):
+            revised, flagged = _draft(base_prompt, "default")
+            if flagged:
+                retry_prompt = (
+                    f"{base_prompt}\n\nIMPORTANT: your previous draft mentioned terms "
+                    f"with no evidence in the resume or job description: {flagged}. "
+                    "Rewrite WITHOUT those terms, using ONLY words that appear "
+                    "verbatim in the resume or job description above."
+                )
+                revised, flagged = _draft(retry_prompt, "retry")
     except LLMUnavailableError:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
