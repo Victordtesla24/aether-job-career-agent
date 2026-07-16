@@ -1087,7 +1087,7 @@
     "GATE-26": "PASS-WITH-DOCUMENTED-RESIDUAL (UAT 17 core PASS + 2 fixed defects [cover 503->COV-002, mobile overflow->UI-001] re-verified live; autonomous /pipeline/run edge-limited 524 at 125s = documented async residual BACKLOG-P6-02, individual agents work standalone)",
     "GATE-27": "PASS (PHASE6-GOVERNANCE-AUDIT.md: 0 orchestrator-model/fable sub-agent spawns; all dispatches haiku/sonnet/opus)",
     "GATE-28": "PASS (EXECUTION-REPORT claims re-verified/corrected: 8 agents, OAuth reversal, supersession)",
-    "GATE-29": "PASS (prod serves pushed build -sOHDHymuYvjj6-YNj31B; deploy-verify.json)",
+    "GATE-29": "PASS (origin/main==HEAD 6374941 pushed; prod serves build P0lNIFlLxlKsKf9vJGHtP, health ok)",
     "GATE-30": "CONDITIONALLY-MET (no OPEN gaps; 20 VERIFIED-CLOSED + rejected/backlog; remaining billing/admin-formal/Gmail are BLOCKED-ON-HUMAN with full code+test+prod-flow evidence, NOT closed by inference per \u00a72)",
     "GATE-31": "PASS (qa-prod-console-admin.json: admin/admin123 isAdmin=false live, admin routes 403)",
     "GATE-32": "PASS (probe-18)",
@@ -1113,5 +1113,7 @@
   ],
   "cluster_H_repo_cleanup": {
     "content_verification": "repo-content-verification.json: ALL 12 open PRs + 14 remote branches SUPERSEDED (verified content-by-content, not SHA) \u2014 safe to close/delete for GATE-21/22. phase-1/foundation empty diff; 6 branches only touch non-served design/screens/*.html; rest rebuilt better in prod. One backlog item logged (BACKLOG-P6-01)."
-  }
+  },
+  "completed": "2026-07-16",
+  "final_state": "23/29 gaps VERIFIED-CLOSED, 0 OPEN; 6 BLOCKED-ON-HUMAN (billing x3 Stripe, admin GATE-17 x2 operator-credential, Gmail x1) fully built+tested+prod-flow-verified; 25 gates PASS, GATE-04 conditionally-closed, GATE-17 functionality-verified/human-formal, GATE-30 conditionally-met, 6 blocked-on-human. 0 fable spawns. Pushed origin/main @ 6374941, deployed build P0lNIFlLxlKsKf9vJGHtP."
 }

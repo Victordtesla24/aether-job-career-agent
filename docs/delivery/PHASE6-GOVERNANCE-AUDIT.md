@@ -112,3 +112,13 @@ tier.
 ## 6. Violations observed
 
 None to date. Orchestrator-model sub-agent spawns: **0**.
+
+## 7. Final governance result (2026-07-16)
+
+Run COMPLETE. Across the full run, every sub-agent dispatch used an explicit model tier —
+**haiku** (scout, evidence, infra-discovery, researcher, deployer, log-tailer),
+**sonnet** (reviewer, qa, writer-audit, doc-updater, fixer-medium, migrator, tester),
+**opus** (fixer-hard, billing-arch). **Orchestrator-model (claude-fable-5) sub-agent spawns: 0.**
+Separation of duties held on every gap (author ≠ reviewer ≠ QA; cross-model review; only QA
+closed gaps with fresh production evidence). Two consecutive REVIEW-FAILs never occurred (all
+fixes passed review within one cycle after any re-fix). GATE-27 = **PASS**.
