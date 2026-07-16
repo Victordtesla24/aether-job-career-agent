@@ -1,0 +1,54 @@
+{
+  "count": 4,
+  "mean": 152000,
+  "results": [
+    {
+      "id": "4820015551",
+      "title": "Delivery Manager",
+      "company": {"display_name": "Melbourne Digital Pty Ltd"},
+      "location": {"display_name": "Melbourne, Victoria", "area": ["Australia", "Victoria", "Melbourne"]},
+      "redirect_url": "https://www.adzuna.com.au/jobs/land/ad/4820015551",
+      "created": "2026-07-10T09:00:00Z",
+      "salary_min": 150000,
+      "salary_max": 180000,
+      "contract_time": "full_time",
+      "description": "Lead delivery across multiple agile squads for a Melbourne-based scale-up."
+    },
+    {
+      "id": "4820015552",
+      "title": "Senior Business Analyst",
+      "company": {"display_name": "Sydney Fintech Group"},
+      "location": {"display_name": "Sydney, New South Wales", "area": ["Australia", "New South Wales", "Sydney"]},
+      "redirect_url": "https://www.adzuna.com.au/jobs/land/ad/4820015552",
+      "created": "2026-07-08T02:30:00Z",
+      "salary_min": 130000,
+      "salary_max": 155000,
+      "contract_time": "full_time",
+      "description": "Elicit requirements and map process for a regulated payments platform."
+    },
+    {
+      "id": "4820015553",
+      "title": "Program Manager",
+      "company": {"display_name": "Brisbane Health Networks"},
+      "location": {"display_name": "Brisbane, Queensland", "area": ["Australia", "Queensland", "Brisbane"]},
+      "redirect_url": "https://www.adzuna.com.au/jobs/land/ad/4820015553",
+      "created": "2026-07-05T22:15:00Z",
+      "salary_min": 160000,
+      "salary_max": 190000,
+      "contract_time": "full_time",
+      "description": "Own a cross-functional transformation program across clinical systems."
+    },
+    {
+      "id": "4820015554",
+      "title": "Senior Software Engineer",
+      "company": {"display_name": "Perth Cloud Co"},
+      "location": {"display_name": "Perth, Western Australia", "area": ["Australia", "Western Australia", "Perth"]},
+      "redirect_url": "https://www.adzuna.com.au/jobs/land/ad/4820015554",
+      "created": "2026-07-09T05:00:00Z",
+      "salary_min": 140000,
+      "salary_max": 170000,
+      "contract_time": "full_time",
+      "description": "Build backend services in Go and Python. This role must be filtered out by relevance."
+    }
+  ]
+}
