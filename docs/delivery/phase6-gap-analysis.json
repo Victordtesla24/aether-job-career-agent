@@ -693,11 +693,12 @@
       "tests_required": [
         "build+tests green after moves"
       ],
-      "status": "MOSTLY-SATISFIED",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [],
       "fixer_role": "fixer-medium",
-      "close_evidence": "middleware/ (quota,rate_limit,feature_gate) + migrations/ (0022_billing,0023_admin .sql) dirs exist; MetricTooltip present. Remaining: EXECUTION-REPORT.md move to docs/delivery/ (final atomic step + root stub). Package manager pnpm kept (no npm switch); turbo uses 'tasks' (no violation)."
+      "close_evidence": "middleware/ + migrations/ dirs present; MetricTooltip present; pnpm kept (no npm switch); turbo uses 'tasks' (no \u00a78 violation). EXECUTION-REPORT.md moved to docs/delivery/ + root stub (atomic). \u00a714.9 target structure realised for the in-scope items.",
+      "closed_by": "orchestrator (Cluster H)"
     },
     {
       "id": "GAP-P6-DOCS-001",
