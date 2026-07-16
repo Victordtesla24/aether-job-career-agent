@@ -123,10 +123,19 @@ def get_budget_seconds() -> float:
         return 180.0
 
 
-def get_entailment_budget_seconds() -> float:
+def _entailment_budget_base_seconds() -> float:
+    """Base seconds for the entailment window (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``)."""
+    try:
+        return float(os.environ.get("AETHER_LLM_ENTAILMENT_BUDGET_SECONDS", "20"))
+    except ValueError:
+        return 20.0
+
+
+def get_entailment_budget_seconds(num_candidates: int | None = None) -> float:
     """Dedicated wall-clock budget (seconds) for the ENTAILMENT-verification LLM
     call, independent of and NOT consumable by the tailor GENERATION call that
-    precedes it on the same client (GAP-P6-TAIL-004).
+    precedes it on the same client (GAP-P6-TAIL-004), scaled to the batch size
+    (GAP-P6-TAIL-005).
 
     The tailor generation and the entailment verification previously shared ONE
     ``AETHER_LLM_BUDGET_SECONDS`` deadline (via the per-client budget or the
@@ -135,22 +144,39 @@ def get_entailment_budget_seconds() -> float:
     conservative fail-safe reverted EVERY changed bullet — including genuinely
     supported ones — producing ZERO ATS lift (live evidence
     qa-prod-craft3.json: tailoredATS == baseline in 17/17 completions).
-
     Reserving the verifier its own FRESH budget window (the tailor call is
-    already finished when the window opens, so it cannot consume it) lets the
-    verifier actually run and KEEP legitimate edits while STILL reverting real
-    fabrications. Keep the combined ceiling under the ~100s HTTP edge: set the
-    tailor budget (``AETHER_LLM_BUDGET_SECONDS``) and this reservation so their
-    sum has margin (e.g. 60s tailor + 20s entailment = 80s). Env-overridable
-    (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``); a missing/malformed value falls
-    back to 20s, and a ``_MIN_ATTEMPT_SECONDS`` floor is enforced so a
-    tiny/negative config can never re-starve the verifier.
+    already finished when the window opens, so it cannot consume it) lets it run
+    and KEEP legitimate edits while STILL reverting real fabrications.
+
+    GAP-P6-TAIL-005: a FIXED window is still too small to verify a full-resume
+    batch. A run that proposed genuine story-grounded rewrites over ~18
+    candidates timed out and its fail-safe reverted even the legitimate lift
+    (qa-prod-craft4.json run 2). ``num_candidates`` scales the window as
+    ``base + per_candidate * N`` (per-candidate via
+    ``AETHER_LLM_ENTAILMENT_BUDGET_PER_CANDIDATE_SECONDS``, default 2.5s), capped
+    by ``AETHER_LLM_ENTAILMENT_BUDGET_MAX_SECONDS`` (default 40s) so a large
+    batch can never blow the ~100s HTTP edge, and floored at
+    ``_MIN_ATTEMPT_SECONDS``. The tailor batch is now capped to the top-K bullets
+    (``AETHER_TAILOR_MAX_BULLETS``), so in practice N is small and the window
+    comfortably fits the verification.
+
+    Called with ``num_candidates=None`` this returns the unscaled base window
+    (backward compatible: the TAIL-004 dedicated-window contract), env-overridable
+    (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``, default 20s) with the same floor.
     """
+    base = _entailment_budget_base_seconds()
+    if num_candidates is None:
+        return max(_MIN_ATTEMPT_SECONDS, base)
     try:
-        seconds = float(os.environ.get("AETHER_LLM_ENTAILMENT_BUDGET_SECONDS", "20"))
+        per = float(os.environ.get("AETHER_LLM_ENTAILMENT_BUDGET_PER_CANDIDATE_SECONDS", "2.5"))
     except ValueError:
-        return 20.0
-    return max(_MIN_ATTEMPT_SECONDS, seconds)
+        per = 2.5
+    try:
+        cap = float(os.environ.get("AETHER_LLM_ENTAILMENT_BUDGET_MAX_SECONDS", "40"))
+    except ValueError:
+        cap = 40.0
+    scaled = base + per * max(0, num_candidates)
+    return max(_MIN_ATTEMPT_SECONDS, min(scaled, cap))
 
 
 def get_primary_budget_fraction() -> float:
