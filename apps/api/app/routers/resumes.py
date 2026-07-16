@@ -113,6 +113,13 @@ async def upload_resume(
         from app.routers.agents import _dispatch
 
         extraction = _dispatch(current_user["id"], "storyExtractor", {})
+    except HTTPException:
+        # An HTTPException here (e.g. the 402 subscription-required paywall
+        # gate in _record_run) is a real API error, not an extraction
+        # failure — it must propagate to the client so a non-subscriber is
+        # routed to /pricing instead of getting a 200 with the error buried
+        # in storyExtraction.error (GAP-P6-RESFIX).
+        raise
     except Exception as exc:  # noqa: BLE001 — upload must survive extraction issues
         extraction = {"error": str(exc)}
     return {**resume, "storyExtraction": extraction}
