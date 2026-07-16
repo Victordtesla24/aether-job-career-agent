@@ -26,6 +26,7 @@ from app.repositories.billing import (
     _ensure_billing_tables,
     ensure_user_billing,
     gst_breakdown,
+    subscription_gate_enabled,
 )
 from app.services import stripe_gateway
 
@@ -470,6 +471,31 @@ def get_subscription(current_user: CurrentUser) -> dict[str, Any]:
         }
         if quota
         else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /billing/entitlement (auth) — subscription wall state (GAP-P6-PAYWALL)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/entitlement")
+def get_entitlement(current_user: CurrentUser) -> dict[str, Any]:
+    """Whether the user may use Aether's actionable features.
+
+    ``active_paid`` mirrors the backend gate (``status='active'`` AND
+    ``planId != 'free'``); ``requiresSubscription`` reflects the operator flag so
+    the dashboard shows its paywall IFF the gate is enforced. Lightweight, cached
+    by no one — the frontend calls it on dashboard load.
+    """
+    user_id = current_user["id"]
+    ensure_user_billing(user_id)
+    repo = SubscriptionRepository()
+    sub = repo.get_by_user(user_id)
+    return {
+        "active_paid": repo.has_active_paid_subscription(user_id),
+        "plan": {"id": sub["planId"], "status": sub["status"]} if sub else None,
+        "requiresSubscription": subscription_gate_enabled(),
     }
 
 

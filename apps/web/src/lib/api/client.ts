@@ -90,6 +90,16 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    // Entitlement gate (GAP-P6-PAYWALL): a 402 `subscription_required` means the
+    // user tried an actionable feature without an active paid subscription. Route
+    // them to the subscribe wall instead of surfacing a raw error toast.
+    if (
+      res.status === 402 &&
+      detail.includes("subscription_required") &&
+      typeof window !== "undefined"
+    ) {
+      window.location.assign("/pricing");
+    }
     throw new ApiError(`${options.method ?? "GET"} ${path} failed (${res.status}): ${detail}`, res.status);
   }
   if (res.status === 204) return undefined as T;

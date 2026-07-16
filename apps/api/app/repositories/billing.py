@@ -28,6 +28,7 @@ Additive only: ``CREATE TABLE IF NOT EXISTS`` / ``ADD COLUMN IF NOT EXISTS`` /
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 from app.db import get_connection, rows_to_dicts
@@ -304,6 +305,25 @@ def _free_plan_limits() -> tuple[int, float]:
     return 5, 1.00
 
 
+#: Env values (case-insensitive) that DISABLE the paid-subscription gate.
+_GATE_OFF = frozenset({"false", "0", "no", "off"})
+
+
+def subscription_gate_enabled() -> bool:
+    """Whether the paid-subscription entitlement gate is enforced.
+
+    Aether is a subscription-gated product (limited beta): actionable agent runs
+    require an ACTIVE PAID subscription. The gate is ON by default in production
+    (``AETHER_REQUIRE_PAID_SUBSCRIPTION`` unset or 'true'); the operator flips the
+    env var to 'false' to restore the freemium (Free-tier 5-run) behaviour.
+    Read via ``os.environ`` on every call so a hot env change takes effect and no
+    secret/flag is baked into source.
+    """
+    return os.environ.get(
+        "AETHER_REQUIRE_PAID_SUBSCRIPTION", "true"
+    ).strip().lower() not in _GATE_OFF
+
+
 class PlanRepository:
     """Read the plan catalog + human-populated Stripe id writes."""
 
@@ -376,6 +396,27 @@ class SubscriptionRepository:
                 )
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
+
+    def has_active_paid_subscription(self, user_id: str) -> bool:
+        """True IFF the user holds an ACTIVE PAID subscription — ``status='active'``
+        AND ``planId != 'free'``.
+
+        This is the sole definition of "entitled to use Aether" behind the
+        subscription gate (``agents._record_run``). A missing row, a Free row, or
+        any non-``active`` status (``past_due`` / ``canceled`` / ``trialing`` /
+        ``paused`` / ...) all read as NOT entitled. Purely additive read against
+        the existing ``Subscription`` table — no new schema.
+        """
+        _ensure_billing_tables()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT 1 FROM "Subscription" '
+                    "WHERE \"userId\" = %s AND \"status\" = 'active' "
+                    "AND \"planId\" <> 'free' LIMIT 1",
+                    (user_id,),
+                )
+                return cur.fetchone() is not None
 
     def set_customer_id(self, user_id: str, customer_id: str) -> None:
         """Attach a Stripe customer id to the user's Subscription (create the

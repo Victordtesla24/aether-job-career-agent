@@ -102,3 +102,23 @@ export async function openBillingPortal(
     body: {},
   });
 }
+
+/**
+ * Subscription entitlement (GAP-P6-PAYWALL). `active_paid` mirrors the backend
+ * gate (status='active' AND planId != 'free'); `requiresSubscription` reflects
+ * the operator flag, so the dashboard shows its paywall IFF the gate is enforced.
+ */
+export const EntitlementSchema = z.object({
+  active_paid: z.boolean(),
+  plan: z.object({ id: z.string(), status: z.string() }).nullable(),
+  requiresSubscription: z.boolean(),
+});
+export type Entitlement = z.infer<typeof EntitlementSchema>;
+
+export async function fetchEntitlement(
+  options: RequestOptions = {},
+): Promise<Entitlement> {
+  return EntitlementSchema.parse(
+    await apiRequest<unknown>("/billing/entitlement", options),
+  );
+}
