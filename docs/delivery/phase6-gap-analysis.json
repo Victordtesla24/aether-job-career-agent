@@ -666,13 +666,15 @@
         "gh pr list --state open == empty",
         "remote heads == main only"
       ],
-      "status": "TRIAGED",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [
         "GATE-21",
         "GATE-22"
       ],
-      "fixer_role": "deployer"
+      "fixer_role": "deployer",
+      "closed_by": "deployer (repo-cleanup-result.json)",
+      "close_evidence": "12 PRs closed (superseded, commented), 14 stale remote branches deleted, 20 worktrees + 50 local branches removed. Final: 0 open PRs, 1 branch (main). GATE-21 + GATE-22 PASS. Content-verified safe (repo-content-verification.json)."
     },
     {
       "id": "GAP-P6-DIR-001",
@@ -1010,8 +1012,8 @@
     "GATE-18": "OPEN (Cluster H user-scoped)",
     "GATE-19": "IN-PROGRESS (new docs/subscription/{admin-guide,privacy-policy,terms-of-service}.md written + billing-architecture.md; live legal-page reconciliation GAP-P6-DOCS-002; delivery-doc refresh + README pending)",
     "GATE-20": "OPEN (Cluster H)",
-    "GATE-21": "FAIL (12 open PRs; Cluster H)",
-    "GATE-22": "FAIL (stale branches; Cluster H)",
+    "GATE-21": "PASS (repo-cleanup-result.json: 0 open PRs, 1 remote branch=main)",
+    "GATE-22": "PASS (repo-cleanup-result.json: 14 stale branches deleted, only main)",
     "GATE-23": "LIKELY-PASS (probe-12; confirm at close)",
     "GATE-24": "PASS (576 backend pytest passed, 0 failed \u2014 full suite 667s; order-dependency flake resolved on clean run)",
     "GATE-25": "PASS (vitest 276 + tsc + lint + build 28 pages)",
