@@ -538,7 +538,7 @@
         "writer-audit >= baseline",
         "STRICT tailoredATS > baselineATS on evidence-supported fixture"
       ],
-      "status": "VERIFY-FAILED-REENTERED",
+      "status": "AUTHENTICITY-MET-VALUE-PENDING",
       "merged_sha": "ef054d1",
       "verify_finding": "writer-audit-G FAIL 58/100: tailoredATS==baselineATS 3/3; guard rejected genuine JD-keyword bullets, zero lift.",
       "fix": "fix/p6-quality: ROOT CAUSE was evidence_extra reaching only the guard, never the LLM prompt (model never saw career evidence). Now evidence_extra + Story Bank fold into prompt; STRICT tailoredATS>baselineATS achievable when evidence proves a JD keyword absent from resume text (unproven still rejected). Reviewer PASS (review-quality.json), 68 tests. RESIDUAL (by design, honest): strict lift requires the account to HAVE story-bank/career evidence \u2014 audited admin/sarkar accounts had EMPTY story banks so +0.0% was CORRECT-for-no-evidence. Production QA must re-verify with >=1 SEEDED real story proving a JD keyword absent from the resume.",
@@ -550,7 +550,8 @@
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-quality",
       "verify_finding_2": "qa-prod-craft.json: architecturally works on a GENUINE live run (real strict lift 30.81->35.14, guard rejected 2/18 overreach) BUT (a) contaminated by the CRITICAL silent fixture-fallback (GAP-P6-AUTH-002) which masked tailoring as canned output, (b) one fabrication slipped (GAP-P6-TAIL-002). Re-verify after AUTH-002+TAIL-002 fixed.",
-      "verify_finding_3": "qa-prod-craft2.json: genuine strict lift 30.81->32.97 content-only metrics-preserved, BUT one unsupported claim 'for financial institutions' on an InfoCentric bullet (no evidence). \u00a79 zero-tolerance. Robust fix = entailment verification (GAP-P6-TAIL-003)."
+      "verify_finding_3": "qa-prod-craft2.json: genuine strict lift 30.81->32.97 content-only metrics-preserved, BUT one unsupported claim 'for financial institutions' on an InfoCentric bullet (no evidence). \u00a79 zero-tolerance. Robust fix = entailment verification (GAP-P6-TAIL-003).",
+      "verify_finding_4": "qa-prod-craft3.json: content-only + ZERO fabrication CONFIRMED (GATE-09 authenticity met). Strict lift NOT observed (tailoredATS==baseline) due to entailment-starvation + anchor false-positive over-reverting legitimate edits. Fix = TAIL-004."
     },
     {
       "id": "GAP-P6-COV-001",
@@ -824,7 +825,7 @@
         "a genuinely-supported tailored bullet is kept (no over-revert, strict lift preserved)",
         "primary-attempt cap leaves time for fallback within budget"
       ],
-      "status": "FIX-READY-MERGED",
+      "status": "PARTIALLY-VERIFIED",
       "human_gated": false,
       "gates": [
         "GATE-09"
@@ -832,7 +833,8 @@
       "fixer_role": "fixer-hard",
       "branch": "fix/p6-tail3",
       "merged_sha_pending": true,
-      "review": "PASS (review-tail3.json): entailment reverts fabrication, no over-revert, conservative+no-fixture on failure, budget cap fixes 503 starvation. 40+58 tests, no AUTH-002 regression. DEPLOY: set AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.4 (give fast fallback more room). Re-QA tailoring after redeploy."
+      "review": "PASS (review-tail3.json): entailment reverts fabrication, no over-revert, conservative+no-fixture on failure, budget cap fixes 503 starvation. 40+58 tests, no AUTH-002 regression. DEPLOY: set AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.4 (give fast fallback more room). Re-QA tailoring after redeploy.",
+      "verify_finding_2": "qa-prod-craft3.json: ENTAILMENT WORKS \u2014 zero fabrication across 33 live attempts, live-reproduced+reverted the exact 'financial'/InfoCentric defect + blocked MYOB/Microsoft/false-title. \u00a79 met. BUT entailment verifier shares the 85s budget with tailor generation, starves to 0-9s, times out, conservatively reverts ALL edits -> no lift. + anchor-collision (see TAIL-004)."
     },
     {
       "id": "GAP-P6-DOCS-002",
@@ -861,6 +863,34 @@
       "fixer_role": "fixer-medium",
       "branch": "fix/p6-legalpages",
       "review": "Content/authenticity fix: false self-service-deletion claim removed from /privacy-policy + /terms + dashboard/settings; subscription/GST terms added; honest 'Stripe not yet active' caveat; operator placeholders. 14 TDD tests, web 292 green. FE deploy in final Cluster H batch; production console re-sweep re-confirms."
+    },
+    {
+      "id": "GAP-P6-TAIL-004",
+      "title": "Restore genuine tailoring lift: dedicated entailment budget + anchor-collision fix",
+      "type": "USABILITY",
+      "severity": "HIGH",
+      "surface": "/dashboard/resume",
+      "category": "tailoring",
+      "source_type": "PROBE-CONFIRMED",
+      "evidence_confirmed": "qa-prod-craft3.json",
+      "observed": "After entailment verification landed, tailoring is fabrication-free (verified) but produces ZERO ATS lift (tailoredATS==baseline in 17/17 completions). Root causes: (1) entailment verifier shares the ONE 85s AETHER_LLM_BUDGET_SECONDS with the tailor generation call -> tailor eats ~all of it -> entailment gets 0-9s -> times out -> conservatively reverts ALL changed bullets (fail-safe wipes legitimate edits); (2) proper_noun_anchors()/_scoped_evidence() (resume_tailor.py:216-245,787-796) treat generic capitalized words ('Business'/'BI') as context anchors, excluding a story's own evidence from its home bullet (reproduced: unsupported_tokens flags ['sql','reached'] on a genuinely-backed rewrite).",
+      "expected": "Tailoring produces a GENUINE strict ATS lift (tailoredATS > baseline) for evidence-supported changes WHILE keeping zero fabrication. Entailment verifier must have enough budget to actually verify+keep legitimate edits (not starve+revert-all). Anchor scoping must not false-positive on generic capitalized words.",
+      "root_cause": "Shared budget starves the verifier; anchor heuristic too broad.",
+      "cluster": "A-REENTRY",
+      "fix_spec": "(1) Give the entailment verification call its OWN dedicated budget reservation separate from the tailor generation budget (e.g. reserve ~15-20s for entailment that the tailor call cannot consume; total under ~100s edge). (2) Fix proper_noun_anchors/_scoped_evidence: only genuine proper nouns (employer/program names) are context anchors \u2014 exclude common/generic capitalized words (stopword-style list or POS/length heuristic); a bullet with no anchors uses the FULL evidence corpus. Preserve zero-fabrication (the entailment pass still reverts genuine fabrications).",
+      "tests_required": [
+        "entailment verifier gets its reserved budget even when tailor generation is slow (not starved to 0-9s)",
+        "a genuinely evidence-backed edit survives (strict lift restored)",
+        "a fabrication is STILL reverted (no regression on \u00a79)",
+        "generic capitalized word is NOT treated as a context anchor"
+      ],
+      "status": "IN-PROGRESS",
+      "human_gated": false,
+      "gates": [
+        "GATE-09"
+      ],
+      "fixer_role": "fixer-hard",
+      "branch": "fix/p6-tail4"
     }
   ],
   "rejected_hypotheses": [
@@ -923,7 +953,7 @@
     "GATE-06": "OPEN (verify Cluster E)",
     "GATE-07": "PASS (qa-prod-sourcing.json: 30 jobs, 3 sources >=5, 30/30 fresh, 0 dup \u2014 live scout run)",
     "GATE-08": "PASS (qa-prod-sourcing.json: 10/10 sampled cards LIVE, 0 seek, 0 expired)",
-    "GATE-09": "FAIL-REENTERED-AGAIN (tailoring fabrication residual 'for financial institutions'; robust entailment fix GAP-P6-TAIL-003)",
+    "GATE-09": "AUTHENTICITY-MET (zero fabrication live-verified) / VALUE-PENDING (no lift due to entailment-starvation + anchor false-positive -> GAP-P6-TAIL-004)",
     "GATE-10": "PASS (qa-prod-craft.json: MetricTooltip + methodology + before/after ATS shown; UI-surface requirements)",
     "GATE-11": "PASS (qa-prod-craft2.json: real cover, business format, 0 fabrication, clean PDF, craft 78)",
     "GATE-12": "PASS (qa-prod-craft2.json: cover PDF clean 1-page)",
