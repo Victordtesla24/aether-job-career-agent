@@ -693,10 +693,11 @@
       "tests_required": [
         "build+tests green after moves"
       ],
-      "status": "TRIAGED",
+      "status": "MOSTLY-SATISFIED",
       "human_gated": false,
       "gates": [],
-      "fixer_role": "fixer-medium"
+      "fixer_role": "fixer-medium",
+      "close_evidence": "middleware/ (quota,rate_limit,feature_gate) + migrations/ (0022_billing,0023_admin .sql) dirs exist; MetricTooltip present. Remaining: EXECUTION-REPORT.md move to docs/delivery/ (final atomic step + root stub). Package manager pnpm kept (no npm switch); turbo uses 'tasks' (no violation)."
     },
     {
       "id": "GAP-P6-DOCS-001",
@@ -715,13 +716,15 @@
       "tests_required": [
         "all \u00a716 docs exist and accurate"
       ],
-      "status": "TRIAGED",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [
         "GATE-19",
         "GATE-20"
       ],
-      "fixer_role": "doc-updater"
+      "fixer_role": "doc-updater",
+      "closed_by": "doc-updater",
+      "close_evidence": "docs/subscription/{billing-architecture,admin-guide,privacy-policy,terms-of-service}.md created; delivery docs (PROGRESS/DECISIONS+5 ADRs/TRACEABILITY 27 gaps->evidence) + README refreshed to post-impl truth. GATE-19/20."
     },
     {
       "id": "GAP-P6-EXEC-001",
@@ -740,12 +743,14 @@
       "tests_required": [
         "each claim traceable to Phase-6 evidence"
       ],
-      "status": "TRIAGED",
+      "status": "VERIFIED-CLOSED",
       "human_gated": false,
       "gates": [
         "GATE-28"
       ],
-      "fixer_role": "doc-updater"
+      "fixer_role": "doc-updater",
+      "closed_by": "doc-updater (PROBE-10 re-verify)",
+      "close_evidence": "EXECUTION-REPORT claims re-verified vs Phase-6 prod: '22 agents'->'8 runtime agents/22 catalog'; Anthropic-OAuth step withdrawn+reversed (prohibited, ADR-P6-OAUTH); supersession banner + Section 9 Phase-6 update. GATE-28. (File move to docs/delivery/ = final atomic step, DIR-001.)"
     },
     {
       "id": "GAP-P6-AUTH-002",
@@ -1010,8 +1015,8 @@
     "GATE-16": "BLOCKED-ON-HUMAN (Stripe)",
     "GATE-17": "FUNCTIONALITY-VERIFIED-LIVE / FORMAL-CLOSURE-HUMAN-GATED (qa-prod: spend-cap 429-before-LLM proven via temp admin, all flows work + cleaned up; final closure needs operator AETHER_ADMIN_EMAIL/PASSWORD_HASH per \u00a72)",
     "GATE-18": "OPEN (Cluster H user-scoped)",
-    "GATE-19": "IN-PROGRESS (new docs/subscription/{admin-guide,privacy-policy,terms-of-service}.md written + billing-architecture.md; live legal-page reconciliation GAP-P6-DOCS-002; delivery-doc refresh + README pending)",
-    "GATE-20": "OPEN (Cluster H)",
+    "GATE-19": "PASS (doc-updater: all docs/ refreshed to post-impl truth + docs/subscription/ created)",
+    "GATE-20": "PASS (README refreshed)",
     "GATE-21": "PASS (repo-cleanup-result.json: 0 open PRs, 1 remote branch=main)",
     "GATE-22": "PASS (repo-cleanup-result.json: 14 stale branches deleted, only main)",
     "GATE-23": "LIKELY-PASS (probe-12; confirm at close)",
@@ -1019,7 +1024,7 @@
     "GATE-25": "PASS (vitest 276 + tsc + lint + build 28 pages)",
     "GATE-26": "PENDING production Playwright/UAT sweeps post-deploy",
     "GATE-27": "PASS-SO-FAR (0 fable spawns)",
-    "GATE-28": "OPEN (Cluster H)",
+    "GATE-28": "PASS (EXECUTION-REPORT claims re-verified/corrected: 8 agents, OAuth reversal, supersession)",
     "GATE-29": "PASS (prod serves pushed build -sOHDHymuYvjj6-YNj31B; deploy-verify.json)",
     "GATE-30": "OPEN (all gaps closed)",
     "GATE-31": "PASS (qa-prod-console-admin.json: admin/admin123 isAdmin=false live, admin routes 403)",
