@@ -44,7 +44,9 @@ class RemotiveAdapter(BaseAdapter):
                     company=str(item.get("company_name") or ""),
                     location=str(item.get("candidate_required_location") or "Remote"),
                     remote=True,
-                    description=relevance.snippet(item.get("description")),
+                    description=relevance.snippet(
+                        item.get("description"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
+                    ),
                     requirements=[],
                     source=self.source,
                     sourceUrl=apply_url,

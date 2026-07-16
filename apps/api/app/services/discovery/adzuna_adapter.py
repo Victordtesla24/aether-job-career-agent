@@ -126,7 +126,9 @@ class AdzunaAdapter(BaseAdapter):
                     company=company,
                     location=location or None,
                     remote=remote,
-                    description=relevance.snippet(item.get("description")),
+                    description=relevance.snippet(
+                        item.get("description"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
+                    ),
                     requirements=[],
                     source=self.source,
                     sourceUrl=apply_url,

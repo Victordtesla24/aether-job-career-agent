@@ -85,7 +85,8 @@ class LeverAdapter(BaseAdapter):
                         location=location,
                         remote=workplace == "remote" or "remote" in location.lower(),
                         description=relevance.snippet(
-                            item.get("descriptionPlain") or item.get("description")
+                            item.get("descriptionPlain") or item.get("description"),
+                            limit=relevance.DESCRIPTION_STORAGE_LIMIT,
                         ),
                         requirements=[],
                         source=self.source,
