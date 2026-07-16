@@ -273,7 +273,10 @@ export default function SettingsPage() {
                 <p className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted">
                   <i className="fa-solid fa-shield-halved mr-2 text-aether-green" aria-hidden="true" />
                   Aether stores your data locally to this workspace. Agents never submit an application, send an
-                  email, or share your profile without an explicit approval. You can export or delete all data at any time.
+                  email, or share your profile without an explicit approval. You can correct your profile here at
+                  any time and disconnect a connected Gmail account from the Email Center whenever you like —
+                  there is no self-service &ldquo;export all data&rdquo; or &ldquo;delete all data&rdquo; button
+                  yet; contact us to request a full data export or deletion and we will process it manually.
                 </p>
               ) : null}
             </section>
