@@ -884,13 +884,15 @@
         "a fabrication is STILL reverted (no regression on \u00a79)",
         "generic capitalized word is NOT treated as a context anchor"
       ],
-      "status": "IN-PROGRESS",
+      "status": "FIX-READY-MERGED",
       "human_gated": false,
       "gates": [
         "GATE-09"
       ],
       "fixer_role": "fixer-hard",
-      "branch": "fix/p6-tail4"
+      "branch": "fix/p6-tail4",
+      "merged_sha": "e968d74",
+      "review": "PASS (review-tail4.json): dedicated entailment budget (fresh contextvar window, not starved) restores lift; fabrication STILL reverted (fail-closed, no \u00a79 regression); anchor stopword doesn't collide with real names; RED re-verified 5/8, 24/24 pass-after, AUTH-002/TAIL-003 16/16. DEPLOY env (reviewer): AETHER_LLM_BUDGET_SECONDS=65, AETHER_LLM_ENTAILMENT_BUDGET_SECONDS=15, AETHER_LLM_PRIMARY_BUDGET_FRACTION=0.3."
     }
   ],
   "rejected_hypotheses": [
