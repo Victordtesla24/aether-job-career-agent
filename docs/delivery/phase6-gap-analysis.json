@@ -964,14 +964,16 @@
         "cover path completes within its budget in a scripted-clock test",
         "no fixture fallback"
       ],
-      "status": "IN-PROGRESS",
+      "status": "FIX-READY-MERGED",
       "human_gated": false,
       "gates": [
         "GATE-11",
         "GATE-26"
       ],
       "fixer_role": "fixer-hard",
-      "branch": "fix/p6-cov2"
+      "branch": "fix/p6-cov2",
+      "merged_sha": "0bb5dde",
+      "review": "PASS (review-cov2.json): dedicated cover budget (88s) decoupled from tailoring 65s, standalone cover fixed; tailoring untouched; no fixture fallback; 23 tests. RESIDUAL (documented, reviewer acceptable-not-blocking + D-0017/D-0038): /pipeline/run (tailor+cover sequential) can exceed edge -> possible 524; async is durable fix (BACKLOG-P6-02). must_fix tracked: (1) re-QA measures pipeline timing + documents residual, (2) code-comment on nested budget [minor/backlog], (3) set AETHER_LLM_COVER_BUDGET_SECONDS=88 at deploy."
     },
     {
       "id": "GAP-P6-UI-001",
@@ -1101,7 +1103,7 @@
       "id": "BACKLOG-P6-02",
       "title": "Async tailoring/cover generation to eliminate synchronous-LLM 503s",
       "severity": "MEDIUM",
-      "detail": "Tailoring/cover generation is synchronous under a ~100s HTTP edge; slow OpenRouter models (deepseek v4-pro ~110-120s, v4-flash 37-58s) cause ~20% honest 503s even after batch-cap. Durable fix: async job (submit->poll/notify) removing the synchronous edge constraint. Honest degradation today (503+retry, never fixture). Out of Phase-6 scope.",
+      "detail": "Tailoring/cover generation is synchronous under a ~100s HTTP edge; slow OpenRouter models (deepseek v4-pro ~110-120s, v4-flash 37-58s) cause ~20% honest 503s even after batch-cap. Durable fix: async job (submit->poll/notify) removing the synchronous edge constraint. Honest degradation today (503+retry, never fixture). Out of Phase-6 scope. ALSO covers /pipeline/run: tailor+cover sequential in one synchronous request can exceed the ~100s edge (COV-002 gives cover a fresh 88s window fixing standalone, but pipeline totals ~120-135s worst-case -> possible 524). Async submit->poll is the durable fix for the pipeline convenience endpoint; individual tailor+cover work standalone.",
       "disposition": "BACKLOG"
     }
   ],
