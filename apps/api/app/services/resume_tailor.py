@@ -182,6 +182,38 @@ def _metric_figures(text: str) -> list[str]:
     return _NUMBER_RE.findall(_fold(text).replace(",", ""))
 
 
+def proper_noun_anchors(text: str) -> set[str]:
+    """Distinctive entity anchors (employer / program / product proper nouns and
+    acronyms) that NAME the context a piece of evidence belongs to.
+
+    Used to scope the anti-fabrication guard per employer/engagement
+    (GAP-P6-TAIL-002). A capability the candidate genuinely proves in ONE
+    context (e.g. a Payday-Super *payments* story) must not be attributed to a
+    bullet describing a DIFFERENT employer (e.g. Telstra) merely because the
+    keyword exists somewhere in the candidate's overall evidence. Two pieces of
+    evidence are "same context" when they share a proper-noun anchor.
+
+    An anchor is a surface token that is an ALL-CAPS acronym ("ATO", "NTP"), a
+    mixed-case product name ("PowerShell", "DevOps"), or a capitalised word used
+    mid-segment ("Payday", "Kookaburras") — i.e. a name, not sentence-initial
+    capitalisation or ordinary prose. Digits and stopwords are excluded.
+    """
+    folded = text.translate(_UNICODE_FOLD)
+    segment_starts = {m.end() for m in _SEGMENT_START_RE.finditer(folded)}
+    anchors: set[str] = set()
+    for match in _SURFACE_TOKEN_RE.finditer(folded):
+        surface = match.group(0)
+        low = surface.lower()
+        if low in _STOPWORDS or any(ch.isdigit() for ch in low):
+            continue
+        all_caps = len(surface) >= 2 and surface.isupper()
+        inner_upper = surface[1:] != surface[1:].lower()
+        cap_mid_segment = surface[0].isupper() and match.start() not in segment_starts
+        if all_caps or inner_upper or cap_mid_segment:
+            anchors.add(_stem(low))
+    return anchors
+
+
 def _metrics_dropped(original: str, rewrite: str) -> bool:
     """True when ``rewrite`` strips all/most of ``original``'s quantified figures.
 
@@ -537,6 +569,36 @@ def strip_bullet_lines(raw_text: str) -> str:
     return "\n".join(kept)
 
 
+def render_tailored_raw_text(
+    original_text: str, bullets: Sequence[dict[str, str]]
+) -> str:
+    """Rebuild a résumé ``raw_text`` from tailored bullets (GAP-P6-TAIL-002).
+
+    The persisted tailored version previously reused the PARENT's ``raw_text``
+    verbatim, so an independent ``GET /resumes/{id}/ats`` (which scores
+    ``raw_text`` preferentially) reverted to the stale BASELINE score even
+    though the bullets — and the downloadable PDF — reflected the tailored
+    content. Regenerating ``raw_text`` as the shared résumé context
+    (skills/summary/headers via :func:`strip_bullet_lines`) followed by the
+    tailored bullet lines makes a re-read reflect the tailored score.
+
+    This mirrors the like-for-like corpus construction in
+    ``_compute_conversion_metrics`` (``context + tailored bullets``), so the
+    ATS engine — whose tokeniser ignores the ``•`` markers — scores the
+    regenerated text identically to the run's reported ``tailoredATSScore``.
+    Bullet markers are kept so the text round-trips through
+    :func:`strip_bullet_lines` / :func:`extract_bullets` for any later
+    re-tailoring off this version.
+    """
+    context = strip_bullet_lines(original_text)
+    lines: list[str] = [context] if context.strip() else []
+    for b in bullets:
+        text = (b.get("text") or "").strip()
+        if text:
+            lines.append(f"• {text}")
+    return "\n".join(lines)
+
+
 @dataclass
 class TailorResult:
     """Validated output of a tailoring run."""
@@ -650,7 +712,7 @@ class ResumeTailorService:
         evidence_source = (
             f"{resume_text}\n{evidence_extra}" if evidence_extra else resume_text
         )
-        evidence_stems, evidence_numbers = _evidence_index(evidence_source)
+        evidence_stems, _ = _evidence_index(evidence_source)
         jd_ngrams = jd_ngram_index(job_description)
         evidence_ngrams = _ngram_set(_content_stems(evidence_source), _JD_ECHO_NGRAM)
         #: JD content stems — a RISK signal (not evidence) that lets the guard
@@ -662,6 +724,42 @@ class ResumeTailorService:
         result = TailorResult()
         structured = self._structure_originals(originals, resume_text)
         by_ref = {b["evidenceRef"]: b["text"] for b in structured}
+        # --- Context scoping of the fabrication corpus (GAP-P6-TAIL-002) -------
+        # The candidate's whole résumé (resume_text: every bullet + skills /
+        # summary / headers) stays SHARED context — genuinely candidate-wide
+        # vocabulary (a skill, a general PM term) legitimately applies to any
+        # bullet. But an extra evidence UNIT (a Story-Bank entry or career-data
+        # chunk) that NAMES a specific employer/program present in the résumé
+        # (shares a proper-noun anchor with some bullet) is context-bound: it may
+        # only lend its keywords to bullets in THAT context. A unit whose anchors
+        # match no bullet is a general capability that applies candidate-wide.
+        # This is what stops a payments story about the ATO/Payday-Super program
+        # from licensing "payment" on an unrelated Telstra bullet.
+        resume_stems, resume_numbers = _evidence_index(resume_text)
+        bullet_anchors = {
+            b["evidenceRef"]: proper_noun_anchors(b["text"]) for b in structured
+        }
+        all_bullet_anchors: set[str] = set()
+        for anchors in bullet_anchors.values():
+            all_bullet_anchors |= anchors
+        extra_units: list[tuple[set[str], set[str], set[str]]] = []
+        for unit in re.split(r"\n\s*\n", evidence_extra):
+            if not unit.strip():
+                continue
+            unit_stems, unit_numbers = _evidence_index(unit)
+            extra_units.append((proper_noun_anchors(unit), unit_stems, unit_numbers))
+
+        def _scoped_evidence(ref: str) -> tuple[set[str], set[str]]:
+            own_anchors = bullet_anchors.get(ref, set())
+            stems = set(resume_stems)
+            numbers = set(resume_numbers)
+            for unit_anchors, unit_stems, unit_numbers in extra_units:
+                context_bound = bool(unit_anchors & all_bullet_anchors)
+                if not context_bound or (unit_anchors & own_anchors):
+                    stems |= unit_stems
+                    numbers |= unit_numbers
+            return stems, numbers
+
         accepted: dict[str, str] = {}
         for item in raw.get("bullets", []):
             text = (item.get("text") or "").strip()
@@ -675,11 +773,13 @@ class ResumeTailorService:
                 result.rejected.append(text)
                 continue
             original = by_ref[ref]
-            if unsupported_tokens(text, evidence_stems, evidence_numbers, jd_stems):
-                # Fabrication guard (D-0015 / GAP-TAIL-001): a content token with
-                # no evidence match — including a lowercase domain term lifted
-                # from the JD ("financial crime", "core banking") — keeps the
-                # original bullet.
+            scoped_stems, scoped_numbers = _scoped_evidence(ref)
+            if unsupported_tokens(text, scoped_stems, scoped_numbers, jd_stems):
+                # Fabrication guard (D-0015 / GAP-TAIL-001 / GAP-P6-TAIL-002): a
+                # content token with no evidence match FOR THIS BULLET'S CONTEXT
+                # — a lowercase JD term lifted from the posting ("core banking"),
+                # OR a keyword proven only by evidence about a DIFFERENT
+                # employer/program (cross-context bleed) — keeps the original.
                 result.rejected.append(text)
                 text = original
             elif _metrics_dropped(original, text):

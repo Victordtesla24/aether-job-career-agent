@@ -2,8 +2,11 @@
 
 An independent review found that stale OpenRouter model ids caused live 500s
 on the LLM agent endpoints. These tests lock in the fix:
-- ``auto`` mode falls back to the recorded fixture when live calls fail;
 - the model chain retries once with the fallback model before giving up;
+- when the live retry chain is exhausted, ``auto`` mode raises an HONEST
+  :class:`LLMUnavailableError` — it does NOT serve a recorded fixture as if it
+  were live output (GAP-P6-AUTH-002 hardening; fixtures serve only in
+  ``replay`` mode);
 - routers convert :class:`LLMUnavailableError` into HTTP 503 (never 500).
 """
 from __future__ import annotations
@@ -105,7 +108,11 @@ class TestActiveCredentialSource:
 
 
 class TestAutoModeFallback:
-    def test_auto_falls_back_to_fixture_when_live_fails(self, tmp_path, monkeypatch):
+    def test_auto_raises_not_serves_fixture_when_live_fails(self, tmp_path, monkeypatch):
+        """GAP-P6-AUTH-002: an ``auto``-mode live failure must raise an honest
+        error even when a recorded fixture exists — serving that stale fixture
+        as if it were a live generation is exactly the authenticity defect this
+        removes. Fixtures serve only in ``replay`` mode."""
         fixture = tmp_path / "demo_prompt" / "default.json"
         fixture.parent.mkdir(parents=True)
         fixture.write_text(json.dumps({"content": "canned answer"}))
@@ -115,7 +122,8 @@ class TestAutoModeFallback:
             "_call_live",
             lambda self, *a, **k: (_ for _ in ()).throw(RuntimeError("HTTP 404")),
         )
-        assert llm.complete("demo_prompt", "sys", "usr") == "canned answer"
+        with pytest.raises(LLMUnavailableError):
+            llm.complete("demo_prompt", "sys", "usr")
 
     def test_auto_raises_unavailable_when_no_fixture(self, tmp_path, monkeypatch):
         llm = LLMClient(mode="auto", fixture_dir=tmp_path)
@@ -139,7 +147,11 @@ class TestTimeBudget:
     """Fix for the >120s cover-letter hang: strict per-call timeouts plus an
     overall wall-clock budget for the whole fallback chain."""
 
-    def test_budget_exhausted_skips_live_and_serves_fixture(self, tmp_path, monkeypatch):
+    def test_budget_exhausted_skips_live_and_raises_not_serves_fixture(
+        self, tmp_path, monkeypatch
+    ):
+        """GAP-P6-AUTH-002: budget exhaustion is an honest failure — it raises
+        rather than quietly serving the recorded fixture, even when one exists."""
         fixture = tmp_path / "slow_prompt" / "default.json"
         fixture.parent.mkdir(parents=True)
         fixture.write_text(json.dumps({"content": "fixture within budget"}))
@@ -150,7 +162,8 @@ class TestTimeBudget:
             raise AssertionError("live call attempted after budget exhausted")
 
         monkeypatch.setattr(LLMClient, "_call_live", _never)
-        assert llm.complete("slow_prompt", "sys", "usr") == "fixture within budget"
+        with pytest.raises(LLMUnavailableError):
+            llm.complete("slow_prompt", "sys", "usr")
 
     def test_budget_exhausted_raises_typed_error_without_fixture(
         self, tmp_path, monkeypatch
@@ -179,10 +192,13 @@ class TestTimeBudget:
         assert 0 < seen["max_seconds"] <= 42
 
     def test_budget_env_default_and_bad_value(self, monkeypatch):
+        # Default raised 60 → 180 (GAP-P6-AUTH-002) so genuine multi-call
+        # generations complete live instead of hitting the cap and (formerly)
+        # falling back to a stale fixture.
         monkeypatch.delenv("AETHER_LLM_BUDGET_SECONDS", raising=False)
-        assert get_budget_seconds() == 60.0
+        assert get_budget_seconds() == 180.0
         monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "not-a-number")
-        assert get_budget_seconds() == 60.0
+        assert get_budget_seconds() == 180.0
 
 
 class TestHardWallClockCap:
@@ -207,7 +223,9 @@ class TestHardWallClockCap:
         assert time.monotonic() - start < 1.5  # cut off, not held hostage
 
     def test_shared_budget_bounds_all_clients_in_scope(self, tmp_path, monkeypatch):
-        """The pipeline shares ONE budget across tailor + coverLetter clients."""
+        """The pipeline shares ONE budget across tailor + coverLetter clients:
+        an already-exhausted shared budget makes NO live call and raises an
+        honest error (never a silently-served fixture, GAP-P6-AUTH-002)."""
         fixture = tmp_path / "shared_prompt" / "default.json"
         fixture.parent.mkdir(parents=True)
         fixture.write_text(json.dumps({"content": "canned"}))
@@ -219,7 +237,8 @@ class TestHardWallClockCap:
         with shared_budget(0.0):  # already exhausted
             for _ in range(2):  # fresh clients, as the pipeline constructs them
                 llm = LLMClient(mode="auto", fixture_dir=tmp_path)
-                assert llm.complete("shared_prompt", "sys", "usr") == "canned"
+                with pytest.raises(LLMUnavailableError):
+                    llm.complete("shared_prompt", "sys", "usr")
 
     def test_provider_base_url_is_configurable(self, monkeypatch):
         """AETHER_LLM_BASE_URL/API_KEY point the OpenAI-compatible (OpenRouter)
@@ -312,21 +331,31 @@ class TestHardWallClockCap:
 
 
 class TestGracefulDegradation:
-    """Malformed live output and missing retry fixtures degrade, never 500."""
+    """Malformed live output and live failures raise an honest error (never a
+    500, and — post GAP-P6-AUTH-002 — never a silently-served fixture)."""
 
-    def test_missing_retry_fixture_key_degrades_to_default(self, tmp_path, monkeypatch):
+    def test_auto_live_failure_raises_even_when_default_fixture_exists(
+        self, tmp_path, monkeypatch
+    ):
+        """A live failure in ``auto`` mode raises even when a ``default`` fixture
+        exists for a retry key. Serving that fixture as live output is the
+        authenticity defect removed in GAP-P6-AUTH-002. (Replay mode's own
+        strict fixture serving is unchanged.)"""
         fixture = tmp_path / "letter_prompt" / "default.json"
         fixture.parent.mkdir(parents=True)
         fixture.write_text(json.dumps({"content": "default letter"}))
         llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
         def _boom(self, *a, **k):
             raise RuntimeError("429")
 
         monkeypatch.setattr(LLMClient, "_call_live", _boom)
-        # "retry2" was never recorded — must serve default, not raise/503.
-        assert llm.complete("letter_prompt", "s", "u", fixture_key="retry2") == "default letter"
+        with pytest.raises(LLMUnavailableError):
+            llm.complete("letter_prompt", "s", "u", fixture_key="retry2")
 
-    def test_malformed_live_json_falls_back_to_fixture(self, tmp_path, monkeypatch):
+    def test_malformed_live_json_raises_not_serves_fixture(self, tmp_path, monkeypatch):
+        """A truncated/malformed live JSON response in ``auto`` mode raises an
+        honest error rather than answering with the recorded fixture."""
         fixture = tmp_path / "json_prompt" / "default.json"
         fixture.parent.mkdir(parents=True)
         fixture.write_text(json.dumps({"content": '{"stories": []}'}))
@@ -334,7 +363,8 @@ class TestGracefulDegradation:
         monkeypatch.setattr(
             LLMClient, "_call_live", lambda self, *a, **k: '{"stories": [{"title": "trunc'
         )
-        assert llm.complete_json("json_prompt", "s", "u") == {"stories": []}
+        with pytest.raises(LLMUnavailableError):
+            llm.complete_json("json_prompt", "s", "u")
 
     def test_malformed_live_json_without_fixture_raises_typed_error(
         self, tmp_path, monkeypatch
