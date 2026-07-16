@@ -19,15 +19,17 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.agents.fit_scorer import get_base_resume_path
-from app.agents.tailor_agent import TailoringAgent
+from app.agents.tailor_agent import TailoringAgent, build_story_evidence
 from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
+from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
 from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_tailor import unsupported_claim_tokens
 
 SYSTEM_PROMPT = (
     "You are a truthful cover-letter writer of elite craft: powerful, "
@@ -376,6 +378,7 @@ class CoverLetterAgent:
         approvals: ApprovalRepository | None = None,
         jobs: JobRepository | None = None,
         users: UserRepository | None = None,
+        stories: StoryRepository | None = None,
     ) -> None:
         self._llm = llm or LLMClient()
         self._guard = guard or FabricationGuard()
@@ -383,6 +386,7 @@ class CoverLetterAgent:
         self._approvals = approvals or ApprovalRepository()
         self._jobs = jobs or JobRepository()
         self._users = users or UserRepository()
+        self._stories = stories or StoryRepository()
 
     @staticmethod
     def _today() -> str:
@@ -427,8 +431,11 @@ class CoverLetterAgent:
         position: str,
         *,
         fixture_key: str,
-    ) -> tuple[str, str, list[str], list[str]]:
-        """Draft a letter; return (letter, body, guard_flags, structural_issues)."""
+        claim_evidence: str,
+        jd_risk: str,
+    ) -> tuple[str, str, list[str], list[str], list[str]]:
+        """Draft a letter; return
+        (letter, body, guard_flags, claim_flags, structural_issues)."""
         raw = self._llm.complete_json(
             "cover_letter",
             SYSTEM_PROMPT,
@@ -437,17 +444,22 @@ class CoverLetterAgent:
             temperature=0.0,
             fixture_key=fixture_key,
         )
-        body = build_body(
-            (raw.get("body") or "").strip(),
-            job,
-            position,
-            str(raw.get("hook_reason") or ""),
-        )
+        hook_reason = str(raw.get("hook_reason") or "")
+        model_body = (raw.get("body") or "").strip()
+        body = build_body(model_body, job, position, hook_reason)
         letter = compose_letter(body, job, signer)
+        # GAP-P6-COV-001: the evidence-grounding guard checks only the MODEL-
+        # authored text (hook_reason + body), never the deterministic role/company
+        # hook clause — naming the target role is not a claim about the candidate.
+        # First-person voice is normalised first so a third-person claim
+        # ("Vikram's experience in intake …") is caught after enforce_first_person
+        # rewrites it, not smuggled past the sentence-scoping.
+        model_text = enforce_first_person(f"{hook_reason}\n{model_body}", signer)
         return (
             letter,
             body,
             self._guard.check(letter, corpus),
+            unsupported_claim_tokens(model_text, claim_evidence, jd_risk),
             self._structural_issues(body, job),
         )
 
@@ -509,16 +521,35 @@ class CoverLetterAgent:
             + ([career_corpus] if career_corpus else [])
         )
 
+        # GAP-P6-COV-001: the candidate-claim evidence corpus is the candidate's
+        # OWN evidence only — résumé + story bank + career + profile + company
+        # NAME (so naming the target company is not flagged). The job DESCRIPTION
+        # is NEVER evidence: a claim backed only by the posting is a fabrication
+        # about the candidate. The job TITLE is the risk signal for the tempting
+        # role-specialty terms a draft is most likely to over-claim ('intake').
+        story_evidence = build_story_evidence(user_id, self._stories)
+        claim_evidence = " ".join(
+            p
+            for p in (
+                resume_text, career_corpus, story_evidence, signer, position, job["company"]
+            )
+            if p
+        )
+        jd_risk = job["title"]
+
         # Corrective drafting loop: each retry feeds back the accumulated
-        # guard-flagged terms AND any §10.2 letter-format violations so the model
-        # fixes both. A draft that still fails the guard (422) or the structural
-        # contract after every retry is REJECTED — never shipped best-effort.
-        letter, body, flagged, issues = self._draft(
-            base_prompt, job, corpus, signer, position, fixture_key="default"
+        # guard-flagged terms, any JD-sourced unsupported CLAIMS, AND any §10.2
+        # letter-format violations so the model fixes all three. A draft that
+        # still fails the guard (422), asserts an unsupported claim, or violates
+        # the structural contract after every retry is REJECTED — never shipped.
+        letter, body, flagged, claim_flags, issues = self._draft(
+            base_prompt, job, corpus, signer, position, fixture_key="default",
+            claim_evidence=claim_evidence, jd_risk=jd_risk,
         )
         all_flagged: list[str] = list(flagged)
+        all_claims: list[str] = list(claim_flags)
         for attempt in ("retry", "retry2"):
-            if not flagged and not issues:
+            if not flagged and not claim_flags and not issues:
                 break
             feedback: list[str] = []
             if all_flagged:
@@ -530,20 +561,36 @@ class CoverLetterAgent:
                     "above (e.g. never abbreviate or restate a metric). Do not "
                     "introduce any other skill, tool, company or figure."
                 )
+            if all_claims:
+                feedback.append(
+                    f"your previous draft claimed the candidate PERSONALLY has "
+                    f"experience their résumé, story bank and profile do NOT prove: "
+                    f"{all_claims}. These are terms from the job posting, which is "
+                    "NOT evidence the candidate has them. Remove every claim to "
+                    "personally possess them (you may still describe the role); "
+                    "write only what the candidate's own evidence proves."
+                )
             if issues:
                 feedback.append("fix these format violations: " + "; ".join(issues))
             retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
             try:
-                letter, body, flagged, issues = self._draft(
-                    retry_prompt, job, corpus, signer, position, fixture_key=attempt
+                letter, body, flagged, claim_flags, issues = self._draft(
+                    retry_prompt, job, corpus, signer, position, fixture_key=attempt,
+                    claim_evidence=claim_evidence, jd_risk=jd_risk,
                 )
             except LLMFixtureMissingError:
                 # Replay mode with no recorded retry fixture — keep the last
                 # draft; the guard and structural gates below still adjudicate it.
                 break
             all_flagged.extend(t for t in flagged if t not in all_flagged)
+            all_claims.extend(t for t in claim_flags if t not in all_claims)
         if flagged:
             raise FabricationError(flagged)
+        if claim_flags:
+            # §9 zero-tolerance: a JD-sourced claim the candidate's evidence
+            # never proves survived every corrective retry — reject the letter
+            # rather than ship a fabrication about the candidate.
+            raise FabricationError(claim_flags)
 
         # Deterministically drop any banned generic opener that survived retries
         # (D-0021), then hard-gate the result: a letter that still violates the
