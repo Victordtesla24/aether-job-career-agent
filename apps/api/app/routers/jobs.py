@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.job import VALID_STATUSES, JobRepository
+from app.services.discovery.active_feed import active_feed
 
 router = APIRouter()
 
@@ -37,13 +38,23 @@ def list_jobs(
     source: str | None = Query(default=None),
     saved: bool | None = Query(default=None),
     sort: str = Query(default="createdAt"),
+    include_stale: bool = Query(default=False),
 ) -> list[dict[str, Any]]:
-    """List the authenticated user's discovered jobs, with optional filters."""
+    """List the authenticated user's discovered jobs, with optional filters.
+
+    By default this is the ACTIVE feed (GAP-P6-DATA-001): rows from a dead /
+    ToS-non-compliant source (Seek) and rows older than the freshness window
+    (>30d STALE) are hidden, and a role cross-posted to two boards is shown
+    once — so paying users never see the dead Seek cards probe-13 found. History
+    is never deleted; ``include_stale=true`` returns the unfiltered set.
+    """
     if status is not None and status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail=f"Invalid status '{status}'")
     jobs = JobRepository().list_by_user(
         current_user["id"], status=status, source=source, saved=saved, sort=sort
     )
+    if not include_stale:
+        jobs = active_feed(jobs)
     return [_public(job) for job in jobs]
 
 

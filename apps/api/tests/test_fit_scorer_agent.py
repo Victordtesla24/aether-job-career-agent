@@ -14,7 +14,9 @@ def _seed_jobs(client, auth_headers) -> list[dict]:
         headers=auth_headers,
     )
     assert run.status_code == 202, run.text
-    jobs = client.get("/jobs", headers=auth_headers).json()
+    # include_stale=true → the FULL persisted set (the fit scorer scores every
+    # persisted job, not just the active-feed subset that GAP-P6-DATA-001 shows).
+    jobs = client.get("/jobs?include_stale=true", headers=auth_headers).json()
     assert jobs, "scout should have persisted fixture jobs"
     return jobs
 
