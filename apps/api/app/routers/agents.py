@@ -19,6 +19,7 @@ from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
+from app.repositories.billing import UsageQuotaRepository
 from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,
@@ -447,6 +448,39 @@ def _quota_429(provider: str, expires_at: Any) -> HTTPException:
     )
 
 
+def _plan_quota_429(code: str, quota: dict[str, Any] | None) -> HTTPException:
+    """Honest 429 for the plan run-quota / USD spend-cap gate (GAP-P6-BILL-002).
+
+    Distinct from the subscription-provider cooldown 429 (``_quota_429``): this
+    is the billing plan quota. Carries an upgrade CTA (``/pricing``) and the
+    period reset time so the UI can prompt an upgrade or a wait.
+    """
+    runs_used = int(quota["runsUsed"]) if quota else None
+    runs_allowed = int(quota["runsAllowed"]) if quota else None
+    period_end = quota.get("periodEnd") if quota else None
+    reset = period_end.isoformat() if period_end is not None else None
+    if code == "spend_cap_exceeded":
+        message = (
+            "Your monthly spend cap has been reached. Runs are paused until the "
+            "period resets or the cap is raised."
+        )
+    elif runs_allowed is not None:
+        message = f"You've used all {runs_allowed} agent runs this period."
+    else:
+        message = "You've reached your plan's run quota this period."
+    return HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": code,
+            "message": message,
+            "runsUsed": runs_used,
+            "runsAllowed": runs_allowed,
+            "upgradeUrl": "/pricing",
+            "quotaReset": reset,
+        },
+    )
+
+
 def _record_run(
     user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
 ) -> dict[str, Any]:
@@ -469,6 +503,24 @@ def _record_run(
             block = None
         if block is not None:
             raise _quota_429(provider, block.get("expiresAt"))
+
+    # Plan quota gate (GAP-P6-BILL-002): atomically RESERVE one run BEFORE the
+    # run row is created. Only metered agents (those that actually call the LLM)
+    # consume quota — deterministic agents (scout/fitScorer/matcher/supervisor)
+    # make no LLM calls and pass through unmetered. The USD spend cap is checked
+    # against the accumulated spend right after reserving; on breach the reserved
+    # run is refunded and the caller gets a distinct 429. A run reserved here is
+    # refunded on any failure path below, so a failed run is never billed.
+    metered = agent_name in _LLM_TIER_BY_BACKEND
+    quota_repo = UsageQuotaRepository() if metered else None
+    if quota_repo is not None:
+        reserved = quota_repo.reserve(user_id)
+        if reserved is None:
+            raise _plan_quota_429("quota_exceeded", quota_repo.get_by_user(user_id))
+        if float(reserved["spendUsedUsd"]) >= float(reserved["spendCapUsd"]):
+            quota_repo.refund_run(user_id)
+            raise _plan_quota_429("spend_cap_exceeded", reserved)
+
     run = runs.start(user_id, agent_name, params)
     _persist_billing_audit(runs, run["id"], audit)
     started = time.monotonic()
@@ -477,10 +529,14 @@ def _record_run(
             output = _to_output(fn())
     except HTTPException:
         runs.finish(run["id"], "failed", error="http error")
+        if quota_repo is not None:
+            quota_repo.refund_run(user_id)  # reserved run produced no output
         raise
     except QuotaExhaustedError as exc:
         # Subscription quota exhausted mid-run — record honestly and 429.
         runs.finish(run["id"], "failed", error=str(exc))
+        if quota_repo is not None:
+            quota_repo.refund_run(user_id)
         expires_at = exc.expires_at
         if expires_at is None:
             try:
@@ -492,11 +548,15 @@ def _record_run(
     except LLMUnavailableError as exc:
         # Live LLM failed and no fixture fallback exists — clean 503, never 500.
         runs.finish(run["id"], "failed", error=str(exc))
+        if quota_repo is not None:
+            quota_repo.refund_run(user_id)
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
         ) from exc
     except Exception as exc:
         runs.finish(run["id"], "failed", error=str(exc))
+        if quota_repo is not None:
+            quota_repo.refund_run(user_id)
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
@@ -524,6 +584,11 @@ def _record_run(
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
     finished = runs.finish(run["id"], "completed", output=output, cost_usd=cost)
+    # Record realized USD spend against the reserved run (metered agents only).
+    # The reserved run-count already stands; here we only accumulate spend so the
+    # USD cap halts the NEXT run once this period's spend passes the ceiling.
+    if quota_repo is not None:
+        quota_repo.record_spend(user_id, cost)
     output["run_id"] = (finished or run)["id"]
     return output
 
