@@ -852,31 +852,55 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
 
 @router.put("/settings")
 def update_settings(payload: SettingsUpdate, current_user: CurrentUser) -> dict[str, Any]:
-    """Persist profile + agent configuration to the User table."""
+    """Persist profile + agent configuration to the User table.
+
+    GAP-P7-DEF-B-PERSIST: every field on ``SettingsProfile`` (``fullName``,
+    ``email``, ``targetRole``, ``location``) must be written here -- a 200
+    response that silently discards part of the submitted profile is wrong.
+    ``email`` previously fell out of the ``SET`` list entirely, so a save
+    always reported success while leaving the stored address unchanged. The
+    DEF-B validator (``_validate_settings_email``) has already normalized/
+    validated ``payload.profile.email`` by the time it reaches here.
+    """
     uid = current_user["id"]
     import json as _json
+
+    import psycopg2
 
     ensure_user_profile_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE "User"
-                SET name = %s,
-                    "targetRole" = %s,
-                    "location" = %s,
-                    "agentConfig" = %s,
-                    "updatedAt" = NOW()
-                WHERE id = %s
-                """,
-                (
-                    payload.profile.fullName,
-                    payload.profile.targetRole,
-                    payload.profile.location,
-                    _json.dumps(payload.agentConfig.model_dump()),
-                    uid,
-                ),
-            )
+            try:
+                cur.execute(
+                    """
+                    UPDATE "User"
+                    SET name = %s,
+                        email = %s,
+                        "targetRole" = %s,
+                        "location" = %s,
+                        "agentConfig" = %s,
+                        "updatedAt" = NOW()
+                    WHERE id = %s
+                    """,
+                    (
+                        payload.profile.fullName,
+                        payload.profile.email,
+                        payload.profile.targetRole,
+                        payload.profile.location,
+                        _json.dumps(payload.agentConfig.model_dump()),
+                        uid,
+                    ),
+                )
+            except psycopg2.errors.UniqueViolation:
+                # "User"."email" is UNIQUE (schema.prisma) -- persisting an
+                # email already owned by a different account must fail
+                # cleanly, not with a raw 500 (same 409 shape as /auth/register's
+                # DuplicateEmailError).
+                conn.rollback()
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "An account with this email already exists",
+                ) from None
         conn.commit()
 
     return get_settings(current_user)
