@@ -157,6 +157,40 @@ def get_cover_budget_seconds() -> float:
     return max(_MIN_ATTEMPT_SECONDS, seconds)
 
 
+def get_worker_budget_seconds() -> float:
+    """Wall-clock LLM budget (seconds) for a SINGLE-agent generation running in
+    the async background worker (GAP-P7-ASYNC-001, blueprint §4.4).
+
+    The worker has NO ~100 s HTTP edge (its result is polled from Postgres), so
+    it is intentionally more generous than the edge-tuned HTTP budgets
+    (``AETHER_LLM_BUDGET_SECONDS`` is 65 s in production). A separate env var
+    keeps that generosity OUT of the request path. MUST stay below the ARQ
+    ``job_timeout`` (600 s) so a job is never killed mid-budget. Default 300 s.
+    """
+    try:
+        return float(os.environ.get("AETHER_LLM_WORKER_BUDGET_SECONDS", "300"))
+    except ValueError:
+        return 300.0
+
+
+def get_worker_cover_budget_seconds() -> float:
+    """Worker-side cover-letter budget (seconds). Default 300 s (blueprint §4.4)."""
+    try:
+        return float(os.environ.get("AETHER_LLM_WORKER_COVER_BUDGET_SECONDS", "300"))
+    except ValueError:
+        return 300.0
+
+
+def get_worker_pipeline_budget_seconds() -> float:
+    """Worker-side SHARED budget (seconds) spanning the pipeline's two metered
+    steps (tailor + coverLetter). Default 480 s (blueprint §4.4); MUST stay
+    below the ARQ ``job_timeout`` (600 s)."""
+    try:
+        return float(os.environ.get("AETHER_LLM_WORKER_PIPELINE_BUDGET_SECONDS", "480"))
+    except ValueError:
+        return 480.0
+
+
 def _entailment_budget_base_seconds() -> float:
     """Base seconds for the entailment window (``AETHER_LLM_ENTAILMENT_BUDGET_SECONDS``)."""
     try:
