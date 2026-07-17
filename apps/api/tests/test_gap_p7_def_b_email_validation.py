@@ -17,38 +17,64 @@ that equals, or ends with ``"." + d``, for ``d`` in that list — independent of
 allow-listed by default). ``valid.person@example.com`` and garbage strings
 are unaffected either way.
 
-Approved fix (§15.2 operator brief / ADR-P7-02, Option 3 — NOT YET
-IMPLEMENTED as of this commit, which is the TDD fail-before state): at app
-startup, read ``AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`` (default
-``"aether.local"``) and discard the corresponding entry/entries from
-``email_validator.SPECIAL_USE_DOMAIN_NAMES`` so EmailStr accepts the
-configured internal domain(s) while every OTHER special-use domain remains
-rejected. No DB migration; no change to what update_settings() persists.
+ORIGINAL fix (§15.2 operator brief / ADR-P7-02, Option 3 — as first
+implemented, commit 58dd77e): at app startup, read
+``AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`` (default ``"aether.local"``) and
+discard the corresponding entry/entries from
+``email_validator.SPECIAL_USE_DOMAIN_NAMES``. An adversarial review
+(uat/reports/evidence/phase7/review-def-b.json, cycle 1, verdict FAIL)
+empirically proved this OPENED EVERY ``*.local`` ADDRESS —
+``attacker@evil.local``, ``foo.local``, ``x@random-internal-host.local`` all
+validated, not just ``admin@aether.local`` — because
+``SPECIAL_USE_DOMAIN_NAMES`` only ever holds bare TLD-like labels (e.g.
+``"local"``), so "discarding" one is inherently a wholesale, process-wide
+opening — exactly the "globally-scoped" Option 1 behaviour §15.1 explicitly
+rejected. fable-5 overrode §15.2's sample pseudocode as flawed.
 
-[INFERRED-FROM-PROMPT] This test file assumes the startup hook will be a
-standalone, idempotent, re-callable function named
-``app.main.apply_email_domain_allowlist`` (mirroring the existing
-``apply_admin_rotation()`` §14.7 pattern already wired into ``_lifespan`` in
-apps/api/app/main.py). The gap record does not name the function explicitly;
-the fixer implementing §15.2 may rename it, but must update this test file in
-the SAME change if it does — the name is this test's assumption, not a
-contract handed down from the operator brief.
+REVISED fix (cycle 2, this commit): ``app.main.apply_email_domain_allowlist()``
+is now a pure, side-effect-free loader — it no longer touches
+``email_validator`` global state at all. It reads
+``AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`` fresh from ``os.environ`` on every
+call (default ``{"aether.local"}``) and returns it as a ``frozenset``. The
+actual accept/reject decision moved to a custom Pydantic validator
+(``app.routers.workspaces._validate_settings_email``, wired via
+``Annotated[str, AfterValidator(...)]``) applied ONLY to
+``SettingsProfile.email`` — the gap's named surface
+(``/dashboard/settings`` + ``PUT /api/workspaces/settings``).
+``RegisterRequest.email`` (apps/api/app/routers/auth.py) stays strict
+``EmailStr`` — the reviewer flagged the register-surface reach of the prior
+global-mutation approach as blocking. The validator requires an EXACT,
+case-insensitive domain match against the allowlist (never a suffix/TLD
+match), so ``evil.local`` stays rejected while ``aether.local`` is accepted.
+No DB migration; no change to what update_settings() persists.
 
-FAIL-BEFORE STATUS (recorded 2026-07-17, pre-fix; see
+FAIL-BEFORE STATUS (recorded 2026-07-17, pre-ANY-fix; see
 uat/reports/evidence/phase7/gap-def-b-tdd-fail.txt for the actual pytest
-run):
-  - test_settings_save_aether_local_returns_200            -> FAILS (422 today)
-  - test_settings_save_valid_external_email_returns_200     -> PASSES already (unaffected by the gap; kept as a regression guard)
-  - test_settings_save_garbage_email_returns_422             -> PASSES already (garbage fails a syntax check unrelated to SPECIAL_USE_DOMAIN_NAMES)
-  - test_settings_save_localhost_still_rejected               -> PASSES already ("no period" check fires before special-use check either way)
-  - test_other_special_use_domains_still_rejected              -> PASSES already (only "aether.local" is allow-listed; "foo.test" stays rejected)
-  - test_allowed_domains_configurable_via_env                   -> FAILS (apply_email_domain_allowlist does not exist yet -> ImportError)
-  - test_email_not_changed_unrelated_field_save_succeeds          -> FAILS (422, same root cause as the base case)
+run against commit 9987fdf, before 58dd77e or this cycle-2 commit existed):
+  - test_settings_save_aether_local_returns_200            -> FAILED (422 then)
+  - test_settings_save_valid_external_email_returns_200     -> PASSED already (unaffected by the gap; kept as a regression guard)
+  - test_settings_save_garbage_email_returns_422             -> PASSED already (garbage fails a syntax check unrelated to SPECIAL_USE_DOMAIN_NAMES)
+  - test_settings_save_localhost_still_rejected               -> PASSED already ("no period" check fires before special-use check either way)
+  - test_other_special_use_domains_still_rejected              -> PASSED already (only "aether.local" is allow-listed; "foo.test" stays rejected)
+  - test_allowed_domains_configurable_via_env                   -> FAILED (apply_email_domain_allowlist did not exist yet -> ImportError)
+  - test_email_not_changed_unrelated_field_save_succeeds          -> FAILED (422, same root cause as the base case)
+
+``test_allowed_domains_configurable_via_env`` is REWRITTEN in this cycle-2
+commit to exercise the new exact-domain mechanism through the live endpoint
+(the OLD version poked ``email_validator.SPECIAL_USE_DOMAIN_NAMES``
+directly via a raw ``EmailStr`` probe model — that internal, now-overridden
+mechanism no longer exists to poke). Its behavioural GOAL is unchanged and,
+if anything, stronger: prove the allowlist is env-driven (not hardcoded),
+that ``apply_email_domain_allowlist()`` is re-callable and reads the env
+fresh, AND that the env var fully replaces the default (not additive) — via
+the actual ``PUT /workspaces/settings`` endpoint rather than a bypassed
+internal probe. Every other test's assertions are BYTE-FOR-BYTE unchanged
+from the original TDD commit (9987fdf) — they exercise the real endpoint
+and never depended on which internal mechanism satisfies them. A new guard
+test, ``test_settings_save_nonconfigured_local_subdomain_rejected``, pins
+the cycle-1 review finding closed.
 """
 from __future__ import annotations
-
-import pytest
-from pydantic import BaseModel, EmailStr
 
 
 def _settings_payload(email: str, full_name: str = "Test User") -> dict:
@@ -127,41 +153,74 @@ def test_other_special_use_domains_still_rejected(client, auth_headers):
     assert resp.status_code == 422, resp.text
 
 
-def test_allowed_domains_configurable_via_env(monkeypatch):
-    """§15.2 target: the allowlist is env-driven, not hardcoded to
-    "aether.local" — re-running the startup hook after changing
-    AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS allow-lists a DIFFERENT domain.
+def test_allowed_domains_configurable_via_env(monkeypatch, client, auth_headers):
+    """§15.2 target (REVISED cycle 2): the exact-domain allowlist is
+    env-driven, not hardcoded to "aether.local" — ``apply_email_domain_allowlist()``
+    re-reads ``AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`` fresh on every call
+    (no caching), so reconfiguring the env var and calling it again allows a
+    DIFFERENT domain immediately, through the live endpoint.
 
-    Uses the reserved name "onion" (Tor .onion addresses) as the probe:
-    it is untouched by the default "aether.local" configuration and by
-    every other test in this file, so this test cannot leak a false pass/
-    fail into its neighbours. The module-level SPECIAL_USE_DOMAIN_NAMES
-    list is snapshotted and restored so this test also cannot leak into
-    other test files run in the same pytest session.
+    Uses "example.onion" (a ``.onion`` special-use address, unrelated to the
+    default "aether.local") as the probe — it is rejected by BOTH the
+    default allowlist AND the standard special-use-domain check, so a flip
+    to 200 after reconfiguration can only be explained by the env change
+    actually taking effect. No global state is touched (unlike the
+    overridden cycle-1 approach), so there is nothing to snapshot/restore —
+    ``monkeypatch.setenv`` reverts itself automatically at test teardown.
     """
-    import email_validator
+    # Baseline: with the default config (only "aether.local" allow-listed),
+    # a different reserved-use domain is rejected.
+    resp = client.put(
+        "/workspaces/settings",
+        json=_settings_payload("node@example.onion"),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
 
-    original = list(email_validator.SPECIAL_USE_DOMAIN_NAMES)
-    try:
-        class _Probe(BaseModel):
-            email: EmailStr
+    monkeypatch.setenv("AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS", "example.onion")
 
-        # Sanity: "onion" is special-use before any allow-listing.
-        with pytest.raises(Exception):
-            _Probe(email="node@example.onion")
+    from app.main import apply_email_domain_allowlist
 
-        monkeypatch.setenv("AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS", "example.onion")
+    # Re-callable: reflects the just-changed env immediately, no caching.
+    reloaded = apply_email_domain_allowlist()
+    assert reloaded == frozenset({"example.onion"}), reloaded
 
-        # NOT YET IMPLEMENTED — this import is expected to fail until §15.2
-        # lands (TDD fail-before for this test).
-        from app.main import apply_email_domain_allowlist
+    # Now allow-listed: the SAME endpoint, the SAME validator, accepts it.
+    resp = client.put(
+        "/workspaces/settings",
+        json=_settings_payload("node@example.onion"),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
 
-        apply_email_domain_allowlist()
+    # The env var REPLACES the default set, it is not additive — the
+    # previously-default "aether.local" is no longer allow-listed. Proves
+    # this reads the env fresh rather than merging with a hardcoded
+    # fallback.
+    resp = client.put(
+        "/workspaces/settings",
+        json=_settings_payload("admin@aether.local"),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
 
-        # "onion" must now be allowed.
-        _Probe(email="node@example.onion")
-    finally:
-        email_validator.SPECIAL_USE_DOMAIN_NAMES[:] = original
+
+def test_settings_save_nonconfigured_local_subdomain_rejected(client, auth_headers):
+    """Regression guard for review-def-b.json cycle-1 FAIL: a DIFFERENT
+    domain that merely shares the allow-listed domain's reserved TLD/label
+    must stay rejected — proves the allowlist is an EXACT domain match, not
+    a wholesale opening of every ".local" address. Adversarial review
+    empirically proved a prior implementation accepted
+    ``attacker@evil.local`` (and ``foo.local``, and
+    ``x@random-internal-host.local``) once "local" was discarded from
+    ``email_validator.SPECIAL_USE_DOMAIN_NAMES``; this test pins that
+    regression closed."""
+    resp = client.put(
+        "/workspaces/settings",
+        json=_settings_payload("attacker@evil.local"),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
 
 
 def test_email_not_changed_unrelated_field_save_succeeds(client, auth_headers, test_user_id, db_session):

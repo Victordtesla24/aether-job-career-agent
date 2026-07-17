@@ -6,10 +6,11 @@ fixtures, no in-process dictionaries, no demo personas.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
+from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
     ensure_user_profile_columns,
@@ -620,9 +621,71 @@ def offers(current_user: CurrentUser) -> dict[str, Any]:
 # Settings  GET /settings   PUT /settings
 # ---------------------------------------------------------------------------
 
+def _load_allowed_internal_domains() -> frozenset[str]:
+    """Deferred import to avoid a circular import: ``app.main`` imports this
+    module (``app.routers.workspaces``) at module load time, so this module
+    cannot import ``app.main`` at ITS module-load time. By request time
+    (when this validator actually runs), ``app.main`` has finished
+    importing, so a local import here is always safe.
+    """
+    from app.main import apply_email_domain_allowlist
+
+    return apply_email_domain_allowlist()
+
+
+def _validate_settings_email(value: str) -> str:
+    """GAP-P7-DEF-B (§15.2, REVISED after review-def-b.json cycle-1 FAIL):
+    exact-domain allowlist for ``SettingsProfile.email`` ONLY — the gap's
+    named surface (``/dashboard/settings`` + ``PUT /api/workspaces/settings``).
+    ``RegisterRequest.email`` (apps/api/app/routers/auth.py) deliberately
+    stays plain ``EmailStr`` — the reviewer flagged reaching that surface as
+    blocking, since self-registration is not part of this gap.
+
+    Design ruling: a prior fix mutated the process-wide
+    ``email_validator.SPECIAL_USE_DOMAIN_NAMES`` list, which (empirically
+    proven by adversarial review) opened every ``*.local`` address, not just
+    the configured ``aether.local``. This validator instead does an EXACT,
+    case-insensitive domain match against
+    ``app.main.apply_email_domain_allowlist()`` — ``evil.local`` and
+    ``foo.local`` are DIFFERENT domains from the allow-listed
+    ``aether.local`` and are correctly rejected; only a byte-for-byte domain
+    match is accepted.
+
+    For a match, the local-part is still fully syntax-checked — just not
+    against the special-use domain rule — by substituting a definitely-not-
+    special-use domain (``example.com``) into ``email_validator.validate_email``
+    and reusing its local-part parsing/validation (length, characters,
+    quoting, etc.); only the domain-reserved-name check is bypassed, and
+    only for this one exact, operator-configured domain. Every other input
+    (no configured-domain match, or a match that still has a bad
+    local-part) goes through the standard ``email_validator.validate_email``
+    path unchanged, so garbage strings, ``user@localhost`` (fails a
+    "must have a period" check unrelated to special-use domains), and other
+    reserved TLDs (``.test``, ``.onion``, ``.arpa``, ``.invalid``) all keep
+    failing exactly as before.
+    """
+    if "@" in value:
+        local, _, domain = value.rpartition("@")
+        if domain.lower() in _load_allowed_internal_domains():
+            try:
+                checked = validate_email(f"{local}@example.com", check_deliverability=False)
+            except EmailNotValidError as exc:
+                raise ValueError(str(exc)) from exc
+            return f"{checked.local_part}@{domain.lower()}"
+
+    try:
+        checked = validate_email(value, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValueError(str(exc)) from exc
+    return checked.normalized
+
+
+SettingsEmail = Annotated[str, AfterValidator(_validate_settings_email)]
+
+
 class SettingsProfile(BaseModel):
     fullName: str = Field(min_length=1, max_length=120)
-    email: EmailStr
+    email: SettingsEmail
     targetRole: str = Field(min_length=1, max_length=120)
     location: str = Field(min_length=1, max_length=120)
 
