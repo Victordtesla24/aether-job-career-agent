@@ -511,13 +511,17 @@ def test_pipeline_partial_refund_on_midrun_crash(
     job_id = _seed_bg_job(test_user_id, "pipeline", status="enqueued",
                           params={"query": "x", "location": "y"})
 
+    from app.repositories.background_jobs import BackgroundJobRepository
     from app.workers import tasks as wtasks  # absent today -> FAILED
     from app.workers.tasks import run_agent_job
 
     def _crashing_pipeline_body(user_id, params):
-        # A metered step reserved one run, then the worker crashed BEFORE that
-        # step could refund itself (mid-pipeline crash).
+        # A metered step reserved one run on THIS job (as a real step does under
+        # _pipeline_job_ctx), then the worker crashed BEFORE that step could refund
+        # itself. The crash refund is scoped to this job's own reservation count
+        # (reviewer BLOCKING-3), never a user-wide runsUsed delta.
         UsageQuotaRepository().reserve(user_id)
+        BackgroundJobRepository().increment_reserved(job_id)
         raise RuntimeError("simulated mid-pipeline worker crash")
 
     monkeypatch.setattr(wtasks, "_run_pipeline_body", _crashing_pipeline_body, raising=True)
