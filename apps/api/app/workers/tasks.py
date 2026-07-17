@@ -89,10 +89,10 @@ def _run_single_agent_body(job: dict[str, Any]) -> dict[str, Any]:
     try:
         name, fn = _agent_callable(user_id, agent_key, params)
     except BaseException:
-        # Callable resolution failed AFTER the enqueue-time reservation -> refund
-        # here (it never reached _execute_reserved_run, which owns the refund).
-        if quota_repo is not None and job.get("quotaReserved"):
-            quota_repo.refund_run(user_id)
+        # Callable resolution failed. Record the AgentRun as failed; the enqueue
+        # reservation refund is performed by run_agent_job's atomic, idempotent,
+        # first-terminal-wins path (mark_failed -> refund_single_reservation), so
+        # it is NOT refunded here (avoids a double-refund with the watchdog).
         if run_id:
             try:
                 AgentRunRepository().finish(
@@ -102,7 +102,12 @@ def _run_single_agent_body(job: dict[str, Any]) -> dict[str, Any]:
                 pass
         raise
     budgeted = _wrap_worker_budget(name, fn)
-    return _execute_reserved_run(run_id, user_id, name, params, budgeted, quota_repo, audit)
+    # manage_quota=False: the worker performs the refund/spend via the atomic
+    # BackgroundJob transition in run_agent_job, not inside _execute_reserved_run,
+    # so a watchdog cannot double-refund or resurrect the job (BLOCKING-1/2).
+    return _execute_reserved_run(
+        run_id, user_id, name, params, budgeted, quota_repo, audit, manage_quota=False
+    )
 
 
 def _run_pipeline_body(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -117,29 +122,25 @@ def _run_pipeline_body(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _runs_used(user_id: str) -> int:
-    try:
-        q = UsageQuotaRepository().get_by_user(user_id)
-        return int(q["runsUsed"]) if q else 0
-    except Exception:  # noqa: BLE001
-        return 0
-
-
-def _refund_pipeline_outstanding(user_id: str, before: int) -> None:
-    """Refund every run reserved during a crashed pipeline (fable-5 condition 1).
-
-    A failed step's own ``_record_run`` already refunded it; the remaining
-    ``runsUsed - before`` corresponds to reservations the crash left standing
-    (and, for a non-completing composite, completed sub-steps that are not
-    separately billed). ``refund_run`` floors at 0."""
-    delta = _runs_used(user_id) - before
-    repo = UsageQuotaRepository()
-    for _ in range(max(0, delta)):
-        repo.refund_run(user_id)
+def _refund_for_job(repo: "BackgroundJobRepository", job: dict[str, Any]) -> None:
+    """Refund a terminated job's reservation(s), scoped to THIS job and idempotent
+    (reviewer BLOCKING-1/3). Single-agent: the one enqueue reservation via the
+    atomic claim CTE; pipeline: this job's own outstanding count (never a
+    user-wide runsUsed delta)."""
+    if job.get("agentKey") == "pipeline":
+        repo.refund_pipeline_outstanding(job["id"])
+    else:
+        repo.refund_single_reservation(job["id"])
 
 
 async def run_agent_job(ctx: Any, job_id: str) -> None:
-    """ARQ task: process one BackgroundJob to a terminal state (blueprint §4.3)."""
+    """ARQ task: process one BackgroundJob to a terminal state (blueprint §4.3).
+
+    Terminal transitions are atomic first-terminal-wins (reviewer BLOCKING-2): the
+    winner of mark_failed/mark_completed performs the associated billing side
+    effect exactly once (refund on fail via the atomic claim; spend on complete)."""
+    from app.routers.agents import _pipeline_job_ctx
+
     repo = BackgroundJobRepository()
     job = repo.mark_processing(job_id)
     if job is None:
@@ -147,21 +148,29 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     user_id = job["userId"]
 
     if job["agentKey"] == "pipeline":
-        before = _runs_used(user_id)
+        # Scope per-step reserves/refunds to THIS job so a mid-pipeline crash
+        # refunds only its own outstanding reservations (BLOCKING-3). to_thread
+        # copies the context, so the ContextVar propagates into _pipeline_core.
+        token = _pipeline_job_ctx.set(job_id)
         try:
             result = await asyncio.to_thread(
                 _run_pipeline_body, user_id, job.get("params") or {}
             )
         except _TransientError:
+            _pipeline_job_ctx.reset(token)
             raise
         except Exception as exc:  # noqa: BLE001 — terminal, honest, refunded
-            _refund_pipeline_outstanding(user_id, before)
-            repo.mark_failed(job_id, _honest_message(exc), refunded=True)
+            _pipeline_job_ctx.reset(token)
+            if repo.mark_failed(job_id, _honest_message(exc)):
+                repo.refund_pipeline_outstanding(job_id)
             logger.error(
                 "pipeline job %s failed: %s: %s", job_id, type(exc).__name__, exc
             )
             return
-        repo.mark_completed(job_id, result)
+        _pipeline_job_ctx.reset(token)
+        repo.mark_completed(job_id, result)  # first-wins; if a stale watchdog beat
+        # it, the job stays failed and no spend accrues (per-step spend already
+        # recorded, but the composite reservation was refunded by that watchdog).
         return
 
     try:
@@ -169,29 +178,40 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     except _TransientError:
         raise
     except Exception as exc:  # noqa: BLE001
-        # _execute_reserved_run already refunded on its failure paths.
-        repo.mark_failed(job_id, _honest_message(exc), refunded=True)
+        # First-terminal-wins: only the winner refunds (atomic + idempotent claim),
+        # so a watchdog that already failed+refunded this job is not double-counted.
+        if repo.mark_failed(job_id, _honest_message(exc)):
+            repo.refund_single_reservation(job_id)
         logger.error("job %s failed: %s: %s", job_id, type(exc).__name__, exc)
         return
-    repo.mark_completed(job_id, result)
+    # Success: record spend ONLY if we win the terminal transition. If a stale
+    # watchdog already failed+refunded this job, mark_completed is a no-op and we
+    # skip spend — the job stays failed and the user is not billed (no free run).
+    if repo.mark_completed(job_id, result):
+        if job.get("quotaReserved"):
+            try:
+                UsageQuotaRepository().record_spend(
+                    user_id, float(result.get("costUsd", 0) or 0)
+                )
+            except Exception:  # noqa: BLE001 — spend accounting best-effort
+                pass
 
 
 async def sweep_stale_jobs(ctx: Any) -> int:
     """ARQ cron: fail + refund abandoned jobs nobody polls (blueprint §7.4).
 
-    Bounds quota leakage when a worker dies before writing a terminal state."""
+    Bounds quota leakage when a worker dies before writing a terminal state. Uses
+    the same atomic first-terminal-wins + scoped-idempotent refund as the lazy
+    watchdog (reviewer BLOCKING-1/2/3), so a sweep racing a lazy-GET poll or a
+    live worker refunds each reservation exactly once."""
     from app.routers.agents import _job_stale_thresholds
 
     repo = BackgroundJobRepository()
     enq, proc = _job_stale_thresholds()
     stale = repo.sweep_stale(enq, proc)
+    swept = 0
     for job in stale:
-        if job.get("quotaReserved") and job.get("quotaRefundedAt") is None:
-            try:
-                UsageQuotaRepository().refund_run(job["userId"])
-            except Exception:  # noqa: BLE001
-                pass
-        repo.mark_failed(
-            job["id"], "generation timed out (worker unavailable)", refunded=True
-        )
-    return len(stale)
+        if repo.mark_failed(job["id"], "generation timed out (worker unavailable)"):
+            _refund_for_job(repo, job)
+            swept += 1
+    return swept

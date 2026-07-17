@@ -8,6 +8,7 @@ did and why. High-risk outputs (tailored resumes, cover letters) surface an
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import os
 import time
@@ -515,6 +516,15 @@ def _require_active_subscription(user_id: str) -> None:
     )
 
 
+#: Set to a BackgroundJob id while an async pipeline worker runs ``_pipeline_core``
+#: so each metered step's reserve/refund is counted on THAT job (reviewer
+#: BLOCKING-3 — reservation-scoped pipeline refund). Default None: the sync path
+#: and single-agent worker never set it, so the counting is a guarded no-op there.
+_pipeline_job_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_pipeline_bg_job", default=None
+)
+
+
 def _record_run(
     user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
 ) -> dict[str, Any]:
@@ -557,6 +567,16 @@ def _record_run(
         if float(reserved["spendUsedUsd"]) >= float(reserved["spendCapUsd"]):
             quota_repo.refund_run(user_id)
             raise _plan_quota_429("spend_cap_exceeded", reserved)
+        # Pipeline reservation-scoping (GAP-P7-ASYNC-001, reviewer BLOCKING-3):
+        # when this metered step runs inside an async pipeline worker, record the
+        # reservation on THAT BackgroundJob so a mid-pipeline crash refunds only
+        # this job's own outstanding reservations (never a user-wide delta).
+        _bg = _pipeline_job_ctx.get()
+        if _bg:
+            try:
+                BackgroundJobRepository().increment_reserved(_bg)
+            except Exception:  # noqa: BLE001 — accounting is best-effort
+                pass
 
     run = runs.start(user_id, agent_name, params)
     _persist_billing_audit(runs, run["id"], audit)
@@ -575,6 +595,7 @@ def _execute_reserved_run(
     fn: Callable[[], Any],
     quota_repo: Any,
     audit: dict[str, Any],
+    manage_quota: bool = True,
 ) -> dict[str, Any]:
     """Execute an already-reserved run (quota reserved + AgentRun row created by
     the caller) and finish it, refunding the reserved run on ANY failure path.
@@ -584,22 +605,40 @@ def _execute_reserved_run(
     implementation — zero logic duplication, identical billing/refund semantics.
     Runs inside ``user_credential_context`` so the deep LLM path resolves THIS
     user's credential; honours any ``shared_budget`` set by the caller.
+
+    ``manage_quota`` (default True, the sync path) makes this function itself
+    refund-on-failure and record-spend-on-success via ``quota_repo``. The async
+    single-agent worker passes ``manage_quota=False`` so the refund/spend are
+    performed by the worker AFTER it wins the atomic first-terminal-wins
+    BackgroundJob transition — closing the watchdog-vs-worker double-refund /
+    free-run race (reviewer BLOCKING-1/2). When a pipeline step runs under
+    ``_pipeline_job_ctx``, an actual refund is additionally counted on the job so
+    a mid-pipeline crash refund is reservation-scoped (BLOCKING-3).
     """
     runs = AgentRunRepository()
+    _bg = _pipeline_job_ctx.get()
+
+    def _refund_once() -> None:
+        if manage_quota and quota_repo is not None:
+            quota_repo.refund_run(user_id)
+            if _bg:
+                try:
+                    BackgroundJobRepository().increment_refunded(_bg)
+                except Exception:  # noqa: BLE001
+                    pass
+
     started = time.monotonic()
     try:
         with user_credential_context(user_id, agent_name):
             output = _to_output(fn())
     except HTTPException:
         runs.finish(run_id, "failed", error="http error")
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)  # reserved run produced no output
+        _refund_once()  # reserved run produced no output
         raise
     except QuotaExhaustedError as exc:
         # Subscription quota exhausted mid-run — record honestly and 429.
         runs.finish(run_id, "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        _refund_once()
         expires_at = exc.expires_at
         if expires_at is None:
             try:
@@ -611,15 +650,13 @@ def _execute_reserved_run(
     except LLMUnavailableError as exc:
         # Live LLM failed and no fixture fallback exists — clean 503, never 500.
         runs.finish(run_id, "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        _refund_once()
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
         ) from exc
     except Exception as exc:
         runs.finish(run_id, "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        _refund_once()
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
@@ -650,7 +687,10 @@ def _execute_reserved_run(
     # Record realized USD spend against the reserved run (metered agents only).
     # The reserved run-count already stands; here we only accumulate spend so the
     # USD cap halts the NEXT run once this period's spend passes the ceiling.
-    if quota_repo is not None:
+    # ``manage_quota=False`` (async single-agent worker) defers this so spend is
+    # recorded only after the worker wins the atomic mark_completed (reviewer
+    # BLOCKING-2): a job the watchdog already failed must not accrue spend.
+    if manage_quota and quota_repo is not None:
         quota_repo.record_spend(user_id, cost)
     output["run_id"] = (finished or {"id": run_id})["id"]
     return output
@@ -935,14 +975,16 @@ def _apply_stale_watchdog(
     age = (datetime.now(timezone.utc) - anchor).total_seconds()
     if age < limit:
         return job
-    if job.get("quotaReserved") and job.get("quotaRefundedAt") is None:
-        try:
-            UsageQuotaRepository().refund_run(job["userId"])
-        except Exception:  # noqa: BLE001
-            pass
-    repo.mark_failed(
-        job["id"], "generation timed out (worker unavailable)", refunded=True
-    )
+    # First-terminal-wins (reviewer BLOCKING-1/2): only the caller that atomically
+    # transitions the job to failed performs the refund, and the refund itself is
+    # atomic + idempotent + reservation-scoped. Two concurrent watchdog pollers,
+    # or a watchdog racing a live-but-slow worker, therefore refund exactly once
+    # (and a job the worker already completed can never be failed/refunded).
+    if repo.mark_failed(job["id"], "generation timed out (worker unavailable)"):
+        if job.get("agentKey") == "pipeline":
+            repo.refund_pipeline_outstanding(job["id"])
+        else:
+            repo.refund_single_reservation(job["id"])
     return repo.get_for_user(job["id"], job["userId"]) or job
 
 

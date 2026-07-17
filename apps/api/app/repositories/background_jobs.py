@@ -19,15 +19,25 @@ from typing import Any, Optional
 
 from app.db import get_connection, new_id, rows_to_dicts
 
-#: Distinct advisory-lock id (next free after billing's 7420240719).
-_BACKGROUND_JOB_LOCK = 7420240720
+#: Distinct advisory-lock id. Registry of table-DDL advisory locks in this repo
+#: (grep pg_advisory_xact_lock): db.py 7420240712 & 7420240720; routers/agents
+#: 7420240711; interviews/networking 7420240713/714; google_credential 715;
+#: job_source_status/provider_credential/gmail_service 716; user_provider_credential
+#: 717; gmail_account 718; billing 719; admin 721. Next genuinely-free id: 722.
+#: (7420240720 was WRONG — it collides with db.py:ensure_admin_user_columns; fixed
+#: per reviewer BLOCKING-4.)
+_BACKGROUND_JOB_LOCK = 7420240722
 
 #: Guard so the DDL only runs once per worker process.
 _bg_ready = False
 
+#: Non-terminal statuses — the only ones a terminal transition may claim.
+_NON_TERMINAL = ("enqueued", "processing")
+
 _COLS = (
     '"id","userId","agentKey","runId","params","status","arqJobId","result",'
     '"error","attempts","quotaReserved","quotaReservedAt","quotaRefundedAt",'
+    '"quotaReservedCount","quotaRefundedCount",'
     '"startedAt","finishedAt","createdAt","updatedAt"'
 )
 
@@ -66,12 +76,24 @@ def _ensure_table() -> None:
                     "quotaReserved"   boolean     NOT NULL DEFAULT false,
                     "quotaReservedAt" timestamptz,
                     "quotaRefundedAt" timestamptz,
+                    "quotaReservedCount" integer  NOT NULL DEFAULT 0,
+                    "quotaRefundedCount" integer  NOT NULL DEFAULT 0,
                     "startedAt"       timestamptz,
                     "finishedAt"      timestamptz,
                     "createdAt"       timestamptz NOT NULL DEFAULT now(),
                     "updatedAt"       timestamptz NOT NULL DEFAULT now()
                 )
                 '''
+            )
+            # Additive backfill for a table created before the count columns
+            # existed (pipeline reservation-scoped refund — reviewer BLOCKING-3).
+            cur.execute(
+                'ALTER TABLE "BackgroundJob" '
+                'ADD COLUMN IF NOT EXISTS "quotaReservedCount" integer NOT NULL DEFAULT 0'
+            )
+            cur.execute(
+                'ALTER TABLE "BackgroundJob" '
+                'ADD COLUMN IF NOT EXISTS "quotaRefundedCount" integer NOT NULL DEFAULT 0'
             )
             cur.execute(
                 'CREATE INDEX IF NOT EXISTS "BackgroundJob_userId_createdAt_idx" '
@@ -178,24 +200,33 @@ class BackgroundJobRepository:
             conn.commit()
         return rows[0] if rows else None
 
-    def mark_completed(self, job_id: str, result: Any) -> None:
+    def mark_completed(self, job_id: str, result: Any) -> bool:
+        """Atomic first-terminal-wins transition to completed. Guarded on the
+        CURRENT status so a watchdog that already marked the job failed cannot be
+        stomped back to completed (reviewer BLOCKING-2). Returns True iff THIS
+        call performed the transition."""
         _ensure_table()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE \"BackgroundJob\" SET \"status\"='completed', "
                     '"result"=%s::jsonb, "error"=NULL, "finishedAt"=now(), '
-                    '"updatedAt"=now() WHERE "id"=%s',
+                    "\"updatedAt\"=now() WHERE \"id\"=%s AND \"status\" IN "
+                    "('enqueued','processing') RETURNING \"id\"",
                     (
                         json.dumps(result, default=str) if result is not None else None,
                         job_id,
                     ),
                 )
+                won = cur.fetchone() is not None
             conn.commit()
+        return won
 
-    def mark_failed(self, job_id: str, error: str, *, refunded: bool = False) -> None:
-        """Terminal failure: honest error string only, NEVER fixture content;
-        ``result`` stays null. Optionally stamps the quota refund time."""
+    def mark_failed(self, job_id: str, error: str, *, refunded: bool = False) -> bool:
+        """Atomic first-terminal-wins transition to failed. Guarded on the CURRENT
+        status (reviewer BLOCKING-2). Honest error string only, NEVER fixture
+        content; ``result`` stays null. Returns True iff THIS call transitioned
+        the job (the caller then performs the associated refund exactly once)."""
         _ensure_table()
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -203,10 +234,112 @@ class BackgroundJobRepository:
                     "UPDATE \"BackgroundJob\" SET \"status\"='failed', "
                     '"error"=%s, "finishedAt"=now(), "updatedAt"=now(), '
                     '"quotaRefundedAt"=CASE WHEN %s THEN now() ELSE "quotaRefundedAt" END '
-                    'WHERE "id"=%s',
+                    "WHERE \"id\"=%s AND \"status\" IN ('enqueued','processing') "
+                    'RETURNING "id"',
                     (str(error)[:1000], refunded, job_id),
                 )
+                won = cur.fetchone() is not None
             conn.commit()
+        return won
+
+    def refund_single_reservation(self, job_id: str) -> bool:
+        """Atomically claim + refund the SINGLE enqueue-time reservation of a
+        single-agent job, in ONE statement (reviewer BLOCKING-1). A data-modifying
+        CTE flips ``quotaRefundedAt`` from NULL under a row lock (WHERE
+        quotaRefundedAt IS NULL AND quotaReserved) and, only if it claimed,
+        decrements ``UsageQuota.runsUsed`` by 1 (floored at 0). Idempotent: a
+        second concurrent firing matches 0 rows and refunds nothing. Returns True
+        iff THIS call performed the refund."""
+        _ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    WITH claim AS (
+                        UPDATE "BackgroundJob"
+                           SET "quotaRefundedAt" = now(),
+                               "quotaRefundedCount" = GREATEST("quotaRefundedCount", 1),
+                               "updatedAt" = now()
+                         WHERE "id" = %s
+                           AND "quotaReserved" = true
+                           AND "quotaRefundedAt" IS NULL
+                        RETURNING "userId"
+                    )
+                    UPDATE "UsageQuota" q
+                       SET "runsUsed" = GREATEST(q."runsUsed" - 1, 0),
+                           "updatedAt" = now()
+                      FROM claim
+                     WHERE q."userId" = claim."userId"
+                    RETURNING q."userId"
+                    ''',
+                    (job_id,),
+                )
+                claimed = cur.fetchone() is not None
+            conn.commit()
+        return claimed
+
+    def increment_reserved(self, job_id: str, n: int = 1) -> None:
+        """Record that this (pipeline) job reserved ``n`` more metered run(s)."""
+        _ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "BackgroundJob" SET "quotaReservedCount"='
+                    '"quotaReservedCount"+%s,"updatedAt"=now() WHERE "id"=%s',
+                    (n, job_id),
+                )
+            conn.commit()
+
+    def increment_refunded(self, job_id: str, n: int = 1) -> None:
+        """Record that this (pipeline) job already refunded ``n`` reserved run(s)
+        (a step that failed and refunded itself)."""
+        _ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "BackgroundJob" SET "quotaRefundedCount"='
+                    '"quotaRefundedCount"+%s,"updatedAt"=now() WHERE "id"=%s',
+                    (n, job_id),
+                )
+            conn.commit()
+
+    def refund_pipeline_outstanding(self, job_id: str) -> int:
+        """Refund EXACTLY this pipeline job's own outstanding reservations
+        (reviewer BLOCKING-3) — never a user-wide runsUsed delta. Under a row
+        lock (SELECT ... FOR UPDATE) compute ``outstanding = quotaReservedCount −
+        quotaRefundedCount`` for THIS job, decrement ``UsageQuota.runsUsed`` by
+        that many (floored at 0), and set ``quotaRefundedCount = quotaReservedCount``.
+        Idempotent + scoped: a second call, or a concurrent same-user run, sees
+        outstanding 0 for this job and refunds nothing. Returns the count refunded."""
+        _ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "userId","quotaReservedCount","quotaRefundedCount" '
+                    'FROM "BackgroundJob" WHERE "id"=%s FOR UPDATE',
+                    (job_id,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    conn.commit()
+                    return 0
+                user_id = row[0]
+                outstanding = int(row[1] or 0) - int(row[2] or 0)
+                if outstanding <= 0:
+                    conn.commit()
+                    return 0
+                cur.execute(
+                    'UPDATE "BackgroundJob" SET "quotaRefundedCount"='
+                    '"quotaReservedCount","updatedAt"=now() WHERE "id"=%s',
+                    (job_id,),
+                )
+                cur.execute(
+                    'UPDATE "UsageQuota" SET "runsUsed"=GREATEST("runsUsed"-%s,0),'
+                    '"updatedAt"=now() WHERE "userId"=%s',
+                    (outstanding, user_id),
+                )
+            conn.commit()
+        return outstanding
 
     def mark_refunded(self, job_id: str) -> None:
         _ensure_table()
