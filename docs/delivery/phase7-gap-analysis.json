@@ -1,0 +1,431 @@
+{
+  "run": "PHASE-7",
+  "date_seeded": "2026-07-17",
+  "orchestrator": "claude-fable-5 (xhigh)",
+  "claim_ledger": "docs/delivery/PHASE7-CLAIM-LEDGER.md",
+  "evidence_root": "uat/reports/evidence/phase7/",
+  "rulings": [
+    {
+      "id": "ADR-P7-01",
+      "title": "DEF-A stands as CRITICAL despite qa ledger dismissal \u2014 Phase-7 operator brief supersedes ADR-P6-OAUTH",
+      "ruling": "ADR-P6-OAUTH prohibited Aether operating an in-app OAuth authorization flow against claude.ai (third-party subscription-OAuth intermediary). Phase-7 \u00a714 mandates a DIFFERENT mechanism: the user pastes their own `claude setup-token` output (sk-ant-oat01-) as a credential; the operator brief explicitly overrides prior policy/modal copy and pre-seeds GAP-P7-DEF-A as CRITICAL launch-blocking. Doc precedence: Phase-7 prompt (2026-07-17, operator-authored) > Phase-6 ADR. The Phase-5/6 compliance tests enforcing oat-rejection (test_gap_p5_auth_compliance.py::test_put_*_credential_rejects_subscription_oauth) are SUPERSEDED and must be replaced by \u00a714.7 tests as part of the fix. qa's narrower genuine finding (format-only validation, no live connectivity check) is FOLDED INTO DEF-A via the \u00a714.4 test-connection endpoint. Constraints preserved: honest fallback to api_key mode, explicit error on subscription-quota exhaustion, NO silent credential-type fallthrough, token never logged.",
+      "by": "fable-5",
+      "date": "2026-07-17"
+    },
+    {
+      "id": "ADR-P7-02",
+      "title": "DEF-B stands as CRITICAL despite qa ledger dismissal",
+      "ruling": "The stored admin@aether.local email fails its own validator on settings save (observed 422, probe-p7-09a). Whether EmailStr special-use rejection is 'as designed' is immaterial: \u00a715 operator brief mandates the AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS allowlist (Option 3) so stored internal emails round-trip. One production row affected (admin@aether.local).",
+      "by": "fable-5",
+      "date": "2026-07-17"
+    },
+    {
+      "id": "ADR-P7-03",
+      "title": "Async stack choice defers to arch blueprint with observed infra",
+      "ruling": "\u00a716 recommends ARQ+Redis; probes show Redis NOT installed, arq NOT installed, and the api runs under /opt/abacus-python (NOT apps/api/venv as \u00a716's draft unit assumed). arch must design against OBSERVED paths and include Redis provisioning + systemd units; fable-5 approves before build. Quota semantics fixed: reserve at enqueue, refund on failure, atomic.",
+      "by": "fable-5",
+      "date": "2026-07-17"
+    },
+    {
+      "id": "ADR-P7-05",
+      "title": "Discovery cron paywall exemption: scoped system-run mechanism",
+      "ruling": "Paywall mandate targets user-initiated actions; platform sourcing automation is system infrastructure. Fix = X-Aether-System-Run shared-secret header (AETHER_SYSTEM_RUN_SECRET in .env), bypassing ONLY the subscription gate, ONLY for discovery/scout agent keys, constant-time compared, audited systemRun=true. Hand-granted subscription REJECTED (fakes billing state); swallow-402 REJECTED (discovery stays broken). Cron script hardened to loud failures (-sS + status handling).",
+      "by": "fable-5",
+      "date": "2026-07-17"
+    },
+    {
+      "id": "ADR-P7-04",
+      "title": "SRC-001 / REPO-001 / NONPROD-001 / FIXTURE-001 rejected as seeded; sourcing-freshness risk reassigned",
+      "ruling": "Fresh probes refute the pre-seeded conditions: sourcing 32 jobs/5 sources (3 sources >=5 each, 0 dup, 0 stale, 10/10 live content); repo already 1 branch/0 open PRs; nonprod scan 0 suspicious with replay-guard present; 0/60 fixture fingerprints in live responses. The REAL sourcing risk is the failed aether-discovery timer unit -> GAP-P7-DISCOVERY-001 (HIGH). Adzuna remains optional H-06 (sourcing not thin).",
+      "by": "fable-5",
+      "date": "2026-07-17"
+    }
+  ],
+  "gaps": [
+    {
+      "id": "GAP-P7-DEF-A",
+      "title": "DEFECT-A: Claude Code OAuth token (sk-ant-oat01-) rejected; credential validation format-only with no live test-connection",
+      "type": "DEFECT",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/agents (Configure Anthropic modal) + PUT /api/agents/providers/anthropic/credential",
+      "source": [
+        "\u00a7D operator brief",
+        "PROBE:P7-08a (422 observed)",
+        "PROBE:P7-08e (operator token present)",
+        "ADR-P7-01"
+      ],
+      "observed": "PUT credential with sk-ant-oat01-... returns 422 'Anthropic api_key must start with sk-ant-api.' (probe-p7-08a-defect-a-oat-rejection.json). Dummy sk-ant-api03- accepted format-only, stored as connected with no live verification (probe-p7-08b). Operator token present at ~/.claude/.credentials.json (probe-p7-08e).",
+      "expected": "Dual-mode per \u00a714: oat01 accepted -> vault + atomic .env write CLAUDE_CODE_OAUTH_TOKEN (600 perms, never logged); api03 unchanged; garbage 422 naming both formats; per-mode test-connection endpoint doing a real Anthropic round-trip; billing audit records authMode; quota exhaustion in oauth mode = explicit 429 error, never silent fallthrough.",
+      "root_cause": "apps/api/app/routers/agents.py:1454-1458 _validate_provider_auth() prefix check enforces superseded ADR-P6-OAUTH.",
+      "files": [
+        "apps/api/app/routers/agents.py",
+        "apps/api/tests/test_gap_p5_auth_compliance.py",
+        "apps/web (Anthropic config modal)"
+      ],
+      "fix_spec": "docs/delivery/PHASE7-DEFECT-A-BLUEPRINT.md \u2014 APPROVED by fable-5 2026-07-17. LIVE-PROBE CORRECTIONS TO \u00a714 (binding): oauth_token mode uses Authorization: Bearer + anthropic-beta: oauth-2025-04-20 header (x-api-key observed 401; Bearer+beta observed 200 \u2014 claude-code-token-verification.md); env file is repo-root .env not apps/api/.env (write requires service restart to take effect; vault row live immediately). Approved decisions: authMode value 'oauth_token' (legacy subscription_oauth stays blocked \u2014 in-app OAuth remains non-goal per ADR-P7-01); reuse POST /agents/providers/{provider}/verify for per-mode test-connection + 429 disambiguation; UserProviderCredential CHECK widened additively; wire missing live-429->set_block in _call_live; UI adds second radio + api.ts/zod enum. Open non-blocking: PROBE-DEFA-2 (429 quota-vs-ratelimit body discriminator \u2014 fixer confirms from official docs, conservative parse, ambiguous=rate-limit, NEVER fallthrough) + PROBE-DEFA-1 (constraint name re-confirm at deploy).",
+      "migration": null,
+      "tests_required": [
+        "tests/test_gap_p7_def_a_dual_mode.py (\u00a714.7 full list)",
+        "supersede test_gap_p5_auth_compliance oat-rejection tests"
+      ],
+      "verification_recipe": [
+        "Journey J1 steps 1-11 on production (\u00a712)"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-08a-defect-a-oat-rejection.json",
+        "uat/reports/evidence/phase7/probe-p7-08b-defect-a-api-key.json",
+        "uat/reports/evidence/phase7/probe-p7-08c-validation-source.txt",
+        "uat/reports/evidence/phase7/probe-p7-08e-claude-token-presence.txt"
+      ],
+      "post_evidence": [],
+      "status": "REVIEW-PASSED",
+      "fixer_role": "fixer-hard",
+      "fixer_model": "claude-opus-4",
+      "reviewer_model": "claude-sonnet-4",
+      "qa_model": "claude-sonnet-4",
+      "priority": 1,
+      "gates": [
+        "GATE-02",
+        "GATE-03",
+        "GATE-04",
+        "GATE-05",
+        "GATE-06"
+      ],
+      "tdd": "fix/p7-def-a@d247357 8F/6P \u2014 qa-confirmed step7-tdd-fail-confirmation.json",
+      "review": "review-def-a.json PASS (reviewer a6416a5, diff instance): secret-safe .env writer (mkstemp+fchmod600+os.replace), no token logging, no quota-429 fallthrough (QuotaExhaustedError re-raised before broad retry). 14/14 re-run. 5 non-blocking notes (autouse env-isolation fixture; AgentConfigUpdate.authMode no test-inert; shared-.env last-writer deferred to async; envSync return discarded; stale JSDoc). Merge-ready @5271516."
+    },
+    {
+      "id": "GAP-P7-DEF-B",
+      "title": "DEFECT-B: Settings save 422 for stored reserved-TLD email (admin@aether.local)",
+      "type": "DEFECT",
+      "severity": "CRITICAL",
+      "surface": "/dashboard/settings + PUT /api/workspaces/settings",
+      "source": [
+        "\u00a7E operator brief",
+        "PROBE:P7-09a (422 observed)",
+        "ADR-P7-02"
+      ],
+      "observed": "PUT settings with profile.email=admin@aether.local -> 422 'special-use or reserved name' (probe-p7-09a-defect-b-settings.json). 1 stored user affected (probe-p7-09c).",
+      "expected": "\u00a715: AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS env allowlist (default aether.local) discarded from email_validator.SPECIAL_USE_DOMAIN_NAMES at startup; aether.local saves 200; garbage still 422; external valid emails 200; no data migration needed.",
+      "root_cause": "apps/api/app/routers/workspaces.py:625 Pydantic EmailStr -> email-validator v2 special-use rejection independent of check_deliverability.",
+      "files": [
+        "apps/api/app/main.py (startup)",
+        "apps/api/app/routers/workspaces.py",
+        ".env.example"
+      ],
+      "fix_spec": "REVISED after review-def-b.json FAIL (re-fix cycle 1, fable-5 design ruling): Do NOT mutate email_validator.SPECIAL_USE_DOMAIN_NAMES (wholesale label removal opens all *.local \u2014 contradicts \u00a715.1 rationale; \u00a715.2 sample pseudocode is itself flawed and is OVERRIDDEN). Implement exact-domain allowlist: custom Pydantic validator type applied ONLY to SettingsProfile.email (workspaces settings surface \u2014 the gap's named surface; RegisterRequest stays strict EmailStr): if domain part (case-insensitive, exact match) in AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS set -> validate local-part syntax then accept; else standard EmailStr path. apply_email_domain_allowlist() becomes the allowlist loader (name kept for test contract). REQUIRED new guard test: user@evil.local (non-configured .local subdomain) -> 422. All other \u00a715.4 tests keep their contracts.",
+      "migration": null,
+      "tests_required": [
+        "tests/test_gap_p7_def_b_email_validation.py (\u00a715.4)",
+        "e2e gap_p7_def_b.spec.ts"
+      ],
+      "verification_recipe": [
+        "Journey J2 steps 1-8 on production (\u00a712)"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-09a-defect-b-settings.json",
+        "uat/reports/evidence/phase7/probe-p7-09b-email-validation-source.txt",
+        "uat/reports/evidence/phase7/probe-p7-09c-reserved-tld-users.txt"
+      ],
+      "post_evidence": [],
+      "status": "REVIEW-PASSED",
+      "fixer_role": "fixer-medium",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": "claude-sonnet-4 (different instance)",
+      "qa_model": "claude-sonnet-4 (different instance)",
+      "priority": 2,
+      "gates": [
+        "GATE-07",
+        "GATE-08",
+        "GATE-09"
+      ],
+      "tdd": "fix/p7-def-b@9987fdf 3F/4P \u2014 qa-confirmed step7-tdd-fail-confirmation.json",
+      "review_history": [
+        {
+          "cycle": 1,
+          "verdict": "FAIL",
+          "artifact": "uat/reports/evidence/phase7/review-def-b.json",
+          "blocking": "wholesale .local opening; register-surface reach; missing evil.local guard test"
+        }
+      ],
+      "review": "review-def-b-cycle2.json PASS (reviewer a5afa5ca, fresh instance): global list untouched; sharp-edge sub.aether.local\u2192REJECT, case-insensitive, local-part validated; register surface strict; 8/8 + 93/93 regression. aether.local.evil.com\u2192accept confirmed baseline EmailStr (non-blocking, outside allowlist path). Merge-ready @7a27284."
+    },
+    {
+      "id": "GAP-P7-ASYNC-001",
+      "title": "Async background generation missing: /pipeline/run times out >150s; synchronous LLM path causes honest-503s",
+      "type": "DEFECT",
+      "severity": "CRITICAL",
+      "surface": "POST /api/agents/tailor/run, /cover-letter/run, /pipeline/run + frontend polling UX",
+      "source": [
+        "\u00a7F.1",
+        "PROBE:P7-11 (timeout observed)",
+        "CL-12 PARTIALLY-TRUE",
+        "ADR-P7-03"
+      ],
+      "observed": "pipeline/run timed out at 150s curl cap (probe-p7-11a-pipeline-latency.json). Redis + arq NOT installed (step2-infra-check.txt).",
+      "expected": "\u00a716: 202 + BackgroundJob row + worker processing; GET /api/jobs/{id} polling; quota reserve-at-enqueue/refund-on-failure atomic; zero 503s in 20-run soak; no fixture content on failure; frontend polling with honest failure states.",
+      "root_cause": "Synchronous in-request LLM calls with budget caps; no queue/worker infrastructure.",
+      "files": [
+        "apps/api/app/routers/agents.py",
+        "apps/api/app/workers/ (new)",
+        "apps/web run-triggering components",
+        "systemd aether-worker.service + redis"
+      ],
+      "fix_spec": "docs/delivery/PHASE7-ASYNC-BLUEPRINT.md \u2014 APPROVED by fable-5 2026-07-17 incl. deviations D1-D8 (venv /opt/abacus-python; /var/log/aether/worker.log; start-worker.sh repo-root .env; redis-server.service; status route GET /api/agents/jobs/{job_id} due to collision; pipeline per-step reserve in worker w/ paywall-first-at-enqueue; Redis requirepass db3; AETHER_LLM_WORKER_BUDGET_SECONDS 300/480). CONDITIONS: (1) pipeline worker crash mid-run must refund reserved-unfinished steps; (2) GATE-11/12/13 evaluated with AETHER_ASYNC_GENERATION=ON final state; (3) all verification recipes use /api/agents/jobs/{id}.",
+      "migration": "CREATE TABLE IF NOT EXISTS BackgroundJob (\u00a716.2) + index \u2014 additive only.",
+      "tests_required": [
+        "tests/test_gap_p7_async_001.py (\u00a716.3)"
+      ],
+      "verification_recipe": [
+        "Journey J3 steps 1-8 incl. 20-run soak (\u00a712)"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-11a-pipeline-latency.json",
+        "uat/reports/evidence/phase7/probe-async-redis-status.txt"
+      ],
+      "post_evidence": [],
+      "status": "REVIEW-PASSED",
+      "fixer_role": "fixer-hard",
+      "fixer_model": "claude-opus-4",
+      "reviewer_model": "claude-sonnet-4",
+      "qa_model": "claude-sonnet-4",
+      "priority": 3,
+      "gates": [
+        "GATE-11",
+        "GATE-12",
+        "GATE-13"
+      ],
+      "tdd": "fix/p7-async@f6ec0ed 12F/1P \u2014 qa-confirmed step7-tdd-fail-confirmation.json",
+      "review_history": [
+        {
+          "cycle": 1,
+          "verdict": "FAIL",
+          "artifact": "uat/reports/evidence/phase7/review-async.json",
+          "blocking": "non-atomic refund double-fire (no CAS on quotaRefundedAt); mark_completed/mark_failed no status guard \u2192 watchdog races slow worker \u2192 free run; _refund_pipeline_outstanding user-scoped delta over-refunds; advisory-lock id 7420240720 collides with ensure_admin_user_columns"
+        }
+      ],
+      "review": "review-async-cycle2.json PASS (reviewer a73653f, fresh instance): B1-B4 all CLOSED (atomic refund CTE w/ GREATEST floor; status-guarded terminal both orderings; per-job FOR UPDATE scoped refund; unique lock 7420240722). 17/17 (4 concurrency fail-before\u2192pass-after). Non-blocking: dead mark_refunded(), pre-existing career/interviews lock collision (follow-up). Merge-ready @df0bda5."
+    },
+    {
+      "id": "GAP-P7-DISCOVERY-001",
+      "title": "aether-discovery systemd unit failing (exit 22) \u2014 scheduled sourcing refresh broken",
+      "type": "DEFECT",
+      "severity": "HIGH",
+      "surface": "aether-discovery.service (oneshot + timer)",
+      "source": [
+        "STEP-2 infra check",
+        "probe-p7-discovery-service-failure.txt",
+        "log-tailer RCA"
+      ],
+      "observed": "RCA CONFIRMED (gap-discovery-rca.md): failing since 2026-07-16T20:30:30Z \u2014 first cron cycle after paywall deploy (not 01:01 as probe framed). scripts/discovery_cron.sh:63 POSTs /agents/scout/run as the free-plan cron account -> _require_active_subscription (agents.py:488-512 via _record_run:528) returns 402 subscription_required -> curl -sf exits 22 silently under set -euo pipefail. Reproduced live (402 without -f; exit 22 with -sf). Non-mutating; 9 consecutive failed cycles; last success 20:01:45Z.",
+      "expected": "Discovery cron runs green under the paywall regime; user-facing scout runs remain paywalled; failures are loud.",
+      "root_cause": "Phase-6 paywall (GAP-P6-PAYWALL) gates ALL agent runs incl. the platform's own discovery automation, which piggybacks on a user account; plus curl -sf hides the failure.",
+      "files": [
+        "apps/api/app/routers/agents.py",
+        "scripts/discovery_cron.sh",
+        "apps/api/tests/test_gap_p7_discovery_001.py (new)"
+      ],
+      "fix_spec": "ADR-P7-05 (fable-5 ruling 2026-07-17): scoped SYSTEM-RUN exemption \u2014 cron sends X-Aether-System-Run header bearing a shared secret from repo-root .env (AETHER_SYSTEM_RUN_SECRET, 600, never logged); server bypasses ONLY the subscription gate, ONLY for discovery/scout agent keys, ONLY when secret matches (constant-time compare); run recorded with systemRun=true in audit; quota untouched for system runs. REJECTED alternatives: hand-granted paid sub (fakes billing state), swallow-402 (leaves discovery broken). Also: discovery_cron.sh curl -sf -> -sS with explicit HTTP-status handling + non-zero exit ON REAL failure (loud, honest). Failing test first: system-context scout run for free-plan cron account currently 402 (fail) -> permitted after fix; user-context scout run without sub STILL 402 (guard test).",
+      "migration": null,
+      "tests_required": [
+        "regression test if code-level; else verified green run evidence"
+      ],
+      "verification_recipe": [
+        "systemctl status aether-discovery green after triggered run",
+        "job pool freshness maintained"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-discovery-service-failure.txt"
+      ],
+      "post_evidence": [],
+      "status": "REVIEW-PASSED",
+      "fixer_role": "fixer-medium",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": "claude-sonnet-4 (different instance)",
+      "qa_model": "claude-sonnet-4 (different instance)",
+      "priority": 4,
+      "gates": [
+        "GATE-10 (freshness durability)"
+      ],
+      "tdd": "RCA-only per ADR-P7-05; failing test = first fix commit \u2014 qa-confirmed step7-tdd-fail-confirmation.json",
+      "review": "review-discovery.json PASS (reviewer a925e4fb, diff instance); secret-curl-arg non-blocking (pre-existing pattern, single-user VM). Merge-ready @ ef13609."
+    },
+    {
+      "id": "GAP-P7-WEBLOG-001",
+      "title": "aether-web log: webpack-runtime TypeError + ELIFECYCLE restart failures (historical; live routes clean)",
+      "type": "DEFECT",
+      "severity": "LOW",
+      "surface": "aether-web service startup/logs",
+      "source": [
+        "probe-p7-log-baseline.txt"
+      ],
+      "observed": "TypeError undefined .call in webpack-runtime.js + [ELIFECYCLE] failures across 4+ restart attempts in web log; but P7-12 sweep: 20/20 routes clean, service active.",
+      "expected": "Clean restarts; no recurring startup exceptions; or documented benign cause.",
+      "root_cause": "TBD \u2014 likely stale .next build chunk mismatch across restarts.",
+      "files": [
+        "apps/web build artifacts / service unit"
+      ],
+      "fix_spec": "Investigate during deploy of other fixes (fresh pnpm build will be required anyway); if reproducible post-rebuild, fix; else document as resolved-by-rebuild with evidence.",
+      "migration": null,
+      "tests_required": [],
+      "verification_recipe": [
+        "clean journalctl/web log across a service restart post-deploy"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-log-baseline.txt"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "fixer_role": "deployer+fixer-medium (only if reproducible)",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": "claude-sonnet-4",
+      "qa_model": "claude-sonnet-4",
+      "priority": 5,
+      "gates": [
+        "GATE-16",
+        "GATE-17"
+      ]
+    },
+    {
+      "id": "GAP-P7-DIR-001",
+      "title": "Directory/document consolidation per \u00a717 (43 duplicate pdf/docx candidates; workers/ addition)",
+      "type": "DOCS",
+      "severity": "MEDIUM",
+      "surface": "repo tree",
+      "source": [
+        "PROBE:P7-13",
+        "\u00a717"
+      ],
+      "observed": "43 duplicate-doc candidates (probe-p7-13a); tree otherwise already close to \u00a717.2 target; turbo already uses tasks.",
+      "expected": "\u00a717.2 layout; duplicates adjudicated by fable-5 before any deletion; builds green after each batch; import paths updated atomically.",
+      "root_cause": "Accumulated phase artifacts.",
+      "files": [
+        "docs/**",
+        "uat/**"
+      ],
+      "fix_spec": "scout migration-map -> fable-5 approves -> fixer-medium executes AFTER all code fixes merge (avoid conflicts).",
+      "migration": null,
+      "tests_required": [
+        "build green after each move batch"
+      ],
+      "verification_recipe": [
+        "probe-p7-13 re-run post-fix"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-13a-duplicate-doc-candidates.txt",
+        "uat/reports/evidence/phase7/probe-p7-13c-dir-tree.txt"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "fixer_role": "fixer-medium",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": "claude-sonnet-4 (different instance)",
+      "qa_model": "claude-sonnet-4 (different instance)",
+      "priority": 6,
+      "gates": [
+        "GATE-23"
+      ]
+    },
+    {
+      "id": "GAP-P7-DOCS-001",
+      "title": "Docs refresh to Phase-7 truth (absorbs CL-02/03 stale figures + CL-07 lift-headline hedging + \u00a718 additions)",
+      "type": "DOCS",
+      "severity": "MEDIUM",
+      "surface": "EXECUTION-REPORT.md, README.md, docs/delivery/*, docs/subscription/billing-architecture.md",
+      "source": [
+        "\u00a718",
+        "CL-02/03/07 PARTIALLY-TRUE",
+        "PROBE:P7-15"
+      ],
+      "observed": "Docs carry Phase-6 figures (601/293, HEAD 602f19f) and an unhedged 30.81->32.97 lift headline (one-run proof; recent live lifts 0.0-0.2%).",
+      "expected": "\u00a718.1 updates + \u00a718.2 new docs; lift claims disclosed with methodology; DEFECT-A dual-mode + DEFECT-B allowlist + async architecture documented.",
+      "root_cause": "Phase progression.",
+      "files": [
+        "per \u00a718.1"
+      ],
+      "fix_spec": "doc-updater executes LAST after all code gates pass.",
+      "migration": null,
+      "tests_required": [],
+      "verification_recipe": [
+        "probe-p7-15 re-run; qa doc spot-check"
+      ],
+      "pre_evidence": [
+        "uat/reports/evidence/phase7/probe-p7-15-delivery-docs.txt"
+      ],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "fixer_role": "doc-updater",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": "claude-sonnet-4 (different instance)",
+      "qa_model": "claude-sonnet-4 (different instance)",
+      "priority": 7,
+      "gates": [
+        "GATE-24",
+        "GATE-27"
+      ]
+    },
+    {
+      "id": "GAP-P7-VERIFY-COVER",
+      "title": "Cover-letter craft/format unverified in Phase-7 (CL-08 partial) \u2014 verify-only",
+      "type": "CLAIM-REFUTED",
+      "severity": "LOW",
+      "surface": "cover-letter generation",
+      "source": [
+        "CL-08 PARTIALLY-TRUE"
+      ],
+      "observed": "No fresh Phase-7 evidence of business-format cover letters.",
+      "expected": "Verified during STEP-10 J4 journey (cover-letter run, format + fixture-absence + honest failure).",
+      "root_cause": "n/a (verification hole, not code defect)",
+      "files": [],
+      "fix_spec": "VERIFY-ONLY: fold into STEP-10 sweep; becomes DEFECT gap only if verification fails.",
+      "migration": null,
+      "tests_required": [],
+      "verification_recipe": [
+        "J4 cover-letter leg on production under temp QA subscription"
+      ],
+      "pre_evidence": [],
+      "post_evidence": [],
+      "status": "TRIAGED",
+      "fixer_role": "qa",
+      "fixer_model": "claude-sonnet-4",
+      "reviewer_model": null,
+      "qa_model": "claude-sonnet-4",
+      "priority": 8,
+      "gates": [
+        "GATE-14"
+      ]
+    }
+  ],
+  "rejected_pre_seeds": [
+    {
+      "id": "GAP-P7-FIXTURE-001",
+      "verdict": "NOT-TRIGGERED",
+      "evidence": "probe-p7-04e empty (0/60 fingerprints); CL-09 CONFIRMED"
+    },
+    {
+      "id": "GAP-P7-SRC-001",
+      "verdict": "REJECTED",
+      "evidence": "probe-p7-06a: 32 jobs / 5 sources, 3 sources >=5; 0 dup; 0 stale; 10/10 live (exceeds GATE-10 floor). Adzuna optional H-06."
+    },
+    {
+      "id": "GAP-P7-REPO-001",
+      "verdict": "REJECTED",
+      "evidence": "probe-p7-14b exactly refs/heads/main; probe-p7-01c-prs.json []"
+    },
+    {
+      "id": "GAP-P7-NONPROD-001",
+      "verdict": "REJECTED",
+      "evidence": "probe-p7-10c: 0 suspicious of 177 hits; replay-guard main.py:59"
+    }
+  ],
+  "blocked_on_human": {
+    "H-01_stripe_keys": "BLOCKED (unchanged)",
+    "H-02_stripe_price_ids": "BLOCKED (unchanged)",
+    "H-03_stripe_abn_tax": "BLOCKED (unchanged)",
+    "H-04_admin_env_credential": "BLOCKED \u2014 AETHER_ADMIN_* absent from .env (probe-p7-03b)",
+    "H-05_gmail_second_consent": "BLOCKED (unchanged)",
+    "H-06_adzuna_creds": "OPTIONAL \u2014 sourcing floor exceeded without it",
+    "H-07_operator_claude_token": "SATISFIED \u2014 sk-ant-oat01- present in ~/.claude/.credentials.json (probe-p7-08e)"
+  },
+  "gate_status": {}
+}
