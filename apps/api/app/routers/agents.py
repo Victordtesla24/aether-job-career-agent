@@ -11,11 +11,12 @@ import asyncio
 import contextvars
 import json
 import os
+import secrets
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
@@ -489,7 +490,55 @@ def _plan_quota_429(code: str, quota: dict[str, Any] | None) -> HTTPException:
     )
 
 
-def _require_active_subscription(user_id: str) -> None:
+#: Header carrying the shared secret for the scoped SYSTEM-RUN exemption
+#: (ADR-P7-05 / GAP-P7-DISCOVERY-001).
+SYSTEM_RUN_HEADER = "X-Aether-System-Run"
+
+#: The ONLY agent keys the SYSTEM-RUN exemption may ever bypass the
+#: subscription gate for — exactly the two calls the platform's own
+#: discovery cron makes (``scripts/discovery_cron.sh``: scout, then
+#: fit-scorer). Enforced here (not just by which routes read the header) so
+#: the exemption can never be widened by wiring the header into another
+#: route later without also touching this allowlist.
+_SYSTEM_RUN_EXEMPT_AGENTS = frozenset({"scout", "fitScorer"})
+
+
+def _system_run_secret() -> str | None:
+    """The configured system-run shared secret, or ``None`` when unset/empty.
+
+    Read fresh from the environment on every call (not cached at import
+    time) so the feature can be enabled/disabled and tests can monkeypatch it
+    per-case, same convention as ``subscription_gate_enabled``.
+    """
+    secret = os.environ.get("AETHER_SYSTEM_RUN_SECRET", "")
+    return secret or None
+
+
+def _is_system_run(request: Request | None) -> bool:
+    """True iff ``request`` carries a valid ``X-Aether-System-Run`` secret.
+
+    ADR-P7-05 (GAP-P7-DISCOVERY-001): a scoped exemption for the platform's
+    OWN scheduled discovery automation, which necessarily runs as a real user
+    account and would otherwise be walled by GAP-P6-PAYWALL exactly like any
+    other unpaid user. Disabled entirely when ``AETHER_SYSTEM_RUN_SECRET`` is
+    unset/empty — the header is then IGNORED, never a bypass-by-omission.
+    Constant-time compare (``secrets.compare_digest``) to avoid a timing
+    side-channel on the shared secret.
+    """
+    if request is None:
+        return False
+    expected = _system_run_secret()
+    if expected is None:
+        return False
+    provided = request.headers.get(SYSTEM_RUN_HEADER)
+    if not provided:
+        return False
+    return secrets.compare_digest(provided, expected)
+
+
+def _require_active_subscription(
+    user_id: str, *, agent_name: str, system_run: bool = False
+) -> None:
     """Entitlement gate (GAP-P6-PAYWALL): Aether is subscription-gated.
 
     Runs BEFORE any billing/quota work in ``_record_run`` so a user without an
@@ -498,8 +547,14 @@ def _require_active_subscription(user_id: str) -> None:
     honest HTTP 402 ``subscription_required`` pointing at ``/pricing``; it never
     fabricates access. Gated behind ``AETHER_REQUIRE_PAID_SUBSCRIPTION`` (default
     ON) — when the operator sets it 'false' the freemium Free-tier path applies.
+
+    ``system_run`` (ADR-P7-05) skips ONLY this check, and ONLY for
+    ``agent_name`` in ``_SYSTEM_RUN_EXEMPT_AGENTS`` — every other guard below
+    this call (quota block, plan quota reserve, spend cap) is unaffected.
     """
     if not subscription_gate_enabled():
+        return
+    if system_run and agent_name in _SYSTEM_RUN_EXEMPT_AGENTS:
         return
     if SubscriptionRepository().has_active_paid_subscription(user_id):
         return
@@ -526,7 +581,12 @@ _pipeline_job_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 def _record_run(
-    user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
+    user_id: str,
+    agent_name: str,
+    params: dict[str, Any],
+    fn: Callable[[], Any],
+    *,
+    system_run: bool = False,
 ) -> dict[str, Any]:
     """Execute ``fn`` under an AgentRun audit record.
 
@@ -535,12 +595,21 @@ def _record_run(
     recorded to ``AgentRun.billingAuditJson`` (GAP-D3), and a prior
     subscription-quota block short-circuits the run with an honest 429 (never a
     silent reroute to another payer).
+
+    ``system_run`` (ADR-P7-05 / GAP-P7-DISCOVERY-001): True only when the
+    caller verified a valid ``X-Aether-System-Run`` secret (see
+    ``_is_system_run``); marks the run's billing audit ``systemRun: true`` so
+    the exemption is honestly traceable, and is otherwise inert here — the
+    actual gate skip happens (scoped to ``agent_name``) in
+    ``_require_active_subscription``.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
-    _require_active_subscription(user_id)
+    _require_active_subscription(user_id, agent_name=agent_name, system_run=system_run)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
+    if system_run:
+        audit["systemRun"] = True
     # Quota cooldown check BEFORE starting a run row — a blocked user gets a
     # clean 429 with no wasted audit record.
     if provider is not None:
@@ -763,7 +832,10 @@ def _agent_callable(
     the async worker (``workers.tasks._run_single_agent_body``) so there is a
     single source of the agent->callable binding (GAP-P7-ASYNC-001 §4.1). No
     logic duplication: the exact service functions bound here are the same ones
-    the sync endpoints have always called.
+    the sync endpoints have always called. The SYSTEM-RUN exemption (ADR-P7-05)
+    is NOT threaded here — it is a paywall concern handled by ``_dispatch`` /
+    the enqueue seam via ``_record_run(..., system_run=...)``; this mapping is
+    identical for a system run and a normal run.
     """
     if name == "scout":
         default_query, default_location = _user_search_defaults(user_id)
@@ -808,9 +880,15 @@ def _agent_callable(
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
-def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
+def _dispatch(
+    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False
+) -> dict[str, Any]:
+    """Resolve the agent callable (pure) then execute + audit it. ``system_run``
+    (ADR-P7-05) is threaded to ``_record_run`` -> ``_require_active_subscription``,
+    which honors the paywall exemption ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``
+    (scout, fitScorer). Every other agent name ignores it (defense in depth)."""
     canonical, fn = _agent_callable(user_id, name, params)
-    return _record_run(user_id, canonical, params, fn)
+    return _record_run(user_id, canonical, params, fn, system_run=system_run)
 
 
 def _require_job_id(params: dict[str, Any]) -> str:
@@ -861,7 +939,7 @@ def _enqueue_to_arq(job_id: str) -> str | None:
 
 
 def _enqueue_single_agent(
-    user_id: str, agent_key: str, params: dict[str, Any]
+    user_id: str, agent_key: str, params: dict[str, Any], *, system_run: bool = False
 ) -> str:
     """Enqueue a metered single-agent run (tailor / coverLetter), blueprint §3.2.
 
@@ -869,11 +947,19 @@ def _enqueue_single_agent(
     paywall FIRST, then cooldown, then ATOMIC reserve-at-enqueue — before the
     AgentRun + BackgroundJob rows and the queue push. On a queue failure the
     reservation is refunded, the job marked failed, and an honest 503 raised
-    (never a silent success, never a silent sync fallthrough)."""
-    # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue).
-    _require_active_subscription(user_id)
+    (never a silent success, never a silent sync fallthrough).
+
+    ``system_run`` (ADR-P7-05) is honored for the paywall check exactly as the
+    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS`` (scout, fitScorer),
+    which are NOT enqueued here, so a metered agent with a valid secret still
+    hits the paywall (402). Threaded for parity + defense in depth."""
+    # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
+    #    system-run exemption applies identically to the sync path.
+    _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_key)
+    if system_run:
+        audit["systemRun"] = True
     # 2) Subscription-provider cooldown block -> 429.
     if provider is not None:
         try:
@@ -920,11 +1006,16 @@ def _enqueue_single_agent(
     return job_id
 
 
-def _enqueue_pipeline(user_id: str, params: dict[str, Any]) -> str:
+def _enqueue_pipeline(
+    user_id: str, params: dict[str, Any], *, system_run: bool = False
+) -> str:
     """Enqueue a composite pipeline run (blueprint §3.2 / D6): paywall FIRST at
     enqueue only — the metered footprint is data-dependent, so per-step atomic
-    reserve/refund stays inside the worker's ``_pipeline_core``."""
-    _require_active_subscription(user_id)
+    reserve/refund stays inside the worker's ``_pipeline_core``.
+
+    ``pipeline`` is NOT a ``_SYSTEM_RUN_EXEMPT_AGENTS`` key, so a valid secret
+    never bypasses the paywall here — the composite is always walled."""
+    _require_active_subscription(user_id, agent_name="pipeline", system_run=system_run)
     repo = BackgroundJobRepository()
     job_id = repo.create(user_id, "pipeline", run_id=None, params=params,
                          quota_reserved=False)
@@ -1070,9 +1161,14 @@ class ScoutRunRequest(BaseModel):
 
 
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
-def run_scout(body: ScoutRunRequest, current_user: CurrentUser) -> dict[str, Any]:
+def run_scout(
+    body: ScoutRunRequest, current_user: CurrentUser, request: Request
+) -> dict[str, Any]:
     """Kick off a scout discovery run for the authenticated user."""
-    output = _dispatch(current_user["id"], "scout", body.model_dump())
+    output = _dispatch(
+        current_user["id"], "scout", body.model_dump(),
+        system_run=_is_system_run(request),
+    )
     return {
         "status": "accepted",
         "persisted": output["persisted"],
@@ -1094,9 +1190,14 @@ def scout_sources(current_user: CurrentUser) -> list[dict[str, Any]]:
 
 
 @router.post("/fit-scorer/run")
-def run_fit_scorer(current_user: CurrentUser, rescore: bool = False) -> dict[str, Any]:
+def run_fit_scorer(
+    current_user: CurrentUser, request: Request, rescore: bool = False
+) -> dict[str, Any]:
     """Score every unscored job for the authenticated user (P2-S04)."""
-    output = _dispatch(current_user["id"], "fitScorer", {"rescore": rescore})
+    output = _dispatch(
+        current_user["id"], "fitScorer", {"rescore": rescore},
+        system_run=_is_system_run(request),
+    )
     return {"status": "completed", "scored": output["scored"], "errors": output["errors"]}
 
 
@@ -1107,19 +1208,27 @@ class JobTargetRequest(BaseModel):
 
 @router.post("/tailor/run")
 def run_tailor(
-    body: JobTargetRequest, current_user: CurrentUser, response: Response
+    body: JobTargetRequest, current_user: CurrentUser, request: Request,
+    response: Response,
 ) -> dict[str, Any]:
     """Produce a tailored child resume version for a target job (P2-S05).
 
     When ``AETHER_ASYNC_GENERATION`` is ON, returns 202 + an enqueue envelope
     (``{"job_id","status":"enqueued"}``) and the worker generates in the
-    background; when OFF, the legacy synchronous 200 body is returned unchanged."""
+    background; when OFF, the legacy synchronous 200 body is returned unchanged.
+    ``system_run`` is threaded to both paths for parity, but ``tailor`` is not a
+    ``_SYSTEM_RUN_EXEMPT_AGENTS`` key so a valid secret never bypasses the paywall."""
+    system_run = _is_system_run(request)
     if async_generation_enabled():
-        job_id = _enqueue_single_agent(current_user["id"], "tailor", body.model_dump())
+        job_id = _enqueue_single_agent(
+            current_user["id"], "tailor", body.model_dump(), system_run=system_run
+        )
         response.status_code = status.HTTP_202_ACCEPTED
         return {"job_id": job_id, "status": "enqueued"}
     try:
-        output = _dispatch(current_user["id"], "tailor", body.model_dump())
+        output = _dispatch(
+            current_user["id"], "tailor", body.model_dump(), system_run=system_run
+        )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     return {
@@ -1132,22 +1241,26 @@ def run_tailor(
 
 @router.post("/cover-letter/run")
 def run_cover_letter(
-    body: JobTargetRequest, current_user: CurrentUser, response: Response
+    body: JobTargetRequest, current_user: CurrentUser, request: Request,
+    response: Response,
 ) -> dict[str, Any]:
     """Draft a fabrication-guarded cover letter; requires human approval (P2-S06).
 
     Async-enabled: 202 + enqueue envelope when ``AETHER_ASYNC_GENERATION`` is ON,
-    legacy synchronous 200 otherwise."""
+    legacy synchronous 200 otherwise. ``coverLetter`` is not system-run exempt."""
     from app.agents.cover_letter_agent import FabricationError, StructuralError
 
+    system_run = _is_system_run(request)
     if async_generation_enabled():
         job_id = _enqueue_single_agent(
-            current_user["id"], "coverLetter", body.model_dump()
+            current_user["id"], "coverLetter", body.model_dump(), system_run=system_run
         )
         response.status_code = status.HTTP_202_ACCEPTED
         return {"job_id": job_id, "status": "enqueued"}
     try:
-        output = _dispatch(current_user["id"], "coverLetter", body.model_dump())
+        output = _dispatch(
+            current_user["id"], "coverLetter", body.model_dump(), system_run=system_run
+        )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except FabricationError as exc:
@@ -1278,16 +1391,22 @@ def _pipeline_core(
 
 @router.post("/pipeline/run")
 def run_pipeline(
-    body: PipelineRunRequest, current_user: CurrentUser, response: Response
+    body: PipelineRunRequest, current_user: CurrentUser, request: Request,
+    response: Response,
 ) -> dict[str, Any]:
     """Full pipeline. Async-enabled: 202 + enqueue envelope when
     ``AETHER_ASYNC_GENERATION`` is ON (the composite runs in the background,
     per-step metering inside the worker); legacy synchronous body otherwise.
 
-    The pipeline halts with ``approvalRequired=True`` after generating artefacts."""
+    The pipeline halts with ``approvalRequired=True`` after generating artefacts.
+    ``pipeline`` is not a ``_SYSTEM_RUN_EXEMPT_AGENTS`` key, so a valid secret
+    never bypasses the paywall (the sync path is walled by the supervisor step's
+    own ``_record_run``; the async path by ``_enqueue_pipeline``)."""
     user_id = current_user["id"]
     if async_generation_enabled():
-        job_id = _enqueue_pipeline(user_id, body.model_dump())
+        job_id = _enqueue_pipeline(
+            user_id, body.model_dump(), system_run=_is_system_run(request)
+        )
         response.status_code = status.HTTP_202_ACCEPTED
         return {"job_id": job_id, "status": "enqueued"}
     return _pipeline_core(user_id, body.model_dump())
@@ -1422,7 +1541,7 @@ class AgentConfigUpdate(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, min_length=1)
     provider: str | None = None
-    authMode: str | None = Field(default=None, pattern="^(api_key)$")
+    authMode: str | None = Field(default=None, pattern="^(api_key|oauth_token)$")
     #: Empty string clears the pinned credential; a non-empty value must
     #: reference one of the caller's own stored credentials (validated below).
     credentialRef: str | None = None
@@ -1746,30 +1865,62 @@ class ProviderCredentialBody(BaseModel):
     baseUrl: str | None = None
 
 
-def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> None:
-    """Reject an authMode/secret that does not match the provider (REQ-PC-2/3).
+#: Names BOTH accepted Anthropic credential formats (GATE-04 / J1 step 10). The
+#: pasted value is NEVER included in this message.
+_ANTHROPIC_CREDENTIAL_HELP = (
+    "Anthropic credential not recognized. Console API keys start with "
+    "'sk-ant-api'. Claude Code OAuth tokens start with 'sk-ant-oat01-'. "
+    "Check which credential you are pasting."
+)
 
-    Every provider — Anthropic included — accepts only ``api_key``. Consumer
-    Anthropic subscription OAuth (``subscription_oauth``) was removed for
-    compliance (GAP-AUTH-001): the only supported Anthropic auth is a Claude
-    Console API key (``sk-ant-api…``). A ``subscription_oauth`` write is a 422.
+
+def _detect_anthropic_auth_mode(secret: str) -> str | None:
+    """Server-derived Anthropic authMode from the secret prefix (authoritative).
+
+    ``sk-ant-api…`` → ``api_key``; ``sk-ant-oat01-…`` → ``oauth_token`` (a pasted
+    ``claude setup-token`` output). Any other value — including a legacy
+    non-oat01 ``sk-ant-oat`` subscription token — → ``None`` (unrecognized).
     """
+    if secret.startswith("sk-ant-api"):
+        return "api_key"
+    if secret.startswith("sk-ant-oat01-"):
+        return "oauth_token"
+    return None
+
+
+def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> str:
+    """Validate the credential and RETURN the server-derived authMode to store.
+
+    Anthropic (GAP-P7-DEF-A): the authMode is DERIVED from the secret prefix
+    (authoritative). A ``sk-ant-oat01-`` token is accepted as ``oauth_token``;
+    a Console ``sk-ant-api…`` key as ``api_key``. Anything else is a 422 naming
+    BOTH formats. If the client's declared ``authMode`` contradicts the detected
+    prefix, that is a 422 (anti-mislabel — never silently store the wrong label,
+    which would pick the wrong transport header at run time). The legacy in-app
+    ``subscription_oauth`` OAuth flow stays unsupported (ADR-P7-01 NON-goal).
+
+    Every other provider accepts only ``api_key``.
+    """
+    if provider == "anthropic":
+        detected = _detect_anthropic_auth_mode(secret)
+        if detected is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, _ANTHROPIC_CREDENTIAL_HELP
+            )
+        if auth_mode and auth_mode != detected:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Credential prefix is a '{detected}' credential but you selected "
+                f"'{auth_mode}'. Select the matching mode, or paste the matching "
+                "credential.",
+            )
+        return detected
     if auth_mode != "api_key":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Provider '{provider}' accepts only authMode 'api_key'."
-            + (
-                " Anthropic subscription OAuth is not supported; use an API key "
-                "(Claude Console)."
-                if provider == "anthropic"
-                else ""
-            ),
+            f"Provider '{provider}' accepts only authMode 'api_key'.",
         )
-    if provider == "anthropic" and not secret.startswith("sk-ant-api"):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Anthropic api_key must start with 'sk-ant-api'.",
-        )
+    return "api_key"
 
 
 @router.put("/providers/{provider}/credential")
@@ -1787,7 +1938,7 @@ def put_provider_credential(
             status.HTTP_404_NOT_FOUND,
             f"Provider '{provider}' does not support stored credentials.",
         )
-    _validate_provider_auth(provider, body.authMode, body.secret)
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
     if not credential_vault.key_present():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1796,12 +1947,19 @@ def put_provider_credential(
         )
     try:
         ProviderCredentialRepository().upsert(
-            provider, auth_mode=body.authMode, secret=body.secret, base_url=body.baseUrl
+            provider, auth_mode=stored_mode, secret=body.secret, base_url=body.baseUrl
         )
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)
         ) from exc
+    if stored_mode == "oauth_token":
+        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A §3.3).
+        # Best-effort: the encrypted DB row is the source of truth, so a sync
+        # failure does not fail the save (the token is never logged).
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(body.secret)
     return _provider_status_object(provider, current_user["id"])
 
 
@@ -1887,7 +2045,7 @@ def put_user_credential(
             status.HTTP_404_NOT_FOUND,
             f"Provider '{provider}' does not support stored credentials.",
         )
-    _validate_provider_auth(provider, body.authMode, body.secret)
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
     if not credential_vault.key_present():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1898,11 +2056,17 @@ def put_user_credential(
     repo = UserProviderCredentialRepository()
     try:
         repo.upsert(
-            user_id, provider, auth_mode=body.authMode,
+            user_id, provider, auth_mode=stored_mode,
             secret=body.secret, base_url=body.baseUrl,
         )
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if stored_mode == "oauth_token":
+        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A §3.3);
+        # best-effort, DB row is source of truth, token never logged.
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(body.secret)
     # GAP-NEW-001: verify round-trip so the badge is truthful (best-effort).
     try:
         ok, _token, _detail = verify_user_credential(provider, user_id)

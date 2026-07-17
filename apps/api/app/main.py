@@ -43,6 +43,51 @@ from app.routers import (
 from app.services.llm_client import get_mode
 
 
+def apply_email_domain_allowlist() -> frozenset[str]:
+    """§15.2 (GAP-P7-DEF-B) — REVISED after adversarial review cycle 1
+    (uat/reports/evidence/phase7/review-def-b.json, verdict FAIL).
+
+    DESIGN-RULING HISTORY: a prior implementation of this function mutated
+    the process-wide, global ``email_validator.SPECIAL_USE_DOMAIN_NAMES``
+    list, discarding the bare reserved label matching each configured
+    domain's suffix (e.g. ``"local"`` for ``"aether.local"``). The review
+    empirically proved this opened EVERY ``*.local`` address —
+    ``attacker@evil.local``, ``foo.local``, ``x@random-internal-host.local``
+    all validated, not just the intended ``admin@aether.local`` — because
+    ``SPECIAL_USE_DOMAIN_NAMES`` only ever contains bare TLD-like labels, so
+    "discarding" it is inherently a wholesale, process-wide opening. That is
+    exactly the "globally-scoped" Option 1 behaviour §15.1 explicitly
+    rejected in favor of Option 3's exact-domain scoping ("removes only the
+    specific domains the operator intends to allow"). fable-5 overrode
+    §15.2's sample pseudocode as flawed; this function no longer touches
+    ``email_validator`` global state AT ALL — it is now a pure,
+    side-effect-free loader.
+
+    Reads ``AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`` (comma-separated,
+    case-insensitive, default ``"aether.local"``) fresh from ``os.environ``
+    on every call (no caching) and returns the configured domains as a
+    ``frozenset`` of lowercased, whitespace-trimmed strings. Re-callable by
+    design — a test (or a future admin endpoint) can monkeypatch the env var
+    and call this again to see the updated set immediately.
+
+    The actual allow/reject decision is made by
+    ``app.routers.workspaces``'s custom ``SettingsProfile.email`` validator
+    (``_validate_settings_email``), which calls this loader and requires an
+    EXACT (case-insensitive) match against the returned set — never a
+    suffix/TLD match — so ``evil.local`` (a different domain that merely
+    shares the ``.local`` label with the allow-listed ``aether.local``) is
+    correctly rejected while ``aether.local`` itself is accepted. See that
+    module for the exact-match logic and
+    ``apps/api/tests/test_gap_p7_def_b_email_validation.py::test_settings_save_nonconfigured_local_subdomain_rejected``
+    for the regression test proving the scoping.
+    """
+    return frozenset(
+        d.strip().lower()
+        for d in os.environ.get("AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS", "aether.local").split(",")
+        if d.strip()
+    )
+
+
 def _guard_production_replay_mode() -> None:
     """Fail fast if a production deploy would silently serve LLM fixtures.
 
@@ -95,6 +140,10 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """Construct and configure the FastAPI application."""
     _guard_production_replay_mode()
+    # NOTE (§15.2, GAP-P7-DEF-B, revised cycle 2): apply_email_domain_allowlist()
+    # is a pure loader with no global state to prime — it is called directly,
+    # per-request, by app.routers.workspaces's SettingsProfile.email
+    # validator, so no startup call is needed here.
     settings = get_settings()
 
     app = FastAPI(

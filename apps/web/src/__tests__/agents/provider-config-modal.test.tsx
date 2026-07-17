@@ -78,7 +78,7 @@ describe("ProviderConfigModal", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("Anthropic offers API key only — no subscription OAuth (GAP-AUTH-001)", () => {
+  it("Anthropic offers BOTH api_key and oauth_token modes; no in-app subscription OAuth (ADR-P7-01)", () => {
     render(
       <ProviderConfigModal
         provider={anthropic}
@@ -87,15 +87,29 @@ describe("ProviderConfigModal", () => {
         onNotice={vi.fn()}
       />,
     );
-    // Consumer subscription OAuth is removed: no subscription radio, no connect
-    // button, and the API-key input is the sole credential entry.
-    expect(screen.queryByRole("radio", { name: /claude subscription/i })).toBeNull();
+    // GAP-P7-DEF-A: two mutually-exclusive radios — a Console API key and a
+    // pasted Claude Code OAuth token. The in-app subscription OAuth *authorize*
+    // flow stays removed (no subscription_oauth radio, no connect button).
+    expect(screen.getByTestId("authmode-api_key")).toBeTruthy();
+    expect(screen.getByTestId("authmode-oauth_token")).toBeTruthy();
     expect(screen.queryByTestId("authmode-subscription_oauth")).toBeNull();
+    expect(screen.queryByRole("radio", { name: /claude subscription/i })).toBeNull();
     expect(screen.queryByTestId("anthropic-oauth-connect")).toBeNull();
     expect(screen.getByTestId("provider-secret-input")).toBeTruthy();
-    // Billing implication must be legible: Anthropic bills to Anthropic, and
-    // the crossover to OpenRouter for other models is stated.
-    expect(screen.getByTestId("provider-config-billing").textContent).toMatch(/anthropic/i);
+
+    // Default mode is api_key → its placeholder/hint show first.
+    const input = screen.getByTestId("provider-secret-input") as HTMLInputElement;
+    expect(input.placeholder).toContain("sk-ant-api");
+
+    // Selecting the OAuth-token mode swaps in the oat01 placeholder + hint.
+    fireEvent.click(screen.getByTestId("authmode-oauth_token"));
+    expect(input.placeholder).toContain("sk-ant-oat01-");
+    expect(screen.getByText(/setup-token/i)).toBeTruthy();
+
+    // Both billing paths must be legible: Anthropic API credits AND subscription.
+    const billing = screen.getByTestId("provider-config-billing").textContent ?? "";
+    expect(billing).toMatch(/anthropic/i);
+    expect(billing).toMatch(/subscription/i);
   });
 
   it("masks the secret input (password type)", () => {
@@ -148,6 +162,40 @@ describe("ProviderConfigModal", () => {
     expect(screen.getByTestId("provider-config-hint").textContent).toContain("…pi42");
     expect(onSaved).toHaveBeenCalled();
     expect(onNotice).toHaveBeenCalledWith(expect.objectContaining({ kind: "success" }));
+  });
+
+  it("Selecting the OAuth-token mode saves authMode oauth_token with the pasted setup-token", async () => {
+    putCredentialMock.mockResolvedValue({
+      ...anthropic,
+      status: "connected",
+      source: "database",
+      authMode: "oauth_token",
+      secretHint: "…f00d",
+      detail: "Claude Code OAuth token · bills to Claude subscription",
+    });
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ProviderConfigModal
+        provider={anthropic}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("authmode-oauth_token"));
+    fireEvent.change(screen.getByTestId("provider-secret-input"), {
+      target: { value: "sk-ant-oat01-abc123" },
+    });
+    fireEvent.click(screen.getByTestId("provider-config-save"));
+
+    await waitFor(() => expect(putCredentialMock).toHaveBeenCalledTimes(1));
+    expect(putCredentialMock).toHaveBeenCalledWith("anthropic", {
+      authMode: "oauth_token",
+      secret: "sk-ant-oat01-abc123",
+    });
+    expect(onSaved).toHaveBeenCalled();
   });
 
   it("Save failure surfaces the REAL backend detail via onNotice, not the generic 'AI model is busy' toast (QA finding)", async () => {
