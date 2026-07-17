@@ -7,6 +7,8 @@ did and why. High-risk outputs (tailored resumes, cover letters) surface an
 """
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import os
 import secrets
@@ -14,13 +16,14 @@ import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
+from app.repositories.background_jobs import BackgroundJobRepository
 from app.repositories.billing import (
     SubscriptionRepository,
     UsageQuotaRepository,
@@ -568,6 +571,15 @@ def _require_active_subscription(
     )
 
 
+#: Set to a BackgroundJob id while an async pipeline worker runs ``_pipeline_core``
+#: so each metered step's reserve/refund is counted on THAT job (reviewer
+#: BLOCKING-3 — reservation-scoped pipeline refund). Default None: the sync path
+#: and single-agent worker never set it, so the counting is a guarded no-op there.
+_pipeline_job_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_pipeline_bg_job", default=None
+)
+
+
 def _record_run(
     user_id: str,
     agent_name: str,
@@ -624,23 +636,78 @@ def _record_run(
         if float(reserved["spendUsedUsd"]) >= float(reserved["spendCapUsd"]):
             quota_repo.refund_run(user_id)
             raise _plan_quota_429("spend_cap_exceeded", reserved)
+        # Pipeline reservation-scoping (GAP-P7-ASYNC-001, reviewer BLOCKING-3):
+        # when this metered step runs inside an async pipeline worker, record the
+        # reservation on THAT BackgroundJob so a mid-pipeline crash refunds only
+        # this job's own outstanding reservations (never a user-wide delta).
+        _bg = _pipeline_job_ctx.get()
+        if _bg:
+            try:
+                BackgroundJobRepository().increment_reserved(_bg)
+            except Exception:  # noqa: BLE001 — accounting is best-effort
+                pass
 
     run = runs.start(user_id, agent_name, params)
     _persist_billing_audit(runs, run["id"], audit)
+    # Reserve + AgentRun row now stand; execution (and refund-on-failure) is the
+    # shared block reused verbatim by the async worker (GAP-P7-ASYNC-001 §4.1).
+    return _execute_reserved_run(
+        run["id"], user_id, agent_name, params, fn, quota_repo, audit
+    )
+
+
+def _execute_reserved_run(
+    run_id: str,
+    user_id: str,
+    agent_name: str,
+    params: dict[str, Any],
+    fn: Callable[[], Any],
+    quota_repo: Any,
+    audit: dict[str, Any],
+    manage_quota: bool = True,
+) -> dict[str, Any]:
+    """Execute an already-reserved run (quota reserved + AgentRun row created by
+    the caller) and finish it, refunding the reserved run on ANY failure path.
+
+    Extracted verbatim from ``_record_run`` (GAP-P7-ASYNC-001 §4.1) so BOTH the
+    sync endpoint path (flag OFF) AND the async worker (flag ON) share ONE
+    implementation — zero logic duplication, identical billing/refund semantics.
+    Runs inside ``user_credential_context`` so the deep LLM path resolves THIS
+    user's credential; honours any ``shared_budget`` set by the caller.
+
+    ``manage_quota`` (default True, the sync path) makes this function itself
+    refund-on-failure and record-spend-on-success via ``quota_repo``. The async
+    single-agent worker passes ``manage_quota=False`` so the refund/spend are
+    performed by the worker AFTER it wins the atomic first-terminal-wins
+    BackgroundJob transition — closing the watchdog-vs-worker double-refund /
+    free-run race (reviewer BLOCKING-1/2). When a pipeline step runs under
+    ``_pipeline_job_ctx``, an actual refund is additionally counted on the job so
+    a mid-pipeline crash refund is reservation-scoped (BLOCKING-3).
+    """
+    runs = AgentRunRepository()
+    _bg = _pipeline_job_ctx.get()
+
+    def _refund_once() -> None:
+        if manage_quota and quota_repo is not None:
+            quota_repo.refund_run(user_id)
+            if _bg:
+                try:
+                    BackgroundJobRepository().increment_refunded(_bg)
+                except Exception:  # noqa: BLE001
+                    pass
+
     started = time.monotonic()
     try:
         with user_credential_context(user_id, agent_name):
             output = _to_output(fn())
     except HTTPException:
-        runs.finish(run["id"], "failed", error="http error")
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)  # reserved run produced no output
+        runs.finish(run_id, "failed", error="http error")
+        _refund_once()  # reserved run produced no output
         raise
     except QuotaExhaustedError as exc:
         # Subscription quota exhausted mid-run — record honestly and 429.
-        runs.finish(run["id"], "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        runs.finish(run_id, "failed", error=str(exc))
+        _refund_once()
         expires_at = exc.expires_at
         if expires_at is None:
             try:
@@ -651,16 +718,14 @@ def _record_run(
         raise _quota_429(exc.provider, expires_at) from exc
     except LLMUnavailableError as exc:
         # Live LLM failed and no fixture fallback exists — clean 503, never 500.
-        runs.finish(run["id"], "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        runs.finish(run_id, "failed", error=str(exc))
+        _refund_once()
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
         ) from exc
     except Exception as exc:
-        runs.finish(run["id"], "failed", error=str(exc))
-        if quota_repo is not None:
-            quota_repo.refund_run(user_id)
+        runs.finish(run_id, "failed", error=str(exc))
+        _refund_once()
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
@@ -687,13 +752,16 @@ def _record_run(
         output["tokensIn"] = tokens_in
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
-    finished = runs.finish(run["id"], "completed", output=output, cost_usd=cost)
+    finished = runs.finish(run_id, "completed", output=output, cost_usd=cost)
     # Record realized USD spend against the reserved run (metered agents only).
     # The reserved run-count already stands; here we only accumulate spend so the
     # USD cap halts the NEXT run once this period's spend passes the ceiling.
-    if quota_repo is not None:
+    # ``manage_quota=False`` (async single-agent worker) defers this so spend is
+    # recorded only after the worker wins the atomic mark_completed (reviewer
+    # BLOCKING-2): a job the watchdog already failed must not accrue spend.
+    if manage_quota and quota_repo is not None:
         quota_repo.record_spend(user_id, cost)
-    output["run_id"] = (finished or run)["id"]
+    output["run_id"] = (finished or {"id": run_id})["id"]
     return output
 
 
@@ -754,14 +822,21 @@ def _user_search_defaults(user_id: str) -> tuple[str, str]:
     return query, location
 
 
-def _dispatch(
-    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False
-) -> dict[str, Any]:
-    """``system_run`` (ADR-P7-05) is only ever honored for the discovery
-    pipeline's own agent keys below (scout, fitScorer) — every other branch
-    ignores it, so a caller cannot widen the exemption just by threading the
-    flag through to a different agent name (``_require_active_subscription``
-    enforces the same allowlist independently, as defense in depth)."""
+def _agent_callable(
+    user_id: str, name: str, params: dict[str, Any]
+) -> tuple[str, Callable[[], Any]]:
+    """Resolve ``(canonical_name, fn)`` for an agent run — a PURE mapping with no
+    side effects, lifted verbatim from the old ``_dispatch`` body.
+
+    Shared by BOTH the synchronous path (``_dispatch`` -> ``_record_run``) and
+    the async worker (``workers.tasks._run_single_agent_body``) so there is a
+    single source of the agent->callable binding (GAP-P7-ASYNC-001 §4.1). No
+    logic duplication: the exact service functions bound here are the same ones
+    the sync endpoints have always called. The SYSTEM-RUN exemption (ADR-P7-05)
+    is NOT threaded here — it is a paywall concern handled by ``_dispatch`` /
+    the enqueue seam via ``_record_run(..., system_run=...)``; this mapping is
+    identical for a system run and a normal run.
+    """
     if name == "scout":
         default_query, default_location = _user_search_defaults(user_id)
         raw_query = params.get("query") or default_query
@@ -771,55 +846,49 @@ def _dispatch(
         # user's full target-role family — GAP-SRC-001: a single narrow
         # title starves discovery volume regardless of where it came from.
         query = build_scout_query(raw_query)
-        return _record_run(
-            user_id, "scout", params,
-            lambda: ScoutAgent().run(user_id, query, location),
-            system_run=system_run,
-        )
+        return "scout", (lambda: ScoutAgent().run(user_id, query, location))
     if name in ("fitScorer", "fit-scorer"):
         from app.agents.fit_scorer import FitScorerAgent
 
-        return _record_run(
-            user_id, "fitScorer", params,
-            lambda: FitScorerAgent().run(user_id, rescore=bool(params.get("rescore"))),
-            system_run=system_run,
+        return "fitScorer", (
+            lambda: FitScorerAgent().run(user_id, rescore=bool(params.get("rescore")))
         )
     if name == "tailor":
         from app.agents.tailor_agent import TailoringAgent
 
         job_id = _require_job_id(params)
-        return _record_run(
-            user_id,
-            "tailor",
-            params,
-            lambda: TailoringAgent().run(user_id, job_id, params.get("resume_id")),
+        return "tailor", (
+            lambda: TailoringAgent().run(user_id, job_id, params.get("resume_id"))
         )
     if name in ("coverLetter", "cover-letter"):
         from app.agents.cover_letter_agent import CoverLetterAgent
 
         job_id = _require_job_id(params)
-        return _record_run(
-            user_id, "coverLetter", params, lambda: CoverLetterAgent().run(user_id, job_id)
-        )
+        return "coverLetter", (lambda: CoverLetterAgent().run(user_id, job_id))
     if name in ("storyExtractor", "story-extractor"):
         from app.agents.story_extractor import StoryExtractorAgent
 
-        return _record_run(
-            user_id, "storyExtractor", params, lambda: StoryExtractorAgent().run(user_id)
-        )
+        return "storyExtractor", (lambda: StoryExtractorAgent().run(user_id))
     if name in ("matcher", "job-matching", "jobMatching"):
         from app.agents.matcher_agent import MatcherAgent
 
-        return _record_run(
-            user_id, "matcher", params, lambda: MatcherAgent().run(user_id)
-        )
+        return "matcher", (lambda: MatcherAgent().run(user_id))
     if name in ("emailAgent", "email-agent", "email"):
         from app.agents.email_agent import EmailAgent
 
-        return _record_run(
-            user_id, "emailAgent", params, lambda: EmailAgent().run(user_id, **params)
-        )
+        return "emailAgent", (lambda: EmailAgent().run(user_id, **params))
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
+
+
+def _dispatch(
+    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False
+) -> dict[str, Any]:
+    """Resolve the agent callable (pure) then execute + audit it. ``system_run``
+    (ADR-P7-05) is threaded to ``_record_run`` -> ``_require_active_subscription``,
+    which honors the paywall exemption ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``
+    (scout, fitScorer). Every other agent name ignores it (defense in depth)."""
+    canonical, fn = _agent_callable(user_id, name, params)
+    return _record_run(user_id, canonical, params, fn, system_run=system_run)
 
 
 def _require_job_id(params: dict[str, Any]) -> str:
@@ -827,6 +896,205 @@ def _require_job_id(params: dict[str, Any]) -> str:
     if not job_id:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "job_id is required")
     return str(job_id)
+
+
+# ---------------------------------------------------------------------------
+# Async background generation (GAP-P7-ASYNC-001) — enqueue + status polling.
+# Gated behind AETHER_ASYNC_GENERATION (default OFF): when OFF the run handlers
+# keep their legacy synchronous 200 behaviour untouched.
+# ---------------------------------------------------------------------------
+
+#: Env values (case-insensitive) that keep async generation DISABLED.
+_ASYNC_OFF = frozenset({"false", "0", "no", "off", ""})
+
+
+def async_generation_enabled() -> bool:
+    """Whether async background generation is enabled (blueprint §7.1).
+
+    Code default OFF; the deployer flips ``AETHER_ASYNC_GENERATION=true`` in
+    ``.env`` after the J3 soak passes. Read via ``os.environ`` on every call so a
+    hot env change takes effect and no flag is baked into source.
+    """
+    return os.environ.get(
+        "AETHER_ASYNC_GENERATION", "false"
+    ).strip().lower() not in _ASYNC_OFF
+
+
+def _get_arq_pool():
+    """Seam for the ARQ enqueue pool (patched to a FakeArqPool in tests)."""
+    from app.workers.queue import get_arq_pool
+
+    return get_arq_pool()
+
+
+def _enqueue_to_arq(job_id: str) -> str | None:
+    """Bridge the sync handler to ARQ's async ``enqueue_job`` (blueprint §3.2).
+
+    Runs the whole enqueue in one ``asyncio.run`` so the redis connection lives
+    inside a single event loop. Returns the ARQ job id (or None). Raises on a
+    queue failure so the caller can compensate (refund + honest 503)."""
+    pool = _get_arq_pool()
+    result = asyncio.run(pool.enqueue_job("run_agent_job", job_id))
+    return getattr(result, "job_id", None) if result is not None else None
+
+
+def _enqueue_single_agent(
+    user_id: str, agent_key: str, params: dict[str, Any], *, system_run: bool = False
+) -> str:
+    """Enqueue a metered single-agent run (tailor / coverLetter), blueprint §3.2.
+
+    Ordering is identical to the sync ``_record_run`` pre-execution steps —
+    paywall FIRST, then cooldown, then ATOMIC reserve-at-enqueue — before the
+    AgentRun + BackgroundJob rows and the queue push. On a queue failure the
+    reservation is refunded, the job marked failed, and an honest 503 raised
+    (never a silent success, never a silent sync fallthrough).
+
+    ``system_run`` (ADR-P7-05) is honored for the paywall check exactly as the
+    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS`` (scout, fitScorer),
+    which are NOT enqueued here, so a metered agent with a valid secret still
+    hits the paywall (402). Threaded for parity + defense in depth."""
+    # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
+    #    system-run exemption applies identically to the sync path.
+    _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
+    runs = AgentRunRepository()
+    audit, provider = _billing_audit(user_id, agent_key)
+    if system_run:
+        audit["systemRun"] = True
+    # 2) Subscription-provider cooldown block -> 429.
+    if provider is not None:
+        try:
+            block = AgentQuotaBlockRepository().get_active(user_id, provider)
+        except Exception:  # noqa: BLE001 — block store down -> allow
+            block = None
+        if block is not None:
+            raise _quota_429(provider, block.get("expiresAt"))
+    # 3) Atomic reserve AT ENQUEUE (metered agents only).
+    metered = agent_key in _LLM_TIER_BY_BACKEND
+    quota_repo = UsageQuotaRepository() if metered else None
+    reserved_flag = False
+    if quota_repo is not None:
+        reserved = quota_repo.reserve(user_id)
+        if reserved is None:
+            raise _plan_quota_429("quota_exceeded", quota_repo.get_by_user(user_id))
+        if float(reserved["spendUsedUsd"]) >= float(reserved["spendCapUsd"]):
+            quota_repo.refund_run(user_id)
+            raise _plan_quota_429("spend_cap_exceeded", reserved)
+        reserved_flag = True
+    # 4) AgentRun audit row + BackgroundJob row.
+    run = runs.start(user_id, agent_key, params)
+    _persist_billing_audit(runs, run["id"], audit)
+    repo = BackgroundJobRepository()
+    job_id = repo.create(
+        user_id, agent_key, run_id=run["id"], params=params,
+        quota_reserved=reserved_flag,
+    )
+    # 5) Enqueue; compensate on failure (refund + fail + honest 503).
+    try:
+        arq_job_id = _enqueue_to_arq(job_id)
+    except Exception as exc:  # noqa: BLE001
+        if reserved_flag and quota_repo is not None:
+            quota_repo.refund_run(user_id)
+        runs.finish(run["id"], "failed", error="generation queue unavailable")
+        repo.mark_failed(
+            job_id, "generation queue temporarily unavailable", refunded=reserved_flag
+        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "generation queue temporarily unavailable",
+        ) from exc
+    repo.set_arq_job_id(job_id, arq_job_id)
+    return job_id
+
+
+def _enqueue_pipeline(
+    user_id: str, params: dict[str, Any], *, system_run: bool = False
+) -> str:
+    """Enqueue a composite pipeline run (blueprint §3.2 / D6): paywall FIRST at
+    enqueue only — the metered footprint is data-dependent, so per-step atomic
+    reserve/refund stays inside the worker's ``_pipeline_core``.
+
+    ``pipeline`` is NOT a ``_SYSTEM_RUN_EXEMPT_AGENTS`` key, so a valid secret
+    never bypasses the paywall here — the composite is always walled."""
+    _require_active_subscription(user_id, agent_name="pipeline", system_run=system_run)
+    repo = BackgroundJobRepository()
+    job_id = repo.create(user_id, "pipeline", run_id=None, params=params,
+                         quota_reserved=False)
+    try:
+        arq_job_id = _enqueue_to_arq(job_id)
+    except Exception as exc:  # noqa: BLE001
+        repo.mark_failed(job_id, "generation queue temporarily unavailable")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "generation queue temporarily unavailable",
+        ) from exc
+    repo.set_arq_job_id(job_id, arq_job_id)
+    return job_id
+
+
+def _job_stale_thresholds() -> tuple[int, int]:
+    """(enqueued_secs, processing_secs) staleness windows (blueprint §7.4).
+
+    enqueued stale > 15 min; processing stale > 12 min. Tunable via
+    ``AETHER_JOB_STALE_SECONDS`` (the enqueued window; processing = that − 180)."""
+    try:
+        enq = int(os.environ.get("AETHER_JOB_STALE_SECONDS", "900"))
+    except ValueError:
+        enq = 900
+    return enq, max(60, enq - 180)
+
+
+def _apply_stale_watchdog(
+    job: dict[str, Any], repo: "BackgroundJobRepository"
+) -> dict[str, Any]:
+    """Lazy-on-GET watchdog (blueprint §7.4): a poll of a non-terminal job older
+    than the staleness window atomically marks it failed + refunds the
+    enqueue-time reservation, so a polling user always reaches a terminal state
+    even if the worker is dead."""
+    status_v = job.get("status")
+    if status_v not in ("enqueued", "processing"):
+        return job
+    from datetime import datetime, timezone
+
+    enq_secs, proc_secs = _job_stale_thresholds()
+    limit = enq_secs if status_v == "enqueued" else proc_secs
+    anchor = job.get("startedAt") if status_v == "processing" else None
+    anchor = anchor or job.get("createdAt")
+    if anchor is None:
+        return job
+    if getattr(anchor, "tzinfo", None) is None:
+        anchor = anchor.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - anchor).total_seconds()
+    if age < limit:
+        return job
+    # First-terminal-wins (reviewer BLOCKING-1/2): only the caller that atomically
+    # transitions the job to failed performs the refund, and the refund itself is
+    # atomic + idempotent + reservation-scoped. Two concurrent watchdog pollers,
+    # or a watchdog racing a live-but-slow worker, therefore refund exactly once
+    # (and a job the worker already completed can never be failed/refunded).
+    if repo.mark_failed(job["id"], "generation timed out (worker unavailable)"):
+        if job.get("agentKey") == "pipeline":
+            repo.refund_pipeline_outstanding(job["id"])
+        else:
+            repo.refund_single_reservation(job["id"])
+    return repo.get_for_user(job["id"], job["userId"]) or job
+
+
+def _job_status_payload(job: dict[str, Any]) -> dict[str, Any]:
+    """The public polling projection (blueprint §3.3)."""
+
+    def _iso(v: Any) -> Any:
+        return v.isoformat() if hasattr(v, "isoformat") else v
+
+    return {
+        "job_id": job["id"],
+        "status": job["status"],
+        "agentKey": job.get("agentKey"),
+        "result": job.get("result"),
+        "error": job.get("error"),
+        "createdAt": _iso(job.get("createdAt")),
+        "startedAt": _iso(job.get("startedAt")),
+        "finishedAt": _iso(job.get("finishedAt")),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -863,6 +1131,23 @@ def get_run(run_id: str, current_user: CurrentUser) -> dict[str, Any]:
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent run not found")
     return run
+
+
+@router.get("/jobs/{job_id}")
+def get_background_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Poll an async background generation job (GAP-P7-ASYNC-001 §3.3).
+
+    Owner-scoped: a job not found OR not owned by the caller returns 404 (no
+    cross-user leakage). Applies the lazy staleness watchdog so a dead worker
+    still resolves to a terminal ``failed`` (with refund) for a polling user.
+    Route lives under ``/agents`` deliberately — ``GET /jobs/{id}`` on the
+    job-postings router would collide (blueprint §3.1)."""
+    repo = BackgroundJobRepository()
+    job = repo.get_for_user(job_id, current_user["id"])
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    job = _apply_stale_watchdog(job, repo)
+    return _job_status_payload(job)
 
 
 # ---------------------------------------------------------------------------
@@ -922,10 +1207,28 @@ class JobTargetRequest(BaseModel):
 
 
 @router.post("/tailor/run")
-def run_tailor(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Produce a tailored child resume version for a target job (P2-S05)."""
+def run_tailor(
+    body: JobTargetRequest, current_user: CurrentUser, request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Produce a tailored child resume version for a target job (P2-S05).
+
+    When ``AETHER_ASYNC_GENERATION`` is ON, returns 202 + an enqueue envelope
+    (``{"job_id","status":"enqueued"}``) and the worker generates in the
+    background; when OFF, the legacy synchronous 200 body is returned unchanged.
+    ``system_run`` is threaded to both paths for parity, but ``tailor`` is not a
+    ``_SYSTEM_RUN_EXEMPT_AGENTS`` key so a valid secret never bypasses the paywall."""
+    system_run = _is_system_run(request)
+    if async_generation_enabled():
+        job_id = _enqueue_single_agent(
+            current_user["id"], "tailor", body.model_dump(), system_run=system_run
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
     try:
-        output = _dispatch(current_user["id"], "tailor", body.model_dump())
+        output = _dispatch(
+            current_user["id"], "tailor", body.model_dump(), system_run=system_run
+        )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     return {
@@ -937,12 +1240,27 @@ def run_tailor(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, A
 
 
 @router.post("/cover-letter/run")
-def run_cover_letter(body: JobTargetRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Draft a fabrication-guarded cover letter; requires human approval (P2-S06)."""
+def run_cover_letter(
+    body: JobTargetRequest, current_user: CurrentUser, request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Draft a fabrication-guarded cover letter; requires human approval (P2-S06).
+
+    Async-enabled: 202 + enqueue envelope when ``AETHER_ASYNC_GENERATION`` is ON,
+    legacy synchronous 200 otherwise. ``coverLetter`` is not system-run exempt."""
     from app.agents.cover_letter_agent import FabricationError, StructuralError
 
+    system_run = _is_system_run(request)
+    if async_generation_enabled():
+        job_id = _enqueue_single_agent(
+            current_user["id"], "coverLetter", body.model_dump(), system_run=system_run
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
     try:
-        output = _dispatch(current_user["id"], "coverLetter", body.model_dump())
+        output = _dispatch(
+            current_user["id"], "coverLetter", body.model_dump(), system_run=system_run
+        )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except FabricationError as exc:
@@ -1013,27 +1331,29 @@ class PipelineRunRequest(BaseModel):
 _PIPELINE_PLAN = ["scout", "fitScorer", "matcher", "tailor", "coverLetter"]
 
 
-@router.post("/pipeline/run")
-def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Full pipeline: supervisor → scout → fitScorer → matcher → tailor → coverLetter.
+def _pipeline_core(
+    user_id: str, params: dict[str, Any], budget_seconds: float | None = None
+) -> dict[str, Any]:
+    """Full pipeline orchestration: supervisor → scout → fitScorer → matcher →
+    tailor → coverLetter.
 
     Mirrors the LangGraph orchestration in packages/agents. Every node —
-    including the supervisor (planning) and matcher (top-job selection) —
-    is recorded as an AgentRun row so the Agents console reflects real
-    activity for all seven registered agents. The pipeline halts with
-    ``approvalRequired=True`` after generating tailored artefacts.
-    """
-    user_id = current_user["id"]
+    including the supervisor (planning) and matcher (top-job selection) — is
+    recorded as an AgentRun row. Each metered step reserves + refunds-on-failure
+    atomically via ``_record_run``, so the composite's data-dependent metered
+    footprint is billed correctly (GAP-P7-ASYNC-001 D6). Shared by BOTH the sync
+    handler (``budget_seconds=None`` → default HTTP budget) and the async worker
+    (``budget_seconds`` → the more-generous worker pipeline budget)."""
     steps: list[dict[str, Any]] = []
 
     # Supervisor node: plans the run (audit-recorded, defect fix — the card
     # previously showed "Never run" because the pipeline skipped this node).
     sup_out = _record_run(
-        user_id, "supervisor", body.model_dump(), lambda: {"plan": list(_PIPELINE_PLAN)}
+        user_id, "supervisor", params, lambda: {"plan": list(_PIPELINE_PLAN)}
     )
     steps.append({"agent": "supervisor", "output": sup_out})
 
-    scout_out = _dispatch(user_id, "scout", body.model_dump())
+    scout_out = _dispatch(user_id, "scout", params)
     steps.append({"agent": "scout", "output": scout_out})
     fit_out = _dispatch(user_id, "fitScorer", {"rescore": False})
     steps.append({"agent": "fitScorer", "output": fit_out})
@@ -1054,7 +1374,7 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
     from app.services.llm_client import shared_budget
 
-    with shared_budget():
+    with shared_budget(budget_seconds):
         tailor_out = _dispatch(user_id, "tailor", {"job_id": top_job_id})
         steps.append({"agent": "tailor", "output": tailor_out})
         letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
@@ -1067,6 +1387,29 @@ def run_pipeline(body: PipelineRunRequest, current_user: CurrentUser) -> dict[st
         "approvalRequired": True,
         "approval_id": letter_out.get("approval_id"),
     }
+
+
+@router.post("/pipeline/run")
+def run_pipeline(
+    body: PipelineRunRequest, current_user: CurrentUser, request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Full pipeline. Async-enabled: 202 + enqueue envelope when
+    ``AETHER_ASYNC_GENERATION`` is ON (the composite runs in the background,
+    per-step metering inside the worker); legacy synchronous body otherwise.
+
+    The pipeline halts with ``approvalRequired=True`` after generating artefacts.
+    ``pipeline`` is not a ``_SYSTEM_RUN_EXEMPT_AGENTS`` key, so a valid secret
+    never bypasses the paywall (the sync path is walled by the supervisor step's
+    own ``_record_run``; the async path by ``_enqueue_pipeline``)."""
+    user_id = current_user["id"]
+    if async_generation_enabled():
+        job_id = _enqueue_pipeline(
+            user_id, body.model_dump(), system_run=_is_system_run(request)
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
+    return _pipeline_core(user_id, body.model_dump())
 
 
 # ---------------------------------------------------------------------------
