@@ -67,7 +67,7 @@ def _ensure_user_agent_tables() -> None:
                     "userId"            text NOT NULL,
                     "provider"          text NOT NULL,
                     "authMode"          text NOT NULL
-                        CHECK ("authMode" IN ('api_key', 'subscription_oauth')),
+                        CHECK ("authMode" IN ('api_key', 'subscription_oauth', 'oauth_token')),
                     "ciphertext"        text NOT NULL,
                     "secretHint"        text,
                     "baseUrl"           text,
@@ -81,6 +81,31 @@ def _ensure_user_agent_tables() -> None:
                 )
                 '''
             )
+            # GAP-P7-DEF-A §3.2: widen the authMode CHECK additively so a pasted
+            # Claude Code OAuth token ('oauth_token') can be stored per-user. A
+            # strict superset — zero existing rows invalidated, zero data loss.
+            # ONLY run the ALTER when the constraint is not already widened, so we
+            # do NOT take an ACCESS EXCLUSIVE lock on every process first-hit (that
+            # would serialize/contend with concurrent API callers and the shared
+            # test schema). A short lock_timeout makes even the one-time widening
+            # fail fast rather than block indefinitely; it is retried next first-hit.
+            cur.execute(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE conname = 'UserProviderCredential_authMode_check'"
+            )
+            _crow = cur.fetchone()
+            _cdef = _crow[0] if _crow else None
+            if not _cdef or "oauth_token" not in _cdef:
+                cur.execute("SET LOCAL lock_timeout = '4s'")
+                cur.execute(
+                    'ALTER TABLE "UserProviderCredential" '
+                    'DROP CONSTRAINT IF EXISTS "UserProviderCredential_authMode_check"'
+                )
+                cur.execute(
+                    'ALTER TABLE "UserProviderCredential" '
+                    'ADD CONSTRAINT "UserProviderCredential_authMode_check" '
+                    'CHECK ("authMode" IN (\'api_key\', \'subscription_oauth\', \'oauth_token\'))'
+                )
             cur.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS "AnthropicOAuthState" (

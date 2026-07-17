@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS "UserProviderCredential" (
     "userId"            text NOT NULL,
     "provider"          text NOT NULL,
     "authMode"          text NOT NULL
-        CHECK ("authMode" IN ('api_key', 'subscription_oauth')),
+        CHECK ("authMode" IN ('api_key', 'subscription_oauth', 'oauth_token')),
     "ciphertext"        text NOT NULL,
     "secretHint"        text,
     "baseUrl"           text,
@@ -75,3 +75,13 @@ ALTER TABLE "AgentConfig" ADD COLUMN IF NOT EXISTS "thinkingEffort" text DEFAULT
 
 -- Billing-provenance audit for every run (GAP-D3).
 ALTER TABLE "AgentRun" ADD COLUMN IF NOT EXISTS "billingAuditJson" jsonb;
+
+-- GAP-P7-DEF-A §3.2: widen the UserProviderCredential authMode CHECK additively
+-- to admit a pasted Claude Code OAuth token ('oauth_token'). Strict superset —
+-- zero rows invalidated, zero data loss. Executed idempotently in
+-- _ensure_user_agent_tables() under the advisory lock (DROP IF EXISTS + ADD).
+ALTER TABLE "UserProviderCredential"
+    DROP CONSTRAINT IF EXISTS "UserProviderCredential_authMode_check";
+ALTER TABLE "UserProviderCredential"
+    ADD CONSTRAINT "UserProviderCredential_authMode_check"
+    CHECK ("authMode" IN ('api_key', 'subscription_oauth', 'oauth_token'));

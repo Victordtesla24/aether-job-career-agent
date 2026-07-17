@@ -33,6 +33,7 @@ import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -338,23 +339,28 @@ def resolve_provider(model: str) -> str:
 
 
 def _infer_anthropic_auth_mode(secret: str) -> str:
-    """Anthropic authMode from the key prefix (``sk-ant-oat…`` = subscription).
+    """Anthropic authMode from the key prefix (single source of truth = prefix).
 
-    Subscription OAuth is no longer a supported live-call mode (GAP-AUTH-001);
-    this classifier is retained so :func:`_resolution_is_supported` can DETECT a
-    legacy ``sk-ant-oat…`` secret and refuse to use it, rather than mislabel it.
+    ``sk-ant-oat01-…`` is a pasted Claude Code OAuth token → ``oauth_token``
+    (supported, GAP-P7-DEF-A). Any other ``sk-ant-oat…`` is a legacy in-app
+    subscription-OAuth token → ``subscription_oauth`` (still blocked; ADR-P7-01
+    NON-goal). Everything else → ``api_key``.
     """
-    return "subscription_oauth" if secret.startswith("sk-ant-oat") else "api_key"
+    if secret.startswith("sk-ant-oat01-"):
+        return "oauth_token"
+    if secret.startswith("sk-ant-oat"):
+        return "subscription_oauth"
+    return "api_key"
 
 
 def _resolution_is_supported(provider: str, auth_mode: str) -> bool:
-    """Whether a resolved credential may serve a live call (GAP-AUTH-001).
+    """Whether a resolved credential may serve a live call.
 
-    Consumer Anthropic subscription OAuth (``subscription_oauth``) was removed
-    for compliance: a pre-existing subscription credential/token must never be
-    used for a live request. Returning ``False`` makes the resolver fall through
-    to the next (api_key / env) source and ultimately surface an honest
-    'no credential' rather than a faked success.
+    The consumer in-app OAuth *authorize* flow (``subscription_oauth``) stays
+    removed for compliance (ADR-P7-01 NON-goal): a pre-existing subscription
+    credential/token must never be used for a live request — returning ``False``
+    makes the resolver fall through rather than fake a success. A pasted Claude
+    Code OAuth token (``oauth_token``, GAP-P7-DEF-A) IS supported.
     """
     return not (provider == "anthropic" and auth_mode == "subscription_oauth")
 
@@ -364,7 +370,7 @@ class ProviderCredentialResolution:
     """A resolved provider credential and where it came from."""
 
     provider: str
-    auth_mode: str          # 'api_key' | 'subscription_oauth'
+    auth_mode: str          # 'api_key' | 'oauth_token' | 'subscription_oauth'
     secret: str
     base_url: str | None
     source: str             # 'database' | 'environment'
@@ -401,6 +407,14 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
             )
     # 2. Legacy env fallback — strictly provider-scoped, never cross-provider.
     if provider == "anthropic":
+        # A synced Claude Code OAuth token (GAP-P7-DEF-A §5.2). The encrypted DB
+        # row still wins above; this env branch is the restart-survival / async
+        # worker source written by ``env_file_writer`` on an oauth_token save.
+        oat = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if oat:
+            return ProviderCredentialResolution(
+                "anthropic", "oauth_token", oat, None, "environment"
+            )
         base = os.environ.get("AETHER_LLM_BASE_URL", "")
         direct = os.environ.get("AETHER_LLM_API_KEY")
         if direct and "anthropic.com" in base:
@@ -561,6 +575,84 @@ def get_quota_block_hours() -> float:
         return 5.0
 
 
+#: Message substrings that mark an Anthropic 429 as SUBSCRIPTION / spend-cap
+#: quota exhaustion (usage paused until reset) rather than a transient per-minute
+#: rate limit. Both surface as HTTP 429 with error.type == "rate_limit_error" —
+#: there is NO distinct type (verified from the official Anthropic errors +
+#: rate-limits docs, 2026-07-17: platform.claude.com/docs/en/api/errors and
+#: /rate-limits). The message text + retry-after magnitude are the ONLY signals.
+_QUOTA_429_MESSAGE_SIGNALS = (
+    "usage limit", "spend", "quota", "credit balance",
+    "plan limit", "monthly", "subscription",
+)
+
+
+def get_quota_429_retry_after_seconds() -> float:
+    """A ``retry-after`` at/above this many seconds marks a 429 as
+    subscription-quota (a spend cap "pauses until the next month" → a very large
+    retry-after; a per-minute limit replenishes continuously → a small one).
+    Env-overridable via ``AETHER_QUOTA_429_RETRY_AFTER_SECONDS``."""
+    try:
+        return float(os.environ.get("AETHER_QUOTA_429_RETRY_AFTER_SECONDS", "300"))
+    except ValueError:
+        return 300.0
+
+
+def _resp_header(resp: Any, name: str) -> "str | None":
+    headers = getattr(resp, "headers", None)
+    if headers is None:
+        return None
+    try:
+        return headers.get(name)
+    except Exception:  # noqa: BLE001 — a header mapping without .get()
+        return None
+
+
+def _parse_retry_after(raw: Any) -> "float | None":
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _anthropic_error_message(resp: Any) -> str:
+    """Best-effort extraction of ``error.message`` from an Anthropic error body."""
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001 — non-JSON / partial body
+        return getattr(resp, "text", "") or ""
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+    return getattr(resp, "text", "") or ""
+
+
+def _anthropic_429_is_subscription_quota(resp: Any) -> bool:
+    """Classify an Anthropic 429 as subscription-quota exhaustion (→ cooldown
+    block) vs a transient per-minute rate limit.
+
+    CONSERVATIVE (GAP-P7-DEF-A PROBE-DEFA-2): only a positive signal — a
+    quota/spend message phrase OR a very large retry-after — counts as quota;
+    anything ambiguous is treated as a transient rate limit (a false long block
+    would wrongly pause a user for hours). Either way the run is NEVER rerouted
+    to a different credential (ADR-PC-2)."""
+    message = _anthropic_error_message(resp).lower()
+    if any(signal in message for signal in _QUOTA_429_MESSAGE_SIGNALS):
+        return True
+    retry_after = _parse_retry_after(_resp_header(resp, "retry-after"))
+    if retry_after is not None and retry_after >= get_quota_429_retry_after_seconds():
+        return True
+    return False
+
+
+def _quota_block_expiry() -> datetime:
+    """When a freshly recorded subscription-quota cooldown expires (UTC)."""
+    return datetime.now(timezone.utc) + timedelta(hours=get_quota_block_hours())
+
+
 def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
     try:
         from app.repositories.user_provider_credential import AgentQuotaBlockRepository
@@ -572,12 +664,17 @@ def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
 
 
 def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
-    """Auth/version headers for the native Anthropic Messages API.
+    """Auth/version headers for the native Anthropic Messages API, per authMode.
 
-    Only server-side API-key auth is supported (``'api_key'``, ``sk-ant-api…``):
-    ``x-api-key: <key>``. Consumer subscription OAuth (``Bearer`` +
-    ``anthropic-beta: oauth-2025-04-20``) was removed for compliance
-    (GAP-AUTH-001) — any other ``auth_mode`` is an honest hard error.
+    Two supported transports (verified against live wire mechanics, GAP-P7-DEF-A):
+
+    - ``api_key`` (``sk-ant-api…``, Claude Console) → ``x-api-key: <key>``.
+    - ``oauth_token`` (``sk-ant-oat01-…``, a pasted ``claude setup-token``) →
+      ``Authorization: Bearer <token>`` + ``anthropic-beta: oauth-2025-04-20``
+      (x-api-key returns 401 for an oat token; Bearer+beta returns 200).
+
+    The legacy in-app subscription-OAuth flow (``subscription_oauth``) stays
+    unsupported (ADR-P7-01 NON-goal) — any other ``auth_mode`` is a hard error.
     """
     headers = {
         "anthropic-version": ANTHROPIC_VERSION,
@@ -585,10 +682,13 @@ def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
     }
     if auth_mode == "api_key":
         headers["x-api-key"] = secret
+    elif auth_mode == "oauth_token":
+        headers["authorization"] = f"Bearer {secret}"
+        headers["anthropic-beta"] = "oauth-2025-04-20"
     else:
         raise RuntimeError(
-            f"Unsupported Anthropic authMode '{auth_mode}'; only 'api_key' "
-            "(Claude Console) is supported."
+            f"Unsupported Anthropic authMode '{auth_mode}'; supported: 'api_key' "
+            "(Claude Console) and 'oauth_token' (claude setup-token)."
         )
     return headers
 
@@ -748,6 +848,20 @@ def verify_resolved_credential(
         return (False, "error", f"Verification request failed: {exc}")
     if 200 <= resp.status_code < 300:
         return (True, "ok", f"{provider} responded HTTP {resp.status_code}.")
+    if provider == "anthropic" and resp.status_code == 429:
+        # Honest 429 disambiguation (GAP-P7-DEF-A §4): distinguish a subscription
+        # quota exhaustion from a transient per-minute rate limit so the modal
+        # can tell the user to wait vs switch to API-key mode.
+        if _anthropic_429_is_subscription_quota(resp):
+            return (
+                False, "quota_exhausted",
+                "Anthropic subscription quota reached; retry later or switch "
+                "this credential to API-key mode.",
+            )
+        return (
+            False, "rate_limited",
+            "Anthropic rate limit hit (per-minute); retry shortly.",
+        )
     return (
         False,
         "failed",
@@ -1025,6 +1139,36 @@ class LLMClient:
                 # Don't block on a straggling request thread; let it finish
                 # in the background and be reaped when the response arrives.
                 executor.shutdown(wait=False)
+        if provider == "anthropic" and resp.status_code == 429:
+            # Wire the LIVE 429 → cooldown block (GAP-P7-DEF-A §5.4). A genuine
+            # subscription-quota 429 (oauth_token or api_key) records a block and
+            # raises an explicit QuotaExhaustedError → honest HTTP 429; it is
+            # NEVER swallowed to a fixture nor rerouted to another credential.
+            if _anthropic_429_is_subscription_quota(resp):
+                expires_at = _quota_block_expiry()
+                if ctx_user_id is not None:
+                    try:
+                        from app.repositories.user_provider_credential import (
+                            AgentQuotaBlockRepository,
+                        )
+
+                        AgentQuotaBlockRepository().set_block(
+                            ctx_user_id, provider,
+                            expires_at=expires_at,
+                            reason="subscription_quota_exceeded",
+                        )
+                    except Exception as exc:  # noqa: BLE001 — never hide the 429
+                        logger.warning(
+                            "failed to record %s quota block: %s",
+                            provider, type(exc).__name__,
+                        )
+                raise QuotaExhaustedError(
+                    provider, expires_at=expires_at,
+                    reason="subscription_quota_exceeded",
+                )
+            # Transient per-minute rate limit: fall through to the retryable
+            # RuntimeError below (the existing single retry may apply). Still
+            # NEVER rerouted to a different credential (ADR-PC-2).
         if resp.status_code >= 400:
             raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
         body = resp.json()

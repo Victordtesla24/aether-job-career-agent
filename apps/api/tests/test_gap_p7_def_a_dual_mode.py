@@ -74,6 +74,14 @@ def _vault_key(monkeypatch):
     monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
 
 
+@pytest.fixture(autouse=True)
+def _isolate_env_file(monkeypatch, tmp_path):
+    """A credential save must NEVER touch the real repo-root ``.env`` during
+    tests — default the oauth_token sync target to a per-test tmp file. Tests
+    that assert the ``.env`` write override ``AETHER_ENV_FILE_PATH`` in-body."""
+    monkeypatch.setenv("AETHER_ENV_FILE_PATH", str(tmp_path / "default.env"))
+
+
 @pytest.fixture()
 def _clean_provider_credentials():
     """ProviderCredential has no FK to User, so conftest never truncates it —
