@@ -49,7 +49,7 @@ export const ProviderSchema = z.object({
   // client parses both a legacy env-only row and the DB-backed enriched row —
   // FE and BE ship on independent branches against this one contract.
   source: z.enum(["database", "environment", "none"]).nullish(),
-  authMode: z.enum(["api_key", "subscription_oauth"]).nullish(),
+  authMode: z.enum(["api_key", "subscription_oauth", "oauth_token"]).nullish(),
   secretHint: z.string().nullish(),
   lastVerifiedAt: z.string().nullish(),
   lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
@@ -57,7 +57,7 @@ export const ProviderSchema = z.object({
 export type Provider = z.infer<typeof ProviderSchema>;
 
 /** Which credential shape a provider row carries. */
-export type ProviderAuthMode = "api_key" | "subscription_oauth";
+export type ProviderAuthMode = "api_key" | "subscription_oauth" | "oauth_token";
 
 /** Body for PUT /agents/providers/{id}/credential. */
 export interface CredentialInput {
@@ -120,7 +120,7 @@ export const AgentConfigSchema = z.object({
   enabled: z.boolean(),
   model: z.string(),
   provider: z.string().nullish(),
-  authMode: z.enum(["api_key", "subscription_oauth"]).nullish(),
+  authMode: z.enum(["api_key", "subscription_oauth", "oauth_token"]).nullish(),
   credentialRef: z.string().nullish(),
   temperature: z.number(),
   thinkingEffort: z.enum(["none", "low", "medium", "high"]),
@@ -163,7 +163,7 @@ export async function updateAgentConfig(
 export const UserCredentialSchema = z.object({
   id: z.string(),
   provider: z.string(),
-  authMode: z.enum(["api_key", "subscription_oauth"]),
+  authMode: z.enum(["api_key", "subscription_oauth", "oauth_token"]),
   secretHint: z.string().nullish(),
   baseUrl: z.string().nullish(),
   expiresAt: z.string().nullish(),

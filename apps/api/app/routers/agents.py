@@ -1108,7 +1108,7 @@ class AgentConfigUpdate(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, min_length=1)
     provider: str | None = None
-    authMode: str | None = Field(default=None, pattern="^(api_key)$")
+    authMode: str | None = Field(default=None, pattern="^(api_key|oauth_token)$")
     #: Empty string clears the pinned credential; a non-empty value must
     #: reference one of the caller's own stored credentials (validated below).
     credentialRef: str | None = None
@@ -1432,30 +1432,62 @@ class ProviderCredentialBody(BaseModel):
     baseUrl: str | None = None
 
 
-def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> None:
-    """Reject an authMode/secret that does not match the provider (REQ-PC-2/3).
+#: Names BOTH accepted Anthropic credential formats (GATE-04 / J1 step 10). The
+#: pasted value is NEVER included in this message.
+_ANTHROPIC_CREDENTIAL_HELP = (
+    "Anthropic credential not recognized. Console API keys start with "
+    "'sk-ant-api'. Claude Code OAuth tokens start with 'sk-ant-oat01-'. "
+    "Check which credential you are pasting."
+)
 
-    Every provider — Anthropic included — accepts only ``api_key``. Consumer
-    Anthropic subscription OAuth (``subscription_oauth``) was removed for
-    compliance (GAP-AUTH-001): the only supported Anthropic auth is a Claude
-    Console API key (``sk-ant-api…``). A ``subscription_oauth`` write is a 422.
+
+def _detect_anthropic_auth_mode(secret: str) -> str | None:
+    """Server-derived Anthropic authMode from the secret prefix (authoritative).
+
+    ``sk-ant-api…`` → ``api_key``; ``sk-ant-oat01-…`` → ``oauth_token`` (a pasted
+    ``claude setup-token`` output). Any other value — including a legacy
+    non-oat01 ``sk-ant-oat`` subscription token — → ``None`` (unrecognized).
     """
+    if secret.startswith("sk-ant-api"):
+        return "api_key"
+    if secret.startswith("sk-ant-oat01-"):
+        return "oauth_token"
+    return None
+
+
+def _validate_provider_auth(provider: str, auth_mode: str, secret: str) -> str:
+    """Validate the credential and RETURN the server-derived authMode to store.
+
+    Anthropic (GAP-P7-DEF-A): the authMode is DERIVED from the secret prefix
+    (authoritative). A ``sk-ant-oat01-`` token is accepted as ``oauth_token``;
+    a Console ``sk-ant-api…`` key as ``api_key``. Anything else is a 422 naming
+    BOTH formats. If the client's declared ``authMode`` contradicts the detected
+    prefix, that is a 422 (anti-mislabel — never silently store the wrong label,
+    which would pick the wrong transport header at run time). The legacy in-app
+    ``subscription_oauth`` OAuth flow stays unsupported (ADR-P7-01 NON-goal).
+
+    Every other provider accepts only ``api_key``.
+    """
+    if provider == "anthropic":
+        detected = _detect_anthropic_auth_mode(secret)
+        if detected is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, _ANTHROPIC_CREDENTIAL_HELP
+            )
+        if auth_mode and auth_mode != detected:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Credential prefix is a '{detected}' credential but you selected "
+                f"'{auth_mode}'. Select the matching mode, or paste the matching "
+                "credential.",
+            )
+        return detected
     if auth_mode != "api_key":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Provider '{provider}' accepts only authMode 'api_key'."
-            + (
-                " Anthropic subscription OAuth is not supported; use an API key "
-                "(Claude Console)."
-                if provider == "anthropic"
-                else ""
-            ),
+            f"Provider '{provider}' accepts only authMode 'api_key'.",
         )
-    if provider == "anthropic" and not secret.startswith("sk-ant-api"):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Anthropic api_key must start with 'sk-ant-api'.",
-        )
+    return "api_key"
 
 
 @router.put("/providers/{provider}/credential")
@@ -1473,7 +1505,7 @@ def put_provider_credential(
             status.HTTP_404_NOT_FOUND,
             f"Provider '{provider}' does not support stored credentials.",
         )
-    _validate_provider_auth(provider, body.authMode, body.secret)
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
     if not credential_vault.key_present():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1482,12 +1514,19 @@ def put_provider_credential(
         )
     try:
         ProviderCredentialRepository().upsert(
-            provider, auth_mode=body.authMode, secret=body.secret, base_url=body.baseUrl
+            provider, auth_mode=stored_mode, secret=body.secret, base_url=body.baseUrl
         )
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)
         ) from exc
+    if stored_mode == "oauth_token":
+        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A §3.3).
+        # Best-effort: the encrypted DB row is the source of truth, so a sync
+        # failure does not fail the save (the token is never logged).
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(body.secret)
     return _provider_status_object(provider, current_user["id"])
 
 
@@ -1573,7 +1612,7 @@ def put_user_credential(
             status.HTTP_404_NOT_FOUND,
             f"Provider '{provider}' does not support stored credentials.",
         )
-    _validate_provider_auth(provider, body.authMode, body.secret)
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
     if not credential_vault.key_present():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1584,11 +1623,17 @@ def put_user_credential(
     repo = UserProviderCredentialRepository()
     try:
         repo.upsert(
-            user_id, provider, auth_mode=body.authMode,
+            user_id, provider, auth_mode=stored_mode,
             secret=body.secret, base_url=body.baseUrl,
         )
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if stored_mode == "oauth_token":
+        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A §3.3);
+        # best-effort, DB row is source of truth, token never logged.
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(body.secret)
     # GAP-NEW-001: verify round-trip so the badge is truthful (best-effort).
     try:
         ok, _token, _detail = verify_user_credential(provider, user_id)

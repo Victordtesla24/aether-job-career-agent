@@ -1,17 +1,24 @@
-"""GAP-AUTH-001 (Gate-14) — Anthropic consumer-subscription OAuth is removed.
+"""GAP-AUTH-001 / ADR-P7-01 — the in-app Anthropic OAuth *authorize* flow stays removed.
 
-Consumer Claude Free/Pro/Max subscription OAuth (``claude.ai/oauth/authorize``)
-is NON-COMPLIANT in a third-party product. The only supported Anthropic auth is
-server-side API-key auth via the Claude Console (``x-api-key``). These tests lock
-in the removal:
+The consumer Claude Free/Pro/Max in-app OAuth *authorize* flow
+(``claude.ai/oauth/authorize``, the ``subscription_oauth`` label) is NON-COMPLIANT
+in a third-party product and remains removed — that is the retained ADR-P7-01
+NON-goal. These tests lock in that removal:
 
 - the subscription OAuth start/callback endpoints no longer exist;
-- the credential write-path rejects ``authMode='subscription_oauth'`` for
-  Anthropic (deployment-wide, per-user, and per-agent config);
-- native Anthropic auth is ``x-api-key`` ONLY — never ``Bearer`` +
-  ``anthropic-beta: oauth-2025-04-20``;
+- the credential write-path rejects the ``subscription_oauth`` label / a legacy
+  non-oat01 ``sk-ant-oat`` secret for Anthropic (deployment-wide, per-user, and
+  per-agent config);
+- the header builder rejects the ``subscription_oauth`` label transport;
 - a pre-existing ``subscription_oauth`` credential is never used for a live call
   (honest fall-through, never a faked success).
+
+NOTE (GAP-P7-DEF-A / ADR-P7-01): a *user-pasted* ``claude setup-token`` output
+(``sk-ant-oat01-…``, authMode ``oauth_token``) is a DISTINCT, now-SUPPORTED
+mechanism — accepted by the write-path and transported via
+``Authorization: Bearer`` + ``anthropic-beta: oauth-2025-04-20``. Its contract is
+covered in ``test_gap_p7_def_a_dual_mode.py``; the assertions here concern only
+the still-removed in-app ``subscription_oauth`` flow.
 
 Outbound HTTP is never touched — the resolution/header assertions are pure and
 the endpoint assertions only exercise routing.

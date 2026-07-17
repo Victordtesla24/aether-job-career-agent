@@ -48,6 +48,12 @@ function authModeOptions(providerId: string): AuthModeOption[] {
         hint: "Paste an Anthropic API key (starts sk-ant-api…). Runs on Anthropic models bill to your Anthropic API credits.",
         placeholder: "sk-ant-api…",
       },
+      {
+        value: "oauth_token",
+        label: "Claude Code OAuth Token",
+        hint: "Paste the token from `claude setup-token` (starts sk-ant-oat01-…). Runs on Anthropic models bill against your Claude Pro/Max subscription quota.",
+        placeholder: "sk-ant-oat01-…",
+      },
     ];
   }
   return [
@@ -63,7 +69,7 @@ function authModeOptions(providerId: string): AuthModeOption[] {
 /** Short, accurate billing implication — the whole point of the feature. */
 function billingNote(providerId: string): string {
   if (providerId === "anthropic") {
-    return "Anthropic models bill to your Anthropic API credits (Claude Console API key). Every non-Anthropic model bills to OpenRouter — credentials never cross providers.";
+    return "Anthropic models bill either to your Anthropic API credits (Console API key) or against your Claude Pro/Max subscription quota (Claude Code OAuth token) — you choose per credential. Every non-Anthropic model bills to OpenRouter; credentials never cross providers.";
   }
   if (providerId === "openrouter") {
     return "Every non-Anthropic model across Aether bills to your OpenRouter credits. Anthropic models never route through OpenRouter.";
