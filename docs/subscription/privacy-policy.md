@@ -60,8 +60,14 @@ bcrypt (`passlib.context.CryptContext(schemes=["bcrypt"])`).
 - **Resume tailoring, cover-letter drafting, story extraction, and email drafting** — these four
   agent types send relevant resume/job text to the configured LLM provider for generation. In
   production this is **OpenRouter** (`AETHER_LLM_MODE=auto`, routing to deepseek-family models by
-  plan tier) — **not** a user's personal Anthropic/Claude subscription; third-party consumer-OAuth
-  reuse of an Anthropic subscription is prohibited and is not implemented (`ADR-P6-OAUTH`).
+  plan tier) for the standard billing/routing path. The in-app, interactive "Connect with Anthropic"
+  OAuth-consent flow remains removed and unsupported (`ADR-P6-OAUTH`). Separately, as of Phase 7
+  (`ADR-P7-01`, `GAP-P7-DEF-A`), the operator (or a signed-in user, for their own per-user credential)
+  may manually paste a pre-generated Anthropic credential — a Claude Console API key or a Claude Code
+  OAuth token obtained by running `claude setup-token` on their own machine — into the agent-provider
+  settings; this is a manual paste of a credential the person already possesses, not an in-app OAuth
+  consent screen. A pasted OAuth-token credential is stored encrypted and never logged. See
+  `docs/subscription/billing-architecture.md` for the full mechanism.
 - **Email management** — if a user connects Gmail, the app reads/drafts/labels messages via the
   Gmail API strictly to support the Email Center feature. Each connected Gmail account's tokens are
   stored and encrypted independently; disconnecting one account (`DELETE /api/emails/accounts/{id}`)

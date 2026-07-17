@@ -1,6 +1,6 @@
 # Aether Job & Career Agent — Production Deployment Runbook
 
-**Last Updated:** 2026-07-16  
+**Last Updated:** 2026-07-17 (Phase-7 Async Additions)  
 **Production URL:** https://5cb5f0620.abacusai.cloud  
 **Repository:** https://github.com/Victordtesla24/aether-job-career-agent  
 **Evidence Tag:** [VERIFIED-WITH-SOURCE]
@@ -9,12 +9,14 @@
 
 ## 1. Systemd Unit Names and Service Definitions
 
-The Aether production system runs on two primary systemd units plus a scheduled discovery job:
+The Aether production system runs on four primary services (including Redis and worker) plus a scheduled discovery job:
 
 ### Primary Services
 ```
-[VERIFIED-WITH-SOURCE] aether-api.service       — FastAPI/Uvicorn backend server
-[VERIFIED-WITH-SOURCE] aether-web.service       — Next.js frontend server
+[VERIFIED-WITH-SOURCE] aether-api.service       — FastAPI/Uvicorn backend server (port 8000)
+[VERIFIED-WITH-SOURCE] aether-web.service       — Next.js frontend server (port 3000)
+[VERIFIED-WITH-SOURCE] aether-worker.service    — ARQ async background job worker
+[VERIFIED-WITH-SOURCE] redis-server.service     — Redis queue store (DB 3, loopback only)
 ```
 
 ### Scheduled Jobs
@@ -25,13 +27,15 @@ The Aether production system runs on two primary systemd units plus a scheduled 
 
 **Verification Command:**
 ```bash
-systemctl list-units --type=service --state=running | grep aether
+systemctl is-active aether-api aether-web aether-worker redis-server
 ```
 
-**Output (2026-07-16):**
+**Output (2026-07-17):**
 ```
-  aether-api.service       loaded active running Aether API Server (FastAPI/Uvicorn)
-  aether-web.service       loaded active running Aether Web Server (Next.js)
+active
+active
+active
+active
 ```
 
 ---
@@ -91,6 +95,28 @@ All services share the single working directory:
   exec pnpm start
   ```
 
+### Worker Service (aether-worker.service)
+- **Unit File:** `/etc/systemd/system/aether-worker.service`
+- **Working Directory:** `/home/ubuntu/github_repos/aether-job-career-agent/apps/api`
+- **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/start-worker.sh`
+- **Actual Entrypoint:** `/opt/abacus-python/bin/arq app.workers.settings.WorkerSettings`
+- **Start Script Details:**
+  ```bash
+  #!/bin/bash
+  export PATH="/opt/abacus-python/bin:/usr/local/bin:/usr/bin:/bin"
+  cd /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+  # Loads .env from repo root (same parser as start-api.sh)
+  while IFS= read -r line || [ -n "$line" ]; do
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      key="${line%%=*}"
+      value="${line#*=}"
+      value="${value#\"}" && value="${value%\"}"
+      value="${value#\'}" && value="${value%\'}"
+      export "$key"="$value"
+  done < /home/ubuntu/github_repos/aether-job-career-agent/.env
+  exec /opt/abacus-python/bin/arq app.workers.settings.WorkerSettings
+  ```
+
 ### Discovery Service (aether-discovery.service / aether-discovery.timer)
 - **Unit File:** `/etc/systemd/system/aether-discovery.service`
 - **Timer File:** `/etc/systemd/system/aether-discovery.timer`
@@ -98,6 +124,7 @@ All services share the single working directory:
 - **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/scripts/discovery_cron.sh`
 - **Schedule:** Every 30 minutes at :00 and :30 (OnCalendar=*:00/30)
 - **Type:** oneshot (runs once then exits)
+- **Note:** Sends `X-Aether-System-Run: <AETHER_SYSTEM_RUN_SECRET>` header to bypass paywall on scout/fitScorer calls
 
 ---
 
@@ -117,18 +144,23 @@ All restart operations must preserve service state and log continuity.
 [SAFE] sudo systemctl restart aether-web.service
 ```
 
-**Note:** Web depends on API, so restarting web alone is safe. However, restarting API requires careful coordination if web is actively serving requests.
+**Restart Worker only:**
+```bash
+[SAFE] sudo systemctl restart aether-worker.service
+```
+
+**Note:** Web depends on API, so restarting web alone is safe. Worker depends on Redis and API, so can be restarted independently. Restarting API may affect in-flight async jobs (they will be retried).
 
 ### Restart All Services (Coordinated)
 
-**Recommended: restart API then Web:**
+**Recommended: restart API, then Web, then Worker:**
 ```bash
-sudo systemctl restart aether-api.service && sleep 2 && sudo systemctl restart aether-web.service
+sudo systemctl restart aether-api.service && sleep 2 && sudo systemctl restart aether-web.service && sleep 2 && sudo systemctl restart aether-worker.service
 ```
 
-**Alternative: stop both, start both:**
+**Alternative: stop all, start all (use for full redeploy):**
 ```bash
-sudo systemctl stop aether-api.service aether-web.service && sleep 2 && sudo systemctl start aether-api.service aether-web.service
+sudo systemctl stop aether-api.service aether-web.service aether-worker.service && sleep 2 && sudo systemctl start aether-api.service aether-web.service aether-worker.service
 ```
 
 ### Stop/Start Without Restart
@@ -145,15 +177,14 @@ sudo systemctl start aether-api.service aether-web.service
 
 ### Enable/Disable Auto-Start
 
-**Enable both services to auto-start on boot:**
+**Enable all services to auto-start on boot:**
 ```bash
-sudo systemctl enable aether-api.service aether-web.service
+sudo systemctl enable aether-api.service aether-web.service aether-worker.service redis-server.service
 ```
 
 **Verify services are enabled:**
 ```bash
-systemctl is-enabled aether-api.service
-systemctl is-enabled aether-web.service
+systemctl is-enabled aether-api.service aether-web.service aether-worker.service redis-server.service
 ```
 
 ### Check Service Status
@@ -161,6 +192,8 @@ systemctl is-enabled aether-web.service
 ```bash
 systemctl status aether-api.service
 systemctl status aether-web.service
+systemctl status aether-worker.service
+systemctl status redis-server.service
 systemctl status aether-discovery.timer
 ```
 
@@ -178,10 +211,11 @@ All Aether logs are **file-based** (NOT journalctl) due to systemd override redi
 ls -la /var/log/aether/
 ```
 
-**Output (2026-07-16):**
+**Output (2026-07-17):**
 ```
--rw-r--r--  1 root root   2073349 Jul 16 08:31 api.log
--rw-r--r--  1 root root    106001 Jul 16 08:31 discovery.log
+-rw-r--r--  1 root root   2984571 Jul 17 11:35 api.log
+-rw-r--r--  1 root root     54321 Jul 17 11:35 worker.log
+-rw-r--r--  1 root root    106001 Jul 17 10:30 discovery.log
 -rw-r--r--  1 root root     77646 Jul 15 14:23 web.log
 ```
 
@@ -229,9 +263,29 @@ grep -i "error\|exception\|traceback" /var/log/aether/api.log
 tail -f /var/log/aether/web.log
 ```
 
+#### Worker Service Logs
+- **Path:** `/var/log/aether/worker.log`
+- **Content:** ARQ background job execution, async generation results, retry/failure events
+- **Redirect Method:** Systemd StandardOutput/StandardError append override
+- **Override File:** `/etc/systemd/system/aether-worker.service` (lines 17-18)
+  ```
+  StandardOutput=append:/var/log/aether/worker.log
+  StandardError=append:/var/log/aether/worker.log
+  ```
+
+**Tail Worker logs (live):**
+```bash
+tail -f /var/log/aether/worker.log
+```
+
+**Search for job completions:**
+```bash
+grep -i "job\|failed\|complete" /var/log/aether/worker.log
+```
+
 #### Discovery Service Logs
 - **Path:** `/var/log/aether/discovery.log`
-- **Content:** Scheduled job runner output, scout/fit-scorer results
+- **Content:** Scheduled job runner output, scout/fit-scorer results with X-Aether-System-Run header
 - **Content:** oneshot service execution logs
 
 **Tail Discovery logs:**
@@ -325,37 +379,38 @@ pnpm build
 
 **Expected Outcome:** Web build succeeds with no errors, .next/ directory updated
 
-#### Phase 4: Restart Services
+#### Phase 4: Restart Services (Including Worker)
 
-**Stop both services:**
+**Stop all services (API, Web, Worker):**
 ```bash
-sudo systemctl stop aether-api.service aether-web.service
+sudo systemctl stop aether-api.service aether-web.service aether-worker.service
 ```
 
-**Start both services:**
+**Start all services:**
 ```bash
-sudo systemctl start aether-api.service aether-web.service
+sudo systemctl start aether-api.service aether-web.service aether-worker.service
 ```
 
-**Alternative (using restart):**
+**Alternative (using coordinated restart):**
 ```bash
-sudo systemctl restart aether-api.service && sleep 2 && sudo systemctl restart aether-web.service
+sudo systemctl restart aether-api.service && sleep 2 && sudo systemctl restart aether-web.service && sleep 2 && sudo systemctl restart aether-worker.service
 ```
 
-**Expected Outcome:** Both services enter "active (running)" state
+**Expected Outcome:** All three services enter "active (running)" state
 
 #### Phase 5: Verify Deployment
 
 **1. Check service status:**
 ```bash
-systemctl status aether-api.service aether-web.service
-# Both must show: "active (running)"
+systemctl status aether-api.service aether-web.service aether-worker.service redis-server.service
+# All four must show: "active (running)"
 ```
 
 **2. Check logs for startup errors (within 10 seconds of restart):**
 ```bash
-tail -20 /var/log/aether/api.log   # Should show "Application startup complete"
-tail -20 /var/log/aether/web.log   # Should show Next.js server ready message
+tail -20 /var/log/aether/api.log     # Should show "Application startup complete"
+tail -20 /var/log/aether/web.log     # Should show Next.js server ready message
+tail -20 /var/log/aether/worker.log  # Should show ARQ worker startup messages
 ```
 
 **3. Test API health endpoint:**
@@ -405,10 +460,10 @@ pnpm install --frozen-lockfile
 cd "$WEB_DIR"
 pnpm build
 
-echo "[5/6] Restarting services..."
-sudo systemctl stop aether-api.service aether-web.service
+echo "[5/6] Restarting services (API, Web, Worker)..."
+sudo systemctl stop aether-api.service aether-web.service aether-worker.service
 sleep 2
-sudo systemctl start aether-api.service aether-web.service
+sudo systemctl start aether-api.service aether-web.service aether-worker.service
 sleep 5
 
 echo "[6/6] Verifying deployment..."
@@ -422,6 +477,18 @@ if systemctl is-active --quiet aether-web.service; then
     echo "✓ Web service running"
 else
     echo "✗ Web service failed"; exit 1
+fi
+
+if systemctl is-active --quiet aether-worker.service; then
+    echo "✓ Worker service running"
+else
+    echo "✗ Worker service failed"; exit 1
+fi
+
+if systemctl is-active --quiet redis-server.service; then
+    echo "✓ Redis running"
+else
+    echo "✗ Redis failed"; exit 1
 fi
 
 echo ""
@@ -440,9 +507,11 @@ echo "=========================================="
 | 2 | pip install | ~30s | Python deps mostly cached |
 | 3 | pnpm install | ~20s | Node deps, incremental updates |
 | 4 | pnpm build | ~60s | Next.js build, can vary |
-| 5 | Service restart | ~5s | Graceful shutdown + startup |
-| 6 | Verification | ~10s | Health checks |
-| **Total** | **Full deploy** | **~2min** | **May vary based on changes** |
+| 5 | Service restart (API, Web, Worker) | ~5s | Graceful shutdown + startup |
+| 6 | Verification (4 services) | ~10s | Health checks + log inspection |
+| **Total** | **Full deploy** | **~2-2.5min** | **May vary based on changes** |
+
+**Note:** Phase 5 now includes aether-worker restart. Async jobs in flight will be automatically retried by the worker after restart.
 
 ---
 
@@ -502,21 +571,22 @@ cd /home/ubuntu/github_repos/aether-job-career-agent/apps/web
 pnpm build
 ```
 
-#### Phase 4: Restart Services
+#### Phase 4: Restart Services (Including Worker)
 
 ```bash
-sudo systemctl stop aether-api.service aether-web.service
+sudo systemctl stop aether-api.service aether-web.service aether-worker.service
 sleep 2
-sudo systemctl start aether-api.service aether-web.service
+sudo systemctl start aether-api.service aether-web.service aether-worker.service
 sleep 5
 ```
 
 #### Phase 5: Verify Rollback
 
 ```bash
-systemctl status aether-api.service aether-web.service
+systemctl status aether-api.service aether-web.service aether-worker.service redis-server.service
 tail -20 /var/log/aether/api.log
 tail -20 /var/log/aether/web.log
+tail -20 /var/log/aether/worker.log
 ```
 
 ### Complete Rollback Recipe
@@ -557,13 +627,13 @@ cd "$WEB_DIR"
 pnpm build
 
 echo "[4/5] Restarting services..."
-sudo systemctl stop aether-api.service aether-web.service
+sudo systemctl stop aether-api.service aether-web.service aether-worker.service
 sleep 2
-sudo systemctl start aether-api.service aether-web.service
+sudo systemctl start aether-api.service aether-web.service aether-worker.service
 sleep 5
 
 echo "[5/5] Verifying rollback..."
-if systemctl is-active --quiet aether-api.service && systemctl is-active --quiet aether-web.service; then
+if systemctl is-active --quiet aether-api.service && systemctl is-active --quiet aether-web.service && systemctl is-active --quiet aether-worker.service && systemctl is-active --quiet redis-server.service; then
     echo "✓ Rollback successful"
     echo "Active commit: $(cd $REPO_DIR && git log --oneline -1)"
 else
@@ -664,6 +734,20 @@ The following environment variables must be defined in .env:
 **Encryption Key:**
 - `AETHER_CREDENTIAL_KEY` (Fernet key for encrypting stored credentials)
 
+**Phase-7 Async & Redis:**
+- `AETHER_REDIS_URL` (Redis connection string with DB 3; format: redis://:password@127.0.0.1:6379/3)
+- `AETHER_REDIS_PASSWORD` (Redis requirepass value, 48 hex chars from openssl rand -hex 24)
+- `AETHER_ASYNC_GENERATION` (Boolean: true to enable async background jobs, false for sync; currently true)
+- `AETHER_LLM_WORKER_BUDGET_SECONDS` (Budget for tailor/general LLM calls; typically 300)
+- `AETHER_LLM_WORKER_COVER_BUDGET_SECONDS` (Budget for cover letter generation; typically 300)
+- `AETHER_LLM_WORKER_PIPELINE_BUDGET_SECONDS` (Budget for pipeline/job recommendations; typically 480)
+- `AETHER_JOB_STALE_SECONDS` (Watchdog timeout for in-flight jobs; default 900)
+
+**Discovery & System:**
+- `AETHER_SYSTEM_RUN_SECRET` (64-char hex secret sent as X-Aether-System-Run header for discovery bypass)
+- `AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS` (Comma-separated domains bypassing paywall; currently aether.local)
+- `CLAUDE_CODE_OAUTH_TOKEN` (Claude Code API token for agent integration)
+
 ### .env File Format
 
 ```
@@ -694,6 +778,60 @@ SPECIAL_CHARS_IN_VALUE=key1=value1&key2=value2
    ```bash
    sudo systemctl restart aether-api.service aether-web.service
    ```
+
+---
+
+## 7.1. Redis Configuration and Async Queue Storage
+
+### Redis Service and Configuration
+
+Redis stores the async job queue (using ARQ — Async Request Queue). The instance is provisioned for Aether only, bound to loopback, and uses logical DB 3 with a password-protected requirepass.
+
+**Service Unit:** `/etc/systemd/system/redis-server.service` (OS-provided)  
+**Configuration File:** `/etc/redis/redis.conf.d/aether.conf` (drop-in, included by main config)  
+**Port:** `6379` (loopback-only, no remote access)  
+**Logical DB:** `3` (isolated from other Redis uses on the VM)  
+**Max Memory:** `256mb` with `noeviction` policy (queue entries are never silently dropped)  
+**Persistence:** RDB snapshots only (appendonly=no); Postgres is the authoritative source
+
+### Verification
+
+**Check Redis is running:**
+```bash
+systemctl status redis-server.service
+```
+
+**Test Redis connectivity (requires password from .env):**
+```bash
+PASS=$(grep "^AETHER_REDIS_PASSWORD=" /home/ubuntu/github_repos/aether-job-career-agent/.env | cut -d= -f2)
+redis-cli -a "$PASS" -n 3 ping
+# Expected output: PONG
+```
+
+**View queued jobs:**
+```bash
+PASS=$(grep "^AETHER_REDIS_PASSWORD=" /home/ubuntu/github_repos/aether-job-career-agent/.env | cut -d= -f2)
+redis-cli -a "$PASS" -n 3 DBSIZE  # Returns number of keys (jobs)
+redis-cli -a "$PASS" -n 3 KEYS '*'  # Lists all job keys
+```
+
+### Restart Redis
+
+Redis does not require restarts during normal deployments. If Redis must be restarted (e.g., after configuration changes):
+
+```bash
+sudo systemctl restart redis-server.service
+# All in-flight async jobs will be retried after Redis comes back online
+```
+
+### Rollback Strategy (Async)
+
+If an async job deployment is problematic:
+
+1. **Instant fallback:** Set `AETHER_ASYNC_GENERATION=false` in `.env` and restart aether-api
+2. **Endpoints revert:** All new requests immediately return sync 200 responses (no longer enqueue)
+3. **In-flight jobs:** Still processed by the worker; can safely coexist with disabled async
+4. **Data safety:** The additive `BackgroundJob` table remains (harmless if async is disabled later)
 
 ---
 
@@ -860,11 +998,14 @@ gh pr close <PR_NUMBER> --repo Victordtesla24/aether-job-career-agent
 
 | Task | Command |
 |------|---------|
-| Check status | `systemctl status aether-{api,web}.service` |
+| Check all services | `systemctl is-active aether-api aether-web aether-worker redis-server` |
+| Check status (detailed) | `systemctl status aether-api.service aether-web.service aether-worker.service redis-server.service` |
 | Restart API | `sudo systemctl restart aether-api.service` |
 | Restart Web | `sudo systemctl restart aether-web.service` |
-| Restart both | `sudo systemctl restart aether-api.service aether-web.service` |
-| View logs | `tail -f /var/log/aether/{api,web,discovery}.log` |
+| Restart Worker | `sudo systemctl restart aether-worker.service` |
+| Restart all | `sudo systemctl restart aether-api.service aether-web.service aether-worker.service` |
+| View logs (all) | `tail -f /var/log/aether/{api,web,worker,discovery}.log` |
+| View worker logs | `tail -f /var/log/aether/worker.log` |
 
 ### Deployment
 
@@ -878,7 +1019,8 @@ gh pr close <PR_NUMBER> --repo Victordtesla24/aether-job-career-agent
 | Task | Command |
 |------|---------|
 | Identify commit | `git log --oneline -10` |
-| Rollback | `git reset --hard <COMMIT> && pnpm install && pnpm --dir apps/web build && sudo systemctl restart aether-api.service aether-web.service` |
+| Rollback (full) | `git reset --hard <COMMIT> && pnpm install && pnpm --dir apps/web build && sudo systemctl restart aether-api.service aether-web.service aether-worker.service` |
+| Disable async (instant) | `sed -i 's/AETHER_ASYNC_GENERATION=.*/AETHER_ASYNC_GENERATION=false/' .env && sudo systemctl restart aether-api.service` |
 
 ---
 
@@ -901,8 +1043,21 @@ gh pr close <PR_NUMBER> --repo Victordtesla24/aether-job-career-agent
 2. Archive: `sudo gzip /var/log/aether/*.log`
 3. Truncate: `sudo truncate -s 0 /var/log/aether/*.log`
 
+### Async jobs not processing
+1. Check worker is running: `systemctl is-active aether-worker.service`
+2. Check Redis is running: `systemctl is-active redis-server.service`
+3. Check worker logs: `tail -100 /var/log/aether/worker.log`
+4. Check AETHER_ASYNC_GENERATION=true in .env: `grep "AETHER_ASYNC_GENERATION" .env`
+5. Restart worker: `sudo systemctl restart aether-worker.service`
+
+### Redis connection errors
+1. Check Redis is running: `systemctl status redis-server.service`
+2. Test Redis: `redis-cli -a <PASSWORD> -n 3 ping` (should output PONG)
+3. Check .env has AETHER_REDIS_URL and AETHER_REDIS_PASSWORD
+4. Restart Redis: `sudo systemctl restart redis-server.service`
+
 ---
 
-**Document Version:** 1.0  
-**Last Verified:** 2026-07-16 by infra-discovery agent  
-**Next Review:** 2026-07-20
+**Document Version:** 2.0 (Phase-7: Async/Redis/Worker)  
+**Last Verified:** 2026-07-17 by infra-discovery agent  
+**Next Review:** 2026-07-24

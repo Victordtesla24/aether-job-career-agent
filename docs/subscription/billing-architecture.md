@@ -2,14 +2,21 @@
 
 **Status:** ✅ **AS-BUILT** — this design was approved (`BILLING-ARCH-APPROVAL.md`, ratified per `ADR-P6-PRICING`)
 and **implemented, tested (mocked Stripe), and deployed to production in Phase 6**. The live payment
-round-trip is **pending operator Stripe keys** (see `docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`); all code,
-schema, quota/spend-cap enforcement, and `/pricing` are live. This document is the architecture reference
-for what shipped — the `§0.1` "green-field / tables ABSENT" schema facts below describe the *pre-build*
-state observed at design time (probe-15) and are annotated inline where the built system now differs.
+round-trip is **pending operator Stripe keys** (see `docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md`, H-01/H-02/H-03,
+which supersedes the Phase-6 checklist for current status); all code, schema, quota/spend-cap enforcement,
+and `/pricing` are live. This document is the architecture reference for what shipped — the `§0.1`
+"green-field / tables ABSENT" schema facts below describe the *pre-build* state observed at design time
+(probe-15) and are annotated inline where the built system now differs.
 **Author:** `billing-arch` sub-agent (Phase 6 Aether run).
 **Date:** 2026-07-16 (design); implemented + deployed same run.
 **Repo:** `/home/ubuntu/github_repos/aether-job-career-agent`.
 **Production:** https://5cb5f0620.abacusai.cloud (health `0.2.0`).
+
+> **[PHASE-7 UPDATE, 2026-07-17]** Two changes since this document's Phase-6 authorship:
+> (1) the runtime-reality claim in the paragraph immediately below (Anthropic OAuth "PROHIBITED") is
+> **corrected** — see the inline annotation there; (2) quota reserve/refund now has an async variant
+> (reserve-at-enqueue instead of reserve-before-run) for background generation jobs — see new **§4.4**.
+> Both are `GAP-P7-DEF-A` / `GAP-P7-ASYNC-001`, `docs/delivery/PHASE7-GAP-ANALYSIS.md`.
 
 ## 0. Epistemic legend & inputs
 
@@ -31,7 +38,7 @@ All non-trivial claims carry a tag. No inference is presented as observation.
 - `uat/reports/evidence/phase6/RESEARCH-REVIEW-fable5.md` — fable-5 rulings 3b/3c/3d (binding).
 - Code inventory: `probe-04-routes.json`, `inventory-backend.json`, `probe-08-agent-runs.json`, `probe-03-llm-mode.json`, `probe-19-webhook.json`, `probe-17-admin-cred.json`, and direct reads of `apps/api/app/routers/agents.py`, `apps/api/app/repositories/user_provider_credential.py`, `apps/api/app/db.py`, `apps/api/app/main.py`, `apps/api/app/rate_limit.py`.
 
-**Runtime reality honored throughout `[VERIFIED-FROM-PROBE probe-03]`:** production LLM provider is **OpenRouter** (`AETHER_LLM_MODE=auto`; reasoning `deepseek/deepseek-v4-pro`, fast `deepseek/deepseek-v4-flash`, structured `qwen/qwen3-coder-next`) — **not** Anthropic. Anthropic third-party subscription OAuth is **PROHIBITED** `[VERIFIED-WITH-SOURCE, RESEARCH-REVIEW-fable5 §3a]`. Therefore a plan's "model tier" maps to the app's **own OpenRouter routing tier**, never to a consumer-OAuth Anthropic token. Per-user spend is tracked in **USD** from `AgentRun.costUsd`.
+**Runtime reality honored throughout `[VERIFIED-FROM-PROBE probe-03]`:** production LLM provider is **OpenRouter** (`AETHER_LLM_MODE=auto`; reasoning `deepseek/deepseek-v4-pro`, fast `deepseek/deepseek-v4-flash`, structured `qwen/qwen3-coder-next`) — **not** Anthropic — for the deepseek/qwen routing tiers a plan's `modelTier` maps to. ~~Anthropic third-party subscription OAuth is PROHIBITED~~ **[PHASE-7 CORRECTION, `[VERIFIED-WITH-SOURCE]` `docs/delivery/PHASE7-GAP-ANALYSIS.md` ADR-P7-01, `GAP-P7-DEF-A`]:** this Phase-6 blanket claim is **superseded for one narrow mechanism**. The Anthropic provider-credential endpoints (`PUT /api/agents/providers/anthropic/credential` and the per-user `PUT /api/agents/user/providers/anthropic/credential`) now accept **two** credential formats, auto-detected from the secret prefix: a Claude Console API key (`sk-ant-api…` → `x-api-key` header) **or** a pasted Claude Code OAuth token (`sk-ant-oat01-…`, the output of running `claude setup-token` on the operator's own machine → `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20`). ADR-P7-01's ruling: pasting one's own pre-generated setup-token is a *different mechanism* from the in-app interactive "Connect with Anthropic" OAuth-consent flow that ADR-P6-OAUTH found ToS-prohibited — **that interactive flow remains removed/unsupported**; only the paste-a-token path is now permitted, and only when the operator supplies their own already-issued token (no in-app consent screen is shown, no client secret is registered). An `oauth_token`-mode credential is stored encrypted and, on save, atomically synced to the repo-root `.env` as `CLAUDE_CODE_OAUTH_TOKEN` (0600 permissions, value never logged, `apps/api/app/services/env_file_writer.py`) so the async worker process can also read it. Quota exhaustion never silently falls through to a different credential (GATE-06, `[VERIFIED-WITH-SOURCE]` `uat/reports/evidence/phase7/step10-cluster1-gates.json`). Per-user spend is still tracked in **USD** from `AgentRun.costUsd` regardless of which Anthropic credential mode (if any) is active — Anthropic calls are a defect-fix/operator capability, not the default production billing/routing path, which remains OpenRouter as described above.
 
 ### 0.1 Schema facts this design is reconciled against `[VERIFIED-FROM-PROBE probe-15]`
 
@@ -435,6 +442,19 @@ Insertion map inside `_record_run` (metered agents only):
 ```
 
 This is distinct from the existing subscription-provider `AgentQuotaBlock` 429 (`_quota_429`, provider-cooldown) — that stays as-is; the plan-quota 429 is the new billing gate.
+
+### 4.4 Async variant — reserve-at-enqueue / refund-on-failure `[PHASE-7 ADDITION, VERIFIED-WITH-SOURCE, GAP-P7-ASYNC-001]`
+
+Behind the `AETHER_ASYNC_GENERATION` flag (default `false`; `true` in production since Phase 7 — `docs/delivery/PHASE7-GAP-ANALYSIS.md`), metered single-agent runs (`tailor`, `coverLetter`) no longer reserve quota *inside* a synchronous HTTP request. Instead:
+
+- **Reserve at enqueue, not at execution.** `POST /api/agents/{tailor,cover-letters}/run` calls the same `UsageQuotaRepository.reserve(user_id)` single-statement atomic reserve as §4.1, but does it **before** the job is handed to the queue, not before the LLM call runs. On success it creates a `BackgroundJob` row (`apps/api/app/repositories/background_jobs.py`) with `quotaReserved=true` and returns **HTTP 202** `{"job_id", "status":"enqueued"}` — the same paywall-then-cooldown-then-reserve ordering as the sync path, so a request that would 429 synchronously still 429s synchronously (never queued to fail later).
+- **Enqueue failure compensates immediately.** If the ARQ push itself fails (queue/Redis unavailable), the reservation is refunded via `quota.refund_run(user_id)`, the `BackgroundJob` and `AgentRun` rows are marked `failed`, and the endpoint raises an honest **503** — never a silent 202 for a job that was never actually queued.
+- **Worker failure refunds after the fact.** The ARQ worker process (`aether-worker.service`, `apps/api/app/workers/tasks.py`) runs the real `_pipeline_core`/agent call outside the request/response cycle. If the worker itself dies or the job raises, the `BackgroundJob` transitions to `failed` and `quota.refund_run(user_id)` fires from the worker side, stamping `BackgroundJob.quotaRefundedAt` — net effect on `UsageQuota.runsUsed` is zero for a job that never produced billable output (`[VERIFIED-WITH-SOURCE]` `uat/reports/evidence/phase7/journey-j3-quota-refund.json`: enqueue reserved → worker `LookupError` → refunded, `runsUsed` net-unchanged).
+- **Stale-job watchdog also refunds.** `GET /api/agents/jobs/{job_id}` (owner-scoped polling) applies a lazy staleness check (`AETHER_JOB_STALE_SECONDS`, default 900s enqueued / 720s processing) — a poll of a job stuck past that window is atomically marked `failed` **and refunded**, so a caller polling a dead worker always reaches a terminal state with correct quota accounting, not an indefinite `processing` with quota silently burned.
+- **Pipeline composite is the one exception.** `_enqueue_pipeline` does **not** reserve at enqueue (its metered footprint is data-dependent across sub-steps); the per-step atomic reserve/refund from §4.1/§4.2 still applies *inside* the worker's `_pipeline_core` once it runs.
+- **Record-spend on success is unchanged** — the worker calls the same `record_spend(user_id, cost_usd)` as §4.2 once the job completes.
+
+Live-verified: 20/20-run soak with 0 HTTP 503s, 0 fixture-fallback matches, and a forced-failure run showing correct net-zero quota (`uat/reports/evidence/phase7/journey-j3-soak-20.json`, `journey-j3-quota-refund.json`). This closes the Phase-6 residual `BACKLOG-P6-02` (~20% honest-503 rate from synchronous generation under the ~100s HTTP edge) — `docs/delivery/EXECUTION-REPORT.md` §10.
 
 ---
 

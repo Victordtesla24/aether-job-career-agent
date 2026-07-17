@@ -6,3 +6,9 @@ The delivery record now lives under `docs/delivery/` alongside the Phase-6 gap l
 (`PHASE6-GAP-ANALYSIS.md`), governance audit (`PHASE6-GOVERNANCE-AUDIT.md`), the
 BLOCKED-ON-HUMAN checklist (`PHASE6-BLOCKED-ON-HUMAN.md`), and the execution summary
 (`PHASE6-EXECUTION-SUMMARY.md`).
+
+**Phase 7 (2026-07-17)** added a dual-mode Anthropic credential (DEFECT-A), a settings-email
+allowlist + persistence fix (DEFECT-B), asynchronous background generation (ARQ/Redis worker),
+and a discovery-cron paywall bypass — see **§10** of `docs/delivery/EXECUTION-REPORT.md` and,
+for the full Phase-7 record, `docs/delivery/PHASE7-GAP-ANALYSIS.md`, `PHASE7-CLAIM-LEDGER.md`,
+`PHASE7-GOVERNANCE-AUDIT.md`, and `PHASE7-BLOCKED-ON-HUMAN.md`.

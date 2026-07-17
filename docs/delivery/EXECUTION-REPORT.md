@@ -226,3 +226,113 @@ Full instructions: `docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md`.
 This §9 was written and re-verified by the `doc-updater` sub-agent against `docs/delivery/phase6-gap-analysis.json`
 and the `uat/reports/evidence/phase6/` artifacts cited inline; it does not itself close GATE-19/20/28 —
 gate closure is the reviewer/QA sub-agent's sole authority, per the no-self-approval rule.
+
+---
+
+## 10. Phase 7 Update (2026-07-17) — Dual-Mode Anthropic Credential / Async Generation / Settings Persistence / Discovery Paywall Bypass
+
+**Prompt:** `aether-subscription-prompt.md` §14–§18 · **Orchestrator:** `claude-fable-5` · **Machine ledger:**
+`docs/delivery/phase7-gap-analysis.json` (10 gaps) · **Evidence root:** `uat/reports/evidence/phase7/` ·
+**Repo HEAD:** `c07e06d` · **Production:** https://5cb5f0620.abacusai.cloud (`{"status":"ok","version":"0.2.0"}`).
+Full detail: `docs/delivery/PHASE7-GAP-ANALYSIS.md`, `PHASE7-CLAIM-LEDGER.md`, `PHASE7-GOVERNANCE-AUDIT.md`,
+`PHASE7-BLOCKED-ON-HUMAN.md` (authored separately; not duplicated here).
+
+### 10.1 Gap ledger — final status (10 gaps, `phase7-gap-analysis.json`)
+
+| Status | Count | Gaps |
+|---|---|---|
+| **VERIFIED-CLOSED** | 9 | `GAP-P7-DEF-A`, `GAP-P7-DEF-B`, `GAP-P7-DEF-B-PERSIST`, `GAP-P7-ASYNC-001`, `GAP-P7-DISCOVERY-001`, `GAP-P7-WEBLOG-001`, `GAP-P7-DIR-001`, `GAP-P7-VERIFY-COVER`, `GAP-P7-FIXTURE-TRACKING` |
+| **IN-PROGRESS** | 1 | `GAP-P7-DOCS-001` (GATE-24) — this documentation pass addresses it; gate/status closure remains the reviewer/QA sub-agent's sole authority (no self-approval), not this `doc-updater` pass |
+
+Full regression at close: backend **676 pytest / 0 failed**, frontend **297 vitest / 0 failed**, tsc/lint/build clean (`phase7-gap-analysis.json` `gate_status.GATE-19`/`GATE-20`) — up from the Phase-6 baseline of 601/293 (growth from Phase-7 TDD, no regressions).
+
+### 10.2 What shipped
+
+- **DEFECT-A — dual-mode Anthropic credential (`GAP-P7-DEF-A`, CRITICAL, GATE-02–06 VERIFIED-CLOSED).**
+  The Anthropic provider-credential endpoints (`PUT /api/agents/providers/anthropic/credential` and the
+  per-user `PUT /api/agents/user/providers/anthropic/credential`) now auto-detect and accept **two**
+  credential formats from the secret prefix: a Claude Console API key (`sk-ant-api03-…` → `x-api-key`
+  header) **or** a pasted Claude Code OAuth token (`sk-ant-oat01-…`, the output of `claude setup-token`
+  run by the operator on their own machine → `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20`;
+  `x-api-key` returns 401 for an oat token, so the header must match the credential type). A mismatched or
+  unrecognized prefix is a 422 naming both accepted formats. An `oauth_token`-mode credential is stored
+  encrypted (never in the clear) and, on save, atomically synced to the repo-root `.env` as
+  `CLAUDE_CODE_OAUTH_TOKEN` (0600 permissions, value never logged — `apps/api/app/services/env_file_writer.py`)
+  so the async worker process can also read it. Quota exhaustion never silently falls through to a
+  different credential (GATE-06). **This is an explicit operator override (`ADR-P7-01`) of the prior
+  Phase-6 stance** (§8.1 above, `ADR-P6-OAUTH`) — but only for this narrower "paste a token you already
+  possess" mechanism; the in-app, interactive "Connect with Anthropic" OAuth-consent flow that ADR-P6-OAUTH
+  found ToS-prohibited **remains removed and unsupported**. Live-verified end-to-end on production: a real
+  `sk-ant-oat01-` token round-tripped through a genuine Anthropic API call (HTTP 200) and a live tailor run
+  recorded `billingAudit.authMode=oauth_token`. Evidence: `uat/reports/evidence/phase7/step10-cluster1-gates.json`,
+  `journey-j1-test-conn-oat.json`, `journey-j1-billing-audit.json`.
+- **DEFECT-B — settings email allowlist + persistence fix (`GAP-P7-DEF-B` + `GAP-P7-DEF-B-PERSIST`,
+  CRITICAL, GATE-07–09 VERIFIED-CLOSED).** The stored seed admin address `admin@aether.local` was failing
+  its own settings-save email validator (HTTP 422 on save). Fixed via `AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`
+  (comma-separated, case-insensitive, default `aether.local`) — an **exact-domain** allowlist (`main.py`
+  `apply_email_domain_allowlist()` + `workspaces.py`'s validator), deliberately **not** a suffix/TLD match:
+  `evil.local` (a different domain sharing only the `.local` label) is still correctly rejected while
+  `aether.local` itself is accepted. QA's first verification pass then discovered a **second, pre-existing,
+  unrelated defect** underneath the fix: `UPDATE "User"` in `apps/api/app/routers/workspaces.py` never
+  included an `email=` assignment, so `PUT /api/workspaces/settings` returned a false-positive HTTP 200
+  while silently discarding any email change (confirmed via direct production-DB read and `git log -p
+  -S'UPDATE "User"'` showing this bug predates Phase 7 entirely). Filed as `GAP-P7-DEF-B-PERSIST` and fixed
+  in a follow-up commit (`4d4cb8b`/`431dfbd`) that adds `email` (and other previously-omitted profile
+  fields) to the UPDATE statement. Re-verified post-fix via a direct production-DB read, not just an HTTP
+  200. Evidence: `uat/reports/evidence/phase7/step10-cluster2-gates.json` (pre-fix FAIL),
+  `journey-j2-persist-aether-local.json` (post-fix PASS).
+- **Async background generation (`GAP-P7-ASYNC-001`, CRITICAL, GATE-11–13 VERIFIED-CLOSED).** Resolves the
+  Phase-6 residual `BACKLOG-P6-02` (~20% honest HTTP 503 rate on tailor/cover-letter generation under the
+  ~100s synchronous HTTP edge, §9.4 above). New `apps/api/app/workers/` package (ARQ task runner), a new
+  additive `BackgroundJob` table (lazy idempotent DDL, ADR-TR-1), and Redis (loopback-only, `requirepass`,
+  logical DB 3) running as `redis-server.service`. `POST /api/agents/{tailor,cover-letters}/run` — and the
+  composite pipeline — now return **HTTP 202** `{"job_id","status":"enqueued"}` when
+  `AETHER_ASYNC_GENERATION=true`, with the caller polling `GET /api/agents/jobs/{job_id}` for terminal
+  state; when the flag is off the legacy synchronous 200 body is unchanged. Quota is reserved atomically
+  **at enqueue** (not at execution) and refunded on any enqueue failure, worker failure, or stale-job
+  watchdog trip (`AETHER_JOB_STALE_SECONDS`) — see `docs/subscription/billing-architecture.md` §4.4. Runs
+  under a new systemd unit `aether-worker.service` (`arq app.workers.settings.WorkerSettings`,
+  `Requires=redis-server.service`, logs to `/var/log/aether/worker.log`). Live-verified: a 20-run soak with
+  **0 HTTP 503s, 0 fixture-fallback matches, 20/20 completed**, plus a forced-failure run proving atomic
+  refund. `AETHER_ASYNC_GENERATION` is now **left permanently `true` in production** per the soak's own
+  decision rule. Evidence: `uat/reports/evidence/phase7/journey-j3-soak-20.json`, `journey-j3-poll.json`,
+  `journey-j3-quota-refund.json`.
+- **Discovery paywall bypass for scheduled sourcing (`GAP-P7-DISCOVERY-001`, HIGH, GATE-10
+  VERIFIED-CLOSED).** The `aether-discovery.timer` cron was failing (exit 22) because scheduled sourcing
+  runs hit the same subscription paywall as an interactive user. Fixed via a new `X-Aether-System-Run`
+  header, checked against `AETHER_SYSTEM_RUN_SECRET` (`ADR-P7-05`), that bypasses the paywall **only** for
+  the platform's own scheduled sourcing (`scout`, `fitScorer` — the deterministic, zero-LLM-token agents),
+  never for a metered LLM agent, and never for an unpaid interactive user (a valid secret does not exempt
+  `tailor`/`coverLetter`/`pipeline` from the paywall). Live-verified via a directly-observed **unattended**
+  native timer fire (not QA-triggered) completing end-to-end with the header present, zero 402s, zero
+  exit-22. Evidence: `uat/reports/evidence/phase7/step10-cluster2-gates.json` (`DISCOVERY_DURABILITY`).
+- **Directory consolidation (`GAP-P7-DIR-001`, MEDIUM, GATE-23 VERIFIED-CLOSED, `ADR-P7-06`).** 23
+  duplicate PDF/DOCX exports of canonical `.md` docs removed (commit `c07e06d`); no `.md` content changed.
+
+### 10.3 Human-gated items still open (unchanged carry-overs from Phase 6 — not new to Phase 7)
+
+1. Stripe test-mode secret key + webhook signing secret + 6 Price IDs + ABN/Stripe Tax — H-01/H-02/H-03.
+2. `AETHER_ADMIN_EMAIL` + bcrypt `AETHER_ADMIN_PASSWORD_HASH` in production `.env` — H-04.
+3. A second real Gmail account's OAuth consent — H-05.
+4. Adzuna AU API credentials — H-06, **optional**; the sourcing floor (GATE-10) is already met without it.
+5. Operator's own Claude Code `sk-ant-oat01-` token — H-07, **SATISFIED** (already present and live-verified;
+   no further action needed).
+
+None of DEF-A, DEF-B/DEF-B-PERSIST, ASYNC-001, or DISCOVERY-001 are human-gated — all four were
+VERIFIED-CLOSED on live production evidence. Full detail: `docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md`.
+
+### 10.4 New Phase-7 environment variables
+
+`CLAUDE_CODE_OAUTH_TOKEN`, `AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS`, `AETHER_REDIS_URL`,
+`AETHER_REDIS_PASSWORD`, `AETHER_ASYNC_GENERATION`, `AETHER_LLM_WORKER_BUDGET_SECONDS`,
+`AETHER_LLM_WORKER_COVER_BUDGET_SECONDS`, `AETHER_LLM_WORKER_PIPELINE_BUDGET_SECONDS`,
+`AETHER_SYSTEM_RUN_SECRET`, `AETHER_JOB_STALE_SECONDS` — all present in the production `.env` (names
+confirmed; values never read/logged by this doc-updater pass). See `README.md` and
+`docs/subscription/billing-architecture.md` §4.4 for usage.
+
+This §10 was written by the `doc-updater` sub-agent (STEP-11, GATE-24, `GAP-P7-DOCS-001`) against
+`docs/delivery/PHASE7-GAP-ANALYSIS.md`, `PHASE7-BLOCKED-ON-HUMAN.md`, `PHASE7-CLAIM-LEDGER.md`, direct repo/
+source reads, and the `uat/reports/evidence/phase7/` artifacts cited inline. It does not itself close
+GATE-24 — gate closure is the reviewer/QA sub-agent's sole authority, per the no-self-approval rule.
+`docs/delivery/phase7-gap-analysis.json` (machine ledger, orchestrator-owned) was read for the facts above
+but not modified by this pass.
