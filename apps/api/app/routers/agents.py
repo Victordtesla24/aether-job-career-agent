@@ -8,11 +8,13 @@ did and why. High-risk outputs (tailored resumes, cover letters) surface an
 from __future__ import annotations
 
 import json
+import os
+import secrets
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
@@ -485,7 +487,55 @@ def _plan_quota_429(code: str, quota: dict[str, Any] | None) -> HTTPException:
     )
 
 
-def _require_active_subscription(user_id: str) -> None:
+#: Header carrying the shared secret for the scoped SYSTEM-RUN exemption
+#: (ADR-P7-05 / GAP-P7-DISCOVERY-001).
+SYSTEM_RUN_HEADER = "X-Aether-System-Run"
+
+#: The ONLY agent keys the SYSTEM-RUN exemption may ever bypass the
+#: subscription gate for — exactly the two calls the platform's own
+#: discovery cron makes (``scripts/discovery_cron.sh``: scout, then
+#: fit-scorer). Enforced here (not just by which routes read the header) so
+#: the exemption can never be widened by wiring the header into another
+#: route later without also touching this allowlist.
+_SYSTEM_RUN_EXEMPT_AGENTS = frozenset({"scout", "fitScorer"})
+
+
+def _system_run_secret() -> str | None:
+    """The configured system-run shared secret, or ``None`` when unset/empty.
+
+    Read fresh from the environment on every call (not cached at import
+    time) so the feature can be enabled/disabled and tests can monkeypatch it
+    per-case, same convention as ``subscription_gate_enabled``.
+    """
+    secret = os.environ.get("AETHER_SYSTEM_RUN_SECRET", "")
+    return secret or None
+
+
+def _is_system_run(request: Request | None) -> bool:
+    """True iff ``request`` carries a valid ``X-Aether-System-Run`` secret.
+
+    ADR-P7-05 (GAP-P7-DISCOVERY-001): a scoped exemption for the platform's
+    OWN scheduled discovery automation, which necessarily runs as a real user
+    account and would otherwise be walled by GAP-P6-PAYWALL exactly like any
+    other unpaid user. Disabled entirely when ``AETHER_SYSTEM_RUN_SECRET`` is
+    unset/empty — the header is then IGNORED, never a bypass-by-omission.
+    Constant-time compare (``secrets.compare_digest``) to avoid a timing
+    side-channel on the shared secret.
+    """
+    if request is None:
+        return False
+    expected = _system_run_secret()
+    if expected is None:
+        return False
+    provided = request.headers.get(SYSTEM_RUN_HEADER)
+    if not provided:
+        return False
+    return secrets.compare_digest(provided, expected)
+
+
+def _require_active_subscription(
+    user_id: str, *, agent_name: str, system_run: bool = False
+) -> None:
     """Entitlement gate (GAP-P6-PAYWALL): Aether is subscription-gated.
 
     Runs BEFORE any billing/quota work in ``_record_run`` so a user without an
@@ -494,8 +544,14 @@ def _require_active_subscription(user_id: str) -> None:
     honest HTTP 402 ``subscription_required`` pointing at ``/pricing``; it never
     fabricates access. Gated behind ``AETHER_REQUIRE_PAID_SUBSCRIPTION`` (default
     ON) — when the operator sets it 'false' the freemium Free-tier path applies.
+
+    ``system_run`` (ADR-P7-05) skips ONLY this check, and ONLY for
+    ``agent_name`` in ``_SYSTEM_RUN_EXEMPT_AGENTS`` — every other guard below
+    this call (quota block, plan quota reserve, spend cap) is unaffected.
     """
     if not subscription_gate_enabled():
+        return
+    if system_run and agent_name in _SYSTEM_RUN_EXEMPT_AGENTS:
         return
     if SubscriptionRepository().has_active_paid_subscription(user_id):
         return
@@ -513,7 +569,12 @@ def _require_active_subscription(user_id: str) -> None:
 
 
 def _record_run(
-    user_id: str, agent_name: str, params: dict[str, Any], fn: Callable[[], Any]
+    user_id: str,
+    agent_name: str,
+    params: dict[str, Any],
+    fn: Callable[[], Any],
+    *,
+    system_run: bool = False,
 ) -> dict[str, Any]:
     """Execute ``fn`` under an AgentRun audit record.
 
@@ -522,12 +583,21 @@ def _record_run(
     recorded to ``AgentRun.billingAuditJson`` (GAP-D3), and a prior
     subscription-quota block short-circuits the run with an honest 429 (never a
     silent reroute to another payer).
+
+    ``system_run`` (ADR-P7-05 / GAP-P7-DISCOVERY-001): True only when the
+    caller verified a valid ``X-Aether-System-Run`` secret (see
+    ``_is_system_run``); marks the run's billing audit ``systemRun: true`` so
+    the exemption is honestly traceable, and is otherwise inert here — the
+    actual gate skip happens (scoped to ``agent_name``) in
+    ``_require_active_subscription``.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
-    _require_active_subscription(user_id)
+    _require_active_subscription(user_id, agent_name=agent_name, system_run=system_run)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
+    if system_run:
+        audit["systemRun"] = True
     # Quota cooldown check BEFORE starting a run row — a blocked user gets a
     # clean 429 with no wasted audit record.
     if provider is not None:
@@ -684,7 +754,14 @@ def _user_search_defaults(user_id: str) -> tuple[str, str]:
     return query, location
 
 
-def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]:
+def _dispatch(
+    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False
+) -> dict[str, Any]:
+    """``system_run`` (ADR-P7-05) is only ever honored for the discovery
+    pipeline's own agent keys below (scout, fitScorer) — every other branch
+    ignores it, so a caller cannot widen the exemption just by threading the
+    flag through to a different agent name (``_require_active_subscription``
+    enforces the same allowlist independently, as defense in depth)."""
     if name == "scout":
         default_query, default_location = _user_search_defaults(user_id)
         raw_query = params.get("query") or default_query
@@ -695,7 +772,9 @@ def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]
         # title starves discovery volume regardless of where it came from.
         query = build_scout_query(raw_query)
         return _record_run(
-            user_id, "scout", params, lambda: ScoutAgent().run(user_id, query, location)
+            user_id, "scout", params,
+            lambda: ScoutAgent().run(user_id, query, location),
+            system_run=system_run,
         )
     if name in ("fitScorer", "fit-scorer"):
         from app.agents.fit_scorer import FitScorerAgent
@@ -703,6 +782,7 @@ def _dispatch(user_id: str, name: str, params: dict[str, Any]) -> dict[str, Any]
         return _record_run(
             user_id, "fitScorer", params,
             lambda: FitScorerAgent().run(user_id, rescore=bool(params.get("rescore"))),
+            system_run=system_run,
         )
     if name == "tailor":
         from app.agents.tailor_agent import TailoringAgent
@@ -796,9 +876,14 @@ class ScoutRunRequest(BaseModel):
 
 
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
-def run_scout(body: ScoutRunRequest, current_user: CurrentUser) -> dict[str, Any]:
+def run_scout(
+    body: ScoutRunRequest, current_user: CurrentUser, request: Request
+) -> dict[str, Any]:
     """Kick off a scout discovery run for the authenticated user."""
-    output = _dispatch(current_user["id"], "scout", body.model_dump())
+    output = _dispatch(
+        current_user["id"], "scout", body.model_dump(),
+        system_run=_is_system_run(request),
+    )
     return {
         "status": "accepted",
         "persisted": output["persisted"],
@@ -820,9 +905,14 @@ def scout_sources(current_user: CurrentUser) -> list[dict[str, Any]]:
 
 
 @router.post("/fit-scorer/run")
-def run_fit_scorer(current_user: CurrentUser, rescore: bool = False) -> dict[str, Any]:
+def run_fit_scorer(
+    current_user: CurrentUser, request: Request, rescore: bool = False
+) -> dict[str, Any]:
     """Score every unscored job for the authenticated user (P2-S04)."""
-    output = _dispatch(current_user["id"], "fitScorer", {"rescore": rescore})
+    output = _dispatch(
+        current_user["id"], "fitScorer", {"rescore": rescore},
+        system_run=_is_system_run(request),
+    )
     return {"status": "completed", "scored": output["scored"], "errors": output["errors"]}
 
 
