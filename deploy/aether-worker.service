@@ -1,0 +1,21 @@
+# Aether ARQ worker (GAP-P7-ASYNC-001, blueprint §5).
+# Install: sudo cp deploy/aether-worker.service /etc/systemd/system/aether-worker.service
+#          sudo systemctl daemon-reload && sudo systemctl enable --now aether-worker
+# Logs:    /var/log/aether/worker.log   (matches aether-api file-log convention)
+[Unit]
+Description=Aether ARQ Worker (async background generation)
+After=network-online.target redis-server.service aether-api.service
+Wants=network-online.target
+Requires=redis-server.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent/apps/api
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/start-worker.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/aether/worker.log
+StandardError=append:/var/log/aether/worker.log
+
+[Install]
+WantedBy=multi-user.target
