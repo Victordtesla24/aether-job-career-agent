@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { apiRequest, type RequestOptions } from "./client";
+import { resolveRun } from "./agents";
 
 export const CoverLetterSchema = z.object({
   id: z.string(),
@@ -30,9 +31,12 @@ export async function runCoverLetterAgent(
   jobId: string,
   options: RequestOptions = {},
 ): Promise<CoverLetterRunResult> {
-  return apiRequest<CoverLetterRunResult>("/agents/cover-letter/run", {
+  const body = await apiRequest<CoverLetterRunResult>("/agents/cover-letter/run", {
     ...options,
     method: "POST",
     body: { job_id: jobId },
   });
+  // Dual-shape (GAP-P7-ASYNC-001 §6): poll a 202 enqueue envelope to completion;
+  // a legacy synchronous body passes through unchanged.
+  return resolveRun(body, options);
 }

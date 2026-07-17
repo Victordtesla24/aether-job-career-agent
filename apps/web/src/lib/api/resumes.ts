@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { ApiError, apiBaseUrl, apiRequest, clearToken, getToken, type RequestOptions } from "./client";
+import { resolveRun } from "./agents";
 
 export const ResumeSchema = z.object({
   id: z.string().min(1),
@@ -105,9 +106,12 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
 }
 
 export async function runTailorAgent(jobId: string, options: RequestOptions = {}): Promise<TailorRunResult> {
-  return apiRequest<TailorRunResult>("/agents/tailor/run", {
+  const body = await apiRequest<TailorRunResult>("/agents/tailor/run", {
     ...options,
     method: "POST",
     body: { job_id: jobId },
   });
+  // Dual-shape (GAP-P7-ASYNC-001 §6): unwrap a 202 enqueue envelope by polling
+  // to completion; a legacy synchronous body passes through unchanged.
+  return resolveRun(body, options);
 }

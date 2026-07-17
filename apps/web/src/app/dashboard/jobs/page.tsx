@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
+import { resolveRun } from "../../../lib/api/agents";
 import { fetchScoutSources } from "../../../lib/api/jobs";
 import type { Job, ScoutSourceStatus } from "../../../lib/api/jobs";
 import MetricTooltip from "../../../components/MetricTooltip";
@@ -384,10 +385,13 @@ export default function JobsPage() {
   const startTailoring = async (jobId: string) => {
     setApplyStep((p) => ({ ...p, [jobId]: "tailoring" }));
     try {
-      const out = await apiRequest<{ resume_id: string; changes: number; rejected: string[] }>(
+      const raw = await apiRequest<{ resume_id: string; changes: number; rejected: string[] }>(
         "/agents/tailor/run",
         { method: "POST", body: { job_id: jobId } },
       );
+      // Dual-shape (GAP-P7-ASYNC-001 §6): unwrap a 202 enqueue envelope by
+      // polling; a legacy synchronous body passes through unchanged.
+      const out = await resolveRun(raw);
       setTailorResults((p) => ({ ...p, [jobId]: out }));
       setApplyStep((p) => ({ ...p, [jobId]: "tailored" }));
     } catch (e) {
