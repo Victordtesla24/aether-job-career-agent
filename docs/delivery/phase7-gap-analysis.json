@@ -497,7 +497,7 @@
     "GATE-15": "VERIFIED-CLOSED (step10-gate15-claims: 21 claims, 0 UNRESOLVED refuted \u2014 CL-17\u2192discovery-gap fixed, CL-20 dismissed; 8 partial all dispositioned)",
     "GATE-18": "VERIFIED-CLOSED (step10-gate18-nonprod: 0 suspicious on c07e06d; worker code clean no fixture path; replay-guard wired main.py:91)",
     "GATE-21": "VERIFIED-CLOSED (step10-gate21-e2e: route-sweep 20/20 fresh + gap_p7_def_b 2/2 under reverted temp grant; 11 local-only specs N/A-for-prod)",
-    "GATE-22": "VERIFIED-CLOSED-PENDING-PUSH (local=main only; origin=refs/heads/main only; 0 open PRs; 5 fix branches+worktrees deleted; harness worktree-agent-* branches deleted. Re-confirm origin=main-only after STEP-13 push.)",
+    "GATE-22": "VERIFIED-CLOSED (post-push confirmed: origin=refs/heads/main only, HEAD==origin/main @3d6f8ca, 0 open PRs)",
     "GATE-24": "VERIFIED-CLOSED (README/EXECUTION-REPORT/billing-architecture/privacy-policy refreshed + DEPLOYMENT-RUNBOOK v2.0 async/Redis/worker/discovery/11-envvars; OAuth-prohibited stance corrected per ADR-P7-01)",
     "GATE-25": "VERIFIED-CLOSED (docs/delivery/EXECUTION-REPORT-PHASE7.md written with 27-gate matrix, claim verdicts, governance audit, BLOCKED-ON-HUMAN, residuals, final health)"
   },
@@ -542,6 +542,8 @@
     "async_flag": "ON",
     "suites": "676 pytest/0 + 297 vitest/0",
     "gates": "27/27 core VERIFIED-CLOSED; 3 human-gated conditionally-closed",
-    "gaps": "10/10 VERIFIED-CLOSED + 4 pre-seeds rejected on evidence"
+    "gaps": "10/10 VERIFIED-CLOSED + 4 pre-seeds rejected on evidence",
+    "origin_head": "3d6f8ca (pushed 673810f\u21923d6f8ca)",
+    "run_status": "COMPLETE \u2014 27/27 core gates VERIFIED-CLOSED"
   }
 }
