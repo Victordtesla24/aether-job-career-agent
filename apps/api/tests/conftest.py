@@ -73,6 +73,167 @@ os.environ["AETHER_LLM_MODE"] = "replay"
 os.environ["AETHER_REQUIRE_PAID_SUBSCRIPTION"] = "false"
 
 # ---------------------------------------------------------------------------
+# MV-system-003 — fail-closed guard against truncating the PRODUCTION schema.
+#
+# INCIDENT (2026-07-18, docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md):
+# ``DATABASE_URL`` and ``DATABASE_URL_TEST`` point at the SAME Postgres
+# host+database and differ ONLY by a ``?schema=`` query param
+# (``aether`` vs. ``aether_test``). psycopg2 does not understand Prisma's
+# ``schema=`` param at all — it only honours ``search_path`` via the
+# connection's ``options=``. ``_truncate_tables()`` used to open its
+# connection via ``app.db.get_connection()``, which derives its
+# ``search_path`` from whatever ``DATABASE_URL`` happens to be in the
+# process environment *at connection time*. If anything causes that to be
+# the production DSN (e.g. a deploy script that sources the repo-root
+# ``.env`` into the pytest process) the swap at the top of this file never
+# ran, and the ``TRUNCATE ... CASCADE`` below lands on the production
+# ``aether`` schema.
+#
+# The fix below is defense-in-depth and does not rely on the swap above at
+# all:
+#   1. The truncation connection is built ONLY from ``DATABASE_URL_TEST``,
+#      parsed independently, with ``search_path`` pinned via ``options=``
+#      (mirrors ``app/db.py``'s own Prisma-URL translation). It can
+#      therefore never resolve to any schema other than the one named in
+#      ``DATABASE_URL_TEST``.
+#   2. Before truncating (and once, session-wide, before any fixture runs
+#      at all), a LIVE ``SELECT current_schema()`` against that exact
+#      connection is compared against the required ``aether_test`` name.
+#      Anything else — including a legitimate-looking connection that
+#      somehow still resolves to ``aether`` — aborts the whole session
+#      (``pytest.exit(..., returncode=2)``) before any destructive SQL runs.
+#   3. An explicit escape hatch, ``AETHER_ALLOW_PROD_TRUNCATE=1``, lets a
+#      developer consciously override the guard (e.g. a differently-named
+#      test schema). It must NEVER be set in CI/deploy — see
+#      docs/delivery/DEPLOYMENT-RUNBOOK.md.
+# ---------------------------------------------------------------------------
+
+
+class ProdTruncationGuardError(RuntimeError):
+    """Raised when the destructive test-truncation path would not be
+    confined to the isolated ``aether_test`` schema. Fail-closed: this is
+    raised (and the pytest session aborted) whenever safety cannot be
+    POSITIVELY proven, not only when it is positively disproven.
+    """
+
+
+#: The only schema name ``_truncate_tables`` is ever allowed to target.
+_REQUIRED_TEST_SCHEMA = "aether_test"
+
+#: Explicit, never-in-CI escape hatch (see module docstring above).
+_ALLOW_PROD_TRUNCATE_ENV = "AETHER_ALLOW_PROD_TRUNCATE"
+
+
+def _resolve_truncation_dsn() -> tuple[str, str, str]:
+    """Compute the exact ``(dsn, options, schema)`` the truncation
+    connection will use, derived ONLY from ``DATABASE_URL_TEST`` — never
+    from ``DATABASE_URL`` — so this pin holds even if the module-level swap
+    above never ran (``DATABASE_URL_TEST`` unset, or something imported
+    ``app.db`` before this module).
+
+    Raises :class:`ProdTruncationGuardError` if ``DATABASE_URL_TEST`` is
+    missing or carries no ``schema=`` param: an un-derivable target is
+    treated as unsafe, not defaulted.
+    """
+    test_url = os.environ.get("DATABASE_URL_TEST") or _root_env.get("DATABASE_URL_TEST")
+    if not test_url:
+        raise ProdTruncationGuardError(
+            "DATABASE_URL_TEST is not set; refusing to run destructive test "
+            "fixtures with no verifiable test-schema target "
+            "(see docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md)."
+        )
+
+    from app.db import _translate_prisma_url
+
+    dsn, schema = _translate_prisma_url(test_url)
+    if not schema:
+        raise ProdTruncationGuardError(
+            "DATABASE_URL_TEST has no '?schema=' query param; refusing to "
+            "run destructive test fixtures with no verifiable test-schema "
+            "target (see docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md)."
+        )
+    return dsn, f"-csearch_path={schema}", schema
+
+
+def _assert_schema_is_safe_test_schema(
+    resolved_schema: str | None, *, allow_override: bool = False
+) -> None:
+    """Pure guard logic — no DB I/O, no filesystem, no environment reads.
+
+    Raises :class:`ProdTruncationGuardError` unless ``resolved_schema`` is
+    exactly ``"aether_test"``. This is the function the MV-system-003
+    regression test exercises directly with synthetic values (including a
+    simulated ``"aether"`` production resolution) so the guard's decision
+    logic is proven without ever opening a real connection.
+    """
+    if allow_override:
+        return
+    if resolved_schema != _REQUIRED_TEST_SCHEMA:
+        raise ProdTruncationGuardError(
+            "REFUSING TO RUN: test truncation would target schema "
+            f"{resolved_schema!r}, not {_REQUIRED_TEST_SCHEMA!r}. "
+            "See docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md. Set "
+            f"{_ALLOW_PROD_TRUNCATE_ENV}=1 to consciously override "
+            "(NEVER in CI/deploy)."
+        )
+
+
+def _live_resolved_schema(dsn: str, options: str) -> str | None:
+    """Open a short-lived connection with the given pinned ``options`` and
+    return what Postgres itself reports via ``SELECT current_schema()``.
+
+    This is the ONLY place that performs real DB I/O for the guard; kept
+    separate from :func:`_assert_schema_is_safe_test_schema` so the decision
+    logic stays unit-testable without a network call.
+    """
+    import psycopg2
+
+    conn = psycopg2.connect(dsn, options=options)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT current_schema()")
+            row = cur.fetchone()
+            return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def _run_prod_truncate_guard() -> None:
+    """Session-start guard: resolve the truncation target and verify (live)
+    that it is the isolated ``aether_test`` schema, aborting the pytest
+    session otherwise. Fails closed — any error resolving the DSN,
+    connecting, or querying is treated as "not proven safe".
+    """
+    allow_override = os.environ.get(_ALLOW_PROD_TRUNCATE_ENV) == "1"
+    if allow_override:
+        return
+    try:
+        dsn, options, _schema_from_url = _resolve_truncation_dsn()
+        resolved = _live_resolved_schema(dsn, options)
+    except ProdTruncationGuardError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - fail closed on ANY error
+        raise ProdTruncationGuardError(
+            "REFUSING TO RUN: could not verify the test-truncation target "
+            f"is the isolated 'aether_test' schema ({exc!r}). Failing "
+            "closed per docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md."
+        ) from exc
+    _assert_schema_is_safe_test_schema(resolved, allow_override=allow_override)
+
+
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
+    """Runs once, before collection and before any fixture executes. Aborts
+    the ENTIRE pytest session (exit code 2) if the truncation guard cannot
+    prove the destructive fixtures are confined to ``aether_test``.
+    MV-system-003 (BLOCKER) — see docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md.
+    """
+    try:
+        _run_prod_truncate_guard()
+    except ProdTruncationGuardError as exc:
+        pytest.exit(f"REFUSING TO RUN: {exc}", returncode=2)
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -99,10 +260,28 @@ _TABLES_TO_CLEAN = (
 
 
 def _truncate_tables() -> None:
-    from app.db import get_connection
+    """Truncate the suite's tables — ONLY ever on the pinned ``aether_test``
+    connection built by :func:`_resolve_truncation_dsn`.
 
-    with get_connection() as conn:
+    Deliberately does NOT use ``app.db.get_connection()`` (which derives its
+    search_path from whatever ``DATABASE_URL`` is currently in the process
+    environment): this connection's target is derived exclusively from
+    ``DATABASE_URL_TEST`` and re-verified live before every truncation, so it
+    cannot be redirected to production by an environment mistake. See the
+    MV-system-003 guard block above and
+    docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md.
+    """
+    import psycopg2
+
+    dsn, options, _schema_from_url = _resolve_truncation_dsn()
+    allow_override = os.environ.get(_ALLOW_PROD_TRUNCATE_ENV) == "1"
+    conn = psycopg2.connect(dsn, options=options)
+    try:
         with conn.cursor() as cur:
+            cur.execute("SELECT current_schema()")
+            resolved = cur.fetchone()[0]
+            _assert_schema_is_safe_test_schema(resolved, allow_override=allow_override)
+
             # Truncate only tables that exist (ignore missing ones).
             # This avoids errors with lazily-created tables.
             cur.execute(
@@ -118,6 +297,8 @@ def _truncate_tables() -> None:
             if existing:
                 cur.execute(f"TRUNCATE TABLE {', '.join(existing)} CASCADE")
         conn.commit()
+    finally:
+        conn.close()
 
 
 @pytest.fixture()
