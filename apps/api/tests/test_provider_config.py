@@ -398,3 +398,54 @@ class TestCredentialEndpoints:
             json={"authMode": "api_key", "secret": "x"},
             headers=auth_headers,
         ).status_code == 404
+
+    def test_expired_credential_is_not_shown_connected(
+        self, client, auth_headers, monkeypatch, _clean_provider_credentials
+    ):
+        # MV-agents-004: a stored credential ROW EXISTING is not proof it
+        # still works — only a genuine last verify result is. Simulate an
+        # expired/revoked Anthropic credential the exact way the real
+        # POST /providers/{p}/verify round-trip records a failure
+        # (ProviderCredentialRepository.mark_verified(provider, "failed")),
+        # then confirm the providers panel demotes it off the green
+        # "Connected" badge instead of showing a false-positive connection.
+        monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
+        client.put(
+            "/agents/providers/anthropic/credential",
+            json={"authMode": "api_key", "secret": "sk-ant-api-EXPIREDvalue1234"},
+            headers=auth_headers,
+        )
+        from app.repositories.provider_credential import ProviderCredentialRepository
+
+        ProviderCredentialRepository().mark_verified("anthropic", "failed")
+
+        providers = client.get("/agents/providers", headers=auth_headers)
+        assert providers.status_code == 200, providers.text
+        anthropic = next(p for p in providers.json() if p["id"] == "anthropic")
+        assert anthropic["lastVerifyStatus"] == "failed"
+        assert anthropic["status"] != "connected"
+        assert anthropic["status"] == "warning"
+        assert "failed" in anthropic["detail"]
+        # Still honestly sourced from the DB — only the badge is demoted.
+        assert anthropic["source"] == "database"
+
+    def test_credential_with_ok_last_verify_still_shown_connected(
+        self, client, auth_headers, monkeypatch, _clean_provider_credentials
+    ):
+        # A credential that genuinely passed its last verify keeps the
+        # legitimate "Connected" badge — the fix must not blanket-demote
+        # every DB-backed credential, only ones with a known failure.
+        monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
+        client.put(
+            "/agents/providers/anthropic/credential",
+            json={"authMode": "api_key", "secret": "sk-ant-api-VALIDvalue1234"},
+            headers=auth_headers,
+        )
+        from app.repositories.provider_credential import ProviderCredentialRepository
+
+        ProviderCredentialRepository().mark_verified("anthropic", "ok")
+
+        providers = client.get("/agents/providers", headers=auth_headers)
+        anthropic = next(p for p in providers.json() if p["id"] == "anthropic")
+        assert anthropic["lastVerifyStatus"] == "ok"
+        assert anthropic["status"] == "connected"

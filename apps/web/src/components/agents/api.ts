@@ -89,12 +89,19 @@ export type AgentStats = z.infer<typeof StatsSchema>;
 export const TestRunSchema = z.object({
   agent_key: z.string(),
   name: z.string(),
+  // MV-agents-003: the backend never returns a raw null `model` (it falls
+  // back to the literal "deterministic" for non-LLM/planned agents, the same
+  // fallback GET /agents/catalog applies), so this stays non-nullable. But
+  // the cost/token ESTIMATE (no per-token pricing to estimate for a
+  // deterministic agent) and the "actual" figures (null until the agent has
+  // completed at least one real run) are honestly nullable — requiring them
+  // non-null is what produced the raw Zod parse error for 18/22 agents.
   model: z.string(),
-  estTokens: z.number(),
-  estCost: z.number(),
-  actualCost: z.number(),
-  actualTokens: z.number(),
-  responseSeconds: z.number(),
+  estTokens: z.number().nullable(),
+  estCost: z.number().nullable(),
+  actualCost: z.number().nullable(),
+  actualTokens: z.number().nullable(),
+  responseSeconds: z.number().nullable(),
   creditsCharged: z.number(),
 });
 export type TestRunResult = z.infer<typeof TestRunSchema>;

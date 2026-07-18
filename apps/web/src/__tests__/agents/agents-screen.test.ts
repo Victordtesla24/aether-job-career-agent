@@ -257,4 +257,25 @@ describe("API schemas", () => {
       }).creditsCharged,
     ).toBe(0);
   });
+
+  it("MV-agents-003: accepts the honest null shape for a deterministic/planned agent's test-run (never throws)", () => {
+    // The backend never returns a raw null `model` (it falls back to
+    // "deterministic"), but genuinely has no cost/token ESTIMATE or "actual"
+    // run figures for a non-LLM/never-run agent — those fields must parse as
+    // null, not throw a raw Zod error, which was the exact reported defect.
+    const parsed = TestRunSchema.parse({
+      agent_key: "jobDiscovery",
+      name: "Job Discovery Agent",
+      model: "deterministic",
+      estTokens: null,
+      estCost: null,
+      actualCost: null,
+      actualTokens: null,
+      responseSeconds: null,
+      creditsCharged: 0,
+    });
+    expect(parsed.model).toBe("deterministic");
+    expect(parsed.estTokens).toBeNull();
+    expect(parsed.actualCost).toBeNull();
+  });
 });

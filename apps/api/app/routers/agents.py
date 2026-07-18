@@ -1701,8 +1701,14 @@ def _build_provider_entry(
 
     ``source`` is the truth about where a live credential would come from
     (``database`` / ``environment`` / ``none``); a provider is never shown
-    ``connected`` without a real credential (D-0020). A persisted per-user
-    override may only DOWNGRADE a connected provider or pick a preferred model.
+    ``connected`` without a real credential (D-0020). A stored credential
+    whose most recent real verify round-trip came back ``failed`` (expired
+    OAuth token, revoked API key, ...) is demoted to ``warning`` — the SAME
+    status the frontend already renders as "Re-authenticate" — rather than
+    the green "Connected" badge a genuinely working credential gets
+    (MV-agents-004). This reads the STORED ``lastVerifyStatus`` only; it never
+    triggers a live re-verify on render. A persisted per-user override may
+    only DOWNGRADE a connected/warning provider or pick a preferred model.
     """
     provider_id = seed["id"]
     env_status, env_model, env_detail, env_models = _provider_env_state(provider_id)
@@ -1712,12 +1718,15 @@ def _build_provider_entry(
     db = _provider_db_masked(provider_id) if credential_vault.key_present() else None
     if db:
         source = "database"
-        status = "connected"
         auth_mode = db.get("authMode")
         secret_hint = db.get("secretHint")
         base_url = db.get("baseUrl")
         last_verified_at = _iso_or_none(db.get("lastVerifiedAt"))
         last_verify_status = db.get("lastVerifyStatus")
+        # Honest demotion: a credential row existing is NOT proof it still
+        # works — only a genuine verify success is. A known-failed last
+        # verify must never show the same "Connected" badge as a healthy one.
+        status = "warning" if last_verify_status == "failed" else "connected"
         detail = f"Credential stored in the encrypted vault ({secret_hint})"
         if last_verify_status:
             detail += f" · last verify: {last_verify_status}"
@@ -1743,7 +1752,10 @@ def _build_provider_entry(
         last_verified_at = None
         last_verify_status = None
         detail = env_detail
-    if override.get("status") in ("warning", "unconfigured") and status == "connected":
+    if override.get("status") in ("warning", "unconfigured") and status in (
+        "connected",
+        "warning",
+    ):
         status = override["status"]
     model = override.get("model") or env_model
     return {
@@ -2184,16 +2196,24 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
     simulated figure — the REAL cost/tokens/duration of the agent's most
     recent completed run (null when it has never run). Never invokes the live
     LLM, so it is safe to call repeatedly and honestly charges nothing.
+
+    ``model`` is never raw ``null`` — deterministic/planned agents (no LLM
+    tier) fall back to the literal string ``"deterministic"``, the SAME
+    fallback ``GET /agents/catalog`` applies (MV-agents-003), so the
+    frontend's non-nullable ``TestRunSchema.model`` always parses. The
+    cost/token ESTIMATE stays genuinely null for those agents (no fabricated
+    spend for a non-LLM run) — only the display string is guaranteed non-null.
     """
     if body.agent_key not in _CATALOG_BY_KEY:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{body.agent_key}'")
     entry = _CATALOG_BY_KEY[body.agent_key]
     backend = entry["backend"]
-    model = _model_for_agent(backend) if backend else None
+    llm_model = _model_for_agent(backend) if backend else None
+    model = llm_model or "deterministic"
     est_cost = None
     est_tokens: int | None = None
-    if model is not None:
-        price_in, price_out = _price_for(model)
+    if llm_model is not None:
+        price_in, price_out = _price_for(llm_model)
         est_tokens_in, est_tokens_out = 2800, 1400
         est_tokens = est_tokens_in + est_tokens_out
         est_cost = round(
