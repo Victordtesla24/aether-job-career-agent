@@ -175,6 +175,29 @@ def _row_to_response(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _verify_application_ref(application_id: str, user_id: str) -> None:
+    """Ensure the interview references an ``Application`` owned by the user.
+
+    MV-interview-center-004: without this referential check ``POST /interviews``
+    accepted any arbitrary string as ``application_id`` and created an orphaned
+    row (201). An interview must point at a real application the caller owns; a
+    missing or foreign reference is a 404 (scoping by ``userId`` also avoids
+    leaking whether another user's application exists).
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM "Application" WHERE "id" = %s AND "userId" = %s',
+                (application_id, user_id),
+            )
+            found = cur.fetchone()
+    if not found:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Referenced application not found",
+        )
+
+
 def _get_or_404(
     interview_id: str, user_id: str
 ) -> dict[str, Any]:
@@ -264,6 +287,10 @@ def create_interview(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Invalid type '{body.type}'. Valid: {sorted(_INTERVIEW_TYPES)}",
         )
+
+    # Referential integrity: the interview must attach to a real application the
+    # caller owns (MV-interview-center-004). Rejects orphan-row creation.
+    _verify_application_ref(body.application_id, uid)
 
     interview_id = new_id()
     with get_connection() as conn:
