@@ -28,6 +28,7 @@ from app.agents.cover_letter_agent import (
     compose_letter,
     current_position,
     extract_injection_payloads,
+    injected_provenance_tokens,
     letter_date,
     sanitize_untrusted_text,
     strip_injection_leaks,
@@ -314,6 +315,12 @@ def refine_cover_letter(
             position,
         ]
     )
+    # MV-cover-letter-studio-003: evidence the phrasing-independent provenance
+    # check treats as legitimately allowed in the revised letter (résumé +
+    # profile identity + the named role/company). An all-caps token from the
+    # untrusted JD that is absent here and shouted in the revision (PINEAPPLE/
+    # BANANAS) has no provenance and is stripped; a real shared skill survives.
+    provenance_evidence = " ".join([resume_text, job["title"], job["company"], signer, position])
     asks: list[str] = []
     if body.instructions.strip():
         asks.append(f"Requested changes: {body.instructions.strip()}")
@@ -347,8 +354,15 @@ def refine_cover_letter(
         # carries the logged-in user's own name — never a name echoed from the
         # résumé corpus.
         text = strip_letter_scaffolding(text)
-        # Strip any injected control token that leaked into the revision.
-        text = strip_injection_leaks(text, injection_payloads)
+        # Strip any injected control token that leaked into the revision —
+        # phrasing-based payloads PLUS the phrasing-independent provenance check
+        # (an all-caps token from the untrusted JD, absent from the candidate's
+        # own evidence, e.g. PINEAPPLE/BANANAS) — mirrors the generation agent.
+        strip_tokens = list(injection_payloads)
+        for tok in injected_provenance_tokens(text, raw_description, provenance_evidence):
+            if tok not in strip_tokens:
+                strip_tokens.append(tok)
+        text = strip_injection_leaks(text, strip_tokens)
         # Compose the revision as a full §10.2 business letter (date, addressee,
         # Re:, salutation, role/company hook, revised body, sign-off) — never the
         # banned generic opener the studio previously hardcoded (D-0021, GAP-P4-049).
