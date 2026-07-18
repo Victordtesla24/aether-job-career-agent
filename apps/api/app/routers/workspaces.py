@@ -311,6 +311,51 @@ def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
 # Email Center  GET /emails/inbox   POST /emails/send
 # ---------------------------------------------------------------------------
 
+
+def _email_activity_stats(uid: str) -> dict[str, int]:
+    """Real per-user Email Center activity for "This Week's Stats" (last 7 days).
+
+    Every subquery is scoped to ``uid`` — one user's agent runs/approvals never
+    leak into another user's stats panel (MV-email-center-005 / reviewer B2).
+
+    ``sentApproved`` counts approved ``email_send`` requests: the human approval
+    is the strongest REAL signal that exists (the post-approval Gmail send result
+    is not persisted anywhere), so it is an honest proxy for "sent", never a
+    fabricated delivery count. Degrades to zeros on any DB hiccup rather than
+    500-ing the inbox (consistent with the Gmail-sync best-effort block)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                      (SELECT count(*) FROM "AgentRun"
+                         WHERE "userId" = %(uid)s AND "agentName" = 'emailAgent'
+                           AND "status" = 'completed'
+                           AND "input"->>'mode' IN ('draft_reply','draft_follow_up')
+                           AND "createdAt" >= now() - interval '7 days') AS auto_drafted,
+                      (SELECT count(*) FROM "AgentRun"
+                         WHERE "userId" = %(uid)s AND "agentName" = 'emailAgent'
+                           AND "status" = 'completed'
+                           AND "input"->>'mode' = 'draft_follow_up'
+                           AND "createdAt" >= now() - interval '7 days') AS follow_ups_sent,
+                      (SELECT count(*) FROM "ApprovalRequest"
+                         WHERE "userId" = %(uid)s AND "type" = 'email_send'
+                           AND "status" = 'approved'
+                           AND "createdAt" >= now() - interval '7 days') AS sent_approved
+                    """,
+                    {"uid": uid},
+                )
+                row = cur.fetchone()
+        return {
+            "autoDrafted": int((row[0] if row else 0) or 0),
+            "followUpsSent": int((row[1] if row else 0) or 0),
+            "sentApproved": int((row[2] if row else 0) or 0),
+        }
+    except Exception:  # noqa: BLE001 — stats are best-effort; never 500 the inbox
+        return {"autoDrafted": 0, "followUpsSent": 0, "sentApproved": 0}
+
+
 @router.get("/emails/inbox")
 def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
     """Email Command Center — real EmailThread records from the database.
@@ -345,18 +390,23 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
                 pass
 
-    # The inbox query reads/joins on the additive Gmail linkage columns; ensure
-    # they exist even for a user who has never connected (so the query never
-    # references a missing column).
-    from app.services.gmail_service import ensure_email_thread_gmail_columns
+    # The inbox query reads/joins on the additive Gmail linkage columns plus the
+    # additive aiScore column; ensure they exist even for a user who has never
+    # connected/triaged (so the query never references a missing column).
+    from app.services.gmail_service import (
+        ensure_email_thread_ai_columns,
+        ensure_email_thread_gmail_columns,
+    )
 
     ensure_email_thread_gmail_columns()
+    ensure_email_thread_ai_columns()
 
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT et.id, et.subject, et.messages, et.classification,
+                       et."aiScore",
                        et."createdAt", et."applicationId", et."gmailAccountId",
                        c.name AS contact_name, c.company AS contact_company,
                        c.email AS contact_email,
@@ -386,16 +436,28 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             "subject": t.get("subject") or "(no subject)",
             "preview": (latest.get("body") or "")[:120],
             "category": t.get("classification") or "all",
-            "score": 0,
+            # REAL per-thread triage score (MV-email-center-001), or null when the
+            # thread has never been triaged — never a fabricated 0. Deep
+            # intelligence (breakdown + summary) and draft replies are computed
+            # ON DEMAND by the client via POST /agents/email/run, so the inbox
+            # load stays one query (never 64 LLM calls).
+            "score": t.get("aiScore"),
             "receivedAt": str(t["createdAt"])[:10] if t.get("createdAt") else "",
             "account": t.get("source_account") or "",
             "body": latest.get("body") or "",
             "intelligence": None,
             "draftReply": "",
-            "voiceDna": 0,
         })
 
     total = len(threads)
+    # Real recruiter-relevant count (MV-email-center-005): priority + follow-up
+    # threads, derived from the already-loaded per-user rows (no extra query).
+    recruiter_emails = sum(
+        1
+        for t in threads
+        if (t.get("classification") or "") in ("priority", "followup")
+    )
+    activity = _email_activity_stats(uid)
 
     # One entry per connected inbox (for the account switcher). Falls back to a
     # single not-connected placeholder so the UI can prompt the first connect.
@@ -429,10 +491,10 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
         "accounts": accounts,
         "stats": {
             "received": total,
-            "recruiterEmails": 0,
-            "autoDrafted": 0,
-            "sentApproved": 0,
-            "followUpsSent": 0,
+            "recruiterEmails": recruiter_emails,
+            "autoDrafted": activity["autoDrafted"],
+            "sentApproved": activity["sentApproved"],
+            "followUpsSent": activity["followUpsSent"],
             "avgResponseHrs": 0,
         },
         "followUps": [],

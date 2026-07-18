@@ -132,23 +132,25 @@ export interface EmailMessage {
   subject: string;
   preview: string;
   category: "priority" | "all" | "followup" | "auto" | "trashed";
-  score: number;
+  // REAL per-thread triage score (0-100), or `null` when the thread has never
+  // been triaged (MV-email-center-001). Never a fabricated 0 — an un-triaged
+  // thread genuinely has no score and the badge shows an em-dash.
+  score: number | null;
   receivedAt: string;
   account: string;
   body: string;
-  // The inbox API returns `null` until a real AI-scoring backend is wired
-  // (GAP-P4-041): the intelligence panel must render an honest empty state
-  // rather than dereferencing a null object.
+  // The inbox API returns `null` here on load; deep intelligence (breakdown +
+  // summary) is computed ON DEMAND per thread via POST /agents/email/run so the
+  // inbox load never triggers 64 LLM calls.
   intelligence: EmailIntelligence | null;
   draftReply: string;
-  voiceDna: number;
 }
 
 /**
  * View-model for the AI-intelligence panel. Discriminated on `available` so the
- * UI cannot dereference a missing intelligence object (GAP-P4-041): when the
- * backend has no score yet (`intelligence: null`), the panel shows an honest
- * "not available yet" state instead of crashing.
+ * UI cannot dereference a missing intelligence object (GAP-P4-041): when no
+ * intelligence has been computed yet (`intelligence: null`), the panel shows an
+ * honest "not analyzed yet" state instead of crashing.
  */
 export type EmailIntelligenceView =
   | { available: false }
@@ -165,6 +167,74 @@ export function emailIntelligenceView(
     breakdown: intel.breakdown ?? [],
     summary: intel.summary ?? "",
   };
+}
+
+/**
+ * Display model for the per-thread score badge (MV-email-center-001). A thread
+ * that has never been triaged has NO score (`null`) → an honest em-dash, never a
+ * fabricated 0 that would read as a real "irrelevant" verdict.
+ */
+export function emailScoreBadge(score: number | null): { text: string; scored: boolean } {
+  if (typeof score !== "number") return { text: "—", scored: false };
+  return { text: String(score), scored: true };
+}
+
+/**
+ * Lift the REAL insights object out of a POST /agents/email/run (mode=insights)
+ * response. Returns `null` (honest empty state) when the agent produced no
+ * usable score — never a fabricated 0. Malformed breakdown rows are dropped.
+ */
+export function parseEmailInsights(resp: Record<string, unknown>): EmailIntelligence | null {
+  const raw = resp?.insights;
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.score !== "number") return null;
+  const breakdown = Array.isArray(obj.breakdown)
+    ? obj.breakdown.filter(
+        (b): b is { label: string; value: number } =>
+          !!b &&
+          typeof b === "object" &&
+          typeof (b as { label?: unknown }).label === "string" &&
+          typeof (b as { value?: unknown }).value === "number",
+      )
+    : [];
+  return {
+    score: obj.score,
+    breakdown,
+    summary: typeof obj.summary === "string" ? obj.summary : "",
+  };
+}
+
+/**
+ * Lift the REAL draft text out of a POST /agents/email/run (mode=draft_reply)
+ * response. Returns "" when the agent produced no draft.
+ */
+export function parseEmailDraft(resp: Record<string, unknown>): string {
+  return typeof resp?.draft === "string" ? resp.draft : "";
+}
+
+/**
+ * The fabrication-guard flags the emailAgent attached to a draft (claims with no
+ * evidence in the resume / incoming email). Surfaced honestly so the user knows
+ * to double-check, never silently swallowed.
+ */
+export function parseEmailDraftFlags(resp: Record<string, unknown>): string[] {
+  return Array.isArray(resp?.flagged)
+    ? (resp.flagged as unknown[]).filter((f): f is string => typeof f === "string")
+    : [];
+}
+
+/**
+ * An honest per-sender LinkedIn *search* URL (MV-email-center-007) — a people
+ * search by the sender's name (+ company), NOT a fabricated "profile" link that
+ * always pointed at linkedin.com/. Returns `null` when there is no real name to
+ * search, so the caller omits the link entirely.
+ */
+export function linkedInSearchUrl(name: string, company?: string): string | null {
+  const trimmed = (name || "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") return null;
+  const keywords = [trimmed, (company || "").trim()].filter(Boolean).join(" ");
+  return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(keywords)}`;
 }
 
 export interface EmailInbox {

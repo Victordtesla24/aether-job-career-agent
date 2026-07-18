@@ -11,12 +11,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createEmailDraft,
   emailIntelligenceView,
+  emailScoreBadge,
   emailSendErrorMessage,
   fetchEmailInbox,
+  linkedInSearchUrl,
+  parseEmailDraft,
+  parseEmailDraftFlags,
+  parseEmailInsights,
   sendEmailReply,
   type EmailInbox,
+  type EmailIntelligence,
   type EmailMessage,
 } from "../../../lib/api/workspaces";
+import { runAgent } from "../../../lib/api/agents";
 import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
 import { connectAnotherGmail, disconnectAccount, setPrimaryAccount } from "../../../lib/api/emails";
 
@@ -28,9 +35,11 @@ const CATEGORIES = [
   { key: "trashed", label: "Trashed" },
 ] as const;
 
-const TONES = ["Professional", "Warm", "Direct"] as const;
-
-function scoreColor(score: number) {
+// Score badge colour. `null` (never-triaged thread) is a neutral, muted
+// placeholder — NOT the red "low score" style — so a not-yet-analyzed thread
+// never masquerades as a real low verdict (MV-email-center-001).
+function scoreColor(score: number | null) {
+  if (typeof score !== "number") return "text-aether-muted-dim border-white/15";
   if (score >= 75) return "text-aether-green border-aether-green/40";
   if (score >= 50) return "text-aether-amber border-aether-amber/40";
   return "text-red-300 border-red-500/40";
@@ -39,10 +48,11 @@ function scoreColor(score: number) {
 export default function EmailCenterPage() {
   const [inbox, setInbox] = useState<EmailInbox | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [category, setCategory] = useState<string>("priority");
+  // Default to "All Recruiter": it always has content, so the screen never opens
+  // on a structurally-empty tab that reads as broken (MV-email-center-003).
+  const [category, setCategory] = useState<string>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tone, setTone] = useState<string>("Professional");
   const [draft, setDraft] = useState<string>("");
   const [gateOpen, setGateOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -51,6 +61,19 @@ export default function EmailCenterPage() {
   const [connectNotice, setConnectNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
+
+  // On-demand AI (MV-email-center-001/002): the emailAgent is invoked per thread
+  // only when the user asks, so the inbox load never fans out to 64 LLM calls.
+  // Computed insights + drafts are cached per thread id.
+  const [computedIntel, setComputedIntel] = useState<Record<string, EmailIntelligence>>({});
+  const [intelBusy, setIntelBusy] = useState(false);
+  const [intelError, setIntelError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [draftFlags, setDraftFlags] = useState<Record<string, string[]>>({});
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [triageBusy, setTriageBusy] = useState(false);
+  const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -67,7 +90,7 @@ export default function EmailCenterPage() {
         const first = data.messages[0];
         if (first) {
           setSelectedId(first.id);
-          setDraft(first.draftReply);
+          setDraft("");
         }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load inbox"));
@@ -124,6 +147,75 @@ export default function EmailCenterPage() {
       .catch(() => {});
   }, []);
 
+  // Run the REAL emailAgent triage over the inbox (one batch LLM call) so the
+  // list scores + Priority/Follow-Up/Auto tabs populate. User-initiated — never
+  // auto-fired on load (MV-email-center-001/003).
+  const runTriage = useCallback(async () => {
+    setTriageBusy(true);
+    setTriageNotice(null);
+    try {
+      const res = await runAgent("email", { mode: "triage" });
+      const triaged = typeof res.triaged === "number" ? res.triaged : 0;
+      const data = await fetchEmailInbox();
+      setInbox(data);
+      setTriageNotice({
+        kind: "success",
+        message:
+          triaged > 0
+            ? `Triaged ${triaged} thread${triaged === 1 ? "" : "s"} — scores and tabs updated.`
+            : "No threads to triage yet.",
+      });
+    } catch (e) {
+      setTriageNotice({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Could not run AI triage.",
+      });
+    } finally {
+      setTriageBusy(false);
+    }
+  }, []);
+
+  // Compute the REAL AI-intelligence view for ONE thread on demand.
+  const analyzeThread = useCallback(async (threadId: string) => {
+    setIntelBusy(true);
+    setIntelError(null);
+    try {
+      const res = await runAgent("email", { mode: "insights", thread_id: threadId });
+      const intel = parseEmailInsights(res);
+      if (!intel) {
+        setIntelError("The AI returned no usable score for this thread — please try again.");
+        return;
+      }
+      setComputedIntel((prev) => ({ ...prev, [threadId]: intel }));
+    } catch (e) {
+      setIntelError(e instanceof Error ? e.message : "Could not analyze this thread.");
+    } finally {
+      setIntelBusy(false);
+    }
+  }, []);
+
+  // Generate a REAL fabrication-guarded draft reply for ONE thread on demand,
+  // then the existing send-gate becomes reachable (MV-email-center-002).
+  const generateDraft = useCallback(async (threadId: string) => {
+    setDraftBusy(true);
+    setDraftError(null);
+    try {
+      const res = await runAgent("email", { mode: "draft_reply", thread_id: threadId });
+      const text = parseEmailDraft(res);
+      if (!text) {
+        setDraftError("The AI returned an empty draft — please try again.");
+        return;
+      }
+      setDrafts((prev) => ({ ...prev, [threadId]: text }));
+      setDraftFlags((prev) => ({ ...prev, [threadId]: parseEmailDraftFlags(res) }));
+      setDraft(text);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Could not generate a draft reply.");
+    } finally {
+      setDraftBusy(false);
+    }
+  }, []);
+
   const makePrimary = useCallback(
     async (id: string) => {
       setAccountBusy(id);
@@ -169,10 +261,36 @@ export default function EmailCenterPage() {
     [inbox, selectedId],
   );
 
-  // Guarded AI-intelligence view: `intelligence` is null until a real scoring
-  // backend is wired (GAP-P4-041), so never dereference it directly.
+  // AI-intelligence view — reconciles the on-demand computed intelligence for the
+  // selected thread with the inbox value (always null on load). The null-guard in
+  // emailIntelligenceView keeps this crash-free before any analysis runs.
   const intelligence = useMemo(
-    () => (selected ? emailIntelligenceView(selected) : ({ available: false } as const)),
+    () =>
+      selected
+        ? emailIntelligenceView({
+            intelligence: computedIntel[selected.id] ?? selected.intelligence,
+          })
+        : ({ available: false } as const),
+    [selected, computedIntel],
+  );
+
+  const connected = useMemo(
+    () => (inbox?.accounts ?? []).some((a) => a.status === "connected"),
+    [inbox],
+  );
+
+  // Whether ANY thread has a real triage score yet — drives honest per-tab empty
+  // copy ("Run AI Triage…" vs "No emails…").
+  const anyTriaged = useMemo(
+    () => (inbox?.messages ?? []).some((m) => m.score !== null),
+    [inbox],
+  );
+
+  // Honest per-sender LinkedIn *search* link (MV-email-center-007) — null when we
+  // have no real name, so the link is omitted rather than pointing at a generic
+  // linkedin.com/.
+  const senderLinkedIn = useMemo(
+    () => (selected ? linkedInSearchUrl(selected.from, selected.company) : null),
     [selected],
   );
 
@@ -187,9 +305,11 @@ export default function EmailCenterPage() {
 
   const selectMessage = (m: EmailMessage) => {
     setSelectedId(m.id);
-    setDraft(m.draftReply);
+    setDraft(drafts[m.id] ?? "");
     setSentNotice(null);
     setSendError(null);
+    setIntelError(null);
+    setDraftError(null);
   };
 
   const closeGate = useCallback(() => setGateOpen(false), []);
@@ -291,6 +411,17 @@ export default function EmailCenterPage() {
             <span className="h-1.5 w-1.5 rounded-full bg-aether-green live-dot" />
             Monitoring Active
           </span>
+          <button
+            type="button"
+            data-testid="run-triage-btn"
+            onClick={() => void runTriage()}
+            disabled={triageBusy}
+            title="Score and sort your inbox with the AI email agent"
+            className="rounded-xl border border-aether-violet/40 bg-aether-violet/10 px-4 py-2 text-sm font-semibold text-aether-violet hover:bg-aether-violet/20 disabled:opacity-50"
+          >
+            <i className="fa-solid fa-wand-magic-sparkles mr-2" aria-hidden="true" />
+            {triageBusy ? "Triaging…" : "Run AI Triage"}
+          </button>
           <button
             type="button"
             onClick={openCompose}
@@ -403,6 +534,20 @@ export default function EmailCenterPage() {
         </p>
       ) : null}
 
+      {triageNotice ? (
+        <p
+          data-testid="triage-notice"
+          role={triageNotice.kind === "error" ? "alert" : "status"}
+          className={`rounded-xl border p-3 text-sm ${
+            triageNotice.kind === "error"
+              ? "border-red-500/30 bg-red-500/10 text-red-300"
+              : "border-aether-violet/30 bg-aether-violet/10 text-aether-violet"
+          }`}
+        >
+          {triageNotice.message}
+        </p>
+      ) : null}
+
       {sentNotice ? (
         <p
           data-testid="email-sent-notice"
@@ -443,13 +588,19 @@ export default function EmailCenterPage() {
               </button>
             ))}
           </div>
-          <div className="space-y-2">
+          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1" data-testid="inbox-list">
             {visibleMessages.length === 0 ? (
               <p className="py-6 text-center text-xs text-aether-muted-dim" data-testid="inbox-empty">
-                No emails in this view.
+                {category === "trashed"
+                  ? "Trash is empty."
+                  : !anyTriaged && category !== "all"
+                    ? "Run AI Triage to sort your inbox into this tab."
+                    : "No emails in this view."}
               </p>
             ) : (
-              visibleMessages.map((m) => (
+              visibleMessages.map((m) => {
+                const badge = emailScoreBadge(m.score);
+                return (
                 <button
                   key={m.id}
                   type="button"
@@ -465,9 +616,9 @@ export default function EmailCenterPage() {
                     <p className="truncate text-xs font-semibold">{m.from}</p>
                     <span
                       className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${scoreColor(m.score)}`}
-                      title={`Intelligence score ${m.score}`}
+                      title={badge.scored ? `Intelligence score ${badge.text}` : "Not analyzed yet — run AI Triage"}
                     >
-                      {m.score}
+                      {badge.text}
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-aether-coral">{m.subject}</p>
@@ -486,7 +637,8 @@ export default function EmailCenterPage() {
                     ) : null}
                   </div>
                 </button>
-              ))
+                );
+              })
             )}
           </div>
         </section>
@@ -500,31 +652,64 @@ export default function EmailCenterPage() {
                   <div>
                     <h2 className="text-[15px] font-semibold">{selected.subject}</h2>
                     <p className="mt-0.5 text-xs text-aether-muted">
-                      {selected.from} &lt;{selected.fromEmail}&gt; · {selected.receivedAt} ·{" "}
-                      <a
-                        href="https://www.linkedin.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-aether-coral hover:underline"
-                      >
-                        LinkedIn Profile
-                      </a>
+                      {selected.from} &lt;{selected.fromEmail}&gt; · {selected.receivedAt}
+                      {senderLinkedIn ? (
+                        <>
+                          {" · "}
+                          <a
+                            href={senderLinkedIn}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="linkedin-search-link"
+                            className="text-aether-coral hover:underline"
+                          >
+                            Find on LinkedIn
+                          </a>
+                        </>
+                      ) : null}
                     </p>
                   </div>
-                  <span className={`mono flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${scoreColor(selected.score)}`}>
-                    {selected.score}
-                  </span>
+                  {(() => {
+                    const detailBadge = emailScoreBadge(
+                      computedIntel[selected.id]?.score ?? selected.score,
+                    );
+                    return (
+                      <span
+                        title={
+                          detailBadge.scored
+                            ? `Intelligence score ${detailBadge.text}`
+                            : "Not analyzed yet"
+                        }
+                        className={`mono flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${scoreColor(
+                          computedIntel[selected.id]?.score ?? selected.score,
+                        )}`}
+                      >
+                        {detailBadge.text}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <p className="whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted">
                   {selected.body}
                 </p>
 
-                {/* AI intelligence — guarded: the backend returns no score yet */}
+                {/* AI intelligence — computed ON DEMAND for the selected thread */}
                 {intelligence.available ? (
                   <div className="mt-4 rounded-xl border border-aether-violet/30 bg-aether-violet/5 p-4" data-testid="ai-intelligence">
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-violet">
-                      AI Intelligence · score {intelligence.score}
-                    </h3>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-aether-violet">
+                        AI Intelligence · score {intelligence.score}
+                      </h3>
+                      <button
+                        type="button"
+                        data-testid="reanalyze-btn"
+                        onClick={() => void analyzeThread(selected.id)}
+                        disabled={intelBusy}
+                        className="text-[10px] text-aether-muted-dim hover:text-white disabled:opacity-50"
+                      >
+                        {intelBusy ? "Analyzing…" : "Re-analyze"}
+                      </button>
+                    </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {intelligence.breakdown.map((b) => (
                         <div key={b.label}>
@@ -546,40 +731,48 @@ export default function EmailCenterPage() {
                       AI Intelligence
                     </h3>
                     <p className="text-xs text-aether-muted-dim">
-                      No intelligence available yet — connect your Gmail account to enable AI
-                      scoring on your real threads.
+                      Not analyzed yet — run the AI email agent on this thread to see a real
+                      recruiter-engagement score, breakdown and summary.
                     </p>
+                    <button
+                      type="button"
+                      data-testid="analyze-thread-btn"
+                      onClick={() => void analyzeThread(selected.id)}
+                      disabled={intelBusy}
+                      className="mt-3 rounded-lg border border-aether-violet/40 bg-aether-violet/10 px-3 py-1.5 text-xs font-semibold text-aether-violet hover:bg-aether-violet/20 disabled:opacity-50"
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles mr-1.5" aria-hidden="true" />
+                      {intelBusy ? "Analyzing…" : "Analyze this thread"}
+                    </button>
+                    {intelError ? (
+                      <p className="mt-2 text-[11px] text-red-300" role="alert" data-testid="analyze-error">
+                        {intelError}
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
 
-              {/* Draft reply */}
-              {selected.draftReply ? (
+              {/* Draft reply — generated ON DEMAND by the real emailAgent; once a
+                  draft exists the (honest) send confirmation gate is reachable. */}
+              {(drafts[selected.id] ?? "").length > 0 ? (
                 <div className="glass rounded-2xl border border-white/10 p-5" data-testid="draft-reply">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-[15px] font-semibold">AI Draft Reply</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="mono text-[11px] text-aether-green">Voice DNA {selected.voiceDna}%</span>
-                      <span className="rounded-md border border-aether-violet/25 bg-aether-violet/10 px-2 py-0.5 text-[10px] text-aether-violet">
-                        Expert · Humble · Professional
-                      </span>
-                      <div className="flex rounded-lg border border-white/10 p-0.5">
-                        {TONES.map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setTone(t)}
-                            aria-pressed={tone === t}
-                            className={`rounded-md px-2 py-1 text-[11px] transition ${
-                              tone === t ? "bg-white/10 text-white" : "text-aether-muted-dim hover:text-white"
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <span className="rounded-md border border-aether-violet/25 bg-aether-violet/10 px-2 py-0.5 text-[10px] text-aether-violet">
+                      Grounded in your resume · fabrication-guarded
+                    </span>
                   </div>
+                  {(draftFlags[selected.id] ?? []).length > 0 ? (
+                    <p
+                      className="mb-3 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-[11px] text-aether-amber"
+                      role="status"
+                      data-testid="draft-flags"
+                    >
+                      Review before sending — the AI flagged claims with no evidence in your
+                      resume/thread: {(draftFlags[selected.id] ?? []).join(", ")}
+                    </p>
+                  ) : null}
                   <textarea
                     value={draft}
                     aria-label="Draft reply"
@@ -600,17 +793,43 @@ export default function EmailCenterPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDraft(selected.draftReply)}
-                      className="rounded-lg border border-white/15 px-4 py-2 text-sm text-aether-muted hover:border-white/30"
+                      data-testid="regenerate-draft-btn"
+                      onClick={() => void generateDraft(selected.id)}
+                      disabled={draftBusy}
+                      className="rounded-lg border border-white/15 px-4 py-2 text-sm text-aether-muted hover:border-white/30 disabled:opacity-50"
                     >
-                      Regenerate
+                      {draftBusy ? "Regenerating…" : "Regenerate"}
                     </button>
                   </div>
+                  {draftError ? (
+                    <p className="mt-2 text-[11px] text-red-300" role="alert" data-testid="draft-error">
+                      {draftError}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
-                <p className="glass rounded-2xl border border-white/10 p-5 text-sm text-aether-muted-dim">
-                  No reply needed for this email.
-                </p>
+                <div className="glass rounded-2xl border border-white/10 p-5" data-testid="draft-reply-empty">
+                  <h3 className="text-[15px] font-semibold">AI Draft Reply</h3>
+                  <p className="mt-1 text-sm text-aether-muted-dim">
+                    Generate a resume-grounded, fabrication-guarded reply you can review, edit
+                    and send through the confirmation gate — nothing is sent automatically.
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="generate-draft-btn"
+                    onClick={() => void generateDraft(selected.id)}
+                    disabled={draftBusy}
+                    className="mt-3 rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles mr-2" aria-hidden="true" />
+                    {draftBusy ? "Drafting…" : "AI Draft Reply"}
+                  </button>
+                  {draftError ? (
+                    <p className="mt-2 text-[11px] text-red-300" role="alert" data-testid="draft-error">
+                      {draftError}
+                    </p>
+                  ) : null}
+                </div>
               )}
             </>
           ) : (
@@ -626,8 +845,9 @@ export default function EmailCenterPage() {
             <h2 className="mb-3 text-[15px] font-semibold">Automated Follow-Ups</h2>
             {inbox.followUps.length === 0 ? (
               <p className="text-xs text-aether-muted-dim">
-                No follow-ups queued yet — connect your Gmail account to enable the
-                follow-up engine on real threads.
+                {connected
+                  ? "No automated follow-ups queued yet. Aether drafts a silence-triggered nudge you approve before it sends — nothing goes out automatically."
+                  : "Connect your Gmail account to enable the follow-up engine on real threads."}
               </p>
             ) : null}
             <div className="space-y-2.5">
