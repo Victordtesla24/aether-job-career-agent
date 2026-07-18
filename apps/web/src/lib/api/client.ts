@@ -27,10 +27,20 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Seconds from a `Retry-After` response header, when the server sent one
+     * (429 rate-limit responses on /billing/checkout and /billing/portal). */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Human-readable "try again in …" phrasing for an ApiError's retryAfterSeconds. */
+export function formatRetryAfter(seconds: number): string {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
 let inMemoryToken: string | null = null;
@@ -100,7 +110,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     ) {
       window.location.assign("/pricing");
     }
-    throw new ApiError(`${options.method ?? "GET"} ${path} failed (${res.status}): ${detail}`, res.status);
+    // 429 rate-limit responses (checkout, portal) carry a Retry-After header
+    // (seconds) — surface it so the caller can tell the user honestly when to
+    // retry instead of a generic "try again" (MV-pricing-004).
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfterSeconds =
+      retryAfterHeader !== null && Number.isFinite(Number(retryAfterHeader))
+        ? Number(retryAfterHeader)
+        : undefined;
+    throw new ApiError(
+      `${options.method ?? "GET"} ${path} failed (${res.status}): ${detail}`,
+      res.status,
+      retryAfterSeconds,
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

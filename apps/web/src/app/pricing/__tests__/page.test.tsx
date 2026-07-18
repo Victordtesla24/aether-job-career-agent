@@ -8,7 +8,9 @@
  * matchers only (no jest-dom), matching the MarketPulse/signup test precedent.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ApiError } from "../../../lib/api/client";
 
 const fetchPlansMock = vi.fn();
 const startCheckoutMock = vi.fn();
@@ -31,33 +33,38 @@ const PLANS = {
     {
       id: "free", name: "Free", modelTier: "light", runsPerMonth: 5,
       monthly: { total: 0, gst: 0, net: 0 }, annual: null,
-      features: ["5 tailored agent runs / month"], purchasable: false,
+      features: ["5 tailored agent runs / month", "Light model tier"], purchasable: false,
     },
     {
       id: "starter", name: "Starter", modelTier: "standard", runsPerMonth: 30,
       monthly: { total: 19, gst: 1.73, net: 17.27 },
       annual: { total: 179, gst: 16.27, net: 162.73 },
-      features: ["30 tailored agent runs / month"], purchasable: true,
+      features: ["30 tailored agent runs / month", "Standard model tier"], purchasable: true,
     },
     {
       id: "pro", name: "Pro", modelTier: "advanced", runsPerMonth: 100,
       monthly: { total: 39, gst: 3.55, net: 35.45 },
       annual: { total: 359, gst: 32.64, net: 326.36 },
-      features: ["100 tailored agent runs / month"], purchasable: true,
+      features: ["100 tailored agent runs / month", "Advanced model tier"], purchasable: true,
     },
     {
       id: "power", name: "Power", modelTier: "premium", runsPerMonth: 300,
       monthly: { total: 69, gst: 6.27, net: 62.73 },
       annual: { total: 649, gst: 59.0, net: 590.0 },
-      features: ["300 tailored agent runs / month"], purchasable: true,
+      features: ["300 tailored agent runs / month", "Full model access"], purchasable: true,
     },
   ],
 };
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 afterEach(() => {
   cleanup();
   fetchPlansMock.mockReset();
   startCheckoutMock.mockReset();
+  window.localStorage.clear();
 });
 
 describe("PricingPage", () => {
@@ -109,5 +116,69 @@ describe("PricingPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("price-pro").textContent).toContain("359");
     });
+  });
+
+  it("MV-pricing-002: never claims a per-plan model-tier/model-access differentiation that doesn't exist", async () => {
+    fetchPlansMock.mockResolvedValue(PLANS);
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("pricing-tier-power"));
+
+    const bodyText = document.body.textContent ?? "";
+    // None of the fixture's model-tier feature bullets ("Light model tier",
+    // "Advanced model tier", "Full model access", ...) may render anywhere.
+    expect(bodyText).not.toMatch(/model tier/i);
+    expect(bodyText).not.toMatch(/model access/i);
+    // The honest differentiator (run quota, not model quality) is stated.
+    expect(bodyText).toMatch(/same ai models/i);
+  });
+
+  it("MV-pricing-004: shows a distinct honest message for a 400 (no Stripe price configured)", async () => {
+    fetchPlansMock.mockResolvedValue(PLANS);
+    startCheckoutMock.mockRejectedValue(
+      new ApiError("POST /billing/checkout failed (400): no Stripe price configured", 400),
+    );
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("subscribe-starter"));
+    fireEvent.click(screen.getByTestId("subscribe-starter"));
+
+    await waitFor(() => screen.getByTestId("checkout-error"));
+    const msg = screen.getByTestId("checkout-error").textContent ?? "";
+    expect(msg).not.toMatch(/could not start checkout\. please try again\.$/i);
+    expect(msg.toLowerCase()).toMatch(/not available for purchase|not yet configured/);
+  });
+
+  it("MV-pricing-004: a 429 shows a distinct message honoring Retry-After, not the generic message", async () => {
+    fetchPlansMock.mockResolvedValue(PLANS);
+    startCheckoutMock.mockRejectedValue(
+      new ApiError("POST /billing/checkout failed (429): rate limited", 429, 90),
+    );
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("subscribe-starter"));
+    fireEvent.click(screen.getByTestId("subscribe-starter"));
+
+    await waitFor(() => screen.getByTestId("checkout-error"));
+    const msg = screen.getByTestId("checkout-error").textContent ?? "";
+    expect(msg.toLowerCase()).toMatch(/too many checkout attempts/);
+    expect(msg).toMatch(/2 minutes/);
+  });
+
+  it("MV-pricing-005: the Free CTA is session-aware — routes an authenticated visitor to /dashboard, not /signup", async () => {
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
+    fetchPlansMock.mockResolvedValue(PLANS);
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("subscribe-free"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("subscribe-free").getAttribute("href")).toBe("/dashboard");
+    });
+    expect(screen.getByTestId("subscribe-free").textContent).toMatch(/dashboard/i);
+  });
+
+  it("MV-pricing-005: an unauthenticated visitor's Free CTA still links to /signup", async () => {
+    fetchPlansMock.mockResolvedValue(PLANS);
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("subscribe-free"));
+
+    expect(screen.getByTestId("subscribe-free").getAttribute("href")).toBe("/signup");
   });
 });
