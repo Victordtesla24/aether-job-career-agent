@@ -138,10 +138,27 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     payload kind; submission integrations land in a later phase, so this
     records the action as executed.
     """
-    approval = ApprovalService().assert_action_allowed(approval_id, current_user["id"])
-    if approval["type"] == "email_send":
-        return _execute_email_send(approval, current_user)
-    return {"status": "executed", "approval_id": approval["id"], "type": approval["type"]}
+    user_id = current_user["id"]
+    approval = ApprovalService().assert_action_allowed(approval_id, user_id)
+    # Idempotency guard (MV-approval-modal-010): atomically claim the approved
+    # request so the side-effect (a real Gmail send) can fire AT MOST ONCE. A
+    # double-submit/retry loses the claim and gets an honest 409 with no send.
+    repo = ApprovalRepository()
+    if not repo.claim_execution(approval_id, user_id):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Approval already executed — no action taken.",
+        )
+    try:
+        if approval["type"] == "email_send":
+            return _execute_email_send(approval, current_user)
+        return {"status": "executed", "approval_id": approval["id"], "type": approval["type"]}
+    except Exception:
+        # The side-effect failed (e.g. Gmail not connected / send error). Release
+        # the claim so the honest 4xx/5xx surfaces AND the user can retry once the
+        # underlying problem is fixed — a failed attempt never burns the approval.
+        repo.release_execution(approval_id, user_id)
+        raise
 
 
 def _execute_email_send(

@@ -16,7 +16,7 @@ import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.agents.scout_agent import ScoutAgent
@@ -1121,7 +1121,12 @@ def list_agents(current_user: CurrentUser) -> list[dict[str, Any]]:
 
 
 @router.get("/runs")
-def list_runs(current_user: CurrentUser, limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(
+    current_user: CurrentUser, limit: int = Query(default=50, ge=0)
+) -> list[dict[str, Any]]:
+    # ``ge=0`` rejects a negative limit with an honest 422 (MV-agents-002) instead
+    # of passing ``LIMIT -5`` to Postgres and surfacing a bare 500; the upper
+    # bound is still clamped so an over-large limit is capped, not rejected.
     return AgentRunRepository().list_recent(current_user["id"], limit=min(limit, 200))
 
 

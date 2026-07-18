@@ -45,7 +45,7 @@ class StoryExtractorAgent:
         self._stories = stories or StoryRepository()
 
     def run(self, user_id: str) -> StoryExtractionResult:
-        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        resume_text = self._resolve_resume_text(user_id)
         raw = self._llm.complete_json(
             "story_extractor",
             SYSTEM_PROMPT,
@@ -77,6 +77,28 @@ class StoryExtractorAgent:
             result.story_ids.append(created["id"])
             result.created += 1
         return result
+
+    @staticmethod
+    def _resolve_resume_text(user_id: str) -> str:
+        """The caller's OWN resume text (MV-story-bank-006).
+
+        Grounds extraction in the user's base résumé version (``sections.raw_text``,
+        falling back to its bullets) so the Story Bank reflects THIS user's résumé
+        — never a fixed operator-configured PDF that could surface another
+        account's content. Only when the user has no résumé on file does it fall
+        back to the bundled base resume, preserving prior behaviour.
+        """
+        from app.repositories.resume import ResumeRepository
+
+        base = ResumeRepository().get_base(user_id)
+        if base:
+            sections = base.get("sections") or {}
+            text = sections.get("raw_text") or "\n".join(
+                str(b.get("text", "")) for b in sections.get("bullets", []) if b.get("text")
+            )
+            if text and text.strip():
+                return text
+        return parse_resume_pdf(get_base_resume_path())["raw_text"]
 
     @staticmethod
     def _metrics_evidenced(metrics: dict[str, Any], resume_numbers: set[str]) -> bool:

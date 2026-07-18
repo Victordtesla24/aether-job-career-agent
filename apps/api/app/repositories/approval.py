@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.db import get_connection, new_id, rows_to_dicts
+from app.db import ensure_approval_columns, get_connection, new_id, rows_to_dicts
 
 _COLUMNS = (
     '"id", "userId", "applicationId", "type", "status", "payload", '
@@ -73,6 +73,53 @@ class ApprovalRepository:
                 rows = rows_to_dicts(cur)
             conn.commit()
         return rows[0]
+
+    def claim_execution(self, approval_id: str, user_id: str) -> bool:
+        """Atomically claim an approved request for execution exactly once.
+
+        Stamps ``executedAt`` only on the single pending→executed transition
+        (``status = approved`` AND not yet executed). Returns ``True`` iff THIS
+        call won the claim; a subsequent (concurrent or sequential) call returns
+        ``False`` — already executed, or not approved — so the caller fires no
+        side-effect and answers with an honest 409 (MV-approval-modal-010). The
+        row-level lock the ``UPDATE`` takes serializes racing callers, so at most
+        one ever observes a matching row.
+        """
+        ensure_approval_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    UPDATE "ApprovalRequest"
+                    SET "executedAt" = NOW()
+                    WHERE "id" = %s AND "userId" = %s
+                      AND "status" = 'approved'::"ApprovalStatus"
+                      AND "executedAt" IS NULL
+                    RETURNING "id"
+                    ''',
+                    (approval_id, user_id),
+                )
+                claimed = cur.fetchone() is not None
+            conn.commit()
+        return claimed
+
+    def release_execution(self, approval_id: str, user_id: str) -> None:
+        """Release a claim so an approval stays retryable after an honest failure.
+
+        Called when the side-effect behind a *claimed* execute raises (e.g. Gmail
+        not connected, or a send/attachment error): clearing ``executedAt`` lets
+        the user retry once the underlying problem is fixed. A *successful*
+        execute keeps the stamp, so the real action can never fire twice.
+        """
+        ensure_approval_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "ApprovalRequest" SET "executedAt" = NULL '
+                    'WHERE "id" = %s AND "userId" = %s',
+                    (approval_id, user_id),
+                )
+            conn.commit()
 
     def get_by_id(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
         with get_connection() as conn:

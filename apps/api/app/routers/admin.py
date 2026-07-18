@@ -14,7 +14,8 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, Field, ValidationError
 
 from app.middleware.auth import AdminUser
 from app.repositories import admin as admin_repo
@@ -151,15 +152,39 @@ class SettingsRequest(BaseModel):
     emailVerificationEnabled: Optional[bool] = None
 
 
+async def _parse_settings_body(request: Request) -> SettingsRequest:
+    """Decode + validate the settings body, raising the same honest 422 FastAPI
+    would — but only AFTER the auth dependency has resolved (MV-admin-settings-002).
+
+    Declaring a Pydantic body parameter makes FastAPI decode the request body
+    BEFORE dependencies for syntactically-broken JSON, so an anonymous caller
+    could receive a 422 instead of a 401. Reading the body here, inside the
+    handler, keeps every /admin/* request auth-gated first for EVERY body shape.
+    """
+    try:
+        raw = await request.json()
+    except Exception as exc:  # noqa: BLE001 — malformed / non-JSON body
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Request body is not valid JSON."
+        ) from exc
+    try:
+        return SettingsRequest.model_validate(raw)
+    except ValidationError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, jsonable_encoder(exc.errors())
+        ) from exc
+
+
 @router.get("/settings")
 def admin_get_settings(_admin: AdminUser) -> dict[str, Any]:
     return admin_repo.get_settings()
 
 
 @router.post("/settings")
-def admin_update_settings(
-    admin: AdminUser, body: SettingsRequest, request: Request
+async def admin_update_settings(
+    admin: AdminUser, request: Request
 ) -> dict[str, Any]:
+    body = await _parse_settings_body(request)
     changed: dict[str, Any] = {}
     if body.signupEnabled is not None:
         admin_repo.set_setting(admin_repo.SIGNUP_ENABLED_KEY, bool(body.signupEnabled))
