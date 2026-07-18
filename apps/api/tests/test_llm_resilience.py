@@ -390,7 +390,14 @@ class TestRouter503Mapping:
             "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
         )
         assert resp.status_code == 503, resp.text
-        assert resp.json()["detail"] == "LLM backend unavailable"
+        # MV-cover-letter-studio-005: the 503 detail is now an honest, secret-free
+        # user message (no 'LLM backend' / 'hard budget' / prompt-name internals).
+        from app.services.llm_client import LLM_UNAVAILABLE_USER_MESSAGE
+
+        detail = resp.json()["detail"]
+        assert detail == LLM_UNAVAILABLE_USER_MESSAGE
+        assert "backend" not in detail.lower()
+        assert "simulated outage" not in detail.lower()
 
     def test_failed_run_is_audited(self, client, auth_headers, monkeypatch):
         job = _seed_job(client, auth_headers)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import logging
 import os
 import secrets
 import time
@@ -38,6 +39,7 @@ from app.repositories.user_provider_credential import (
 from app.services import credential_vault
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
+    LLM_UNAVAILABLE_USER_MESSAGE,
     LLMUnavailableError,
     QuotaExhaustedError,
     _infer_anthropic_auth_mode,
@@ -51,6 +53,8 @@ from app.services.llm_client import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 #: Last-resort discovery targets used only when the user has NOT configured a
 #: target role/location on their profile (see ``_user_search_defaults``).
@@ -718,10 +722,15 @@ def _execute_reserved_run(
         raise _quota_429(exc.provider, expires_at) from exc
     except LLMUnavailableError as exc:
         # Live LLM failed and no fixture fallback exists — clean 503, never 500.
-        runs.finish(run_id, "failed", error=str(exc))
+        # MV-cover-letter-studio-005: record + surface an HONEST, secret-free
+        # message on both the AgentRun audit record and the 503 detail; the raw
+        # exception (carrying 'hard budget', 'live call', the prompt name) is
+        # logged server-side only, never shown to the user. Quota is refunded.
+        logger.warning("agent run %s LLM-unavailable: %s", run_id, exc)
+        runs.finish(run_id, "failed", error=LLM_UNAVAILABLE_USER_MESSAGE)
         _refund_once()
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
+            status.HTTP_503_SERVICE_UNAVAILABLE, LLM_UNAVAILABLE_USER_MESSAGE
         ) from exc
     except Exception as exc:
         runs.finish(run_id, "failed", error=str(exc))

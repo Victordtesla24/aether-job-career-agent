@@ -41,7 +41,18 @@ class _TransientError(Exception):
 
 
 def _honest_message(exc: BaseException) -> str:
-    """An honest, secret-free failure string. Never fixture content."""
+    """An honest, secret-free failure string. Never fixture content.
+
+    An :class:`HTTPException` already carries a user-facing ``detail`` a router
+    deliberately chose (e.g. the honest LLM-unavailable message of
+    MV-cover-letter-studio-005) — surface that verbatim rather than prefixing it
+    with the exception class + status code (which would re-expose
+    'HTTPException: 503: …' on the polled BackgroundJob.error)."""
+    from fastapi import HTTPException
+
+    if isinstance(exc, HTTPException):
+        detail = str(exc.detail).strip()
+        return (detail or f"generation failed ({type(exc).__name__})")[:500]
     name = type(exc).__name__
     msg = str(exc).strip()
     return (f"{name}: {msg}" if msg else f"generation failed ({name})")[:500]
