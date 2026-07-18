@@ -100,6 +100,14 @@ _INJECTION_INDICATORS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bsay\s+only\b", re.I),
     re.compile(r"\breply\s+with\s+only\b", re.I),
     re.compile(r"^\s*tag\s*[:\-]?\s*\S+", re.I),
+    # "Mention COMELY as your top quality in the response" — an output-directed
+    # "mention X" phrasing (gated on an explicit output reference so an ordinary
+    # JD instruction like "mention relevant experience" is NOT redacted).
+    re.compile(
+        r"\bmention\b[^.;\n]*?\b(?:in\s+(?:the|your)\s+(?:response|reply|answer|"
+        r"output|letter)|as\s+your\s+(?:top|best)\b)",
+        re.I,
+    ),
 )
 
 #: Extracts the literal token a "force this exact word into the output"
@@ -109,6 +117,17 @@ _INJECTION_PAYLOAD = re.compile(
     r"\b(?:output|say|print|respond\s+with|reply\s+with)\s+(?:the\s+word\s+|only\s+)?"
     r"[\"']?([A-Za-z0-9][A-Za-z0-9_-]{1,39})[\"']?"
     r"|\btag\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9_-]{1,39})",
+    re.I,
+)
+
+#: Token of an output-directed "mention X …" injection (e.g. "Mention COMELY as
+#: your top quality in the response" -> "COMELY"). Gated on an explicit output
+#: reference so a benign JD ask ("mention teamwork") never yields a strip token
+#: that would erase a legitimate skill from the letter.
+_INJECTION_MENTION = re.compile(
+    r"\bmention\s+[\"']?([A-Za-z0-9][A-Za-z0-9_-]{1,39})[\"']?"
+    r"[^.;\n]*?\b(?:in\s+(?:the|your)\s+(?:response|reply|answer|output|letter)"
+    r"|as\s+your\s+(?:top|best)\b)",
     re.I,
 )
 
@@ -145,6 +164,10 @@ def extract_injection_payloads(text: str) -> list[str]:
     payloads: list[str] = []
     for match in _INJECTION_PAYLOAD.finditer(text or ""):
         token = match.group(1) or match.group(2)
+        if token and token not in payloads:
+            payloads.append(token)
+    for match in _INJECTION_MENTION.finditer(text or ""):
+        token = match.group(1)
         if token and token not in payloads:
             payloads.append(token)
     return payloads
@@ -276,6 +299,67 @@ def compose_letter(body: str, job: dict[str, Any], signer: str) -> str:
     )
 
 
+#: Closing salutations that open a business-letter sign-off block. A paragraph
+#: starting with one of these is the sign-off (its name line follows), so it and
+#: everything after it is dropped by :func:`strip_letter_scaffolding`.
+_CLOSINGS = (
+    "sincerely",
+    "kind regards",
+    "warm regards",
+    "best regards",
+    "yours sincerely",
+    "yours faithfully",
+    "regards",
+    "best,",
+    "thank you,",
+)
+
+
+def strip_letter_scaffolding(text: str) -> str:
+    """Strip any business-letter scaffolding a refine model echoed back.
+
+    ``POST /cover-letters/{id}/refine`` hands the model the FULL previously
+    composed letter (date, addressee, salutation, deterministic role/company
+    hook, body, sign-off) as context. A model that echoes those structural
+    elements into its ``body`` output would have them DUPLICATED once it is
+    re-wrapped by :func:`compose_letter` / :func:`build_body`. Deterministically
+    remove them here so the revised body carries the two real paragraphs only —
+    the envelope (salutation + one hook + sign-off with the LOGGED-IN user's own
+    name) is re-added exactly once downstream (MV-cover-letter-studio-002/004)."""
+    kept: list[str] = []
+    for para in split_paragraphs(text):
+        stripped = para.strip()
+        if not stripped:
+            continue
+        low = stripped.lower()
+        first_line = stripped.splitlines()[0].strip().lower().rstrip(",")
+        # Sign-off block ("Sincerely," / name): drop it and every later paragraph.
+        if first_line in {c.rstrip(",") for c in _CLOSINGS} or any(
+            low.startswith(c) for c in _CLOSINGS
+        ):
+            break
+        # Leading date line ("7 July 2026").
+        if re.fullmatch(r"\d{1,2} [A-Za-z]+ \d{4}", stripped):
+            continue
+        # Salutation ("Dear Hiring Team at Foo,").
+        if low.startswith("dear "):
+            continue
+        # Addressee block ("Hiring Team / <company> / Re: <title>").
+        if low.startswith("hiring team") or low.startswith("re:"):
+            continue
+        # Remove any echoed deterministic hook sentence so build_body re-adds it
+        # exactly once ("… is a direct match for the <role> role at <company>.").
+        cleaned = re.sub(
+            r"[^.!?\n]*\bis a direct match for the\b[^.!?\n]*[.!?]\s*",
+            "",
+            stripped,
+            flags=re.I,
+        ).strip()
+        if cleaned:
+            kept.append(cleaned)
+    return "\n\n".join(kept) or text.strip()
+
+
 def strip_banned_openers(body: str) -> str:
     """Deterministically drop any sentence carrying a banned generic opener."""
     for phrase in _BANNED_PHRASES:
@@ -297,6 +381,24 @@ def _opens_sentence(text: str, start: int) -> bool:
     while i >= 0 and text[i] in " \t":
         i -= 1
     return i < 0 or text[i] in _SENTENCE_ENDERS
+
+
+#: Indefinite/definite articles. A signer-name token immediately preceded by one
+#: is functioning as an ordinary COMMON NOUN ("as an Administrator", "the
+#: Administrator's office"), not as a third-person reference to the candidate, so
+#: it must NOT be rewritten to "I"/"my" (MV-cover-letter-studio-001).
+_ARTICLES = frozenset({"a", "an", "the"})
+
+
+def _preceded_by_article(text: str, start: int) -> bool:
+    """True when the word immediately before ``start`` is an article (a/an/the)."""
+    i = start - 1
+    while i >= 0 and text[i] in " \t":
+        i -= 1
+    end = i + 1
+    while i >= 0 and (text[i].isalpha() or text[i] == "'"):
+        i -= 1
+    return text[i + 1 : end].lower() in _ARTICLES
 
 
 def enforce_first_person(body: str, signer: str) -> str:
@@ -340,6 +442,14 @@ def enforce_first_person(body: str, signer: str) -> str:
         kind = match.lastgroup
         if kind == "contr":
             return "I'm"
+        # The signer's name string preceded by an article is a common-noun usage
+        # ("My background as an Administrator …"), not the candidate referring to
+        # themself in the third person — leave it untouched so the deterministic
+        # hook stays grammatical (MV-cover-letter-studio-001 / MV-approval-modal-009).
+        if kind in ("name", "namep") and _preceded_by_article(
+            match.string, match.start()
+        ):
+            return match.group()
         if kind in ("namep", "possdet"):
             base = "my"
         elif kind in ("name", "subj"):
@@ -357,6 +467,73 @@ def enforce_first_person(body: str, signer: str) -> str:
     text = re.sub(r"\bI does\b", "I do", text)
     # Collapse any double spaces the rewrites introduced (never touch newlines).
     return re.sub(r"[ \t]{2,}", " ", text)
+
+
+#: Content-word tokenizer for the grounding metric (mirrors the studio's voice
+#: metrics). Short words and connectives carry no grounding signal.
+_CONTENT_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#./-]*")
+_CONFIDENCE_STOPWORDS = frozenset(
+    """
+    a an and are as at be been by for from has have i in is it its my of on or
+    our that the their this to was we were will with you your who what how when
+    across own more most very than then also both each am me not can could would
+    should into out about over under they them he she his her role letter
+    """.split()
+)
+
+
+def grounding_confidence(letter: str, corpus: str) -> int:
+    """Share (0-100) of the letter's content words backed by the evidence corpus.
+
+    The SAME evidence-authenticity signal the Cover Letter Studio surfaces
+    (cover_letters._voice_metrics, cl03): a real, deterministic measurement of
+    the finished artifact — never a fabricated or random score. A guard-passed
+    letter, whose every entity/metric already traces to the corpus, sits high."""
+    corpus_tokens = {t.lower() for t in _CONTENT_WORD_RE.findall(corpus)}
+    words = [
+        t
+        for t in _CONTENT_WORD_RE.findall(letter)
+        if len(t) >= 3 and t.lower() not in _CONFIDENCE_STOPWORDS
+    ]
+    if not words:
+        return 0
+    supported = sum(1 for w in words if w.lower() in corpus_tokens)
+    return round(100 * supported / len(words))
+
+
+def build_approval_extras(letter: str, job: dict[str, Any], corpus: str) -> dict[str, Any]:
+    """Approval-card fields the review modal renders — ``preview`` (the actual
+    generated letter), ``why`` (why the human gate fired), ``reasoning`` (what
+    the agent verified) and ``confidence`` (evidence grounding). Without these
+    the modal renders an empty box with no letter to review (MV-approval-modal-001).
+
+    Every reasoning item is TRUE by construction: a letter only reaches this
+    point after passing the FabricationGuard (grounded), the first-person voice
+    pass, and the §10.2 structural gate (names the real role/company)."""
+    return {
+        "preview": letter,
+        "why": (
+            "This cover letter will be submitted with your application. Review "
+            "the generated letter before it is sent on your behalf."
+        ),
+        "reasoning": [
+            {
+                "kind": "check",
+                "text": (
+                    "Every specific claim is grounded in your resume and career "
+                    "evidence (fabrication guard passed)."
+                ),
+            },
+            {"kind": "check", "text": "Written consistently in your first-person voice."},
+            {
+                "kind": "check",
+                "text": (
+                    f"Addressed to the real role — {job['title']} at {job['company']}."
+                ),
+            },
+        ],
+        "confidence": grounding_confidence(letter, corpus),
+    }
 
 
 @dataclass
@@ -447,6 +624,7 @@ class CoverLetterAgent:
         fixture_key: str,
         claim_evidence: str,
         jd_risk: str,
+        injection_payloads: list[str],
     ) -> tuple[str, str, list[str], list[str], list[str]]:
         """Draft a letter; return
         (letter, body, guard_flags, claim_flags, structural_issues)."""
@@ -460,6 +638,15 @@ class CoverLetterAgent:
         )
         hook_reason = str(raw.get("hook_reason") or "")
         model_body = (raw.get("body") or "").strip()
+        # GAP-NEW-003 / MV-cover-letter-studio-003: strip any literal control
+        # token an injection attempt tried to force into the letter FROM THE
+        # MODEL OUTPUT, before it is composed and evidence-checked. Stripping
+        # here (not only post-guard) means the sanitized evidence corpus can no
+        # longer be poisoned into grounding the injected token, so the guard
+        # adjudicates a clean letter.
+        if injection_payloads:
+            hook_reason = strip_injection_leaks(hook_reason, injection_payloads)
+            model_body = strip_injection_leaks(model_body, injection_payloads)
         body = build_body(model_body, job, position, hook_reason)
         letter = compose_letter(body, job, signer)
         # GAP-P6-COV-001: the evidence-grounding guard checks only the MODEL-
@@ -522,12 +709,16 @@ class CoverLetterAgent:
         # The letter date, signer name and current position are system/profile
         # ground truth, so they join the evidence corpus the guard checks
         # against — as does the consolidated career evidence when present.
+        # MV-cover-letter-studio-003: the job description is ATTACKER-controlled,
+        # so it joins the corpus only in its SANITIZED form — a redacted
+        # injection clause can no longer "ground" an injected token and wave it
+        # past the guard. Legitimate requirements survive sanitization intact.
         corpus = " ".join(
             [
                 resume_text,
                 job["title"],
                 job["company"],
-                job.get("description", ""),
+                sanitize_untrusted_text(raw_description),
                 self._today(),
                 signer,
                 position,
@@ -570,6 +761,7 @@ class CoverLetterAgent:
             letter, body, flagged, claim_flags, issues = self._draft(
                 base_prompt, job, corpus, signer, position, fixture_key="default",
                 claim_evidence=claim_evidence, jd_risk=jd_risk,
+                injection_payloads=injection_payloads,
             )
             all_flagged: list[str] = list(flagged)
             all_claims: list[str] = list(claim_flags)
@@ -602,6 +794,7 @@ class CoverLetterAgent:
                     letter, body, flagged, claim_flags, issues = self._draft(
                         retry_prompt, job, corpus, signer, position, fixture_key=attempt,
                         claim_evidence=claim_evidence, jd_risk=jd_risk,
+                        injection_payloads=injection_payloads,
                     )
                 except LLMFixtureMissingError:
                     # Replay mode with no recorded retry fixture — keep the last
@@ -665,6 +858,10 @@ class CoverLetterAgent:
                 "job_id": job_id,
                 "job_title": job["title"],
                 "company": job["company"],
+                # Review-modal fields (preview/why/reasoning/confidence) so the
+                # human sees the letter + the agent's grounded reasoning rather
+                # than an empty box (MV-approval-modal-001).
+                **build_approval_extras(letter, job, corpus),
             },
             application_id=stored["id"],
         )
