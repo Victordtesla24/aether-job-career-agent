@@ -5,6 +5,8 @@ not exist yet.
 """
 from __future__ import annotations
 
+import uuid
+
 VALID_CREDENTIALS = {"email": "casey@example.com", "password": "hunter2024"}
 
 
@@ -315,24 +317,45 @@ class TestAuthRateLimiting:
         assert statuses[:5] == [401, 401, 401, 401, 401], statuses
         assert statuses[5] == 429, statuses
 
-    def test_register_spam_on_one_email_is_capped(self, client):
+    def test_register_spam_on_one_email_is_capped(self, client, db_session):
         # Default cap: 3 register attempts / email / window. The first creates
         # the account (201); the next two collide (409 duplicate) but STILL
         # count; the fourth attempt on the same email is throttled with 429.
+        #
+        # MV-system-004: this test used to hardcode a fixed literal email
+        # ("spam@example.com"). That is fragile under a shared Postgres test
+        # schema — a row already present for that exact address BEFORE this
+        # test's own "first" call (e.g. a prior crashed run, or a concurrent
+        # process sharing the schema) flips the very first assertion from 201
+        # to 409, even though the in-memory rate limiter itself (fresh per
+        # test app instance) has recorded nothing yet. Proven below: seed
+        # exactly that pollution against the OLD literal, then show this
+        # test's own (now unique, per-run) email is unaffected by it.
+        with db_session.cursor() as cur:
+            from app.db import new_id
+
+            cur.execute(
+                'INSERT INTO "User" ("id","email","passwordHash","updatedAt")'
+                " VALUES (%s,%s,%s,NOW())",
+                (new_id(), "spam@example.com", "irrelevant-hash"),
+            )
+        db_session.commit()
+
+        email = f"spam-{uuid.uuid4().hex[:8]}@example.com"
         first = client.post(
-            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+            "/auth/register", json={"email": email, "password": "Passw0rd1"}
         )
         assert first.status_code == 201, first.text
         second = client.post(
-            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+            "/auth/register", json={"email": email, "password": "Passw0rd1"}
         )
         third = client.post(
-            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+            "/auth/register", json={"email": email, "password": "Passw0rd1"}
         )
         assert second.status_code == 409
         assert third.status_code == 409
         fourth = client.post(
-            "/auth/register", json={"email": "spam@example.com", "password": "Passw0rd1"}
+            "/auth/register", json={"email": email, "password": "Passw0rd1"}
         )
         assert fourth.status_code == 429, fourth.text
         assert fourth.headers.get("Retry-After")
