@@ -338,6 +338,32 @@ systemctl status aether-api.service aether-web.service
 # Both should show "active (running)"
 ```
 
+**4. Verify `AETHER_LLM_MODE` is NOT `replay` or `record`:**
+```bash
+grep -E '^AETHER_LLM_MODE=' /home/ubuntu/github_repos/aether-job-career-agent/.env
+# Expected: AETHER_LLM_MODE=auto  (or =live)
+# MUST NOT be =replay or =record
+```
+
+**Why this check exists (MV-application-tracker-001, BLOCKER, 2026-07-17):** in `replay`
+mode the LLM client (`apps/api/app/services/llm_client.py`, `_replay()`) serves
+canned content straight out of `apps/api/tests/fixtures/llm/**` instead of a live
+model response, and `record` mode persists whatever the live call returns for
+later replay. Neither mode carries any signal to the end user that the content
+is fixture/test data, not a real generation. A prior incident (RCA:
+`uat/reports/evidence/manual-verification/fixes/MV-application-tracker-001/RCA.json`,
+verdict `stale-seed-data`) found 8 production `Application.coverLetter` rows
+containing fixture-derived text, fabricated achievements repeated verbatim
+across unrelated jobs, reachable by real users. The RCA confirmed production
+was already running `AETHER_LLM_MODE=auto` (which never serves fixtures — see
+`_auto()` in the same file) and that the leaked rows were stale seed/test data
+rather than a live code defect, but the exposure mechanism (a non-`auto`/`live`
+mode reaching production) is exactly what this check guards against. Do not
+deploy — and if already deployed, treat as a rollback-now incident — if this
+check shows `replay` or `record`. A permanent regression guard for the
+specific leaked content also exists at
+`apps/api/tests/test_mv_no_fixture_content_in_prod_data.py`.
+
 ### Step-by-Step Deployment
 
 #### Phase 1: Pull Latest Code
