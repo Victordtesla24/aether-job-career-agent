@@ -54,8 +54,39 @@ _STOPWORDS = frozenset(
     position preferred proven range red required requirements responsibilities
     role salary seeking skills solid stack strong success successful suitable
     team teams the understanding us via want we well work working world years
+    accommodation accommodations disability disabilities veteran veterans
+    gender orientation sexual religion religious ethnicity nationality marital
+    pregnancy harassment discrimination diversity inclusion inclusive belonging
+    regardless
     """.split()
 )
+
+#: A single maximal run of digits — used to spot machine-gibberish tokens.
+_DIGIT_RUN_RE = re.compile(r"\d+")
+
+
+def _is_noise_token(token: str) -> bool:
+    """Structural non-skill garbage that must never surface as a skill (MV-job-discovery-001).
+
+    Live postings leak URL/domain fragments and machine gibberish (e.g.
+    anti-scrape honeypot codes) verbatim into their text; neither is a plausible
+    skill:
+
+    * URL / multi-segment domain fragments — ``cdn.openai.com`` (2+ dots) or a
+      token carrying a ``http``/``www`` marker. Real tech keeps a single dot
+      (``node.js``, ``asp.net``), so it is preserved.
+    * Machine gibberish — real skills carry at most a short version suffix with
+      one digit group (``python3``, ``log4j``, ``oauth2``, ``i18n``) or, rarely,
+      two in a compact token (``log4j2``). An encoded token (base64 honeypot
+      ``rmja4ljeymi44ljex``) betrays itself with three+ digit runs, or two runs
+      inside a long (>= 12 char) token — never a real skill.
+    """
+    if token.count(".") >= 2 or "www" in token or "http" in token:
+        return True
+    digit_runs = len(_DIGIT_RUN_RE.findall(token))
+    if digit_runs >= 3 or (digit_runs >= 2 and len(token) >= 12):
+        return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -77,9 +108,13 @@ def _clamp(value: float) -> float:
 
 
 def _content_tokens(text: str) -> list[str]:
-    """Lowercased tokens with stopwords/boilerplate removed (order kept)."""
+    """Lowercased tokens with stopwords/boilerplate/garbage removed (order kept)."""
     tokens = [t.lower().rstrip(".,-") for t in _TOKEN_RE.findall(text)]
-    return [t for t in tokens if len(t) >= 2 and t not in _STOPWORDS]
+    return [
+        t
+        for t in tokens
+        if len(t) >= 2 and t not in _STOPWORDS and not _is_noise_token(t)
+    ]
 
 
 @lru_cache(maxsize=1)

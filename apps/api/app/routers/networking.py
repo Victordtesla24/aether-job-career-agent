@@ -331,8 +331,16 @@ def delete_contact(contact_id: str, current_user: CurrentUser) -> None:
     """Delete a contact."""
     uid = current_user["id"]
     get_contact(contact_id, current_user)  # 404 check
+    _ensure_outreach_tables()
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # App-level cascade (MV-networking-007): remove dependent outreach
+            # tasks first so no orphan survives even where the deployed table's
+            # declared ON DELETE CASCADE is not active.
+            cur.execute(
+                'DELETE FROM "OutreachTask" WHERE "contactId" = %s AND "userId" = %s',
+                (contact_id, uid),
+            )
             cur.execute(
                 'DELETE FROM "Contact" WHERE "id" = %s AND "userId" = %s',
                 (contact_id, uid),
@@ -409,6 +417,11 @@ def create_outreach_task(
     """Create a new outreach task linked to a contact."""
     _ensure_outreach_tables()
     uid = current_user["id"]
+
+    # Referential integrity (MV-networking-007): the referenced contact must
+    # exist AND belong to the caller. Validating here yields an honest 404 and
+    # never creates an orphan task nor surfaces a raw DB FK-violation 500.
+    get_contact(body.contact_id, current_user)
 
     if body.type not in _OUTREACH_TYPES:
         raise HTTPException(

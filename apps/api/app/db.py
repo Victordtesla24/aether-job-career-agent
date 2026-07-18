@@ -224,3 +224,51 @@ def ensure_resume_columns() -> None:
             )
         conn.commit()
     _resume_columns_ready = True
+
+
+#: Guard so the additive ``ApprovalRequest`` execution column is only ensured
+#: once per worker process (see ``ensure_approval_columns``).
+_approval_columns_ready = False
+
+
+def ensure_approval_columns() -> None:
+    """Idempotently add the additive ``ApprovalRequest.executedAt`` column on first use.
+
+    ``executedAt`` (MV-approval-modal-010) is the idempotency marker for the
+    ``/approvals/{id}/execute`` side-effect: the endpoint claims an approved
+    request by conditionally stamping this column exactly once, so a
+    double-submit/retry cannot fire the same real Gmail send twice. Introduced by
+    lazy DDL (ADR-TR-1 — there is no migration runner), mirroring
+    ``ensure_resume_columns``.
+
+    ``ADD COLUMN ... timestamptz`` with no default is a metadata-only change on
+    PostgreSQL (existing rows read ``NULL`` = "never executed"), so it is fast and
+    safe on the production ``ApprovalRequest`` table and backfills the shared test
+    schema — fully backward compatible; the ``ApprovalStatus`` enum is untouched. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers so the
+    DDL cannot race; ``TRUNCATE`` never drops columns, so this survives teardown.
+    """
+    global _approval_columns_ready
+    if _approval_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER when the column
+            # already exists (production / warm test schema).
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'ApprovalRequest'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'executedAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _approval_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240725,))
+            cur.execute(
+                'ALTER TABLE "ApprovalRequest" '
+                'ADD COLUMN IF NOT EXISTS "executedAt" timestamptz'
+            )
+        conn.commit()
+    _approval_columns_ready = True

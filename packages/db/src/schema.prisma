@@ -206,6 +206,11 @@ model ApprovalRequest {
   payload       Json
   createdAt     DateTime       @default(now())
   resolvedAt    DateTime?
+  // Idempotency marker for /approvals/{id}/execute (MV-approval-modal-010):
+  // stamped exactly once when the high-risk side-effect fires, so a retry/
+  // double-submit cannot execute the same approval twice. Managed by lazy DDL
+  // (ensure_approval_columns) — additive, nullable, backward compatible.
+  executedAt    DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   application Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
