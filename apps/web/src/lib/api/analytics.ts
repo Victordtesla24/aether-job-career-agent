@@ -77,6 +77,14 @@ export const DashboardSchema = z.object({
 
 export type Dashboard = z.infer<typeof DashboardSchema>;
 
-export async function fetchDashboard(options: RequestOptions = {}): Promise<Dashboard> {
-  return DashboardSchema.parse(await apiRequest<unknown>("/analytics/dashboard", options));
+export async function fetchDashboard(
+  period: Period = "all",
+  options: RequestOptions = {},
+): Promise<Dashboard> {
+  // The backend has always accepted ?period= here (see analytics.py
+  // _dashboard()); the client simply never forwarded it, so the Analytics
+  // page's period selector silently left this panel on "all" (MV-analytics-004).
+  return DashboardSchema.parse(
+    await apiRequest<unknown>(`/analytics/dashboard?period=${period}`, options),
+  );
 }

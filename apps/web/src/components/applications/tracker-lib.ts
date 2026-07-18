@@ -228,7 +228,21 @@ export const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; label: string }> = [
   { key: "company", label: "Company A–Z" },
 ] as const;
 
-export function cardMatchesFilter(card: StageCard, filter: FilterKey): boolean {
+/**
+ * Application ids with a live, pending ApprovalRequest — the same set the
+ * pending-approvals banner counts (GET /approvals?status=pending). Passed
+ * into the "needs-approval" filter so both signals on this screen always
+ * describe the SAME underlying set (MV-application-tracker-002): a
+ * status==='draft' heuristic could disagree with the banner whenever a
+ * draft Application had no linked approval request (or vice versa).
+ */
+export type PendingApprovalIds = ReadonlySet<string>;
+
+export function cardMatchesFilter(
+  card: StageCard,
+  filter: FilterKey,
+  pendingApprovalIds: PendingApprovalIds = new Set(),
+): boolean {
   switch (filter) {
     case "all":
       return true;
@@ -237,7 +251,7 @@ export function cardMatchesFilter(card: StageCard, filter: FilterKey): boolean {
     case "below-fit":
       return card.fit != null && card.fit < 85;
     case "needs-approval":
-      return card.app?.status === "draft";
+      return card.app != null && pendingApprovalIds.has(card.app.id);
     default:
       return true;
   }
@@ -263,9 +277,17 @@ export function sortCards(cards: StageCard[], sort: SortKey): StageCard[] {
 }
 
 /** Apply the active filter + sort to every stage (pure). */
-export function viewStages(stages: Stage[], filter: FilterKey, sort: SortKey): Stage[] {
+export function viewStages(
+  stages: Stage[],
+  filter: FilterKey,
+  sort: SortKey,
+  pendingApprovalIds: PendingApprovalIds = new Set(),
+): Stage[] {
   return stages.map((s) => ({
     ...s,
-    cards: sortCards(s.cards.filter((c) => cardMatchesFilter(c, filter)), sort),
+    cards: sortCards(
+      s.cards.filter((c) => cardMatchesFilter(c, filter, pendingApprovalIds)),
+      sort,
+    ),
   }));
 }

@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { submitApplication } from "../../../lib/api/applications";
-import { fetchApprovals } from "../../../lib/api/approvals";
+import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
@@ -220,7 +220,17 @@ function CardLink({ stageKey }: { stageKey: StageKey }) {
 export default function ApplicationsPage() {
   const [apps, setApps] = useState<TrackerApplication[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
+  // The full pending-approvals list — not just a count — so the
+  // "Needs approval" filter (MV-application-tracker-002) can match the
+  // EXACT same set the banner counts, instead of a status==='draft'
+  // heuristic that can silently disagree with it.
+  const [pendingApprovals, setPendingApprovals] = useState<Approval[]>([]);
+  const pendingCount = pendingApprovals.length;
+  const pendingApprovalIds = new Set(
+    pendingApprovals
+      .map((a) => a.applicationId)
+      .filter((id): id is string => Boolean(id)),
+  );
   const [detail, setDetail] = useState<TrackerApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -244,11 +254,12 @@ export default function ApplicationsPage() {
       setError(e instanceof Error ? e.message : "Failed to load applications");
       setApps([]);
     }
-    // Pending-approvals banner (REQ-TM-04) — non-fatal if it fails.
+    // Pending-approvals banner + "Needs approval" filter (REQ-TM-04,
+    // MV-application-tracker-002) — non-fatal if it fails.
     try {
-      setPendingCount((await fetchApprovals("pending")).length);
+      setPendingApprovals(await fetchApprovals("pending"));
     } catch {
-      // Keep the last known count.
+      // Keep the last known list.
     }
     // Auto-apply guardrail state — banner falls back to generic copy.
     try {
@@ -296,7 +307,7 @@ export default function ApplicationsPage() {
     }
   };
 
-  const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort);
+  const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort, pendingApprovalIds);
   const closed = (apps ?? []).filter((a) => a.status === "rejected" || a.status === "withdrawn");
   const activeCount = stages.reduce((n, s) => n + s.cards.length, 0);
   const autoApplyOn = agentConfig?.autoApply ?? false;

@@ -155,6 +155,47 @@ describe("SubscriptionGate", () => {
     expect(screen.queryByTestId("subscription-paywall")).toBeNull();
   });
 
+  it("keeps an unmapped /dashboard/<unknown> route reachable for a gated (free) user instead of the paywall (MV-dashboard-001)", async () => {
+    usePathnameMock.mockReturnValue("/dashboard/nonexistent-xyz");
+    // Even a gated free user must see the [...slug] catch-all's own
+    // "Section not found" panel, not a paywall indistinguishable from a
+    // real paid-feature gate.
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() => expect(screen.getByText(ACTIONABLE)).toBeTruthy());
+    expect(screen.queryByTestId("subscription-paywall")).toBeNull();
+  });
+
+  it("still gates a real, known dashboard section for a free user (MV-dashboard-001 must not open the whole dashboard)", async () => {
+    usePathnameMock.mockReturnValue("/dashboard/jobs");
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-paywall")).toBeTruthy(),
+    );
+    expect(screen.queryByText(ACTIONABLE)).toBeNull();
+  });
+
   it("paywall's 'manage your account' is a real link to /dashboard/settings (MV-mobile-dashboard-002)", async () => {
     fetchEntitlementMock.mockResolvedValue({
       active_paid: false,

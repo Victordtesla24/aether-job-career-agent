@@ -28,6 +28,48 @@ def _period_clause(period: str, column: str) -> str:
     return f' AND {column} >= NOW() - INTERVAL \'{days} days\''
 
 
+def get_application_counts(
+    cur: Any, user_id: str, period_clause: str = ""
+) -> dict[str, int]:
+    """Canonical application counts for a user — the single source of truth
+    every "applications" figure across the dashboard, mobile dashboard,
+    application tracker and analytics surfaces must derive from (data-
+    consistency ruling: MV-dashboard-001, MV-mobile-dashboard-005/006,
+    MV-analytics-004/005/006, MV-application-tracker-002).
+
+    ``total`` is every ``Application`` row regardless of status — the
+    canonical "applications" figure for any surface whose label does not
+    itself narrow to a subset (e.g. the analytics dashboard-summary card).
+
+    ``submitted`` is the subset whose status has left ``draft`` (i.e. it was
+    actually sent to an employer). Any surface whose label narrows to
+    "submitted", "applied" or similar (the funnel's "Applied" stage, the
+    stat card's "Active Applications", Market Pulse's "Applications / month")
+    must use ``submitted``, never ``total``, and must say so honestly.
+
+    Before this helper, several call sites computed "applications" with
+    divergent inline queries — one of them (Market Pulse's rolling monthly
+    count) mixed ALL statuses while the funnel's all-time "Applied" excluded
+    drafts, so a monthly figure could impossibly exceed the all-time total
+    (MV-mobile-dashboard-005: "you 14" vs "Applied 7"). Every surface below
+    now calls this one function instead.
+
+    ``period_clause`` is an optional ``AND ...`` SQL fragment (see
+    ``_period_clause``) applied to both counts, e.g. a rolling time window.
+    """
+    cur.execute(
+        f'''
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE "status" <> 'draft') AS submitted
+        FROM "Application" WHERE "userId" = %s{period_clause}
+        ''',
+        (user_id,),
+    )
+    total, submitted = cur.fetchone()
+    return {"total": int(total), "submitted": int(submitted)}
+
+
 @router.get("/funnel")
 def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     """Application funnel counts for the requested look-back window."""
@@ -40,10 +82,12 @@ def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
                 (user_id,),
             )
             jobs_found = cur.fetchone()[0]
+            # "Applied" is the canonical submitted-set count (see
+            # get_application_counts docstring) — not a divergent inline query.
+            applied = get_application_counts(cur, user_id, job_filter)["submitted"]
             cur.execute(
                 f'''
                 SELECT
-                    COUNT(*) FILTER (WHERE "status" <> 'draft') AS applied,
                     COUNT(*) FILTER (
                         WHERE "status" IN ('screening','interview','offer')
                     ) AS screened,
@@ -53,7 +97,7 @@ def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
                 ''',
                 (user_id,),
             )
-            applied, screened, interviewed, offers = cur.fetchone()
+            screened, interviewed, offers = cur.fetchone()
     return {
         "period": period,
         "jobs_found": jobs_found,
@@ -277,15 +321,22 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 SELECT
                     COUNT(*) AS total,
                     COUNT(*) FILTER (WHERE "status" IN ('interview','offer')) AS interviews,
-                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers,
-                    COUNT(*) FILTER (
-                        WHERE "createdAt" >= NOW() - INTERVAL '30 days'
-                    ) AS last_month
+                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers
                 FROM "Application" WHERE "userId" = %s
                 ''',
                 (user_id,),
             )
-            f_total, f_interviews, _f_offers, f_last_month = cur.fetchone()
+            f_total, f_interviews, _f_offers = cur.fetchone()
+
+            # "Applications / month" (Market vs. You) must count the SAME
+            # submitted set as every other "applications" figure on this
+            # user's dashboard (data-consistency ruling) — not all statuses
+            # in the window, or a rolling monthly count can silently exceed
+            # the all-time "Applied" total (MV-mobile-dashboard-005: drafts
+            # inflated this to "you 14" against the funnel's honest 7).
+            f_last_month = get_application_counts(
+                cur, user_id, ' AND "createdAt" >= NOW() - INTERVAL \'30 days\''
+            )["submitted"]
 
             # Average fit score across scored jobs (skill-match proxy).
             cur.execute(
@@ -560,12 +611,12 @@ def _dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
     agent_filter = _period_clause(period, '"startedAt"')
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Application stats
-            cur.execute(
-                f'SELECT COUNT(*) FROM "Application" WHERE "userId" = %s{app_filter}',
-                (user_id,),
-            )
-            total_apps = cur.fetchone()[0]  # type: ignore[index]
+            # Application stats — "totalApplications" is the canonical, ALL-
+            # statuses figure (see get_application_counts docstring): this
+            # card's label is the unqualified "Applications", so it must
+            # show every Application row, not a narrower submitted-only
+            # count.
+            total_apps = get_application_counts(cur, user_id, app_filter)["total"]
 
             cur.execute(
                 f'''SELECT COUNT(*) FROM "Application"

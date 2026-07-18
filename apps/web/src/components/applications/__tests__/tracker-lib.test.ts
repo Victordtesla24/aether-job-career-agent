@@ -201,10 +201,38 @@ describe("filter / sort", () => {
       "c3",
     ]);
     expect(cards.filter((c) => cardMatchesFilter(c, "below-fit")).map((c) => c.id)).toEqual(["c2"]);
-    expect(cards.filter((c) => cardMatchesFilter(c, "needs-approval")).map((c) => c.id)).toEqual([
-      "c3",
-    ]);
+    // "needs-approval" matches the LIVE pending-approval set, not a
+    // status==='draft' heuristic (MV-application-tracker-002) — c3's draft
+    // application has a pending ApprovalRequest (id "c3") here.
+    const pendingApprovalIds = new Set(["c3"]);
+    expect(
+      cards.filter((c) => cardMatchesFilter(c, "needs-approval", pendingApprovalIds)).map((c) => c.id),
+    ).toEqual(["c3"]);
     expect(cards.filter((c) => cardMatchesFilter(c, "all"))).toHaveLength(3);
+  });
+
+  it("needs-approval never disagrees with the pending-approvals banner (MV-application-tracker-002)", () => {
+    // A draft application with NO linked pending ApprovalRequest (the
+    // Stripe-repro scenario) must NOT show up under "Needs approval" —
+    // the filter and the banner must always describe the same set.
+    expect(cards.filter((c) => cardMatchesFilter(c, "needs-approval", new Set())).map((c) => c.id)).toEqual(
+      [],
+    );
+    // A non-draft application that still has a live pending approval (e.g.
+    // an email_send approval attached post-submission) DOES match — the
+    // filter tracks the approval, not the status label.
+    const submittedWithPendingApproval: StageCard = {
+      id: "c4",
+      title: "D",
+      company: "Beta",
+      updatedAt: "2026-07-07T00:00:00Z",
+      fit: 60,
+      app: app({ id: "c4", status: "submitted" }),
+      meta: {},
+    };
+    expect(
+      cardMatchesFilter(submittedWithPendingApproval, "needs-approval", new Set(["c4"])),
+    ).toBe(true);
   });
 
   it("sorts by recency, fit and company without mutating input", () => {

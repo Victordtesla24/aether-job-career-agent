@@ -197,3 +197,52 @@ class TestAnalytics:
         for c in mvy["comparisons"]:
             assert c["market"] is None
         assert "no market data source connected" in mvy["summary"].lower()
+
+    def test_applications_total_consistent_across_dashboard_funnel_market_pulse(
+        self, client, auth_headers, user_id
+    ):
+        """Data-consistency ruling (MV-dashboard-001, MV-mobile-dashboard-
+        005/006, MV-analytics-004/005/006, MV-application-tracker-002): the
+        canonical "applications" total (every Application row, any status)
+        must be identical everywhere it's shown unqualified, and every
+        "submitted"-labelled figure (funnel "applied", Market Pulse
+        "Applications / month") must count exactly the non-draft subset —
+        never a fourth, divergent count.
+
+        Before the fix, the dashboard-summary card counted ALL statuses, the
+        funnel's "Applied" excluded drafts, and Market Pulse's rolling
+        monthly figure ALSO counted all statuses within a 30-day window —
+        so a monthly figure could exceed the all-time submitted total
+        (MV-mobile-dashboard-005 observed "you 14" vs funnel "Applied 7").
+        """
+        # 3 drafts (never submitted) + 4 applications that left draft, all
+        # created "now" so the last-30-days window captures every row.
+        _seed_funnel(
+            user_id,
+            jobs=7,
+            statuses=[
+                "draft", "draft", "draft",
+                "submitted", "screening", "interview", "offer",
+            ],
+        )
+        total = 7
+        submitted = 4  # everything except the 3 drafts
+
+        dashboard = client.get("/analytics/dashboard", headers=auth_headers).json()
+        assert dashboard["totalApplications"] == total
+
+        funnel = client.get("/analytics/funnel?period=all", headers=auth_headers).json()
+        assert funnel["applied"] == submitted
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        you_apps_month = next(
+            c["you"]
+            for c in pulse["marketVsYou"]["comparisons"]
+            if c["label"] == "Applications / month"
+        )
+        # All seeded rows fall inside the 30-day window, so the monthly
+        # submitted count must equal the all-time submitted count — and must
+        # NOT silently include the 3 drafts (which would make it 7, not 4).
+        assert you_apps_month == submitted
+        assert you_apps_month == funnel["applied"]
+        assert you_apps_month != total

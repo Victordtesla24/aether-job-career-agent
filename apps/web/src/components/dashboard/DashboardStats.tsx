@@ -46,7 +46,11 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       noteColor:
         weeklyApplied != null && weeklyApplied > 0 ? "text-aether-green" : "text-aether-muted",
       trendUp: weeklyApplied != null && weeklyApplied > 0,
-      tooltip: "Total roles you've applied to that haven't reached a terminal outcome yet.",
+      // Honest about what's actually counted (data-consistency ruling,
+      // MV-mobile-dashboard-005): funnel.applied is every Application that
+      // has left "draft" — i.e. actually submitted — not a narrower
+      // "still active" subset, so the tooltip must not claim otherwise.
+      tooltip: "Applications you've submitted to an employer — every status past draft (screening, interview, offer, or rejected).",
     },
     {
       label: "Interview Rate",
