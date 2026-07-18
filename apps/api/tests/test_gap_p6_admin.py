@@ -197,6 +197,65 @@ def test_set_spend_cap_persists_and_writes_audit(client):
             assert cur.fetchone()[0] == 1
 
 
+# --------------------------------------------------------------------------- #
+# MV-admin-settings-003 — auth gates before body parsing, for EVERY body shape
+# (identical body-before-auth hazard/fix as MV-admin-settings-002, applied to
+# admin_set_spend_cap).
+# --------------------------------------------------------------------------- #
+
+
+def test_spend_cap_malformed_json_unauth_is_401(client):
+    _, uid = _register(client, f"cap-401a-{uuid.uuid4().hex[:8]}@example.com")
+    resp = client.post(
+        f"/admin/users/{uid}/spend-cap",
+        content="not-json-at-all",
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 401, resp.text
+
+
+def test_spend_cap_wrong_type_unauth_is_401(client):
+    _, uid = _register(client, f"cap-401b-{uuid.uuid4().hex[:8]}@example.com")
+    resp = client.post(
+        f"/admin/users/{uid}/spend-cap",
+        json={"spendCapUsd": "not-a-number-xyz"},
+    )
+    assert resp.status_code == 401, resp.text
+
+
+def test_spend_cap_malformed_json_authed_is_422(client):
+    headers, _ = _admin(client)
+    _, uid = _register(client, f"cap-422-{uuid.uuid4().hex[:8]}@example.com")
+    resp = client.post(
+        f"/admin/users/{uid}/spend-cap",
+        content="not-json-at-all",
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_spend_cap_invalid_value_authed_is_422(client):
+    headers, _ = _admin(client)
+    _, uid = _register(client, f"cap-422b-{uuid.uuid4().hex[:8]}@example.com")
+    resp = client.post(
+        f"/admin/users/{uid}/spend-cap",
+        json={"spendCapUsd": -5},
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_spend_cap_valid_body_still_ok_for_admin(client):
+    headers, _ = _admin(client)
+    _, uid = _register(client, f"cap-200-{uuid.uuid4().hex[:8]}@example.com")
+    ensure_user_billing(uid)
+    resp = client.post(
+        f"/admin/users/{uid}/spend-cap", json={"spendCapUsd": 7.25}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert float(resp.json()["spendCapUsd"]) == pytest.approx(7.25)
+
+
 def test_admin_low_cap_trips_429_before_llm_call(client):
     headers, _ = _admin(client)
     _, uid = _register(client, f"llm-{uuid.uuid4().hex[:8]}@example.com")

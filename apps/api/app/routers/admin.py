@@ -76,11 +76,37 @@ class SpendCapRequest(BaseModel):
     spendCapUsd: float = Field(ge=0)
 
 
+async def _parse_spend_cap_body(request: Request) -> SpendCapRequest:
+    """Decode + validate the spend-cap body AFTER the auth dependency has
+    resolved (MV-admin-settings-003 — the identical body-before-auth hazard
+    and fix as MV-admin-settings-002's ``_parse_settings_body``).
+
+    Declaring a Pydantic body parameter makes FastAPI decode the request body
+    BEFORE dependencies for syntactically-broken JSON, so an anonymous caller
+    could receive a 422 instead of a 401. Reading the body here, inside the
+    handler (after ``AdminUser`` already resolved), keeps this route
+    auth-gated first for EVERY body shape.
+    """
+    try:
+        raw = await request.json()
+    except Exception as exc:  # noqa: BLE001 — malformed / non-JSON body
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Request body is not valid JSON."
+        ) from exc
+    try:
+        return SpendCapRequest.model_validate(raw)
+    except ValidationError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, jsonable_encoder(exc.errors())
+        ) from exc
+
+
 @router.post("/users/{user_id}/spend-cap")
-def admin_set_spend_cap(
-    admin: AdminUser, user_id: str, body: SpendCapRequest, request: Request
+async def admin_set_spend_cap(
+    admin: AdminUser, user_id: str, request: Request
 ) -> dict[str, Any]:
     """Set the per-user USD spend cap (flows into the metered-run reserve)."""
+    body = await _parse_spend_cap_body(request)
     if not admin_repo.user_exists(user_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     cap = admin_repo.set_spend_cap(user_id, body.spendCapUsd)
