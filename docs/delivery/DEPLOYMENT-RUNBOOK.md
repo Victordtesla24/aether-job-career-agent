@@ -401,9 +401,13 @@ timestamp on every line, so the existing file-based tooling (`tail`, `grep`,
   `Restart=on-failure`.
 - **Newly tracked in git** (previously host-only): `deploy/aether-api.service`,
   `deploy/aether-api.service.d/logging.conf`, `deploy/aether-web.service`,
-  `deploy/aether-web.service.d/logging.conf` — byte-identical to the live
-  `/etc/systemd/system/...` units as of 2026-07-18 (no functional change),
-  verified with `systemd-analyze verify`.
+  `deploy/aether-web.service.d/logging.conf` — the `[Unit]`/`[Service]`/
+  `[Install]` directives are functionally identical to the live
+  `/etc/systemd/system/...` units as of 2026-07-18 (no functional change);
+  each tracked `.service` file additionally carries a descriptive header
+  comment block not present in the live file. Verified via `diff` isolating
+  the added comment lines as the only difference, plus `systemd-analyze
+  verify`.
 - **Worker (`aether-worker.service`) is unaffected** — `arq`'s own default
   logging config already prefixes `HH:MM:SS` timestamps (confirmed in the
   original finding's reproduction), so `worker.log` was never part of this
