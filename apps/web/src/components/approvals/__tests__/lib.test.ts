@@ -83,6 +83,18 @@ describe("parseApprovalPayload", () => {
     expect(conf(NaN)).toBeNull();
   });
 
+  it("clamps out-of-range confidence to null instead of a nonsensical percentage (MV-approval-modal-004)", () => {
+    const conf = (confidence: unknown) =>
+      parseApprovalPayload(approval({ payload: { confidence } })).confidence;
+    // 1.5 is neither a valid [0,1] fraction (>1) nor a genuine already-scaled
+    // percentage (real percentages are always whole numbers) — must not
+    // render as a misleading "2%".
+    expect(conf(1.5)).toBeNull();
+    expect(conf(2.3)).toBeNull();
+    // Whole-number percentages just above 1 remain valid.
+    expect(conf(2)).toBe(2);
+  });
+
   it("accepts plain-string reasoning items and drops malformed entries", () => {
     const details = parseApprovalPayload(
       approval({ payload: { reasoning: ["ATS score 96", { kind: "warning" }, 42, { text: "ok" }] } }),

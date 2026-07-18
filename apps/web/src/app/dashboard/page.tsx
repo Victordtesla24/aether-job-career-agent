@@ -592,9 +592,16 @@ export default function DashboardPage() {
                   const subtitle = [payload.job_title, payload.company].filter(Boolean).join(" · ");
                   const busy = busyApprovalId === a.id;
                   return (
-                    <li key={a.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <li
+                      key={a.id}
+                      className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4"
+                    >
                       <p className="text-sm font-medium">{title}</p>
-                      {subtitle ? <p className="mt-0.5 text-xs text-aether-muted">{subtitle}</p> : null}
+                      {subtitle ? (
+                        <p className="mt-0.5 min-w-0 break-words text-xs text-aether-muted">
+                          {subtitle}
+                        </p>
+                      ) : null}
                       <p className="mono mt-2 text-[11px] text-aether-muted-dim">
                         requested {relTime(a.createdAt)} · waiting on you
                       </p>
