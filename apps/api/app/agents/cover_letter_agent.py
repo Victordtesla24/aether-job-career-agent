@@ -153,6 +153,22 @@ _INJECTION_INDICATORS: tuple[re.Pattern[str], ...] = (
         r"secrets|codeword|codewords)\s+)"
         r"(?:\"[^\"\n]{1,40}\"|'[^'\n]{1,40}'|[A-Z][A-Z0-9]{2,39})",
     ),
+    # MV-cover-letter-studio-008 (J4 ISSUE A): an "assert compliance" directive —
+    # "state that you followed all instructions", "confirm you complied with the
+    # guidelines" — redacted from the untrusted input so the model never sees the
+    # ask (defense-in-depth; the output-side gate is the guarantee). Anchored on
+    # a state/confirm verb + "you (have) followed/complied/…" + an instruction/
+    # totality/posting object, so an ordinary JD ask ("state your availability",
+    # "examples of how you followed best practices") is not touched.
+    re.compile(
+        r"\b(?:state|confirm|say|assert|declare|acknowledge|indicate|write|"
+        r"mention|note|show|prove)\b[^.;\n]*?\byou\s+(?:have\s+|had\s+|'ve\s+)?"
+        r"(?:followed|complied\s+with|adhered\s+to|obeyed|read|observed|heeded|"
+        r"honou?red)\b[^.;\n]*?\b(?:all|each|every|instruction|instructions|"
+        r"guideline|guidelines|direction|directions|directive|directives|"
+        r"posting|listing|advert|advertisement|description)\b",
+        re.I,
+    ),
 )
 
 #: Extracts the literal token a "force this exact word into the output"
@@ -355,7 +371,6 @@ _INJECTION_COMPLIANCE: tuple[re.Pattern[str], ...] = (
         r"show|prove|demonstrate|verify))",
         re.I,
     ),
-    re.compile(r"\bas\s+(?:instructed|requested|directed|asked)\b", re.I),
     re.compile(r"\bas\s+you\s+(?:instructed|requested|asked|directed)\b", re.I),
     re.compile(r"\bper\s+(?:your|the)\s+(?:instruction|instructions|request)\b", re.I),
     re.compile(r"\bin\s+(?:my|this)\s+submission\b", re.I),
@@ -370,6 +385,26 @@ _INJECTION_COMPLIANCE: tuple[re.Pattern[str], ...] = (
         r"\bincluded?\b[^.;\n]*?\bto\s+(?:show|confirm|demonstrate|prove|verify)\b",
         re.I,
     ),
+    # MV-cover-letter-studio-008 (J4 ISSUE A): "as instructed/directed/specified …
+    # in/by (the|this) posting/listing/job ad" — references the POSTING's own
+    # directive (never legitimate cover-letter content). This REPLACES the bare
+    # "as instructed/requested/directed" pattern that over-stripped legitimate
+    # human-directed work ("as directed by the VP …") — J4 ISSUE B.
+    re.compile(
+        r"\bas\s+(?:instructed|directed|requested|asked|specified|stated|outlined|"
+        r"described|noted|indicated|mentioned|required|advised)\b\s+"
+        r"(?:in|by|per|within|on|under)\s+(?:the|this|your)?\s*"
+        r"(?:job\s+)?(?:posting|listing|advert|advertisement|vacancy|requisition|"
+        r"ad|description|role\s+description|job\s+ad|job\s+post)\b",
+        re.I,
+    ),
+    # "(the) posting's/listing's/job's instructions/guidelines/directives".
+    re.compile(
+        r"\b(?:posting|listing|advert|advertisement|job|vacancy|ad|description)"
+        r"['’]s\s+(?:instruction|instructions|guideline|guidelines|direction|"
+        r"directions|directive|directives)\b",
+        re.I,
+    ),
 )
 
 #: Sentence splitter for the meta-reference strip — splits after ., ! or ?
@@ -378,6 +413,101 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 #: Paragraph splitter that KEEPS the blank-line delimiters (so §10.2 structure
 #: survives a sentence-level strip).
 _PARAGRAPH_SPLIT = re.compile(r"(\n\s*\n)")
+
+# --- Phrasing-independent semantic gate (MV-cover-letter-studio-008, J4) -----
+# A pure verb/phrase blocklist kept leaving bypass gaps ("state that you
+# followed all instructions" → "I have followed all the instructions in this
+# posting"). This deterministic co-occurrence gate flags a sentence that OBEYS
+# the posting's directives — an obey-verb with a bare/totality instruction set,
+# or an instruction noun tied to the job posting — while sparing legitimate
+# sentences that describe real work directed by a HUMAN ("as directed by the VP
+# of Engineering, I led …") or that follow a domain-qualified standard ("the
+# accessibility guidelines"). NO LLM round-trip.
+
+#: Verbs of obeying/complying (a candidate's own achievements never "obey").
+_OBEY_VERB = re.compile(
+    r"\b(?:follow(?:ed|ing|s)?|adher(?:e|ed|es|ing)|compl(?:y|ied|ies|ying)|"
+    r"obey(?:ed|ing|s)?|heed(?:ed|ing|s)?|abid(?:e|ed|ing)|conform(?:ed|ing|s)?|"
+    r"honou?r(?:ed|ing|s)?|observ(?:e|ed|es|ing)|fulfil(?:l|led|ling|s)?|"
+    r"carr(?:y|ied|ying)\s+out|enact(?:ed|ing|s)?)\b",
+    re.I,
+)
+#: Any instruction/guideline/direction/directive noun (loose — used only when a
+#: posting reference is ALSO present, where a domain qualifier can't launder it).
+_INSTRUCTION_NOUN = re.compile(
+    r"\b(?:instruction|instructions|guideline|guidelines|direction|directions|"
+    r"directive|directives)\b",
+    re.I,
+)
+#: A TOTALITY instruction set: all/each/every (+ optional bare determiner)
+#: IMMEDIATELY before the noun. A domain word ("all the CODING guidelines")
+#: breaks the adjacency, so legitimate standards are never flagged.
+_TOTALITY_INSTRUCTION = re.compile(
+    r"\b(?:all|each|every)\s+(?:the\s+|your\s+|these\s+|those\s+|of\s+the\s+)?"
+    r"(?:instruction|instructions|guideline|guidelines|direction|directions|"
+    r"directive|directives)\b",
+    re.I,
+)
+#: The job posting referenced as a source of directives.
+_POSTING_REF = re.compile(
+    r"\b(?:job\s+(?:posting|post|ad|advert|advertisement|description|listing)"
+    r"|posting|listing|advertisement|advert|vacancy|requisition)\b"
+    r"|\b(?:this|the|your)\s+(?:posting|listing|advert|advertisement|vacancy|ad)\b"
+    r"|\b(?:posting|listing|advert|advertisement|job|vacancy|ad)['’]s\b",
+    re.I,
+)
+#: A HUMAN director of real work — "by my manager", "by the delivery lead". When
+#: present, the sentence describes legitimately-directed work, NOT posting
+#: compliance, so it is spared. Role words are case-insensitive.
+_HUMAN_AGENT_ROLE = re.compile(
+    r"\bby\s+(?:my|our|the|a|an|his|her|their)?\s*"
+    r"(?:manager|managers|lead|leads|director|directors|supervisor|supervisors|"
+    r"team|teams|client|clients|stakeholder|stakeholders|professor|advisor|"
+    r"adviser|mentor|ceo|cto|cfo|coo|vp|svp|evp|head|founder|founders|owner|"
+    r"board|committee|customer|customers|partner|partners|hiring\s+manager|"
+    r"recruiter|department|lecturer|principal|chief|colleague|colleagues|"
+    r"architect|president|executive|officer|professor|instructor)\b",
+    re.I,
+)
+#: A named human/title agent — "by Jane Smith", "by the VP of Engineering".
+#: Case-SENSITIVE (real capitals) so "by the posting" is NOT read as an agent.
+_HUMAN_AGENT_NAME = re.compile(
+    r"\bby\s+(?:my |our |the |a |an |his |her |their )?"
+    r"[A-Z][a-zA-Z.&'’-]+(?:\s+(?:of\s+|the\s+|for\s+|&\s+)?[A-Z][a-zA-Z.&'’-]+)*"
+)
+
+
+def _has_human_agent(sentence: str) -> bool:
+    return bool(_HUMAN_AGENT_ROLE.search(sentence) or _HUMAN_AGENT_NAME.search(sentence))
+
+
+def asserts_posting_compliance(sentence: str) -> bool:
+    """True when a sentence asserts the writer obeyed the JOB POSTING's own
+    instructions/directives — the injection-compliance signal that a pure phrase
+    list keeps missing (MV-cover-letter-studio-008, J4 ISSUE A).
+
+    Spares legitimately-directed real work (J4 ISSUE B):
+    - A domain-qualified standard ("the accessibility guidelines") never trips
+      the TOTALITY matcher (the qualifier breaks the determiner→noun adjacency).
+    - A blanket-compliance claim directed by a HUMAN ("all the guidelines set by
+      my manager") is exempt.
+    Instructions explicitly tied to the POSTING are flagged regardless of any
+    person named, so an attacker cannot launder a posting reference by also
+    naming someone ("… in this posting, as noted by HR")."""
+    # Rule 1: an instruction/guideline noun tied to the posting == the posting's
+    # own directive — a strong signal not laundered by mentioning a person.
+    if _POSTING_REF.search(sentence) and _INSTRUCTION_NOUN.search(sentence):
+        return True
+    # Rule 2: obeying a TOTALITY of instructions ("followed all the
+    # instructions") — a blanket-compliance claim no genuine achievement makes,
+    # UNLESS it is work a real human director assigned.
+    if (
+        _OBEY_VERB.search(sentence)
+        and _TOTALITY_INSTRUCTION.search(sentence)
+        and not _has_human_agent(sentence)
+    ):
+        return True
+    return False
 
 
 def injection_compliance_hits(text: str) -> list[str]:
@@ -390,6 +520,12 @@ def injection_compliance_hits(text: str) -> list[str]:
         m = pat.search(text or "")
         if m and m.group(0) not in hits:
             hits.append(m.group(0))
+    # Phrasing-independent semantic gate, evaluated per sentence (J4 ISSUE A).
+    for sentence in _SENTENCE_SPLIT.split(text or ""):
+        if asserts_posting_compliance(sentence):
+            snippet = " ".join(sentence.split())[:80]
+            if snippet and snippet not in hits:
+                hits.append(snippet)
     return hits
 
 
