@@ -297,6 +297,55 @@ def test_test_run_estimates_no_charge(client, auth_headers):
     assert body["actualCost"] is None or body["actualCost"] >= 0
 
 
+def test_test_run_model_never_null_for_deterministic_agent(client, auth_headers):
+    # MV-agents-003: /agents/test-run must apply the SAME "or deterministic"
+    # model fallback GET /agents/catalog already applies (agents.py:~1501), so
+    # a deterministic (non-LLM) agent's dry-run never returns a raw null
+    # `model` — the frontend's TestRunSchema.model is non-nullable and a raw
+    # null there is exactly what produced the reported Zod parse error.
+    res = client.post(
+        "/agents/test-run", json={"agent_key": "jobDiscovery"}, headers=auth_headers
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["model"] == "deterministic"
+    assert body["model"] is not None
+    # Honesty: a deterministic agent makes no LLM call, so the cost/token
+    # ESTIMATE stays genuinely null — the fix must not fabricate a fake spend
+    # just to satisfy the non-null model field.
+    assert body["estCost"] is None
+    assert body["estTokens"] is None
+    assert body["creditsCharged"] == 0.0
+
+
+def test_test_run_model_never_null_for_planned_agent(client, auth_headers):
+    # A "planned" catalog entry has no backend implementation at all
+    # (entry["backend"] is None) — same null-model bug applied here too.
+    res = client.post(
+        "/agents/test-run", json={"agent_key": "compliance"}, headers=auth_headers
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["model"] == "deterministic"
+    assert body["estCost"] is None
+    assert body["creditsCharged"] == 0.0
+
+
+def test_test_run_model_never_null_for_real_llm_agent(client, auth_headers):
+    # A genuine LLM-backed agent keeps returning its REAL resolved model
+    # (never the "deterministic" fallback) and a real, non-zero cost estimate.
+    res = client.post(
+        "/agents/test-run", json={"agent_key": "resumeTailoring"}, headers=auth_headers
+    )
+    assert res.status_code == 200
+    body = res.json()
+    from app.services.llm_client import get_model
+
+    assert body["model"] == get_model("REASONING")
+    assert body["model"] != "deterministic"
+    assert body["estCost"] > 0
+
+
 def test_test_run_unknown_agent_404(client, auth_headers):
     res = client.post("/agents/test-run", json={"agent_key": "nope"}, headers=auth_headers)
     assert res.status_code == 404

@@ -183,7 +183,11 @@ export default function TestRunModal({
           <div className="glass rounded-xl border border-white/10 p-3">
             <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">Est. tokens</p>
             <p className="mt-1 font-mono text-[11px] font-semibold" data-testid="test-run-tokens">
-              {result ? `~${(result.estTokens / 1000).toFixed(1)}K` : "~4.2K"}
+              {result
+                ? result.estTokens != null
+                  ? `~${(result.estTokens / 1000).toFixed(1)}K`
+                  : "N/A"
+                : "~4.2K"}
             </p>
           </div>
           <div className="glass rounded-xl border border-aether-coral/25 p-3">
@@ -194,7 +198,11 @@ export default function TestRunModal({
               className="mt-0.5 font-mono text-sm font-bold text-aether-coral"
               data-testid="test-run-cost"
             >
-              {result ? `~$${result.estCost.toFixed(3)}` : "~$0.032"}
+              {result
+                ? result.estCost != null
+                  ? `~$${result.estCost.toFixed(3)}`
+                  : "N/A"
+                : "~$0.032"}
             </p>
           </div>
         </div>
@@ -209,13 +217,25 @@ export default function TestRunModal({
               <p className="text-xs font-semibold text-aether-green">Dry-run complete</p>
             </div>
             <p className="text-[11px] leading-relaxed text-aether-muted">
-              Agent responded in{" "}
-              <span className="font-mono text-white">{result.responseSeconds}s</span>. Actual cost{" "}
-              <span className="font-mono text-white">${result.actualCost.toFixed(3)}</span> ·{" "}
-              <span className="font-mono text-white">
-                {result.actualTokens.toLocaleString()}
-              </span>{" "}
-              tokens. No credits were charged for this preview.
+              {result.responseSeconds != null &&
+              result.actualCost != null &&
+              result.actualTokens != null ? (
+                <>
+                  Agent responded in{" "}
+                  <span className="font-mono text-white">{result.responseSeconds}s</span>. Actual
+                  cost <span className="font-mono text-white">${result.actualCost.toFixed(3)}</span>{" "}
+                  ·{" "}
+                  <span className="font-mono text-white">
+                    {result.actualTokens.toLocaleString()}
+                  </span>{" "}
+                  tokens. No credits were charged for this preview.
+                </>
+              ) : (
+                <>
+                  No completed run yet for this agent — actual cost/timing will appear here after
+                  it has run at least once. No credits were charged for this preview.
+                </>
+              )}
             </p>
           </div>
         ) : null}
