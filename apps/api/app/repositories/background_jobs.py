@@ -23,7 +23,8 @@ from app.db import get_connection, new_id, rows_to_dicts
 #: (grep pg_advisory_xact_lock): db.py 7420240712 & 7420240720; routers/agents
 #: 7420240711; interviews/networking 7420240713/714; google_credential 715;
 #: job_source_status/provider_credential/gmail_service 716; user_provider_credential
-#: 717; gmail_account 718; billing 719; admin 721. Next genuinely-free id: 722.
+#: 717; gmail_account 718; billing 719; admin 721; background_jobs 722;
+#: EmailThread aiScore (gmail_service) 723. Next genuinely-free id: 724.
 #: (7420240720 was WRONG — it collides with db.py:ensure_admin_user_columns; fixed
 #: per reviewer BLOCKING-4.)
 _BACKGROUND_JOB_LOCK = 7420240722

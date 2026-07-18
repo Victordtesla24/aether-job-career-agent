@@ -149,6 +149,23 @@ class EmailAgent:
             return str(msgs[-1].get("body") or "")
         return ""
 
+    @staticmethod
+    def _coerce_score(value: Any) -> Optional[int]:
+        """Parse a triage score into an int clamped to 0-100, or ``None`` when the
+        LLM did not return a genuine number for this thread (missing index, null,
+        or non-numeric). NEVER coalesces a missing score to 0 — an un-scored
+        thread has NO score, so its ``aiScore`` stays NULL rather than a
+        fabricated 0 that would read as a real 'irrelevant' verdict."""
+        if isinstance(value, bool):  # bool is an int subclass — reject explicitly
+            return None
+        if isinstance(value, (int, float)):
+            return max(0, min(100, int(value)))
+        if isinstance(value, str):
+            s = value.strip()
+            if s.lstrip("-").isdigit():
+                return max(0, min(100, int(s)))
+        return None
+
     def _resume_text(self) -> str:
         return parse_resume_pdf(get_base_resume_path())["raw_text"]
 
@@ -212,6 +229,12 @@ class EmailAgent:
         except LLMFixtureMissingError as exc:
             raise EmailAgentError("triage model unavailable") from exc
         items = {int(it.get("index", -1)): it for it in raw.get("items", [])}
+        # Additive aiScore column (MV-email-center-001) — created on demand so a
+        # never-triaged DB still gets it; nullable, so an un-scored thread stays
+        # NULL (never a fabricated 0).
+        from app.services.gmail_service import ensure_email_thread_ai_columns
+
+        ensure_email_thread_ai_columns()
         categories: dict[str, int] = {}
         triaged = 0
         with get_connection() as conn:
@@ -222,11 +245,23 @@ class EmailAgent:
                     if category not in _CATEGORIES:
                         category = "all"
                     categories[category] = categories.get(category, 0) + 1
-                    cur.execute(
-                        'UPDATE "EmailThread" SET "classification" = %s,'
-                        ' "updatedAt" = now() WHERE id = %s AND "userId" = %s',
-                        (category, t["id"], user_id),
-                    )
+                    # Persist the REAL per-thread score the LLM returned. When the
+                    # model gave no genuine number for this index, aiScore is left
+                    # NULL — an un-scored thread has no score, never a fake 0.
+                    score = self._coerce_score(item.get("score"))
+                    if score is None:
+                        cur.execute(
+                            'UPDATE "EmailThread" SET "classification" = %s,'
+                            ' "updatedAt" = now() WHERE id = %s AND "userId" = %s',
+                            (category, t["id"], user_id),
+                        )
+                    else:
+                        cur.execute(
+                            'UPDATE "EmailThread" SET "classification" = %s,'
+                            ' "aiScore" = %s, "updatedAt" = now()'
+                            ' WHERE id = %s AND "userId" = %s',
+                            (category, score, t["id"], user_id),
+                        )
                     triaged += 1
             conn.commit()
         return EmailAgentResult(
@@ -322,8 +357,12 @@ class EmailAgent:
             model=get_model("REASONING"),
             temperature=0.0,
         )
+        # NEVER fabricate a score: when the LLM returns no genuine numeric score,
+        # `score` is null (the client renders an honest "no usable score" state)
+        # rather than a fake 0 that would read as a real 'irrelevant' verdict —
+        # the same discipline as the triage aiScore path (MV-email-center-001).
         insights = {
-            "score": int(raw.get("score", 0) or 0),
+            "score": self._coerce_score(raw.get("score")),
             "breakdown": raw.get("breakdown", []),
             "summary": str(raw.get("summary", "")),
         }

@@ -23,15 +23,18 @@ from app.db import get_connection, new_id, rows_to_dicts
 from app.repositories.gmail_account import GmailAccountRepository
 from app.services.google_oauth import GOOGLE_SCOPES
 
-#: Distinct advisory-lock id for the additive EmailThread columns
-#: (AgentConfig 711, User 712, CareerProfile 713, OutreachTask 714,
-#: GoogleCredential 715, EmailThread cols 716).
+#: Distinct advisory-lock ids for the additive EmailThread DDL. See the lock-id
+#: ledger in app/repositories/background_jobs.py — 717 is taken
+#: (user_provider_credential) and 722 (background_jobs), so the aiScore lock uses
+#: the next free id, 723.
 _EMAIL_COLS_LOCK = 7420240716
+_EMAIL_AI_COLS_LOCK = 7420240723
 
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
 _MAX_MESSAGE_BYTES = 25 * 1024 * 1024
 
 _cols_ready = False
+_ai_cols_ready = False
 
 
 class GmailError(RuntimeError):
@@ -117,6 +120,38 @@ def ensure_email_thread_gmail_columns() -> None:
             )
         conn.commit()
     _cols_ready = True
+
+
+def ensure_email_thread_ai_columns() -> None:
+    """Idempotently add the additive ``aiScore`` column to ``EmailThread``
+    (backward-compatible; survives TRUNCATE).
+
+    ``aiScore`` (MV-email-center-001) persists the integer 0-100 triage score the
+    :class:`app.agents.email_agent.EmailAgent` produces for a thread, so the
+    Email Command Center list can surface the REAL per-thread score instead of a
+    hardcoded 0. It is nullable and stays NULL until a thread is actually triaged
+    — an un-triaged thread has NO score (never a fabricated 0)."""
+    global _ai_cols_ready
+    if _ai_cols_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'EmailThread'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'aiScore'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _ai_cols_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (_EMAIL_AI_COLS_LOCK,))
+            cur.execute(
+                'ALTER TABLE "EmailThread" ADD COLUMN IF NOT EXISTS "aiScore" integer'
+            )
+        conn.commit()
+    _ai_cols_ready = True
 
 
 def _header(headers: list[dict[str, str]], name: str) -> str:
