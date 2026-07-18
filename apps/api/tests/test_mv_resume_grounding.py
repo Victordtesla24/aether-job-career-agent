@@ -23,6 +23,12 @@ insights) plus an unrelated cover-letter-studio JD-keyword-coverage defect
 * MV-cover-letter-studio-006 (MED)  ``_jd_keywords``/``_keyword_coverage`` in
   ``app/routers/cover_letters.py`` do not filter scraper/boilerplate noise
   tokens, so they can crowd real skills entirely out of the 10-item cap.
+* NF-final-B (5th leaking path, HIGH)  ``GET /resumes/{id}/download`` serves
+  the OPERATOR's bundled PDF verbatim for a user's OWN base resume whenever
+  its ``formatHash`` matches no bundled asset (always true for a JSON/upload-
+  ingested resume) — ``services/resume_pdf.py::resolve_original_pdf`` falls
+  back to ``get_base_resume_path()`` and ``routers/resumes.py::download_resume``
+  streams that file's raw bytes for a base (parentless) resume.
 """
 from __future__ import annotations
 
@@ -252,3 +258,60 @@ def test_keyword_coverage_drops_boilerplate_and_surfaces_buried_skills():
             f"real skill {skill!r} was crowded out of the 10-item keyword coverage cap "
             f"by boilerplate: {sorted(keywords_lower)}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# NF-final-B (5th leaking path, HIGH) — resume PDF download must serve the
+# user's OWN uploaded/ingested content, never the operator's bundled PDF.
+# --------------------------------------------------------------------------- #
+def test_download_resume_serves_users_own_content_not_operator_pdf(client, auth_headers):
+    """A base resume ingested via POST /resumes gets a formatHash that never
+    matches a bundled asset on disk (the operator's real PDF) --
+    ``resolve_original_pdf`` falls back to the bundled operator PDF and
+    ``download_resume`` streams it verbatim for a base (parentless) resume.
+    The downloaded PDF must contain the calling user's OWN marker/content and
+    must NEVER contain the operator's real name, former employers or phone
+    number."""
+    import io
+
+    import pdfplumber
+
+    marker = "ZZUSERMARKERDOWNLOAD07"
+    raw_text = (
+        f"{marker}\n"
+        "Senior Rust engineer specializing in embedded systems and real-time "
+        "control software. Built distributed telemetry pipelines processing "
+        "500k events per second across a 40-node cluster. Led a 6-engineer "
+        "team delivering a safety-critical firmware platform."
+    )
+    create = client.post(
+        "/resumes",
+        json={"label": "Mine", "raw_text": raw_text},
+        headers=auth_headers,
+    )
+    assert create.status_code == 201, create.text
+    resume_id = create.json()["id"]
+
+    resp = client.get(f"/resumes/{resume_id}/download", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.content.startswith(b"%PDF"), "download did not return a PDF"
+
+    with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+    assert marker in text, (
+        "downloaded resume PDF did not contain the user's own ingested content "
+        f"(marker {marker!r} absent) -- served bytes:\n{text[:300]!r}"
+    )
+    assert "ANZ" not in text, (
+        "downloaded resume PDF leaked the OPERATOR's bundled PDF content (ANZ) "
+        "for a user's OWN base resume"
+    )
+    assert "Telstra" not in text, (
+        "downloaded resume PDF leaked the OPERATOR's bundled PDF content (Telstra) "
+        "for a user's OWN base resume"
+    )
+    assert "+61 433 224 556" not in text, (
+        "downloaded resume PDF leaked the OPERATOR's real phone number for a "
+        "user's OWN base resume"
+    )
