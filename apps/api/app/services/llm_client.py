@@ -277,10 +277,23 @@ class LLMFixtureMissingError(RuntimeError):
     """Raised in replay mode when no fixture exists for a prompt."""
 
 
+#: Honest, secret-free message shown to the USER when the live model failed and
+#: no fixture fallback exists (MV-cover-letter-studio-005). The raw
+#: :class:`LLMUnavailableError` string carries internal terms ('hard budget',
+#: 'live call', prompt names) that must never reach a paying user — routers and
+#: the async worker map the failure to this message on every user-facing surface
+#: (503 detail, AgentRun.error audit, BackgroundJob.error) while keeping the
+#: honest 503 + quota-refund semantics.
+LLM_UNAVAILABLE_USER_MESSAGE = (
+    "The AI service is temporarily unavailable. Please try again in a moment."
+)
+
+
 class LLMUnavailableError(RuntimeError):
     """Raised when the live LLM backend failed AND no fixture fallback exists.
 
-    Routers convert this into a clean HTTP 503 ("LLM backend unavailable").
+    Routers convert this into a clean HTTP 503 with an honest, secret-free
+    user message (:data:`LLM_UNAVAILABLE_USER_MESSAGE`).
     """
 
 

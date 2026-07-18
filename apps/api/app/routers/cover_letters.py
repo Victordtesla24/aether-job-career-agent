@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.agents.cover_letter_agent import (
+    REDACTION_PLACEHOLDER,
     build_approval_extras,
     build_body,
     compose_letter,
@@ -31,6 +32,7 @@ from app.agents.cover_letter_agent import (
     injected_provenance_tokens,
     letter_date,
     sanitize_untrusted_text,
+    strip_injection_compliance,
     strip_injection_leaks,
     strip_letter_scaffolding,
     wrap_untrusted_block,
@@ -44,6 +46,7 @@ from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
+    LLM_UNAVAILABLE_USER_MESSAGE,
     LLMClient,
     LLMUnavailableError,
     get_cover_budget_seconds,
@@ -86,6 +89,79 @@ def _meaningful(text: str) -> list[str]:
             continue
         seen.add(low)
         out.append(raw)
+    return out
+
+
+#: Posting-structure / boilerplate words that are not role skills — the JD
+#: Keyword Coverage panel must never surface these (MV-cover-letter-studio-006).
+_KEYWORD_BOILERPLATE = frozenset(
+    """
+    posted about looking apply applying applicant applicants candidate candidates
+    role roles position positions job jobs description responsibilities
+    requirements requirement location locations remote hybrid onsite based team
+    teams company companies please note join joining opportunity opportunities
+    ago day days week weeks month months year years now today
+    """.split()
+)
+
+#: URL / email / path fragments (incl. a bare ``http``/``https`` scheme token
+#: left after ``://`` splits it off) — never a role keyword.
+_NON_SEMANTIC_URL = re.compile(
+    r"https?|www\.|@|/|\\|\.(?:com|org|net|io|co|ai|gov|edu|dev|xyz)\b", re.I
+)
+#: Any vowel — a longish token with none is gibberish, not a real word/skill.
+_VOWEL = re.compile(r"[aeiouy]", re.I)
+
+#: Edge punctuation stripped from a raw token before it is shown as a keyword
+#: (so "PM." → "PM", "Engineer." → "Engineer").
+_KEYWORD_EDGE = ".,;:!?()[]{}\"'`/\\|"
+
+
+def _is_semantic_keyword(token: str) -> bool:
+    """A JD token is a plausible skill/requirement keyword — not a URL, an
+    injected honeypot code, posting boilerplate or a tokenizer artifact
+    (MV-cover-letter-studio-006)."""
+    if len(token) < 3:
+        return False
+    low = token.lower()
+    if low in _STOPWORDS or low in _KEYWORD_BOILERPLATE:
+        return False
+    if _NON_SEMANTIC_URL.search(token):
+        return False
+    has_digit = any(c.isdigit() for c in token)
+    has_upper = any(c.isupper() for c in token)
+    has_lower = any(c.islower() for c in token)
+    # base64/honeypot codes: a longish token mixing letter-case WITH digits, or a
+    # long ALL-CAPS code carrying digits — random strings an injection or
+    # formatting artifact leaves behind (e.g. an IP smuggled as a base64 blob).
+    if has_digit and len(token) >= 8 and has_upper and has_lower:
+        return False
+    if token.isupper() and has_digit and len(token) >= 5:
+        return False
+    # gibberish: a longish token with no vowel is not a real word/skill.
+    if len(token) >= 6 and not _VOWEL.search(token):
+        return False
+    return True
+
+
+def _jd_keywords(jd: str) -> list[str]:
+    """Ordered, deduped, semantic JD keywords for the coverage panel.
+
+    The JD is first passed through :func:`sanitize_untrusted_text` (so an
+    injected token like 'ZEBRA' in an 'include the token ZEBRA' clause is
+    dropped, not surfaced as a keyword — MV-cover-letter-studio-006/008); the
+    redaction placeholder is removed; each token is stripped of edge punctuation
+    and filtered to plausible skills/terms."""
+    sanitized = (sanitize_untrusted_text(jd) or "").replace(REDACTION_PLACEHOLDER, " ")
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in _WORD_RE.findall(sanitized):
+        cleaned = raw.strip(_KEYWORD_EDGE)
+        low = cleaned.lower()
+        if not low or low in seen or not _is_semantic_keyword(cleaned):
+            continue
+        seen.add(low)
+        out.append(cleaned)
     return out
 
 
@@ -160,7 +236,10 @@ def _evidence_trace(
 
 def _keyword_coverage(letter: str, job: dict[str, Any] | None) -> dict[str, Any]:
     jd = f"{(job or {}).get('title', '')} {(job or {}).get('description', '')}"
-    keywords = _meaningful(jd)[:10]
+    # MV-cover-letter-studio-006: filter non-semantic garbage (URLs, injected
+    # honeypot codes, posting boilerplate, punctuation artifacts) so the panel
+    # shows plausible skills/terms rather than tokenizer noise.
+    keywords = _jd_keywords(jd)[:10]
     letter_tokens = _tokens(letter)
     items = [{"keyword": k, "covered": k.lower() in letter_tokens} for k in keywords]
     return {
@@ -363,6 +442,11 @@ def refine_cover_letter(
             if tok not in strip_tokens:
                 strip_tokens.append(tok)
         text = strip_injection_leaks(text, strip_tokens)
+        # MV-cover-letter-studio-008: drop any self-referential injection-
+        # compliance / meta-reference sentence (references the posting's
+        # instructions, not the candidate) that a behaviourally-compliant model
+        # emitted — mirrors the generation agent's output-side check.
+        text = strip_injection_compliance(text)
         # Compose the revision as a full §10.2 business letter (date, addressee,
         # Re:, salutation, role/company hook, revised body, sign-off) — never the
         # banned generic opener the studio previously hardcoded (D-0021, GAP-P4-049).
@@ -385,8 +469,11 @@ def refine_cover_letter(
                 )
                 revised, flagged = _draft(retry_prompt, "retry")
     except LLMUnavailableError:
+        # MV-cover-letter-studio-005: surface an honest, secret-free message —
+        # the raw exception's internals ('hard budget', prompt name) never reach
+        # the user. Honest 503 semantics preserved (no fixture fallback).
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "LLM backend unavailable"
+            status.HTTP_503_SERVICE_UNAVAILABLE, LLM_UNAVAILABLE_USER_MESSAGE
         ) from None
     if flagged:
         raise HTTPException(
