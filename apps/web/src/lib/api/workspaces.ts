@@ -320,19 +320,59 @@ export interface Offer {
   bonus: number;
   equity: number;
   location: string;
-  fitScore: number;
+  /** ISO currency code the figures are in (e.g. "AUD") — MV-offer-comparison-006. */
+  currency: string;
+  /** null for manually-added offers with no agent fit score yet ("Pending"). */
+  fitScore: number | null;
   topPick: boolean;
   deadline: string;
+  /** "application" = derived from an Application(status='offer'); "manual" =
+   * user-entered via Add Offer (deletable). MV-offer-comparison-001/005. */
+  source: "application" | "manual";
 }
 
 export interface OffersPayload {
   offers: Offer[];
   weights: Array<{ key: string; label: string; weight: number }>;
-  negotiation: { insight: string; suggestedCounter: number; leverage: string[] };
+  /** suggestedCounter is null when there is no base to anchor on — the coach
+   * then shows an honest "add an offer" state (never a fabricated $0). */
+  negotiation: { insight: string; suggestedCounter: number | null; leverage: string[] };
+}
+
+/** Fields the Add-Offer form persists via POST /workspaces/offers. */
+export interface OfferCreateInput {
+  company: string;
+  role?: string;
+  base: number;
+  bonus: number;
+  equity: number;
+  location: string;
+  currency: string;
 }
 
 export const fetchOffers = (options: RequestOptions = {}) =>
   apiRequest<OffersPayload>("/workspaces/offers", options);
+
+/** MV-offer-comparison-001 — persist a user-entered offer (real backend write,
+ * replacing the old client-only mock). */
+export const createOffer = (input: OfferCreateInput, options: RequestOptions = {}) =>
+  apiRequest<Offer>("/workspaces/offers", {
+    ...options,
+    method: "POST",
+    body: {
+      company: input.company,
+      role: input.role || undefined,
+      base: input.base,
+      bonus: input.bonus,
+      equity: input.equity,
+      location: input.location,
+      currency: input.currency,
+    },
+  });
+
+/** Delete one of the user's own manually-added offers. */
+export const deleteOffer = (offerId: string, options: RequestOptions = {}) =>
+  apiRequest<void>(`/workspaces/offers/${offerId}`, { ...options, method: "DELETE" });
 
 /* -------------------------------- Settings -------------------------------- */
 

@@ -153,6 +153,7 @@ def test_workspaces_endpoints_require_auth(client):
         ("/workspaces/networking/summary", "GET"),
         ("/workspaces/emails/inbox", "GET"),
         ("/workspaces/offers", "GET"),
+        ("/workspaces/offers", "POST"),
     ]
     for path, method in endpoints:
         if method == "GET":

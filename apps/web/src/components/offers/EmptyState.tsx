@@ -11,9 +11,8 @@ export function EmptyState({ onAddOffer }: { onAddOffer: () => void }) {
         </div>
         <h2 className="mb-1.5 text-lg font-bold">No offers to compare</h2>
         <p className="mb-6 max-w-md text-sm text-aether-muted">
-          When you receive an offer, add it here to run a weighted decision analysis across
-          compensation, growth, culture and more — and get negotiation coaching tailored to
-          your priorities.
+          When you receive an offer, add it here to compare total compensation side by side
+          — and get negotiation coaching anchored on your strongest offer.
         </p>
         <button
           type="button"
@@ -26,7 +25,7 @@ export function EmptyState({ onAddOffer }: { onAddOffer: () => void }) {
         </button>
         <div className="mt-6 flex items-center gap-2 text-[11px] text-aether-muted-dim">
           <i className="fa-solid fa-lightbulb text-aether-yellow" aria-hidden="true" />
-          Tip: Add at least two offers to unlock side-by-side scoring and counter-offer suggestions.
+          Tip: Add at least two offers to compare them side by side and get counter-offer suggestions.
         </div>
       </div>
     </div>

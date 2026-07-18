@@ -1,9 +1,21 @@
 /**
  * AddOfferModal — accessible dialog to add an offer to the comparison
- * (interactivity for add-offer-of05 / empty-add-offer-of16). Validated form;
- * on submit appends a new offer card. Closable via ✕, Cancel, backdrop, Escape.
+ * (interactivity for add-offer-of05 / empty-add-offer-of16). Validated form; on
+ * submit it PERSISTS the offer via onAdd (POST /workspaces/offers) and only
+ * closes on success — a failed write keeps the draft and shows an inline error
+ * (no fake success). Closable via ✕, Cancel, backdrop, Escape.
+ *
+ * MV-offer-comparison-003: the dialog is rendered through a portal to
+ * document.body. The offers page wraps this component as a non-first child of a
+ * `space-y-6` container, and Tailwind's `space-y-6` injects `margin-top:1.5rem`
+ * (24px) onto every non-first child — including this modal's `fixed inset-0`
+ * root, which shifted the overlay down by exactly 24px and left the top strip of
+ * the viewport (with the live Topbar controls) uncovered and clickable. Portaling
+ * to document.body removes the overlay from that flow entirely, so `fixed
+ * inset-0` resolves against the viewport and covers it fully.
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   emptyDraft,
@@ -12,15 +24,21 @@ import {
   validateOfferDraft,
   type DraftErrors,
   type OfferDraft,
-  type UiOffer,
 } from "./offers-lib";
+import type { OfferCreateInput } from "../../lib/api/workspaces";
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [href]';
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href]';
+
+//: Currencies offered for a manually-entered offer — must mirror the API's
+//: accepted set so the stored/displayed code is always a real user choice.
+const CURRENCIES = ["AUD", "USD", "NZD", "GBP", "EUR", "SGD", "CAD", "INR"] as const;
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onAdd: (offer: UiOffer) => void;
+  /** Persist the offer (POST) and resolve on success; reject to surface an
+   * inline error and keep the modal + draft open. */
+  onAdd: (input: OfferCreateInput) => Promise<void>;
 }
 
 const NUMERIC_FIELDS: Array<keyof OfferDraft> = ["base", "bonus", "equity"];
@@ -28,16 +46,17 @@ const NUMERIC_FIELDS: Array<keyof OfferDraft> = ["base", "bonus", "equity"];
 export function AddOfferModal({ open, onClose, onAdd }: Props) {
   const [draft, setDraft] = useState<OfferDraft>(emptyDraft);
   const [errors, setErrors] = useState<DraftErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
   const addCounter = useRef(0);
 
-  // Keep Tab/Shift+Tab trapped inside the dialog. Without this, focus can
-  // walk past the dialog's first/last field onto the header/empty-state "Add
-  // Offer" buttons the backdrop visually covers but never removes from the
-  // tab order (GAP-P4-057 — the overlay must isolate the dialog for keyboard
-  // interaction too, not just for the mouse).
+  useEffect(() => setMounted(true), []);
+
+  // Keep Tab/Shift+Tab trapped inside the dialog (GAP-P4-057).
   const trapTab = useCallback((e: KeyboardEvent) => {
     if (e.key !== "Tab" || !dialogRef.current) return;
     const nodes = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -53,6 +72,8 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
     if (!open) return;
     setDraft(emptyDraft());
     setErrors({});
+    setSubmitError(null);
+    setSubmitting(false);
     const t = setTimeout(() => firstFieldRef.current?.focus(), 0);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -65,7 +86,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
     };
   }, [open, onClose, trapTab]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const setField = (key: keyof OfferDraft) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -78,13 +99,13 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
       .map((v) => Number(v.replace(/[$,\s]/g, "")) || 0)
       .reduce((a, b) => a + b, 0) || 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     addCounter.current += 1;
     const result = validateOfferDraft(draft, String(addCounter.current));
     if (!result.ok || !result.offer) {
       setErrors(result.errors);
-      // focus the first invalid field
       const firstBad = (["company", "base", "location", "bonus", "equity"] as Array<keyof OfferDraft>).find(
         (k) => result.errors[k],
       );
@@ -94,8 +115,25 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
       }
       return;
     }
-    onAdd(result.offer);
-    onClose();
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onAdd({
+        company: result.offer.company,
+        role: draft.role.trim() || undefined,
+        base: result.offer.base,
+        bonus: result.offer.bonus,
+        equity: result.offer.equity,
+        location: result.offer.location,
+        currency: draft.currency || "AUD",
+      });
+      onClose();
+    } catch {
+      setSubmitError("Could not save the offer. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const field = (
@@ -139,7 +177,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
     );
   };
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="add-offer-modal">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
@@ -176,14 +214,39 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
             {field("bonus", "Bonus", { placeholder: "0" })}
             {field("equity", "Equity / yr", { placeholder: "0" })}
           </div>
-          {field("location", "Location", { required: true, placeholder: "e.g. Sydney · Hybrid" })}
+          <div className="grid grid-cols-2 gap-3">
+            {field("location", "Location", { required: true, placeholder: "e.g. Sydney · Hybrid" })}
+            <label className="block">
+              <span className="mb-1 block text-[11px] uppercase tracking-wide text-aether-muted-dim">
+                Currency
+              </span>
+              <select
+                name="currency"
+                value={draft.currency}
+                onChange={(e) => setDraft((prev) => ({ ...prev, currency: e.target.value }))}
+                className="min-h-[44px] w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-aether-coral/50"
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-3.5 py-2.5 text-[12px]">
-            <span className="text-aether-muted-dim">Total comp / yr</span>
+            <span className="text-aether-muted-dim">Total comp / yr · {draft.currency}</span>
             <span className="mono font-semibold text-white" data-testid="add-offer-total">
               {money(previewTotal)}
             </span>
           </div>
+
+          {submitError ? (
+            <p role="alert" data-testid="add-offer-error" className="text-[12px] text-red-400">
+              {submitError}
+            </p>
+          ) : null}
 
           <div className="mt-5 flex items-center justify-end gap-2">
             <button
@@ -196,14 +259,18 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
             <button
               type="submit"
               data-testid="add-offer-submit"
-              className="flex min-h-[44px] items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90"
+              disabled={submitting}
+              aria-busy={submitting}
+              className="flex min-h-[44px] items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <i className="fa-solid fa-plus" aria-hidden="true" />
-              Add offer
+              {submitting ? "Saving…" : "Add offer"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
