@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { validateSignupForm, type SignupFormErrors } from "../../components/auth/validation";
+import PublicFooter from "../../components/PublicFooter";
 import { AuthApiError, login, registerAccount } from "../../lib/api/auth";
 
 const TOKEN_STORAGE_KEY = "aether_token";
@@ -25,6 +26,7 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [consent, setConsent] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<SignupFormErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +38,10 @@ export default function SignupPage() {
     const errors = validateSignupForm({ name, email, password });
     setFieldErrors(errors);
     if (errors.email || errors.password) {
+      return;
+    }
+    if (!consent) {
+      setFormError("You must agree to the Terms & Conditions and Privacy Policy to create an account.");
       return;
     }
 
@@ -147,6 +153,27 @@ export default function SignupPage() {
             ) : null}
           </div>
 
+          <div className="flex items-start gap-2 text-[13px] text-aether-muted">
+            <input
+              id="signup-consent"
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-white/5 accent-aether-indigo"
+            />
+            <label htmlFor="signup-consent">
+              I agree to the{" "}
+              <Link href="/terms" className="text-aether-indigo hover:underline">
+                Terms &amp; Conditions
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy-policy" className="text-aether-indigo hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </label>
+          </div>
+
           {formError ? (
             <p role="alert" data-testid="signup-error" className="text-sm text-aether-coral">
               {formError}
@@ -168,6 +195,8 @@ export default function SignupPage() {
             </Link>
           </p>
         </form>
+
+        <PublicFooter />
       </div>
     </main>
   );

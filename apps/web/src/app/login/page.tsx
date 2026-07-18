@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
+import PublicFooter from "../../components/PublicFooter";
 import { AuthApiError, login } from "../../lib/api/auth";
 
 const TOKEN_STORAGE_KEY = "aether_token";
@@ -127,6 +128,8 @@ export default function LoginPage() {
             </Link>
           </p>
         </form>
+
+        <PublicFooter />
       </div>
     </main>
   );

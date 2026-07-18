@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { getOperatorLegalConfig } from "../../lib/config/legal";
+
 export const metadata: Metadata = {
   title: "Terms & Conditions · Aether Career Agent",
   description:
     "The terms and conditions governing your use of Aether Career Agent.",
 };
+
+// Read the operator identity/contact env vars at request time, not baked in
+// at build time (MV-terms-002/003, H-3 — see lib/config/legal.ts).
+export const dynamic = "force-dynamic";
 
 /**
  * Standalone public terms & conditions page. It is intentionally NOT wrapped in
@@ -14,6 +20,8 @@ export const metadata: Metadata = {
  * configuration and the privacy policy page.
  */
 export default function TermsPage() {
+  const { businessName, abn, supportEmail } = getOperatorLegalConfig();
+
   return (
     <div className="min-h-screen bg-aether-bg text-aether-text">
       {/* Header */}
@@ -135,10 +143,18 @@ export default function TermsPage() {
               every invoice and is available for each plan from the pricing page.
             </p>
             <p className="mt-4">
-              Tax invoices require a registered Australian Business Number.{" "}
-              <strong className="text-aether-text">[Operator ABN]</strong> and{" "}
-              <strong className="text-aether-text">[Business Name]</strong> are placeholders the
-              operator must supply before GST tax invoices are legally complete.
+              Tax invoices require a registered Australian Business Number. Aether Career Agent
+              is operated by <strong className="text-aether-text">{businessName}</strong>
+              {abn ? (
+                <>
+                  {" "}(ABN <strong className="text-aether-text">{abn}</strong>).
+                </>
+              ) : (
+                <>
+                  . An Australian Business Number has not yet been published for this entity;
+                  once the operator configures one, it will appear here and on GST tax invoices.
+                </>
+              )}
             </p>
           </Section>
 
@@ -202,12 +218,9 @@ export default function TermsPage() {
           <Section title="9. Refunds">
             <p>
               No automated refund flow is built into the service. There is no self-service
-              &ldquo;request a refund&rdquo; option. Refund requests, if the operator chooses to
-              honor any, are handled manually by the operator.{" "}
-              <strong className="text-aether-text">
-                [Operator: state your refund policy here — e.g., pro-rated refunds within X
-                days, or no refunds — before relying on this page as final.]
-              </strong>
+              &ldquo;request a refund&rdquo; option. Refund requests are handled manually, on a
+              case-by-case basis, by the operator via the contact method in §18 (Contact) below;
+              this page does not itself guarantee any specific refund outcome.
             </p>
           </Section>
 
@@ -281,8 +294,8 @@ export default function TermsPage() {
               <li>
                 To the maximum extent permitted by law, our total liability for any claim arising
                 out of or relating to the service is capped at the amounts you paid to us in the
-                twelve (12) months prior to the claim, or fifty U.S. dollars ($50) if you are on
-                the free tier.
+                twelve (12) months prior to the claim, or fifty Australian dollars (A$50) if you
+                are on the free tier.
               </li>
               <li>
                 We are not liable for hiring, rejection, or other decisions made by employers or
@@ -310,16 +323,34 @@ export default function TermsPage() {
 
           <Section title="17. Governing Law">
             <p>
-              These Terms are governed by and construed in accordance with the laws of the State
-              of Delaware, USA, without regard to its conflict-of-law principles.
+              These Terms are governed by and construed in accordance with the laws of Victoria,
+              Australia. You and Aether Career Agent submit to the non-exclusive jurisdiction of
+              the courts of Victoria, Australia, without regard to conflict-of-law principles.
             </p>
           </Section>
 
           <Section title="18. Contact">
             <p>
-              If you have questions about these Terms, you can reach us via the{" "}
-              <strong className="text-aether-text">Settings</strong> page or the in-app support
-              channel.
+              {supportEmail ? (
+                <>
+                  If you have questions about these Terms, or need to request a refund, account
+                  closure, or a GST tax invoice correction, email us at{" "}
+                  <a
+                    href={`mailto:${supportEmail}`}
+                    className="text-aether-coral hover:underline"
+                  >
+                    {supportEmail}
+                  </a>
+                  .
+                </>
+              ) : (
+                <>
+                  A support contact address has not yet been published for this service. Once
+                  the operator configures one, it will be shown here and used to process
+                  questions about these Terms, refund requests, account closures, and GST tax
+                  invoice details.
+                </>
+              )}
             </p>
           </Section>
         </div>

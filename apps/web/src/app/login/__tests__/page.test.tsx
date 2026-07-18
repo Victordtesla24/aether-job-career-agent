@@ -97,4 +97,12 @@ describe("LoginPage", () => {
     const flash = await screen.findByTestId("signup-success");
     expect(flash.textContent).toMatch(/account created/i);
   });
+
+  it("MV-privacy-policy-001/MV-terms-001: shows a footer linking to /privacy-policy and /terms", () => {
+    render(<LoginPage />);
+    const privacyLink = screen.getByRole("link", { name: /privacy policy/i });
+    const termsLink = screen.getByRole("link", { name: /^terms$/i });
+    expect(privacyLink.getAttribute("href")).toBe("/privacy-policy");
+    expect(termsLink.getAttribute("href")).toBe("/terms");
+  });
 });
