@@ -33,6 +33,7 @@ import {
   type CareerDataSource,
   type SettingsPayload,
 } from "../../../lib/api/workspaces";
+import { runScoutAgent } from "../../../lib/api/jobs";
 import {
   bySource,
   buildRefreshPayload,
@@ -60,7 +61,14 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
   const [agentConfig, setAgentConfig] = useState({ autoApply: false, approvalGate: true, matchThreshold: 80 });
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  // Job Board Integrations sync (MV-settings-002): a single, real "Sync All"
+  // wired to POST /agents/scout/run — the backend (ScoutAgent.run()) always
+  // fans out over every registered adapter in one call, so there is no
+  // honest way to sync just one board; the previous per-row "Sync" buttons
+  // and their client-only setTimeout theater are gone.
+  const [jobBoardSyncing, setJobBoardSyncing] = useState(false);
+  const [jobBoardSyncNotice, setJobBoardSyncNotice] = useState<string | null>(null);
+  const [jobBoardSyncError, setJobBoardSyncError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -244,9 +252,28 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
     }
   };
 
-  const syncOne = (name: string) => {
-    setSyncing((prev) => ({ ...prev, [name]: true }));
-    setTimeout(() => setSyncing((prev) => ({ ...prev, [name]: false })), 1500);
+  // A real sync needs somewhere to search — the same targetRole/location the
+  // scout agent's own profile-derived defaults use elsewhere in the app
+  // (app/routers/agents.py `_user_search_defaults`). Gate the button rather
+  // than firing a call we know the honest fallback would have to guess at.
+  const jobBoardSyncReady = profile.targetRole.trim().length > 0 && profile.location.trim().length > 0;
+
+  const syncAllJobBoards = async () => {
+    if (!jobBoardSyncReady || jobBoardSyncing) return;
+    setJobBoardSyncing(true);
+    setJobBoardSyncError(null);
+    setJobBoardSyncNotice(null);
+    try {
+      const token = await getToken();
+      await runScoutAgent(profile.targetRole, profile.location, { token, baseUrl: apiBaseUrl() });
+      setData(await fetchSettings());
+      setJobBoardSyncNotice("Job boards synced ✓");
+      setTimeout(() => setJobBoardSyncNotice(null), 4000);
+    } catch (e) {
+      setJobBoardSyncError(e instanceof Error ? e.message : "Job board sync failed");
+    } finally {
+      setJobBoardSyncing(false);
+    }
   };
 
   if (error && data === null) {
@@ -573,13 +600,22 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
           {active === "notifications" && (
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-notifications">
               <h2 className="mb-4 text-[15px] font-semibold">Notifications</h2>
+              <p
+                role="status"
+                data-testid="notifications-unavailable-notice"
+                className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted"
+              >
+                <i className="fa-solid fa-circle-info mr-2 text-aether-muted-dim" aria-hidden="true" />
+                Notification delivery isn&rsquo;t built yet — these preferences aren&rsquo;t functional and
+                aren&rsquo;t saved by &ldquo;Save Changes&rdquo;. Coming soon.
+              </p>
               <div className="space-y-4">
                 <Toggle label="Approval requests" description="Notify me when an agent needs my approval"
-                  value={true} testId="toggle-notif-approvals" onChange={() => undefined} />
+                  value={true} testId="toggle-notif-approvals" onChange={() => undefined} disabled />
                 <Toggle label="Application updates" description="Status changes, recruiter views and responses"
-                  value={true} testId="toggle-notif-apps" onChange={() => undefined} />
+                  value={true} testId="toggle-notif-apps" onChange={() => undefined} disabled />
                 <Toggle label="Weekly digest" description="Summary of agent activity every Monday morning"
-                  value={false} testId="toggle-notif-digest" onChange={() => undefined} />
+                  value={false} testId="toggle-notif-digest" onChange={() => undefined} disabled />
               </div>
             </section>
           )}
@@ -592,35 +628,45 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
                   <button
                     type="button"
                     data-testid="sync-all-btn"
-                    onClick={() => data.integrations.forEach((i) => syncOne(i.name))}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white"
+                    onClick={() => void syncAllJobBoards()}
+                    disabled={jobBoardSyncing || !jobBoardSyncReady}
+                    title={jobBoardSyncReady ? undefined : "Set your target role and location in Profile before syncing job boards"}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
                   >
-                    Sync All
+                    {jobBoardSyncing ? "Syncing…" : "Sync All"}
                   </button>
                 </div>
+                {jobBoardSyncNotice ? (
+                  <p role="status" data-testid="jobboard-sync-notice" className="mb-3 text-[11px] text-aether-green">
+                    {jobBoardSyncNotice}
+                  </p>
+                ) : null}
+                {jobBoardSyncError ? (
+                  <p
+                    role="alert"
+                    data-testid="jobboard-sync-error"
+                    className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-[11px] text-red-300"
+                  >
+                    {jobBoardSyncError}
+                  </p>
+                ) : null}
                 <div className="space-y-2.5">
                   {data.integrations.map((i) => (
                     <div key={i.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
                       <div>
                         <p className="text-xs font-semibold">{i.name}</p>
-                        <p className="text-[11px] text-aether-muted-dim">{syncing[i.name] ? "Syncing…" : i.detail}</p>
+                        <p className="text-[11px] text-aether-muted-dim">{i.detail}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[i.status] ?? STATUS_STYLE.not_configured}`}>
-                          {syncing[i.name] ? "syncing" : i.status.replace("_", " ")}
-                        </span>
-                        <button
-                          type="button"
-                          data-testid={`sync-${i.name.toLowerCase().replace(/\s/g, "-")}`}
-                          onClick={() => syncOne(i.name)}
-                          className="rounded-md border border-white/15 px-2 py-1 text-[10px] text-aether-muted hover:border-white/30 hover:text-white"
-                        >
-                          {syncing[i.name] ? "…" : "Sync"}
-                        </button>
-                      </div>
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[i.status] ?? STATUS_STYLE.not_configured}`}>
+                        {i.status.replace("_", " ")}
+                      </span>
                     </div>
                   ))}
                 </div>
+                <p className="mt-3 text-[10px] text-aether-muted-dim">
+                  <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
+                  Job boards are synced together — per-source sync isn&rsquo;t available yet.
+                </p>
               </section>
 
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-accounts">
@@ -810,26 +856,45 @@ function Toggle({
   value,
   onChange,
   testId,
+  disabled,
 }: {
   label: string;
   description: string;
   value: boolean;
   onChange: (v: boolean) => void;
   testId: string;
+  /** Honestly non-functional (e.g. no backing persistence yet) — renders
+   * genuinely inert via the native `disabled` attribute, not just a
+   * no-op `onChange`, so it can never look interactive while doing nothing. */
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-semibold">{label}</p>
+        <p className="text-sm font-semibold">
+          {label}
+          {disabled ? (
+            <span className="ml-2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-aether-muted-dim">
+              Coming soon
+            </span>
+          ) : null}
+        </p>
         <p className="text-xs text-aether-muted-dim">{description}</p>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={value}
+        aria-disabled={disabled ? "true" : undefined}
+        disabled={disabled}
         data-testid={testId}
-        onClick={() => onChange(!value)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition ${value ? "bg-aether-green" : "bg-white/15"}`}
+        onClick={() => {
+          if (disabled) return;
+          onChange(!value);
+        }}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition ${value ? "bg-aether-green" : "bg-white/15"} ${
+          disabled ? "cursor-not-allowed opacity-50" : ""
+        }`}
       >
         <span
           className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${value ? "left-[22px]" : "left-0.5"}`}
