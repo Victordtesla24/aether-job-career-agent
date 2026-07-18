@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { getOperatorLegalConfig } from "../../lib/config/legal";
+
 export const metadata: Metadata = {
   title: "Privacy Policy · Aether Career Agent",
   description:
     "How Aether Career Agent collects, uses, and protects your data.",
 };
+
+// Read the operator support-contact env var at request time, not baked in at
+// build time (MV-privacy-policy-003, H-3 — see lib/config/legal.ts).
+export const dynamic = "force-dynamic";
 
 /**
  * Standalone public privacy policy page. It is intentionally NOT wrapped in the
@@ -14,6 +20,8 @@ export const metadata: Metadata = {
  * "Aether Career Agent" to match the OAuth consent configuration.
  */
 export default function PrivacyPolicyPage() {
+  const { supportEmail } = getOperatorLegalConfig();
+
   return (
     <div className="min-h-screen bg-aether-bg text-aether-text">
       {/* Header */}
@@ -50,8 +58,13 @@ export default function PrivacyPolicyPage() {
             <strong className="text-aether-text">Aether Career Agent</strong>{" "}
             (&ldquo;Aether Career Agent&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or
             &ldquo;our&rdquo;) collects, uses, retains, and protects your information when
-            you use our application. By using Aether Career Agent, you agree to the
-            practices described below.
+            you use our application. Aether Career Agent is billed in Australian dollars
+            (AUD) with GST and is offered to an Australian market; this Policy is intended
+            to comply with the{" "}
+            <strong className="text-aether-text">Privacy Act 1988 (Cth)</strong> and the{" "}
+            <strong className="text-aether-text">Australian Privacy Principles (APPs)</strong>{" "}
+            (see §9 below). By using Aether Career Agent, you agree to the practices
+            described below.
           </p>
 
           <Section title="1. Information We Collect">
@@ -233,10 +246,26 @@ export default function PrivacyPolicyPage() {
 
           <Section title="7. Contact">
             <p>
-              If you have questions about this Privacy Policy or how your data is handled,
-              you can reach us via the{" "}
-              <strong className="text-aether-text">Settings</strong> page or the in-app
-              support channel.
+              {supportEmail ? (
+                <>
+                  If you have questions about this Privacy Policy or how your data is
+                  handled, or to request a data export or account deletion, email us at{" "}
+                  <a
+                    href={`mailto:${supportEmail}`}
+                    className="text-aether-coral hover:underline"
+                  >
+                    {supportEmail}
+                  </a>
+                  .
+                </>
+              ) : (
+                <>
+                  A support contact address has not yet been published for this service.
+                  Once the operator configures one, it will be shown here and used to
+                  process questions about this Privacy Policy and data export/deletion
+                  requests.
+                </>
+              )}
             </p>
           </Section>
 
@@ -245,6 +274,34 @@ export default function PrivacyPolicyPage() {
               We may update this Privacy Policy from time to time. If we make material
               changes, we will notify you through an in-app notification so you are aware
               before the changes take effect.
+            </p>
+          </Section>
+
+          <Section title="9. Australian Privacy Law">
+            <p>
+              Aether Career Agent is offered to an Australian market and handles personal
+              information — including resume content, Gmail messages you choose to
+              connect, and billing metadata — in a manner intended to comply with the{" "}
+              <strong className="text-aether-text">Privacy Act 1988 (Cth)</strong> and the{" "}
+              <strong className="text-aether-text">
+                Australian Privacy Principles (APPs)
+              </strong>{" "}
+              that Act sets out. If you believe we have mishandled your personal
+              information and are not satisfied with our response after contacting us (see
+              §7 Contact above), you may lodge a complaint with the{" "}
+              <strong className="text-aether-text">
+                Office of the Australian Information Commissioner (OAIC)
+              </strong>{" "}
+              at{" "}
+              <a
+                href="https://www.oaic.gov.au"
+                className="text-aether-coral hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                oaic.gov.au
+              </a>
+              .
             </p>
           </Section>
         </div>

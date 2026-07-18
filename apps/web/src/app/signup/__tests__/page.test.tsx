@@ -44,12 +44,28 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function fillForm({ name, email, password }: { name?: string; email: string; password: string }) {
+function fillForm({
+  name,
+  email,
+  password,
+  consent = true,
+}: {
+  name?: string;
+  email: string;
+  password: string;
+  consent?: boolean;
+}) {
   if (name !== undefined) {
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: name } });
   }
   fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: email } });
   fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: password } });
+  // The Terms/Privacy consent checkbox (MV-terms-001/MV-privacy-policy-001)
+  // is required for a real submission; tests that want to reach the API
+  // check it by default and opt out explicitly to exercise the block.
+  if (consent) {
+    fireEvent.click(screen.getByLabelText(/i agree to the/i));
+  }
 }
 
 describe("SignupPage", () => {
@@ -126,5 +142,52 @@ describe("SignupPage", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/login?registered=1"));
     expect(window.localStorage.getItem("aether_token")).toBeNull();
+  });
+
+  it("MV-terms-001/MV-privacy-policy-001: renders a Terms/Privacy consent checkbox linking to both pages", () => {
+    render(<SignupPage />);
+    const checkbox = screen.getByLabelText(/i agree to the/i) as HTMLInputElement;
+    expect(checkbox.type).toBe("checkbox");
+    expect(checkbox.checked).toBe(false);
+
+    // "Terms & Conditions" only appears in the consent line, so this is
+    // unambiguous even though the page's footer separately links "Terms".
+    const termsLink = screen.getByRole("link", { name: /terms & conditions/i });
+    expect(termsLink.getAttribute("href")).toBe("/terms");
+
+    // "Privacy Policy" appears both in the consent line and the footer —
+    // assert every instance points at the right page.
+    const privacyLinks = screen.getAllByRole("link", { name: /privacy policy/i });
+    expect(privacyLinks.length).toBeGreaterThanOrEqual(1);
+    for (const link of privacyLinks) {
+      expect(link.getAttribute("href")).toBe("/privacy-policy");
+    }
+  });
+
+  it("MV-terms-001/MV-privacy-policy-001: blocks submission and never calls the API when consent is not checked", () => {
+    render(<SignupPage />);
+    fillForm({ email: "new@example.com", password: "abcdefg1", consent: false });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(registerAccountMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(/agree to the terms/i);
+  });
+
+  it("MV-terms-001/MV-privacy-policy-001: proceeds once the consent checkbox is checked", async () => {
+    registerAccountMock.mockResolvedValue({ id: "u1", email: "new@example.com", createdAt: "2026-07-14T00:00:00" });
+    loginMock.mockResolvedValue({ accessToken: "jwt-abc", userId: "u1", email: "new@example.com" });
+
+    render(<SignupPage />);
+    fillForm({ email: "new@example.com", password: "abcdefg1", consent: true });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(registerAccountMock).toHaveBeenCalled());
+  });
+
+  it("MV-privacy-policy-001/MV-terms-001: shows a dedicated footer with a bare 'Terms' link (distinct from the consent line)", () => {
+    render(<SignupPage />);
+    const footerTermsLink = screen.getByRole("link", { name: /^terms$/i });
+    expect(footerTermsLink.getAttribute("href")).toBe("/terms");
+    expect(screen.getByTestId("public-legal-footer")).not.toBeNull();
   });
 });

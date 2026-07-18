@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import MetricTooltip from "../../components/MetricTooltip";
+import PublicFooter from "../../components/PublicFooter";
 import { ApiError } from "../../lib/api/client";
 import { fetchPlans, startCheckout, type Plan } from "../../lib/api/billing";
 
@@ -221,6 +222,8 @@ export default function PricingPage() {
             Sign in
           </Link>
         </p>
+
+        <PublicFooter />
       </div>
     </main>
   );
