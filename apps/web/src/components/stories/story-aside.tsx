@@ -72,9 +72,23 @@ export function StoryAside({
             return (
               <div key={q} className="glass-raised rounded-xl border border-white/10 p-3">
                 <div className="mb-1 text-[#C7C7D6]">{q}</div>
-                <div className={`text-[11px] ${match ? accent : "text-aether-muted-dim"}`}>
-                  <i className="fa-solid fa-arrow-right-long mr-1" aria-hidden="true" />
-                  {match ? match.title : "No matching story yet"}
+                <div
+                  className={`flex items-center text-[11px] ${match ? accent : "text-aether-muted-dim"}`}
+                >
+                  <i className="fa-solid fa-arrow-right-long mr-1 shrink-0" aria-hidden="true" />
+                  {/*
+                    MV-story-bank-008: an unbroken-long story title has no
+                    whitespace to wrap at, so without truncate it can overflow
+                    this fixed-width aside — the same class of bug
+                    MV-story-bank-002 fixed on the STAR fields. `min-w-0`
+                    overrides the flex item's default `min-width: auto` so
+                    `truncate` (overflow:hidden + ellipsis + nowrap) can
+                    actually take effect, matching the story-card header's
+                    already-fixed `h3.truncate` treatment of story.title.
+                  */}
+                  <span className="min-w-0 truncate">
+                    {match ? match.title : "No matching story yet"}
+                  </span>
                 </div>
               </div>
             );
