@@ -225,10 +225,23 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     subtitle ?? (lastRun ? `${today} · last agent run ${timeAgo(lastRun)}` : today);
 
   return (
-    <header className="h-16 shrink-0 border-b border-white/10 glass flex items-center justify-between px-8">
-      <div>
-        <h1 className="text-[15px] font-semibold">{greeting}</h1>
-        <p className="text-xs text-aether-muted-dim mono">{liveSubtitle}</p>
+    <header className="min-h-16 shrink-0 border-b border-white/10 glass flex items-center justify-between gap-3 px-4 py-2 sm:px-8">
+      {/*
+        MV-mobile-dashboard-001: at a 390px viewport this greeting/subtitle
+        previously wrapped to 2-3 lines inside a hard-clamped `h-16` header,
+        clipping the first line above the viewport and overflowing the
+        subtitle below the header box (DOM measurement: h1 top:-15,
+        p.bottom:78 vs. header bottom:64). `min-w-0` lets this column shrink
+        below its content's natural width inside the flex row so `truncate`
+        can actually take effect instead of the row overflowing; `truncate`
+        keeps each line to a single row (ellipsis instead of wrap) so it can
+        never exceed the header's box regardless of viewport width; the
+        header itself is now a `min-h` (can grow) rather than a fixed height
+        as defense in depth.
+      */}
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-[13px] font-semibold sm:text-[15px]">{greeting}</h1>
+        <p className="truncate text-[11px] text-aether-muted-dim mono sm:text-xs">{liveSubtitle}</p>
       </div>
       <div className="flex items-center gap-3">
         <div className="relative w-72 max-lg:hidden">

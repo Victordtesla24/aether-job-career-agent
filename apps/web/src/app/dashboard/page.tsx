@@ -28,7 +28,7 @@ import {
   rejectRequest,
   type Approval,
 } from "../../lib/api/approvals";
-import { apiRequest } from "../../lib/api/client";
+import { apiRequest, ApiError } from "../../lib/api/client";
 import type { Job } from "../../lib/api/jobs";
 import { fetchStories, type Story } from "../../lib/api/stories";
 import { fetchNetworkingSummary, type NetworkingSummary } from "../../lib/api/workspaces";
@@ -75,6 +75,22 @@ function approvalTitle(a: Approval): string {
   if (a.type === "email_send") return "Send email";
   if (a.type === "offer_response") return "Respond to offer";
   return "Submit application";
+}
+
+/**
+ * A clean, honest, non-technical message for an approve/reject failure
+ * (MV-dashboard-009). The raw ApiError message deliberately carries the HTTP
+ * method, endpoint path, record id, status code and a raw JSON body (see
+ * lib/api/client.ts) for developer logging — none of that belongs in a
+ * user-facing toast. A 409/404 specifically means someone else already
+ * resolved this request (another tab, another session, the approvals page).
+ */
+function describeApprovalError(e: unknown, action: "approve" | "reject"): string {
+  if (e instanceof ApiError) {
+    if (e.status === 409) return "This request was already handled — no action needed.";
+    if (e.status === 404) return "This request no longer exists.";
+  }
+  return `Couldn't ${action} this request — please try again.`;
 }
 
 /** Load-once state with an explicit error channel (no fake-empty states). */
@@ -144,6 +160,11 @@ export default function DashboardPage() {
   const topJobs = (jobs.data ?? []).slice(0, 3);
   const maxStage = funnel.data ? Math.max(funnel.data.jobs_found, 1) : 1;
   const pending = approvals.data ?? [];
+  // MV-dashboard-009: the live, independently-fetched set of genuinely
+  // pending approval ids — the source of truth for whether an inline
+  // Approve control should render, rather than the stale
+  // AgentRun.output.approval_status snapshot cached at generation time.
+  const pendingApprovalIds = new Set(pending.map((a) => a.id));
 
   async function resolveApproval(id: string, action: "approve" | "reject") {
     setBusyApprovalId(id);
@@ -156,9 +177,15 @@ export default function DashboardPage() {
         "success",
       );
     } catch (e: unknown) {
-      const msg = `Couldn't ${action} — ${e instanceof Error ? e.message : "request failed"}`;
+      const msg = describeApprovalError(e, action);
       setApprovalActionError(msg);
       showToast(msg, "error");
+      // A 409/404 means this request was already resolved elsewhere (stale
+      // client state) — drop it from the pending set so no surface keeps
+      // offering a dead action for it.
+      if (e instanceof ApiError && (e.status === 409 || e.status === 404)) {
+        approvals.setData(pending.filter((a) => a.id !== id));
+      }
     } finally {
       setBusyApprovalId(null);
     }
@@ -254,10 +281,19 @@ export default function DashboardPage() {
                   const tile = agentTile(r.agentName);
                   const desc = describeRun(r);
                   const out = (r.output ?? {}) as Record<string, unknown>;
+                  // MV-dashboard-009: out.approval_status is a snapshot
+                  // cached at generation time and is never updated once the
+                  // linked ApprovalRequest is resolved elsewhere (the
+                  // /dashboard/approvals page, another session, the Needs
+                  // Approval widget). Cross-check against the live,
+                  // independently-fetched pending-approvals set so a
+                  // resolved approval's inline control disappears instead of
+                  // staying live indefinitely and 409ing on click.
                   const isCoverLetterPending =
                     r.agentName === "coverLetter" &&
                     out.approval_status === "pending" &&
-                    typeof out.approval_id === "string";
+                    typeof out.approval_id === "string" &&
+                    pendingApprovalIds.has(out.approval_id as string);
                   const feedApproveBusy = busyApprovalId === (out.approval_id as string);
                   return (
                     <li key={r.id} className="flex items-start gap-3.5">
