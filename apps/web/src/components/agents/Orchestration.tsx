@@ -34,6 +34,18 @@ function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[]) {
   return { label: "idle", cls: "text-aether-muted-dim border-white/15" };
 }
 
+/**
+ * A Task Queue row. `progress` is `null` for anything still in flight — there
+ * is no real progress-fraction signal to report, so the UI must not invent
+ * one (MV-agent-monitor-002). Only a completed run's real 100% is a number.
+ */
+interface TaskItem {
+  key: string;
+  label: string;
+  progress: number | null;
+  active: boolean;
+}
+
 function logLevel(run: AgentRun): { tag: string; cls: string } {
   if (run.status === "failed") return { tag: "ERR", cls: "text-red-300" };
   if (run.status === "running" || run.status === "queued")
@@ -64,20 +76,25 @@ export default function Orchestration({
     durations.length > 0 ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1) : "0.0";
 
   // Task queue: running/queued runs first; completed recents as context.
-  const active = runs
+  // AgentRun carries no real progress-fraction field (status is only
+  // queued/running/completed/failed), so an in-progress row's `progress` is
+  // `null` — the UI renders an honest indeterminate indicator for it instead
+  // of a fabricated percentage (MV-agent-monitor-002). Only a genuinely
+  // completed run gets the real, backend-confirmed 100%.
+  const active: TaskItem[] = runs
     .filter((r) => r.status === "running" || r.status === "queued")
     .slice(0, 3)
-    .map((r, i) => ({
+    .map((r) => ({
       key: r.id,
-      label: `${r.agentName} · in progress`,
-      progress: 35 + i * 25,
+      label: `${r.agentName} · ${r.status === "running" ? "in progress" : "queued"}`,
+      progress: null,
       active: true,
     }));
-  const recentDone = runs
+  const recentDone: TaskItem[] = runs
     .filter((r) => r.status === "completed")
     .slice(0, 3 - active.length)
     .map((r) => ({ key: r.id, label: `${r.agentName} · completed`, progress: 100, active: false }));
-  const tasks = [...active, ...recentDone];
+  const tasks: TaskItem[] = [...active, ...recentDone];
 
   return (
     <section className="space-y-4" data-testid="agent-orchestration">
@@ -90,16 +107,30 @@ export default function Orchestration({
           </span>
         </div>
         <div className="flex gap-2">
+          {/*
+            MV-agent-monitor-001: there is no backend "pause all" or "manual
+            override" capability (checked apps/api/app/routers/agents.py —
+            only per-agent enable/disable and per-agent run trigger exist, no
+            bulk-pause or manual-override endpoint). Rather than wire these to
+            a fake action, they are honestly disabled with a tooltip so no
+            control appears live when it does nothing.
+          */}
           <button
             type="button"
-            className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white"
+            disabled
+            title="Not yet available"
+            aria-disabled="true"
+            className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-aether-muted-dim opacity-50"
           >
             <i className="fa-solid fa-pause mr-1.5" aria-hidden="true" />
             Pause All
           </button>
           <button
             type="button"
-            className="rounded-lg border border-aether-amber/40 px-3 py-1.5 text-xs font-semibold text-aether-amber hover:bg-aether-amber/10"
+            disabled
+            title="Not yet available"
+            aria-disabled="true"
+            className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-aether-muted-dim opacity-50"
           >
             Manual Override
           </button>
@@ -162,13 +193,22 @@ export default function Orchestration({
                 <div key={t.key}>
                   <div className="mb-1 flex justify-between text-[11px]">
                     <span className="capitalize text-aether-muted">{t.label}</span>
-                    <span className="mono">{t.progress}%</span>
+                    {/* No fabricated percentage for in-progress work — only a
+                        real, completed-run 100% is ever shown as a number. */}
+                    <span className="mono">{t.progress !== null ? `${t.progress}%` : "…"}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-white/10">
-                    <div
-                      className={`h-1.5 rounded-full ${t.active ? "bg-aether-coral" : "bg-aether-green"}`}
-                      style={{ width: `${t.progress}%` }}
-                    />
+                    {t.progress !== null ? (
+                      <div
+                        className={`h-1.5 rounded-full ${t.active ? "bg-aether-coral" : "bg-aether-green"}`}
+                        style={{ width: `${t.progress}%` }}
+                      />
+                    ) : (
+                      <div
+                        className="h-1.5 w-full animate-pulse rounded-full bg-aether-coral/40"
+                        aria-label="in progress, no measured completion percentage available"
+                      />
+                    )}
                   </div>
                 </div>
               ))}
@@ -178,7 +218,22 @@ export default function Orchestration({
 
         {/* Performance */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="performance-metrics">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Performance</h3>
+          {/*
+            MV-agent-monitor-003: this card's success rate is computed
+            client-side from the `runs` prop, which the Agents page fetches
+            via GET /agents/runs (server default limit=50) — a DIFFERENT
+            sample window than the separate Agent Stats "Success Rate" card
+            (GET /agents/stats, server limit=200). Both numbers are real, but
+            without disclosure they read as contradicting each other. Label
+            this card's own window explicitly, matching the disclosure
+            pattern already used by the Agent Stats card ("last N tasks").
+          */}
+          <h3 className="mb-3 flex flex-wrap items-baseline gap-x-1.5 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+            Performance
+            <span className="normal-case text-[10px] font-normal tracking-normal text-aether-muted-dim/70">
+              · last {runs.length.toLocaleString()} run{runs.length === 1 ? "" : "s"}
+            </span>
+          </h3>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
               <div className="mono text-xl font-bold">{runs.length.toLocaleString()}</div>
