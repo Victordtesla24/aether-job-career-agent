@@ -3,26 +3,53 @@
 /**
  * Networking — Recruiter & Referral CRM backed by GET /networking/summary
  * (wireframe: networking.html). Stat tiles, 5-stage contact pipeline,
- * outreach queue and communication log, with an Add Contact modal.
+ * outreach queue and communication log, with a real Add Contact flow and a
+ * contact-detail panel.
+ *
+ * MV-networking-001: "Add Contact" persists via POST /networking/contacts
+ * (app/routers/networking.py) — no more client-side-only fake success.
+ * MV-networking-002: Outreach Queue / Communication Log render the actual
+ * fields GET /workspaces/networking/summary sends (contactName/company/
+ * subject/kind/status/scheduledAt/sentAt), not a made-up shape.
+ * MV-networking-003: the empty-state control that used to claim "Import from
+ * LinkedIn" (while only opening the manual Add-Contact modal) is relabeled
+ * honestly — there is no LinkedIn OAuth integration behind it.
+ * MV-networking-004: the dead "Review all drafts" button (no handler, no
+ * destination screen) is removed rather than left as a no-op.
+ * MV-networking-005: contact cards open a detail panel sourced from the real
+ * GET /networking/contacts/{id} endpoint.
+ * MV-networking-006: contact cards show their pipeline-stage badge.
+ * MV-networking-009 / -010: Cancel resets the Add Contact form; Escape closes
+ * whichever modal is open regardless of DOM focus.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
+  createNetworkingContact,
+  fetchNetworkingContact,
   fetchNetworkingSummary,
-  type NetworkingContact,
+  type NetworkingContactRecord,
   type NetworkingSummary,
 } from "../../../lib/api/workspaces";
-import { STAGE_ACCENT, buildPipelineColumns, initials, totalContacts } from "./lib";
+import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "./lib";
+
+const EMPTY_FORM = { name: "", role: "", company: "" };
 
 export default function NetworkingPage() {
   const [data, setData] = useState<NetworkingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", role: "", company: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
-  // Locally-added contacts land in the "New" stage (demo scope).
-  const [added, setAdded] = useState<NetworkingContact[]>([]);
+  const [saving, setSaving] = useState(false);
   const [demoEmpty, setDemoEmpty] = useState(false);
+
+  // Contact-detail panel (MV-networking-005): the id of the contact whose
+  // details are being viewed, or null when the panel is closed.
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [contactDetail, setContactDetail] = useState<NetworkingContactRecord | null>(null);
+  const [contactDetailLoading, setContactDetailLoading] = useState(false);
+  const [contactDetailError, setContactDetailError] = useState<string | null>(null);
 
   // ?demo=empty → render the real empty-state branch (state variant preview).
   useEffect(() => {
@@ -37,18 +64,79 @@ export default function NetworkingPage() {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load networking data"));
   }, []);
 
-  const addContact = () => {
+  // Contact detail: fetch on demand via the real GET /networking/contacts/{id}
+  // endpoint whenever a card is selected.
+  useEffect(() => {
+    if (!selectedContactId) {
+      setContactDetail(null);
+      setContactDetailError(null);
+      return;
+    }
+    let cancelled = false;
+    setContactDetailLoading(true);
+    setContactDetailError(null);
+    fetchNetworkingContact(selectedContactId)
+      .then((c) => {
+        if (!cancelled) setContactDetail(c);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setContactDetailError(e instanceof Error ? e.message : "Failed to load contact");
+      })
+      .finally(() => {
+        if (!cancelled) setContactDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContactId]);
+
+  const closeAddModal = useCallback(() => {
+    setShowAdd(false);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  }, []);
+
+  // Escape closes whichever modal is open — a document-level listener so it
+  // fires regardless of which element currently has focus (MV-networking-010:
+  // the previous per-dialog onKeyDown only fired when focus was already
+  // inside the modal's DOM subtree).
+  useEffect(() => {
+    if (!showAdd && !selectedContactId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (showAdd) closeAddModal();
+      else setSelectedContactId(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showAdd, selectedContactId, closeAddModal]);
+
+  const saveContact = async () => {
     if (!form.name.trim()) {
       setFormError("Name is required");
       return;
     }
-    setAdded((prev) => [
-      { name: form.name.trim(), role: form.role.trim() || "Contact", company: form.company.trim() || "—", warmth: 1 },
-      ...prev,
-    ]);
-    setForm({ name: "", role: "", company: "" });
+    setSaving(true);
     setFormError(null);
-    setShowAdd(false);
+    try {
+      await createNetworkingContact({
+        name: form.name.trim(),
+        title: form.role.trim() || undefined,
+        company: form.company.trim() || undefined,
+      });
+      // Re-fetch from the source of truth so the board reflects exactly what
+      // the backend persisted — no optimistic local-only echo (MV-networking-001).
+      const refreshed = await fetchNetworkingSummary();
+      setData(refreshed);
+      setForm(EMPTY_FORM);
+      setFormError(null);
+      setShowAdd(false);
+    } catch (e) {
+      // Honest failure: modal stays open, no fabricated success.
+      setFormError(e instanceof Error ? e.message : "Failed to save contact");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (error) {
@@ -68,9 +156,9 @@ export default function NetworkingPage() {
     );
   }
 
-  const contactCount = totalContacts(data.stats, added);
+  const contactCount = totalContacts(data.stats, []);
   const isEmpty = contactCount === 0 || demoEmpty;
-  const columns = buildPipelineColumns(data.pipeline, added);
+  const columns = buildPipelineColumns(data.pipeline);
 
   return (
     <div className="space-y-6" data-testid="networking-crm">
@@ -93,16 +181,17 @@ export default function NetworkingPage() {
         <div className="glass rounded-2xl border border-white/10 p-12 text-center" data-testid="networking-empty-state">
           <p className="text-lg font-semibold">No connections yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
-            Start building your recruiter &amp; referral network. Import your LinkedIn connections
-            to auto-populate the CRM, or add a contact manually to begin tracking outreach.
+            Start building your recruiter &amp; referral network by adding a contact manually to begin tracking
+            outreach.
           </p>
           <button
             type="button"
+            data-testid="empty-state-add-contact-btn"
             onClick={() => setShowAdd(true)}
             className="mt-4 rounded-xl border border-aether-violet/40 px-4 py-2 text-sm font-semibold text-aether-violet hover:bg-aether-violet/10"
           >
-            <i className="fa-brands fa-linkedin mr-2" aria-hidden="true" />
-            Import from LinkedIn
+            <i className="fa-solid fa-user-plus mr-2" aria-hidden="true" />
+            Add contact manually
           </button>
         </div>
       ) : (
@@ -143,20 +232,38 @@ export default function NetworkingPage() {
                         <div className="space-y-2">
                           {col.contacts.map((c) => (
                             <article
-                              key={`${c.name}-${c.company}`}
+                              key={c.id ?? `${c.name}-${c.company}`}
                               data-testid="contact-card"
-                              className="glass rounded-xl border border-white/10 p-3 transition hover:border-aether-coral/40"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => c.id && setSelectedContactId(c.id)}
+                              onKeyDown={(e) => {
+                                if ((e.key === "Enter" || e.key === " ") && c.id) {
+                                  e.preventDefault();
+                                  setSelectedContactId(c.id);
+                                }
+                              }}
+                              className="glass cursor-pointer rounded-xl border border-white/10 p-3 transition hover:border-aether-coral/40"
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
-                                  {initials(c.name)}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="truncate text-xs font-semibold">{c.name}</p>
-                                  <p className="truncate text-[10px] text-aether-muted-dim">
-                                    {c.role} · {c.company}
-                                  </p>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                                    {initials(c.name)}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-xs font-semibold">{c.name}</p>
+                                    <p className="truncate text-[10px] text-aether-muted-dim">
+                                      {c.role} · {c.company}
+                                    </p>
+                                  </div>
                                 </div>
+                                {/* MV-networking-006: honest stage badge on each card. */}
+                                <span
+                                  className={`mono shrink-0 rounded px-1.5 py-0.5 text-[9px] ${STAGE_ACCENT[col.stage] ?? "bg-white/40"} bg-opacity-20 text-white/80`}
+                                  data-testid="contact-stage-badge"
+                                >
+                                  {col.stage}
+                                </span>
                               </div>
                               <p className="mt-1.5 text-[10px] text-aether-amber" aria-label={`Warmth ${c.warmth} of 5`}>
                                 {"★".repeat(c.warmth)}
@@ -176,41 +283,59 @@ export default function NetworkingPage() {
             <div className="min-w-0 space-y-6">
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="outreach-queue">
                 <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
-                <div className="space-y-3">
-                  {data.outreachQueue.map((o) => (
-                    <article key={o.subject} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs font-semibold">{o.to}</p>
-                      <p className="mt-0.5 text-xs text-aether-coral">{o.subject}</p>
-                      <p className="mt-1 truncate text-[11px] text-aether-muted-dim">{o.preview}</p>
-                      <span className="mono mt-1.5 inline-block rounded bg-aether-violet/15 px-1.5 py-0.5 text-[10px] text-aether-violet">
-                        tone: {o.tone}
-                      </span>
-                    </article>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="mt-3 w-full rounded-lg border border-white/15 py-2 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white"
-                >
-                  Review all drafts
-                </button>
+                {data.outreachQueue.length === 0 ? (
+                  <p className="text-xs text-aether-muted-dim" data-testid="outreach-queue-empty">
+                    No outreach queued yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.outreachQueue.map((o) => (
+                      <article key={o.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-xs font-semibold">
+                          {o.contactName || "Unknown contact"}
+                          {o.company ? ` · ${o.company}` : ""}
+                        </p>
+                        <p className="mt-0.5 text-xs text-aether-coral">{o.subject}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className="mono inline-block rounded bg-aether-violet/15 px-1.5 py-0.5 text-[10px] text-aether-violet">
+                            {formatOutreachKind(o.kind)}
+                          </span>
+                          <span className="mono inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-aether-muted">
+                            {o.status}
+                          </span>
+                        </div>
+                        {o.scheduledAt ? (
+                          <p className="mt-1 text-[10px] text-aether-muted-dim">
+                            Scheduled: {formatWhen(o.scheduledAt)}
+                          </p>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="glass rounded-2xl border border-white/10 p-5" data-testid="communication-log">
                 <h2 className="mb-3 text-[15px] font-semibold">Communication Log</h2>
-                <div className="space-y-3">
-                  {data.communicationLog.map((l) => (
-                    <div key={`${l.when}-${l.who}`} className="border-l-2 border-white/10 pl-3">
-                      <p className="mono text-[10px] text-aether-muted-dim">
-                        {l.when} · {l.channel}
-                      </p>
-                      <p className="text-xs">
-                        <span className="font-semibold">{l.who}</span>{" "}
-                        <span className="text-aether-muted">— {l.note}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                {data.communicationLog.length === 0 ? (
+                  <p className="text-xs text-aether-muted-dim" data-testid="communication-log-empty">
+                    No communications logged yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.communicationLog.map((l) => (
+                      <div key={l.id} className="border-l-2 border-white/10 pl-3">
+                        <p className="mono text-[10px] text-aether-muted-dim">
+                          {formatWhen(l.sentAt)} · {formatOutreachKind(l.kind)}
+                        </p>
+                        <p className="text-xs">
+                          <span className="font-semibold">{l.contactName || "Unknown contact"}</span>{" "}
+                          <span className="text-aether-muted">— {l.subject}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           </div>
@@ -224,14 +349,11 @@ export default function NetworkingPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Add contact"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setShowAdd(false);
-          }}
         >
           <div className="glass w-full max-w-md rounded-2xl border border-white/15 bg-[#12121C] p-6" data-testid="add-contact-modal">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Add Contact</h2>
-              <button type="button" onClick={() => setShowAdd(false)} className="text-aether-muted-dim hover:text-white">
+              <button type="button" onClick={closeAddModal} className="text-aether-muted-dim hover:text-white">
                 ✕
               </button>
             </div>
@@ -239,11 +361,11 @@ export default function NetworkingPage() {
               <Field label="Name *" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} testId="contact-name-input" />
               <Field label="Role" value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v }))} testId="contact-role-input" />
               <Field label="Company" value={form.company} onChange={(v) => setForm((f) => ({ ...f, company: v }))} testId="contact-company-input" />
-              {formError ? <p className="text-xs text-red-300">{formError}</p> : null}
+              {formError ? <p className="text-xs text-red-300" data-testid="add-contact-error">{formError}</p> : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAdd(false)}
+                  onClick={closeAddModal}
                   className="rounded-lg border border-white/15 px-4 py-2 text-sm text-aether-muted hover:border-white/30"
                 >
                   Cancel
@@ -251,13 +373,58 @@ export default function NetworkingPage() {
                 <button
                   type="button"
                   data-testid="save-contact-btn"
-                  onClick={addContact}
-                  className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                  onClick={saveContact}
+                  disabled={saving}
+                  className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
                 >
-                  Save Contact
+                  {saving ? "Saving…" : "Save Contact"}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Contact detail panel (MV-networking-005) */}
+      {selectedContactId ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Contact details"
+        >
+          <div
+            className="glass w-full max-w-md rounded-2xl border border-white/15 bg-[#12121C] p-6"
+            data-testid="contact-detail-modal"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Contact details</h2>
+              <button
+                type="button"
+                onClick={() => setSelectedContactId(null)}
+                className="text-aether-muted-dim hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            {contactDetailLoading ? (
+              <p className="text-sm text-aether-muted" data-testid="contact-detail-loading">
+                Loading…
+              </p>
+            ) : contactDetailError ? (
+              <p className="text-sm text-red-300" data-testid="contact-detail-error">
+                {contactDetailError}
+              </p>
+            ) : contactDetail ? (
+              <dl className="space-y-2 text-sm" data-testid="contact-detail-body">
+                <DetailRow label="Name" value={contactDetail.name} />
+                <DetailRow label="Role" value={contactDetail.title || "—"} />
+                <DetailRow label="Company" value={contactDetail.company || "—"} />
+                <DetailRow label="Stage" value={contactDetail.stage} />
+                <DetailRow label="Email" value={contactDetail.email || "Not provided"} />
+                <DetailRow label="LinkedIn" value={contactDetail.linkedinUrl || "Not provided"} />
+              </dl>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -296,5 +463,14 @@ function Field({
         className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50"
       />
     </label>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-white/5 pb-2">
+      <dt className="text-aether-muted-dim">{label}</dt>
+      <dd className="max-w-[65%] break-words text-right font-medium">{value}</dd>
+    </div>
   );
 }

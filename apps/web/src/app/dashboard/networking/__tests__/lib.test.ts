@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { NetworkingContact, NetworkingSummary } from "../../../../lib/api/workspaces";
-import { STAGE_ACCENT, buildPipelineColumns, initials, totalContacts } from "../lib";
+import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "../lib";
 
 /**
  * Regression coverage for GAP-P4-052: the Networking page must render a
@@ -99,5 +99,39 @@ describe("STAGE_ACCENT", () => {
     expect(Object.keys(STAGE_ACCENT).sort()).toEqual(
       ["Active", "New", "Placed", "Scheduled", "Warm"].sort(),
     );
+  });
+});
+
+/**
+ * MV-networking-002: the Outreach Queue / Communication Log cards must read
+ * the real OutreachTask-derived fields (kind, scheduledAt/sentAt) the
+ * backend sends, not the `tone`/`when`/`who`/`channel`/`note` shape the UI
+ * used to assume.
+ */
+describe("formatOutreachKind", () => {
+  it("humanizes an OutreachTask.type enum value into display text", () => {
+    expect(formatOutreachKind("connection_request")).toBe("Connection request");
+    expect(formatOutreachKind("follow_up")).toBe("Follow up");
+    expect(formatOutreachKind("message")).toBe("Message");
+    expect(formatOutreachKind("introduction")).toBe("Introduction");
+  });
+
+  it("handles an empty string without throwing", () => {
+    expect(formatOutreachKind("")).toBe("");
+  });
+});
+
+describe("formatWhen", () => {
+  it("renders an em dash for a null/undefined timestamp instead of 'undefined'", () => {
+    expect(formatWhen(null)).toBe("—");
+    expect(formatWhen(undefined)).toBe("—");
+  });
+
+  it("shortens a psycopg2-style timestamp string to its date portion", () => {
+    expect(formatWhen("2026-07-18 10:23:45.123456+00:00")).toBe("2026-07-18");
+  });
+
+  it("passes through a short/non-date string unchanged rather than crashing", () => {
+    expect(formatWhen("n/a")).toBe("n/a");
   });
 });
