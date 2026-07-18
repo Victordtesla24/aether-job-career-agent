@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.agents.fit_scorer import get_base_resume_path
+from app.repositories.approval import ApprovalRepository
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
 from app.repositories.story import StoryRepository
@@ -139,12 +140,132 @@ def build_story_evidence(user_id: str, repo: StoryRepository | None = None) -> s
     return "\n\n".join(parts)
 
 
+#: Content-word tokenizer for the tailor grounding metric (mirrors the cover
+#: letter's ``grounding_confidence``). Short words / connectives carry no signal.
+_TAILOR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#./-]*")
+_TAILOR_STOPWORDS = frozenset(
+    """
+    a an and are as at be been by for from has have i in is it its my of on or
+    our that the their this to was we were will with you your who what how when
+    across own more most very than then also both each am me not can could would
+    should into out about over under they them he she his her role resume
+    """.split()
+)
+
+
+def grounding_confidence(bullets: list[dict[str, str]], corpus: str) -> int:
+    """Share (0-100) of the tailored bullets' content words backed by the
+    candidate's evidence corpus — a REAL, deterministic measurement of the
+    finished version, never a fabricated or random score (§ no-fake-metrics).
+
+    Every accepted rewrite already passed the fabrication + entailment guards, so
+    a genuinely tailored version sits high; the figure is nonetheless computed
+    from the actual bullet text so it degrades honestly if the corpus lacks a
+    term. Mirrors ``cover_letter_agent.grounding_confidence`` (kept local to avoid
+    a circular import — cover_letter_agent imports this module)."""
+    corpus_tokens = {t.lower() for t in _TAILOR_WORD_RE.findall(corpus or "")}
+    words = [
+        t
+        for b in bullets
+        for t in _TAILOR_WORD_RE.findall(b.get("text", ""))
+        if len(t) >= 3 and t.lower() not in _TAILOR_STOPWORDS
+    ]
+    if not words:
+        return 0
+    supported = sum(1 for w in words if w.lower() in corpus_tokens)
+    return round(100 * supported / len(words))
+
+
+def build_tailor_approval_extras(
+    result: "Any", job: dict[str, Any], evidence_corpus: str
+) -> dict[str, Any]:
+    """Approval-card fields the review modal renders for a tailored résumé
+    (MV-resume-studio-001) — ``preview`` (the changed bullets a human reviews),
+    ``why`` (why the gate fired), ``reasoning`` (what the agent verified) and
+    ``confidence`` (evidence grounding). Every reasoning item is TRUE by
+    construction: a version only reaches this point after its rewrites passed the
+    fabrication + entailment guards, and the source PDF's ``formatHash`` is carried
+    through untouched.
+    """
+    changed = [
+        (cur, orig)
+        for cur, orig in zip(result.bullets, result.originals)
+        if cur.get("text") != orig.get("text")
+    ]
+    preview_lines = [
+        f"{cur.get('text', '')}" for cur, _ in changed[:6]
+    ]
+    more = len(changed) - len(preview_lines)
+    if more > 0:
+        preview_lines.append(f"…and {more} more rewritten bullet(s).")
+    preview = (
+        f"{len(changed)} bullet(s) rewritten for {job['title']} @ {job['company']}:\n"
+        + "\n".join(f"• {line}" for line in preview_lines)
+    )
+    return {
+        "preview": preview,
+        "why": (
+            "This tailored résumé version awaits your sign-off before it becomes an "
+            "approved, authoritative version for this role. Review the reworded "
+            "bullets, then approve or request changes."
+        ),
+        "reasoning": [
+            {
+                "kind": "check",
+                "text": (
+                    "Every reworded bullet is grounded in your résumé and career "
+                    "evidence (fabrication + entailment guards passed)."
+                ),
+            },
+            {
+                "kind": "check",
+                "text": (
+                    "Original layout preserved — the source PDF's format hash is "
+                    "carried through untouched."
+                ),
+            },
+            {
+                "kind": "check",
+                "text": (
+                    f"{len(changed)} bullet(s) reworded to surface "
+                    f"{job['title']}-relevant keywords you already prove."
+                ),
+            },
+        ],
+        "confidence": grounding_confidence(result.bullets, evidence_corpus),
+    }
+
+
+class NoChangesApplied(RuntimeError):
+    """Raised when a tailoring run applies ZERO net edits — every proposed rewrite
+    was rejected by the fabrication/entailment guards, so the résumé is unchanged
+    (MV-resume-studio-003).
+
+    Handled like the cover letter's :class:`FabricationError`: NO new résumé
+    version is created, NO approval is opened, and the reserved run is refunded, so
+    the user is never billed for — nor shown — a silent no-op "Tailored" version
+    that is byte-identical to its parent."""
+
+    def __init__(self, rejected: list[str] | None = None) -> None:
+        super().__init__(
+            "No verifiable changes could be applied — every suggested edit was "
+            "unsupported by your evidence, so your résumé is unchanged and you "
+            "were not charged."
+        )
+        self.rejected = rejected or []
+
+
 @dataclass
 class TailorRunResult:
     resume_id: str
     changes: int
     rejected: list[str]
     conversionMetrics: dict[str, Any]
+    #: The pending ApprovalRequest opened for this tailored version so nothing is
+    #: treated as authoritative without human sign-off (MV-resume-studio-001).
+    #: ``None`` only on legacy/uncreated paths.
+    approval_id: str | None = None
+    approval_status: str | None = None
 
 
 class TailoringAgent:
@@ -154,11 +275,13 @@ class TailoringAgent:
         jobs: JobRepository | None = None,
         service: ResumeTailorService | None = None,
         stories: StoryRepository | None = None,
+        approvals: ApprovalRepository | None = None,
     ) -> None:
         self._resumes = resumes or ResumeRepository()
         self._jobs = jobs or JobRepository()
         self._service = service or ResumeTailorService()
         self._stories = stories or StoryRepository()
+        self._approvals = approvals or ApprovalRepository()
 
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
@@ -235,12 +358,26 @@ class TailoringAgent:
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )
 
+        # MV-resume-studio-003: when the fabrication/entailment guards reject
+        # EVERY proposed rewrite the tailored bullets are byte-identical to the
+        # parent (0 net changes). Persisting that as a new "Tailored" version was a
+        # silent, billed no-op indistinguishable from a real change. Instead raise
+        # — mirroring the cover letter's FabricationError — so NO version is
+        # created, NO approval is opened, and the reserved run is refunded (the
+        # caller's _execute_reserved_run refunds on any exception). Honest outcome:
+        # the résumé is unchanged and the user is not charged.
+        if result.changes == 0:
+            raise NoChangesApplied(rejected=result.rejected)
+
         # GAP-P6-TAIL-002: regenerate the persisted raw_text from the TAILORED
         # bullets (not the parent's verbatim raw_text) so a later independent
         # GET /resumes/{id}/ats — which scores raw_text preferentially —
         # reflects the tailored score, matching the PDF and the run's reported
         # tailoredATSScore instead of reverting to the stale baseline.
         tailored_raw_text = render_tailored_raw_text(resume_text, result.bullets)
+        # MV-resume-studio-001: a freshly tailored version is created ``pending`` —
+        # it stays under human review until its ApprovalRequest (below) is
+        # approved, at which point ApprovalRepository flips it to ``approved``.
         tailored = self._resumes.create(
             user_id,
             {"bullets": result.bullets, "raw_text": tailored_raw_text},
@@ -249,13 +386,41 @@ class TailoringAgent:
             version=self._resumes.next_version(user_id),
             parent_id=base["id"],
             source_job_id=job_id,
+            approval_status="pending",
         )
         conversion_metrics = _compute_conversion_metrics(
             resume_text, result.originals, result.bullets, job.get("description") or ""
+        )
+        # MV-resume-studio-001: open a REAL pending ApprovalRequest (mirroring the
+        # cover letter agent) so the run's ``approvalRequired: true`` flag is backed
+        # by an actual human-in-the-loop gate rather than being decorative. Kept
+        # idempotent per (job, kind=resume_tailor) by the repository, so re-tailoring
+        # the same job refreshes the one pending card at the newest version instead
+        # of stacking duplicates — and never collides with the job's cover-letter
+        # approval. ``application_submit`` is the shared enum type (as the cover
+        # letter uses); ``kind`` discriminates the artifact family.
+        evidence_corpus = "\n".join(p for p in (resume_text, evidence_extra) if p)
+        approval = self._approvals.create(
+            user_id,
+            "application_submit",
+            {
+                "kind": "resume_tailor",
+                "resume_id": tailored["id"],
+                "job_id": job_id,
+                "job_title": job["title"],
+                "company": job["company"],
+                # Overrides so the review modal names the Tailoring Agent rather
+                # than the application_submit defaults.
+                "agent": "Tailoring Agent",
+                "action": "apply a tailored résumé",
+                **build_tailor_approval_extras(result, job, evidence_corpus),
+            },
         )
         return TailorRunResult(
             resume_id=tailored["id"],
             changes=result.changes,
             rejected=result.rejected,
             conversionMetrics=conversion_metrics,
+            approval_id=approval["id"],
+            approval_status=approval["status"],
         )

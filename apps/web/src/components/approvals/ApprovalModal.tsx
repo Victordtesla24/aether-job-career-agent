@@ -13,7 +13,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { Approval } from "../../lib/api/approvals";
 import type { DecisionContext } from "./api";
-import { isExpired, metaLine, parseApprovalPayload } from "./lib";
+import { isExpired, metaLine, parseApprovalPayload, previewLabel } from "./lib";
 
 export interface ApprovalModalProps {
   approval: Approval;
@@ -237,7 +237,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             <div className="glass rounded-xl border border-white/10 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
-                  Generated cover letter
+                  {previewLabel(approval)}
                 </span>
                 <span className="text-[10px] text-[#818CF8]">
                   {editing ? "editing" : "preview"}

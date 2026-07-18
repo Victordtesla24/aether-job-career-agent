@@ -26,11 +26,16 @@ class ApprovalRepository:
             raise ValueError(f"Invalid approval type '{type_}'")
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Idempotent per (job, type): regenerating or refining a letter
-                # for the same job REFRESHES the existing PENDING request
-                # (pointing it at the newest version) instead of stacking
-                # duplicate cards in the approval queue. Resolved requests are
-                # history and never reused.
+                # Idempotent per (job, type, kind): regenerating or refining an
+                # artifact for the same job REFRESHES the existing PENDING request
+                # (pointing it at the newest version) instead of stacking duplicate
+                # cards in the approval queue. Resolved requests are history and
+                # never reused. The ``kind`` scope keeps DISTINCT artifact families
+                # that share the ``application_submit`` type from colliding — a
+                # tailored-résumé approval (kind=resume_tailor) and a cover-letter
+                # approval (kind=cover_letter) for the SAME job are independent
+                # requests and must not overwrite each other (MV-resume-studio-001);
+                # ``IS NOT DISTINCT FROM`` also matches a legacy kind-less request.
                 job_id = payload.get("job_id")
                 if job_id:
                     cur.execute(
@@ -42,11 +47,15 @@ class ApprovalRepository:
                             WHERE "userId" = %s AND "type" = %s::"ApprovalType"
                               AND "status" = 'pending'
                               AND "payload"->>'job_id' = %s
+                              AND "payload"->>'kind' IS NOT DISTINCT FROM %s
                             ORDER BY "createdAt" DESC LIMIT 1
                         )
                         RETURNING {_COLUMNS}
                         ''',
-                        (json.dumps(payload), application_id, user_id, type_, job_id),
+                        (
+                            json.dumps(payload), application_id, user_id, type_,
+                            job_id, payload.get("kind"),
+                        ),
                     )
                     rows = rows_to_dicts(cur)
                     if rows:
@@ -129,8 +138,51 @@ class ApprovalRepository:
                 approval = rows[0] if rows else None
                 if approval is not None:
                     self._sync_application(cur, approval, user_id)
+                    self._sync_resume(cur, approval, user_id)
             conn.commit()
         return approval
+
+    @staticmethod
+    def _payload_dict(approval: dict[str, Any]) -> dict[str, Any]:
+        """The approval's payload as a dict (jsonb comes back as a dict under the
+        default psycopg2 cursor, but tolerate a JSON string defensively)."""
+        payload = approval.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                return {}
+        return payload if isinstance(payload, dict) else {}
+
+    @classmethod
+    def _sync_resume(
+        cls, cur: Any, approval: dict[str, Any], user_id: str
+    ) -> None:
+        """Propagate a resume-tailor approval decision to the linked Résumé version.
+
+        Runs on the caller's cursor so it commits atomically with the approval
+        update (mirroring :meth:`_sync_application`). Approve → the tailored
+        version becomes ``approved``; reject → ``rejected``. This is what makes the
+        tailor approval gate REAL rather than decorative (MV-resume-studio-001): a
+        tailored version created ``pending`` only becomes authoritative once a human
+        signs off. Scoped by ``kind`` so it never touches an application/email/offer
+        approval. A missing résumé (already deleted) is a harmless no-op.
+        """
+        payload = cls._payload_dict(approval)
+        if payload.get("kind") != "resume_tailor":
+            return
+        resume_id = payload.get("resume_id")
+        if not resume_id:
+            return
+        new_status = "approved" if approval["status"] == "approved" else "rejected"
+        cur.execute(
+            '''
+            UPDATE "Resume"
+            SET "approvalStatus" = %s, "updatedAt" = NOW()
+            WHERE "id" = %s AND "userId" = %s
+            ''',
+            (new_status, resume_id, user_id),
+        )
 
     @staticmethod
     def _sync_application(

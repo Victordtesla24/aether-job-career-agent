@@ -1218,6 +1218,8 @@ def run_tailor(
     background; when OFF, the legacy synchronous 200 body is returned unchanged.
     ``system_run`` is threaded to both paths for parity, but ``tailor`` is not a
     ``_SYSTEM_RUN_EXEMPT_AGENTS`` key so a valid secret never bypasses the paywall."""
+    from app.agents.tailor_agent import NoChangesApplied
+
     system_run = _is_system_run(request)
     if async_generation_enabled():
         job_id = _enqueue_single_agent(
@@ -1231,11 +1233,31 @@ def run_tailor(
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except NoChangesApplied as exc:
+        # MV-resume-studio-003: the guards rejected every proposed edit, so no
+        # version was created and the reserved run was already refunded by
+        # _execute_reserved_run. Return an HONEST no-op (never a silent billed
+        # "Tailored" version); the client renders it as an informational notice.
+        return {
+            "resume_id": None,
+            "changes": 0,
+            "rejected": exc.rejected,
+            "conversionMetrics": None,
+            "noChangesApplied": True,
+            "approvalRequired": False,
+            "message": str(exc),
+        }
     return {
         "resume_id": output["resume_id"],
         "changes": output["changes"],
         "rejected": output["rejected"],
         "conversionMetrics": output["conversionMetrics"],
+        # MV-resume-studio-001: the approvalRequired flag is now backed by a REAL
+        # pending ApprovalRequest — surface its id/status so the client can link to
+        # the human-in-the-loop review just as the cover-letter run does.
+        "approvalRequired": output.get("approvalRequired", False),
+        "approval_id": output.get("approval_id"),
+        "approval_status": output.get("approval_status"),
     }
 
 
@@ -1372,10 +1394,20 @@ def _pipeline_core(
     # One shared wall-clock budget across BOTH LLM-backed steps: without it
     # tailor and coverLetter each armed their own 60 s budget, so the pipeline
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
+    from app.agents.tailor_agent import NoChangesApplied
     from app.services.llm_client import shared_budget
 
     with shared_budget(budget_seconds):
-        tailor_out = _dispatch(user_id, "tailor", {"job_id": top_job_id})
+        try:
+            tailor_out: dict[str, Any] = _dispatch(
+                user_id, "tailor", {"job_id": top_job_id}
+            )
+        except NoChangesApplied as exc:
+            # MV-resume-studio-003: the guards rejected every proposed edit, so no
+            # tailored version was created and the tailor run was refunded. This
+            # must NOT fail the whole pipeline — the cover-letter step draws on the
+            # base résumé regardless — so record the honest no-op and continue.
+            tailor_out = {"noChangesApplied": True, "changes": 0, "message": str(exc)}
         steps.append({"agent": "tailor", "output": tailor_out})
         letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
         steps.append({"agent": "coverLetter", "output": letter_out})

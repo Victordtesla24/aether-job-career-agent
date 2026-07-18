@@ -61,21 +61,29 @@ class TestTailoring:
         run said 7, diff said 6)."""
         from app.repositories.resume import ResumeRepository
         from app.security import decode_access_token
+        from app.services.resume_pdf import extract_pdf_bullets
 
         job = _seed_job(client, auth_headers)
         token = auth_headers["Authorization"].removeprefix("Bearer ")
         user_id = decode_access_token(token)["userId"]
         repo = ResumeRepository()
+        # Build the corrupted parent from the REAL base résumé content (which the
+        # default LLM fixture rewrites, so the re-tailor produces genuine changes
+        # rather than an honest no-op — MV-resume-studio-003) and inject the
+        # pre-fix corruption: a SECOND row for an existing evidenceRef (bullet-6,
+        # one the fixture rewrites). _structure_originals must dedup it (first row
+        # wins) so the duplicate never propagates to the child.
+        base_path = get_base_resume_path()
+        base_raw = parse_resume_pdf(base_path)["raw_text"]
+        base_bullets = [
+            {"text": b, "evidenceRef": f"bullet-{i}"}
+            for i, b in enumerate(extract_pdf_bullets(base_path))
+        ]
+        dup = dict(base_bullets[6])
+        dup["text"] = dup["text"] + " (duplicate row)"
         corrupted = repo.create(
             user_id,
-            {
-                "raw_text": "• Led delivery across squads\n• Reduced costs by 15%\n",
-                "bullets": [
-                    {"text": "Led delivery across squads", "evidenceRef": "bullet-0"},
-                    {"text": "Led delivery across squads again", "evidenceRef": "bullet-0"},
-                    {"text": "Reduced costs by 15%", "evidenceRef": "bullet-1"},
-                ],
-            },
+            {"raw_text": base_raw, "bullets": base_bullets + [dup]},
             "corrupthash",
             label="Corrupted pre-fix version",
             version=repo.next_version(user_id),

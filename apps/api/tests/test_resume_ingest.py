@@ -101,8 +101,35 @@ class TestResumeIngestion:
         ]
         assert not fragments, f"stored fragmented bullets: {fragments}"
 
-    def test_tailor_run_accepts_explicit_resume_id(self, client, auth_headers):
-        """The tailoring agent must tailor the SELECTED resume, not the base."""
+    def test_tailor_run_accepts_explicit_resume_id(
+        self, client, auth_headers, monkeypatch
+    ):
+        """The tailoring agent must tailor the SELECTED resume, not the base.
+
+        The default LLM fixture is tuned for the bundled base résumé, so it yields
+        no accepted edits for the short BA variant — which, post-MV-resume-studio-003,
+        is an honest no-op rather than a billed 0-change version. Stub the service to
+        a real single-bullet change so the child-of-selected-résumé WIRING (parentId
+        / carried formatHash) is exercised, which is what this test pins."""
+        from app.services.resume_tailor import ResumeTailorService, TailorResult
+
+        def _one_change(self, resume_text, job_description, originals=None,
+                        evidence_extra=""):
+            # Unconditionally report a single real change so the run is a genuine
+            # (changes>0) tailoring — the BA variant stores no extractable bullets,
+            # so the default fixture would otherwise honestly no-op. The child's
+            # parentId/formatHash wiring (what this test pins) is independent of the
+            # bullet content.
+            original = {"text": "Delivered analytics and BI projects.",
+                        "evidenceRef": "bullet-0"}
+            changed = {"text": "Delivered analytics and BI projects aligned to the role.",
+                       "evidenceRef": "bullet-0"}
+            return TailorResult(
+                bullets=[changed], changes=1, rejected=[], originals=[original]
+            )
+
+        monkeypatch.setattr(ResumeTailorService, "tailor", _one_change)
+
         created = _ingest_ba_resume(client, auth_headers)
         job = _seed_job(client, auth_headers)
         resp = client.post(

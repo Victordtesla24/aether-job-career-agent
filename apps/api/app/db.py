@@ -173,3 +173,54 @@ def ensure_admin_user_columns() -> None:
             )
         conn.commit()
     _admin_user_columns_ready = True
+
+
+#: Guard so the additive ``Resume`` approval column is only ensured once per
+#: worker process (see ``ensure_resume_columns``).
+_resume_columns_ready = False
+
+
+def ensure_resume_columns() -> None:
+    """Idempotently add the additive ``Resume.approvalStatus`` column on first use.
+
+    ``approvalStatus`` (MV-resume-studio-001) records the human-in-the-loop review
+    state of a résumé version — ``pending`` for a freshly tailored child version
+    that awaits sign-off, ``approved``/``rejected`` once the linked
+    ``ApprovalRequest`` is resolved. It is introduced by lazy DDL (ADR-TR-1 — there
+    is no migration runner), so the résumé read/write paths call this first,
+    mirroring ``ensure_user_profile_columns``.
+
+    ``ADD COLUMN ... NOT NULL DEFAULT 'approved'`` is a metadata-only change on
+    PostgreSQL (the constant default is not rewritten across existing rows), so it
+    is fast and safe on the production ``Resume`` table and backfills the shared
+    test schema. Defaulting to ``approved`` keeps EVERY pre-existing résumé
+    version (the immutable base and all historical tailored versions) usable and
+    downloadable exactly as before — backward compatible; only newly tailored
+    versions are created ``pending``. A transaction-scoped advisory lock serializes
+    concurrent first-hit callers so the DDL cannot race; ``TRUNCATE`` never drops
+    columns, so this survives the test-suite teardown.
+    """
+    global _resume_columns_ready
+    if _resume_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER when the column
+            # already exists (production / warm test schema).
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Resume'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'approvalStatus'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _resume_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240721,))
+            cur.execute(
+                'ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "approvalStatus" text'
+                " NOT NULL DEFAULT 'approved'"
+            )
+        conn.commit()
+    _resume_columns_ready = True

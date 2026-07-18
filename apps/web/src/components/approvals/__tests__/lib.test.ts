@@ -7,6 +7,7 @@ import {
   isExpired,
   metaLine,
   parseApprovalPayload,
+  previewLabel,
   summarize,
 } from "../lib";
 
@@ -135,6 +136,18 @@ describe("summarize / metaLine", () => {
   it("labels cover-letter payloads", () => {
     const a = approval({ payload: { kind: "cover_letter", job_title: "SE", company: "Vercel" } });
     expect(summarize(a)).toBe("Cover letter for SE @ Vercel");
+  });
+  it("labels resume-tailor payloads distinctly from cover letters (MV-resume-studio-001)", () => {
+    const a = approval({
+      payload: { kind: "resume_tailor", job_title: "SE", company: "Vercel" },
+    });
+    expect(summarize(a)).toBe("Tailored résumé for SE @ Vercel");
+    // Both share the application_submit type but must never collide in labeling.
+    expect(previewLabel(a)).toBe("Tailored résumé changes");
+  });
+  it("keeps the cover-letter preview label for cover-letter approvals", () => {
+    const a = approval({ payload: { kind: "cover_letter" } });
+    expect(previewLabel(a)).toBe("Generated cover letter");
   });
   it("builds the company · location · via source meta line", () => {
     const details = parseApprovalPayload(

@@ -32,6 +32,14 @@ type AtsScore = {
   company?: string | null;
 };
 
+/** How many version cards to show before "Show more" (MV-resume-studio-005). */
+const VERSIONS_PAGE_SIZE = 8;
+
+/** Substring of the honest no-op message the tailor run returns / a failed async
+ *  job surfaces, so the UI can render it as an informational notice rather than a
+ *  scary error (MV-resume-studio-003). */
+const NO_OP_HINT = "no verifiable changes";
+
 export default function ResumePage() {
   const [resumes, setResumes] = useState<Resume[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -42,7 +50,9 @@ export default function ResumePage() {
   const [conversion, setConversion] = useState<ConversionMetrics | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(VERSIONS_PAGE_SIZE);
 
   const load = useCallback(async () => {
     try {
@@ -71,13 +81,31 @@ export default function ResumePage() {
   const runTailor = async () => {
     if (!selectedJob) return;
     setRunning(true);
+    setError(null);
+    setNotice(null);
     try {
       const result = await runTailorAgent(selectedJob);
-      setConversion(result.conversionMetrics);
+      if (result.noChangesApplied) {
+        // Honest no-op — the guards rejected every edit; nothing was created or
+        // billed. Surface it as an informational notice (MV-resume-studio-003).
+        setConversion(null);
+        setNotice(
+          result.message ??
+            "No changes could be applied — your résumé is unchanged and you were not charged.",
+        );
+      } else {
+        setConversion(result.conversionMetrics ?? null);
+      }
       await load();
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Tailoring run failed");
+      const message = e instanceof Error ? e.message : "Tailoring run failed";
+      // The async path surfaces the honest no-op as a failed-job error; render it
+      // as an informational notice, not a red error (MV-resume-studio-003).
+      if (message.toLowerCase().includes(NO_OP_HINT)) {
+        setNotice(message);
+      } else {
+        setError(message);
+      }
     } finally {
       setRunning(false);
     }
@@ -120,6 +148,14 @@ export default function ResumePage() {
         )
       : [];
   };
+
+  // Real per-version format-integrity signal (MV-resume-studio-004): the base is
+  // the immutable root (no parent); a tailored version preserves layout iff its
+  // formatHash still matches the base's (the source PDF is never re-rendered). The
+  // panel below reflects THIS comparison instead of an unconditional claim.
+  const baseResume = (resumes ?? []).find((r) => !r.parentId) ?? (resumes ?? [])[0];
+  const baseHash = baseResume?.formatHash ?? null;
+  const formatIntact = selected ? selected.formatHash === baseHash : null;
 
   return (
     <div className="space-y-6">
@@ -165,6 +201,15 @@ export default function ResumePage() {
         </p>
       ) : null}
 
+      {notice ? (
+        <p
+          data-testid="tailor-notice"
+          className="rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+        >
+          {notice}
+        </p>
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-2" data-design-id="panes-rs0405">
         <div className="glass rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
           <div className="flex items-center gap-2">
@@ -205,10 +250,22 @@ export default function ResumePage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Format Integrity Check</h2>
-            <p className="mt-1 text-sm text-aether-green">Typography, spacing, columns &amp; margins preserved</p>
+            {formatIntact === null ? (
+              <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
+                Select a version to verify its layout against the immutable base.
+              </p>
+            ) : formatIntact ? (
+              <p className="mt-1 text-sm text-aether-green" data-testid="integrity-status">
+                Layout hash matches the base — typography, spacing, columns &amp; margins preserved.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
+                Layout hash differs from the base — review formatting before using this version.
+              </p>
+            )}
             <p className="mt-1 text-xs text-aether-muted-dim">
               {diff
-                ? `Changes Summary: ${diff.changes.filter((c) => c.before).length} rewrites · ${diff.changes.filter((c) => !c.before).length} additions · layout locked (formatHash carried from base)`
+                ? `Changes Summary: ${diff.changes.filter((c) => c.before).length} rewrites · ${diff.changes.filter((c) => !c.before).length} additions${formatIntact ? " · formatHash carried from base" : ""}`
                 : "Select a tailored version to see its change summary."}
             </p>
           </div>
@@ -272,29 +329,56 @@ export default function ResumePage() {
               No resume versions yet. Tailor against a job to create one.
             </div>
           ) : (
-            resumes.map((resume) => (
-              <button
-                key={resume.id}
-                type="button"
-                data-testid="resume-version-card"
-                onClick={() => void openResume(resume)}
-                className={`glass block w-full rounded-xl border p-4 text-left transition ${
-                  selected?.id === resume.id
-                    ? "border-aether-coral/60"
-                    : "border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">v{resume.version}</span>
-                  <span className="text-xs text-aether-muted-dim">
-                    {new Date(resume.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-aether-muted">
-                  {resume.label ?? (resume.version === 1 ? "Base resume" : "Tailored version")}
-                </p>
-              </button>
-            ))
+            <>
+              {resumes.slice(0, visibleCount).map((resume) => (
+                <button
+                  key={resume.id}
+                  type="button"
+                  data-testid="resume-version-card"
+                  onClick={() => void openResume(resume)}
+                  className={`glass block w-full rounded-xl border p-4 text-left transition ${
+                    selected?.id === resume.id
+                      ? "border-aether-coral/60"
+                      : "border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">v{resume.version}</span>
+                    <span className="text-xs text-aether-muted-dim">
+                      {new Date(resume.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-aether-muted">
+                    {resume.label ?? (resume.version === 1 ? "Base resume" : "Tailored version")}
+                  </p>
+                  {resume.approvalStatus === "pending" ? (
+                    <span
+                      data-testid="version-pending-badge"
+                      className="mt-2 inline-block rounded-full border border-aether-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-amber"
+                    >
+                      Pending approval
+                    </span>
+                  ) : resume.approvalStatus === "rejected" ? (
+                    <span
+                      data-testid="version-rejected-badge"
+                      className="mt-2 inline-block rounded-full border border-red-500/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300"
+                    >
+                      Changes requested
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+              {resumes.length > visibleCount ? (
+                <button
+                  type="button"
+                  data-testid="versions-show-more"
+                  onClick={() => setVisibleCount((n) => n + VERSIONS_PAGE_SIZE)}
+                  className="w-full rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-aether-muted transition hover:border-white/20 hover:text-white"
+                >
+                  Show more ({resumes.length - visibleCount} older)
+                </button>
+              ) : null}
+            </>
           )}
         </section>
 
@@ -316,6 +400,25 @@ export default function ResumePage() {
                     Download
                   </button>
                 </div>
+                {selected.approvalStatus === "pending" ? (
+                  <p
+                    data-testid="version-approval-hint"
+                    className="mt-2 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-xs text-aether-amber"
+                  >
+                    Pending your review —{" "}
+                    <a href="/dashboard/approvals" className="font-semibold underline">
+                      approve or request changes
+                    </a>{" "}
+                    to make this your authoritative tailored version.
+                  </p>
+                ) : selected.approvalStatus === "rejected" ? (
+                  <p
+                    data-testid="version-approval-hint"
+                    className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300"
+                  >
+                    You requested changes on this version — re-run tailoring to try again.
+                  </p>
+                ) : null}
                 {downloadNote ? (
                   <p
                     data-testid="download-note"

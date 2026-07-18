@@ -13,6 +13,9 @@ export const ResumeSchema = z.object({
   sourceJobId: z.string().nullish(),
   parentId: z.string().nullish(),
   formatHash: z.string(),
+  // Human-in-the-loop review state (MV-resume-studio-001). Nullish for backward
+  // compatibility with any payload predating the column; defaults to "approved".
+  approvalStatus: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -56,10 +59,19 @@ export interface ConversionMetrics {
 }
 
 export interface TailorRunResult {
-  resume_id: string;
+  /** Null on an honest no-op run (no version created — MV-resume-studio-003). */
+  resume_id: string | null;
   changes: number;
   rejected: string[];
-  conversionMetrics: ConversionMetrics;
+  /** Null on a no-op run (no tailored version was scored). */
+  conversionMetrics: ConversionMetrics | null;
+  /** True and backed by a real pending ApprovalRequest (MV-resume-studio-001). */
+  approvalRequired?: boolean;
+  approval_id?: string | null;
+  approval_status?: string | null;
+  /** Honest no-op: the guards rejected every edit, nothing billed or created. */
+  noChangesApplied?: boolean;
+  message?: string;
 }
 
 /**
