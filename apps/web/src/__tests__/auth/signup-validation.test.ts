@@ -81,3 +81,33 @@ describe("validateSignupForm", () => {
     expect("name" in errors).toBe(false);
   });
 });
+
+describe("password max length (MV-signup-001 client mirror)", () => {
+  it("rejects a password longer than 72 bytes", () => {
+    expect(passwordPolicyErrors("a".repeat(73)).some((e) => /72 bytes/.test(e))).toBe(true);
+  });
+
+  it("measures the limit in UTF-8 bytes, not characters", () => {
+    // 20 four-byte emoji + a digit = 21 code points (well under any character
+    // cap) but 81 UTF-8 bytes — a code-point/char check would miss it.
+    const pw = "\u{1F600}".repeat(20) + "1";
+    expect(Array.from(pw).length).toBe(21);
+    expect(new TextEncoder().encode(pw).length).toBe(81);
+    expect(passwordPolicyErrors(pw).some((e) => /72 bytes/.test(e))).toBe(true);
+  });
+
+  it("accepts an exactly-72-byte password", () => {
+    expect(passwordPolicyErrors("a".repeat(71) + "1")).toEqual([]);
+  });
+});
+
+describe("email length cap (MV-signup-003)", () => {
+  it("flags an over-long email with an honest, non-technical message", () => {
+    const errors = validateSignupForm({
+      name: "",
+      email: "a".repeat(300) + "@example.com",
+      password: "abcdefg1",
+    });
+    expect(errors.email).toMatch(/254 characters or fewer/i);
+  });
+});

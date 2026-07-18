@@ -11,12 +11,16 @@ from app.db import (
     new_id,
     rows_to_dicts,
 )
+from app.security import BCRYPT_MAX_PASSWORD_BYTES
 
 #: Columns returned to callers. ``passwordHash`` is included so the auth layer
 #: can verify credentials — routers must never serialize it outward.
 _USER_COLUMNS = '"id", "email", "name", "image", "passwordHash", "createdAt", "updatedAt"'
 
-#: Password policy: at least 8 characters and at least one digit.
+#: Password policy: at least 8 characters, at least one digit, and at most
+#: ``BCRYPT_MAX_PASSWORD_BYTES`` (72) UTF-8 bytes. The upper bound closes
+#: MV-signup-001: bcrypt silently truncates past 72 bytes, so without it a
+#: different password sharing only the first 72 bytes would authenticate.
 MIN_PASSWORD_LENGTH = 8
 _DIGIT_RE = re.compile(r"\d")
 
@@ -30,6 +34,10 @@ def validate_password_policy(password: str) -> list[str]:
     problems: list[str] = []
     if len(password) < MIN_PASSWORD_LENGTH:
         problems.append(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
+    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        problems.append(
+            f"password must be at most {BCRYPT_MAX_PASSWORD_BYTES} bytes"
+        )
     if not _DIGIT_RE.search(password):
         problems.append("password must contain at least one digit")
     return problems

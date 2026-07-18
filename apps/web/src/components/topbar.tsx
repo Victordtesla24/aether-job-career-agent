@@ -17,6 +17,7 @@ import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals } from "../lib/api/approvals";
 import { fetchSettings } from "../lib/api/workspaces";
 import { apiRequest } from "../lib/api/client";
+import { UserMenu } from "./user-menu";
 
 export interface SearchHit {
   kind: "job" | "application" | "agent";
@@ -91,13 +92,37 @@ function timeAgo(iso: string): string {
   return `${Math.floor(mins / (60 * 24))}d ago`;
 }
 
-/** Build the chip fields from a full name + target role. */
-function deriveChip(fullName: string, targetRole: string): UserChip {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+/**
+ * A display-name token safe to derive initials from: it begins with a Unicode
+ * letter and contains only letters/marks plus intra-name punctuation
+ * (apostrophe, hyphen, period). Markup ("<script>…") and emoji/symbol tokens
+ * ("日本語🎉") are excluded so an adversarial or decorated name degrades
+ * gracefully instead of garbling the avatar/label (MV-signup-004).
+ */
+const NAME_TOKEN_RE = /^[\p{L}\p{M}][\p{L}\p{M}'.’-]*$/u;
+
+/** First code point of a string (surrogate-pair aware), or "". */
+function firstCodePoint(value: string): string {
+  return Array.from(value)[0] ?? "";
+}
+
+/** First letter code point at or after index 1 (the fallback second initial
+ * for a single-token name), or "". */
+function secondLetter(value: string): string {
+  return Array.from(value).slice(1).find((c) => /\p{L}/u.test(c)) ?? "";
+}
+
+/** Build the chip fields from a full name + target role. Robust to markup,
+ * emoji, and surrogate-pair characters in the name (MV-signup-004). */
+export function deriveChip(fullName: string, targetRole: string): UserChip {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter((p) => NAME_TOKEN_RE.test(p));
   const firstName = parts[0] ?? "";
-  const lastInitial = parts.length > 1 ? parts[parts.length - 1]!.charAt(0) : "";
+  const lastInitial = parts.length > 1 ? firstCodePoint(parts[parts.length - 1]!) : "";
   const initials =
-    (firstName.charAt(0) + (lastInitial || (parts[0]?.charAt(1) ?? ""))).toUpperCase() || "AE";
+    (firstCodePoint(firstName) + (lastInitial || secondLetter(firstName))).toUpperCase() || "AE";
   const chipName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   return { firstName, initials, chipName, role: shortenRole(targetRole) };
 }
@@ -277,17 +302,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
           ) : null}
         </Link>
-        <div className="flex items-center gap-2.5 pl-3 border-l border-white/10">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-sm font-semibold">
-            {chip.initials}
-          </div>
-          <div className="leading-tight">
-            <div className="text-[13px] font-medium">{chip.chipName}</div>
-            {chip.role ? (
-              <div className="text-[11px] text-aether-muted-dim">{chip.role}</div>
-            ) : null}
-          </div>
-        </div>
+        <UserMenu initials={chip.initials} name={chip.chipName} role={chip.role} />
       </div>
     </header>
   );

@@ -13,7 +13,7 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { validateSignupForm, type SignupFormErrors } from "../../components/auth/validation";
 import PublicFooter from "../../components/PublicFooter";
@@ -23,6 +23,15 @@ const TOKEN_STORAGE_KEY = "aether_token";
 
 export default function SignupPage() {
   const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    // An already-authenticated visitor shouldn't be re-shown the create-account
+    // form (MV-signup-002) — forward them to the workspace instead.
+    if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      setRedirecting(true);
+      router.replace("/dashboard");
+    }
+  }, [router]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +76,14 @@ export default function SignupPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (redirecting) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-aether-bg px-4">
+        <p className="text-sm text-aether-muted">Redirecting…</p>
+      </main>
+    );
   }
 
   return (

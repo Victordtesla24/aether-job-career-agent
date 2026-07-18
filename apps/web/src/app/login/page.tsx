@@ -13,6 +13,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import PublicFooter from "../../components/PublicFooter";
 import { AuthApiError, login } from "../../lib/api/auth";
+import { safeNextPath } from "../../lib/auth/next-path";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
@@ -23,9 +24,22 @@ export default function LoginPage() {
   // auto-login didn't complete, so the account exists but the user still
   // needs to sign in.
   const [justRegistered, setJustRegistered] = useState(false);
+  // The validated post-login destination — /dashboard, or the deep-link the
+  // visitor was sent to /login from (MV-login-002).
+  const [nextPath, setNextPath] = useState("/dashboard");
+  const [redirecting, setRedirecting] = useState(false);
   useEffect(() => {
-    setJustRegistered(new URLSearchParams(window.location.search).get("registered") === "1");
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    setJustRegistered(params.get("registered") === "1");
+    const dest = safeNextPath(params.get("next"));
+    setNextPath(dest);
+    // Already signed in? Don't re-present the form — forward to the intended
+    // destination (MV-login-001 / MV-login-002).
+    if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      setRedirecting(true);
+      router.replace(dest);
+    }
+  }, [router]);
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +52,20 @@ export default function LoginPage() {
     try {
       const session = await login(email, password);
       window.localStorage.setItem(TOKEN_STORAGE_KEY, session.accessToken);
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof AuthApiError ? err.message : "Could not reach the API. Please try again.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (redirecting) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-aether-bg px-4">
+        <p className="text-sm text-aether-muted">Redirecting…</p>
+      </main>
+    );
   }
 
   return (
@@ -105,6 +127,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
             />
+            <div className="text-right">
+              <Link
+                href="/forgot-password"
+                className="text-xs text-aether-muted hover:text-aether-indigo hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {error ? (

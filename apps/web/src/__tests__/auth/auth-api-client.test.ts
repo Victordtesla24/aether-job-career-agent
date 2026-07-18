@@ -147,3 +147,44 @@ describe("login", () => {
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ email: "admin", password: "admin123" });
   });
 });
+
+describe("register 422 message hygiene (MV-signup-003)", () => {
+  it("replaces the raw email_validator message with a clean, non-technical line", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            detail: [
+              {
+                msg: "value is not a valid email address: The email address is too long (65 characters too many).",
+                type: "value_error",
+              },
+            ],
+          },
+          422,
+        ),
+      ),
+    );
+
+    await expect(
+      registerAccount({ email: "x".repeat(300) + "@ex.dev", password: "abcdefg1" }, "http://api.test"),
+    ).rejects.toMatchObject({ status: 422, message: "Please enter a valid email address." });
+  });
+
+  it("strips the pydantic 'Value error,' wrapper from an honest policy message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { detail: [{ msg: "Value error, password must be at most 72 bytes", type: "value_error" }] },
+          422,
+        ),
+      ),
+    );
+
+    await expect(
+      registerAccount({ email: "a@example.com", password: "z".repeat(80) }, "http://api.test"),
+    ).rejects.toMatchObject({ status: 422, message: "password must be at most 72 bytes" });
+  });
+});
