@@ -16,8 +16,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
 const registerAccountMock = vi.fn();
@@ -39,6 +40,7 @@ import SignupPage from "../page";
 afterEach(() => {
   cleanup();
   pushMock.mockReset();
+  replaceMock.mockReset();
   registerAccountMock.mockReset();
   loginMock.mockReset();
   window.localStorage.clear();
@@ -189,5 +191,12 @@ describe("SignupPage", () => {
     const footerTermsLink = screen.getByRole("link", { name: /^terms$/i });
     expect(footerTermsLink.getAttribute("href")).toBe("/terms");
     expect(screen.getByTestId("public-legal-footer")).not.toBeNull();
+  });
+
+  it("MV-signup-002: redirects an already-authenticated visitor to /dashboard instead of showing the form", () => {
+    window.localStorage.setItem("aether_token", "jwt-123");
+    render(<SignupPage />);
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard");
+    expect(screen.queryByRole("heading", { name: "Create account", level: 1 })).toBeNull();
   });
 });

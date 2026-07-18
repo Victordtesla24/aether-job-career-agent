@@ -64,6 +64,26 @@ async function extractDetail(res: Response): Promise<string | null> {
   return null;
 }
 
+/**
+ * Turn a raw FastAPI 422 `detail` into clean user-facing copy (MV-signup-003).
+ * Pydantic wraps our field-validator messages as "Value error, <msg>" and
+ * surfaces `EmailStr` failures with email_validator's internal text ("value is
+ * not a valid email address: ...The email address is too long..."). Strip the
+ * wrapper and replace the email-validator noise with one honest line, while
+ * leaving genuine policy messages (e.g. password rules) intact.
+ */
+function cleanValidationDetail(detail: string | null): string {
+  if (!detail) return "Please check your details and try again.";
+  const stripped = detail.replace(/Value error,\s*/gi, "").trim();
+  const mentionsEmail = /valid email address|email address is too long/i.test(stripped);
+  // Only swallow the message when it is PURELY about the email; a combined 422
+  // that also carries a password-policy message keeps that part intact.
+  if (mentionsEmail && !/password/i.test(stripped)) {
+    return "Please enter a valid email address.";
+  }
+  return stripped;
+}
+
 async function toAuthApiError(res: Response, action: "login" | "register"): Promise<AuthApiError> {
   if (res.status === 429) {
     const retryAfterSeconds = parseRetryAfter(res);
@@ -78,7 +98,7 @@ async function toAuthApiError(res: Response, action: "login" | "register"): Prom
   }
   if (res.status === 422) {
     const detail = await extractDetail(res);
-    return new AuthApiError(detail ?? "Please check your details and try again.", 422);
+    return new AuthApiError(cleanValidationDetail(detail), 422);
   }
   const verb = action === "login" ? "Login" : "Registration";
   return new AuthApiError(`${verb} failed (${res.status}). Please try again.`, res.status);

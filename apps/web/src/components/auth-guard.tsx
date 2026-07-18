@@ -21,7 +21,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
       setAuthed(true);
     } else {
-      router.replace("/login");
+      // Preserve the originally-requested destination so /login can return the
+      // visitor there instead of dropping them on bare /dashboard
+      // (MV-login-002). safeNextPath re-validates it on the login side, so an
+      // attacker-crafted value here can never become an open redirect.
+      const intended = window.location.pathname + window.location.search;
+      router.replace(`/login?next=${encodeURIComponent(intended)}`);
     }
   }, [router]);
 

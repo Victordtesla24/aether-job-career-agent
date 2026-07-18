@@ -15,8 +15,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
 const loginMock = vi.fn();
@@ -36,6 +37,7 @@ import LoginPage from "../page";
 afterEach(() => {
   cleanup();
   pushMock.mockReset();
+  replaceMock.mockReset();
   loginMock.mockReset();
   window.localStorage.clear();
   window.history.replaceState(null, "", "/login");
@@ -104,5 +106,35 @@ describe("LoginPage", () => {
     const termsLink = screen.getByRole("link", { name: /^terms$/i });
     expect(privacyLink.getAttribute("href")).toBe("/privacy-policy");
     expect(termsLink.getAttribute("href")).toBe("/terms");
+  });
+
+  it("MV-login-001: redirects an already-authenticated visitor to /dashboard instead of showing the form", () => {
+    window.localStorage.setItem("aether_token", "jwt-123");
+    render(<LoginPage />);
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard");
+    expect(screen.queryByRole("heading", { name: "Sign in", level: 1 })).toBeNull();
+  });
+
+  it("MV-login-002: returns an authenticated visitor to a safe ?next destination", () => {
+    window.history.replaceState(null, "", "/login?next=" + encodeURIComponent("/dashboard/jobs"));
+    window.localStorage.setItem("aether_token", "jwt-123");
+    render(<LoginPage />);
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard/jobs");
+  });
+
+  it("MV-login-002: honors a safe ?next path after a successful login", async () => {
+    loginMock.mockResolvedValue({ accessToken: "jwt-x", userId: "u1", email: "a@example.com" });
+    window.history.replaceState(null, "", "/login?next=" + encodeURIComponent("/dashboard/jobs"));
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: "a@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "pw1234567" } });
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard/jobs"));
+  });
+
+  it("MV-login-004: offers an honest Forgot password link to /forgot-password", () => {
+    render(<LoginPage />);
+    const link = screen.getByRole("link", { name: /forgot password/i });
+    expect(link.getAttribute("href")).toBe("/forgot-password");
   });
 });
