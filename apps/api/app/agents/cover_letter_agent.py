@@ -352,6 +352,24 @@ def strip_injection_leaks(text: str, payloads: list[str]) -> str:
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
+#: FRONTED-ADVERBIAL posting-compliance (J4 final in-class gap): "As the posting
+#: instructed, I …", "In line with the posting's request, I …". Here the
+#: POSTING-ARTIFACT sits BETWEEN the adverbial opener and the verb, so the
+#: "as <verb> by the posting" mirror and the immediate "as instructed" form both
+#: miss it. Self-gated on the posting-artifact, so a legitimate survivor (which
+#: contains NO posting-artifact) can never match — zero over-block risk.
+_FRONTED_ADVERBIAL = re.compile(
+    r"\b(?:in\s+line\s+with|in\s+accordance\s+with|consistent\s+with|"
+    r"in\s+keeping\s+with|as\s+per|as|when|since|per|following)\s+"
+    r"(?:the|this|that|your|a|an)?\s*"
+    r"(?:job\s+)?(?:posting|listing|advertisement|advert|ad|vacancy|requisition|jd)"
+    r"(?:['’]s)?\s+"
+    r"(?:instructed|instructs|instruction|instructions|asked|asks|ask|requested|"
+    r"requests|request|specified|specifies|required|requires|said|says|wanted|"
+    r"wants|directed|directs|stated|states|directive|directives|guidance)\b",
+    re.I,
+)
+
 #: Self-referential injection-compliance / meta-reference phrasings
 #: (MV-cover-letter-studio-008). A cover letter speaks to the CANDIDATE'S FIT —
 #: it never references the job posting's INSTRUCTIONS or the act of obeying them.
@@ -361,6 +379,7 @@ def strip_injection_leaks(text: str, payloads: list[str]) -> str:
 #: still ship. Each pattern is high-precision — it targets language about the
 #: posting's directive/the act of complying, not ordinary fit prose.
 _INJECTION_COMPLIANCE: tuple[re.Pattern[str], ...] = (
+    _FRONTED_ADVERBIAL,
     re.compile(r"\byour\s+(?:request|instruction|instructions|directive|directives)\b", re.I),
     # A "token/passphrase/secret" reference is only injection-compliance when it
     # is being SMUGGLED (an inclusion verb precedes it) or tied to a compliance
@@ -543,10 +562,14 @@ def _has_human_agent(sentence: str) -> bool:
 
 
 def _clause_asserts_posting_compliance(chunk: str) -> bool:
-    """A single clause co-occurring a posting-artifact reference AND a compliance
-    predicate — used to mirror the output gate into the input sanitizer so the
-    JD directive is redacted before the model ever sees it (J4 ISSUE A)."""
-    return bool(_POSTING_ARTIFACT.search(chunk) and _COMPLIANCE_PREDICATE.search(chunk))
+    """A single clause that either (a) co-occurs a posting-artifact reference AND
+    a compliance predicate, or (b) matches the fronted-adverbial posting-compliance
+    form ("as the posting instructed") — mirrored into the input sanitizer so the
+    JD directive is redacted before the model ever sees it (J4 ISSUE A / final)."""
+    return bool(
+        (_POSTING_ARTIFACT.search(chunk) and _COMPLIANCE_PREDICATE.search(chunk))
+        or _FRONTED_ADVERBIAL.search(chunk)
+    )
 
 
 def asserts_posting_compliance(sentence: str, prev: str = "", nxt: str = "") -> bool:
