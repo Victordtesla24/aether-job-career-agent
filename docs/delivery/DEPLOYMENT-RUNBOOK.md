@@ -1,9 +1,70 @@
 # Aether Job & Career Agent — Production Deployment Runbook
 
-**Last Updated:** 2026-07-17 (Phase-7 Async Additions)  
+**Last Updated:** 2026-07-18 (MV-system-003 — safe test-suite invocation)  
 **Production URL:** https://5cb5f0620.abacusai.cloud  
 **Repository:** https://github.com/Victordtesla24/aether-job-career-agent  
 **Evidence Tag:** [VERIFIED-WITH-SOURCE]
+
+---
+
+## 0. CRITICAL SAFETY — Running the Backend Test Suite
+
+> ### ⚠️ WARNING — read before running `pytest` anywhere near this repo
+>
+> On 2026-07-18 a deploy step ran `set -a && source ../../.env && set +a && pytest`
+> before the test suite. Sourcing the repo-root `.env` put the **PRODUCTION**
+> `DATABASE_URL` (schema=`aether`) into the pytest process's environment. The
+> suite's per-test table-cleanup fixture (`apps/api/tests/conftest.py`,
+> `_truncate_tables()`) then ran `TRUNCATE TABLE ... CASCADE` against the
+> **production** `aether` schema, wiping all real `User`/`Application`/`Job`/
+> `StoryEntry`/`Resume`/`CoverLetter`/`Subscription`/`ApprovalRequest` data.
+> Full incident writeup: `docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md`.
+>
+> **NEVER** run the backend test suite by `source`-ing the repo-root `.env`
+> (or any file that sets `DATABASE_URL` to the production DSN) into the same
+> shell/process that then invokes `pytest`. `DATABASE_URL` and
+> `DATABASE_URL_TEST` point at the **same** Postgres host+database and differ
+> **only** by a `?schema=` query param — psycopg2 does not honour that param
+> on its own (it needs `search_path` pinned via connection `options=`), so
+> there is no forgiving margin here: getting `DATABASE_URL` wrong means
+> truncating production.
+
+### SAFE invocation (required)
+
+Use **`scripts/run-tests.sh`** — it resolves `DATABASE_URL_TEST` (from an
+already-exported var, or by grepping *only* that one line out of the
+repo-root `.env`, never sourcing the whole file), exports it as **both**
+`DATABASE_URL` and `DATABASE_URL_TEST` for the pytest child process, and
+**refuses to run at all** if the resolved DSN's `schema=` param is not
+literally `aether_test`:
+
+```bash
+cd /home/ubuntu/github_repos/aether-job-career-agent
+scripts/run-tests.sh                          # full suite
+scripts/run-tests.sh tests/test_auth.py -q    # one file
+```
+
+Equivalent manual invocation (if you must run pytest directly — still never
+`source ../../.env`):
+
+```bash
+cd /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+DATABASE_URL="$DATABASE_URL_TEST" AETHER_ASYNC_GENERATION=false python3 -m pytest
+```
+
+### Defense in depth (already in place, do not rely on this alone)
+
+`apps/api/tests/conftest.py` additionally enforces a fail-closed,
+session-start guard (MV-system-003): before any fixture or test runs, it
+opens the exact connection the truncation fixture will use — built **only**
+from `DATABASE_URL_TEST`, with `search_path` pinned via `options=`, never
+trusting `DATABASE_URL` — and verifies live via `SELECT current_schema()`
+that it resolves to `aether_test`. Anything else aborts the whole pytest
+session (`pytest.exit(..., returncode=2)`) before any destructive SQL runs.
+Regression test: `apps/api/tests/test_mv_system_003_prod_truncate_guard.py`.
+The escape hatch `AETHER_ALLOW_PROD_TRUNCATE=1` exists only for a
+consciously-overridden local schema name and **must never be set in CI or
+any deploy script.**
 
 ---
 
@@ -363,6 +424,12 @@ deploy — and if already deployed, treat as a rollback-now incident — if this
 check shows `replay` or `record`. A permanent regression guard for the
 specific leaked content also exists at
 `apps/api/tests/test_mv_no_fixture_content_in_prod_data.py`.
+
+**5. If running the backend test suite as part of pre-deploy validation:**
+**NEVER** `source ../../.env` (or the repo-root `.env`) into the shell that
+invokes `pytest` — use `scripts/run-tests.sh` exclusively. See **§0 CRITICAL
+SAFETY** above (MV-system-003) — this is how production got wiped on
+2026-07-18.
 
 ### Step-by-Step Deployment
 
