@@ -10,16 +10,31 @@
  * the server pre-computes `round(total/11, 2)`. Subscribe posts to
  * /api/billing/checkout and redirects to the returned Stripe Checkout URL
  * (logged-out visitors are sent to /login by the shared client first).
+ *
+ * MV-pricing-002 (HIGH): the API still returns a per-plan `modelTier` field
+ * and feature bullets like "Advanced model tier" / "Full model access" — but
+ * no backend code path routes a subscriber's plan to a different LLM; every
+ * agent call resolves its model from a fixed task-type tier, identical for
+ * every plan. This page does not render the `modelTier` label or any
+ * feature bullet that claims per-plan model differentiation, and states the
+ * real differentiator (monthly run quota) plainly instead.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import MetricTooltip from "../../components/MetricTooltip";
 import PublicFooter from "../../components/PublicFooter";
-import { ApiError } from "../../lib/api/client";
+import { ApiError, formatRetryAfter } from "../../lib/api/client";
 import { fetchPlans, startCheckout, type Plan } from "../../lib/api/billing";
 
 type Interval = "month" | "year";
+
+const TOKEN_STORAGE_KEY = "aether_token";
+
+// Matches feature copy that implies a plan-differentiated model/LLM quality
+// (there is none — MV-pricing-002). Filtered from display; the honest
+// differentiator (run quota) is stated separately in the page header.
+const MODEL_TIER_CLAIM_RE = /model tier|model access/i;
 
 function formatAud(amount: number): string {
   return new Intl.NumberFormat("en-AU", {
@@ -35,6 +50,10 @@ export default function PricingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  // Session-aware Free CTA (MV-pricing-005): read the stored token directly —
+  // never `getToken()`, which force-redirects an unauthenticated visitor to
+  // /login and would break this public page.
+  const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +69,10 @@ export default function PricingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setIsAuthed(Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY)));
+  }, []);
+
   const handleSubscribe = useCallback(
     async (plan: Plan) => {
       setCheckoutError(null);
@@ -62,6 +85,19 @@ export default function PricingPage() {
         if (err instanceof ApiError && err.status === 401) return;
         if (err instanceof ApiError && err.status === 503) {
           setCheckoutError("Checkout isn't available yet — billing is still being set up.");
+        } else if (err instanceof ApiError && err.status === 400) {
+          // MV-pricing-004: honest, distinct message — this plan has no Stripe
+          // price configured yet, not a generic failure.
+          setCheckoutError(
+            "This plan isn't available for purchase yet (not yet configured for checkout). Please try a different plan or check back soon.",
+          );
+        } else if (err instanceof ApiError && err.status === 429) {
+          // MV-pricing-004: respect Retry-After instead of a generic message.
+          setCheckoutError(
+            err.retryAfterSeconds !== undefined
+              ? `Too many checkout attempts — please try again in about ${formatRetryAfter(err.retryAfterSeconds)}.`
+              : "Too many checkout attempts — please wait a bit and try again.",
+          );
         } else {
           setCheckoutError("Could not start checkout. Please try again.");
         }
@@ -85,6 +121,13 @@ export default function PricingPage() {
           <p className="mx-auto mt-3 max-w-xl text-sm text-aether-muted">
             All prices are in Australian dollars and GST-inclusive. Pick a plan and let
             Aether do the applying — cancel anytime.
+          </p>
+          <p
+            data-testid="pricing-model-honesty-note"
+            className="mx-auto mt-2 max-w-xl text-xs text-aether-muted-dim"
+          >
+            Every plan uses the same AI models — plans differ by monthly agent-run
+            quota and feature access, not model quality.
           </p>
 
           <div
@@ -147,9 +190,6 @@ export default function PricingPage() {
                   className="glass flex flex-col rounded-2xl border border-white/10 p-6"
                 >
                   <h2 className="text-lg font-semibold">{plan.name}</h2>
-                  <p className="mt-1 text-[11px] uppercase tracking-wide text-aether-muted-dim">
-                    {plan.modelTier} model tier
-                  </p>
 
                   <div className="mt-4 flex items-baseline gap-1">
                     <span
@@ -183,21 +223,23 @@ export default function PricingPage() {
                   </p>
 
                   <ul className="mt-3 flex flex-1 flex-col gap-2 text-[13px] text-aether-muted">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <i className="fa-solid fa-check mt-0.5 text-aether-green" aria-hidden="true" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
+                    {plan.features
+                      .filter((feature) => !MODEL_TIER_CLAIM_RE.test(feature))
+                      .map((feature) => (
+                        <li key={feature} className="flex items-start gap-2">
+                          <i className="fa-solid fa-check mt-0.5 text-aether-green" aria-hidden="true" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
                   </ul>
 
                   {isFree ? (
                     <Link
-                      href="/signup"
+                      href={isAuthed ? "/dashboard" : "/signup"}
                       data-testid={`subscribe-${plan.id}`}
                       className="mt-6 rounded-xl border border-white/15 py-2.5 text-center text-sm font-semibold transition hover:bg-white/5"
                     >
-                      Get started free
+                      {isAuthed ? "Go to dashboard" : "Get started free"}
                     </Link>
                   ) : (
                     <button
