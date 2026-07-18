@@ -151,6 +151,13 @@ model Resume {
   sourceJobId String?
   parentId    String?
   formatHash  String
+  // Human-in-the-loop review state (MV-resume-studio-001). Defaults to
+  // "approved" so the immutable base and all pre-existing tailored versions stay
+  // authoritative; a freshly tailored child version is created "pending" and
+  // flips to "approved"/"rejected" when its ApprovalRequest is resolved. Added
+  // additively via lazy DDL (app.db.ensure_resume_columns) — there is no
+  // migration runner in this repo (ADR-TR-1).
+  approvalStatus String @default("approved")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

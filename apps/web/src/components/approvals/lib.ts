@@ -102,6 +102,12 @@ export function isExpired(approval: Approval, now: number = Date.now()): boolean
   );
 }
 
+/** The artifact family a payload describes, discriminated by ``kind`` for the
+ *  approvals that share the ``application_submit`` type (MV-resume-studio-001). */
+function payloadKind(approval: Approval): string | undefined {
+  return (approval.payload as { kind?: string }).kind;
+}
+
 /** One-line description for a queue card, e.g. "Application for Senior ML Engineer @ Canva". */
 export function summarize(approval: Approval): string {
   const details = parseApprovalPayload(approval);
@@ -110,13 +116,25 @@ export function summarize(approval: Approval): string {
       ? "Email"
       : approval.type === "offer_response"
         ? "Offer response"
-        : (approval.payload as { kind?: string }).kind === "cover_letter"
+        : payloadKind(approval) === "cover_letter"
           ? "Cover letter"
-          : "Application";
+          : payloadKind(approval) === "resume_tailor"
+            ? "Tailored résumé"
+            : "Application";
   const target = details.jobTitle
     ? ` for ${details.jobTitle}${details.company ? ` @ ${details.company}` : ""}`
     : "";
   return `${kind}${target}`;
+}
+
+/** Label for the generated-artifact preview block in the approval modal. Reflects
+ *  the artifact family so a tailored-résumé approval never mislabels its preview
+ *  as a "cover letter" (MV-resume-studio-001). */
+export function previewLabel(approval: Approval): string {
+  if (payloadKind(approval) === "resume_tailor") return "Tailored résumé changes";
+  if (approval.type === "email_send") return "Email to send";
+  if (approval.type === "offer_response") return "Offer response";
+  return "Generated cover letter";
 }
 
 /** "Company · Location · via Source" meta line under the job title. */

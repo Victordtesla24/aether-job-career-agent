@@ -306,8 +306,15 @@ def test_persisted_raw_text_reflects_tailored_bullets():
         def list_by_user(self, user_id):  # noqa: ANN001
             return []
 
+    class _StubApprovals:
+        # A tailored version now opens a real pending approval (MV-resume-studio-001);
+        # stub it so this pure-unit test stays DB-free.
+        def create(self, *a, **k):  # noqa: ANN001, ANN002
+            return {"id": "appr-1", "status": "pending"}
+
     TailoringAgent(
-        resumes=_StubResumes(), jobs=_StubJobs(), service=_StubService(), stories=_StubStories()
+        resumes=_StubResumes(), jobs=_StubJobs(), service=_StubService(),
+        stories=_StubStories(), approvals=_StubApprovals(),
     ).run("user-1", "job-1", resume_id="base-1")
 
     raw = captured["sections"]["raw_text"]

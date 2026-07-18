@@ -221,6 +221,15 @@ def test_tailoring_agent_wires_story_bank_into_evidence() -> None:
         service=_StubService(),
         stories=_StubStories([story]),
     )
-    agent.run("user-1", "job-1", resume_id="base-1")
+    # The stub service reports 0 net changes, so the agent honestly no-ops
+    # (MV-resume-studio-003) — but the Story Bank evidence is still folded into
+    # the corpus handed to ``tailor`` (captured above) before that check, which is
+    # exactly what this test pins.
+    import pytest as _pytest
+
+    from app.agents.tailor_agent import NoChangesApplied
+
+    with _pytest.raises(NoChangesApplied):
+        agent.run("user-1", "job-1", resume_id="base-1")
     assert "Kubernetes" in captured["evidence_extra"], captured
     assert "Kafka" in captured["evidence_extra"], captured
