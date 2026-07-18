@@ -69,6 +69,10 @@ const SOURCE_FILTERS = [
 ] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
 
+/** Minimum-salary bands (in thousands, "0" = no filter) — MV-job-discovery-004. */
+const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
+type SalaryFilter = (typeof SALARY_FILTERS)[number];
+
 /** Display label + badge for a job source (wireframe source bar naming). */
 const SOURCE_LABEL: Record<string, string> = {
   seek: "Seek.com.au",
@@ -205,6 +209,8 @@ export default function JobsPage() {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [matchMin, setMatchMin] = useState(0);
   const [locationQuery, setLocationQuery] = useState("");
+  const [roleQuery, setRoleQuery] = useState("");
+  const [salaryMinFilter, setSalaryMinFilter] = useState<SalaryFilter>("0");
   const [sort, setSort] = useState<"fitScore" | "createdAt">("fitScore");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +232,17 @@ export default function JobsPage() {
   const [submitted, setSubmitted] = useState(false);
   const gateTriggerRef = useRef<HTMLElement | null>(null);
   const gateConfirmRef = useRef<HTMLButtonElement | null>(null);
+
+  // Bulk-apply confirmation gate (MV-job-discovery-002) — the same
+  // "irreversible action, explicit confirm" safety the single-job flow
+  // enforces, applied to bulk apply too (both the list "Apply (N)" button and
+  // the Saved view's "Apply to all").
+  const [bulkGateOpen, setBulkGateOpen] = useState(false);
+  const [bulkGateIds, setBulkGateIds] = useState<string[]>([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkSubmitted, setBulkSubmitted] = useState(false);
+  const bulkGateTriggerRef = useRef<HTMLElement | null>(null);
+  const bulkGateConfirmRef = useRef<HTMLButtonElement | null>(null);
 
   // ?demo=empty → saved empty state.
   useEffect(() => {
@@ -279,9 +296,16 @@ export default function JobsPage() {
       if (remoteOnly && !j.remote) return false;
       if (matchMin > 0 && (j.fitScore == null || j.fitScore < matchMin)) return false;
       if (locationQuery && !(j.location ?? "").toLowerCase().includes(locationQuery.toLowerCase())) return false;
+      if (roleQuery && !(j.title ?? "").toLowerCase().includes(roleQuery.toLowerCase())) return false;
+      if (salaryMinFilter !== "0") {
+        const threshold = Number(salaryMinFilter) * 1000;
+        const j2 = j as Job & { salaryMin?: number | null; salaryMax?: number | null };
+        const cap = j2.salaryMax ?? j2.salaryMin ?? null;
+        if (cap == null || cap < threshold) return false;
+      }
       return true;
     });
-  }, [marketJobs, remoteOnly, matchMin, locationQuery]);
+  }, [marketJobs, remoteOnly, matchMin, locationQuery, roleQuery, salaryMinFilter]);
 
   const counts = useMemo(() => {
     const all = jobs ?? [];
@@ -447,9 +471,28 @@ export default function JobsPage() {
       return next;
     });
 
-  const bulkApply = async (explicitIds?: string[]) => {
-    const ids = explicitIds ?? [...selectedIds].filter((id) => visible.some((j) => j.id === id));
+  // Bulk apply (MV-job-discovery-002): opens the same kind of irreversible-
+  // action confirmation gate the single-job flow enforces — no silent mass
+  // apply. `requestBulkApply` only stages the ids and opens the gate;
+  // `confirmBulkApply` performs the actual POSTs, and only after the user
+  // explicitly confirms.
+  const requestBulkApply = (ids: string[], trigger: HTMLElement | null) => {
     if (ids.length === 0) return;
+    bulkGateTriggerRef.current = trigger;
+    setBulkGateIds(ids);
+    setBulkSubmitted(false);
+    setBulkGateOpen(true);
+  };
+  const closeBulkGate = useCallback(() => {
+    setBulkGateOpen(false);
+    setBulkGateIds([]);
+    bulkGateTriggerRef.current?.focus?.();
+  }, []);
+
+  const confirmBulkApply = async () => {
+    const ids = bulkGateIds;
+    if (ids.length === 0) return;
+    setBulkSubmitting(true);
     setRunning(true);
     try {
       for (const id of ids) {
@@ -457,9 +500,13 @@ export default function JobsPage() {
         setJobs((prev) => (prev ?? []).map((j) => (j.id === res.job.id ? res.job : j)));
       }
       setSelectedIds(new Set());
+      setBulkSubmitted(true);
+      window.setTimeout(closeBulkGate, 1600);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Bulk apply failed");
+      setBulkGateOpen(false);
     } finally {
+      setBulkSubmitting(false);
       setRunning(false);
     }
   };
@@ -475,15 +522,31 @@ export default function JobsPage() {
     return () => document.removeEventListener("keydown", onKey);
   }, [gateOpen, closeGate]);
 
+  useEffect(() => {
+    if (!bulkGateOpen) return;
+    bulkGateConfirmRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeBulkGate();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [bulkGateOpen, closeBulkGate]);
+
   const clearAll = () => {
     setSourceFilter("all");
     setRemoteOnly(false);
     setMatchMin(0);
     setLocationQuery("");
+    setRoleQuery("");
+    setSalaryMinFilter("0");
     setSort("fitScore");
   };
 
   const gateJob = gateJobId ? (jobs ?? []).find((j) => j.id === gateJobId) : undefined;
+  const bulkGateJobs = useMemo(
+    () => (jobs ?? []).filter((j) => bulkGateIds.includes(j.id)),
+    [jobs, bulkGateIds],
+  );
 
   return (
     <div className="space-y-5">
@@ -639,6 +702,15 @@ export default function JobsPage() {
 
       {/* Filters (jd04–jd08, jd29) */}
       <div className="flex flex-wrap items-center gap-2.5" data-testid="job-filter-bar">
+        <input
+          type="text"
+          value={roleQuery}
+          onChange={(e) => setRoleQuery(e.target.value)}
+          placeholder="Role…"
+          aria-label="Filter by role"
+          data-testid="job-role-filter"
+          className="glass w-32 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs placeholder:text-aether-muted-dim"
+        />
         <select
           value={sourceFilter}
           aria-label="Filter by source"
@@ -661,6 +733,19 @@ export default function JobsPage() {
           data-testid="job-location-filter"
           className="glass w-32 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs placeholder:text-aether-muted-dim"
         />
+        <select
+          value={salaryMinFilter}
+          aria-label="Filter by minimum salary"
+          onChange={(e) => setSalaryMinFilter(e.target.value as SalaryFilter)}
+          data-testid="job-salary-filter"
+          className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs"
+        >
+          {SALARY_FILTERS.map((s) => (
+            <option key={s} value={s} className="bg-black">
+              {s === "0" ? "Any salary" : `$${s}k+`}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           data-testid="remote-toggle"
@@ -725,7 +810,7 @@ export default function JobsPage() {
         <SavedView
           jobs={visible}
           onUnsave={(id) => void toggleSave(id)}
-          onApplyAll={(ids) => void bulkApply(ids)}
+          onApplyAll={(ids, trigger) => requestBulkApply(ids, trigger)}
         />
       ) : visible.length === 0 ? (
         <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="jobs-empty-state">
@@ -757,7 +842,12 @@ export default function JobsPage() {
                 <button
                   type="button"
                   data-testid="bulk-apply"
-                  onClick={() => void bulkApply()}
+                  onClick={(e) =>
+                    requestBulkApply(
+                      [...selectedIds].filter((id) => visible.some((j) => j.id === id)),
+                      e.currentTarget,
+                    )
+                  }
                   disabled={selectedIds.size === 0 || running}
                   className="rounded-lg bg-aether-coral px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-40"
                 >
@@ -1114,6 +1204,18 @@ export default function JobsPage() {
                             </span>
                           ) : null}
                         </div>
+                        {tailorResults[selected.id]?.rejected?.length ? (
+                          <p
+                            className="mt-2 text-[11px] leading-relaxed text-aether-muted-dim"
+                            data-testid="tailor-rejected-note"
+                          >
+                            {tailorResults[selected.id].changes} of{" "}
+                            {tailorResults[selected.id].changes + tailorResults[selected.id].rejected.length}{" "}
+                            suggestions applied — the rest were rejected by the fabrication guard because they
+                            couldn&apos;t be verified against your real experience, so nothing unsupported was added
+                            to your resume.
+                          </p>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px]">
                           <Link href="/dashboard/stories" className="font-medium text-[#a5b4fc] transition hover:text-white">
                             Pull from Story Bank →
@@ -1245,6 +1347,83 @@ export default function JobsPage() {
           </div>
         </div>
       ) : null}
+
+      {/* Bulk-apply confirmation gate (MV-job-discovery-002) — same
+          irreversible-action safety as the single-job submit gate above,
+          applied to "Apply (N)" and Saved's "Apply to all". No per-job
+          tailoring runs for a bulk submission; the dialog says so. */}
+      {bulkGateOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="bulk-apply-gate">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeBulkGate} aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulkGateTitle"
+            className="glass-raised relative w-[520px] max-w-[92vw] rounded-2xl border border-aether-coral/40 p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
+              <div className="flex-1">
+                <h3 id="bulkGateTitle" className="text-base font-semibold leading-snug">
+                  Submit {bulkGateIds.length} application{bulkGateIds.length === 1 ? "" : "s"} without tailoring?
+                </h3>
+                <p className="mt-1 text-[12px] text-aether-muted">
+                  Th{bulkGateIds.length === 1 ? "is job" : "ese jobs"} will be recorded as{" "}
+                  <span className="text-[#C7C7D6]">Applied</span> using your{" "}
+                  <span className="text-aether-yellow">current, untailored</span> resume — bulk submission does not
+                  run per-job tailoring. This action cannot be undone.
+                </p>
+              </div>
+              <button type="button" onClick={closeBulkGate} aria-label="Close" className="text-aether-muted transition hover:text-white">✕</button>
+            </div>
+
+            <div
+              className="mt-4 max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-3.5 text-[12px]"
+              data-testid="bulk-apply-gate-list"
+            >
+              {bulkGateJobs.map((j) => (
+                <div key={j.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[#C7C7D6]">{j.title}</span>
+                  <span className="shrink-0 text-aether-muted-dim">{j.company}</span>
+                </div>
+              ))}
+            </div>
+
+            {bulkSubmitted ? (
+              <div
+                className="mt-4 flex items-center gap-2 rounded-xl border border-aether-green/25 bg-aether-green/10 px-3.5 py-2.5 text-[12px]"
+                data-testid="bulk-submitted-state"
+                role="status"
+              >
+                ✓ {bulkGateIds.length} application{bulkGateIds.length === 1 ? "" : "s"} recorded.
+              </div>
+            ) : (
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  data-testid="bulk-apply-cancel"
+                  onClick={closeBulkGate}
+                  className="glass-raised rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20"
+                >
+                  Cancel
+                </button>
+                <button
+                  ref={bulkGateConfirmRef}
+                  type="button"
+                  data-testid="bulk-apply-confirm"
+                  onClick={() => void confirmBulkApply()}
+                  disabled={bulkSubmitting}
+                  className="flex items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+                >
+                  {bulkSubmitting
+                    ? "Submitting…"
+                    : `✈ Submit ${bulkGateIds.length} Application${bulkGateIds.length === 1 ? "" : "s"}`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1259,7 +1438,7 @@ function SavedView({
 }: {
   jobs: Job[];
   onUnsave: (id: string) => void;
-  onApplyAll: (ids: string[]) => void;
+  onApplyAll: (ids: string[], trigger: HTMLElement | null) => void;
 }) {
   if (jobs.length === 0) {
     return (
@@ -1286,7 +1465,12 @@ function SavedView({
         <button
           type="button"
           data-testid="saved-apply-all"
-          onClick={() => onApplyAll(jobs.map((j) => j.id))}
+          onClick={(e) =>
+            onApplyAll(
+              jobs.map((j) => j.id),
+              e.currentTarget,
+            )
+          }
           className="flex items-center gap-2 rounded-lg bg-aether-coral px-4 py-2 text-xs font-semibold shadow-lg shadow-aether-coral/25 hover:opacity-90"
         >
           ✦ Apply to all ({jobs.length})

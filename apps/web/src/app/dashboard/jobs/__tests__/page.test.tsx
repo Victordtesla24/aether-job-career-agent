@@ -75,7 +75,45 @@ const SAVED_JOB = {
   createdAt: "2026-07-15T00:00:00Z",
 };
 
-const JOBS_FIXTURE = [AU_JOB, INTL_JOB, SAVED_JOB];
+// Two AU-located jobs with real salary data, used by the Role/Salary filter
+// tests (MV-job-discovery-004) — one below and one at/above a $150k band.
+const BACKEND_JOB = {
+  id: "job-backend",
+  title: "Backend Engineer",
+  company: "DataCo",
+  location: "Sydney NSW",
+  remote: false,
+  description: "",
+  source: "greenhouse",
+  sourceUrl: "https://greenhouse.io/job/4",
+  status: "matched",
+  fitScore: 70,
+  saved: false,
+  createdAt: "2026-07-15T00:00:00Z",
+  salaryMin: 90000,
+  salaryMax: 110000,
+  currency: "AUD",
+};
+
+const SENIOR_BACKEND_JOB = {
+  id: "job-senior-backend",
+  title: "Senior Backend Engineer",
+  company: "CloudCo",
+  location: "Melbourne VIC",
+  remote: false,
+  description: "",
+  source: "lever",
+  sourceUrl: "https://lever.co/job/5",
+  status: "matched",
+  fitScore: 88,
+  saved: false,
+  createdAt: "2026-07-15T00:00:00Z",
+  salaryMin: 150000,
+  salaryMax: 180000,
+  currency: "AUD",
+};
+
+const JOBS_FIXTURE = [AU_JOB, INTL_JOB, SAVED_JOB, BACKEND_JOB, SENIOR_BACKEND_JOB];
 
 function insightsFor(jobId: string) {
   return {
@@ -97,13 +135,25 @@ function insightsFor(jobId: string) {
   };
 }
 
-apiRequest.mockImplementation(async (path: string) => {
-  if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
-  const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
-  if (insightsMatch) return insightsFor(insightsMatch[1]);
-  if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
-  throw new Error(`unexpected apiRequest(${path})`);
-});
+apiRequest.mockImplementation(
+  async (path: string, options?: { method?: string; body?: unknown }) => {
+    if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
+    const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
+    if (insightsMatch) return insightsFor(insightsMatch[1]);
+    if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
+    const applyMatch = /^\/jobs\/([^/]+)\/apply$/.exec(path);
+    if (applyMatch && options?.method === "POST") {
+      const job = JOBS_FIXTURE.find((j) => j.id === applyMatch[1]);
+      return { job: { ...job, status: "applied" } };
+    }
+    if (path === "/agents/tailor/run" && options?.method === "POST") {
+      // 1 applied / 7 rejected — mirrors the real run observed in
+      // TESTING-OUTCOME-REPORT.md (MV-job-discovery-005).
+      return { resume_id: "resume-mock-1", changes: 1, rejected: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"] };
+    }
+    throw new Error(`unexpected apiRequest(${path})`);
+  },
+);
 getToken.mockResolvedValue("test-token");
 apiBaseUrl.mockReturnValue("http://test.local");
 fetchScoutSources.mockResolvedValue([]);
@@ -142,5 +192,127 @@ describe("Job Discovery market tabs (GAP-P6-WIRE-001)", () => {
     fireEvent.click(screen.getByTestId("market-tab-au"));
     await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
     expect(screen.queryByTestId("saved-view")).toBeNull();
+  });
+});
+
+describe("Bulk apply confirmation gate (MV-job-discovery-002)", () => {
+  it("opens a confirmation dialog before applying, and does NOT apply on cancel", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByLabelText("Select AU Product Manager"));
+    expect(screen.getByTestId("selected-count").textContent).toContain("1 selected");
+
+    fireEvent.click(screen.getByTestId("bulk-apply"));
+
+    // The gate must appear, and apply must NOT have fired yet.
+    await screen.findByTestId("bulk-apply-gate");
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/jobs/job-au/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    // Cancel closes the gate without ever applying.
+    fireEvent.click(screen.getByTestId("bulk-apply-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("bulk-apply-gate")).toBeNull());
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/jobs/job-au/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("applies only after explicit confirmation", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByLabelText("Select AU Product Manager"));
+    fireEvent.click(screen.getByTestId("bulk-apply"));
+    await screen.findByTestId("bulk-apply-gate");
+
+    // The dialog discloses which job(s) and that tailoring will not run.
+    expect(screen.getByTestId("bulk-apply-gate-list").textContent).toContain("AU Product Manager");
+    expect(screen.getByRole("dialog").textContent?.toLowerCase()).toContain("untailored");
+
+    fireEvent.click(screen.getByTestId("bulk-apply-confirm"));
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/jobs/job-au/apply",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("routes the Saved view's Apply-to-all through the same confirmation gate", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByTestId("market-tab-saved"));
+    await screen.findByTestId("saved-view");
+
+    fireEvent.click(screen.getByTestId("saved-apply-all"));
+
+    await screen.findByTestId("bulk-apply-gate");
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/jobs/job-saved/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("Role and Salary filters (MV-job-discovery-004)", () => {
+  it("Role filter narrows the visible list by job title", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Backend Engineer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Senior Backend Engineer").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByTestId("job-role-filter"), { target: { value: "Engineer" } });
+
+    await waitFor(() => expect(screen.queryAllByText("AU Product Manager")).toHaveLength(0));
+    expect(screen.getAllByText("Backend Engineer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Senior Backend Engineer").length).toBeGreaterThan(0);
+  });
+
+  it("Salary filter narrows the visible list by minimum salary band", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("Senior Backend Engineer").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByTestId("job-salary-filter"), { target: { value: "150" } });
+
+    // Job with no salary data and job below the $150k band both drop out;
+    // the job whose band clears $150k remains.
+    await waitFor(() => expect(screen.queryAllByText("AU Product Manager")).toHaveLength(0));
+    expect(screen.queryAllByText("Backend Engineer")).toHaveLength(0);
+    expect(screen.getAllByText("Senior Backend Engineer").length).toBeGreaterThan(0);
+  });
+
+  it("Clear all resets Role and Salary filters", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByTestId("job-role-filter"), { target: { value: "Engineer" } });
+    fireEvent.change(screen.getByTestId("job-salary-filter"), { target: { value: "150" } });
+    await waitFor(() => expect(screen.queryAllByText("AU Product Manager")).toHaveLength(0));
+
+    fireEvent.click(screen.getByTestId("clear-filters"));
+
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+    expect((screen.getByTestId("job-role-filter") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("job-salary-filter") as HTMLSelectElement).value).toBe("0");
+  });
+});
+
+describe("Tailoring honesty note (MV-job-discovery-005)", () => {
+  it("explains why most proposed edits were rejected when few are applied", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByTestId("tailor-resume"));
+    await screen.findByTestId("apply-step2");
+
+    const note = screen.getByTestId("tailor-rejected-note").textContent ?? "";
+    expect(note).toMatch(/1 of 8/);
+    expect(note.toLowerCase()).toMatch(/unsupported/);
   });
 });
