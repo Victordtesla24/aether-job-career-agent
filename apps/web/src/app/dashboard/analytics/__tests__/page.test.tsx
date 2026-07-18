@@ -14,7 +14,7 @@
  *      as "all time" / unaffected by the selector, instead of silently
  *      implying they respect it.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiRequest = vi.fn();
@@ -116,5 +116,30 @@ describe("Analytics period selector (MV-analytics-004)", () => {
 
     const roi = screen.getByTestId("agent-roi");
     expect(roi.textContent?.toLowerCase()).toMatch(/all time/);
+  });
+
+  it("dashboard-summary now respects the period selector, so its 'Applications' tooltip no longer claims all-time and the section shows a period indicator like its siblings (review rework, MV-analytics-004/005)", async () => {
+    render(<AnalyticsPage />);
+
+    const summary = await screen.findByTestId("dashboard-summary");
+    // Matches the sibling "Application funnel ({period})" / "Stage
+    // conversion ({period})" headers instead of leaving this the only
+    // section with no period indicator.
+    expect(within(summary).getByText(/dashboard summary \(all\)/i)).toBeTruthy();
+
+    // The "Applications" stat card's tooltip must not claim "all time
+    // periods" now that the value genuinely changes with the selector.
+    const appsLabel = within(summary).getByText("Applications");
+    const card = appsLabel.closest("div");
+    expect(card).not.toBeNull();
+    const tooltip = card!.querySelector('[data-testid="metric-tooltip-popover"]');
+    expect(tooltip?.textContent?.toLowerCase()).not.toMatch(
+      /all time|all sources and time periods/,
+    );
+    expect(tooltip?.textContent?.toLowerCase()).toMatch(/selected period/);
+
+    // The period indicator itself updates when the selector changes.
+    fireEvent.click(screen.getByText("7d"));
+    await within(summary).findByText(/dashboard summary \(7d\)/i);
   });
 });

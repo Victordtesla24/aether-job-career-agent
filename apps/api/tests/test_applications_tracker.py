@@ -153,3 +153,37 @@ class TestFunnelSankey:
         assert len(data["dropoffs"]) == 4
         assert isinstance(data["insight"], str)
         assert data["dropoffs"][0]["reason"] == "below match threshold"
+
+    def test_applied_is_intentionally_stage_exclusive_not_the_canonical_submitted_total(
+        self, client, auth_headers, user_id, db_session
+    ):
+        """MV-application-tracker-005 review ruling: the Sankey's "Applied"
+        node is a stage-EXCLUSIVE current-bucket count (status == 'submitted'
+        exactly) — a legitimately different concept from
+        analytics.get_application_counts()'s cumulative "submitted" (status
+        <> 'draft', used by /analytics/funnel's "applied" and the dashboard
+        summary). This pins the intentional divergence so a future "fix"
+        doesn't collapse them and break the Sankey's node-to-node dropoff
+        math, which requires each stage to be an exclusive bucket rather
+        than a superset of the next.
+        """
+        _seed_application(db_session, user_id, app_status="draft")
+        _seed_application(db_session, user_id, app_status="submitted")
+        _seed_application(db_session, user_id, app_status="submitted")
+        _seed_application(db_session, user_id, app_status="screening")
+        _seed_application(db_session, user_id, app_status="interview")
+        _seed_application(db_session, user_id, app_status="offer")
+        _seed_application(db_session, user_id, app_status="rejected")
+
+        sankey = client.get("/applications/funnel/sankey", headers=auth_headers).json()
+        sankey_applied = next(s["value"] for s in sankey["stages"] if s["key"] == "applied")
+        assert sankey_applied == 2  # exactly status == 'submitted'
+
+        funnel = client.get("/analytics/funnel?period=all", headers=auth_headers).json()
+        # Canonical cumulative "submitted" (status <> 'draft'): 2 submitted +
+        # 1 screening + 1 interview + 1 offer + 1 rejected = 6.
+        assert funnel["applied"] == 6
+
+        # The two MUST differ here — they measure different things on
+        # purpose (see get_application_counts()'s docstring).
+        assert sankey_applied != funnel["applied"]

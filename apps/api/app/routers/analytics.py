@@ -32,9 +32,9 @@ def get_application_counts(
     cur: Any, user_id: str, period_clause: str = ""
 ) -> dict[str, int]:
     """Canonical application counts for a user — the single source of truth
-    every "applications" figure across the dashboard, mobile dashboard,
-    application tracker and analytics surfaces must derive from (data-
-    consistency ruling: MV-dashboard-001, MV-mobile-dashboard-005/006,
+    every CUMULATIVE "applications" figure across the dashboard, mobile
+    dashboard, application tracker and analytics surfaces must derive from
+    (data-consistency ruling: MV-dashboard-001, MV-mobile-dashboard-005/006,
     MV-analytics-004/005/006, MV-application-tracker-002).
 
     ``total`` is every ``Application`` row regardless of status — the
@@ -51,8 +51,19 @@ def get_application_counts(
     divergent inline queries — one of them (Market Pulse's rolling monthly
     count) mixed ALL statuses while the funnel's all-time "Applied" excluded
     drafts, so a monthly figure could impossibly exceed the all-time total
-    (MV-mobile-dashboard-005: "you 14" vs "Applied 7"). Every surface below
-    now calls this one function instead.
+    (MV-mobile-dashboard-005: "you 14" vs "Applied 7"). Every CUMULATIVE
+    surface below now calls this one function instead.
+
+    NOT in scope: ``applications.py``'s ``funnel_sankey()``. Its "Applied"
+    node is a stage-EXCLUSIVE current-bucket count (status == 'submitted'
+    exactly, one applicant counted at their single current stage) so the
+    Sankey's node-to-node dropoff math holds — a legitimately different
+    concept from this helper's cumulative ``submitted`` (status <> 'draft',
+    which double-counts anyone who has since advanced past "submitted").
+    Reconciling the two would break the dropoff diagram, not fix a bug (see
+    MV-application-tracker-005 review ruling — the two are pinned as
+    intentionally distinct by test_applied_is_intentionally_stage_exclusive_
+    not_the_canonical_submitted_total in test_applications_tracker.py).
 
     ``period_clause`` is an optional ``AND ...`` SQL fragment (see
     ``_period_clause``) applied to both counts, e.g. a rolling time window.

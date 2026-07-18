@@ -88,8 +88,11 @@ export default function AnalyticsPage() {
     // MV-analytics-005): this is the canonical, unqualified "Applications"
     // figure — every Application record you have, including drafts you
     // haven't submitted yet — not the narrower "Applied"/submitted count
-    // shown in the funnel below.
-    Applications: "Every application record you have — draft through offer or rejection — across all sources and time periods.",
+    // shown in the funnel below. It respects the period selector above
+    // (GET /analytics/dashboard?period=..., MV-analytics-004) — the copy
+    // must say so instead of claiming "all time periods" while the number
+    // visibly changes when the selector is used.
+    Applications: "Every application record created in the selected period — draft through offer or rejection.",
     Interviews: "Applications that have progressed to at least one interview stage.",
     Offers: "Applications where an employer has extended a formal offer.",
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
@@ -137,7 +140,16 @@ export default function AnalyticsPage() {
       ) : null}
 
       {dashboard ? (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-summary">
+        <section data-testid="dashboard-summary">
+          {/* Every field on this card is period-scoped server-side (GET
+              /analytics/dashboard?period=..., MV-analytics-004) — say so
+              the same way the sibling funnel/conversion sections do,
+              instead of leaving this the only section with no period
+              indicator. */}
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+            Dashboard summary ({period})
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
               ["Applications", dashboard.totalApplications, "text-aether-coral"],
@@ -156,6 +168,7 @@ export default function AnalyticsPage() {
               </dd>
             </div>
           ))}
+          </div>
         </section>
       ) : null}
 

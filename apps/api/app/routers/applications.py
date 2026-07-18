@@ -39,6 +39,15 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
                 'SELECT status, count(*) FROM "Application" WHERE "userId" = %s '
                 'GROUP BY status', (uid,))
             status_counts = dict(cur.fetchall())
+    # Intentionally stage-EXCLUSIVE (status == 'submitted' exactly, not
+    # analytics.get_application_counts()'s cumulative "status <> draft"): each
+    # node below must count applicants CURRENTLY at that single stage so the
+    # node-to-node dropoff subtraction is meaningful. Using the cumulative
+    # count here would double-count anyone who has since advanced past
+    # "submitted" and break the dropoff math — do not "fix" this into
+    # matching the funnel's cumulative "Applied" (MV-application-tracker-005
+    # review ruling; pinned by
+    # test_applied_is_intentionally_stage_exclusive_not_the_canonical_submitted_total).
     applied = status_counts.get("submitted", 0)
     screened = status_counts.get("screening", 0)
     interviewed = status_counts.get("interview", 0)
