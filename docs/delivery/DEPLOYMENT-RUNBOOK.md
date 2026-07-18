@@ -284,14 +284,15 @@ ls -la /var/log/aether/
 
 #### API Service Logs
 - **Path:** `/var/log/aether/api.log`
-- **Content:** Uvicorn startup messages, HTTP request logs, application errors
+- **Content:** Uvicorn startup messages, HTTP request logs, application errors — every line now carries an `ISO-8601 UTC` timestamp prefix (`2026-07-18T18:17:05Z INFO: ...`), fixed under MV-system-001 (see below)
 - **Redirect Method:** Systemd StandardOutput/StandardError append override
-- **Override File:** `/etc/systemd/system/aether-api.service.d/10-logging.conf`
+- **Override File:** `/etc/systemd/system/aether-api.service.d/logging.conf` (corrected filename — was previously misdocumented here as `10-logging.conf`; verified against the live file 2026-07-18)
   ```
   [Service]
   StandardOutput=append:/var/log/aether/api.log
   StandardError=append:/var/log/aether/api.log
   ```
+- **Now tracked in git:** `deploy/aether-api.service` + `deploy/aether-api.service.d/logging.conf` (previously host-only, untracked)
 
 **Tail API logs (live):**
 ```bash
@@ -310,14 +311,15 @@ grep -i "error\|exception\|traceback" /var/log/aether/api.log
 
 #### Web Service Logs
 - **Path:** `/var/log/aether/web.log`
-- **Content:** Next.js build output, server startup, request logs
+- **Content:** Next.js build output, server startup, request logs — every line now carries an `ISO-8601 UTC` timestamp prefix, fixed under MV-system-001 (see below)
 - **Redirect Method:** Systemd StandardOutput/StandardError append override
-- **Override File:** `/etc/systemd/system/aether-web.service.d/10-logging.conf`
+- **Override File:** `/etc/systemd/system/aether-web.service.d/logging.conf` (corrected filename — was previously misdocumented here as `10-logging.conf`; verified against the live file 2026-07-18)
   ```
   [Service]
   StandardOutput=append:/var/log/aether/web.log
   StandardError=append:/var/log/aether/web.log
   ```
+- **Now tracked in git:** `deploy/aether-web.service` + `deploy/aether-web.service.d/logging.conf` (previously host-only, untracked)
 
 **Tail Web logs (live):**
 ```bash
@@ -370,6 +372,55 @@ Journalctl is **not the authoritative source** for Aether logs. Service output i
 journalctl -u aether-api.service -n 50 --no-pager
 # Output: "No journal files were found" (verified 2026-07-16)
 ```
+
+### MV-system-001 — Timestamped Logs Fix (2026-07-18)
+
+**Finding:** journald was empty for every `aether-*` unit (confirmed above)
+*and* `api.log`/`web.log` lines carried no timestamp at all, so a 5xx/
+traceback found in either file could not be scoped to a test/incident time
+window (`uat/reports/evidence/manual-verification/screens/baseline-server-logs.md`).
+
+**Decision:** keep the file-based sink (do **not** switch
+`StandardOutput`/`StandardError` to `journal`) rather than adopting journald.
+Switching sinks is a bigger, restart-requiring infra change that would leave
+every log-tailing/grep command in this runbook silently pointed at a file
+journald no longer writes to. Instead, both surfaces now emit an ISO-8601 UTC
+timestamp on every line, so the existing file-based tooling (`tail`, `grep`,
+`awk`) can scope by time exactly like `journalctl --since`/`--until` would:
+
+- **API (uvicorn):** `apps/api/logging_config.json` extends uvicorn's own
+  default `logging.config.dictConfig` (formatters `default`/`access` plus a
+  `root` handler so any app-module `logging.getLogger(__name__)` call also
+  gets timestamped) with `%(asctime)sZ` (`datefmt: "%Y-%m-%dT%H:%M:%S"`).
+  Wired in via `start-api.sh`'s `uvicorn ... --log-config logging_config.json`.
+- **Web (Next.js):** `next start` has no built-in log-format hook, so
+  `start-web.sh` now pipes its stdout/stderr through `gawk` (pre-installed,
+  no new dependency) to prefix `strftime("%Y-%m-%dT%H:%M:%SZ", ..., utc=1)`
+  on every line. `set -o pipefail` was added so the pipeline's exit status
+  still reflects `pnpm start`/`next`'s real exit code (not gawk's), preserving
+  `Restart=on-failure`.
+- **Newly tracked in git** (previously host-only): `deploy/aether-api.service`,
+  `deploy/aether-api.service.d/logging.conf`, `deploy/aether-web.service`,
+  `deploy/aether-web.service.d/logging.conf` — the `[Unit]`/`[Service]`/
+  `[Install]` directives are functionally identical to the live
+  `/etc/systemd/system/...` units as of 2026-07-18 (no functional change);
+  each tracked `.service` file additionally carries a descriptive header
+  comment block not present in the live file. Verified via `diff` isolating
+  the added comment lines as the only difference, plus `systemd-analyze
+  verify`.
+- **Worker (`aether-worker.service`) is unaffected** — `arq`'s own default
+  logging config already prefixes `HH:MM:SS` timestamps (confirmed in the
+  original finding's reproduction), so `worker.log` was never part of this
+  gap.
+
+**Needs a deploy to take effect:** `start-api.sh`/`start-web.sh` are read by
+their respective processes only at process start, so the ISO-8601 prefix
+appears only after the next `sudo systemctl restart aether-api.service` /
+`aether-web.service` (normal deploy restart — see §5). No new systemd units
+need to be installed/symlinked for this fix alone since `ExecStart` already
+points directly at the tracked `start-api.sh`/`start-web.sh`; the newly
+tracked `deploy/aether-{api,web}.service*` files are a documentation/version-
+control hygiene addition, not a required action.
 
 ---
 

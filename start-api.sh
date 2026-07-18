@@ -19,4 +19,10 @@ while IFS= read -r line || [ -n "$line" ]; do
     export "$key"="$value"
 done < /home/ubuntu/github_repos/aether-job-career-agent/.env
 
-exec /opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+# MV-system-001: uvicorn's built-in log formatters carry no timestamp at all,
+# which made /var/log/aether/api.log un-scopable to a test/incident time
+# window (journald is not used for this unit — see
+# apps/api/logging_config.json's header comment and
+# docs/delivery/DEPLOYMENT-RUNBOOK.md §4 for why). logging_config.json adds an
+# ISO-8601 UTC timestamp to every default/access/root log line.
+exec /opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-config logging_config.json

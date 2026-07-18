@@ -1,4 +1,9 @@
 #!/bin/bash
+# pipefail: MV-system-001 pipes stdout/stderr through gawk below to prefix an
+# ISO-8601 timestamp on every line; without pipefail the pipeline's exit
+# status would always be gawk's (~always 0), silently defeating
+# aether-web.service's `Restart=on-failure` crash detection.
+set -o pipefail
 export PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin"
 cd /home/ubuntu/github_repos/aether-job-career-agent/apps/web
 
@@ -18,4 +23,14 @@ while IFS= read -r line || [ -n "$line" ]; do
 done < /home/ubuntu/github_repos/aether-job-career-agent/.env
 
 export NODE_ENV=production
-exec pnpm start
+
+# MV-system-001: Next.js's `next start` (no custom server) emits its own
+# console lines with no timestamp at all, which made /var/log/aether/web.log
+# un-scopable to a test/incident time window (journald is not used for this
+# unit — see docs/delivery/DEPLOYMENT-RUNBOOK.md §4 for why). Prefix every
+# stdout/stderr line with an ISO-8601 UTC timestamp via gawk (pre-installed,
+# no new dependency); `fflush()` keeps `tail -f` live. This can no longer be
+# a bare `exec` (a pipeline always needs the shell to stay alive to run both
+# ends) — `set -o pipefail` above preserves pnpm/next's real exit code for
+# systemd's Restart=on-failure.
+pnpm start 2>&1 | gawk '{ print strftime("%Y-%m-%dT%H:%M:%SZ", systime(), 1) " " $0; fflush() }'

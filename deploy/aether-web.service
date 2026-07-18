@@ -1,0 +1,34 @@
+# Aether Web server (Next.js production server, `next start`).
+# Install: sudo cp deploy/aether-web.service /etc/systemd/system/aether-web.service
+#          sudo cp deploy/aether-web.service.d/logging.conf /etc/systemd/system/aether-web.service.d/logging.conf
+#          sudo systemctl daemon-reload && sudo systemctl restart aether-web
+# Logs:    /var/log/aether/web.log (see aether-web.service.d/logging.conf)
+#
+# MV-system-001 (docs/delivery/MANUAL-VERIFICATION-GAPS.json): this is the
+# first time this unit is tracked in version control — it and its logging.conf
+# drop-in were previously host-only files. The [Unit]/[Service]/[Install]
+# directives below are functionally identical to the live
+# /etc/systemd/system/aether-web.service on 2026-07-18 — only this
+# descriptive header comment block was added; verified via `diff` isolating
+# the added comment lines (`diff /etc/systemd/system/aether-web.service
+# deploy/aether-web.service` shows only these header lines) plus
+# `systemd-analyze verify`. No behavior change here; see
+# aether-web.service.d/logging.conf for the rationale on keeping the
+# file-based (not journald) sink, and start-web.sh for the accompanying
+# ISO-8601 timestamp fix (Next.js has no built-in log-format hook, so
+# start-web.sh pipes stdout/stderr through gawk instead).
+[Unit]
+Description=Aether Web Server (Next.js)
+After=network-online.target aether-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/start-web.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
