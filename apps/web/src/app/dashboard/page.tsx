@@ -426,7 +426,10 @@ export default function DashboardPage() {
         <div className="flex min-w-0 flex-col gap-7 xl:col-span-1">
           {/* Application funnel (funnel-q7r8s9 — data-driven per audit D11) */}
           <section className="glass rounded-2xl border border-white/10 p-6" data-testid="funnel-widget">
-            <h2 className="mb-5 text-[15px] font-semibold">Application Funnel</h2>
+            <h2 className="mb-5 text-[15px] font-semibold">
+              Application Funnel{" "}
+              <span className="text-xs font-normal text-aether-muted-dim">(all time)</span>
+            </h2>
             {funnel.error ? (
               <WidgetError>Couldn&apos;t load the funnel — {funnel.error}</WidgetError>
             ) : funnel.data === null ? (

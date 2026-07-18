@@ -153,3 +153,42 @@ class TestFunnelSankey:
         assert len(data["dropoffs"]) == 4
         assert isinstance(data["insight"], str)
         assert data["dropoffs"][0]["reason"] == "below match threshold"
+
+    def test_aging_pipeline_never_produces_a_negative_dropoff(
+        self, client, auth_headers, user_id, db_session
+    ):
+        """MV-application-tracker-006: reproduces the reviewer's live finding
+        against be7b240 — 3 applications sitting at 'interview' and 1 at
+        'offer', with NONE currently at exact status 'screening'. The prior
+        stage-EXCLUSIVE model (status == 'screening' exactly) returned
+        screened=0, interviewed=3, so the "screened -> interviewed" dropoff
+        came back as 0 - 3 = -3, which SankeyFlow.tsx rendered as the broken
+        literal "−-3 · no response / screened out".
+
+        The CUMULATIVE model fixes this: "screened" counts status IN
+        (screening, interview, offer), so an application already at
+        'interview' is still counted as having passed through "screened" —
+        every stage is >= the next, so every dropoff is >= 0. "Applied" is
+        also now the canonical non-draft count from get_application_counts(),
+        consistent with /analytics/funnel's "applied" rather than a
+        divergent per-exact-status bucket.
+        """
+        _seed_application(db_session, user_id, app_status="interview")
+        _seed_application(db_session, user_id, app_status="interview")
+        _seed_application(db_session, user_id, app_status="interview")
+        _seed_application(db_session, user_id, app_status="offer")
+
+        sankey = client.get("/applications/funnel/sankey", headers=auth_headers).json()
+        values = {s["key"]: s["value"] for s in sankey["stages"]}
+        assert values["applied"] == 4  # all 4 are non-draft
+        assert values["screened"] == 4  # interview/offer both count as "reached screened"
+        assert values["interviewed"] == 4
+        assert values["offers"] == 1
+
+        for dropoff in sankey["dropoffs"]:
+            assert dropoff["count"] >= 0, dropoff
+
+        funnel = client.get("/analytics/funnel?period=all", headers=auth_headers).json()
+        # The Sankey's "applied" now agrees with the funnel's "applied" —
+        # both are the canonical cumulative non-draft count.
+        assert sankey["stages"][1]["value"] == funnel["applied"] == 4

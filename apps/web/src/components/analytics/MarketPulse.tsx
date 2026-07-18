@@ -147,19 +147,30 @@ export default function MarketPulse() {
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Top Skills in Demand
           </h3>
-          <div className="space-y-3">
-            {data.topSkills.map((s) => (
-              <div key={s.skill}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span className="text-aether-muted">{s.skill}</span>
-                  <span className="mono">{s.demand}</span>
+          {data.topSkills.length === 0 ? (
+            // Honest empty state (MV-mobile-dashboard-006 / MV-analytics-006)
+            // — matches the pattern already used elsewhere on this screen
+            // (e.g. "Market data: not connected") instead of a silent blank
+            // area that reads as a rendering bug.
+            <p className="text-xs italic text-aether-muted-dim">
+              Not enough job data yet to surface top skills — matched jobs with
+              recognized skill keywords will populate this.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {data.topSkills.map((s) => (
+                <div key={s.skill}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="text-aether-muted">{s.skill}</span>
+                    <span className="mono">{s.demand}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/10">
+                    <div className="h-1.5 rounded-full bg-aether-violet" style={{ width: `${s.demand}%` }} />
+                  </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-white/10">
-                  <div className="h-1.5 rounded-full bg-aether-violet" style={{ width: `${s.demand}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Job Probability Score */}

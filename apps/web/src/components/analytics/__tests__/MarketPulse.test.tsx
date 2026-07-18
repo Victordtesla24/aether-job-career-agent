@@ -66,3 +66,26 @@ describe("MarketPulse sources widget label", () => {
     expect(donut.getAttribute("aria-label")?.toLowerCase()).not.toContain("application");
   });
 });
+
+describe("MarketPulse top-skills honest empty state (MV-mobile-dashboard-006, MV-analytics-006)", () => {
+  it("shows explanatory copy instead of a silent blank area when topSkills is empty", async () => {
+    fetchMarketPulse.mockResolvedValue({ ...FIXTURE, topSkills: [] });
+    render(<MarketPulse />);
+
+    const widget = await screen.findByTestId("top-skills");
+    // The heading still renders...
+    expect(widget.textContent).toMatch(/top skills in demand/i);
+    // ...but the content area must not be a bare, message-less empty <div>.
+    expect(widget.querySelector(".space-y-3")).toBeNull();
+    expect(widget.textContent?.toLowerCase()).toMatch(/not enough job data|no skill data/);
+  });
+
+  it("still renders the skill bars when topSkills has data", async () => {
+    fetchMarketPulse.mockResolvedValue(FIXTURE);
+    render(<MarketPulse />);
+
+    const widget = await screen.findByTestId("top-skills");
+    expect(widget.textContent).toContain("TypeScript");
+    expect(widget.textContent?.toLowerCase()).not.toMatch(/not enough job data|no skill data/);
+  });
+});

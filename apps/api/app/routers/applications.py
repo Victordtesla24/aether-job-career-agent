@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.db import get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
+from app.routers.analytics import get_application_counts
 
 router = APIRouter()
 
@@ -29,20 +30,44 @@ router = APIRouter()
 
 @router.get("/funnel/sankey")
 def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
-    """Real-time application-flow sankey computed from live DB counts."""
+    """Real-time application-flow sankey computed from live DB counts.
+
+    CUMULATIVE model (MV-application-tracker-006): each node counts
+    applications that have reached AT LEAST that stage, mirroring the
+    nested-IN stage definitions analytics.funnel() already uses — "applied"
+    is the canonical non-draft count from get_application_counts()
+    (status <> 'draft', consistent with the funnel's "Applied" and the
+    dashboard summary), "screened" is status IN (screening, interview,
+    offer), "interviewed" is status IN (interview, offer), and "offers" is
+    status = 'offer'. Each stage is therefore always >= the next stage, so
+    every dropoff (stage_N - stage_{N+1}) is always >= 0.
+
+    A prior stage-EXCLUSIVE model (status == 'submitted'/'screening'/etc.
+    exactly) was disproven live: an application that skipped straight to
+    'interview' with nobody currently sitting in exact 'screening' produced
+    a negative dropoff (screened=0, interviewed=3 -> -3), which rendered as
+    the broken literal "−-3 · no response / screened out" in the Sankey UI
+    (MV-application-tracker-006). Do not revert to per-exact-status buckets.
+    """
     uid = current_user["id"]
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT count(*) FROM "Job" WHERE "userId" = %s', (uid,))
             jobs_found = cur.fetchone()[0]
+            applied = get_application_counts(cur, uid)["submitted"]
             cur.execute(
-                'SELECT status, count(*) FROM "Application" WHERE "userId" = %s '
-                'GROUP BY status', (uid,))
-            status_counts = dict(cur.fetchall())
-    applied = status_counts.get("submitted", 0)
-    screened = status_counts.get("screening", 0)
-    interviewed = status_counts.get("interview", 0)
-    offers = status_counts.get("offer", 0)
+                '''
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE "status" IN ('screening','interview','offer')
+                    ) AS screened,
+                    COUNT(*) FILTER (WHERE "status" IN ('interview','offer')) AS interviewed,
+                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers
+                FROM "Application" WHERE "userId" = %s
+                ''',
+                (uid,),
+            )
+            screened, interviewed, offers = cur.fetchone()
     return {
         "stages": [
             {"key": "jobs_found", "label": "Jobs Found", "value": jobs_found, "color": "#4F46E5"},

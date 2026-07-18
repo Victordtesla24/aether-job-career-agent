@@ -46,12 +46,50 @@ type GateState = "loading" | "allowed" | "gated" | "error";
  */
 const GATE_EXEMPT_PREFIXES: readonly string[] = ["/dashboard/settings"];
 
-/** True when `pathname` is an always-reachable account-management route. */
+/**
+ * Every real dashboard section — one entry per `app/dashboard/<x>/page.tsx`.
+ * A pathname that starts with none of these (and isn't the `/dashboard` root
+ * itself) belongs to the `[...slug]` catch-all: it cannot be a genuine gated
+ * feature, so it must never be masked by the paywall (MV-dashboard-001) — a
+ * mistyped/stale-bookmark URL would then be visually indistinguishable from a
+ * real paid-feature gate. Keep this list in sync with `app/dashboard/*`.
+ */
+const KNOWN_DASHBOARD_SECTIONS: readonly string[] = [
+  "/dashboard/agents",
+  "/dashboard/analytics",
+  "/dashboard/applications",
+  "/dashboard/approvals",
+  "/dashboard/cover-letters",
+  "/dashboard/email",
+  "/dashboard/interviews",
+  "/dashboard/jobs",
+  "/dashboard/networking",
+  "/dashboard/offers",
+  "/dashboard/resume",
+  "/dashboard/settings",
+  "/dashboard/stories",
+];
+
+/** True when `pathname` maps to a real dashboard page (root or a known section). */
+function isKnownDashboardRoute(pathname: string): boolean {
+  if (pathname === "/dashboard") return true;
+  return KNOWN_DASHBOARD_SECTIONS.some(
+    (section) => pathname === section || pathname.startsWith(`${section}/`),
+  );
+}
+
+/** True when `pathname` is an always-reachable account-management route, or an
+ * unmapped `/dashboard/*` path that only the `[...slug]` catch-all can serve. */
 export function isGateExempt(pathname: string | null): boolean {
   if (!pathname) return false;
-  return GATE_EXEMPT_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  if (
+    GATE_EXEMPT_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  ) {
+    return true;
+  }
+  return pathname.startsWith("/dashboard/") && !isKnownDashboardRoute(pathname);
 }
 
 const VALUE_POINTS: readonly string[] = [

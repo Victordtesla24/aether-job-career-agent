@@ -50,8 +50,12 @@ export default function AnalyticsPage() {
 
       // Dashboard summary is fetched separately so a 404 on the dashboard
       // endpoint does not take down the entire page (GAP-P4-005 / P4-016).
+      // Forwards the selected period (MV-analytics-004) — the backend has
+      // always supported it; only the panels below (ATS distribution,
+      // Agent ROI) have no period support server-side, so they carry an
+      // explicit "all time" label instead of silently ignoring the selector.
       try {
-        const dashboardData = await fetchDashboard();
+        const dashboardData = await fetchDashboard(period);
         setDashboard(dashboardData);
       } catch {
         // Dashboard endpoint not yet deployed — degrade gracefully.
@@ -80,7 +84,15 @@ export default function AnalyticsPage() {
   const maxBucket = ats ? Math.max(1, ...ats.buckets.map((b) => b.count)) : 1;
 
   const SUMMARY_TIP: Record<string, string> = {
-    Applications: "Total roles you've applied to, across all sources and time periods.",
+    // Honest about what's counted (data-consistency ruling,
+    // MV-analytics-005): this is the canonical, unqualified "Applications"
+    // figure — every Application record you have, including drafts you
+    // haven't submitted yet — not the narrower "Applied"/submitted count
+    // shown in the funnel below. It respects the period selector above
+    // (GET /analytics/dashboard?period=..., MV-analytics-004) — the copy
+    // must say so instead of claiming "all time periods" while the number
+    // visibly changes when the selector is used.
+    Applications: "Every application record created in the selected period — draft through offer or rejection.",
     Interviews: "Applications that have progressed to at least one interview stage.",
     Offers: "Applications where an employer has extended a formal offer.",
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
@@ -128,7 +140,16 @@ export default function AnalyticsPage() {
       ) : null}
 
       {dashboard ? (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-summary">
+        <section data-testid="dashboard-summary">
+          {/* Every field on this card is period-scoped server-side (GET
+              /analytics/dashboard?period=..., MV-analytics-004) — say so
+              the same way the sibling funnel/conversion sections do,
+              instead of leaving this the only section with no period
+              indicator. */}
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+            Dashboard summary ({period})
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
               ["Applications", dashboard.totalApplications, "text-aether-coral"],
@@ -147,6 +168,7 @@ export default function AnalyticsPage() {
               </dd>
             </div>
           ))}
+          </div>
         </section>
       ) : null}
 
@@ -214,6 +236,12 @@ export default function AnalyticsPage() {
               value=""
               tooltip="How your scored jobs are spread across ATS/AI fit-score bands (0–100) — higher bands mean stronger keyword and experience matches."
             />
+            {/* This panel has no period support server-side (MV-analytics-004)
+                — say so honestly instead of silently ignoring the selector
+                above like it applies here too. */}
+            <span className="text-[10px] font-normal normal-case text-aether-muted-dim">
+              (all time — not affected by the period selector)
+            </span>
           </h2>
           {ats === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
@@ -242,8 +270,13 @@ export default function AnalyticsPage() {
         </section>
 
         <section className="glass rounded-2xl border border-white/10 p-5" data-testid="agent-roi">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-aether-muted">
             Agent ROI
+            {/* No period support server-side (MV-analytics-004) — honest
+                label instead of silently ignoring the selector above. */}
+            <span className="text-[10px] font-normal normal-case text-aether-muted-dim">
+              (all time — not affected by the period selector)
+            </span>
           </h2>
           {roi === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
