@@ -95,3 +95,80 @@ describe("Application Tracker view toggles (GAP-P6-WIRE-001)", () => {
     expect(screen.queryByTestId("timeline-view")).toBeNull();
   });
 });
+
+describe("Tracker header label honesty (MV-adv-A-001)", () => {
+  it("labels the board's full pipeline count honestly, never 'active applications'", async () => {
+    // 2 sourced jobs with no application yet (early board columns, fed by
+    // Job.status) + 10 applications (2 draft, 3 submitted, 3 interview, 1
+    // offer, 1 rejected). Board-card (activeCount) total = 2 jobs + 9
+    // non-closed applications (rejected is excluded to the "Closed" strip)
+    // = 11 — while the canonical submitted count shown elsewhere
+    // (dashboard/mobile/analytics, get_application_counts()['submitted']) for
+    // the SAME account/moment is 8 (everything but the 2 drafts: 3 submitted
+    // + 3 interview + 1 offer + 1 rejected). 11 !== 8, so the header must not
+    // read "11 active applications" — that collides with the "8 active
+    // applications" label used on every other surface for a different count.
+    const pendingJobs = [0, 1].map((i) => ({
+      id: `pending-job-${i}`,
+      title: `Sourced Role ${i}`,
+      company: "Sourced Co",
+      location: "Remote",
+      remote: true,
+      description: "",
+      requirements: [],
+      source: "seek",
+      sourceUrl: null,
+      status: "discovered",
+      fitScore: null,
+      atsScore: null,
+      saved: false,
+      postedAt: null,
+      createdAt: "2026-07-01T00:00:00Z",
+      updatedAt: "2026-07-01T00:00:00Z",
+    }));
+
+    const makeApp = (i: number, status: string) => ({
+      id: `app-${i}`,
+      jobId: `job-${i}`,
+      resumeId: "resume-1",
+      status,
+      coverLetter: null,
+      jobTitle: `Role ${i}`,
+      company: "Acme Corp",
+      applyUrl: null,
+      createdAt: "2026-07-10T00:00:00Z",
+      updatedAt: "2026-07-14T00:00:00Z",
+      answers: {},
+      fitScore: 80,
+    });
+
+    const apps = [
+      makeApp(1, "draft"),
+      makeApp(2, "draft"),
+      makeApp(3, "submitted"),
+      makeApp(4, "submitted"),
+      makeApp(5, "submitted"),
+      makeApp(6, "interview"),
+      makeApp(7, "interview"),
+      makeApp(8, "interview"),
+      makeApp(9, "offer"),
+      makeApp(10, "rejected"),
+    ];
+
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return apps;
+      if (path === "/jobs") return pendingJobs;
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+
+    const subtitle = await screen.findByTestId("tracker-subtitle");
+    expect(subtitle.textContent).toContain("11");
+    expect(subtitle.textContent?.toLowerCase()).not.toMatch(/active application/);
+  });
+});

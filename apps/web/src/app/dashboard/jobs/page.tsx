@@ -23,6 +23,7 @@ import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
 import { resolveRun } from "../../../lib/api/agents";
 import { fetchScoutSources } from "../../../lib/api/jobs";
 import type { Job, ScoutSourceStatus } from "../../../lib/api/jobs";
+import type { TailorRunResult } from "../../../lib/api/resumes";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
 
@@ -214,6 +215,11 @@ export default function JobsPage() {
   const [sort, setSort] = useState<"fitScore" | "createdAt">("fitScore");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Honest-no-op notice (MV-adv-A-002) — a legitimate business outcome (every
+  // proposed edit rejected by the anti-fabrication guard), rendered as an
+  // informational notice, never the red error banner, matching Resume
+  // Studio's identical no-op handling (MV-resume-studio-003).
+  const [notice, setNotice] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [demoEmpty, setDemoEmpty] = useState(false);
@@ -223,9 +229,7 @@ export default function JobsPage() {
 
   // Apply flow (per selected job) + submit gate.
   const [applyStep, setApplyStep] = useState<Record<string, "idle" | "tailoring" | "tailored">>({});
-  const [tailorResults, setTailorResults] = useState<
-    Record<string, { resume_id: string; changes: number; rejected: string[] }>
-  >({});
+  const [tailorResults, setTailorResults] = useState<Record<string, TailorRunResult>>({});
   const [gateOpen, setGateOpen] = useState(false);
   const [gateJobId, setGateJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -408,14 +412,28 @@ export default function JobsPage() {
 
   const startTailoring = async (jobId: string) => {
     setApplyStep((p) => ({ ...p, [jobId]: "tailoring" }));
+    setError(null);
+    setNotice(null);
     try {
-      const raw = await apiRequest<{ resume_id: string; changes: number; rejected: string[] }>(
+      const raw = await apiRequest<TailorRunResult>(
         "/agents/tailor/run",
         { method: "POST", body: { job_id: jobId } },
       );
       // Dual-shape (GAP-P7-ASYNC-001 §6): unwrap a 202 enqueue envelope by
       // polling; a legacy synchronous body passes through unchanged.
       const out = await resolveRun(raw);
+      if (out.noChangesApplied) {
+        // Honest no-op — the guards rejected every edit; nothing was created
+        // or billed. Surface it as an informational notice (never the red
+        // error banner, never a leaked exception-class name), matching
+        // Resume Studio (MV-resume-studio-003 / MV-adv-A-002).
+        setNotice(
+          out.message ??
+            "No changes could be applied — your résumé is unchanged and you were not charged.",
+        );
+        setApplyStep((p) => ({ ...p, [jobId]: "idle" }));
+        return;
+      }
       setTailorResults((p) => ({ ...p, [jobId]: out }));
       setApplyStep((p) => ({ ...p, [jobId]: "tailored" }));
     } catch (e) {
@@ -796,6 +814,15 @@ export default function JobsPage() {
       {error ? (
         <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
+        </p>
+      ) : null}
+
+      {notice ? (
+        <p
+          data-testid="tailor-notice"
+          className="rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+        >
+          {notice}
         </p>
       ) : null}
 
