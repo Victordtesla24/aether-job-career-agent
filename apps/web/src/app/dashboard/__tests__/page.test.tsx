@@ -230,3 +230,24 @@ describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () =>
     expect(toast.textContent).toMatch(/couldn.?t approve/i);
   });
 });
+
+describe("Needs Approval widget — long job_title containment leak (MV-approval-modal-003)", () => {
+  it("wraps a long unbroken job_title in the subtitle instead of blowing out the widget layout", async () => {
+    const longTitle = "B".repeat(300);
+    fetchApprovalsMock.mockResolvedValue([
+      approval({ payload: { job_title: longTitle, company: "Acme" } }),
+    ]);
+
+    render(<DashboardPage />);
+
+    const widget = await screen.findByTestId("needs-approval-widget");
+    await waitFor(() => expect(widget.textContent).toContain(longTitle));
+
+    const subtitle = Array.from(widget.querySelectorAll("p")).find((p) =>
+      p.textContent?.includes(longTitle),
+    );
+    expect(subtitle).toBeTruthy();
+    expect(subtitle!.className).toMatch(/break-words|break-all/);
+    expect(subtitle!.parentElement?.className).toMatch(/\bmin-w-0\b/);
+  });
+});

@@ -11,7 +11,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApprovalModal } from "../../../components/approvals/ApprovalModal";
-import { decideApproval, fetchApproval, type DecisionContext } from "../../../components/approvals/api";
+import {
+  decideApproval,
+  executeApproval,
+  fetchApproval,
+  type DecisionContext,
+} from "../../../components/approvals/api";
 import { isExpired, parseApprovalPayload, summarize } from "../../../components/approvals/lib";
 import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
 
@@ -25,11 +30,39 @@ function syncReviewParam(id: string | null) {
   window.history.replaceState(null, "", url.toString());
 }
 
+/**
+ * Approving an email_send request only flips its status — the Gmail send
+ * itself is the separate POST /approvals/{id}/execute call, the endpoint's
+ * one real side effect (MV-approval-modal-008). Fire it immediately so the
+ * wireframed "Approve" action actually sends the email end-to-end; a send
+ * failure is reported honestly without hiding that the approval itself went
+ * through (returns the message to show, or null when nothing went wrong).
+ */
+async function sendIfEmailApproval(
+  resolved: Approval,
+  decision: "approve" | "reject",
+): Promise<string | null> {
+  if (decision !== "approve" || resolved.type !== "email_send") return null;
+  try {
+    await executeApproval(resolved.id);
+    return null;
+  } catch (e) {
+    return `Approved, but sending the email failed: ${
+      e instanceof Error ? e.message : "please retry from the approval."
+    }`;
+  }
+}
+
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("pending");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Two independent error slots so a successful list refresh can never
+  // clobber a still-relevant deep-link failure (MV-approval-modal-006 /
+  // MV-mobile-approval-002) — each source only ever writes its own slot.
+  const [listError, setListError] = useState<string | null>(null);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+  const error = deepLinkError ?? listError;
   const [reviewing, setReviewing] = useState<Approval | null>(null);
   // Monotonic guard: a stale (slow) response must never overwrite a newer one.
   const fetchSeq = useRef(0);
@@ -40,10 +73,10 @@ export default function ApprovalsPage() {
       const rows = await fetchApprovals(filter);
       if (seq !== fetchSeq.current) return;
       setApprovals(rows);
-      setError(null);
+      setListError(null);
     } catch (e) {
       if (seq !== fetchSeq.current) return;
-      setError(e instanceof Error ? e.message : "Failed to load approvals");
+      setListError(e instanceof Error ? e.message : "Failed to load approvals");
       setApprovals([]);
     }
   }, [filter]);
@@ -58,21 +91,56 @@ export default function ApprovalsPage() {
     const id = new URLSearchParams(window.location.search).get("review");
     if (!id) return;
     fetchApproval(id)
-      .then((approval) => setReviewing(approval))
+      .then((approval) => {
+        // Splice a "modal closed" entry underneath the deep-linked "modal
+        // open" state so Back always has a same-page entry to land on
+        // instead of leaving the Approvals screen entirely
+        // (MV-approval-modal-005).
+        const bareUrl = new URL(window.location.href);
+        bareUrl.searchParams.delete("review");
+        window.history.replaceState(null, "", bareUrl.toString());
+        const openUrl = new URL(window.location.href);
+        openUrl.searchParams.set("review", id);
+        window.history.pushState({ approvalReview: id }, "", openUrl.toString());
+        setReviewing(approval);
+      })
       .catch(() => {
         syncReviewParam(null);
-        setError("The linked approval request could not be found.");
+        setDeepLinkError("The linked approval request could not be found.");
       });
+  }, []);
+
+  // Back/Forward: the review modal's open state lives in history (see
+  // openReview/closeReview below), so popping to an entry without ?review=
+  // must just close the dialog, never leave /dashboard/approvals
+  // (MV-approval-modal-005).
+  useEffect(() => {
+    const onPopState = () => {
+      const id = new URLSearchParams(window.location.search).get("review");
+      if (!id) setReviewing(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const openReview = (approval: Approval) => {
     setReviewing(approval);
-    syncReviewParam(approval.id);
+    setDeepLinkError(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("review", approval.id);
+    window.history.pushState({ approvalReview: approval.id }, "", url.toString());
   };
 
   const closeReview = () => {
     setReviewing(null);
-    syncReviewParam(null);
+    // Consume the history entry pushed on open (if any) instead of just
+    // rewriting the URL in place, so Back closes the modal exactly once
+    // (MV-approval-modal-005) rather than leaving a stale entry behind.
+    if (new URLSearchParams(window.location.search).get("review")) {
+      window.history.back();
+    } else {
+      syncReviewParam(null);
+    }
   };
 
   /** Replace the decided row in place; drop it if it no longer matches the filter. */
@@ -92,10 +160,11 @@ export default function ApprovalsPage() {
   const decideFromCard = async (id: string, decision: "approve" | "reject") => {
     setBusy(id);
     try {
-      applyResolved(await decideApproval(id, decision));
-      setError(null);
+      const resolved = await decideApproval(id, decision);
+      applyResolved(resolved);
+      setListError(await sendIfEmailApproval(resolved, decision));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Decision failed");
+      setListError(e instanceof Error ? e.message : "Decision failed");
     } finally {
       setBusy(null);
     }
@@ -106,6 +175,8 @@ export default function ApprovalsPage() {
     const resolved = await decideApproval(reviewing.id, decision, context);
     applyResolved(resolved);
     closeReview();
+    const sendError = await sendIfEmailApproval(resolved, decision);
+    if (sendError) setListError(sendError);
   };
 
   const pendingCount = approvals?.filter((a) => a.status === "pending").length ?? null;
@@ -184,7 +255,7 @@ export default function ApprovalsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-semibold">{summarize(approval)}</h2>
+                      <h2 className="min-w-0 break-words font-semibold">{summarize(approval)}</h2>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${
                           approval.status === "pending"

@@ -48,6 +48,13 @@ function asString(value: unknown): string | null {
 
 function parseConfidence(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  // Values above 1 are ambiguous (fraction vs. already-a-percentage) unless
+  // they're a whole number: the only real producer of an already-scaled
+  // percentage (cover_letter_agent's grounding_confidence) always emits an
+  // integer 0-100. A non-integer above 1 (e.g. 1.5) is neither a valid
+  // [0,1] fraction nor a genuine percentage — reject it instead of silently
+  // rendering a nonsensical value (MV-approval-modal-004).
+  if (value > 1 && !Number.isInteger(value)) return null;
   const pct = value <= 1 ? value * 100 : value;
   return pct > 100 ? null : Math.round(pct);
 }
