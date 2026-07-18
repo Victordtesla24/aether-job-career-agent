@@ -29,11 +29,30 @@ bare numeric metric.
 
 This test is a permanent regression guard: it connects directly to the
 *production* database (bypassing the test-schema swap ``tests/conftest.py``
-performs at import time) and asserts (a) no ``Application.coverLetter`` value
-contains a fixture's verbatim fabricated-achievement span, AND (b) the 4
-restored real rows are still present (guarding against a future recurrence of
-the over-deletion this remediation fixed). It must be re-run after any
-seed/import operation that touches production data.
+performs at import time) and asserts no ``Application.coverLetter`` value
+contains a fixture's verbatim fabricated-achievement span. It must be re-run
+after any seed/import operation that touches production data.
+
+2026-07-18 update — restored-row-presence assertions removed
+--------------------------------------------------------------
+This module previously ALSO asserted that the 4 real Application rows restored
+above (``c0e3601826b6258afd1ced52d``, ``c53d0b3ada038f7ce441dd018``,
+``c597b074bbd6214c31dcf75ec``, ``ce01bad499189ac40e9e9c78f``) were still
+present, and derived a no-false-positive check from their live cover-letter
+content. Both were destroyed — along with the rest of the production
+``Application``/``User``/``Job`` tables — in the 2026-07-18 prod-DB wipe
+incident (``docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md``): an unrelated
+deploy-process defect (sourcing prod ``.env`` into a test-suite invocation,
+now closed by the MV-system-003 fail-closed truncation guard), not a defect in
+this guard's own logic. The user is re-signing-up fresh, so those specific row
+IDs will never exist again. Asserting specific live prod row IDs was a
+one-time restore-verification, not a durable invariant, so those two
+assertions were removed rather than left permanently red or perpetually
+skipped. The durable invariant — zero fixture-fingerprint spans in current
+production cover letters — remains enforced below, and the no-false-positive
+property (fingerprint matches verbatim fixture content but not
+independently-authored genuine content citing the same numeric metric) is now
+proven hermetically with synthetic sample strings instead of live rows.
 
 Design notes:
 - ``conftest.py`` rewrites ``os.environ["DATABASE_URL"]`` to the TEST schema URL
@@ -73,18 +92,6 @@ _FIXTURE_FILES = ("default.json", "retry.json")
 #: future short/generic fixture body from producing a loose, collision-prone
 #: fingerprint like the numeric-metric one this redesign removed.
 _MIN_SPAN_CHARS = 80
-
-#: Application rows restored by MV-application-tracker-001 REWORK: real user data
-#: wrongly deleted by the original over-loose numeric fingerprint. Asserted
-#: PRESENT so any future recurrence of that over-deletion fails this guard.
-#: (reclassification.json -> summary.real_restored_ids)
-_RESTORED_REAL_APPLICATION_IDS = (
-    "c0e3601826b6258afd1ced52d",
-    "c53d0b3ada038f7ce441dd018",
-    "c597b074bbd6214c31dcf75ec",
-    "ce01bad499189ac40e9e9c78f",
-)
-
 
 def _load_root_env() -> dict[str, str]:
     """Parse the repo-root ``.env`` directly (mirrors conftest.py's helper).
@@ -233,61 +240,54 @@ def test_no_fixture_cover_letter_spans_in_production(
     )
 
 
-def test_restored_real_application_rows_present(
-    production_connection: Any,
-) -> None:
-    """The 4 wrongly-deleted real Application rows must remain present.
+def test_fingerprint_matches_fixture_span_but_not_synthetic_real_metric_content() -> (
+    None
+):
+    """Hermetic no-false-positive proof for the fixture fingerprint.
 
-    Guards against a recurrence of the over-deletion this REWORK fixed: the
-    original remediation removed these real rows because their genuine
-    StoryEntry evidence cites the same numeric metric as the fixtures. If a
-    future over-broad cleanup deletes them again, this fails loudly.
-    """
-    with production_connection.cursor() as cur:
-        cur.execute(
-            'SELECT id FROM "Application" WHERE id = ANY(%s)',
-            (list(_RESTORED_REAL_APPLICATION_IDS),),
-        )
-        present = {row[0] for row in cur.fetchall()}
-    missing = [rid for rid in _RESTORED_REAL_APPLICATION_IDS if rid not in present]
-    assert not missing, (
-        "Restored real Application rows are missing from production: "
-        f"{missing}. These are genuine user data (one SUBMITTED) wrongly deleted "
-        "once already by an over-loose numeric fingerprint; they must not be "
-        "removed by any fixture cleanup. See "
-        "uat/reports/evidence/manual-verification/fixes/cluster-C/reclassification.json."
-    )
+    Replaces the former ``test_restored_real_application_rows_present`` and
+    ``test_fingerprint_does_not_flag_legitimate_metric_content``, both of which
+    depended on 4 specific production ``Application`` rows. Those rows were
+    destroyed in the 2026-07-18 prod-DB-wipe incident
+    (``docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md``) and will never
+    exist again — the user is re-signing-up fresh — so asserting their
+    presence is now permanently unsatisfiable and was removed rather than kept
+    red or perpetually skipped.
 
-
-def test_fingerprint_does_not_flag_legitimate_metric_content(
-    production_connection: Any,
-) -> None:
-    """The tightened fingerprint must NOT match the restored real rows.
-
-    Direct no-false-positive proof: each restored real cover letter contains the
-    "3 hours" / "15 minutes" metric (the substring that tripped the old
-    fingerprint) yet is legitimate, independently-authored content. This asserts
-    the achievement-span fingerprint matches none of them, so the guard cannot
-    regress into deleting genuine metric-citing user content.
+    The property those tests guarded is still real and still durable: the
+    fingerprint must match verbatim fixture content but NOT independently
+    authored genuine content that merely cites the same colliding numeric
+    metric ("3 hours" / "15 minutes"). This proves that property hermetically
+    with synthetic sample strings modeled on the real collision
+    (COBOL/Mainframe test-automation StoryEntry evidence, see the module
+    docstring), requiring no database and no dependency on any specific row
+    ever having existed.
     """
     spans = _fixture_fingerprint_spans()
-    with production_connection.cursor() as cur:
-        cur.execute(
-            'SELECT id, "coverLetter" FROM "Application" WHERE id = ANY(%s)',
-            (list(_RESTORED_REAL_APPLICATION_IDS),),
-        )
-        real_rows = {row[0]: (row[1] or "") for row in cur.fetchall()}
+    assert spans, "expected at least one fixture fingerprint span"
 
-    # Precondition: these rows exist and do carry the colliding numeric metric.
-    for rid in _RESTORED_REAL_APPLICATION_IDS:
-        assert rid in real_rows, f"restored row {rid} not found (run restore first)"
-        letter = real_rows[rid]
-        assert "3 hours" in letter or "15 minutes" in letter, (
-            f"row {rid} unexpectedly lacks the numeric metric it was deleted for"
+    # Synthetic genuine user content: independently authored prose citing the
+    # same numeric metric that tripped the OLD numeric-only fingerprint, but
+    # sharing none of a fixture's verbatim fabricated-achievement wording.
+    synthetic_real_cover_letter = (
+        "In my most recent role I redesigned our COBOL regression suite, "
+        "reducing manual verification effort from roughly 3 hours to about "
+        "15 minutes per scenario, a change the team adopted platform-wide."
+    )
+    for span in spans:
+        assert span not in synthetic_real_cover_letter, (
+            "FALSE POSITIVE: a fixture span matched synthetic genuine content "
+            f"that merely cites the same numeric metric ({span[:60]!r}...). "
+            "Tighten the span derivation."
         )
-        for span in spans:
-            assert span not in letter, (
-                f"FALSE POSITIVE: restored real row {rid} matched fixture span "
-                f"{span[:60]!r}...; the fingerprint would wrongly flag genuine "
-                "user content. Tighten the span derivation."
-            )
+
+    # Synthetic leaked cover letter: a fixture span served verbatim inside
+    # otherwise-ordinary letter boilerplate, as happens when a fixture leaks.
+    leaked_span = spans[0]
+    synthetic_leaked_cover_letter = (
+        f"Dear Hiring Manager,\n\n{leaked_span}\n\nSincerely,\nA. Candidate"
+    )
+    assert leaked_span in synthetic_leaked_cover_letter, (
+        "sanity check failed: fixture span not found in its own synthetic "
+        "wrapper text"
+    )
