@@ -64,6 +64,15 @@ export function StoryCard({
     window.setTimeout(() => setCopied(false), 1800);
   };
 
+  // MV-story-bank-003: deleting a story is permanent (no undo) — gate it
+  // behind an explicit confirmation so a single accidental click can't
+  // destroy a STAR narrative.
+  const confirmDelete = () => {
+    if (window.confirm(`Delete "${story.title}"? This cannot be undone.`)) {
+      onDelete();
+    }
+  };
+
   if (editing) {
     return (
       <article
@@ -133,7 +142,7 @@ export function StoryCard({
             type="button"
             data-testid="delete-story-btn"
             aria-label="Delete story"
-            onClick={onDelete}
+            onClick={confirmDelete}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-aether-muted transition hover:bg-white/5 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/40"
           >
             <i className="fa-solid fa-trash-can" aria-hidden="true" />
@@ -150,9 +159,13 @@ export function StoryCard({
             ["Result", story.result, "text-[#34D399]"],
           ] as const
         ).map(([label, value, labelCls]) => (
-          <div key={label}>
+          // min-w-0: CSS Grid items default to `min-width: auto` (i.e. sized
+          // to their intrinsic content), so a single long unbroken token
+          // (MV-story-bank-002) can stretch the grid track — and therefore
+          // the whole page — no matter what wrap CSS the text itself has.
+          <div key={label} className="min-w-0">
             <div className={`mb-1 text-[10px] font-semibold uppercase ${labelCls}`}>{label}</div>
-            <p className="text-[#C7C7D6]">{value}</p>
+            <p className="min-w-0 break-words text-[#C7C7D6]">{value}</p>
           </div>
         ))}
       </div>
