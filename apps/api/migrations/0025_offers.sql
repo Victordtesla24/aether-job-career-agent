@@ -1,4 +1,4 @@
--- 0024_offers.sql — DOCUMENTATION MIRROR ONLY (ADR-TR-1).
+-- 0025_offers.sql — DOCUMENTATION MIRROR ONLY (ADR-TR-1).
 --
 -- There is NO migration runner in this repo. The authoritative, executed DDL is
 -- the lazy idempotent DDL in:
