@@ -13,7 +13,7 @@
  * (mocked here at the api-client boundary).
  */
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Next's <Link> needs no router in a plain render — stub it to an anchor.
 vi.mock("next/link", () => ({
@@ -31,6 +31,13 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// The gate reads the live pathname to allowlist account-management routes
+// (settings/billing) out of the paywall (MV-pricing-003 / MV-settings-003).
+const usePathnameMock = vi.hoisted(() => vi.fn(() => "/dashboard" as string | null));
+vi.mock("next/navigation", () => ({
+  usePathname: () => usePathnameMock(),
+}));
+
 // Mock the entitlement fetch at the module boundary.
 const fetchEntitlementMock = vi.hoisted(() => vi.fn());
 vi.mock("../../lib/api/billing", () => ({
@@ -38,6 +45,11 @@ vi.mock("../../lib/api/billing", () => ({
 }));
 
 import { SubscriptionGate } from "../../components/subscription-gate";
+
+beforeEach(() => {
+  // Default every test to a gated (non-exempt) route; exemption tests override.
+  usePathnameMock.mockReturnValue("/dashboard");
+});
 
 afterEach(() => {
   cleanup();
@@ -102,5 +114,64 @@ describe("SubscriptionGate", () => {
 
     await waitFor(() => expect(screen.getByText(ACTIONABLE)).toBeTruthy());
     expect(screen.queryByText(/Subscribe to unlock/i)).toBeNull();
+  });
+
+  it("FAILS CLOSED — when the entitlement request errors, gated children are NOT rendered (MV-agent-monitor-004)", async () => {
+    // A free user could previously force GET /billing/entitlement to error and
+    // bypass the paywall (fail-open). The gate must now fail closed: on any
+    // fetch error/timeout it shows a safe fallback, never the gated dashboard.
+    fetchEntitlementMock.mockRejectedValue(new Error("network/timeout"));
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-gate-error")).toBeTruthy(),
+    );
+    // The actionable dashboard content must NOT leak through the error state.
+    expect(screen.queryByText(ACTIONABLE)).toBeNull();
+  });
+
+  it("keeps /dashboard/settings reachable for a gated (free) user instead of the paywall (MV-pricing-003, MV-settings-003)", async () => {
+    usePathnameMock.mockReturnValue("/dashboard/settings");
+    // Even a gated free user (would-be paywall) must reach account management.
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() => expect(screen.getByText(ACTIONABLE)).toBeTruthy());
+    // The full-page paywall must NOT replace the settings/billing screen.
+    expect(screen.queryByTestId("subscription-paywall")).toBeNull();
+  });
+
+  it("paywall's 'manage your account' is a real link to /dashboard/settings (MV-mobile-dashboard-002)", async () => {
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-paywall")).toBeTruthy(),
+    );
+    const manage = screen.getByRole("link", { name: /manage your account/i });
+    expect(manage.getAttribute("href")).toBe("/dashboard/settings");
   });
 });

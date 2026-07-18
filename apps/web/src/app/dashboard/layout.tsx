@@ -11,6 +11,10 @@ import { MobileTabBar } from "@/components/mobile-tab-bar";
  * shell sits behind AuthGuard — no session, no workspace (SC-AUTH-03) — and
  * behind SubscriptionGate: without an active paid subscription the routed page
  * is replaced by the "Subscribe to unlock Aether" paywall (GAP-P6-PAYWALL).
+ * The gate self-exempts account-management routes (/dashboard/settings) so a
+ * free user can always view and manage/cancel their own subscription
+ * (MV-pricing-003 / MV-settings-003); it fails CLOSED if entitlement can't be
+ * verified (MV-agent-monitor-004). See subscription-gate.tsx.
  */
 export default function DashboardLayout({
   children,

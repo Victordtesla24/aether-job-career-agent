@@ -27,17 +27,27 @@ vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
 
 const fetchSubscriptionMock = vi.fn();
 const openBillingPortalMock = vi.fn();
+const fetchEntitlementMock = vi.fn();
 vi.mock("../../../../lib/api/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../lib/api/billing")>();
   return {
     ...actual,
     fetchSubscription: (...args: unknown[]) => fetchSubscriptionMock(...args),
     openBillingPortal: (...args: unknown[]) => openBillingPortalMock(...args),
+    fetchEntitlement: (...args: unknown[]) => fetchEntitlementMock(...args),
   };
 });
 
+// The SubscriptionGate reads the live pathname to allowlist /dashboard/settings.
+const usePathnameMock = vi.fn(() => "/dashboard/settings" as string | null);
+vi.mock("next/navigation", () => ({
+  usePathname: () => usePathnameMock(),
+}));
+
 // eslint-disable-next-line import/first
 import SettingsPage from "../page";
+// eslint-disable-next-line import/first
+import { SubscriptionGate } from "../../../../components/subscription-gate";
 
 const SETTINGS = {
   profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" },
@@ -71,7 +81,24 @@ afterEach(() => {
   fetchCareerDataMock.mockReset();
   fetchSubscriptionMock.mockReset();
   openBillingPortalMock.mockReset();
+  fetchEntitlementMock.mockReset();
+  usePathnameMock.mockReturnValue("/dashboard/settings");
 });
+
+const FREE_SUBSCRIPTION = {
+  plan: { id: "free", name: "Free", modelTier: "basic" },
+  status: null,
+  interval: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  quota: {
+    runsUsed: 3,
+    runsAllowed: 5,
+    spendUsedUsd: 0.42,
+    spendCapUsd: 1.0,
+    periodEnd: "2026-08-01T00:00:00Z",
+  },
+};
 
 describe("SettingsPage — Privacy & Compliance tab", () => {
   it("does not claim a self-service export/delete-all-data feature that does not exist", async () => {
@@ -160,5 +187,37 @@ describe("SettingsPage — Billing & Subscription (MV-settings-003, MV-pricing-0
     const msg = screen.getByTestId("manage-subscription-message").textContent ?? "";
     expect(msg).not.toMatch(/success/i);
     expect(msg.toLowerCase()).toMatch(/billing profile|contact|support/);
+  });
+});
+
+describe("Settings billing reachable through the SubscriptionGate for a FREE account (MV-pricing-003, MV-settings-003, MV-mobile-dashboard-002)", () => {
+  it("a gated free user on /dashboard/settings sees their plan + Manage subscription, NOT the full-page paywall", async () => {
+    // A free/unsubscribed account: the gate would normally paywall the whole
+    // dashboard, but account management (view plan/quota + cancel) must stay
+    // reachable. Rendered exactly as production wraps it: <SubscriptionGate>.
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(FREE_SUBSCRIPTION);
+    usePathnameMock.mockReturnValue("/dashboard/settings");
+
+    render(
+      <SubscriptionGate>
+        <SettingsPage />
+      </SubscriptionGate>,
+    );
+
+    // Billing section renders the real free plan + a working Manage button…
+    await waitFor(() => screen.getByTestId("billing-plan-name"));
+    expect(screen.getByTestId("billing-plan-name").textContent).toContain("Free");
+    expect(screen.getByTestId("manage-subscription-btn")).toBeTruthy();
+    expect(screen.getByTestId("billing-quota-runs").textContent).toContain("5");
+    // …and the paywall never replaces it.
+    expect(screen.queryByTestId("subscription-paywall")).toBeNull();
+    expect(screen.queryByText(/Subscribe to unlock/i)).toBeNull();
   });
 });
