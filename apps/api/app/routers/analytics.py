@@ -44,26 +44,21 @@ def get_application_counts(
     ``submitted`` is the subset whose status has left ``draft`` (i.e. it was
     actually sent to an employer). Any surface whose label narrows to
     "submitted", "applied" or similar (the funnel's "Applied" stage, the
-    stat card's "Active Applications", Market Pulse's "Applications / month")
+    stat card's "Active Applications", Market Pulse's "Applications / month",
+    and — as of MV-application-tracker-006 — the Sankey's "Applied" node)
     must use ``submitted``, never ``total``, and must say so honestly.
 
     Before this helper, several call sites computed "applications" with
     divergent inline queries — one of them (Market Pulse's rolling monthly
     count) mixed ALL statuses while the funnel's all-time "Applied" excluded
     drafts, so a monthly figure could impossibly exceed the all-time total
-    (MV-mobile-dashboard-005: "you 14" vs "Applied 7"). Every CUMULATIVE
-    surface below now calls this one function instead.
-
-    NOT in scope: ``applications.py``'s ``funnel_sankey()``. Its "Applied"
-    node is a stage-EXCLUSIVE current-bucket count (status == 'submitted'
-    exactly, one applicant counted at their single current stage) so the
-    Sankey's node-to-node dropoff math holds — a legitimately different
-    concept from this helper's cumulative ``submitted`` (status <> 'draft',
-    which double-counts anyone who has since advanced past "submitted").
-    Reconciling the two would break the dropoff diagram, not fix a bug (see
-    MV-application-tracker-005 review ruling — the two are pinned as
-    intentionally distinct by test_applied_is_intentionally_stage_exclusive_
-    not_the_canonical_submitted_total in test_applications_tracker.py).
+    (MV-mobile-dashboard-005: "you 14" vs "Applied 7"). A separate attempt to
+    keep ``applications.py``'s ``funnel_sankey()`` on a stage-EXCLUSIVE model
+    (status == 'submitted' exactly) was disproven live: an application that
+    skipped straight to 'interview' undercounted earlier stages and produced
+    a negative dropoff (MV-application-tracker-006). ``funnel_sankey()`` now
+    also calls this function for its "Applied" node — every cumulative
+    surface derives from this one function, with no divergent queries left.
 
     ``period_clause`` is an optional ``AND ...`` SQL fragment (see
     ``_period_clause``) applied to both counts, e.g. a rolling time window.

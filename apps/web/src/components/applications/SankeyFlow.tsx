@@ -111,7 +111,11 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
               textAnchor="middle"
               fontFamily="'JetBrains Mono', monospace"
             >
-              −{f.dropoff.count} · {f.dropoff.reason}
+              {/* Defense-in-depth (MV-application-tracker-006): the backend
+                  cumulative model keeps this >= 0, but never let a stray
+                  negative render as the broken literal "−-3" — clamp here
+                  too so a data anomaly degrades to "−0", not nonsense. */}
+              −{Math.max(0, f.dropoff.count)} · {f.dropoff.reason}
             </text>
           ) : null,
         )}
