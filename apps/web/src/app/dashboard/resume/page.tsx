@@ -40,6 +40,40 @@ const VERSIONS_PAGE_SIZE = 8;
  *  scary error (MV-resume-studio-003). */
 const NO_OP_HINT = "no verifiable changes";
 
+/** A resume's real identity, derived from its own stored data — never a
+ *  hardcoded third party (MV-adv-resume-studio-006). */
+type ResumeIdentity = { name: string; title: string };
+
+/**
+ * Derive the real signed-in user's name/title from a resume's own `sections`
+ * payload — the same data the version list/diff already render from. Prefers
+ * an explicit `contact.name`/`contact.title` (set on ingest), falls back to
+ * the resume's first extracted text line (a resume's own first line is
+ * conventionally the candidate's name) and finally the version label. Returns
+ * `null` only when no resume exists at all, so the caller can show an honest
+ * empty-state instead of fabricating an identity.
+ */
+function deriveIdentity(resume: Resume | null | undefined): ResumeIdentity | null {
+  if (!resume) return null;
+  const sections = (resume.sections ?? {}) as {
+    contact?: { name?: unknown; title?: unknown; headline?: unknown };
+    raw_text?: unknown;
+  };
+  const contact = sections.contact ?? {};
+  const rawText = typeof sections.raw_text === "string" ? sections.raw_text : "";
+  const firstLine = rawText
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  const name =
+    (typeof contact.name === "string" && contact.name.trim()) || firstLine || resume.label || "—";
+  const title =
+    (typeof contact.title === "string" && contact.title.trim()) ||
+    (typeof contact.headline === "string" && contact.headline.trim()) ||
+    "—";
+  return { name, title };
+}
+
 export default function ResumePage() {
   const [resumes, setResumes] = useState<Resume[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -156,6 +190,11 @@ export default function ResumePage() {
   const baseResume = (resumes ?? []).find((r) => !r.parentId) ?? (resumes ?? [])[0];
   const baseHash = baseResume?.formatHash ?? null;
   const formatIntact = selected ? selected.formatHash === baseHash : null;
+  // Latest tailored version — `resumes` is ordered newest-first, so the first
+  // match is the latest (MV-adv-resume-studio-006).
+  const tailoredResume = (resumes ?? []).find((r) => r.label?.startsWith("Tailored"));
+  const originalIdentity = deriveIdentity(baseResume);
+  const tailoredIdentity = deriveIdentity(tailoredResume);
 
   return (
     <div className="space-y-6">
@@ -216,8 +255,20 @@ export default function ResumePage() {
             <span className="h-2 w-2 rounded-full bg-aether-muted-dim" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Original — Base Resume</h2>
           </div>
-          <p className="mt-3 text-lg font-bold tracking-wide">VIKRAM DESHPANDE</p>
-          <p className="text-xs text-aether-muted-dim">Senior Technical Program Manager · Melbourne, AU</p>
+          {originalIdentity ? (
+            <>
+              <p className="mt-3 text-lg font-bold tracking-wide" data-testid="hero-original-name">
+                {originalIdentity.name}
+              </p>
+              <p className="text-xs text-aether-muted-dim" data-testid="hero-original-title">
+                {originalIdentity.title}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-aether-muted-dim" data-testid="hero-original-empty">
+              No base resume yet.
+            </p>
+          )}
           <p className="mt-3 text-sm text-aether-muted">
             Base resume is immutable — every tailored version derives from this source of truth.
           </p>
@@ -227,21 +278,28 @@ export default function ResumePage() {
             <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Tailored — Latest Version</h2>
           </div>
-          <p className="mt-3 text-lg font-bold tracking-wide">VIKRAM DESHPANDE</p>
-          <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
+          {tailoredIdentity ? (
+            <>
+              <p className="mt-3 text-lg font-bold tracking-wide" data-testid="hero-tailored-name">
+                {tailoredIdentity.name}
+              </p>
+              <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-aether-muted-dim" data-testid="hero-tailored-empty">
+              No tailored version yet.
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            {(() => {
-              const tailored = (resumes ?? []).find((r) => r.label?.startsWith("Tailored"));
-              return tailored ? (
-                <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
-                  {tailored.label}
-                </span>
-              ) : (
-                <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">
-                  No tailored version yet — run tailoring against a job
-                </span>
-              );
-            })()}
+            {tailoredResume ? (
+              <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
+                {tailoredResume.label}
+              </span>
+            ) : (
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">
+                No tailored version yet — run tailoring against a job
+              </span>
+            )}
           </div>
         </div>
       </section>
