@@ -57,3 +57,25 @@ export function buildPipelineColumns(
 export function totalContacts(stats: NetworkingSummary["stats"], added: NetworkingContact[]): number {
   return stats.contacts + added.length;
 }
+
+/**
+ * Humanize an OutreachTask.type / NetworkingOutreachEntry.kind enum value
+ * ("connection_request", "follow_up", …) into display text ("Connection
+ * request", "Follow up"). Used by the Outreach Queue + Communication Log
+ * cards (MV-networking-002) instead of a nonexistent `tone` field.
+ */
+export function formatOutreachKind(kind: string): string {
+  const spaced = kind.replace(/_/g, " ").trim();
+  if (!spaced) return "";
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Render a nullable ISO-ish timestamp (as psycopg2's `str(datetime)` produces,
+ * e.g. "2026-07-18 10:23:45.123456+00:00") as an honest short date, or an
+ * em dash when absent — never "undefined" or "Invalid Date".
+ */
+export function formatWhen(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value.length >= 10 ? value.slice(0, 10) : value;
+}

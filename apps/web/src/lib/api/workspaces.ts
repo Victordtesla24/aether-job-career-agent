@@ -27,22 +27,94 @@ export const fetchInterviewPrep = (options: RequestOptions = {}) =>
 /* ------------------------------- Networking ------------------------------- */
 
 export interface NetworkingContact {
+  /** Present on every contact GET /workspaces/networking/summary returns —
+   * optional here only so existing fixture literals without it still type-check. */
+  id?: string;
   name: string;
   role: string;
   company: string;
   warmth: number;
+  email?: string;
+  linkedinUrl?: string;
+}
+
+/**
+ * One row from GET /workspaces/networking/summary's `outreachQueue` /
+ * `communicationLog` arrays. The backend (app/routers/workspaces.py
+ * `networking_summary`) builds these from real `OutreachTask` rows and sends
+ * `contactName`/`company`/`subject`/`kind`/`status`/`scheduledAt`/`sentAt` —
+ * NOT the `to`/`preview`/`tone`/`when`/`who`/`channel`/`note` fields the UI
+ * used to assume (MV-networking-002).
+ */
+export interface NetworkingOutreachEntry {
+  id: string;
+  kind: string;
+  status: string;
+  contactName: string;
+  company: string;
+  subject: string;
+  scheduledAt: string | null;
+  sentAt: string | null;
 }
 
 export interface NetworkingSummary {
   stats: { contacts: number; activeConversations: number; referralsInFlight: number; responseRate: number };
   pipeline: Array<{ stage: string; count: number; contacts: NetworkingContact[] }>;
-  outreachQueue: Array<{ to: string; subject: string; preview: string; tone: string }>;
-  communicationLog: Array<{ when: string; who: string; channel: string; note: string }>;
+  outreachQueue: NetworkingOutreachEntry[];
+  communicationLog: NetworkingOutreachEntry[];
   crmSummary: { activeConversations: number; followUpsDueToday: number; warmIntrosPending: number };
 }
 
 export const fetchNetworkingSummary = (options: RequestOptions = {}) =>
   apiRequest<NetworkingSummary>("/workspaces/networking/summary", options);
+
+/** A persisted Contact row exactly as GET/POST /networking/contacts return it
+ * (app/routers/networking.py `_CONTACT_COLUMNS`). */
+export interface NetworkingContactRecord {
+  id: string;
+  userId: string;
+  name: string;
+  title: string | null;
+  company: string | null;
+  stage: string;
+  email: string | null;
+  linkedinUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NetworkingContactCreateInput {
+  name: string;
+  title?: string;
+  company?: string;
+  email?: string;
+  linkedinUrl?: string;
+  /** Defaults to "identified" server-side (ContactStage enum) when omitted. */
+  stage?: string;
+}
+
+/** POST /networking/contacts (MV-networking-001) — the real create endpoint;
+ * previously the "Add Contact" form only mutated client-side state. */
+export const createNetworkingContact = (
+  input: NetworkingContactCreateInput,
+  options: RequestOptions = {},
+) =>
+  apiRequest<NetworkingContactRecord>("/networking/contacts", {
+    ...options,
+    method: "POST",
+    body: {
+      name: input.name,
+      title: input.title || undefined,
+      company: input.company || undefined,
+      email: input.email || undefined,
+      linkedin_url: input.linkedinUrl || undefined,
+      stage: input.stage,
+    },
+  });
+
+/** GET /networking/contacts/{id} (MV-networking-005 contact-detail view). */
+export const fetchNetworkingContact = (contactId: string, options: RequestOptions = {}) =>
+  apiRequest<NetworkingContactRecord>(`/networking/contacts/${contactId}`, options);
 
 /* ------------------------------- Email Center ------------------------------ */
 
