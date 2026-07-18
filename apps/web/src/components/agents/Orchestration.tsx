@@ -103,7 +103,12 @@ export default function Orchestration({
           <span className="h-2 w-2 rounded-full bg-aether-green live-dot" />
           <h2 className="text-[15px] font-semibold">Agent Orchestration</h2>
           <span className="mono text-[11px] text-aether-muted-dim">
-            {online} agents online · {queued} task{queued === 1 ? "" : "s"} in queue · uptime 99.8%
+            {/* ADV-agent-monitor-001: there is no real uptime signal backing
+                a percentage here (checked apps/api/app/routers/agents.py —
+                no uptime/health-history endpoint exists), so the fabricated
+                "uptime 99.8%" literal has been removed rather than grounded
+                in a fake number. */}
+            {online} agents online · {queued} task{queued === 1 ? "" : "s"} in queue
           </span>
         </div>
         <div className="flex gap-2">

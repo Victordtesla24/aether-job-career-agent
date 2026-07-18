@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { fetchAgents } from "@/lib/api/agents";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { fetchAgents } from "../lib/api/agents";
+import { fetchSubscription, type SubscriptionState } from "../lib/api/billing";
+import { NAV_ITEMS } from "../lib/navigation";
 
 type AgentPulse = { running: number; total: number };
 
@@ -20,6 +21,11 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
   const currentHref = activeHref ?? pathname ?? "/dashboard";
   // undefined = loading, null = unavailable, otherwise live counts
   const [pulse, setPulse] = useState<AgentPulse | null | undefined>(undefined);
+  // MV-dashboard-006: no plan/quota indicator existed anywhere on the
+  // dashboard hub despite a real, populated quota system server-side.
+  // undefined = loading, null = fetch failed (honest fallback), otherwise
+  // the real GET /billing/subscription state.
+  const [subscription, setSubscription] = useState<SubscriptionState | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +46,20 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
     return () => {
       cancelled = true;
       clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSubscription()
+      .then((s) => {
+        if (!cancelled) setSubscription(s);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscription(null);
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -85,41 +105,73 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
         })}
       </nav>
 
-      <div className="mt-auto glass-raised rounded-2xl p-4 border border-white/10">
-        <div className="flex items-center gap-2 mb-2">
-          <span
-            className={
-              agentsActive
-                ? "w-2 h-2 rounded-full bg-aether-green live-dot"
-                : "w-2 h-2 rounded-full bg-aether-muted-dim"
-            }
-          />
-          <span
-            className={
-              agentsActive
-                ? "text-xs font-medium text-aether-green"
-                : "text-xs font-medium text-aether-muted"
-            }
-          >
-            {agentsActive ? "Agents Active" : "Agents Idle"}
-          </span>
+      <div className="mt-auto flex flex-col gap-3">
+        {/*
+          MV-dashboard-006: no plan-tier or quota/usage indicator existed
+          anywhere on the dashboard hub (topbar chip only showed name +
+          target role) despite a real, populated quota system server-side
+          (GET /billing/subscription) already surfaced honestly on the
+          Settings page. This reads the same live endpoint — no fabricated
+          numbers, no Math.random(); an unresolved/errored fetch shows an
+          honest fallback, never an invented figure.
+        */}
+        <div className="glass-raised rounded-2xl border border-white/10 p-3" data-testid="sidebar-plan-quota">
+          {subscription === undefined ? (
+            <p className="text-[11px] text-aether-muted-dim">Checking plan…</p>
+          ) : subscription === null ? (
+            <p className="text-[11px] text-aether-muted-dim">Plan unavailable</p>
+          ) : (
+            <>
+              <p className="text-xs font-medium" data-testid="sidebar-plan-name">
+                {subscription.plan?.name ?? "Free plan"}
+              </p>
+              {subscription.quota ? (
+                <p className="mono mt-1 text-[11px] text-aether-muted-dim" data-testid="sidebar-plan-quota-runs">
+                  {subscription.quota.runsUsed}/{subscription.quota.runsAllowed} runs this period
+                </p>
+              ) : (
+                <p className="mt-1 text-[11px] text-aether-muted-dim">No usage quota on record</p>
+              )}
+            </>
+          )}
         </div>
-        <p className="text-[11px] text-aether-muted-dim leading-relaxed">
-          {pulse === undefined
-            ? "Checking agent status…"
-            : pulse === null
-              ? "Agent status unavailable"
-              : agentsActive
-                ? `${running} of ${pulse.total} agents running`
-                : `${pulse.total} agents ready · none running`}
-        </p>
-        <Link
-          href="/dashboard/agents"
-          prefetch={false}
-          className="mt-3 block w-full text-center text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
-        >
-          Manage Agents
-        </Link>
+
+        <div className="glass-raised rounded-2xl p-4 border border-white/10">
+          <div className="flex items-center gap-2 mb-2">
+            <span
+              className={
+                agentsActive
+                  ? "w-2 h-2 rounded-full bg-aether-green live-dot"
+                  : "w-2 h-2 rounded-full bg-aether-muted-dim"
+              }
+            />
+            <span
+              className={
+                agentsActive
+                  ? "text-xs font-medium text-aether-green"
+                  : "text-xs font-medium text-aether-muted"
+              }
+            >
+              {agentsActive ? "Agents Active" : "Agents Idle"}
+            </span>
+          </div>
+          <p className="text-[11px] text-aether-muted-dim leading-relaxed">
+            {pulse === undefined
+              ? "Checking agent status…"
+              : pulse === null
+                ? "Agent status unavailable"
+                : agentsActive
+                  ? `${running} of ${pulse.total} agents running`
+                  : `${pulse.total} agents ready · none running`}
+          </p>
+          <Link
+            href="/dashboard/agents"
+            prefetch={false}
+            className="mt-3 block w-full text-center text-xs font-medium py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
+          >
+            Manage Agents
+          </Link>
+        </div>
       </div>
 
       <div className="mt-4 px-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim">

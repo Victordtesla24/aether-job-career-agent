@@ -109,3 +109,20 @@ describe("Orchestration — MV-agent-monitor-003 success-rate window disclosure"
     expect(perf.textContent).toMatch(/last 5 runs?/i);
   });
 });
+
+describe("Orchestration — ADV-agent-monitor-001 fabricated uptime", () => {
+  it("does not render a hardcoded/fabricated uptime figure in the header — there is no real uptime signal", () => {
+    render(<Orchestration agents={agents} runs={[]} />);
+    const section = screen.getByTestId("agent-orchestration");
+    expect(section.textContent).not.toMatch(/uptime/i);
+    expect(section.textContent).not.toMatch(/99\.8\s*%/);
+  });
+
+  it("still shows the real, live agent/task counts next to where uptime used to be", () => {
+    const runs = [run({ id: "q1", status: "queued", startedAt: null, completedAt: null })];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const section = screen.getByTestId("agent-orchestration");
+    expect(section.textContent).toMatch(/1 agents? online/i);
+    expect(section.textContent).toMatch(/1 tasks? in queue/i);
+  });
+});

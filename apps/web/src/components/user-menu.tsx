@@ -62,7 +62,19 @@ export function UserMenu({
         <span className="w-9 h-9 rounded-full bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-sm font-semibold">
           {initials}
         </span>
-        <span className="leading-tight text-left">
+        {/*
+          MV-mobile-dashboard-004: this name/role text has no responsive hide
+          class, so at a 390px viewport it renders in full, crowding the
+          topbar and directly contributing to the header greeting/subtitle
+          clip bug (MV-mobile-dashboard-001). It's redundant at mobile width
+          anyway — the greeting already says "Good afternoon, Administrator".
+          Hidden below the `lg` breakpoint the rest of this shell already
+          treats as the desktop cutover (see the topbar search box's
+          `max-lg:hidden`); the avatar + chevron (and the button's own
+          "Account menu" aria-label) stay reachable at every width so Sign
+          out is never lost on mobile.
+        */}
+        <span className="leading-tight text-left max-lg:hidden">
           <span className="block text-[13px] font-medium">{name}</span>
           {role ? <span className="block text-[11px] text-aether-muted-dim">{role}</span> : null}
         </span>

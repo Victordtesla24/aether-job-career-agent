@@ -35,4 +35,26 @@ describe("UserMenu (MV-login-003 logout)", () => {
     expect(window.localStorage.getItem("aether_token")).toBeNull();
     expect(replaceMock).toHaveBeenCalledWith("/login");
   });
+
+  // MV-mobile-dashboard-001 / MV-mobile-dashboard-004: this desktop
+  // account-identity chip (name + role text) has no responsive hide class,
+  // so it renders in full at a 390px mobile viewport, crowding the topbar and
+  // directly contributing to the header greeting/subtitle clipping bug. The
+  // avatar (and its click target for the account menu) must stay reachable
+  // at every width — only the redundant name/role TEXT should hide below the
+  // `lg` breakpoint the rest of this shell already treats as the desktop
+  // cutover (see the search box's `max-lg:hidden` in topbar.tsx).
+  it("hides the name/role text below the lg breakpoint so it can't crowd the mobile header", () => {
+    render(<UserMenu initials="VS" name="Vikram S." role="TPM" />);
+    const nameNode = screen.getByText("Vikram S.");
+    const textWrapper = nameNode.parentElement as HTMLElement;
+    expect(textWrapper.className).toMatch(/\bmax-lg:hidden\b/);
+  });
+
+  it("keeps the avatar + account-menu button reachable regardless of the text hide", () => {
+    render(<UserMenu initials="VS" name="Vikram S." role="TPM" />);
+    const btn = screen.getByRole("button", { name: /account menu/i });
+    expect(btn.className).not.toMatch(/hidden/);
+    expect(screen.getByText("VS")).toBeTruthy();
+  });
 });
