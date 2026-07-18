@@ -441,14 +441,20 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
             )
     # 2. Legacy env fallback — strictly provider-scoped, never cross-provider.
     if provider == "anthropic":
-        # A synced Claude Code OAuth token (GAP-P7-DEF-A §5.2). The encrypted DB
-        # row still wins above; this env branch is the restart-survival / async
-        # worker source written by ``env_file_writer`` on an oauth_token save.
-        oat = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        if oat:
-            return ProviderCredentialResolution(
-                "anthropic", "oauth_token", oat, None, "environment"
-            )
+        # NOTE (MV-system-002): ``CLAUDE_CODE_OAUTH_TOKEN`` is a downstream SYNC
+        # TARGET written by ``env_file_writer`` on an oauth_token save (native-
+        # consumer hand-off / restart survival) — NOT an independent credential
+        # source for this resolver. The encrypted DB row is the single source of
+        # truth for an oauth_token credential and is resolved DB-first above
+        # (immediately usable, and it survives restarts because the save always
+        # writes the DB row and the ``.env`` line together). Resolving a bare
+        # ambient ``CLAUDE_CODE_OAUTH_TOKEN`` here would (a) resurrect a
+        # credential the operator deleted from the DB (no companion row), (b) leak
+        # a developer's ambient token into per-user/anthropic resolution, and (c)
+        # break the no-cross-provider / honest-no-credential invariants
+        # (test_provider_config::TestNoCrossProviderFallback,
+        # test_gap_p5_auth_compliance). So the resolver never reads it — the
+        # oauth_token path is DB-row only.
         base = os.environ.get("AETHER_LLM_BASE_URL", "")
         direct = os.environ.get("AETHER_LLM_API_KEY")
         if direct and "anthropic.com" in base:
