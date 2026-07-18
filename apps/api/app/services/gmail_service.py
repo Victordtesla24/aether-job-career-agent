@@ -23,11 +23,12 @@ from app.db import get_connection, new_id, rows_to_dicts
 from app.repositories.gmail_account import GmailAccountRepository
 from app.services.google_oauth import GOOGLE_SCOPES
 
-#: Distinct advisory-lock id for the additive EmailThread columns
-#: (AgentConfig 711, User 712, CareerProfile 713, OutreachTask 714,
-#: GoogleCredential 715, EmailThread cols 716, EmailThread aiScore 717).
+#: Distinct advisory-lock ids for the additive EmailThread DDL. See the lock-id
+#: ledger in app/repositories/background_jobs.py — 717 is taken
+#: (user_provider_credential) and 722 (background_jobs), so the aiScore lock uses
+#: the next free id, 723.
 _EMAIL_COLS_LOCK = 7420240716
-_EMAIL_AI_COLS_LOCK = 7420240717
+_EMAIL_AI_COLS_LOCK = 7420240723
 
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
 _MAX_MESSAGE_BYTES = 25 * 1024 * 1024

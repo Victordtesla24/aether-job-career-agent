@@ -357,8 +357,12 @@ class EmailAgent:
             model=get_model("REASONING"),
             temperature=0.0,
         )
+        # NEVER fabricate a score: when the LLM returns no genuine numeric score,
+        # `score` is null (the client renders an honest "no usable score" state)
+        # rather than a fake 0 that would read as a real 'irrelevant' verdict —
+        # the same discipline as the triage aiScore path (MV-email-center-001).
         insights = {
-            "score": int(raw.get("score", 0) or 0),
+            "score": self._coerce_score(raw.get("score")),
             "breakdown": raw.get("breakdown", []),
             "summary": str(raw.get("summary", "")),
         }

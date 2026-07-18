@@ -118,6 +118,33 @@ def test_triage_never_fabricates_score_for_unscored_thread(db_session, test_user
     assert rows[ids[2]][1] == "all"
 
 
+def test_insights_never_fabricates_score(db_session, test_user_id):
+    """The on-demand AI-Intelligence path (`_insights`, reachable via the
+    "Analyze this thread" button) must NOT coalesce a missing/malformed LLM score
+    to a fabricated 0 — it stays null, so the client shows an honest "no usable
+    score" state instead of a fake verdict (reviewer BLOCKING-1)."""
+    tid = f"mv-ins-{uuid.uuid4().hex[:8]}"
+    with db_session.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "EmailThread" '
+            '("id","userId","subject","messages","createdAt","updatedAt") '
+            "VALUES (%s,%s,%s,%s::jsonb, now(), now())",
+            (tid, test_user_id, "Insights thread",
+             _json.dumps([{"role": "recruiter", "body": "Are you available?"}])),
+        )
+    db_session.commit()
+
+    class _FakeLLM:
+        def complete_json(self, *_a, **_k):
+            # The model returned a breakdown/summary but NO usable score.
+            return {"breakdown": [{"label": "Urgency", "value": 40}], "summary": "…"}
+
+    res = EmailAgent(llm=_FakeLLM())._insights(test_user_id, {"thread_id": tid})
+    assert res.insights is not None
+    # No genuine score → null, never a fabricated 0.
+    assert res.insights["score"] is None
+
+
 # --------------------------------------------------------------------------- 005
 def test_inbox_recruiter_stat_reflects_classification(client, auth_headers):
     """stats.recruiterEmails counts the priority/followup threads (real), not a
