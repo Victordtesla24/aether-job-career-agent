@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  deleteStory,
   fetchStories,
   fetchStoryStats,
   StorySchema,
@@ -102,5 +103,27 @@ describe("Story Bank client — enrichment", () => {
     // evidence metric preserved + control flag flipped on
     expect(body.metrics.effortReductionPercent).toBe(92);
     expect(body.metrics.__starred).toBe(true);
+  });
+});
+
+describe("Story Bank client — DELETE response handling (MV-story-bank-004)", () => {
+  it("drains the empty 204 response body instead of leaving it unread", async () => {
+    // Chromium reports a fetch() whose 204 body stream is never read/cancelled
+    // as a client-observed net::ERR_ABORTED on the network panel, even though
+    // the server completed the request correctly. Every other response branch
+    // in apiRequest() already consumes the body (`.json()` or the error-path
+    // `.text()`); the 204 fast path must do the same.
+    const textSpy = vi.fn().mockResolvedValue("");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      text: textSpy,
+      json: vi.fn(),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deleteStory("cstory00000000000000000001", { token: "tok" });
+
+    expect(textSpy).toHaveBeenCalledTimes(1);
   });
 });

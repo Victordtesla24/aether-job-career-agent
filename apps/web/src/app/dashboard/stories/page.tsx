@@ -261,8 +261,8 @@ export default function StoryBankPage() {
               </div>
               <h3 className="mb-1.5 text-base font-semibold">Your Story Bank is empty</h3>
               <p className="mx-auto mb-5 max-w-md text-sm text-aether-muted">
-                Import achievements from your resume and portfolio to build your interview arsenal.
-                Aether will auto-extract STAR+R stories you can reuse everywhere.
+                Import achievements from your resume to build your interview arsenal. Aether will
+                auto-extract STAR+R stories you can reuse everywhere.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2.5">
                 <button
@@ -275,15 +275,6 @@ export default function StoryBankPage() {
                 >
                   <i className="fa-solid fa-file-import mr-1.5" aria-hidden="true" />
                   {importResumeState.label}
-                </button>
-                <button
-                  type="button"
-                  data-testid="empty-import-portfolio"
-                  onClick={openCreate}
-                  className="min-h-[44px] rounded-xl border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium transition hover:bg-white/12"
-                >
-                  <i className="fa-solid fa-briefcase mr-1.5" aria-hidden="true" />
-                  Import from Portfolio
                 </button>
                 <button
                   type="button"

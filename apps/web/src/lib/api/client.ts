@@ -124,6 +124,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       retryAfterSeconds,
     );
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) {
+    // Drain the (empty) body before returning. Leaving a 204's body stream
+    // unread lets Chromium's network stack treat it as cancelled mid-flight,
+    // which surfaces as a client-observed net::ERR_ABORTED on an otherwise
+    // fully-successful request (MV-story-bank-004, seen on DELETE /stories/{id}).
+    await res.text().catch(() => undefined);
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
