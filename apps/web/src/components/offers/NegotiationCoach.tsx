@@ -2,18 +2,26 @@
  * NegotiationCoach — payload-driven coaching panel (wireframe: negotiation-of12).
  * Insight callout, suggested counter, leverage list, and a Draft-counter-email
  * toggle that reveals a pre-filled draft referencing the suggested counter.
+ *
+ * MV-offer-comparison-002: the suggested counter is computed server-side from the
+ * user's real offer bases. When there is nothing to anchor on it arrives as null
+ * and this panel shows an honest "add an offer" state instead of a fabricated
+ * "$0 base" — and the draft-email affordance is hidden entirely (never a draft
+ * telling a recruiter you'd like "a base of $0"). The draft is a clearly-generic
+ * fill-in template (no fabricated names / roles / cities).
  */
 import { useState } from "react";
 
 export interface Negotiation {
   insight: string;
-  suggestedCounter: number;
+  suggestedCounter: number | null;
   leverage: string[];
 }
 
 export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) {
   const [showDraft, setShowDraft] = useState(false);
-  const counter = negotiation?.suggestedCounter ?? 0;
+  const counter = negotiation?.suggestedCounter ?? null;
+  const hasCounter = typeof counter === "number";
 
   return (
     <section
@@ -34,9 +42,15 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
         <div className="flex items-baseline gap-1">
           <i className="fa-solid fa-arrow-up-right-dots mr-1 text-aether-coral" aria-hidden="true" />
           <span>Suggested counter:</span>
-          <span className="mono font-semibold text-white" data-testid="suggested-counter">
-            ${counter.toLocaleString()} base
-          </span>
+          {hasCounter ? (
+            <span className="mono font-semibold text-white" data-testid="suggested-counter">
+              ${counter.toLocaleString()} base
+            </span>
+          ) : (
+            <span className="text-aether-muted" data-testid="suggested-counter">
+              add an offer with a base salary to get a suggestion
+            </span>
+          )}
         </div>
         <ul className="space-y-1.5">
           {(negotiation?.leverage ?? []).map((point) => (
@@ -51,26 +65,30 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
         </ul>
       </div>
 
-      <button
-        type="button"
-        data-testid="draft-counter-btn"
-        aria-expanded={showDraft}
-        aria-controls="counter-email-draft"
-        onClick={() => setShowDraft((v) => !v)}
-        className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
-      >
-        <i className="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true" />
-        {showDraft ? "Hide counter email" : "Draft counter email"}
-      </button>
+      {hasCounter ? (
+        <>
+          <button
+            type="button"
+            data-testid="draft-counter-btn"
+            aria-expanded={showDraft}
+            aria-controls="counter-email-draft"
+            onClick={() => setShowDraft((v) => !v)}
+            className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
+          >
+            <i className="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true" />
+            {showDraft ? "Hide counter email" : "Draft counter email"}
+          </button>
 
-      {showDraft ? (
-        <p
-          id="counter-email-draft"
-          data-testid="counter-email-draft"
-          className="mt-3 whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-3 text-[12px] text-aether-muted"
-        >
-          {`Hi Emma,\n\nThank you for the offer — I'm genuinely excited about the role and the team.\n\nBased on my competing offers and the market band for Senior TPMs in Sydney, I'd like to discuss a base of $${counter.toLocaleString()}. I'm confident the AI delivery experience I bring maps directly to the roadmap we discussed.\n\nHappy to jump on a call this week.\n\nBest,\n[Your Name]`}
-        </p>
+          {showDraft ? (
+            <p
+              id="counter-email-draft"
+              data-testid="counter-email-draft"
+              className="mt-3 whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-3 text-[12px] text-aether-muted"
+            >
+              {`Hi [Hiring Manager],\n\nThank you for the offer — I'm genuinely excited about the role and the team.\n\nBased on my competing offers and the market band for this role, I'd like to discuss a base of $${counter.toLocaleString()}. I'm confident the experience I bring maps directly to the roadmap we discussed.\n\nHappy to jump on a call this week.\n\nBest,\n[Your Name]`}
+            </p>
+          ) : null}
+        </>
       ) : null}
     </section>
   );

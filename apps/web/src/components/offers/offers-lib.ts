@@ -65,6 +65,7 @@ export interface OfferDraft {
   bonus: string;
   equity: string;
   location: string;
+  currency: string;
 }
 
 export const emptyDraft = (): OfferDraft => ({
@@ -74,6 +75,7 @@ export const emptyDraft = (): OfferDraft => ({
   bonus: "",
   equity: "",
   location: "",
+  currency: "AUD",
 });
 
 export type DraftErrors = Partial<Record<keyof OfferDraft, string>>;
@@ -136,9 +138,11 @@ export function validateOfferDraft(draft: OfferDraft, idSuffix: string): Validat
       equity,
       total: base + bonus + equity,
       location,
+      currency: draft.currency || "AUD",
       fitScore: null,
       topPick: false,
       deadline: "",
+      source: "manual",
       isNew: true,
     },
   };

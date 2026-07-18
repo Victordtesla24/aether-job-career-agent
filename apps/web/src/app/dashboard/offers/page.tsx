@@ -1,35 +1,59 @@
 "use client";
 
 /**
- * Offer Comparison — side-by-side offer cards, weighted decision priorities and
- * a negotiation coach (wireframe: design/screens/offer-comparison.html).
- * Backed by the live authenticated API: GET /offers via fetchOffers().
+ * Offer Comparison — side-by-side offer cards and a negotiation coach (wireframe:
+ * design/screens/offer-comparison.html). Backed by the live authenticated API:
+ * GET /workspaces/offers via fetchOffers(); Add/Remove persist via
+ * createOffer()/deleteOffer() so offers survive reloads (MV-offer-comparison-001).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AddOfferModal } from "../../../components/offers/AddOfferModal";
 import { EmptyState } from "../../../components/offers/EmptyState";
 import { NegotiationCoach } from "../../../components/offers/NegotiationCoach";
 import { OfferCard } from "../../../components/offers/OfferCard";
-import { PriorityWeights } from "../../../components/offers/PriorityWeights";
-import type { UiOffer } from "../../../components/offers/offers-lib";
-import { fetchOffers, type OffersPayload } from "../../../lib/api/workspaces";
+import {
+  createOffer,
+  deleteOffer,
+  fetchOffers,
+  type OfferCreateInput,
+  type OffersPayload,
+} from "../../../lib/api/workspaces";
 
 export default function OffersPage() {
   const [data, setData] = useState<OffersPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [added, setAdded] = useState<UiOffer[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
-    fetchOffers()
-      .then(setData)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load offers"));
+  const load = useCallback(async () => {
+    const payload = await fetchOffers();
+    setData(payload);
+    return payload;
   }, []);
 
-  const offers: UiOffer[] = useMemo(
-    () => [...(data?.offers ?? []), ...added],
-    [data, added],
+  useEffect(() => {
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : "Failed to load offers"),
+    );
+  }, [load]);
+
+  // Persist the offer, then refetch so the grid AND the recomputed negotiation
+  // coach reflect the real backend state. Errors propagate to the modal, which
+  // keeps the draft and shows an inline message (no fake success).
+  const handleAdd = useCallback(
+    async (input: OfferCreateInput) => {
+      await createOffer(input);
+      await load();
+    },
+    [load],
+  );
+
+  const handleDelete = useCallback(
+    async (offerId: string) => {
+      await deleteOffer(offerId);
+      await load();
+    },
+    [load],
   );
 
   if (error) {
@@ -54,6 +78,7 @@ export default function OffersPage() {
     );
   }
 
+  const offers = data.offers;
   const isEmpty = offers.length === 0;
 
   return (
@@ -66,7 +91,7 @@ export default function OffersPage() {
           </div>
           <h1 className="text-2xl font-bold">Offer Comparison</h1>
           <p className="mt-1 text-sm text-aether-muted">
-            Weighted decision analysis across your live offers.
+            Compare your live offers side by side.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -95,12 +120,15 @@ export default function OffersPage() {
             className="grid min-w-0 gap-4 sm:grid-cols-2 xl:col-span-2 xl:grid-cols-3"
           >
             {offers.map((o) => (
-              <OfferCard key={o.id} offer={o} />
+              <OfferCard
+                key={o.id}
+                offer={o}
+                onDelete={o.source === "manual" ? handleDelete : undefined}
+              />
             ))}
           </section>
 
           <div className="min-w-0 space-y-5">
-            <PriorityWeights weights={data.weights} />
             <NegotiationCoach negotiation={data.negotiation} />
           </div>
         </div>
@@ -109,7 +137,7 @@ export default function OffersPage() {
       <AddOfferModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onAdd={(offer) => setAdded((prev) => [...prev, offer])}
+        onAdd={handleAdd}
       />
     </div>
   );

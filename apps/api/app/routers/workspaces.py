@@ -20,6 +20,7 @@ from app.db import (
 from app.middleware.auth import CurrentUser
 from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
 from app.services.career_data import refresh_career_data
+from app.services.offers import create_offer, delete_offer, fetch_offers_payload
 
 router = APIRouter()
 
@@ -545,76 +546,73 @@ def send_reply(payload: SendReplyRequest, current_user: CurrentUser) -> dict[str
 
 
 # ---------------------------------------------------------------------------
-# Offers  GET /offers
+# Offers  GET /offers · POST /offers · DELETE /offers/{id}
 # ---------------------------------------------------------------------------
+
+#: Currencies accepted for a manually-entered offer. Kept intentionally small
+#: and explicit so the stored/displayed currency code is always a real value the
+#: user chose (MV-offer-comparison-006 — never a fabricated default badge).
+_OFFER_CURRENCIES = frozenset({"AUD", "USD", "NZD", "GBP", "EUR", "SGD", "CAD", "INR"})
+
+
+class OfferCreate(BaseModel):
+    """Payload for persisting a user-entered offer (POST /workspaces/offers)."""
+
+    company: str = Field(min_length=1, max_length=120)
+    role: str | None = Field(default=None, max_length=120)
+    base: int = Field(gt=0)
+    bonus: int = Field(default=0, ge=0)
+    equity: int = Field(default=0, ge=0)
+    location: str = Field(min_length=1, max_length=120)
+    currency: str = Field(default="AUD", max_length=8)
+
 
 @router.get("/offers")
 def offers(current_user: CurrentUser) -> dict[str, Any]:
-    """Offer comparison payload — real Application records with status='offer'."""
-    uid = current_user["id"]
+    """Offer comparison payload — real Application(status='offer') records plus
+    the user's persisted manual offers (see ``app.services.offers``)."""
+    return fetch_offers_payload(current_user["id"])
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT a.id, a."createdAt",
-                       j.title, j.company, j.location,
-                       j."salaryMin", j."salaryMax", j.currency,
-                       j."fitScore", j.remote
-                FROM "Application" a
-                JOIN "Job" j ON a."jobId" = j.id
-                WHERE a."userId" = %s AND a.status = 'offer'
-                ORDER BY j."fitScore" DESC NULLS LAST
-                """,
-                (uid,),
-            )
-            offer_rows = rows_to_dicts(cur)
 
-    offer_list = []
-    for idx, row in enumerate(offer_rows):
-        sal_min = row.get("salaryMin") or 0
-        sal_max = row.get("salaryMax") or 0
-        base = sal_min
-        # Estimate bonus ~10% of base and equity ~15% of base for display purposes
-        bonus = int(base * 0.10)
-        equity = int(base * 0.15)
-        total = base + bonus + equity
-        loc_label = row.get("location") or ("Remote" if row.get("remote") else "On-site")
-        offer_list.append({
-            "id": row["id"],
-            "company": row["company"],
-            "role": row["title"],
-            "total": total,
-            "base": base,
-            "bonus": bonus,
-            "equity": equity,
-            "salaryRange": (
-                f"{row.get('currency','AUD')} {sal_min:,}–{sal_max:,}" if sal_min else None
-            ),
-            "location": loc_label,
-            "fitScore": int(row.get("fitScore") or 0),
-            "topPick": idx == 0,
-            "deadline": None,
-        })
+@router.post("/offers", status_code=status.HTTP_201_CREATED)
+def add_offer(body: OfferCreate, current_user: CurrentUser) -> dict[str, Any]:
+    """Persist a user-entered offer, scoped to the current user (MV-001).
 
-    return {
-        "offers": offer_list,
-        "weights": [
-            {"key": "comp", "label": "Total compensation", "weight": 30},
-            {"key": "growth", "label": "Career growth", "weight": 25},
-            {"key": "culture", "label": "Culture & team", "weight": 20},
-            {"key": "flexibility", "label": "Location & flexibility", "weight": 15},
-            {"key": "stability", "label": "Company stability", "weight": 10},
-        ],
-        "negotiation": {
-            "insight": (
-                "Review each offer carefully. Use the weights panel to adjust "
-                "what matters most to you and compare total compensation packages."
-            ),
-            "suggestedCounter": None,
-            "leverage": [],
-        },
-    }
+    Replaces the old client-only "Add Offer" mock: the offer is now written to
+    the additive ``"Offer"`` table and survives reloads/navigation.
+    """
+    company = body.company.strip()
+    location = body.location.strip()
+    if not company:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Company is required.")
+    if not location:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Location is required.")
+    currency = body.currency.strip().upper() or "AUD"
+    if currency not in _OFFER_CURRENCIES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Unsupported currency '{currency}'. Supported: {sorted(_OFFER_CURRENCIES)}",
+        )
+    role = (body.role or "").strip() or None
+    return create_offer(
+        current_user["id"],
+        company=company,
+        role=role,
+        base=body.base,
+        bonus=body.bonus,
+        equity=body.equity,
+        location=location,
+        currency=currency,
+    )
+
+
+@router.delete("/offers/{offer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_offer(offer_id: str, current_user: CurrentUser) -> None:
+    """Delete one of the caller's own manual offers (MV-005 mitigation for the
+    now-permanent write). Application-derived offers are managed in the
+    Application Tracker and are not deletable here — a 404 is returned."""
+    if not delete_offer(current_user["id"], offer_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Offer not found")
 
 
 # ---------------------------------------------------------------------------
