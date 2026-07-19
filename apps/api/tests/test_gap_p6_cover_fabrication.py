@@ -18,8 +18,6 @@ regeneration, or the run fails loudly rather than shipping it.
 """
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from app.agents.cover_letter_agent import CoverLetterAgent, FabricationError
@@ -133,11 +131,20 @@ class _NoPersist:
         raise AssertionError("a letter with a fabricated claim must never be persisted")
 
 
-def test_cover_letter_run_rejects_fabricated_jd_title_claim() -> None:
+def test_cover_letter_run_rejects_fabricated_jd_title_claim(monkeypatch) -> None:
     """End-to-end: a draft that claims a JD-title specialty ('intake') absent
     from the candidate's evidence is retried and then REJECTED (FabricationError)
     — never shipped. Before the fix the lowercase JD-sourced claim passed the
     capitalized-only guard and the letter shipped."""
+    # DI-stub test using a fake user id ("user-p6cov"); stub the OUTBOUND
+    # résumé-grounding lookup with evidence that supports 'portfolio' but NOT
+    # 'intake' — mirroring the real evidence corpus this test exercises.
+    monkeypatch.setattr(
+        "app.agents.cover_letter_agent.require_user_resume_text",
+        lambda user_id, message: (
+            "Led delivery for a major bank. Managed a $5M program portfolio."
+        ),
+    )
     llm = _AlwaysFabricatesLLM()
     agent = CoverLetterAgent(
         llm=llm,

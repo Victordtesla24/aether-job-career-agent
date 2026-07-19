@@ -38,6 +38,8 @@ Run under the shared test DB lock:
 """
 from __future__ import annotations
 
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
+
 from app.agents.cover_letter_agent import CoverLetterAgent, enforce_first_person
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
@@ -70,8 +72,14 @@ def _seed_job(user_id: str, suffix: str, job: dict) -> str:
 
 
 def _make_letter(client, auth_headers) -> tuple[dict, dict]:
-    """Seed a job via the scout replay fixture, then draft a letter for it
-    through the normal (unpatched) LLM replay path."""
+    """Seed the fixture user their own base résumé, a job via the scout
+    replay fixture, then draft a letter for it through the normal
+    (unpatched) LLM replay path.
+
+    This drives a REAL (non-stub) LLM replay generation, so the seeded
+    resume must ground the STATIC "default"/"retry" replay fixtures'
+    vocabulary too (see FIXTURE_LLM_RESUME_TEXT docstring in conftest.py)."""
+    seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
     run = client.post(
         "/agents/scout/run",
         json={"query": "python engineer", "location": "Sydney"},
@@ -181,6 +189,7 @@ class TestEnforceFirstPersonHookGrammar:
             "I would welcome the opportunity to discuss this further in an "
             "interview at your convenience."
         )
+        seed_own_resume(client, auth_headers)
         me = client.get("/auth/me", headers=auth_headers).json()
         user_id = me["id"]
         job_id = _seed_job(user_id, "admin-collision", job)
@@ -322,6 +331,7 @@ class TestPromptInjectionTokenLeak:
     def test_injected_token_survives_via_job_description_corpus_poisoning(
         self, client, auth_headers
     ):
+        seed_own_resume(client, auth_headers)
         me = client.get("/auth/me", headers=auth_headers).json()
         user_id = me["id"]
         job_id = _seed_job(user_id, "injection-comely", _INJECTION_JOB)

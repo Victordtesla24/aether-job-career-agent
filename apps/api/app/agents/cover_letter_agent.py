@@ -33,7 +33,7 @@ from app.services.llm_client import (
     get_model,
     shared_budget,
 )
-from app.services.resume_grounding import resolve_user_resume_text
+from app.services.resume_grounding import require_user_resume_text
 from app.services.resume_tailor import unsupported_claim_tokens
 
 SYSTEM_PROMPT = (
@@ -1184,7 +1184,12 @@ class CoverLetterAgent:
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
 
-        resume_text = resolve_user_resume_text(user_id)
+        # OUTBOUND artifact: ground ONLY on the caller's own résumé and REFUSE
+        # when they have none — never emit the bundled operator résumé into a
+        # third-party-visible letter (NF-final-B-001).
+        resume_text = require_user_resume_text(
+            user_id, "Add your resume before generating a cover letter."
+        )
         user = self._users.get_by_id(user_id) or {}
         signer = str(user.get("name") or "")
         # ``targetRole`` is an additive profile column not carried by the default

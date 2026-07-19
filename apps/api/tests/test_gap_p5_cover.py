@@ -25,16 +25,15 @@ from __future__ import annotations
 import re
 
 import pytest
+from conftest import seed_own_resume
 
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
     FabricationError,
     split_paragraphs,
 )
-from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
-from app.services.resume_parser import parse_resume_pdf
 
 _CTA_CUES = (
     "discuss",
@@ -121,6 +120,7 @@ class _StubLLM:
 
 
 def _run(client, auth_headers, job: dict, suffix: str, llm) -> str:
+    seed_own_resume(client, auth_headers)
     user_id, name = _real_user(client, auth_headers)
     job_id = _seed_job(user_id, suffix, job)
     agent = CoverLetterAgent(
@@ -180,6 +180,7 @@ class TestUnsupportedClaimStillRejected:
         """A hook_reason that names an unsupported entity is guarded exactly
         like the body — the elevated hook must not become a fabrication
         loophole."""
+        seed_own_resume(client, auth_headers)
         user_id, name = _real_user(client, auth_headers)
         job_id = _seed_job(user_id, "unsupported-claim", _JOB)
         llm = _StubLLM(

@@ -8,6 +8,20 @@ agent cards and the RECENT RUNS table reflect real activity.
 """
 from __future__ import annotations
 
+from conftest import seed_own_resume
+
+from app.agents.fit_scorer import get_base_resume_path
+from app.services.resume_parser import parse_resume_pdf
+
+
+def _operator_resume_text() -> str:
+    """The bundled operator PDF's own text, seeded EXPLICITLY as the fixture
+    user's OWN résumé (never auto-seeded — NF-final-B-005). The pipeline runs
+    the real tailor + cover-letter generation, whose STATIC replay fixtures were
+    recorded against this text; a synthetic résumé would make those steps 422 on
+    fabrication grounds (and the tailor collapse to a no-op)."""
+    return parse_resume_pdf(get_base_resume_path())["raw_text"]
+
 
 def _register_and_login(client) -> dict[str, str]:
     creds = {"email": "pipeline-user@aether.dev", "password": "Str0ngPass1"}
@@ -20,6 +34,9 @@ class TestPipelineRun:
     def test_pipeline_records_every_node_including_supervisor_and_matcher(
         self, client, auth_headers
     ):
+        # The pipeline reaches tailor/coverLetter for a matched job — both are
+        # OUTBOUND paths that now require the caller's own résumé on file.
+        seed_own_resume(client, auth_headers, raw_text=_operator_resume_text())
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -55,6 +72,9 @@ class TestPipelineRun:
 
     def test_pipeline_with_no_jobs_completes_with_empty_match(self, client):
         headers = _register_and_login(client)
+        # Defensive: if a job IS matched (fixture-dependent), the pipeline would
+        # reach tailor/coverLetter, both of which now require a résumé on file.
+        seed_own_resume(client, headers, raw_text=_operator_resume_text())
         resp = client.post("/agents/pipeline/run", json={}, headers=headers)
         assert resp.status_code == 200
         body = resp.json()

@@ -19,9 +19,12 @@ default); the async worker shares the same service + refund plumbing.
 from __future__ import annotations
 
 import pytest
+from conftest import seed_own_resume
 
+from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.billing import UsageQuotaRepository
 from app.security import decode_access_token
+from app.services.resume_parser import parse_resume_pdf
 
 
 @pytest.fixture()
@@ -31,6 +34,21 @@ def user_id(auth_headers) -> str:
 
 
 def _seed_job(client, auth_headers) -> dict:
+    """Seed the fixture user their own base résumé (every test in this file
+    goes on to run a tailor — and often a cover-letter — agent, both of which
+    now require the caller's own résumé on file) and a scout-replay job.
+
+    Seeded EXPLICITLY with the bundled operator PDF's own text (never
+    auto-seeded — NF-final-B-005): the committed ``tailor`` LLM replay fixture
+    is a static canned rewrite keyed to THIS résumé's exact 26-bullet
+    structure (evidenceRef bullet-6/7/9/12/16), so this file's
+    ``body["changes"] > 0`` assertions need a seeded résumé whose bullets
+    actually line up with it — a synthetic résumé would make every canned
+    rewrite miss its evidenceRef and the run would always be a no-op.
+    """
+    seed_own_resume(
+        client, auth_headers, raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"]
+    )
     run = client.post(
         "/agents/scout/run",
         json={"query": "python engineer", "location": "Sydney"},
@@ -239,6 +257,12 @@ class TestNoSilentBilledNoOp:
     def test_pipeline_tolerates_a_noop_tailor(self, client, auth_headers, monkeypatch):
         """A no-op tailor inside the full pipeline must NOT fail the whole run —
         the cover-letter step draws on the base résumé regardless."""
+        # The pipeline's cover-letter step runs the real (replay) generation, so
+        # seed the operator-PDF text the canned fixture was recorded against —
+        # a synthetic résumé would make that step 422 on fabrication grounds.
+        seed_own_resume(
+            client, auth_headers, raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"]
+        )
         self._force_noop(monkeypatch)
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
         assert resp.status_code == 200, resp.text

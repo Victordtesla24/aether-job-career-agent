@@ -1,9 +1,11 @@
 """Tailoring agent — produces a job-specific child resume version (P2-S05).
 
-Ensures the user has a base resume record (bootstrapped from the bundled PDF
-on first run), tailors its bullets against the target job via
-:class:`ResumeTailorService`, and persists the result as a child version.
-The source PDF is never modified — ``formatHash`` is carried through intact.
+Requires the user to have their OWN base resume record (uploaded/ingested — it
+is NEVER bootstrapped from the bundled operator PDF, which would leak the
+operator's résumé as the user's own; NF-final-B-005), tailors its bullets
+against the target job via :class:`ResumeTailorService`, and persists the result
+as a child version. The source résumé is never modified — ``formatHash`` is
+carried through intact.
 """
 from __future__ import annotations
 
@@ -12,13 +14,13 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.approval import ApprovalRepository
 from app.repositories.job import JobRepository
 from app.repositories.resume import ResumeRepository
 from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
+from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
 from app.services.resume_tailor import (
@@ -285,44 +287,49 @@ class TailoringAgent:
 
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
-        if base and (base.get("sections") or {}).get("raw_text"):
-            stored = [
-                b.get("text", "")
-                for b in ((base.get("sections") or {}).get("bullets") or [])
-            ]
-            # A base persisted before the column-aware extractor holds truncated
-            # first-line fragments (or hyphen-corrupted bullets) even though its
-            # raw_text is complete. Re-derive COMPLETE bullets on read and heal
-            # in place — non-destructively, preserving the immutable raw_text and
-            # format hash (GAP-P5-PDF). A healthy base is returned untouched.
-            if stored and not _bullets_need_healing(stored):
-                return base
-        base_path = get_base_resume_path()
-        parsed = parse_resume_pdf(base_path)
-        # Reconstruct COMPLETE bullets positionally from the PDF. The flat text
-        # stream interleaves each wrapped bullet's continuation lines with
-        # left-rail content, so line-based extraction would store truncated
-        # first-line fragments — which the tailoring LLM then "completes" into
-        # incoherent, duplicated output (GAP-P4-044).
+        raw_text = ((base.get("sections") or {}).get("raw_text") if base else "") or ""
+        if not base or not raw_text.strip():
+            # No résumé of the user's own on file. NEVER seed the bundled operator
+            # résumé as this user's base — that persists the operator's PII as
+            # "their" résumé and leaks it into their downloads/attachments
+            # (NF-final-B-005). Outbound flows refuse until the user adds one.
+            raise MissingResumeError(
+                "Add your resume before tailoring or generating an application."
+            )
+        stored = [
+            b.get("text", "")
+            for b in ((base.get("sections") or {}).get("bullets") or [])
+        ]
+        # A base persisted before the column-aware extractor holds truncated
+        # first-line fragments (or hyphen-corrupted bullets) even though its
+        # raw_text is complete. Re-derive COMPLETE bullets on read and heal in
+        # place — non-destructively, preserving the immutable raw_text and format
+        # hash (GAP-P5-PDF). A healthy base is returned untouched.
+        if stored and not _bullets_need_healing(stored):
+            return base
+        # Bullets need healing. Re-derive them ONLY from a bundled source PDF that
+        # THIS base actually derives from (its formatHash matches a packaged
+        # asset, e.g. the BA variant). A user-authored résumé has no bundled
+        # source, so its stored bullets are returned as-is — the operator PDF is
+        # NEVER used to heal another user's résumé (NF-final-B-005).
+        from app.services.resume_pdf import resolve_original_pdf
+
+        source = resolve_original_pdf(base.get("formatHash"))
+        if source is None:
+            return base
+        parsed = parse_resume_pdf(source)
         sections = {
-            "raw_text": parsed["raw_text"],
+            "raw_text": raw_text,
             "bullets": [
                 {"text": b, "evidenceRef": f"bullet-{i}"}
-                for i, b in enumerate(extract_pdf_bullets(base_path))
+                for i, b in enumerate(extract_pdf_bullets(source))
             ],
-            "contact": parsed["contact"],
+            "contact": (base.get("sections") or {}).get("contact") or parsed["contact"],
         }
-        if base:
-            # Base exists but was seeded with empty sections — heal it from
-            # the real PDF so diffs have genuine "before" content.
-            healed = self._resumes.update_sections(
-                base["id"], user_id, sections, parsed["format_hash"]
-            )
-            if healed:
-                return healed
-        return self._resumes.create(
-            user_id, sections, parsed["format_hash"], label="Base resume", version=1
+        healed = self._resumes.update_sections(
+            base["id"], user_id, sections, base["formatHash"]
         )
+        return healed or base
 
     def run(self, user_id: str, job_id: str, resume_id: str | None = None) -> TailorRunResult:
         job = self._jobs.get_by_id(job_id, user_id)
@@ -336,9 +343,12 @@ class TailoringAgent:
                 raise LookupError(f"Resume {resume_id} not found for user")
         else:
             base = self.ensure_base_resume(user_id)
-        resume_text = base["sections"].get("raw_text") or parse_resume_pdf(
-            get_base_resume_path()
-        )["raw_text"]
+        resume_text = base["sections"].get("raw_text") or ""
+        if not resume_text.strip():
+            # Never tailor against the bundled operator résumé (NF-final-B-005).
+            raise MissingResumeError(
+                "Add your resume before tailoring or generating an application."
+            )
 
         jd = f"{job['title']} at {job['company']}. {job.get('description', '')}"
         # Tailor against the version's stored bullets when present so change

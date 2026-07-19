@@ -419,7 +419,14 @@ def refine_cover_letter(
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job for this letter not found")
 
-    resume_text = resolve_user_resume_text(user_id)
+    # OUTBOUND artifact: refuse rather than ground the revised letter on the
+    # bundled operator résumé when the user has none (NF-final-B-001).
+    resume_text = resolve_user_resume_text(user_id, allow_operator_fallback=False)
+    if not resume_text.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Add your resume before refining a cover letter.",
+        )
     guard = FabricationGuard()
     signer = str(current_user.get("name") or "")
     # ``current_user`` comes from the default UserRepository projection, which
@@ -593,7 +600,7 @@ def _sender_block(user: dict[str, Any]) -> tuple[str, list[str]]:
     supplemented with the CALLER's own résumé phone and profile links so the
     exported letter carries THIS user's real contact details — never a fixed
     operator résumé's (GAP-P4-048, NF-final-B-001)."""
-    contact = resolve_user_resume_contact(user.get("id", ""))
+    contact = resolve_user_resume_contact(user.get("id", ""), allow_operator_fallback=False)
     name = str(user.get("name") or "").strip()
     email = str(user.get("email") or contact.get("email") or "").strip()
     primary = [v for v in (email, contact.get("phone")) if v]

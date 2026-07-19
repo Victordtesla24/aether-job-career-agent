@@ -1,9 +1,30 @@
 """P2-S05 — Resume tailoring agent tests (LLM record-replay mode)."""
 from __future__ import annotations
 
+from conftest import seed_own_resume
+
 from app.agents.fit_scorer import get_base_resume_path
 from app.services.resume_parser import compute_format_hash, parse_resume_pdf
 from app.services.resume_tailor import _evidence_index, unsupported_tokens
+
+
+def _own_operator_text() -> str:
+    """The bundled operator PDF's parsed text, seeded EXPLICITLY as the fixture
+    user's OWN résumé (never auto-seeded — NF-final-B-005).
+
+    The committed ``tailor`` LLM replay fixture (``tests/fixtures/llm/tailor/
+    default.json``) is a STATIC canned rewrite keyed only by prompt name; it
+    targets specific ``evidenceRef`` indices (bullet-6/7/9/12/16) and wording
+    that only line up with THIS résumé's 26-bullet structure. A synthetic
+    résumé with different bullets/indices would make every canned rewrite miss
+    its evidenceRef (or fail the anti-fabrication guard), so the run would
+    always be an honest no-op — that would silently drop this suite's real
+    coverage rather than test it. Explicitly POSTing this text as the user's
+    own résumé (as done here) is not the auto-seed leak the fix closed: the
+    user consciously supplies it, exactly like uploading a résumé that happens
+    to read the same.
+    """
+    return parse_resume_pdf(get_base_resume_path())["raw_text"]
 
 
 def _seed_job(client, auth_headers) -> dict:
@@ -17,6 +38,7 @@ def _seed_job(client, auth_headers) -> dict:
 
 
 def _run_tailor(client, auth_headers) -> dict:
+    seed_own_resume(client, auth_headers, raw_text=_own_operator_text())
     job = _seed_job(client, auth_headers)
     resp = client.post(
         "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
@@ -30,7 +52,10 @@ class TestTailoring:
         """Every accepted bullet is fully evidence-traced (D-0015 semantics)."""
         body = _run_tailor(client, auth_headers)
         resume = client.get(f"/resumes/{body['resume_id']}", headers=auth_headers).json()
-        raw_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        # The tailored resume is now grounded on the SEEDED (own) résumé — build
+        # the evidence index from that exact same explicitly-seeded text (see
+        # ``_own_operator_text`` docstring for why this test seeds that content).
+        raw_text = _own_operator_text()
         stems, numbers = _evidence_index(raw_text)
         for bullet in resume["sections"]["bullets"]:
             novel = unsupported_tokens(bullet["text"], stems, numbers)

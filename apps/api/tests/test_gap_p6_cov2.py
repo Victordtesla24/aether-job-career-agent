@@ -94,6 +94,14 @@ def test_cover_generation_budget_decoupled_from_tailoring_65(monkeypatch) -> Non
     monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "65")  # the tailoring-tuned global
     monkeypatch.delenv("AETHER_LLM_COVER_BUDGET_SECONDS", raising=False)  # default 88
     _stub_evidence(monkeypatch)
+    # DI-stub test using a fake user id ("user-1") that never goes through the
+    # real API, so it has no résumé of its own on file. Stub the OUTBOUND
+    # résumé-grounding lookup directly so the budget probe under test still
+    # reaches the LLM call instead of short-circuiting on MissingResumeError.
+    monkeypatch.setattr(
+        "app.agents.cover_letter_agent.require_user_resume_text",
+        lambda user_id, message: "Senior engineer with Python and distributed systems experience.",
+    )
 
     clock = {"t": 5000.0}
     monkeypatch.setattr(llm_client.time, "monotonic", lambda: clock["t"])
@@ -144,6 +152,12 @@ def test_cover_budget_strictly_exceeds_tailoring_generation_budget(monkeypatch) 
 def test_cover_run_raises_honest_error_no_fixture_fallback(monkeypatch) -> None:
     monkeypatch.setenv("AETHER_LLM_MODE", "auto")
     _stub_evidence(monkeypatch)
+    # DI-stub test using a fake user id ("user-1"); stub the résumé-grounding
+    # lookup so the run reaches the LLM call the test is actually exercising.
+    monkeypatch.setattr(
+        "app.agents.cover_letter_agent.require_user_resume_text",
+        lambda user_id, message: "Senior engineer with Python and distributed systems experience.",
+    )
 
     class _FailingLLM(LLMClient):
         def __init__(self) -> None:

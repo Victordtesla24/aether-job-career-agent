@@ -128,14 +128,18 @@ def test_cover_letter_agent_grounds_on_user_resume_not_operator_pdf(test_user_id
         "cover letter agent did not ground its prompt on the user's own resume: "
         f"marker {marker!r} absent from captured prompt"
     )
-    assert "ANZ" not in prompt, (
-        "cover letter agent leaked the OPERATOR's bundled resume (ANZ) into a "
-        "prompt built for a different user"
-    )
-    assert "Telstra" not in prompt, (
-        "cover letter agent leaked the OPERATOR's bundled resume (Telstra) into "
-        "a prompt built for a different user"
-    )
+    for operator_marker in (
+        "ANZ",
+        "Telstra",
+        "DESHPANDE",
+        "+61 433 224 556",
+        "sarkar.vikram@gmail.com",
+        "Australian Taxation Office",
+    ):
+        assert operator_marker not in prompt, (
+            f"cover letter agent leaked the OPERATOR's bundled resume ({operator_marker}) "
+            "into a prompt built for a different user"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -149,8 +153,15 @@ def test_resolve_user_resume_text_uses_own_base_when_present(test_user_id):
 
     text = resolve_user_resume_text(test_user_id)
     assert marker in text, "resolve_user_resume_text did not return the user's own base resume"
-    assert "ANZ" not in text
-    assert "Telstra" not in text
+    for operator_marker in (
+        "ANZ",
+        "Telstra",
+        "DESHPANDE",
+        "+61 433 224 556",
+        "sarkar.vikram@gmail.com",
+        "Australian Taxation Office",
+    ):
+        assert operator_marker not in text
 
 
 def test_resolve_user_resume_text_falls_back_to_bundled_when_no_base():
@@ -303,15 +314,125 @@ def test_download_resume_serves_users_own_content_not_operator_pdf(client, auth_
         "downloaded resume PDF did not contain the user's own ingested content "
         f"(marker {marker!r} absent) -- served bytes:\n{text[:300]!r}"
     )
-    assert "ANZ" not in text, (
-        "downloaded resume PDF leaked the OPERATOR's bundled PDF content (ANZ) "
-        "for a user's OWN base resume"
+    for operator_marker in (
+        "ANZ",
+        "Telstra",
+        "DESHPANDE",
+        "+61 433 224 556",
+        "sarkar.vikram@gmail.com",
+        "Australian Taxation Office",
+    ):
+        assert operator_marker not in text, (
+            f"downloaded resume PDF leaked the OPERATOR's bundled PDF content "
+            f"({operator_marker}) for a user's OWN base resume"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Production contract (fix/mv-resume-grounding) — OUTBOUND paths REFUSE (422)
+# for an authed user with NO résumé of their own; the bundled operator PDF is
+# NEVER emitted into a third-party-visible artifact, and NEVER auto-seeded as
+# that user's own base résumé.
+# --------------------------------------------------------------------------- #
+
+_OPERATOR_PII_MARKERS = (
+    "DESHPANDE",
+    "+61 433 224 556",
+    "sarkar.vikram@gmail.com",
+    "Australian Taxation Office",
+    "ANZ",
+    "Telstra",
+)
+
+
+def _register_fresh_user(client) -> tuple[str, dict[str, str]]:
+    """Register + log in a brand-new user who has seeded NOTHING — genuinely
+    no résumé of their own on file. Never use ``seed_own_resume``/``auth_headers``
+    for these tests: the whole point is a user with NO base résumé."""
+    email = f"mv-noresume-{uuid.uuid4().hex[:10]}@example.com"
+    password = "Sup3rSecret"
+    reg = client.post("/auth/register", json={"email": email, "password": password})
+    assert reg.status_code == 201, reg.text
+    login = client.post("/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    me = client.get("/auth/me", headers=headers)
+    assert me.status_code == 200, me.text
+    return me.json()["id"], headers
+
+
+def test_no_resume_user_cover_letter_refused_no_operator_pii(client):
+    """A fresh authed user with NO résumé of their own gets an honest 422 on
+    cover-letter generation, never the bundled operator PDF grounding it —
+    and the operator's real PII never appears anywhere in the response."""
+    user_id, headers = _register_fresh_user(client)
+    run = client.post(
+        "/agents/scout/run",
+        json={"query": "python engineer", "location": "Sydney"},
+        headers=headers,
     )
-    assert "Telstra" not in text, (
-        "downloaded resume PDF leaked the OPERATOR's bundled PDF content (Telstra) "
-        "for a user's OWN base resume"
+    assert run.status_code == 202, run.text
+    job = client.get("/jobs", headers=headers).json()[0]
+
+    resp = client.post(
+        "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=headers
     )
-    assert "+61 433 224 556" not in text, (
-        "downloaded resume PDF leaked the OPERATOR's real phone number for a "
-        "user's OWN base resume"
+    assert resp.status_code == 422, resp.text
+    assert "Add your resume" in resp.json()["detail"]
+    for marker in _OPERATOR_PII_MARKERS:
+        assert marker not in resp.text, (
+            f"operator PII ({marker!r}) leaked into the 422 response body: {resp.text!r}"
+        )
+
+
+def test_no_resume_user_email_draft_refused(client):
+    """A fresh authed user with NO résumé of their own gets an honest
+    422/refusal on an email draft_reply — never the operator's résumé grounding
+    it, and no operator PII in the response body."""
+    user_id, headers = _register_fresh_user(client)
+    draft = client.post(
+        "/emails/draft",
+        json={"subject": "Recruiter outreach", "body": "Are you open to new roles?"},
+        headers=headers,
+    )
+    assert draft.status_code == 201, draft.text
+    thread_id = draft.json()["id"]
+
+    resp = client.post(
+        "/agents/email/run",
+        json={"mode": "draft_reply", "thread_id": thread_id},
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+    assert "Add your resume" in resp.json()["detail"]
+    for marker in _OPERATOR_PII_MARKERS:
+        assert marker not in resp.text, (
+            f"operator PII ({marker!r}) leaked into the 422 response body: {resp.text!r}"
+        )
+
+
+def test_no_resume_user_tailor_refused_and_no_base_created(client):
+    """A fresh authed user with NO résumé of their own gets an honest 422 on
+    tailoring, and — critically — the bundled operator PDF is NEVER seeded as
+    this user's own base résumé as a side effect of the refused attempt
+    (NF-final-B-005): GET /resumes must still return []."""
+    user_id, headers = _register_fresh_user(client)
+    run = client.post(
+        "/agents/scout/run",
+        json={"query": "python engineer", "location": "Sydney"},
+        headers=headers,
+    )
+    assert run.status_code == 202, run.text
+    job = client.get("/jobs", headers=headers).json()[0]
+
+    resp = client.post(
+        "/agents/tailor/run", json={"job_id": job["id"]}, headers=headers
+    )
+    assert resp.status_code == 422, resp.text
+    assert "Add your resume before tailoring" in resp.json()["detail"]
+
+    resumes = client.get("/resumes", headers=headers).json()
+    assert resumes == [], (
+        "a refused tailor run seeded the operator PDF as this user's own base "
+        f"resume as a side effect: {resumes!r}"
     )

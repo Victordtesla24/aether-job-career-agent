@@ -166,9 +166,10 @@ class EmailAgent:
         return None
 
     def _resume_text(self, user_id: str) -> str:
-        """The CALLER's own base resume text — never a fixed operator resume
-        (NF-final-B-001 class). Bundled base PDF only when the user has none."""
-        return resolve_user_resume_text(user_id)
+        """The CALLER's own base resume text for an OUTBOUND draft — never the
+        bundled operator resume (NF-final-B-001). Empty when the user has no
+        resume so the draft path refuses rather than leaking operator content."""
+        return resolve_user_resume_text(user_id, allow_operator_fallback=False)
 
     # ---------------------------------------------------------------- run
     def run(self, user_id: str, mode: str = "triage", **params: Any) -> EmailAgentResult:
@@ -291,6 +292,8 @@ class EmailAgent:
         thread = self._thread(user_id, thread_id)
         incoming = self._latest_body(thread)
         resume_text = self._resume_text(user_id)
+        if not resume_text.strip():
+            raise EmailAgentError("Add your resume before drafting a reply.")
         # The incoming email's own text (names, company, role) is legitimate
         # evidence, so it joins the corpus the guard checks against — only
         # claims about the *candidate* that aren't in the resume get flagged.

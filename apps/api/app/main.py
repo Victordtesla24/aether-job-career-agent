@@ -11,8 +11,9 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.rate_limit import (
@@ -41,6 +42,7 @@ from app.routers import (
     workspaces,
 )
 from app.services.llm_client import get_mode
+from app.services.resume_grounding import MissingResumeError
 
 
 def apply_email_domain_allowlist() -> frozenset[str]:
@@ -182,6 +184,19 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # OUTBOUND generation paths (cover letter, email draft, refine, tailor) raise
+    # MissingResumeError when the caller has no résumé of their own. Surface it as
+    # an honest 422 — never a 500, and never by grounding on the bundled operator
+    # résumé (NF-final-B-001/005).
+    @app.exception_handler(MissingResumeError)
+    async def _missing_resume_handler(  # pyright: ignore[reportUnusedFunction]
+        _request: Request, exc: MissingResumeError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": str(exc) or "Add your resume before generating this."},
+        )
 
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
