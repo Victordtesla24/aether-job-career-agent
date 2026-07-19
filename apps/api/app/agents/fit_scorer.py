@@ -1,9 +1,11 @@
 """FitScorer agent — ATS-scores every unscored job for a user (P2-S04).
 
-Reads the CALLER's own base resume text (``resolve_user_resume_text`` —
-bundled asset only when the user has no resume on file), runs
-:class:`ATSEngine` against each job description, and persists
-``fitScore``/``atsScore`` via the job repository.
+Scores against the CALLER's OWN base resume text and REFUSES
+(``MissingResumeError`` -> 422) when the user has no resume on file — a
+no-resume user is NEVER scored against the bundled operator resume
+(NF-final-B-008), so no operator-derived ``fitScore`` is ever persisted or
+shown as their own. Runs :class:`ATSEngine` against each job description and
+persists ``fitScore``/``atsScore`` via the job repository.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from typing import Any
 
 from app.repositories.job import JobRepository
 from app.services.ats_engine import ATSEngine
-from app.services.resume_grounding import resolve_user_resume_text
+from app.services.resume_grounding import require_user_resume_text
 
 #: Repo-root bundled base resume (read-only). Overridable for tests/deploys.
 _DEFAULT_RESUME = Path(__file__).resolve().parents[4] / "assets" / "resume" / "Vik_Resume_Final.pdf"
@@ -42,7 +44,12 @@ class FitScorerAgent:
 
     def run(self, user_id: str, rescore: bool = False) -> FitScoreResult:
         result = FitScoreResult()
-        resume_text = resolve_user_resume_text(user_id)
+        # Score ONLY against the caller's own resume; refuse (no operator
+        # fallback, no operator-derived fitScore) when they have none — the
+        # reserved run is refunded on this exception (NF-final-B-008).
+        resume_text = require_user_resume_text(
+            user_id, "Add your resume before scoring jobs against it."
+        )
         for job in self._repository.list_by_user(user_id):
             if job.get("fitScore") is not None and not rescore:
                 continue

@@ -496,3 +496,32 @@ def test_no_resume_user_cover_letter_insights_shows_needs_resume(client):
         assert marker not in resp.text, (
             f"operator PII ({marker!r}) surfaced in a no-résumé user's cover-letter insights"
         )
+
+
+# --------------------------------------------------------------------------- #
+# NF-final-B-008 (MED) — the metered batch fit-scorer must NOT score a no-résumé
+# caller against the operator résumé: no operator-derived fitScore is ever
+# persisted (or shown as a job-list badge), and the refused run is not charged.
+# --------------------------------------------------------------------------- #
+def test_no_resume_user_fit_scoring_refused_no_operator_score(client):
+    """A no-résumé user running the fit scorer is honestly refused (422) and NO
+    operator-derived fitScore is persisted on their jobs."""
+    user_id, headers = _register_fresh_user(client)
+    run = client.post(
+        "/agents/scout/run",
+        json={"query": "python engineer", "location": "Sydney"},
+        headers=headers,
+    )
+    assert run.status_code == 202, run.text
+    jobs_before = client.get("/jobs?include_stale=true", headers=headers).json()
+    assert jobs_before and all(j["fitScore"] is None for j in jobs_before), jobs_before
+
+    resp = client.post("/agents/fit-scorer/run", headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert "Add your resume" in resp.json()["detail"]
+
+    jobs_after = client.get("/jobs?include_stale=true", headers=headers).json()
+    leaked = [(j["id"], j["fitScore"]) for j in jobs_after if j["fitScore"] is not None]
+    assert leaked == [], (
+        f"operator-derived fitScore persisted for a no-résumé user: {leaked!r}"
+    )
