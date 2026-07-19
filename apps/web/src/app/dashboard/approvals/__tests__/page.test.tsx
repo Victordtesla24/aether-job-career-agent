@@ -49,7 +49,14 @@ function approval(overrides: Partial<Approval> = {}): Approval {
     type: "application_submit",
     status: "pending",
     payload: { job_title: "Senior ML Engineer", company: "Canva" },
-    createdAt: "2026-07-17T09:00:00Z",
+    // Computed relative to the real clock at call time (not a hardcoded
+    // calendar date) so this fixture never ages past the production
+    // isExpired() 48h window (components/approvals/lib.ts EXPIRY_HOURS) --
+    // a fixed past ISO string eventually crosses that threshold as real
+    // time passes, which disables the Approve/Reject buttons and makes
+    // every test below that clicks approve-btn fail deterministically
+    // regardless of run order or isolation (MV-approval-modal-008).
+    createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     resolvedAt: null,
     ...overrides,
   };
