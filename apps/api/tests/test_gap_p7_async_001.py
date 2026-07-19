@@ -498,6 +498,52 @@ def test_honest_error_body_on_worker_failure(
     assert _no_fingerprint(err)
 
 
+def test_noop_tailor_completes_not_failed(
+    client, auth_headers, test_user_id, bg_table, monkeypatch
+):
+    """MV-adv-A-002: a legitimate business no-op (the anti-fabrication guard
+    rejected EVERY proposed edit) must NOT be surfaced as a failed job — that
+    leaks the raw 'NoChangesApplied: ...' exception-class text to the client
+    (via ``_honest_message``) and reports a benign no-op as a failure. Mirror
+    the honest synchronous ``/tailor/run`` contract (``run_tailor``'s explicit
+    ``except NoChangesApplied`` handling, agents.py ~1250-1263): complete the
+    job with an honest ``noChangesApplied`` result and refund the reservation
+    (never billed for a run that changed nothing), exactly like Resume
+    Studio's no-op handling (MV-resume-studio-003)."""
+    from app.agents.tailor_agent import NoChangesApplied
+
+    _set_paid_plan(test_user_id)
+    UsageQuotaRepository().reserve(test_user_id)
+    run = AgentRunRepository().start(test_user_id, "tailor", {"job_id": "job-1"})
+    job_id = _seed_bg_job(test_user_id, "tailor", status="enqueued", run_id=run["id"],
+                          params={"job_id": "job-1"}, quota_reserved=True)
+    _stub_tailor(
+        monkeypatch,
+        raises=NoChangesApplied(rejected=["bullet one", "bullet two"]),
+    )
+
+    from app.workers.tasks import run_agent_job
+
+    asyncio.run(run_agent_job({}, job_id))
+
+    row = _get_bg_job(job_id)
+    # Completed (not failed) — a no-op is an honest OUTCOME, not a failure.
+    assert row["status"] == "completed"
+    assert row.get("error") is None
+    result = row["result"]
+    assert result is not None
+    assert result["noChangesApplied"] is True
+    assert result["resume_id"] is None
+    assert result["changes"] == 0
+    assert result["rejected"] == ["bullet one", "bullet two"]
+    message = (result.get("message") or "").lower()
+    assert "no verifiable changes" in message
+    # NEVER the raw Python exception-class prefix a user should never see.
+    assert "nochangesapplied" not in message
+    # The reserved run is refunded — a legitimate no-op is never billed.
+    assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
+
+
 # ===========================================================================
 # 7) Pipeline partial refund on a mid-run worker crash (fable-5 condition 1).
 # ===========================================================================

@@ -150,6 +150,7 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     Terminal transitions are atomic first-terminal-wins (reviewer BLOCKING-2): the
     winner of mark_failed/mark_completed performs the associated billing side
     effect exactly once (refund on fail via the atomic claim; spend on complete)."""
+    from app.agents.tailor_agent import NoChangesApplied
     from app.routers.agents import _pipeline_job_ctx
 
     repo = BackgroundJobRepository()
@@ -188,6 +189,28 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         result = await asyncio.to_thread(_run_single_agent_body, job)
     except _TransientError:
         raise
+    except NoChangesApplied as exc:
+        # MV-adv-A-002: every proposed edit was rejected by the anti-fabrication
+        # guard — a legitimate business no-op, NOT a failure. Mirror the honest
+        # synchronous ``/tailor/run`` contract (agents.py ``run_tailor``'s
+        # ``except NoChangesApplied`` handling): complete the job with an honest
+        # no-op result and refund the reservation (never billed for a run that
+        # changed nothing) — matching Resume Studio's no-op handling
+        # (MV-resume-studio-003). Never marked 'failed', so no leaked
+        # exception-class text ever reaches the client's error path.
+        honest_result = {
+            "resume_id": None,
+            "changes": 0,
+            "rejected": exc.rejected,
+            "conversionMetrics": None,
+            "noChangesApplied": True,
+            "approvalRequired": False,
+            "message": str(exc),
+        }
+        if repo.mark_completed(job_id, honest_result):
+            repo.refund_single_reservation(job_id)
+        logger.info("job %s no-op (NoChangesApplied): 0 net edits, refunded", job_id)
+        return
     except Exception as exc:  # noqa: BLE001
         # First-terminal-wins: only the winner refunds (atomic + idempotent claim),
         # so a watchdog that already failed+refunded this job is not double-counted.

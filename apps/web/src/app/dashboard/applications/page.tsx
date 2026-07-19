@@ -319,7 +319,13 @@ export default function ApplicationsPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">Application Tracker</h1>
           <p className="mono mt-1 text-xs text-aether-muted-dim" data-testid="tracker-subtitle">
-            {activeCount} active application{activeCount === 1 ? "" : "s"} across 8 stages
+            {/* MV-adv-A-001: this counts every board card — sourced jobs still
+                pre-application PLUS non-closed applications (incl. drafts) —
+                which is NOT the canonical submitted-application count the
+                dashboard/mobile/analytics surfaces show. Label it honestly as
+                a pipeline count so "applications" is never overloaded with
+                two different numbers under the same name. */}
+            {activeCount} pipeline item{activeCount === 1 ? "" : "s"} across 8 stages
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

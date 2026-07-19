@@ -316,3 +316,50 @@ describe("Tailoring honesty note (MV-job-discovery-005)", () => {
     expect(note.toLowerCase()).toMatch(/unsupported/);
   });
 });
+
+describe("Jobs-board no-op honesty (MV-adv-A-002)", () => {
+  it("surfaces a full-rejection tailor no-op as an informational notice, never a red error with a leaked exception-class name", async () => {
+    apiRequest.mockImplementation(
+      async (path: string, options?: { method?: string; body?: unknown }) => {
+        if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
+        const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
+        if (insightsMatch) return insightsFor(insightsMatch[1]);
+        if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
+        if (path === "/agents/tailor/run" && options?.method === "POST") {
+          // The honest no-op body BOTH the synchronous /tailor/run route and
+          // (post MV-adv-A-002 fix) the async worker's completed
+          // BackgroundJob result return — never a thrown "NoChangesApplied:
+          // ..." error (MV-resume-studio-003 parity).
+          return {
+            resume_id: null,
+            changes: 0,
+            rejected: ["b1", "b2"],
+            conversionMetrics: null,
+            noChangesApplied: true,
+            approvalRequired: false,
+            message:
+              "No verifiable changes could be applied — every suggested edit was unsupported by your evidence, so your résumé is unchanged and you were not charged.",
+          };
+        }
+        throw new Error(`unexpected apiRequest(${path})`);
+      },
+    );
+
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByTestId("tailor-resume"));
+
+    const notice = await screen.findByTestId("tailor-notice");
+    expect(notice.textContent?.toLowerCase()).toContain("no verifiable changes");
+    // NEVER the raw Python exception-class prefix a user should never see.
+    expect(notice.textContent?.toLowerCase()).not.toContain("nochangesapplied");
+
+    // Never the red error banner, and never a fabricated "tailored" success
+    // state (0 changes is not a success worth a green checkmark) — the flow
+    // resets to "idle" so the user can retry, exactly like Resume Studio.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByTestId("apply-step2")).toBeNull();
+    expect(screen.getByTestId("tailor-resume")).not.toBeNull();
+  });
+});
