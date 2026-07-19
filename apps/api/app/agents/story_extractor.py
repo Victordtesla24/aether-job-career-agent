@@ -11,10 +11,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.story import StoryRepository
 from app.services.llm_client import LLMClient, get_model
-from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_grounding import resolve_user_resume_text
 
 SYSTEM_PROMPT = (
     "You are a career-story analyst. Extract STAR (Situation, Task, Action, "
@@ -80,25 +79,10 @@ class StoryExtractorAgent:
 
     @staticmethod
     def _resolve_resume_text(user_id: str) -> str:
-        """The caller's OWN resume text (MV-story-bank-006).
-
-        Grounds extraction in the user's base résumé version (``sections.raw_text``,
-        falling back to its bullets) so the Story Bank reflects THIS user's résumé
-        — never a fixed operator-configured PDF that could surface another
-        account's content. Only when the user has no résumé on file does it fall
-        back to the bundled base resume, preserving prior behaviour.
-        """
-        from app.repositories.resume import ResumeRepository
-
-        base = ResumeRepository().get_base(user_id)
-        if base:
-            sections = base.get("sections") or {}
-            text = sections.get("raw_text") or "\n".join(
-                str(b.get("text", "")) for b in sections.get("bullets", []) if b.get("text")
-            )
-            if text and text.strip():
-                return text
-        return parse_resume_pdf(get_base_resume_path())["raw_text"]
+        """The caller's OWN resume text (MV-story-bank-006) — delegates to the
+        shared per-user grounding helper so every agent path resolves résumé text
+        identically (bundled base PDF only when the user has no résumé)."""
+        return resolve_user_resume_text(user_id)
 
     @staticmethod
     def _metrics_evidenced(metrics: dict[str, Any], resume_numbers: set[str]) -> bool:

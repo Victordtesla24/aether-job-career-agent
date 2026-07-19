@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.agents.fit_scorer import get_base_resume_path
 from app.agents.tailor_agent import TailoringAgent, build_story_evidence
 from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
@@ -34,7 +33,7 @@ from app.services.llm_client import (
     get_model,
     shared_budget,
 )
-from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_grounding import resolve_user_resume_text
 from app.services.resume_tailor import unsupported_claim_tokens
 
 SYSTEM_PROMPT = (
@@ -1185,7 +1184,7 @@ class CoverLetterAgent:
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
 
-        resume_text = parse_resume_pdf(get_base_resume_path())["raw_text"]
+        resume_text = resolve_user_resume_text(user_id)
         user = self._users.get_by_id(user_id) or {}
         signer = str(user.get("name") or "")
         # ``targetRole`` is an additive profile column not carried by the default

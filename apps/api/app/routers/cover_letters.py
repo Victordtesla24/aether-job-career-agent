@@ -37,7 +37,6 @@ from app.agents.cover_letter_agent import (
     strip_letter_scaffolding,
     wrap_untrusted_block,
 )
-from app.agents.fit_scorer import get_base_resume_path
 from app.middleware.auth import CurrentUser
 from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
@@ -53,7 +52,10 @@ from app.services.llm_client import (
     get_model,
     shared_budget,
 )
-from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_grounding import (
+    resolve_user_resume_contact,
+    resolve_user_resume_text,
+)
 
 router = APIRouter()
 
@@ -67,12 +69,6 @@ _STOPWORDS = frozenset(
     how when across own more most very than then also both each
     """.split()
 )
-
-
-@lru_cache(maxsize=1)
-def _resume_text() -> str:
-    """Base resume text, parsed once — the PDF never changes at runtime."""
-    return parse_resume_pdf(get_base_resume_path())["raw_text"]
 
 
 def _tokens(text: str) -> set[str]:
@@ -98,9 +94,13 @@ _KEYWORD_BOILERPLATE = frozenset(
     """
     posted about looking apply applying applicant applicants candidate candidates
     role roles position positions job jobs description responsibilities
-    requirements requirement location locations remote hybrid onsite based team
-    teams company companies please note join joining opportunity opportunities
-    ago day days week weeks month months year years now today
+    requirements requirement required require requires location locations remote
+    hybrid onsite based team teams company companies please note notice join
+    joining opportunity opportunities ago day days week weeks month months year
+    years now today details detail visit visiting tag tags skills skill
+    anti-scrape scrape scraping click view views page pages website websites site
+    sites submit submitting learn read overview summary benefits benefit hiring
+    hire careers career preferred posting listing listings
     """.split()
 )
 
@@ -115,6 +115,48 @@ _VOWEL = re.compile(r"[aeiouy]", re.I)
 #: Edge punctuation stripped from a raw token before it is shown as a keyword
 #: (so "PM." → "PM", "Engineer." → "Engineer").
 _KEYWORD_EDGE = ".,;:!?()[]{}\"'`/\\|"
+
+#: Common technology / professional skill tokens that always rank ahead of
+#: generic JD prose so real skills surface within the coverage cap even when
+#: they appear late in the posting (MV-cover-letter-studio-006).
+_SKILL_HINTS = frozenset(
+    """
+    python java javascript typescript golang rust ruby php scala kotlin swift
+    node nodejs deno react angular vue svelte nextjs django flask fastapi spring
+    rails express dotnet kubernetes docker terraform ansible puppet chef jenkins
+    gitlab github circleci aws gcp azure lambda ec2 s3 cloudformation postgres
+    postgresql mysql mariadb mongodb dynamodb redis kafka rabbitmq elasticsearch
+    graphql grpc rest soap sql nosql linux unix bash powershell git svn agile
+    scrum kanban jira confluence tableau powerbi looker excel pandas numpy scipy
+    pytorch tensorflow keras sklearn scikit spark hadoop hive airflow snowflake
+    databricks etl elt mlops devops sre observability prometheus grafana datadog
+    splunk microservices serverless api sdk oauth saml jwt cryptography networking
+    tcp http css html sass webpack vite babel jest cypress playwright selenium
+    pytest junit leadership stakeholder roadmap architecture scalability
+    reliability distributed
+    """.split()
+)
+
+
+def _skill_score(token: str) -> int:
+    """Skill-likeness of a JD token — higher is more skill-like. Ranks plausible
+    skills ahead of surviving generic prose BEFORE the coverage cap so real
+    skills (Kubernetes/Docker/Terraform/PostgreSQL) are never crowded out by raw
+    JD ordering (MV-cover-letter-studio-006)."""
+    low = token.lower()
+    score = 0
+    if low in _SKILL_HINTS:
+        score += 120
+    if any(ch in token for ch in "+#."):          # C++, C#, Node.js, CI/CD
+        score += 40
+    if any(c.isupper() for c in token[1:]):        # PostgreSQL, JavaScript, GraphQL
+        score += 45
+    if token[:1].isupper() and len(token) >= 4:    # Kubernetes, Terraform, Docker
+        score += 25
+    if token.isupper() and 2 <= len(token) <= 5:   # AWS, GCP, SQL, REST, API
+        score += 30
+    score += min(len(token), 14)                   # distinctiveness tiebreak
+    return score
 
 
 def _is_semantic_keyword(token: str) -> bool:
@@ -145,13 +187,18 @@ def _is_semantic_keyword(token: str) -> bool:
 
 
 def _jd_keywords(jd: str) -> list[str]:
-    """Ordered, deduped, semantic JD keywords for the coverage panel.
+    """Deduped, semantic JD keywords for the coverage panel, ranked by
+    skill-likeness.
 
     The JD is first passed through :func:`sanitize_untrusted_text` (so an
     injected token like 'ZEBRA' in an 'include the token ZEBRA' clause is
     dropped, not surfaced as a keyword — MV-cover-letter-studio-006/008); the
     redaction placeholder is removed; each token is stripped of edge punctuation
-    and filtered to plausible skills/terms."""
+    and filtered to plausible skills/terms. The survivors are then ordered by
+    :func:`_skill_score` (Python's stable sort keeps JD order among equal
+    scores) so that when the caller caps the panel at N, genuine skills surface
+    ahead of surviving generic prose even when they appear late in the posting
+    (MV-cover-letter-studio-006)."""
     sanitized = (sanitize_untrusted_text(jd) or "").replace(REDACTION_PLACEHOLDER, " ")
     seen: set[str] = set()
     out: list[str] = []
@@ -162,7 +209,7 @@ def _jd_keywords(jd: str) -> list[str]:
             continue
         seen.add(low)
         out.append(cleaned)
-    return out
+    return sorted(out, key=lambda t: -_skill_score(t))
 
 
 def _story_corpus(story: dict[str, Any]) -> str:
@@ -181,7 +228,10 @@ def _find_phrase(letter_lower: str, letter: str, phrase: str) -> str | None:
 
 
 def _evidence_trace(
-    letter: str, stories: list[dict[str, Any]], job: dict[str, Any] | None
+    letter: str,
+    stories: list[dict[str, Any]],
+    job: dict[str, Any] | None,
+    resume_text: str,
 ) -> list[dict[str, Any]]:
     """Claim → source rows: green when a Story Bank entry backs the phrase,
     amber when the letter echoes the JD with no personal evidence behind it."""
@@ -222,7 +272,7 @@ def _evidence_trace(
 
     # JD-echo claims with no personal evidence: in the letter and the job
     # description, but absent from resume + story corpora → "add or soften".
-    personal = _tokens(_resume_text()).union(*(_tokens(_story_corpus(s)) for s in stories))
+    personal = _tokens(resume_text).union(*(_tokens(_story_corpus(s)) for s in stories))
     jd_tokens = _tokens(f"{(job or {}).get('title', '')} {(job or {}).get('description', '')}")
     for word in _meaningful(letter):
         low = word.lower()
@@ -294,8 +344,9 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
     job = JobRepository().get_by_id(letter["jobId"], user_id)
     stories = StoryRepository().list_by_user(user_id)
 
+    resume_text = resolve_user_resume_text(user_id)
     corpus = " ".join(
-        [_resume_text(), (job or {}).get("title", ""), (job or {}).get("company", ""),
+        [resume_text, (job or {}).get("title", ""), (job or {}).get("company", ""),
          (job or {}).get("description", "")]
         + [_story_corpus(s) for s in stories]
     )
@@ -319,7 +370,7 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
         "jobTitle": (job or {}).get("title"),
         "company": (job or {}).get("company"),
         "wordCount": len(text.split()),
-        "evidence": _evidence_trace(text, stories, job),
+        "evidence": _evidence_trace(text, stories, job, resume_text),
         "keywords": _keyword_coverage(text, job),
         "voice": _voice_metrics(text, corpus),
         "versions": versions,
@@ -368,7 +419,7 @@ def refine_cover_letter(
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job for this letter not found")
 
-    resume_text = _resume_text()
+    resume_text = resolve_user_resume_text(user_id)
     guard = FabricationGuard()
     signer = str(current_user.get("name") or "")
     # ``current_user`` comes from the default UserRepository projection, which
@@ -537,17 +588,12 @@ def _pdf_fonts() -> tuple[str, str]:
     return "Helvetica", "Helvetica-Bold"
 
 
-@lru_cache(maxsize=1)
-def _resume_contact() -> dict[str, Any]:
-    """Candidate contact fields parsed once from the base resume PDF."""
-    return dict(parse_resume_pdf(get_base_resume_path())["contact"])
-
-
 def _sender_block(user: dict[str, Any]) -> tuple[str, list[str]]:
     """Sender identity for the letterhead: name/email from the workspace profile,
-    supplemented with the résumé's own phone and profile links so the exported
-    letter carries the candidate's real contact details (GAP-P4-048)."""
-    contact = _resume_contact()
+    supplemented with the CALLER's own résumé phone and profile links so the
+    exported letter carries THIS user's real contact details — never a fixed
+    operator résumé's (GAP-P4-048, NF-final-B-001)."""
+    contact = resolve_user_resume_contact(user.get("id", ""))
     name = str(user.get("name") or "").strip()
     email = str(user.get("email") or contact.get("email") or "").strip()
     primary = [v for v in (email, contact.get("phone")) if v]

@@ -1,21 +1,21 @@
 """FitScorer agent — ATS-scores every unscored job for a user (P2-S04).
 
-Reads the user's parsed base resume text (bundled asset for now — resume
-upload lands later), runs :class:`ATSEngine` against each job description,
-and persists ``fitScore``/``atsScore`` via the job repository.
+Reads the CALLER's own base resume text (``resolve_user_resume_text`` —
+bundled asset only when the user has no resume on file), runs
+:class:`ATSEngine` against each job description, and persists
+``fitScore``/``atsScore`` via the job repository.
 """
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app.repositories.job import JobRepository
 from app.services.ats_engine import ATSEngine
-from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_grounding import resolve_user_resume_text
 
 #: Repo-root bundled base resume (read-only). Overridable for tests/deploys.
 _DEFAULT_RESUME = Path(__file__).resolve().parents[4] / "assets" / "resume" / "Vik_Resume_Final.pdf"
@@ -23,12 +23,6 @@ _DEFAULT_RESUME = Path(__file__).resolve().parents[4] / "assets" / "resume" / "V
 
 def get_base_resume_path() -> Path:
     return Path(os.environ.get("AETHER_RESUME_PDF", str(_DEFAULT_RESUME)))
-
-
-@lru_cache(maxsize=1)
-def _resume_text() -> str:
-    """Parse (and cache) the base resume text — the PDF never changes at runtime."""
-    return parse_resume_pdf(get_base_resume_path())["raw_text"]
 
 
 @dataclass
@@ -48,7 +42,7 @@ class FitScorerAgent:
 
     def run(self, user_id: str, rescore: bool = False) -> FitScoreResult:
         result = FitScoreResult()
-        resume_text = _resume_text()
+        resume_text = resolve_user_resume_text(user_id)
         for job in self._repository.list_by_user(user_id):
             if job.get("fitScore") is not None and not rescore:
                 continue

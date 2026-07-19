@@ -181,17 +181,21 @@ def _clean_skills(keywords: list[str], entities: set[str]) -> list[str]:
     return out
 
 
-def _build_insights(job: dict[str, Any]) -> dict[str, Any]:
-    """Run the real ATS engine + deterministic field blends into a UI payload."""
-    from app.agents.fit_scorer import _resume_text
+def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Run the real ATS engine + deterministic field blends into a UI payload.
+
+    Grounds the fit analysis on the CALLER's own base resume (NF-final-B-002) —
+    never a fixed operator resume.
+    """
     from app.services.ats_engine import ATSEngine
+    from app.services.resume_grounding import resolve_user_resume_text
 
     title = job.get("title", "")
     remote = bool(job.get("remote"))
     au = _is_au(job)
 
     try:
-        score = ATSEngine().score(_resume_text(), _job_text(job))
+        score = ATSEngine().score(resolve_user_resume_text(user_id), _job_text(job))
         km = float(score.keyword_match)
         sem = float(score.semantic_similarity)
         exp = float(score.experience_gap)
@@ -281,7 +285,7 @@ def job_insights(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     job = JobRepository().get_by_id(job_id, current_user["id"])
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _build_insights(job)
+    return _build_insights(job, current_user["id"])
 
 
 @router.post("/{job_id}/save")
