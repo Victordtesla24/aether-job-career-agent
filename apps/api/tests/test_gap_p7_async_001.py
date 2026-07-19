@@ -544,6 +544,50 @@ def test_noop_tailor_completes_not_failed(
     assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
 
 
+def test_missing_resume_completes_not_failed(
+    client, auth_headers, test_user_id, bg_table, monkeypatch
+):
+    """NF-final-PII-002: a no-résumé user's async cover-letter/tailor refusal
+    (``MissingResumeError``, NF-final-B-001/005) must NOT surface as a 'failed'
+    job with the raw 'MissingResumeError: ...' exception-class prefix leaked via
+    ``_honest_message`` — that both leaks an internal class name AND mislabels a
+    legitimate, honest refusal as a failure. Mirror
+    ``test_noop_tailor_completes_not_failed`` immediately above: complete the
+    job with the SAME honest message the synchronous 422 path surfaces (no
+    class prefix — main.py's ``MissingResumeError`` handler uses ``str(exc)``
+    verbatim) and refund the reservation — never billed for a refused run."""
+    from app.services.resume_grounding import MissingResumeError
+
+    _set_paid_plan(test_user_id)
+    UsageQuotaRepository().reserve(test_user_id)
+    run = AgentRunRepository().start(test_user_id, "tailor", {"job_id": "job-1"})
+    job_id = _seed_bg_job(test_user_id, "tailor", status="enqueued", run_id=run["id"],
+                          params={"job_id": "job-1"}, quota_reserved=True)
+    _stub_tailor(
+        monkeypatch,
+        raises=MissingResumeError(
+            "Add your resume before tailoring or generating an application."
+        ),
+    )
+
+    from app.workers.tasks import run_agent_job
+
+    asyncio.run(run_agent_job({}, job_id))
+
+    row = _get_bg_job(job_id)
+    # Completed (not failed) — an honest refusal is an outcome, not a failure.
+    assert row["status"] == "completed"
+    assert row.get("error") is None
+    result = row["result"]
+    assert result is not None
+    message = result.get("message") or ""
+    assert message == "Add your resume before tailoring or generating an application."
+    # NEVER the raw Python exception-class prefix a user should never see.
+    assert "missingresumeerror" not in message.lower()
+    # The reserved run is refunded — never billed for a refused run.
+    assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
+
+
 # ===========================================================================
 # 7) Pipeline partial refund on a mid-run worker crash (fable-5 condition 1).
 # ===========================================================================

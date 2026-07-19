@@ -152,6 +152,7 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     effect exactly once (refund on fail via the atomic claim; spend on complete)."""
     from app.agents.tailor_agent import NoChangesApplied
     from app.routers.agents import _pipeline_job_ctx
+    from app.services.resume_grounding import MissingResumeError
 
     repo = BackgroundJobRepository()
     job = repo.mark_processing(job_id)
@@ -210,6 +211,28 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         if repo.mark_completed(job_id, honest_result):
             repo.refund_single_reservation(job_id)
         logger.info("job %s no-op (NoChangesApplied): 0 net edits, refunded", job_id)
+        return
+    except MissingResumeError as exc:
+        # NF-final-PII-002: an OUTBOUND generation path (cover letter, tailor,
+        # fit-scorer) refused because this user has no résumé of their own — a
+        # legitimate, honest refusal (NF-final-B-001/005/008), NOT a failure.
+        # Mirror the NoChangesApplied handling immediately above: complete the
+        # job with the SAME honest, PII-free message the synchronous 422 path
+        # surfaces (main.py's ``MissingResumeError`` handler renders
+        # ``str(exc)`` verbatim) and refund the reservation — never "failed",
+        # and never the leaked "MissingResumeError:" class prefix the generic
+        # ``except Exception`` branch below would add via ``_honest_message``.
+        honest_message = str(exc).strip() or "Add your resume before generating this."
+        honest_result = {
+            "resume_id": None,
+            "missingResume": True,
+            "message": honest_message,
+        }
+        if repo.mark_completed(job_id, honest_result):
+            repo.refund_single_reservation(job_id)
+        logger.info(
+            "job %s refused (MissingResumeError): no resume on file, refunded", job_id
+        )
         return
     except Exception as exc:  # noqa: BLE001
         # First-terminal-wins: only the winner refunds (atomic + idempotent claim),
