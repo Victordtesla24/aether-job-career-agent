@@ -688,6 +688,8 @@ def _execute_reserved_run(
     ``_pipeline_job_ctx``, an actual refund is additionally counted on the job so
     a mid-pipeline crash refund is reservation-scoped (BLOCKING-3).
     """
+    from app.agents.tailor_agent import NoChangesApplied
+
     runs = AgentRunRepository()
     _bg = _pipeline_job_ctx.get()
 
@@ -707,6 +709,37 @@ def _execute_reserved_run(
     except HTTPException:
         runs.finish(run_id, "failed", error="http error")
         _refund_once()  # reserved run produced no output
+        raise
+    except NoChangesApplied as exc:
+        # MV-adv-A-002 (AgentRun audit-row half): every proposed edit was
+        # rejected by the anti-fabrication guard — a legitimate business
+        # no-op, NOT a failure. ``GET /agents/runs`` is a plain-CurrentUser
+        # (owner-visible, not admin-gated) endpoint rendered verbatim in the
+        # /dashboard/agents "Recent runs" table, so recording this as
+        # status='failed' with ``str(exc)`` would leak nothing extra here
+        # (str(exc) itself carries no class name) but STILL mislabels an
+        # honest no-op as a red "failed" row to its own owner. Record an
+        # honest COMPLETED no-op — the exact same body the caller's
+        # ``except NoChangesApplied`` handling returns over HTTP (sync
+        # ``run_tailor``) or completes the BackgroundJob with (async
+        # ``run_agent_job``) — then re-raise so those callers keep building
+        # their own response/job-result shape unchanged.
+        honest_output = {
+            "resume_id": None,
+            "changes": 0,
+            "rejected": exc.rejected,
+            "conversionMetrics": None,
+            "noChangesApplied": True,
+            "approvalRequired": False,
+            "message": str(exc),
+        }
+        runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
+        # Refund only when THIS function manages quota (the sync path,
+        # manage_quota=True); the async worker performs its own refund via
+        # BackgroundJobRepository.refund_single_reservation AFTER this
+        # re-raises (manage_quota=False here makes _refund_once() a no-op),
+        # so a no-op is refunded exactly once on either path, never twice.
+        _refund_once()
         raise
     except QuotaExhaustedError as exc:
         # Subscription quota exhausted mid-run — record honestly and 429.

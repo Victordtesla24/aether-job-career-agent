@@ -236,6 +236,42 @@ class TestNoSilentBilledNoOp:
         assert quota is not None
         assert int(quota["runsUsed"]) == 0
 
+    def test_noop_agent_run_audit_row_is_honest_not_failed(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """MV-adv-A-002 (AgentRun audit-row half): ``GET /agents/runs`` is a
+        plain-``CurrentUser`` (NOT admin) endpoint rendered verbatim in the
+        /dashboard/agents "Recent runs" table (status + error columns), so a
+        legitimate full-rejection no-op must not be recorded as
+        ``status='failed'`` with a leaked ``'NoChangesApplied: ...'``
+        exception-class error string — that would show the run's OWNER a red
+        "failed" row with raw internal exception text. ``_execute_reserved_run``
+        must record an honest COMPLETED no-op instead (mirrors the HTTP
+        response body), matching the async worker's BackgroundJob treatment."""
+        job = _seed_job(client, auth_headers)
+        self._force_noop(monkeypatch)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert resp.status_code == 200, resp.text
+
+        from app.repositories.agent_run import AgentRunRepository
+
+        runs = AgentRunRepository().list_recent(user_id, limit=5)
+        tailor_runs = [r for r in runs if r["agentName"] == "tailor"]
+        assert tailor_runs, "no AgentRun row recorded for the tailor no-op"
+        run = tailor_runs[0]
+        assert run["status"] != "failed", run
+        assert run["status"] == "completed"
+        error_text = (run.get("error") or "").lower()
+        assert "nochangesapplied" not in error_text
+        output = run.get("output") or {}
+        if isinstance(output, str):
+            import json as _json
+
+            output = _json.loads(output)
+        assert output.get("noChangesApplied") is True
+
     def test_pipeline_tolerates_a_noop_tailor(self, client, auth_headers, monkeypatch):
         """A no-op tailor inside the full pipeline must NOT fail the whole run —
         the cover-letter step draws on the base résumé regardless."""
