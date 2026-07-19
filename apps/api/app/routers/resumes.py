@@ -248,7 +248,8 @@ def _branded_content(
 def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
     """Download a resume as a format-preserving PDF.
 
-    - **Base resume** (no parent): the original bundled PDF bytes, verbatim.
+    - **Base resume** (no parent) backed by a bundled asset: the original
+      bundled PDF bytes, verbatim.
     - **Tailored resume**: the original PDF with *only* the reworded bullets
       redrawn in place — same two-column layout, peach title panel, coral
       accents and fonts — plus a subtle highlight behind each changed bullet.
@@ -288,14 +289,17 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
         (parent or resume).get("formatHash") or resume.get("formatHash")
     )
 
-    if original.exists():
-        # Source PDF on hand → preserve its exact layout.
+    if original is not None and original.exists():
+        # A bundled source PDF backs THIS résumé (seeded base / BA variant) →
+        # preserve its exact layout.
         if parent is None:
             pdf_bytes = original.read_bytes()  # base → verbatim bytes
         else:
             pdf_bytes = render_tailored_pdf(original, changes)  # splice in place
     else:
-        # No source PDF → structured render with the branded template.
+        # No bundled source PDF for this résumé — a user-authored upload/ingest
+        # (NF-final-B-005) → render from the résumé's OWN structured content with
+        # the branded template; never serve the operator's bundled PDF bytes.
         name, title, objective, sections = _branded_content(resume)
         pdf_bytes = create_branded_resume_pdf(
             name, title, objective, sections, changes or None

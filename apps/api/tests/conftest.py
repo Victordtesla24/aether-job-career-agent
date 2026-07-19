@@ -363,3 +363,90 @@ def test_user_id(client, auth_headers) -> str:
     when conftest switched to random UUID emails.
     """
     return client._test_user_id
+
+
+# ---------------------------------------------------------------------------
+# Own-resume seeding — OUTBOUND generation paths (cover letter, tailoring,
+# email drafts) now REFUSE (422) for an authed user with no résumé of their
+# OWN on file (app/services/resume_grounding.py; NF-final-B-001/005). Every
+# test that generates an outbound artifact for the default fixture user must
+# seed that user a real, non-operator base résumé first.
+# ---------------------------------------------------------------------------
+
+#: A realistic, clearly-NOT-the-bundled-operator résumé: distinctive markers
+#: (name, employers, contact) plus enough structured content (bullets/skills)
+#: to pass structural + fabrication-guard checks. Kept VERBATIM as specified —
+#: do not edit; use ``FIXTURE_LLM_RESUME_TEXT`` below for flows that need
+#: extra vocabulary to ground a static LLM replay fixture.
+JORDAN_RESUME_TEXT = """JORDAN RIVERA
+Senior Software Engineer — Melbourne, Australia
+jordan.rivera@example.com | +61 400 111 222 | linkedin.com/in/jordanrivera
+
+SUMMARY
+Senior software engineer with 8 years building distributed backend systems.
+
+EXPERIENCE
+Lead Engineer, Canvatech (2020-2024)
+- Led 6 engineers on a payments platform in Python and PostgreSQL, improving throughput 40 percent.
+- Migrated services to Kubernetes and Docker, cutting deploy time from 30 minutes to 5 minutes.
+- Built a FastAPI microservice handling 2 million requests per day with Redis caching.
+
+Software Engineer, Atlassian (2016-2020)
+- Shipped React and TypeScript features for a project management product used by 500 teams.
+- Automated CI pipelines with Jenkins and Terraform, reducing manual releases by 80 percent.
+
+SKILLS
+Python, PostgreSQL, Kubernetes, Docker, FastAPI, React, TypeScript, Terraform, Redis, AWS
+"""
+
+#: For tests that drive a REAL (non-stub-LLM) generation end-to-end through
+#: ``AETHER_LLM_MODE=replay`` — e.g. ``POST /agents/cover-letter/run`` /
+#: ``POST /cover-letters/{id}/refine`` / ``POST /agents/tailor/run`` without
+#: injecting a fake LLM — the replay fixtures
+#: (``tests/fixtures/llm/<prompt_name>/{default,retry}.json``) are STATIC
+#: canned text keyed only by ``fixture_key`` (never by prompt content),
+#: recorded back when every no-resume user fell back to the bundled operator
+#: PDF. Their fixed wording references that PDF's own specific vocabulary
+#: (e.g. "PI Planning", "Next.js", "Supabase", "LLM ... Langfuse and Phoenix",
+#: "3 hours ... 15 minutes", "AI/ML", "$5M", "92%", "MLOps", "CI/CD", "P95")
+#: — so the FabricationGuard/entailment checks need those exact tokens
+#: present in the SEEDED user's evidence corpus too, or an otherwise-correct
+#: canned fixture answer gets rejected as "fabricated" purely because the
+#: (non-operator) seeded résumé never mentions them. This is
+#: ``JORDAN_RESUME_TEXT`` plus that vocabulary, under the same non-operator
+#: identity — never the operator's own name/contact/employers.
+FIXTURE_LLM_RESUME_TEXT = (
+    JORDAN_RESUME_TEXT.rstrip()
+    + "\n\n"
+    + (
+        "ADDITIONAL DELIVERY & PLATFORM WORK\n"
+        "- Owned sprint cadence and PI Planning for delivery squads, plus capacity "
+        "management and executive status reporting.\n"
+        "- Built LLM evaluation stacks with Langfuse and Phoenix, and delivered "
+        "analytics applications with Next.js and Supabase.\n"
+        "- Ran test-automation strategies that cut evidence effort from roughly 3 "
+        "hours to about 15 minutes per scenario.\n"
+        "- Directed AI/ML and MLOps CI/CD initiatives across a program portfolio "
+        "valued at over $5M, cutting evidence effort per scenario by about 92%.\n"
+        "- Built LLM-powered retrospective dashboards, reducing error-budget "
+        "breaches by 38%, keeping P95 latency under 200 ms, and maintaining "
+        "100% regulatory compliance for data initiatives.\n"
+    )
+)
+
+
+def seed_own_resume(client, auth_headers, *, raw_text: str | None = None) -> dict:
+    """POST a base résumé for the currently-authed fixture user and return it.
+
+    Every OUTBOUND generation path (cover letter, tailoring, email draft,
+    refine) now requires the authed user to have their OWN résumé on file —
+    call this at the top of any test/helper that drives one of those paths so
+    it gets a real 200/202 instead of a 422 "Add your resume" refusal.
+    """
+    resp = client.post(
+        "/resumes",
+        json={"label": "My resume", "raw_text": raw_text or JORDAN_RESUME_TEXT},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()

@@ -181,17 +181,79 @@ def _clean_skills(keywords: list[str], entities: set[str]) -> list[str]:
     return out
 
 
-def _build_insights(job: dict[str, Any]) -> dict[str, Any]:
-    """Run the real ATS engine + deterministic field blends into a UI payload."""
-    from app.agents.fit_scorer import _resume_text
+def _empty_insights(job: dict[str, Any]) -> dict[str, Any]:
+    """Honest empty-state for a caller with NO résumé of their own.
+
+    Read-only analytics must NEVER score a user against the bundled operator
+    résumé (NF-final-B-007): a no-résumé user sees only neutral, résumé-
+    independent signals (salary/location/stability + the salary risk) plus a
+    ``needsResume`` prompt — never operator-derived skills or numbers labelled as
+    their own fit.
+    """
+    remote = bool(job.get("remote"))
+    au = _is_au(job)
+    salary_fit = _salary_fit(job)
+    location_match = 100 if remote else (95 if au else 70)
+    stability = _round(_SOURCE_STABILITY.get(str(job.get("source", "")).lower(), 76)
+                       + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0))
+    dimensions = [
+        {"label": "Technical Skills", "score": 0},
+        {"label": "Experience Level", "score": 0},
+        {"label": "Industry Match", "score": 0},
+        {"label": "Role Alignment", "score": 0},
+        {"label": "Culture Fit", "score": 0},
+        {"label": "Salary Fit", "score": salary_fit},
+        {"label": "Location Match", "score": location_match},
+        {"label": "Career Growth", "score": 0},
+        {"label": "Company Stability", "score": stability},
+        {"label": "North Star Align", "score": 0},
+    ]
+    risks: list[dict[str, str]] = []
+    if job.get("salaryMin") is None and job.get("salaryMax") is None:
+        risks.append({"label": "No salary listed", "severity": "medium"})
+    return {
+        "jobId": job["id"],
+        "scored": False,
+        "needsResume": True,
+        "overall": 0,
+        "keywordMatch": 0,
+        "semantic": 0,
+        "experience": 0,
+        "skillsMatched": 0,
+        "skillsTotal": 0,
+        "matchedSkills": [],
+        "missingSkills": [],
+        "skillGap": None,
+        "narrative": (
+            "Add your resume to see how you match this role — we score your fit "
+            "against your own resume, never a sample."
+        ),
+        "dimensions": dimensions,
+        "riskSignals": risks,
+        "isAustralia": au,
+    }
+
+
+def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Run the real ATS engine + deterministic field blends into a UI payload.
+
+    Grounds the fit analysis on the CALLER's own base resume (NF-final-B-002).
+    A caller with NO résumé gets an honest empty-state — never a fit scored
+    against the bundled operator résumé (NF-final-B-007).
+    """
     from app.services.ats_engine import ATSEngine
+    from app.services.resume_grounding import resolve_user_resume_text
+
+    resume_text = resolve_user_resume_text(user_id, allow_operator_fallback=False)
+    if not resume_text.strip():
+        return _empty_insights(job)
 
     title = job.get("title", "")
     remote = bool(job.get("remote"))
     au = _is_au(job)
 
     try:
-        score = ATSEngine().score(_resume_text(), _job_text(job))
+        score = ATSEngine().score(resume_text, _job_text(job))
         km = float(score.keyword_match)
         sem = float(score.semantic_similarity)
         exp = float(score.experience_gap)
@@ -259,6 +321,7 @@ def _build_insights(job: dict[str, Any]) -> dict[str, Any]:
     return {
         "jobId": job["id"],
         "scored": scored,
+        "needsResume": False,
         "overall": _round(overall),
         "keywordMatch": _round(km),
         "semantic": _round(sem),
@@ -281,7 +344,7 @@ def job_insights(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     job = JobRepository().get_by_id(job_id, current_user["id"])
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _build_insights(job)
+    return _build_insights(job, current_user["id"])
 
 
 @router.post("/{job_id}/save")

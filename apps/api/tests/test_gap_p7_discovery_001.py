@@ -106,8 +106,12 @@ def test_scout_run_with_valid_system_secret_bypasses_paywall(
 def test_fit_scorer_run_with_valid_system_secret_bypasses_paywall(
     client, auth_headers, test_user_id, monkeypatch
 ):
+    from conftest import seed_own_resume
+
     monkeypatch.setenv("AETHER_SYSTEM_RUN_SECRET", SYSTEM_SECRET)
     ensure_user_billing(test_user_id)
+    # NF-final-B-008: the fit scorer scores only against the caller's own resume.
+    seed_own_resume(client, auth_headers)
     headers = {**auth_headers, "X-Aether-System-Run": SYSTEM_SECRET}
     r = client.post("/agents/fit-scorer/run", headers=headers)
     assert r.status_code == 200, r.text

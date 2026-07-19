@@ -8,6 +8,11 @@ from __future__ import annotations
 
 def _seed_jobs(client, auth_headers) -> list[dict]:
     """Run the scout (fixture mode) to seed discoverable jobs."""
+    from conftest import seed_own_resume
+
+    # NF-final-B-008: the fit scorer scores only against the caller's OWN
+    # resume, so give this user one (otherwise the run is honestly refused).
+    seed_own_resume(client, auth_headers)
     run = client.post(
         "/agents/scout/run",
         json={"query": "python engineer", "location": "Sydney"},

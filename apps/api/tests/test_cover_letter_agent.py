@@ -4,18 +4,21 @@ from __future__ import annotations
 import re
 
 import pytest
+from conftest import FIXTURE_LLM_RESUME_TEXT, JORDAN_RESUME_TEXT, seed_own_resume
 
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
     StructuralError,
     split_paragraphs,
 )
-from app.agents.fit_scorer import get_base_resume_path
 from app.services.fabrication_guard import FabricationGuard
-from app.services.resume_parser import parse_resume_pdf
 
 
 def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+    # This drives a REAL (non-stub) LLM replay generation, so the seeded
+    # resume must ground the STATIC "default"/"retry" replay fixtures'
+    # vocabulary too (see FIXTURE_LLM_RESUME_TEXT docstring in conftest.py).
+    seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
     run = client.post(
         "/agents/scout/run",
         json={"query": "python engineer", "location": "Sydney"},
@@ -47,14 +50,14 @@ class TestFabricationGuard:
 class TestCoverLetterAgent:
     def test_cover_letter_contains_no_invented_claims(self, client, auth_headers):
         body, job = _run_cover_letter(client, auth_headers)
-        parsed = parse_resume_pdf(get_base_resume_path())
         me = client.get("/auth/me", headers=auth_headers).json()
         signer = me.get("name") or ""
         # Mirror the agent's corpus: the letter date and signer name are
-        # system-generated ground truth, not fabrications.
+        # system-generated ground truth, not fabrications. The letter is now
+        # grounded on the SEEDED (own) résumé, not the bundled operator PDF.
         corpus = " ".join(
             [
-                parsed["raw_text"],
+                FIXTURE_LLM_RESUME_TEXT,
                 job["title"],
                 job["company"],
                 job.get("description") or "",
@@ -203,9 +206,17 @@ class TestStructuralContract:
         )
         assert any("role or company" in i for i in agent._structural_issues(no_hook, _JOB))
 
-    def test_violating_draft_is_retried_then_rejected(self):
+    def test_violating_draft_is_retried_then_rejected(self, monkeypatch):
         """A draft that never satisfies the contract is retried and then REJECTED
         (raising StructuralError) — never persisted as a soft best-effort pass."""
+        # DI-stub test using a fake user id ("user-1") that never goes through
+        # the real API, so it has no résumé of its own on file. Stub the
+        # OUTBOUND résumé-grounding lookup directly so the retry loop under
+        # test runs, rather than short-circuiting on MissingResumeError.
+        monkeypatch.setattr(
+            "app.agents.cover_letter_agent.require_user_resume_text",
+            lambda user_id, message: JORDAN_RESUME_TEXT,
+        )
 
         class _StubLLM:
             def __init__(self, body: str) -> None:

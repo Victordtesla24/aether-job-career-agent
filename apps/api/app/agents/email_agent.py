@@ -28,13 +28,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.agents.fit_scorer import get_base_resume_path
 from app.db import get_connection, rows_to_dicts
 from app.repositories.approval import ApprovalRepository
 from app.repositories.gmail_account import GmailAccountRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
-from app.services.resume_parser import parse_resume_pdf
+from app.services.resume_grounding import resolve_user_resume_text
 
 #: Inbox categories the Email Center filters on (see apps/web email/page.tsx).
 _CATEGORIES = ("priority", "followup", "auto", "all")
@@ -166,8 +165,11 @@ class EmailAgent:
                 return max(0, min(100, int(s)))
         return None
 
-    def _resume_text(self) -> str:
-        return parse_resume_pdf(get_base_resume_path())["raw_text"]
+    def _resume_text(self, user_id: str) -> str:
+        """The CALLER's own base resume text for an OUTBOUND draft — never the
+        bundled operator resume (NF-final-B-001). Empty when the user has no
+        resume so the draft path refuses rather than leaking operator content."""
+        return resolve_user_resume_text(user_id, allow_operator_fallback=False)
 
     # ---------------------------------------------------------------- run
     def run(self, user_id: str, mode: str = "triage", **params: Any) -> EmailAgentResult:
@@ -289,7 +291,9 @@ class EmailAgent:
             raise EmailAgentError(f"{mode} requires thread_id")
         thread = self._thread(user_id, thread_id)
         incoming = self._latest_body(thread)
-        resume_text = self._resume_text()
+        resume_text = self._resume_text(user_id)
+        if not resume_text.strip():
+            raise EmailAgentError("Add your resume before drafting a reply.")
         # The incoming email's own text (names, company, role) is legitimate
         # evidence, so it joins the corpus the guard checks against — only
         # claims about the *candidate* that aren't in the resume get flagged.

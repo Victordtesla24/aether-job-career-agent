@@ -93,7 +93,7 @@ def test_draft_follow_up_returns_follow_up_mode_and_guards():
         "subject": "Delivery role",
         "messages": [{"body": "Thanks for applying — we'll be in touch."}],
     }
-    agent._resume_text = lambda: "Experienced delivery lead and program manager."  # type: ignore[assignment]
+    agent._resume_text = lambda *a, **k: "Experienced delivery lead and program manager."  # type: ignore[assignment]
     res = agent.run("u1", mode="draft_follow_up", thread_id="t9")
     assert res.mode == "draft_follow_up"
     assert res.thread_id == "t9"
@@ -114,7 +114,7 @@ def test_draft_flags_fabricated_claims():
         "subject": "Delivery role",
         "messages": [{"body": "We have an opening for a delivery lead."}],
     }
-    agent._resume_text = lambda: "Experienced delivery lead and program manager."  # type: ignore[assignment]
+    agent._resume_text = lambda *a, **k: "Experienced delivery lead and program manager."  # type: ignore[assignment]
     res = agent.run("u1", mode="draft_reply", thread_id="t1")
     assert res.mode == "draft_reply"
     # GCP (acronym) and 99.99 (metric) are not in the evidence corpus.

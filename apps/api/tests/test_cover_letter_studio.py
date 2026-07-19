@@ -1,9 +1,17 @@
 """AGT-COVER — Cover Letter Studio endpoints (insights / refine / pdf, R11)."""
 from __future__ import annotations
 
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
+
 
 def _make_letter(client, auth_headers) -> tuple[dict, dict]:
-    """Seed a job via scout replay fixtures, then draft a letter for it."""
+    """Seed the fixture user their own base résumé, then a job via scout
+    replay fixtures, then draft a letter for it.
+
+    This drives a REAL (non-stub) LLM replay generation, so the seeded
+    resume must ground the STATIC "default"/"retry" replay fixtures'
+    vocabulary too (see FIXTURE_LLM_RESUME_TEXT docstring in conftest.py)."""
+    seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
     run = client.post(
         "/agents/scout/run",
         json={"query": "python engineer", "location": "Sydney"},
@@ -150,12 +158,19 @@ class TestPdfExport:
 
     def test_pdf_is_submission_ready_business_letter(self, client, auth_headers):
         """GAP-P4-048: the export is a neutral business letter — candidate contact
-        details present, no third-party/tool branding or AI-generated disclosure."""
+        details present, no third-party/tool branding or AI-generated disclosure.
+
+        NF-final-B-001: the letterhead is grounded on the CALLER's own résumé
+        contact, never the bundled operator's. A JSON-ingested résumé (as
+        seeded here via ``seed_own_resume``) stores ``contact={}``, so the
+        letterhead falls back to the caller's own workspace profile email —
+        never the operator's phone/LinkedIn."""
         import io
 
         import pdfplumber
 
         body, job = _make_letter(client, auth_headers)
+        me = client.get("/auth/me", headers=auth_headers).json()
         resp = client.get(
             f"/cover-letters/{body['cover_letter_id']}/pdf", headers=auth_headers
         )
@@ -163,9 +178,17 @@ class TestPdfExport:
         with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
             text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         lower = text.lower()
-        # Candidate's own contact details, drawn from the résumé/profile.
-        assert "+61 433 224 556" in text, "résumé phone missing from sender block"
-        assert "linkedin.com/in/" in lower, "profile link missing from sender block"
+        # The candidate's OWN contact details (workspace profile email) head
+        # the letter — never the bundled operator résumé's.
+        assert me["email"] in text, (
+            "the caller's own profile email is missing from the sender block"
+        )
+        assert "+61 433 224 556" not in text, (
+            "operator résumé phone leaked into another user's export"
+        )
+        assert "linkedin.com/in/vikramd-profile" not in lower, (
+            "operator résumé LinkedIn leaked into another user's export"
+        )
         # The letter still renders (addressee/company present).
         assert job["company"] in text
         # No third-party/tool branding or AI-generated disclosure.

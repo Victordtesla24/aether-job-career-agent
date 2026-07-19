@@ -195,6 +195,11 @@ def test_fit_scores_are_distinct_for_contrasting_jobs():
 
 
 def test_insights_skillgap_not_garbage(client, auth_headers, test_user_id):
+    from conftest import seed_own_resume
+
+    # NF-final-B-007: fit-insights are scored only against the caller's OWN
+    # résumé; give this user one so the scored path (not the empty-state) runs.
+    seed_own_resume(client, auth_headers)
     jid = _seed_job(
         test_user_id,
         "Python and Django backend role. See cdn.openai.com for details. "

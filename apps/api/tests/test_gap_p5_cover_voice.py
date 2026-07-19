@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from conftest import seed_own_resume
 
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
@@ -122,6 +123,7 @@ def _seed_job(user_id: str, suffix: str, job: dict) -> str:
 
 
 def _run(client, auth_headers, suffix: str, llm) -> str:
+    seed_own_resume(client, auth_headers)
     me = client.get("/auth/me", headers=auth_headers).json()
     user_id = me["id"]
     job_id = _seed_job(user_id, suffix, _JOB)
@@ -213,6 +215,7 @@ class TestFabricationGuardStillHolds:
     ):
         """First-person enforcement must not become a fabrication loophole: an
         unsupported entity in the model draft is still rejected."""
+        seed_own_resume(client, auth_headers)
         me = client.get("/auth/me", headers=auth_headers).json()
         user_id = me["id"]
         job_id = _seed_job(user_id, "fab-guard", _JOB)

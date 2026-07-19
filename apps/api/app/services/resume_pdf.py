@@ -78,24 +78,27 @@ _PUNCT_FOLD = str.maketrans({
 })
 
 
-def resolve_original_pdf(format_hash: str | None) -> Path:
-    """Return the bundled resume asset whose bytes match ``format_hash``.
+def resolve_original_pdf(format_hash: str | None) -> Path | None:
+    """Return the bundled resume asset whose bytes match ``format_hash``, or
+    ``None`` when no bundled asset matches.
 
-    The ``formatHash`` on a resume record is the SHA-256 of the source PDF, so
-    it uniquely identifies which bundled asset (the main resume vs the BA
-    variant) a version derives from. Falls back to the canonical base resume
-    when the hash matches nothing on disk (e.g. an externally-ingested variant
-    with no bundled file).
+    The ``formatHash`` on a resume record is the SHA-256 of the source PDF, so a
+    bundled-derived version (the seeded base or the BA variant) matches a file on
+    disk. A user-authored résumé (uploaded/ingested — its ``formatHash`` is a
+    digest of the USER's own content) matches nothing, so this returns ``None``
+    and the caller MUST render from the résumé's own structured content rather
+    than serve another résumé's bytes: returning the bundled operator PDF here
+    would leak the operator's résumé into the user's download/attachment
+    (NF-final-B-005, cross-account PII).
     """
-    default = get_base_resume_path()
     if not format_hash:
-        return default
-    assets_dir = default.parent
+        return None
+    assets_dir = get_base_resume_path().parent
     for pdf in sorted(assets_dir.glob("*.pdf")):
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         if digest == format_hash or digest[:16] == format_hash:
             return pdf
-    return default
+    return None
 
 
 def _normalize(text: str) -> str:
