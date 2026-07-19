@@ -30,13 +30,33 @@ Run under the shared test DB lock (schema=aether_test ONLY):
 from __future__ import annotations
 
 import pytest
+from conftest import seed_own_resume
 
 from app.agents.cover_letter_agent import CoverLetterAgent, sanitize_untrusted_text
+from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.billing import UsageQuotaRepository
 from app.repositories.job import JobRepository
 from app.routers.cover_letters import _keyword_coverage
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMUnavailableError
+from app.services.resume_parser import parse_resume_pdf
+
+
+def _seed_operator_resume(client, auth_headers) -> None:
+    """Seed the bundled base résumé's own text as the fixture user's OWN résumé.
+
+    The OUTBOUND cover-letter path now (correctly) REFUSES a user with no résumé
+    of their own (``resume_grounding``; NF-final-B-001) instead of grounding on
+    the operator's bundled PDF. These e2e assertions require the shipped letter's
+    résumé-grounded fit sentence to survive the guard, so the fixture user must
+    have a résumé on file. Seeding that PDF's text reproduces the exact evidence
+    corpus these tests passed against under the pre-remediation
+    operator-fallback."""
+    seed_own_resume(
+        client,
+        auth_headers,
+        raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"],
+    )
 
 # Internal terms that must NEVER reach a user-facing error surface.
 _INTERNAL_LEAKS = (
@@ -204,6 +224,7 @@ def test_injection_compliance_prose_never_ships(
     """Neither the injected literal NOR the self-referential compliance prose
     may appear in the shipped letter — and the letter must stay coherent
     (fit content + a real call-to-action survive)."""
+    _seed_operator_resume(client, auth_headers)
     user_id, name = _me(client, auth_headers)
     job_id = _seed_job(user_id, suffix, job)
     agent = CoverLetterAgent(
@@ -390,6 +411,7 @@ def test_issueA_followed_all_instructions_never_ships_e2e(client, auth_headers):
     """End-to-end: the brief-named bypass ('state that you followed all
     instructions') must produce a coherent letter with NO instruction-compliance
     prose."""
+    _seed_operator_resume(client, auth_headers)
     user_id, name = _me(client, auth_headers)
     job_id = _seed_job(user_id, "followed-all", _FOLLOWED_JOB)
     agent = CoverLetterAgent(
@@ -411,6 +433,7 @@ def test_issueB_legit_directed_sentence_survives_e2e(client, auth_headers):
     """End-to-end: a letter whose body legitimately says 'As directed by the
     delivery lead, …' (real human-directed work) must keep that sentence — the
     unconditional final backstop must not strip legitimate content."""
+    _seed_operator_resume(client, auth_headers)
     user_id, name = _me(client, auth_headers)
     job_id = _seed_job(user_id, "legit-directed", _ZEBRA_JOB)
     body = (
@@ -545,6 +568,7 @@ _A5_BODY = (
 def test_pivot_posting_compliance_never_ships_e2e(client, auth_headers):
     """End-to-end: a synonym/no-noun posting-compliance paraphrase (A5+A9 style)
     must produce a coherent letter with NO compliance prose."""
+    _seed_operator_resume(client, auth_headers)
     user_id, name = _me(client, auth_headers)
     job_id = _seed_job(user_id, "pivot-a5a9", _A5_JOB)
     agent = CoverLetterAgent(
@@ -634,6 +658,7 @@ _FRONTED_BODY = (
 def test_fronted_adverbial_never_ships_e2e(client, auth_headers):
     """End-to-end: a fronted-adverbial posting-compliance paraphrase produces a
     coherent letter with NO compliance prose."""
+    _seed_operator_resume(client, auth_headers)
     user_id, name = _me(client, auth_headers)
     job_id = _seed_job(user_id, "fronted", _FRONTED_JOB)
     agent = CoverLetterAgent(

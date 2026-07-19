@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
+
 from app.agents.tailor_agent import _compute_conversion_metrics
 
 
@@ -108,6 +110,14 @@ class TestConversionMetricsUnit:
 
 class TestConversionMetricsApi:
     def test_tailor_run_response_includes_conversion_metrics(self, client, auth_headers) -> None:
+        # The tailor run is an OUTBOUND generation path: it now (correctly)
+        # REFUSES a user with no résumé of their own (resume_grounding;
+        # NF-final-B-005) rather than tailoring the bundled operator PDF. Seed
+        # the fixture user a real own résumé so the run proceeds — the replay
+        # generation fixtures reference the bundled-résumé vocabulary, so
+        # FIXTURE_LLM_RESUME_TEXT (non-operator identity + that vocabulary) is
+        # the correct seed for an end-to-end replay generation.
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         job = _seed_job(client, auth_headers)
         resp = client.post(
             "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers

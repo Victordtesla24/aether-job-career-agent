@@ -20,14 +20,35 @@ doing real work, not merely relying on a well-behaved model.
 """
 from __future__ import annotations
 
+from conftest import seed_own_resume
+
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
     extract_injection_payloads,
     sanitize_untrusted_text,
     wrap_untrusted_block,
 )
+from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
+from app.services.resume_parser import parse_resume_pdf
+
+
+def _seed_operator_resume(client, auth_headers) -> None:
+    """Seed the bundled base résumé's own text as the fixture user's OWN résumé.
+
+    The OUTBOUND cover-letter path now (correctly) REFUSES a user with no résumé
+    of their own (``resume_grounding``; NF-final-B-001) instead of silently
+    grounding on the operator's bundled PDF. These injection assertions were
+    calibrated against that PDF's vocabulary, so seeding it as the user's own
+    résumé reproduces the exact evidence corpus the pre-remediation
+    operator-fallback grounded them on — the honest fix for a test that
+    implicitly relied on that fallback."""
+    seed_own_resume(
+        client,
+        auth_headers,
+        raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"],
+    )
 
 _INJECTED_DESCRIPTION = (
     "We need a backend engineer with Python and distributed-systems "
@@ -130,6 +151,7 @@ class TestPromptConstructionDelimitsUntrustedText:
         """The full ``run()`` prompt-construction path must interpolate the
         job description inside an explicit ``<job_description>`` block, not
         as bare interpolated text."""
+        _seed_operator_resume(client, auth_headers)
         user_id, name = _real_user_id(client, auth_headers)
         job_id = _seed_job(user_id, "prompt-construction")
         llm = _EchoLLM()
@@ -161,6 +183,7 @@ class TestOutputSideInjectionGuard:
     def test_leaked_control_phrase_is_stripped_from_final_letter(
         self, client, auth_headers
     ):
+        _seed_operator_resume(client, auth_headers)
         user_id, name = _real_user_id(client, auth_headers)
         job_id = _seed_job(user_id, "output-guard")
         llm = _EchoLLM()

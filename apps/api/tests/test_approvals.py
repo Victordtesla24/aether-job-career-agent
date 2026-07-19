@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
 
 from app.repositories.approval import ApprovalRepository
 
@@ -66,7 +67,19 @@ class TestApprovalGateway:
         assert resp2.status_code == 409
 
     def _seed_letter_approval(self, client, auth_headers) -> dict:
-        """Full flow: scout a job → cover-letter run → draft app + approval."""
+        """Full flow: scout a job → cover-letter run → draft app + approval.
+
+        The cover-letter run is an OUTBOUND generation path that now (correctly)
+        REFUSES a user with no résumé of their own (resume_grounding;
+        NF-final-B-001). This helper only uses that run to MANUFACTURE a linked
+        draft application + approval so the approve/reject → tracker-sync
+        assertions (the real subject of these tests) have something to act on —
+        the approve/submit endpoints themselves require no résumé. Seed a real
+        own résumé so the setup succeeds; the replay generation fixtures
+        reference the bundled-résumé vocabulary, so FIXTURE_LLM_RESUME_TEXT is
+        the correct seed for the end-to-end replay run.
+        """
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         run = client.post(
             "/agents/scout/run",
             json={"query": "python engineer", "location": "Sydney"},

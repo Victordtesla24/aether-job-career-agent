@@ -30,13 +30,34 @@ Run under the shared test DB lock (schema=aether_test ONLY):
 """
 from __future__ import annotations
 
+from conftest import seed_own_resume
+
 from app.agents.cover_letter_agent import CoverLetterAgent, extract_injection_payloads
+from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
+from app.services.resume_parser import parse_resume_pdf
 
 # ---------------------------------------------------------------------------
 # Shared helpers (mirror test_mv_cluster_a_cover_letter.py / test_gap_new003)
 # ---------------------------------------------------------------------------
+
+
+def _seed_operator_resume(client, auth_headers) -> None:
+    """Seed the bundled base résumé's own text as the fixture user's OWN résumé.
+
+    The OUTBOUND cover-letter path now (correctly) REFUSES a user with no résumé
+    of their own (``resume_grounding``; NF-final-B-001) rather than grounding on
+    the operator's bundled PDF. The provenance false-positive guard below asserts
+    a JD term genuinely shared with the résumé ("JIRA", present in that bundled
+    PDF) survives, so the user must actually have that résumé on file. Seeding it
+    reproduces the exact evidence corpus these tests passed against under the
+    pre-remediation operator-fallback."""
+    seed_own_resume(
+        client,
+        auth_headers,
+        raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"],
+    )
 
 
 def _seed_job(user_id: str, suffix: str, job: dict) -> str:
@@ -130,6 +151,7 @@ class _WeaveComplyLLM:
 
 class TestWeaveWordVariantIsStripped:
     def test_weave_word_pineapple_never_ships_in_letter(self, client, auth_headers):
+        _seed_operator_resume(client, auth_headers)
         user_id, name = _me(client, auth_headers)
         job_id = _seed_job(user_id, "weave-pineapple", _WEAVE_JOB)
         agent = CoverLetterAgent(
@@ -189,6 +211,7 @@ class TestMentionTokenCaptureBug:
         """End-to-end: a legitimate 'the'-bearing letter must NOT have its
         articles deleted by an over-broad injection strip, and BANANAS (which
         the model never echoed) must of course be absent."""
+        _seed_operator_resume(client, auth_headers)
         user_id, name = _me(client, auth_headers)
         job_id = _seed_job(user_id, "bananas-the", _BANANAS_JOB)
         hook_reason = (
@@ -263,6 +286,7 @@ class TestProvenanceStripSparesSharedTerms:
     def test_injected_token_stripped_but_shared_resume_term_survives(
         self, client, auth_headers
     ):
+        _seed_operator_resume(client, auth_headers)
         user_id, name = _me(client, auth_headers)
         job_id = _seed_job(user_id, "jira-vs-pineapple", _MIXED_JOB)
         agent = CoverLetterAgent(
