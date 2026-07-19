@@ -344,7 +344,11 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
     job = JobRepository().get_by_id(letter["jobId"], user_id)
     stories = StoryRepository().list_by_user(user_id)
 
-    resume_text = resolve_user_resume_text(user_id)
+    # Read-only analytics: never fall back to the operator résumé for a
+    # no-résumé caller (NF-final-B-007) — the voice/evidence corpus then reflects
+    # only what is actually grounded (job + stories), never operator content, and
+    # the panel shows a needsResume prompt.
+    resume_text = resolve_user_resume_text(user_id, allow_operator_fallback=False)
     corpus = " ".join(
         [resume_text, (job or {}).get("title", ""), (job or {}).get("company", ""),
          (job or {}).get("description", "")]
@@ -370,6 +374,7 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
         "jobTitle": (job or {}).get("title"),
         "company": (job or {}).get("company"),
         "wordCount": len(text.split()),
+        "needsResume": not resume_text.strip(),
         "evidence": _evidence_trace(text, stories, job, resume_text),
         "keywords": _keyword_coverage(text, job),
         "voice": _voice_metrics(text, corpus),

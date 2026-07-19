@@ -436,3 +436,63 @@ def test_no_resume_user_tailor_refused_and_no_base_created(client):
         "a refused tailor run seeded the operator PDF as this user's own base "
         f"resume as a side effect: {resumes!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# NF-final-B-007 (MED) — INTERNAL read-only analytics (job-insights + cover-
+# letter voice/evidence corpus) must NOT fall back to the operator résumé for a
+# caller with no résumé of their own. They degrade to an honest empty-state
+# (HTTP 200 + a ``needsResume`` prompt), never a fit/voice computed against the
+# bundled operator résumé and labelled as the user's own.
+# --------------------------------------------------------------------------- #
+def test_no_resume_user_job_insights_empty_state_not_operator(client):
+    """A no-résumé user's GET /jobs/{id}/insights is an honest empty-state — not
+    a fit scored against the operator résumé."""
+    user_id, headers = _register_fresh_user(client)
+    job_id = _seed_job(
+        user_id, "Python, Django, PostgreSQL and Kubernetes backend role.",
+    )
+    resp = client.get(f"/jobs/{job_id}/insights", headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["needsResume"] is True, body
+    assert body["scored"] is False, body
+    assert body["matchedSkills"] == [] and body["skillsMatched"] == 0, body
+    assert body["overall"] == 0, body
+    # No operator skills/PII presented as this user's own fit.
+    for marker in _OPERATOR_PII_MARKERS:
+        assert marker not in resp.text, (
+            f"operator PII ({marker!r}) surfaced in a no-résumé user's insights"
+        )
+
+
+def test_no_resume_user_cover_letter_insights_shows_needs_resume(client):
+    """The cover-letter studio voice/evidence corpus must not fall back to the
+    operator résumé once the caller has no résumé of their own — the panel shows
+    ``needsResume`` and grounds on NO operator content."""
+    from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
+
+    from app.repositories.cover_letter import CoverLetterRepository
+    from app.repositories.resume import ResumeRepository
+
+    user_id, headers = _register_fresh_user(client)
+    # Give the user a real base résumé so a letter can legitimately exist …
+    seed_own_resume(client, headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
+    job_id = _seed_job(user_id, "Python and PostgreSQL backend role.")
+    base = ResumeRepository().get_base(user_id)
+    letter = CoverLetterRepository().create(
+        user_id, job_id, base["id"],
+        "Dear Hiring Team,\n\nI led delivery on a payments platform.\n\nSincerely,\nJordan",
+    )
+    # … then the user removes their résumé grounding (row stays, no grounding
+    # text): the panel must NOT silently fall back to the operator résumé.
+    ResumeRepository().update_sections(base["id"], user_id, {}, base["formatHash"])
+
+    resp = client.get(f"/cover-letters/{letter['id']}/insights", headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["needsResume"] is True, body
+    for marker in _OPERATOR_PII_MARKERS:
+        assert marker not in resp.text, (
+            f"operator PII ({marker!r}) surfaced in a no-résumé user's cover-letter insights"
+        )
