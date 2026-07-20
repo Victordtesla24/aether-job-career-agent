@@ -544,6 +544,50 @@ def test_noop_tailor_completes_not_failed(
     assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
 
 
+def test_missing_resume_completes_not_failed(
+    client, auth_headers, test_user_id, bg_table, monkeypatch
+):
+    """NF-final-PII-002: a no-résumé user's async cover-letter/tailor refusal
+    (``MissingResumeError``, NF-final-B-001/005) must NOT surface as a 'failed'
+    job with the raw 'MissingResumeError: ...' exception-class prefix leaked via
+    ``_honest_message`` — that both leaks an internal class name AND mislabels a
+    legitimate, honest refusal as a failure. Mirror
+    ``test_noop_tailor_completes_not_failed`` immediately above: complete the
+    job with the SAME honest message the synchronous 422 path surfaces (no
+    class prefix — main.py's ``MissingResumeError`` handler uses ``str(exc)``
+    verbatim) and refund the reservation — never billed for a refused run."""
+    from app.services.resume_grounding import MissingResumeError
+
+    _set_paid_plan(test_user_id)
+    UsageQuotaRepository().reserve(test_user_id)
+    run = AgentRunRepository().start(test_user_id, "tailor", {"job_id": "job-1"})
+    job_id = _seed_bg_job(test_user_id, "tailor", status="enqueued", run_id=run["id"],
+                          params={"job_id": "job-1"}, quota_reserved=True)
+    _stub_tailor(
+        monkeypatch,
+        raises=MissingResumeError(
+            "Add your resume before tailoring or generating an application."
+        ),
+    )
+
+    from app.workers.tasks import run_agent_job
+
+    asyncio.run(run_agent_job({}, job_id))
+
+    row = _get_bg_job(job_id)
+    # Completed (not failed) — an honest refusal is an outcome, not a failure.
+    assert row["status"] == "completed"
+    assert row.get("error") is None
+    result = row["result"]
+    assert result is not None
+    message = result.get("message") or ""
+    assert message == "Add your resume before tailoring or generating an application."
+    # NEVER the raw Python exception-class prefix a user should never see.
+    assert "missingresumeerror" not in message.lower()
+    # The reserved run is refunded — never billed for a refused run.
+    assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
+
+
 # ===========================================================================
 # 7) Pipeline partial refund on a mid-run worker crash (fable-5 condition 1).
 # ===========================================================================
@@ -579,6 +623,65 @@ def test_pipeline_partial_refund_on_midrun_crash(
     # Reserved-but-unfinished steps MUST be refunded on crash -> no quota leak.
     after = int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"])
     assert after == baseline, f"leaked {after - baseline} reserved run(s) after crash"
+
+
+def test_pipeline_missing_resume_completes_not_failed(
+    client, auth_headers, test_user_id, bg_table, monkeypatch
+):
+    """NF-final-PII-002 (review gap — consolidated-residuals-review.json): the
+    PIPELINE branch of ``run_agent_job`` must apply the SAME honest-refusal
+    contract as the single-agent branch (``test_missing_resume_completes_not_failed``
+    above) when a step inside ``_pipeline_core`` (tailor / coverLetter) raises
+    ``MissingResumeError`` for a no-résumé user. Mirrors
+    ``test_pipeline_partial_refund_on_midrun_crash``'s monkeypatch-of-
+    ``_run_pipeline_body`` seam (a metered step reserved one run on THIS job,
+    as a real step does under ``_pipeline_job_ctx``, before the terminal
+    exception fires) but with the terminal exception swapped for
+    ``MissingResumeError`` instead of a crash. Must complete (not fail), carry
+    the honest message with NO leaked 'MissingResumeError:' class prefix, and
+    refund the reservation — never billed for a refused pipeline run."""
+    from app.services.resume_grounding import MissingResumeError
+
+    _set_paid_plan(test_user_id)
+    baseline = int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"])
+    job_id = _seed_bg_job(test_user_id, "pipeline", status="enqueued",
+                          params={"query": "x", "location": "y"})
+
+    from app.repositories.background_jobs import BackgroundJobRepository
+    from app.workers import tasks as wtasks
+    from app.workers.tasks import run_agent_job
+
+    def _refusing_pipeline_body(user_id, params):
+        # A metered step (e.g. coverLetter) reserved one run on THIS job (as a
+        # real step does under _pipeline_job_ctx), then refused because this
+        # user has no résumé on file — same seam as
+        # test_pipeline_partial_refund_on_midrun_crash, different terminal
+        # exception.
+        UsageQuotaRepository().reserve(user_id)
+        BackgroundJobRepository().increment_reserved(job_id)
+        raise MissingResumeError(
+            "Add your resume before generating a cover letter."
+        )
+
+    monkeypatch.setattr(
+        wtasks, "_run_pipeline_body", _refusing_pipeline_body, raising=True
+    )
+
+    asyncio.run(run_agent_job({}, job_id))
+
+    row = _get_bg_job(job_id)
+    # Completed (not failed) — an honest refusal is an outcome, not a failure.
+    assert row["status"] == "completed"
+    assert row.get("error") is None
+    result = row["result"]
+    assert result is not None
+    message = result.get("message") or ""
+    assert message == "Add your resume before generating a cover letter."
+    # NEVER the raw Python exception-class prefix a user should never see.
+    assert "missingresumeerror" not in message.lower()
+    # The reserved run is refunded — never billed for a refused pipeline run.
+    after = int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"])
+    assert after == baseline, f"leaked {after - baseline} reserved run(s) after refusal"
 
 
 # ===========================================================================
