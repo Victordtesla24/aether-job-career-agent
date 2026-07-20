@@ -172,6 +172,31 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         except _TransientError:
             _pipeline_job_ctx.reset(token)
             raise
+        except MissingResumeError as exc:
+            # NF-final-PII-002 (review gap): a step inside _pipeline_core
+            # (tailor / coverLetter) refused because this user has no résumé
+            # of their own — a legitimate, honest refusal (NF-final-B-001/
+            # 005/008), NOT a failure, exactly like the single-agent branch
+            # above. Mirror that handling: complete the job with the SAME
+            # honest, PII-free message the synchronous 422 path surfaces and
+            # refund THIS job's own outstanding reservations — never
+            # "failed", and never the leaked "MissingResumeError:" class
+            # prefix the generic except Exception branch below would add via
+            # _honest_message.
+            _pipeline_job_ctx.reset(token)
+            honest_message = str(exc).strip() or "Add your resume before generating this."
+            honest_result = {
+                "resume_id": None,
+                "missingResume": True,
+                "message": honest_message,
+            }
+            if repo.mark_completed(job_id, honest_result):
+                repo.refund_pipeline_outstanding(job_id)
+            logger.info(
+                "pipeline job %s refused (MissingResumeError): no resume on "
+                "file, refunded", job_id
+            )
+            return
         except Exception as exc:  # noqa: BLE001 — terminal, honest, refunded
             _pipeline_job_ctx.reset(token)
             if repo.mark_failed(job_id, _honest_message(exc)):
