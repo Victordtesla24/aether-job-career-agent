@@ -125,4 +125,4 @@ Full detail + operator instructions: `docs/delivery/MANUAL-VERIFICATION-BLOCKED-
 
 ### Push addendum (G-08 execution record)
 
-*(Appended at final push — see below.)*
+**Pre-push state (2026-07-20):** local HEAD `258ea50` · 102 commits ahead of `origin/main@53f0e08` · 0 open PRs (`gh pr list` empty) · prod health 200 `{"status":"ok","version":"0.2.0"}` @ `54c28e5` · push executed as fast-forward. Post-push verification recorded in `fixes/DEPLOY-FINAL-PUSH-log.md`.
