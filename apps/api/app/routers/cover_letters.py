@@ -59,7 +59,20 @@ from app.services.resume_grounding import (
 
 router = APIRouter()
 
-_WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9+#./-]*")
+#: Unicode-aware: ``[^\W_]`` is any Unicode letter/digit (NOT underscore),
+#: so an accented proper noun (e.g. "München", "résumé", "São") stays a
+#: single token instead of being severed at the non-ASCII character. Kept
+#: ASCII-only before NF-final-closure-001: "MünchenLocation" split at "ü"
+#: into "M" + "nchenLocation" — the surviving fragment then had only ONE
+#: CamelCase segment ("Location"), so ``_is_camel_concatenation_artifact``'s
+#: `len(segments) < 2` guard returned False before the label-word check ever
+#: ran, and "nchenLocation" leaked into the keyword-chip panel. Widening the
+#: word boundary keeps the whole glued token intact so the existing
+#: any-segment-is-a-label rule (``_ARTIFACT_LABEL_WORDS``) catches it exactly
+#: like an ASCII gluing (e.g. "SydneySalary"). The permitted in-word
+#: punctuation (``+#./-``) is unchanged so "C++", "Node.js" and "CI/CD"
+#: tokenize identically to before.
+_WORD_RE = re.compile(r"[^\W_](?:[^\W_]|[+#./-])*")
 
 #: Connective words excluded from keyword/evidence matching.
 _STOPWORDS = frozenset(

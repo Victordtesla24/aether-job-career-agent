@@ -153,6 +153,41 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
 }
 
 /**
+ * Detect the shared async "missing résumé" honest-refusal result shape and,
+ * when present, return an honest non-success Notice carrying the backend's
+ * own message — instead of letting `agentSuccessNotice`/
+ * `pipelineCompletionNotice` fabricate a green success from the fields a
+ * refusal never has (NF-final-closure-002).
+ *
+ * apps/api/app/workers/tasks.py's `except MissingResumeError` handler
+ * completes the BackgroundJob (never "failed") with
+ * `{resume_id: null, missingResume: true, message: "Add your resume
+ * before…"}` for BOTH the single-agent branch (tailor/coverLetter/...) and
+ * the pipeline branch — the exact shape NF-final-resid-002 already handles
+ * for Cover Letter Studio's `applyCoverLetterResult`. Before this check,
+ * `agentSuccessNotice`/`pipelineCompletionNotice` read fields the refusal
+ * shape never sets (`changes`, `steps`, `approvalRequired`, ...) and
+ * fabricated "Tailor finished — 0 accepted changes", "a draft is awaiting
+ * your sign-off", or "Pipeline complete — no jobs matched yet" — all FALSE
+ * SUCCESS, dropping the honest message entirely. Call this BEFORE
+ * agentSuccessNotice/pipelineCompletionNotice and use its result when
+ * non-null.
+ */
+export function missingResumeNotice(output: Record<string, unknown>): Notice | null {
+  if (output.missingResume !== true) return null;
+  const message =
+    typeof output.message === "string" && output.message.trim()
+      ? output.message
+      : "Add your resume before running this agent.";
+  return {
+    kind: "error",
+    text: message,
+    href: "/dashboard/resume",
+    hrefLabel: "add your resume →",
+  };
+}
+
+/**
  * Lift the real backend `detail` out of an `ApiError`'s raw message.
  * `apiRequest` embeds the raw response body in the error message (e.g.
  * `PUT /agents/providers/x/credential failed (503): {"detail":"Vault
@@ -174,6 +209,44 @@ function extractApiDetail(err: unknown): string | null {
     }
   }
   return err.message;
+}
+
+/**
+ * Strict variant of `extractApiDetail`: returns the parsed JSON `detail`
+ * ONLY when `err.message` genuinely ends in a real backend error body
+ * (`apiRequest`'s `... failed (<status>): {"detail": "..."}` shape) —
+ * unlike `extractApiDetail`, this NEVER falls back to the raw message text.
+ *
+ * Review regression fix (NF-final-closure-002): `runErrorNotice`'s 422
+ * branch used `extractApiDetail`, whose raw-message fallback made it treat
+ * ANY `Error` with a 422 `status` property as if it carried a genuine
+ * backend detail — including `agents/page.tsx`'s `resolveParams()`, which
+ * throws a CLIENT-SIDE synthetic `Object.assign(new Error("No jobs
+ * discovered yet"), {status:422})` for Tailor/CoverLetter when the user has
+ * zero jobs sourced (the ordinary, pre-existing "run Scout first" scenario
+ * the hardcoded copy below was built for). That plain, non-JSON message is
+ * not a real backend detail, so `extractApiDetail` fell through to
+ * returning it verbatim, silently swallowing the href-bearing Scout
+ * guidance. Using this stricter helper for that one call site keeps the
+ * fitScorer/genuine-backend-422 improvement (a real `{"detail":...}` body
+ * still surfaces) while restoring the original Scout-guidance notice for
+ * any 422 whose message isn't genuinely JSON. `providerCredentialErrorNotice`
+ * still uses `extractApiDetail` (unchanged) — its raw-message fallback is
+ * correct there since every error on that path is a real backend response.
+ */
+function extractApiJsonDetail(err: unknown): string | null {
+  if (!(err instanceof Error) || !err.message.trim()) return null;
+  const match = err.message.match(/\{[\s\S]*\}$/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+  } catch {
+    // Not JSON — genuinely no real backend detail.
+  }
+  return null;
 }
 
 /**
@@ -209,6 +282,23 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     };
   }
   if (status === 422) {
+    // NF-final-closure-002: this hardcoded "run Scout to discover jobs" copy
+    // was wrong whenever the real 422 detail said something else — most
+    // often fitScorer's honest, synchronous MissingResumeError refusal
+    // ("Add your resume before scoring jobs against it."), which "run
+    // Scout" both drops and misdirects (jobs already exist; the résumé is
+    // what's missing). Surface the server's own detail when present — but
+    // ONLY when it was genuinely parsed from a backend JSON body
+    // (extractApiJsonDetail, not extractApiDetail): resolveParams() in
+    // agents/page.tsx throws a CLIENT-SIDE synthetic 422 ("No jobs
+    // discovered yet") for the ordinary zero-jobs case, and that plain
+    // Error's message must keep falling through to the Scout-guidance
+    // notice below, not be mistaken for a real backend detail (review
+    // regression fix).
+    const detail = extractApiJsonDetail(err);
+    if (detail) {
+      return { kind: "error", text: `${context} failed — ${detail}` };
+    }
     return {
       kind: "error",
       text: `${context} needs more data first — run Scout to discover jobs, then try again.`,

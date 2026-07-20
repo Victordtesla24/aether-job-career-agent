@@ -36,6 +36,7 @@ import pytest
 
 from app.routers.cover_letters import (
     _is_camel_concatenation_artifact,
+    _jd_keywords,
     _keyword_coverage,
 )
 
@@ -294,3 +295,131 @@ def test_keyword_coverage_drops_city_label_camel_artifacts_redpanda_pattern():
 
     assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
     assert 0 < kw["total"] <= 10
+
+
+# ---------------------------------------------------------------------------
+# NF-final-closure-001 — final adversarial CLOSURE sweep, narrow residual of
+# NF-final-resid-001 / NF-final-PII-001 / MV-cover-letter-studio-006. An
+# ACCENTED/non-ASCII proper noun glued to a JD structural label still leaked
+# a fragment: "MünchenLocation" -> chip "nchenLocation". Root cause: the
+# ASCII-only ``_WORD_RE`` severed the token at "ü" into "M" + "nchenLocation"
+# BEFORE ``_is_camel_concatenation_artifact`` ever ran; the surviving
+# fragment's CamelCase split ("nchenLocation" -> ["Location"]) has only ONE
+# segment, so the `len(segments) < 2` guard returned False before the
+# any-segment-is-a-label check ever fired. Fixed at the root by widening
+# ``_WORD_RE`` to be Unicode-aware, so the glued token survives tokenization
+# whole and hits the SAME existing label rule an ASCII gluing does — no
+# change to ``_is_camel_concatenation_artifact``/``_CAMEL_HUMP_RE`` needed.
+# ---------------------------------------------------------------------------
+
+# The exact reported case plus adversarial variants of my own design: other
+# single-word accented city names (different accented letters, different
+# label words, different label POSITIONS relative to the accent) glued with
+# no space to a JD structural label. Each tuple is
+# (glued_token, forbidden_fragment_pre_fix) — the forbidden fragment is the
+# exact garbage token the ASCII-only tokenizer left behind pre-fix (verified
+# by direct simulation of the unfixed ``_WORD_RE`` against each string).
+_ACCENTED_LABEL_ARTIFACTS = (
+    ("MünchenLocation", "nchenlocation"),        # the reported case (ü)
+    ("LocationMünchen", "nchen"),                # label-first order (ü)
+    ("ZürichSalary", "richsalary"),               # accent near the start
+    ("SalaryZürich", "rich"),                     # label-first order
+    ("KölnDepartment", "lndepartment"),           # ö
+    ("GöteborgBenefits", "teborgbenefits"),       # ö, longer city name
+    ("BenefitsGöteborg", "teborg"),               # label-first order
+    ("MünchenQualifications", "nchenqualifications"),
+)
+
+
+@pytest.mark.parametrize("artifact,fragment", _ACCENTED_LABEL_ARTIFACTS)
+def test_accented_label_camel_artifact_leaves_no_fragment(artifact, fragment):
+    """The glued accented+label token must be dropped WHOLE — no fragment
+    (the pre-fix garbage the ASCII-only tokenizer produced) may survive as a
+    keyword chip (NF-final-closure-001)."""
+    jd = f"Senior Engineer. {artifact}: details below. Apply with your CV."
+    keywords = _jd_keywords(jd)
+    words = [k.lower() for k in keywords]
+    assert fragment not in words, (
+        f"{artifact!r} leaked the pre-fix tokenizer fragment {fragment!r} "
+        f"into JD keywords: {words!r}"
+    )
+    assert artifact.lower() not in words, (
+        f"{artifact!r} itself leaked into JD keywords: {words!r}"
+    )
+
+
+def test_keyword_coverage_drops_muenchen_location_class_artifact_reported_pattern():
+    """The EXACT reported repro (NF-final-closure-001): a scraped JD gluing
+    an accented city to a label with no space. Chip must be absent, no
+    fragment, and legit tech terms + a legit UNGLUED accented city name must
+    still survive."""
+    job = {
+        "title": "Senior Backend Engineer",
+        "description": (
+            "MünchenLocation: hybrid, 2 days onsite per week. "
+            "We are a Zürich-based company with a satellite office. "
+            "Stack: JavaScript, TypeScript, PostgreSQL, Kubernetes and "
+            "Docker. DevOps and microservices experience required."
+        ),
+    }
+    letter = (
+        "I bring deep JavaScript, TypeScript, PostgreSQL, Kubernetes and "
+        "Docker experience building reliable DevOps microservices."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    assert "nchenlocation" not in words, (
+        f"Accented city+label CamelCase fragment 'nchenLocation' leaked "
+        f"into keyword chips: {words!r}"
+    )
+    assert "münchenlocation" not in words, f"leaked whole: {words!r}"
+
+    for term in ("javascript", "typescript", "postgresql", "kubernetes", "docker"):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10
+
+
+# ---------------------------------------------------------------------------
+# Preserved cases (NF-final-closure-001's own acceptance criterion cuts both
+# ways): a legitimate accented word that is NOT glued to a label must keep
+# working exactly like any other JD term — not be flagged as an artifact,
+# and not be shredded into ASCII-only garbage fragments.
+# ---------------------------------------------------------------------------
+
+
+def test_unglued_accented_city_name_is_not_flagged_as_artifact():
+    """'Zürich'/'München' standing alone (not glued to a label) are
+    legitimate city names, not concatenation artifacts — NF-final-closure-001
+    preserved case."""
+    assert not _is_camel_concatenation_artifact("Zürich")
+    assert not _is_camel_concatenation_artifact("München")
+
+
+def test_accented_word_survives_tokenization_intact_no_garbage_fragments():
+    """'résumé' (and other legit accented JD prose) must tokenize as ONE
+    whole word, not be severed into ASCII-only garbage fragments ('r' +
+    'sum') — NF-final-closure-001 preserved case: legit accented words in
+    JDs must not break keyword extraction."""
+    jd = (
+        "Please submit your résumé and a brief cover note. "
+        "JavaScript and PostgreSQL experience preferred."
+    )
+    keywords = _jd_keywords(jd)
+    words = [k.lower() for k in keywords]
+    # The pre-fix ASCII-only tokenizer fragmented "résumé" into "r" (dropped,
+    # too short) and "sum" (>=3 chars, survived as a spurious keyword chip).
+    assert "sum" not in words, (
+        f"'résumé' was fragmented into a spurious 'sum' keyword chip: "
+        f"{words!r}"
+    )
+    # The whole word survives as itself (not silently discarded either).
+    assert "résumé" in words, (
+        f"'résumé' should tokenize and survive as a single whole keyword: "
+        f"{words!r}"
+    )

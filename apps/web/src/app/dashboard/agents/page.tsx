@@ -46,6 +46,7 @@ import {
 } from "../../../components/agents/api";
 import {
   agentSuccessNotice,
+  missingResumeNotice,
   pipelineCompletionNotice,
   pipelineProgressNotice,
   pipelineStartNotice,
@@ -164,7 +165,7 @@ export default function AgentsPage() {
     startPolling("pipeline");
     try {
       const result = await runPipeline();
-      setNotice(pipelineCompletionNotice(result));
+      setNotice(missingResumeNotice(result) ?? pipelineCompletionNotice(result));
     } catch (e) {
       setNotice(runErrorNotice(e, "Pipeline"));
     } finally {
@@ -192,7 +193,7 @@ export default function AgentsPage() {
     try {
       const params = await resolveParams(backend);
       const output = await runAgent(AGENT_ROUTE[backend] ?? backend, params);
-      setNotice(agentSuccessNotice(backend, output));
+      setNotice(missingResumeNotice(output) ?? agentSuccessNotice(backend, output));
     } catch (e) {
       setNotice(runErrorNotice(e, backend));
     } finally {
