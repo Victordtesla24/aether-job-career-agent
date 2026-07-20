@@ -1,0 +1,87 @@
+{
+  "finding": "MV-system-008",
+  "review_target": {
+    "branch": "fix/mv-system-008-cron-logging",
+    "commit": "b08b502",
+    "base": "084e04b",
+    "repo": "/home/ubuntu/github_repos/aether-job-career-agent"
+  },
+  "reviewer": "reviewer (independent of fixer-medium; did not author the fix)",
+  "verdict": "PASS",
+  "timestamp_utc": "2026-07-20T01:27:00Z",
+  "review_window_utc": "2026-07-20T01:22Z - 2026-07-20T01:27Z",
+  "epistemic_note": "All claims below are [VERIFIED-WITH-FRESH-EVIDENCE] from THIS run (fresh git worktrees at /tmp/claude-2000/.../scratchpad/review-cron-log{,-OLD}, removed after use; read-only `systemctl cat` against the live production host, which this VM is per docs/delivery/DEPLOYMENT-RUNBOOK.md §5 and confirmed live via `systemctl is-active`). Fixer's fix-log.md was read only after independent verification, as testimony for cross-check, not as evidence.",
+  "checks": [
+    {
+      "id": "1a-diff-scope",
+      "description": "Diff 084e04b..b08b502 touches only scripts/discovery_cron.sh and the new test file",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git diff 084e04b..b08b502 --stat` => '.../test_discovery_cron_logging.sh | 124 +++...', 'scripts/discovery_cron.sh | 11 +-', '2 files changed, 134 insertions(+), 1 deletion(-)'. No scope creep."
+    },
+    {
+      "id": "1b-line-level-fix",
+      "description": "log() changed from `echo \"...\"` (stdout) to `echo \"...\" >&2` (stderr) at scripts/discovery_cron.sh:41 (was line 32 pre-fix), plus a 9-line explanatory comment block (lines 32-40). One functional line changed.",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] diff hunk: '-log() { echo \"[discovery-cron $(date -u +%FT%TZ)] $*\"; }' / '+log() { echo \"[discovery-cron $(date -u +%FT%TZ)] $*\" >&2; }'. Comment is documentation, not functional scope creep -- consistent with existing comment-block density elsewhere in the same file (lines 43-48, 57-66, 94-103 of the fixed file)."
+    },
+    {
+      "id": "1c-callsite-audit",
+      "description": "Every log() call site read and cross-checked against every command-substitution capture in the whole script (118 lines, read in full) to confirm the stderr redirect breaks nothing that legitimately consumed log()'s stdout.",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] 5 call sites: (1) line 51-53 FATAL on missing PASSWORD -- top-level statement, never captured; (2) line 79 FATAL inside http_call() -- THIS is the bug: http_call() is invoked as `LOGIN_RESP=$(http_call ...)` (L85), `ME=$(http_call ...)` (L90), `SCOUT=$(http_call ...)` (L110), `SCORER=$(http_call ...)` (L115) -- all 4 real call sites use command substitution, all previously swallowed a stdout log() line into the response variable; (3) line 109 'scout run: ...' -- top-level, never captured; (4) line 113 'scout: $SCOUT' -- top-level, never captured; (5) line 117 'fit-scorer: $SCORER' -- top-level, never captured. No caller anywhere parses log()'s own stdout as data -- the only thing $(...) callers parse is http_call()'s `printf '%s' \"$body\"` return value (L82), which is unaffected since printf still goes to stdout. Redirecting log() to stderr is therefore safe for every call site."
+    },
+    {
+      "id": "1d-same-bug-class-elsewhere",
+      "description": "Scan for other stdout diagnostics leaking into captured functions in the same script (same bug class)",
+      "result": "PASS (none found, not a note)",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Full-file read of scripts/discovery_cron.sh: the only other command-substitution consumers are `TOKEN=$(printf ... | python3 -c ...)` (L87), `QUERY=$(echo \"$ME\" | python3 -c ...)` (L91), `LOCATION=$(echo \"$ME\" | python3 -c ...)` (L92) -- these pipe through python3, which on failure emits a traceback to its OWN stderr by default (never swallowed into the captured value); no log() calls exist inside those pipelines. No second instance of the bug class found."
+    },
+    {
+      "id": "2-systemd-drop-in-claim",
+      "description": "Independently verify the systemd drop-in claim (StandardError=append:/var/log/aether/discovery.log) via read-only `systemctl cat`, not by trusting the fixer's or runbook's prose",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] This VM is the live production host (confirmed: `systemctl is-active aether-api aether-web aether-worker aether-discovery.timer` => all 'active'; working directory matches DEPLOYMENT-RUNBOOK.md §2's documented production path). `systemctl cat aether-discovery.service` output: unit file ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/scripts/discovery_cron.sh, plus drop-in /etc/systemd/system/aether-discovery.service.d/logging.conf containing 'StandardOutput=append:/var/log/aether/discovery.log' AND 'StandardError=append:/var/log/aether/discovery.log' -- both streams land in the SAME file, confirming (a) the fixer's claim is accurate and (b) redirecting log() from stdout to stderr does not change which file any log() message lands in -- it only fixes whether the FATAL message reaches either stream at all instead of being captured into a variable. Read-only inspection only; no systemctl start/stop/restart/reload performed."
+    },
+    {
+      "id": "3-fail-before",
+      "description": "Run the new test against the UNFIXED script (084e04b) in a separate fresh worktree",
+      "result": "FAIL as required (confirms bug reproduces pre-fix)",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Worktree /tmp/claude-2000/.../scratchpad/review-cron-log-OLD @084e04b, test file copied in (didn't exist pre-fix), `bash apps/api/tests/shell/test_discovery_cron_logging.sh` run 2026-07-20 ~01:26:09Z. Output: 'FAIL (a): no FATAL line found in the log file -- diagnostics are being swallowed'; 'FAIL (b): captured stdout is polluted with the FATAL diagnostic'; 'RESULT: FAIL (2 assertion(s) failed)'; exit code 1. Confirmed old log() line has no `>&2` (`grep -n \"^log()\"` => 'log() { echo \"...\"; }')."
+    },
+    {
+      "id": "3-pass-after",
+      "description": "Run the same test against the FIXED script (b08b502) in a separate fresh worktree",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Worktree /tmp/claude-2000/.../scratchpad/review-cron-log @b08b502, `bash apps/api/tests/shell/test_discovery_cron_logging.sh` run 2026-07-20 ~01:26:12Z. Output: 'PASS (a): FATAL line landed in the log file'; 'PASS (b): captured stdout is clean -- no FATAL contamination'; 'RESULT: PASS'; exit code 0. Log file transcript shows both the curl connection-refused line (systemd StandardError-equivalent stand-in) and the '[discovery-cron ...] FATAL: GET http://127.0.0.1:1/mv-system-008-unreachable -> HTTP 000:' line landing in the same temp log file, captured stdout empty."
+    },
+    {
+      "id": "4-test-quality",
+      "description": "Test asserts both properties (FATAL reaches log; captured stdout unpolluted), non-tautological, would catch a regression",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Test extracts log()/http_call() from the REAL script file via a brace-depth-aware awk extractor (not a hand-duplicated copy, so it can't drift from the implementation), drives http_call() against an unreachable endpoint (127.0.0.1:1) exactly the way every real caller does (`VAR=$(http_call ... 2>>LOG_FILE)`), and asserts (a) grep for FATAL in the log-file stand-in, (b) captured-stdout does NOT contain FATAL, (c) sanity non-zero exit. Empirically demonstrated non-tautological by the fail-before/pass-after transcripts above: the identical assertions produce opposite verdicts against the two script versions, which is direct proof the test exercises the real fixed behavior and would trip on a regression back to a bare `echo` in log()."
+    },
+    {
+      "id": "5a-prohibited-patterns",
+      "description": "Scan diff for placeholders, suppressed errors, --no-verify, eslint-disable/@ts-ignore (N/A, bash), Math.random, TODO/FIXME/XXX stubs, swallowed-error redirects (2>/dev/null, || true)",
+      "result": "PASS (none found)",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git diff 084e04b..b08b502 | grep -nE 'no-verify|eslint-disable|@ts-ignore|Math\\.random|TODO|FIXME|XXX|2>/dev/null|\\|\\| true'` => no matches."
+    },
+    {
+      "id": "5b-lint",
+      "description": "shellcheck on both changed files",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `shellcheck scripts/discovery_cron.sh` exit 0, no warnings. `shellcheck apps/api/tests/shell/test_discovery_cron_logging.sh` exit 0, no warnings."
+    },
+    {
+      "id": "5c-main-tree-untouched",
+      "description": "Confirm the production main tree was not modified by this review",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git -C /home/ubuntu/github_repos/aether-job-career-agent status` => 'On branch main' at 084e04b, only pre-existing unrelated untracked orchestrator files (.claude/agents/*.md), nothing touching scripts/discovery_cron.sh or the test path. Review worktrees removed via `git worktree remove --force` after use."
+    }
+  ],
+  "notes_non_blocking": [
+    "docs/delivery/DEPLOYMENT-RUNBOOK.md §4's Discovery Service Logs subsection (lines 349-357) does not show the StandardOutput/StandardError override file content the way the API/Web/Worker subsections do, and deploy/ has no tracked aether-discovery.service or aether-discovery.service.d/logging.conf (unlike aether-api/aether-web, which MV-system-001 brought under version control). This is a pre-existing documentation/tracking gap, out of scope for MV-system-008's finding (which is about log()'s stream, not the runbook or git-tracking the unit file). Not a blocker for this PASS; flagged for a possible future finding."
+  ],
+  "required_changes_if_fail": null,
+  "summary": "log() at scripts/discovery_cron.sh:41 now writes to stderr instead of stdout; verified against the live production systemd unit (systemctl cat aether-discovery.service, read-only) that StandardOutput and StandardError both append to the same /var/log/aether/discovery.log, so the fix is both correct (FATAL lines inside http_call(), previously swallowed by every caller's `VAR=$(http_call ...)` command substitution, now survive it via the never-captured stderr stream) and lossless (non-FATAL log() calls still land in the identical file, just via the other fd). Full-script read confirms no other log() call site or command-substitution capture is broken, and no second instance of the same bug class exists elsewhere in the file. Fail-before/pass-after re-run by this reviewer independently (not reusing fixer's transcript) reproduces the exact swallow bug pre-fix and confirms it is fixed post-fix. Diff is minimal (1 functional line + comment + new test, 2 files total, no scope creep). No prohibited patterns, clean shellcheck."
+}

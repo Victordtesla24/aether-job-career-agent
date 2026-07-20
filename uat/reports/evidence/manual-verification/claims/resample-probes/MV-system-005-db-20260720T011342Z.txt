@@ -1,0 +1,37 @@
+=== MV-system-005 read-only DB confirmation ===
+captured_utc: 2026-07-20T01:13:42Z
+
+--- admin rows (lower(username)='admin' OR email='admin@aether.local') ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'id': 'c6c8d0163d973a8048e7e33b8', 'email': 'admin@aether.local', 'username': 'admin', 'name': 'Administrator', 'isAdmin': False, 'has_pw': True}
+
+--- count of admin-ish rows ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'admin_rows': 1}
+
+--- any isAdmin=true rows in whole table ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'is_admin_true': 0}
+
+--- Subscription rows for admin userId c6c8d0163d973a8048e7e33b8 ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'id': '17df5e99-8ece-4ec5-bda7-c8407b68bbbc', 'planId': 'free', 'status': 'active', 'stripeSubscriptionId': None, 'stripeCustomerId': None}
+
+--- UsageQuota rows for admin userId ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'id': '9fc676a7-2414-4993-a4cb-6d67d0a7ae7b', 'planId': 'free', 'runsAllowed': 5, 'runsUsed': 0, 'spendCapUsd': Decimal('1.0'), 'spendUsedUsd': Decimal('0')}
+
+--- total User count ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'total_users': 23}
+
+--- non-free Subscription rows anywhere (should be none: all grants reverted) ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=1
+{'non_free_subs': 6}

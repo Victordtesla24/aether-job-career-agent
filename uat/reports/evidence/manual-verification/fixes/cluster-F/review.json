@@ -1,0 +1,52 @@
+{
+  "branch": "fix/mv-cluster-f",
+  "commit": "72d9f3fb8c7dab849f55bbad0233dc1ad30c2b7a",
+  "base_commit": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "reviewer": "reviewer (sonnet), independent of the fixer that authored 72d9f3f",
+  "review_timestamp_utc": "2026-07-18T03:05:52Z",
+  "review_method": "Diffed the single fix commit against its actual parent (72d9f3f^, i.e. 53f0e08) rather than against current main, because fix/mv-cluster-f was cut from 53f0e08 and main has since gained 4 unrelated merges (cluster-a, cluster-c, system-003) that make a naive `main..branch` diff show ~1100 lines of spurious deletions (cover_letter_agent.py, conftest.py, DEPLOYMENT-RUNBOOK.md, etc.) that are just base drift, not this fixer's work. Confirmed via `git diff 72d9f3f^..72d9f3f --stat` that the real fix touches only 13 frontend/config files, +430/-32.",
+  "verdict": "PASS",
+  "no_placeholder_brackets": {
+    "result": "PASS",
+    "evidence": "grep -n '\\[Operator\\|\\[Business' apps/web/src/app/terms/page.tsx apps/web/src/app/privacy-policy/page.tsx -> no matches (exit 1) in the fixed worktree at .claude/worktrees/agent-a7220f243e7ec43be. '[Operator ABN]', '[Business Name]', and the '[Operator: state your refund policy...]' bracket are all removed from terms/page.tsx (diff lines ~145-160, ~218-224). Vitest test 'MV-terms-002: never renders a raw bracket placeholder anywhere on the page' asserts bodyText has no '[' or ']' character at all (apps/web/src/app/terms/__tests__/page.test.tsx:~90-97) -- stronger than just checking the two known strings."
+  },
+  "honest_copy": {
+    "result": "PASS",
+    "evidence": "apps/web/src/lib/config/legal.ts:29-42 getOperatorLegalConfig(): businessName defaults to the literal string 'Aether' (the product's own name, not a fabricated legal entity) when AETHER_OPERATOR_BUSINESS_NAME is unset; abn and supportEmail default to null (no fabricated ABN or email) with the pages rendering an explicit 'has not yet been published' sentence in that case (terms/page.tsx:151-158, 336-347; privacy-policy/page.tsx:257-269). Confirmed both defaults are exercised by tests with vi.stubEnv(...., '') asserting the honest fallback text and absence of '(ABN' / old placeholder phrasing."
+  },
+  "links_and_consent": {
+    "result": "PASS",
+    "evidence": "New apps/web/src/components/PublicFooter.tsx renders Privacy Policy (-> /privacy-policy) and Terms (-> /terms) links; wired into /login (page.tsx:131), /signup (page.tsx:198), /pricing (page.tsx:225). Vitest asserts href values on all three pages (login/__tests__/page.test.tsx:100-106, pricing/__tests__/page.test.tsx:113-122, signup/__tests__/page.test.tsx:186-192). Signup adds a real checkbox (signup/page.tsx:156-174) gated in handleSubmit: 'if (!consent) { setFormError(...); return; }' (signup/page.tsx:43-46) -- this runs before the API call, so unchecked consent structurally blocks account creation, not just a UI hint. Test 'blocks submission and never calls the API when consent is not checked' (signup/__tests__/page.test.tsx:167-174) asserts registerAccountMock was NOT called -- a real behavioral assertion, not a tautology."
+  },
+  "contact_honest": {
+    "result": "PASS",
+    "evidence": "terms/page.tsx:336-347 and privacy-policy/page.tsx:257-269: when AETHER_SUPPORT_EMAIL is set, renders a real <a href=mailto:...> link; when unset, states 'A support contact address has not yet been published for this service' -- no promise of a Settings-page or in-app support channel that doesn't exist. Old text ('reach us via the Settings page or the in-app support channel') is fully removed and tests assert its absence via .not.toMatch(/reach us via the settings page/i) and .not.toMatch(/in-app support channel/i) in both terms and privacy-policy test files."
+  },
+  "jurisdiction": {
+    "result": "PASS",
+    "evidence": "terms/page.tsx: liability cap changed from 'fifty U.S. dollars ($50)' to 'fifty Australian dollars (A$50)' (line ~298); governing law changed from 'State of Delaware, USA' to 'Victoria, Australia' (line ~325). Test 'MV-terms-004' asserts A$50 present, 'U.S. dollars' absent, 'Victoria, Australia' present, 'Delaware' and standalone 'USA' absent. privacy-policy/page.tsx adds a new Section 9 'Australian Privacy Law' referencing Privacy Act 1988 (Cth), Australian Privacy Principles, and an OAIC complaint path (oaic.gov.au) plus an intro-paragraph reference. Confirmed no remaining 'Delaware' or bare 'USA' string in either page via full-text read."
+  },
+  "tests_meaningful": {
+    "result": "PASS",
+    "evidence": "New/rewritten tests assert concrete, falsifiable behavior rather than tautologies: bracket-absence via literal '[' / ']' scan, env-var-driven fallback vs configured-value branches (both directions tested for business name/ABN/support email), footer link hrefs by role name, consent checkbox blocking the mocked registerAccount call, and the distinct 'public-legal-footer' testid vs the inline consent-line Terms link (signup test explicitly disambiguates the two 'Privacy Policy' occurrences and asserts every instance has the correct href). No test merely re-asserts a hardcoded constant equal to itself."
+  },
+  "vitest_result": {
+    "command": "cd apps/web && pnpm vitest run (worktree .claude/worktrees/agent-a7220f243e7ec43be @ 72d9f3f)",
+    "result": "312 passed / 312 total, 44 test files, 0 failed",
+    "duration": "40.14s",
+    "tsc": "pnpm exec tsc --noEmit -> no output, exit clean",
+    "build": "pnpm run build -> ✓ Compiled successfully, ✓ Generating static pages (28/28); route table shows '/terms' and '/privacy-policy' both marked ƒ (Dynamic, server-rendered on demand) confirming export const dynamic = \"force-dynamic\" takes effect and env vars are read at request time, not baked in at build time"
+  },
+  "prohibited_patterns": [],
+  "reasons": [
+    "PASS: All 5 MV findings (MV-terms-001..004, MV-privacy-policy-001..003 across the 7 listed IDs) are addressed with root-cause fixes (env-sourced config module + page copy changes), not surface patches.",
+    "PASS: No bracket placeholders remain; verified by direct grep of rendered source in the actual worktree, not just reading the diff.",
+    "PASS: No fabricated ABN or support email; defaults are honest ('Aether' generic name; explicit 'not yet published' statements).",
+    "PASS: Footer links and signup consent are real and independently verified via tests that assert hrefs and block the actual submit call.",
+    "PASS: AU jurisdiction (AUD, Victoria/Australia governing law, Privacy Act 1988/APP) fully reconciled; no leftover USD/Delaware artifacts found via full-page read.",
+    "PASS: 312/312 vitest, clean tsc, clean production build with /terms and /privacy-policy confirmed dynamic (ƒ) in the build's route table.",
+    "No prohibited patterns found: no eslint-disable/@ts-ignore/as any/Math.random/TODO/FIXME introduced by this commit; the diff's own docstrings discuss 'placeholder' only in the context of describing what was removed.",
+    "Scope discipline: the commit touches only apps/web (+.env.example docs) as required; the large deletions visible in a naive `git diff main..fix/mv-cluster-f` are base-branch drift from unrelated already-merged clusters (cluster-a/c/system-003), not part of this fix -- confirmed by diffing the commit against its true parent instead.",
+    "Minor non-blocking observation (not a fail reason): apps/web/src/lib/config/legal.ts is byte-identical to the copy independently added in fix/mv-cluster-g (both branches share the same 53f0e08 base and both created this file). This is a trivial same-content 'both added' situation at merge time, not a defect in either branch; flagging for the orchestrator's merge-order awareness only."
+  ]
+}

@@ -1,0 +1,258 @@
+{
+  "session": 1,
+  "started": "2026-07-17T13:39:28.473Z",
+  "steps": [
+    {
+      "step": "1-unauth-load",
+      "status": 200,
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy"
+    },
+    {
+      "step": "1b-title-h1",
+      "title": "Privacy Policy · Aether Career Agent",
+      "h1": "Privacy Policy"
+    },
+    {
+      "step": "1c-lorem-check",
+      "hasLorem": false,
+      "hasComingSoon": false,
+      "hasPlaceholder": false
+    },
+    {
+      "step": "5a-logo-href",
+      "href": "/dashboard"
+    },
+    {
+      "step": "5b-after-logo-click",
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy"
+    },
+    {
+      "step": "5c-after-back",
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy"
+    },
+    {
+      "step": "5d-after-forward",
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy"
+    },
+    {
+      "step": "6a-footer-link-href",
+      "href": "/dashboard"
+    },
+    {
+      "step": "6b-after-footer-click",
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy"
+    },
+    {
+      "step": "7-mobile-viewport",
+      "done": true
+    }
+  ],
+  "links": [
+    {
+      "href": "/dashboard",
+      "text": "AetherCareer Agent"
+    },
+    {
+      "href": "/terms",
+      "text": "Terms & Conditions"
+    },
+    {
+      "href": "/dashboard",
+      "text": "← Back to Dashboard"
+    }
+  ],
+  "linkResults": [
+    {
+      "href": "/dashboard",
+      "text": "AetherCareer Agent",
+      "resolvedUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "status": 200,
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "href": "/terms",
+      "text": "Terms & Conditions",
+      "resolvedUrl": "https://5cb5f0620.abacusai.cloud/terms",
+      "status": 200,
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/terms"
+    },
+    {
+      "href": "/dashboard",
+      "text": "← Back to Dashboard",
+      "resolvedUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "status": 200,
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    }
+  ],
+  "headings": [
+    {
+      "tag": "H1",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "H2",
+      "text": "1. Information We Collect"
+    },
+    {
+      "tag": "H2",
+      "text": "2. How We Use Your Information"
+    },
+    {
+      "tag": "H2",
+      "text": "3. Third-Party Services"
+    },
+    {
+      "tag": "H2",
+      "text": "4. Data Retention"
+    },
+    {
+      "tag": "H2",
+      "text": "5. Your Rights"
+    },
+    {
+      "tag": "H2",
+      "text": "6. Security"
+    },
+    {
+      "tag": "H2",
+      "text": "7. Contact"
+    },
+    {
+      "tag": "H2",
+      "text": "8. Changes to This Policy"
+    }
+  ],
+  "consoleMsgs": [],
+  "failedRequests": [],
+  "networkLogSample": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=lwyc4",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=lwyc4",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/login?_rsc=189n2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=lwyc4",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/login?_rsc=189n2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=lwyc4",
+      "status": 200
+    }
+  ],
+  "finished": "2026-07-17T13:39:33.736Z"
+}

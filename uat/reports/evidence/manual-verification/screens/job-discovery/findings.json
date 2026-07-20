@@ -1,0 +1,127 @@
+[
+  {
+    "id": "MV-job-discovery-001",
+    "screen": "job-discovery",
+    "severity": "MEDIUM",
+    "category": "agent-integration",
+    "summary": "fitScorer's keyword-extraction pulls non-skill garbage tokens (raw URLs, anti-scrape honeypot codes, concatenated words) out of live job descriptions and surfaces them as the headline 'Skill gap' in the AI Match Analysis card shown to the paying user.",
+    "reproduction": [
+      "Log in as admin/admin123 (Pro entitlement active).",
+      "Navigate to /dashboard/jobs.",
+      "Select job id ccf9af5cfbc634f860c727c95 ('Project Manager' @ Empire Life, source=remoteok) or call GET /jobs/{id}/insights directly.",
+      "Read the 'AI Match Analysis' card's 'Skill gap' value / the API response's skillGap field.",
+      "Observe skillGap = 'rmja4ljeymi44ljex' -- traced to an anti-AI-scraper honeypot phrase embedded in the live posting text ('tag RMjA4LjEyMi44LjEx when applying').",
+      "Repeat for job id c3a9c67fb2da7ec7c416a8a06 (skillGap='cdn.openai.com', a URL from the raw description) and cb4f11f939445b2a2e383a6af (skillGap='accommodations', a stray word)."
+    ],
+    "expected": "The 'Skill gap' shown to a paying user should be a plausible, human-readable skill/technology, not a URL fragment, an anti-scraper honeypot code, or a stray non-skill word pulled verbatim from unstructured description text.",
+    "observed": "skillGap and matchedSkills/missingSkills arrays regularly contain non-skill noise tokens extracted from raw description text, shown verbatim in the primary AI Match Analysis card.",
+    "evidence": [
+      "test-artifacts/session1-netlog-part1.json",
+      "curl GET /jobs/ccf9af5cfbc634f860c727c95/insights and GET /jobs/ccf9af5cfbc634f860c727c95 (description text) -- captured 2026-07-17T15:44Z and re-confirmed 2026-07-17T15:58Z (stable/deterministic, reproduced twice)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-job-discovery-002",
+    "screen": "job-discovery",
+    "severity": "HIGH",
+    "category": "wiring",
+    "summary": "Bulk 'Apply (N)' applies directly to every selected job with NO resume tailoring step and NO confirmation gate, unlike the wireframe's 'Tailor & Apply (4)' bulk button and unlike the single-job flow, which requires Tailor Resume -> Review & Apply -> an explicit 'this action cannot be undone' confirmation modal before submitting.",
+    "reproduction": [
+      "Log in, go to /dashboard/jobs, Australia tab.",
+      "Tick the checkbox on one not-yet-applied job card (e.g. 'Senior Product Manager, Strategic Origination Platforms' @ Plenti).",
+      "Observe the bulk action button reads 'Apply (1)' (not 'Tailor & Apply (1)').",
+      "Click 'Apply (1)'.",
+      "Observe: no confirmation dialog appears, no tailoring progress is shown; the job immediately flips to status=applied (confirmed via GET /jobs) and an Application record is created with status=submitted."
+    ],
+    "expected": "Per the wireframe (btn-bulk-tailor-jd10, label 'Tailor & Apply (4)') and per the single-job apply flow's own explicit confirmation gate ('This action cannot be undone'), a bulk apply action should either tailor each resume first or, at minimum, show the same irreversible-action confirmation gate the single-job flow enforces.",
+    "observed": "bulkApply() in apps/web/src/app/dashboard/jobs/page.tsx calls POST /jobs/{id}/apply directly for every selected id, in a loop, with no tailor call and no confirmation modal.",
+    "evidence": [
+      "test-artifacts/25-bulk-apply-result.png",
+      "test-artifacts/23-single-select-bulk-apply-label.png",
+      "GET /jobs response for ce2f682aeba72f9e9b07ff083 showing status=applied, updatedAt=2026-07-17T15:55:29Z immediately after the single click, captured 2026-07-17T15:55Z",
+      "apps/web/src/app/dashboard/jobs/page.tsx lines 450-465 (bulkApply) vs lines 385-430 (single-job startTailoring/openGate/confirmSubmit)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-job-discovery-003",
+    "screen": "job-discovery",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "The 'Connected Job Boards' source integration bar structurally diverges from the wireframe: the wireframe (jd22-jd28) shows named consumer job boards (Seek, LinkedIn AU, Workforce AU, Jora, Indeed AU) each with a per-source connection-status dot and a 'Connect via Browser' / 'Manage' / 'Connect via MyGov' action button; the live implementation instead renders one card per ACTUAL backend data source (Greenhouse, ashby, Lever, RemoteOK, Remotive, ...) showing only a live job count, with no per-source connect/manage affordance and no red/yellow/green connection-state semantics matching the wireframe.",
+    "reproduction": [
+      "Log in, go to /dashboard/jobs.",
+      "Compare the 'CONNECTED JOB BOARDS' section against design/screens/job-discovery.html lines 63-122 (source-bar-jd22)."
+    ],
+    "expected": "Visual/structural conformance to the wireframe's per-source connect/manage card pattern.",
+    "observed": "Cards show only source name + live job count; no connect/manage buttons; Seek/LinkedIn AU/Workforce AU/Jora/Indeed AU (as named in the wireframe) are entirely absent, replaced by the real ATS-aggregator sources actually wired up.",
+    "evidence": [
+      "test-artifacts/02-jobs-initial-load.png",
+      "test-artifacts/29-session2-fresh-initial.png",
+      "design/screens/job-discovery.html lines 63-122"
+    ],
+    "claimRefs": ["CLM-035", "CLM-066", "CLM-099"],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-job-discovery-004",
+    "screen": "job-discovery",
+    "severity": "MEDIUM",
+    "category": "coverage-gap",
+    "summary": "The wireframe's 'Role' (filter-role-jd04) and 'Salary' (filter-salary-jd06) filter dropdowns have no equivalent in the live implementation -- only Source, Location (text), Remote toggle, Sort, and Match-min slider are present.",
+    "reproduction": [
+      "Log in, go to /dashboard/jobs.",
+      "Inspect the filter bar (data-testid=job-filter-bar).",
+      "Compare against design/screens/job-discovery.html lines 125-133 which shows Role, Source, Location, Salary, Remote-Hybrid, Match>= controls."
+    ],
+    "expected": "A Role filter and a Salary filter, per the approved wireframe.",
+    "observed": "Only 5 controls present: job-source-filter (select), job-location-filter (text input), remote-toggle, a sort-by select, and match-min-slider. No role or salary filtering is possible anywhere on the screen.",
+    "evidence": [
+      "test-artifacts/02-jobs-initial-load.png",
+      "test-artifacts/20-source-status-post-sync.png",
+      "test-artifacts/29-session2-fresh-initial.png",
+      "apps/web/src/app/dashboard/jobs/page.tsx lines 640-709 (full filter bar JSX)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-job-discovery-005",
+    "screen": "job-discovery",
+    "severity": "LOW",
+    "category": "agent-integration",
+    "summary": "Tailor-resume runs frequently apply 0 (or 1) of ~8 LLM-proposed bullet edits because the fabrication guard rejects the rest, with no user-facing explanation of why -- the UI just shows 'N rejected by fabrication guard' with no detail, after a ~90-100s wait and a real LLM spend.",
+    "reproduction": [
+      "Select a job, click 'Tailor Resume ->'.",
+      "Wait ~90s for step 2 to appear.",
+      "Read 'X changes applied ... Y rejected by fabrication guard'.",
+      "Observed twice on the same job: run 1 = 1 applied / 7 rejected; run 2 (re-tailor) = 0 applied / 8 rejected."
+    ],
+    "expected": "Either a higher accept rate, or an explanation/preview of what was rejected and why, so a paying user understands the value received for the LLM spend and wait.",
+    "observed": "Binary 'N rejected by fabrication guard' with no elaboration; two consecutive runs on the same job yielded 1/8 and 0/8 accepted changes respectively.",
+    "evidence": [
+      "test-artifacts/14-tailor-step2-or-error.png",
+      "GET /agents/runs entries c3110b283d4e6ed04a22d5f9b (changes=1) and c89e9ae179c6b2ccd500141e4 (changes=0), both job_id=c79e53e764c3a08088d24dde7"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

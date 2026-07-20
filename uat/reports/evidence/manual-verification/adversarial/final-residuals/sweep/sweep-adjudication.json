@@ -1,0 +1,19 @@
+{
+  "sweep_window_utc": "2026-07-20T03:10:17Z .. 2026-07-20T03:11:30Z",
+  "prod_commit_at_sweep": "e182571 (Merge fix/mv-system-008-cron-logging; api/web/worker restarted 03:03:48Z)",
+  "curl_400_adjudication": {
+    "deployer_observation": "deployer's earlier curl probe saw HTTP 400 on dashboard routes",
+    "my_fresh_result": "NOT reproducible \u2014 /dashboard, /dashboard/jobs, /dashboard/analytics all return 200 via plain curl, browser-UA curl, AND browser-UA+Accept:text/html curl; real-browser Playwright navigation returns main_status 200 for all 15 dashboard routes",
+    "verdict": "Transient/probe artifact (likely probed during a web-service restart window or against a stale deploy). Current prod serves 200 for every dashboard route in both curl and real browser."
+  },
+  "failed_request_characterization": {
+    "public_ERR_ABORTED": "Next.js <Link> RSC prefetch requests (?_rsc=...) to /forgot-password,/privacy-policy,/terms aborted on navigation after the 2.5s settle \u2014 speculative prefetch, not a user-facing failure; the pages themselves return 200 when visited",
+    "analytics_ERR_ABORTED": "2x /api/jobs/{id}/insights aborted on navigation; independently re-probed as R1 -> BOTH return HTTP 200 with valid data (jobId/scored/overall/keywordMatch). Not a real failure.",
+    "genuine_unsurfaced_failures": 0
+  },
+  "server_log_window": {
+    "5xx_count": 0,
+    "non_401_4xx_count": 0,
+    "note": "401s in window are expected (logged-out entitlement/auth checks + parallel qa agent traffic)"
+  }
+}

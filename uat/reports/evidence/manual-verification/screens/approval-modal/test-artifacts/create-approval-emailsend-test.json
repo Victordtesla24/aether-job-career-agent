@@ -1,0 +1,2 @@
+{"id":"cdcb5da181cbc0f6107d72637","userId":"cc29a76e324fbf19f438eb8be","applicationId":null,"type":"email_send","status":"pending","payload":{"to":"MV-approval-modal-test@example.com","preview":"MV-approval-modal- email body preview text.","subject":"MV-approval-modal- test subject","confidence":0.5},"createdAt":"2026-07-17T16:40:34.878000","resolvedAt":null}
+HTTP_STATUS:201

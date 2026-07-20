@@ -1,0 +1,18 @@
+{
+  "job_id": "cc3e6aa58559035025e97c835",
+  "status": "completed",
+  "agentKey": "tailor",
+  "result": {
+    "changes": 0,
+    "message": "No verifiable changes could be applied \u2014 every suggested edit was unsupported by your evidence, so your r\u00e9sum\u00e9 is unchanged and you were not charged.",
+    "rejected": [],
+    "resume_id": null,
+    "approvalRequired": false,
+    "noChangesApplied": true,
+    "conversionMetrics": null
+  },
+  "error": null,
+  "createdAt": "2026-07-19T23:09:16.420786+00:00",
+  "startedAt": "2026-07-19T23:09:16.743456+00:00",
+  "finishedAt": "2026-07-19T23:09:30.785613+00:00"
+}

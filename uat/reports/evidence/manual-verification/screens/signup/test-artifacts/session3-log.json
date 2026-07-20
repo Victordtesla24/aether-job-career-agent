@@ -1,0 +1,34 @@
+{
+  "session": "session3_bcrypt_verify",
+  "started": "2026-07-17T13:44:19.425667Z",
+  "steps": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/login",
+      "login_error": [
+        "Invalid email or password."
+      ],
+      "network": [
+        {
+          "ts": "2026-07-17T13:44:21.465654Z",
+          "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+          "status": 401
+        }
+      ],
+      "step": "negative_control_early_diff",
+      "ts": "2026-07-17T13:44:22.343028Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "login_error": [],
+      "network": [
+        {
+          "ts": "2026-07-17T13:44:23.564021Z",
+          "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+          "status": 200
+        }
+      ],
+      "step": "bcrypt_truncation_repro_variant2_fresh_context",
+      "ts": "2026-07-17T13:44:24.322521Z"
+    }
+  ]
+}

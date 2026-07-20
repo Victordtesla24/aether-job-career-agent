@@ -1,0 +1,10 @@
+=== CLM-082/058/091 tailoring setup ===
+captured_utc: 2026-07-20T03:11:28Z
+-- upload reference resume (assets/resume/Vik_Resume_Final.pdf) --
+{"id":"c0d81ad4c71ddf1b85c791d46","userId":"c90279607e7688144c3d73b4d","version":1,"label":"Uploaded — Vik_Resume_Final","sections":{"bullets":[{"text":"AI/ML Solutions, LLM Pipelines (LangChain, Langfuse), Python, TypeScript, React/Next.js, Kubernetes, Docker, Terraform, GCP/AWS, Postgres/Supabase, Real-Time Telemetry.","evidenceRef":"bullet-0"},{"text":"Agile Delivery Leadership: Lead end-to-end
+resume_id: c0d81ad4c71ddf1b85c791d46
+
+-- pick a job with a substantive description (longest JD) --
+id= c08ae75ba71918c613711e7b8  title= Implementation Manager - Spend   company= airwallex  jd_len= 8000
+id= cab2cd1fdc133d08d72c196cf  title= Program Manager, People Transformation  company= Wikimedia Foundation  jd_len= 8000
+id= ca55d1f4fa70345753e89416c  title= Senior Product Manager, Infrastructure O  company= Grafana Labs  jd_len= 8000

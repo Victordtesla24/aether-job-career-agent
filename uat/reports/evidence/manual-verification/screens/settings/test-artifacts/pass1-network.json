@@ -1,0 +1,44 @@
+[
+  {
+    "ts": "2026-07-17T16:12:42.445Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:42.484Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:42.664Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:42.673Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:42.690Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:42.902Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/career-data",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "ts": "2026-07-17T16:12:43.111Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "method": "GET"
+  }
+]

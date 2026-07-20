@@ -1,0 +1,112 @@
+{
+  "run": "MANUAL-VERIFICATION / adversarial FINAL-PASS-002 CLOSURE (focused re-verify of NF-final-pass-002 — the caseless-script gluing leak this qa-adversary discovered in the FINAL-PASS-001 closure run)",
+  "role": "qa-adversary (independent closure verifier; NOT the author/fixer/reviewer/deployer of the NF-final-pass-002 fix 9ceb92f / merge 54c28e5)",
+  "status": "COMPLETE",
+  "generated_utc": "2026-07-20T13:45:00Z",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "prod_commit": "54c28e5 (Merge fix/nf-final-pass-002) — fix commit 9ceb92f: single-label-segment gluings are artifacts (token != solo && solo in _ARTIFACT_LABEL_WORDS), closing the len(segments)<2 early-return family",
+  "prod_health": "GET /api/health -> HTTP 200 {\"status\":\"ok\",\"version\":\"0.2.0\"}; aether-api restarted 2026-07-20T13:33:04Z (gate 967/0 completed BEFORE restart) and a REDUNDANT second restart at 13:40:58Z (governance entry 14, deployed code UNCHANGED @54c28e5) — window-adjacent probes re-verified post-restart, byte-identical (api/pass3-postrestart-reverify.json).",
+  "epistemic_legend": "[VERIFIED-WITH-FRESH-EVIDENCE]=artifact path + timestamp from THIS run (prod @54c28e5, 2026-07-20T13:38-13:45Z); [INFERRED]=deployed-source reading / local predictor; [ASSUMED-PENDING-PROBE]=not proven. Only [VERIFIED-WITH-FRESH-EVIDENCE] closes.",
+
+  "verdict": "VERIFIED-CLOSED-RECOMMENDED for NF-final-pass-002 — WITH ONE NEW LOW FINDING (NF-final-pass-003) that is ORTHOGONAL to the CamelCase-gluing class (a pre-existing _WORD_RE complex-script tokenizer fragmentation, not a re-trigger of NF-final-pass-002).",
+  "verdict_epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+  "loop_exit_input": "Loop does NOT exit fully clean: ONE new LOW finding (NF-final-pass-003). NF-final-pass-002 itself IS closed. The new finding is a distinct root cause (tokenizer word-boundary, not CamelCase segmentation) and reproduces with a STANDALONE unglued Thai city name — so it neither reopens NF-final-pass-002 nor was introduced by its fix.",
+
+  "setup": {
+    "account": {"email": "mv-qa-lastcheck2-ff967d@example.com", "userId": "cc62794585997022a7897e2f0", "name": "Verity Lastcheck Two", "registered_utc": "2026-07-20T13:38:03Z (POST /auth/register, browser UA, HTTP 201)", "note": "FRESH account distinct from the FINAL-PASS-001 account (c644b4d…, already reverted, left untouched)."},
+    "resume": {"id": "c67ad3bad59510aad85ad4920", "via": "POST /api/resumes (label 'MV closure2 base résumé', synthetic raw_text, HTTP 201)"},
+    "grant": {"applied_utc": "2026-07-20T13:38:~30Z", "sql": "2x keyed UPDATE (Subscription pro/active + UsageQuota pro/100/15.0), rowcount==1 each", "verify": "GET /billing/entitlement -> active_paid:true plan.id=pro (api/00-entitlement-granted.json)", "before_state": "db/00-before-state.json (updatedAt 2026-07-20T13:38:16.965884+00; free/5/0/1.0/0)"},
+    "test_data": "6 Job rows + 6 minimal CoverLetter(Application) rows seeded via single-row keyed INSERTs under search_path=aether (source='mv-qa-lastcheck2'); map in db/seed-map.json. Chips are genuine deployed _jd_keywords output on crafted JDs (letter body is a fixture, irrelevant to chip membership)."
+  },
+
+  "verification": {
+    "method": "GET /cover-letters/{id}/insights (deployed tokenizer @54c28e5) x2 independent passes (pass1 session A on SET A; pass2 fresh-login session B on a fresh job B1 + re-read of SET A) + a post-restart re-verify (pass3) + 1 real-browser KeywordCoveragePanel render. All passes deterministic/identical.",
+    "1_original_caseless_repro_CLEAN": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "detail": "東京Salary / القاهرةSalary / ソウルSalary / मुंबईLocation / बईLocation / 北京Location ALL ABSENT from job A2 chips [Terraform,Docker,Engineer,Systems,competitive,quarterly,flexible,use] (pass1 AND pass2) and from fresh job B1 (pass2 + pass3 post-restart). No label-bearing glue chip surfaced. Twice, fresh job the second time, plus post-restart.",
+      "evidence": ["api/pass1-insights.json","api/pass2-insights.json","api/pass3-postrestart-reverify.json","api/assertions.json","screenshots/panel-A2-caseless-repro.png"]
+    },
+    "2_new_variants_CLEAN": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "different_caseless_script": "Thai (กรุงเทพSalary, ภูเก็ตLocation) + Hebrew (ירושליםSalary, ירושליםLocation) — all DROPPED (job A4).",
+      "label_first_order": "Salary東京, Locationالقاهرة, Salaryกรุงเทพ (Salaryソウル-style) — all DROPPED (A4 + B1).",
+      "mixed_cased_plus_caseless_my_design": "東京МоскваSalary (CJK+Cyrillic+Salary), МоскваSalaryソウル (Cyrillic+Salary+Katakana), ΑθήναソウルLocation (Greek+Katakana+Location) — all DROPPED (A4 + B1).",
+      "detail": "Job A4 chips [GraphQL,Reliability,Kafka,Engineer,flagged,listed,tagged,noted,shown,seen] — 0 gluing chips; legit tech (Kafka, GraphQL) present. Identical both passes.",
+      "evidence": ["api/pass1-insights.json","api/pass2-insights.json","screenshots/panel-A4-newvariants.png"]
+    },
+    "3_controls_preserved": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "cased_cases_stay_clean": "A1 forward cased gluings (İstanbulSalary/КиевLocation/МоскваSalary/İzmirLocation/ΑθήναLocation) + MünchenLocation ALL ABSENT; chips [JavaScript,PostgreSQL,DevOps,SlideShare,...]. NF-final-pass-001/closure-001 fixes intact.",
+      "standalone_nouns_not_suppressed": "Standalone unglued Zürich + Киев + 東京都 (a caseless CJK noun) PRESENT as chips (job A3). NOTE: standalone 東京 (2 chars) does NOT appear — dropped by the PRE-EXISTING min-length (len<3) filter, NOT by the fix; a 3-char caseless standalone (東京都) DOES appear, proving the fix does not over-suppress caseless standalones. ソウル ranked out of A3's top-10 by competition (score cap), not suppressed (predictor: semantic=True).",
+      "standalone_label_mention_behaves_as_before": "Bare unglued 'Salary' PRESENT as a chip (job A3) — token==segment, unaffected by the new solo-branch (only GLUED 'XSalary' is dropped). Bare 'Location' stays dropped as pre-existing _KEYWORD_BOILERPLATE (unchanged).",
+      "legit_tech_present": "JavaScript/PostgreSQL/DevOps/SlideShare/Kafka/GraphQL/Terraform/Docker/Redis/Prometheus/Ansible/Kubernetes/MongoDB/Elasticsearch all present across jobs.",
+      "evidence": ["api/pass1-insights.json","api/pass2-insights.json","api/assertions.json"]
+    },
+    "4_sec7_spot": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "console": "0 uncaught pageerrors AND 0 console errors on the exercised page /dashboard/cover-letters (browser-keyword-panel.json consoleErrors=[], pageErrors=[]).",
+      "server_5xx": "/var/log/aether/api.log window 2026-07-20T13:38:00Z–13:45:30Z (45 ISO-8601 lines): status histogram {200:35, 201:2}; 0 5xx; 0 Traceback/Internal Server Error. 4 lifecycle markers from the redundant 13:40:58Z restart (clean shutdown/startup, not errors). No 5xx attributable to either restart.",
+      "evidence": ["api/browser-keyword-panel.json","logs/api-window-1338-1345Z.log"]
+    }
+  },
+
+  "boundary_probes_documented_not_a_finding": {
+    "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE] leak + [INFERRED] design rationale",
+    "observed": "Job A5 chips [MongoDB,Elasticsearch,TokyoManager,東京Salaries,東京Manager,東京Zürich,...] — 東京Manager, TokyoManager, 東京Zürich, 東京Salaries LEAK.",
+    "why_not_a_finding": "These are OUTSIDE the caseless-LABEL gluing class and match the fix's explicitly-documented, deliberate boundary: (a) 東京Manager/TokyoManager glue a ROLE word (not one of the narrow _ARTIFACT_LABEL_WORDS) — the label-vs-role asymmetry the commit calls out, and it applies EQUALLY to Latin cased nouns (TokyoManager leaks identically); (b) 東京Zürich glues two proper nouns with NO label word at all; (c) 東京Salaries uses the plural 'Salaries' which is intentionally exact-match-safe (commit: 'plural/possessive forms ... are exact-match-safe and unaffected'). All three are pre-existing, deliberate tradeoffs mirrored for Latin — NOT caseless-specific regressions, NOT loop-blocking."
+  },
+
+  "new_findings": [
+    {
+      "id": "NF-final-pass-003",
+      "screen": "cover-letter-studio",
+      "severity": "LOW",
+      "category": "defect",
+      "class": "JD keyword tokenizer (_WORD_RE) complex-script word-boundary fragmentation — DISTINCT from the CamelCase-gluing class (NF-final-pass-001/002); a pre-existing issue surfaced by this closure sweep",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE] leak observed on prod @54c28e5 (insights API + real-browser panel, twice + post-restart); [INFERRED] root cause from deployed-source reading + local tokenization probe",
+      "summary": "The JD Keyword Coverage panel leaks garbage fragment chips for CJK-adjacent COMBINING-MARK scripts (Thai, Devanagari, ...). _WORD_RE = re.compile(r\"[^\\W_](?:[^\\W_]|[+#./-])*\") treats Thai/Devanagari combining vowel-signs/anusvara (e.g. U+0E38 ◌ุ, U+0E47 ◌็, U+0E31 ◌ั, U+0902 ◌ं) as non-word chars, so it SPLITS a single Thai/Devanagari token at every combining mark. A standalone Thai city name — with NO gluing and NO label word — therefore fragments into meaningless sub-tokens, and any fragment >=3 chars survives _is_semantic_keyword and surfaces as a top chip: 'กรุงเทพ' (Bangkok) -> ['กร','งเทพ'] -> chip 'งเทพ'; 'เชียงใหม่' (Chiang Mai) -> chip 'ยงใหม'. This is NOT the CamelCase-gluing class and is NOT introduced by the NF-final-pass-002 fix — the fix correctly drops the label-bearing half of a gluing ('Salaryกรุงเทพ' -> ['Salaryกร','งเทพ'], the 'Salaryกร' hump ['Salary'] is now flagged and dropped); what leaks is the orphaned non-label script fragment.",
+      "reproduction": [
+        "1. Log in as a Pro user with a résumé.",
+        "2. Create/seed a Job whose description contains a STANDALONE (unglued, no label) Thai city name — e.g. 'Offices in กรุงเทพ and เชียงใหม่ and ภูเก็ต cities.' plus a couple legit tech terms.",
+        "3. Attach a cover letter for that job.",
+        "4. GET /cover-letters/{id}/insights -> keywords.items CONTAINS the garbage fragments 'งเทพ' and 'ยงใหม' as chips (evidence api/probe-thai-standalone.json).",
+        "5. Open in Cover Letter Studio -> the JD Keyword Coverage panel renders those Thai fragments (screenshots/panel-C1-thai-fragment.png)."
+      ],
+      "expected": "A complex-script proper noun in a JD is either surfaced whole as a keyword or filtered — never fragmented into meaningless sub-tokens that appear as chips on the paid rail.",
+      "observed": "Standalone 'กรุงเทพ' -> 'งเทพ' and 'เชียงใหม่' -> 'ยงใหม' leaked as chips on prod @54c28e5 (job C1, no gluing at all). Also visible via the gluing path: job B1 'Salaryกรุงเทพ' -> 'งเทพ' chip (the 'Salary' half correctly dropped by the fix). Reproduced twice and post-restart (pass2/pass3/probe), identical. Devanagari standalone 'मुंबई' -> ['म','बई'] fragments too but the 'बई' fragment is <3 chars and is dropped by min-length, so Devanagari standalone happens not to leak (its leak surfaces only when a label is glued, which the fix now catches).",
+      "root_cause_inferred": "apps/api/app/routers/cover_letters.py::_WORD_RE — the character class [^\\W_] excludes Unicode combining marks (general category Mn/Mc), which Thai and Devanagari use extensively as inline vowel signs. The regex therefore breaks a single orthographic word at each combining mark instead of keeping the grapheme cluster together. _is_semantic_keyword's gibberish guard only rejects tokens of len>=6 with no ASCII [aeiouy] vowel — a 3-5 char caseless fragment sails through. (Cyrillic/Greek standalone words of len>=6 are instead caught by that same ASCII-vowel gibberish guard, e.g. standalone Москва was dropped — so this specifically bites 3-5 char combining-mark fragments.)",
+      "fix_hint": "Any of: (a) include Unicode combining marks in the word class — e.g. _WORD_RE = re.compile(r\"[^\\W_][\\w\\u0300-\\u036f\\u0e00-\\u0e7f\\u0900-\\u097f...+#./-]*\", re.U) or switch to a grapheme-cluster / \\X-aware tokenizer (the `regex` module's \\X, or unicodedata normalization + combining-mark reattachment); or (b) after tokenizing, reject a token that is (or begins with) an orphaned combining mark or is a sub-grapheme fragment; or (c) extend the gibberish guard to reject short pure-caseless-script fragments that are not whole words. Materiality is LOW so a targeted _WORD_RE widening is likely sufficient.",
+      "materiality": "LOW: a meaningless script fragment on the paid JD-Keyword-Coverage rail — no PII, no security, no fabricated user content, and the CamelCase-gluing class (the reported finding) is genuinely closed. Trigger surface is any JD mentioning a Thai/Devanagari (and likely other combining-mark script) place/proper name, glued OR standalone — international boards emit these. Filed as loop-exit input and to keep the tokenizer honest; NOT a regression and NOT a reopening of NF-final-pass-002.",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-002-closure/api/probe-thai-standalone.json (STANDALONE Thai, no gluing -> งเทพ + ยงใหม)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-002-closure/api/pass2-insights.json (B1 gluing path -> งเทพ, label half dropped)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-002-closure/api/pass3-postrestart-reverify.json (deterministic post-restart)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-002-closure/api/local-predictor-INFERRED.txt (tokenization: 'กรุงเทพ' -> ['กร','งเทพ'])",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-002-closure/screenshots/panel-C1-thai-fragment.png"
+      ],
+      "claimRefs": [],
+      "status": "OPEN",
+      "owner": null,
+      "fixCommits": [],
+      "verifiedBy": null
+    }
+  ],
+
+  "grant_revert_status": {
+    "granted_utc": "2026-07-20T13:38:~30Z (2x UPDATE 1, rowcount==1 each; active_paid:true verified — api/00-entitlement-granted.json)",
+    "reverted_utc": "2026-07-20T13:44Z (self-applied, BEFORE finishing; 2x UPDATE 1, rowcount==1 each; byte_for_byte_match=True — db/zz-revert-verify.json)",
+    "verify": "GET /billing/entitlement -> active_paid:false, plan.id=free (api/zz-post-revert-entitlement.json). updatedAt restored to before-state 2026-07-20T13:38:16.965884+00; runsUsed stayed 0 (insights reads unmetered).",
+    "discipline": "psycopg2 under options=-c search_path=aether; ?schema= stripped via python urllib (not sed); current_schema()==aether asserted before every op; single-row WHERE-keyed on my userId only; NO TRUNCATE / unqualified DELETE. Ledgers updated: ENTITLEMENT-GRANT-LOG.md (FINAL-PASS-002 CLOSURE grant+revert block) + TEST-DATA-CLEANUP-LEDGER.md (account under mv-qa-% DELETE pattern). FINAL-PASS-001 account c644b4d… left untouched (already reverted).",
+    "before_state_evidence": "db/00-before-state.json"
+  },
+
+  "evidence_index": {
+    "entitlement": ["db/00-before-state.json","api/00-entitlement-granted.json","db/zz-revert-verify.json","api/zz-post-revert-entitlement.json"],
+    "insights_api": ["api/pass1-insights.json","api/pass2-insights.json","api/pass3-postrestart-reverify.json","api/probe-thai-standalone.json","api/assertions.json"],
+    "browser": ["api/browser-keyword-panel.json","screenshots/panel-A2-caseless-repro.png","screenshots/panel-A4-newvariants.png","screenshots/panel-C1-thai-fragment.png","screenshots/studio-full.png"],
+    "server_log": ["logs/api-window-1338-1345Z.log","logs/api-window-1338-1345Z.log.summary"],
+    "design_aid_INFERRED": ["api/local-predictor-INFERRED.txt","db/seed-map.json"]
+  },
+
+  "prohibitions_respected": "No pytest anywhere; no service restarts by me (the 13:33:04Z + redundant 13:40:58Z restarts were the deployer/deployer-fork; I only read logs); no code edits; no force-push; did NOT edit GAPS.json (orchestrator is sole writer); only my one fresh disposable mv-qa-lastcheck2 account touched; FINAL-PASS-001 account left alone; never touched sarkar.vikram/admin/other users; all DB ops single-row WHERE-keyed under search_path=aether with current_schema() asserted, ?schema= stripped via urllib (not sed); NO TRUNCATE/unqualified DELETE; server log read-only; secrets never printed beyond first 8 chars. Grant reverted byte-for-byte BEFORE finishing (active_paid:false verified). File polling used, no process-greps for completion."
+}

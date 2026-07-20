@@ -1,0 +1,60 @@
+
+### T1_signup_consent
+{
+  "signupEmail": "mv-verifyfg-signup-2026-07-18T03-17-37-675Z@example.com",
+  "footer_terms_href": "/terms",
+  "footer_privacy_href": "/privacy-policy",
+  "consent_default_checked": false,
+  "blocked_submit_error": "You must agree to the Terms & Conditions and Privacy Policy to create an account.",
+  "url_after_blocked_submit": "https://5cb5f0620.abacusai.cloud/signup",
+  "register_calls_while_unchecked": [],
+  "consent_after_check": true,
+  "url_after_checked_submit": "https://5cb5f0620.abacusai.cloud/dashboard",
+  "register_calls_total": [
+    "POST https://5cb5f0620.abacusai.cloud/api/auth/register"
+  ]
+}
+
+### T1b_footer_link_resolve
+{
+  "login_terms_href": "/terms",
+  "login_privacy_href": "/privacy-policy",
+  "navigated_to": "https://5cb5f0620.abacusai.cloud/login",
+  "terms_h1": "Sign in"
+}
+
+### T2_pricing_unauth
+{
+  "honesty_note": "Every plan uses the same AI models — plans differ by monthly agent-run quota and feature access, not model quality.",
+  "model_tier_visible_hits": [],
+  "vendor_name_visible_hits": [],
+  "free_cta_text": "Get started free",
+  "free_cta_href": "/signup",
+  "plan_cards_text_excerpt": "AAetherSimple, honest pricingAll prices are in Australian dollars and GST-inclusive. Pick a plan and let Aether do the applying — cancel anytime.Every plan uses the same AI models — plans differ by monthly agent-run quota and feature access, not model quality.MonthlyAnnualsave moreFree$0No card required5 agent runs / month5 tailored agent runs / monthResume tailoring + ATS scoringCommunity supportGet started freeStarter$19/ monthIncl. $1.73 GSTGST-inclusive price. Net $17.27 + $1.73 GST (10%, computed as round(total ÷ 11, 2)).30 agent runs / month30 tailored agent runs / monthCover letters + story bankEmail agent (triage + drafts)Subscribe to StarterPro$39/ monthIncl. $3.55 GSTGST-inclusive price. Net $35.45 + $3.55 GST (10%, computed as round(total ÷ 11, 2)).100 agent runs / month100 tailored agent runs / monthEverything in StarterPriority email agentSubscribe to ProPower$69/ monthIncl. $6.27 GSTGST-inclusive price. Net $62.73 + $6.27 GST (10%, computed as round(total ÷ 11, 2)).300 agent runs / month300 tailored agent runs / monthEverything in ProHighest monthly run ceilingSubscribe to PowerAlready have an account? Sign inPrivacy Policy·Terms·© 2026 Aether"
+}
+
+### T3_pricing_authed_checkout
+{
+  "logged_in_landing": "https://5cb5f0620.abacusai.cloud/dashboard",
+  "free_cta_text_authed": "Go to dashboard",
+  "free_cta_href_authed": "/dashboard",
+  "checkout_error_text": "This plan isn't available for purchase yet (not yet configured for checkout). Please try a different plan or check back soon.",
+  "navigated_to_stripe": false,
+  "current_url": "https://5cb5f0620.abacusai.cloud/pricing"
+}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.click: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-testid="manage-subscription-btn"]')[22m
+
+    at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/mv-verifyfg-ui.mjs:165:14 {
+  log: [
+    `  - waiting for locator('[data-testid="manage-subscription-btn"]')`
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.1

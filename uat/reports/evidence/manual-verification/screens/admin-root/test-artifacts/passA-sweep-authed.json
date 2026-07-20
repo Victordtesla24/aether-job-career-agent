@@ -1,0 +1,134 @@
+[
+  {
+    "screen": "admin-root",
+    "route": "/admin",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:19.517Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-root/test-artifacts/authed-admin-root-fullpage.png"
+  },
+  {
+    "screen": "admin-health",
+    "route": "/admin/health",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:26.433Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-health/test-artifacts/authed-admin-health-fullpage.png"
+  },
+  {
+    "screen": "admin-users",
+    "route": "/admin/users",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:33.304Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-users/test-artifacts/authed-admin-users-fullpage.png"
+  },
+  {
+    "screen": "admin-settings",
+    "route": "/admin/settings",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:39.950Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-settings/test-artifacts/authed-admin-settings-fullpage.png"
+  },
+  {
+    "screen": "admin-audit-log",
+    "route": "/admin/audit-log",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:46.584Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-audit-log/test-artifacts/authed-admin-audit-log-fullpage.png"
+  },
+  {
+    "screen": "admin-spend",
+    "route": "/admin/spend",
+    "phase": "authed",
+    "timestamp": "2026-07-17T15:44:53.328Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+        "status": 200
+      }
+    ],
+    "bodyTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 1m ago\n\nAD\nAdministrator\nAdministrator\nACTIVE APPLICATIONS\n1\n+1 this week\nINTERVIEW RATE\n0%\n0 of 1 applied\nOFFERS\n0\nnone yet — agents hunting\nAI CONFIDENCE\n38%\navg match quality\nAgent Activity\nlive\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nCover Letter Agent drafted a cover letter — awaiting your approval\n\n1 min ago · needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n4 hr ago · Job bad-job-id-async-force-fail not found for user\n\nFailed\n\nTailoring Agent customized your resume\n\n4 hr ago · 2 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 0 edits\n\nTailored\n\nTailoring Agent customized your resume\n\n4 hr ago · 1 edits\n\nTailored\nToday's Opportunities\nBrowse all jobs\nP\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply\nB\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nB\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match\nApplication Funnel\nJobs Found\n44\nApplied\n1\nScreened\n0\nInterviewed\n0\nOffers\n0\nStory Bank\nOpen\n\n3 STAR achievements ready to deploy\n\nLATEST STORIES\n\nLLM Evaluation Stack for Production-Grade AI Governance\n1 metrics\nExecutive Alignment Workshop for Strategic Decision-Making at ANZ\n1 metrics\nCloud-Native Core Banking Platfor",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-spend/test-artifacts/authed-admin-spend-fullpage.png"
+  }
+]

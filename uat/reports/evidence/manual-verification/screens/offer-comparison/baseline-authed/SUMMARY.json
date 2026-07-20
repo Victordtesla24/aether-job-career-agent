@@ -1,0 +1,12 @@
+{
+  "screen_id": "offer-comparison",
+  "route": "/offer-comparison",
+  "url": "https://5cb5f0620.abacusai.cloud/offer-comparison",
+  "ts_utc": "2026-07-17T15:20:10.690Z",
+  "http_status": 200,
+  "final_url": "https://5cb5f0620.abacusai.cloud/offer-comparison",
+  "authenticated_200_xhr_count": 1,
+  "console_error_count": 1,
+  "console_warning_count": 0,
+  "failed_request_count": 0
+}

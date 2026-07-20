@@ -1,0 +1,324 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+    "status": 202,
+    "method": "POST",
+    "ts": "2026-07-17T15:45:11.341Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "enqueued"
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:14.553Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:17.766Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:20.980Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:24.181Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:27.579Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:30.785Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:34.005Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:37.204Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:40.426Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:43.651Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:46.873Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:50.115Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:53.313Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:56.518Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:45:59.701Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:46:02.903Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:46:06.122Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "processing",
+      "agentKey": "tailor",
+      "result": null,
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": null
+    }
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c022642760edffb7e88c4f16f",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:46:09.348Z",
+    "body": {
+      "job_id": "c022642760edffb7e88c4f16f",
+      "status": "completed",
+      "agentKey": "tailor",
+      "result": {
+        "model": "deepseek/deepseek-v4-pro",
+        "run_id": "c1b7738702004606769cebace",
+        "changes": 1,
+        "costUsd": 0.000658,
+        "rejected": [],
+        "tokensIn": 414,
+        "resume_id": "c4e1d5240fe9c4c7221c62f7a",
+        "tokensOut": 122,
+        "duration_ms": 54410,
+        "billingAudit": {
+          "authMode": "api_key",
+          "provider": "openrouter",
+          "quotaPath": "metered_api",
+          "credentialSource": "environment"
+        },
+        "approvalRequired": true,
+        "conversionMetrics": {
+          "confidence": "model-estimated",
+          "methodology": "Like-for-like ATS delta (shared context) × population baseline (2.5%)",
+          "baselineATSScore": 43.26,
+          "tailoredATSScore": 43.26,
+          "estimatedConversionLift": "+0.0%"
+        }
+      },
+      "error": null,
+      "createdAt": "2026-07-17T15:45:11.387274+00:00",
+      "startedAt": "2026-07-17T15:45:11.855979+00:00",
+      "finishedAt": "2026-07-17T15:46:06.737749+00:00"
+    }
+  }
+]

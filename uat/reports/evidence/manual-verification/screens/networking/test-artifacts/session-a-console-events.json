@@ -1,0 +1,17 @@
+[
+  {
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 422 ()",
+    "ts": "2026-07-17T16:16:37.143Z"
+  },
+  {
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 422 ()",
+    "ts": "2026-07-17T16:16:37.240Z"
+  },
+  {
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 404 ()",
+    "ts": "2026-07-17T16:16:37.486Z"
+  }
+]

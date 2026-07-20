@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "timestamp_utc": "2026-07-17T12:36:30Z",
+  "endpoint_file_line": "apps/api/app/routers/health.py:24",
+  "nginx_route_mapping": "/etc/nginx/conf.d/5cb5f0620.conf:15-17 — location /api/ strips prefix and proxies to http://127.0.0.1:8000",
+  "production_url": "https://5cb5f0620.abacusai.cloud/api/health",
+  "raw_response": {
+    "status": "ok",
+    "version": "0.2.0"
+  },
+  "http_code": 200,
+  "latency_s": 0.03514,
+  "verdict": "OK — health endpoint live via production HTTPS and responding with canonical payload",
+  "notes": "Route defined at apps/api/app/routers/health.py line 24 (GET /health returns HealthResponse). Public production URL https://5cb5f0620.abacusai.cloud/api/health verified live. Nginx vhost (5cb5f0620.conf:15-17) confirms /api/ prefix is rewritten and proxied to FastAPI on 127.0.0.1:8000. Latency measured end-to-end via public HTTPS endpoint."
+}

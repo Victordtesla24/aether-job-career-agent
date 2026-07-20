@@ -1,0 +1,380 @@
+[
+  {
+    "step": "unauth-access",
+    "detail": {
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "redirectedToLogin": true
+    },
+    "ts": "2026-07-17T15:57:50.197Z"
+  },
+  {
+    "step": "login",
+    "detail": {
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "tokenPrefix": "eyJhbGci"
+    },
+    "ts": "2026-07-17T15:57:57.857Z"
+  },
+  {
+    "step": "load",
+    "detail": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/applications",
+      "subtitle": "34 active applications across 8 stages"
+    },
+    "ts": "2026-07-17T15:58:01.465Z"
+  },
+  {
+    "step": "inventory",
+    "detail": {
+      "viewTabs": [
+        "Board View",
+        "Sankey Flow",
+        "Timeline"
+      ],
+      "filterBtn": 1,
+      "sortBtn": 1,
+      "kanban": 1,
+      "columns": 8,
+      "cards": 34,
+      "autoApplyBanner": "Auto-apply is a high-risk action. Only applications with Match Score > 80% and your explicit approval will be submitted. Auto-apply is currently off.",
+      "pendingBanner": 1,
+      "closedStrip": 1
+    },
+    "ts": "2026-07-17T15:58:01.518Z"
+  },
+  {
+    "step": "view-sankey",
+    "detail": {
+      "sankeySection": 1
+    },
+    "ts": "2026-07-17T15:58:02.997Z"
+  },
+  {
+    "step": "view-timeline",
+    "detail": {
+      "timelineSection": 1,
+      "timelineItems": 11
+    },
+    "ts": "2026-07-17T15:58:04.111Z"
+  },
+  {
+    "step": "view-board-again",
+    "detail": {},
+    "ts": "2026-07-17T15:58:05.512Z"
+  },
+  {
+    "step": "filter-menu-open",
+    "detail": {
+      "filterOptions": [
+        "All applications",
+        "Match ≥ 85",
+        "Match < 85",
+        "Needs approval"
+      ]
+    },
+    "ts": "2026-07-17T15:58:06.307Z"
+  },
+  {
+    "step": "filter-applied",
+    "detail": {
+      "optText": "All applications",
+      "cardCount": 34
+    },
+    "ts": "2026-07-17T15:58:07.213Z"
+  },
+  {
+    "step": "filter-applied",
+    "detail": {
+      "optText": "Match ≥ 85",
+      "cardCount": 0
+    },
+    "ts": "2026-07-17T15:58:08.295Z"
+  },
+  {
+    "step": "filter-applied",
+    "detail": {
+      "optText": "Match < 85",
+      "cardCount": 34
+    },
+    "ts": "2026-07-17T15:58:09.628Z"
+  },
+  {
+    "step": "filter-applied",
+    "detail": {
+      "optText": "Needs approval",
+      "cardCount": 5
+    },
+    "ts": "2026-07-17T15:58:10.848Z"
+  },
+  {
+    "step": "sort-menu-open",
+    "detail": {
+      "sortOptions": [
+        "Latest activity",
+        "Match score",
+        "Company A–Z"
+      ]
+    },
+    "ts": "2026-07-17T15:58:12.268Z"
+  },
+  {
+    "step": "sort-applied",
+    "detail": {
+      "optText": "Latest activity"
+    },
+    "ts": "2026-07-17T15:58:13.157Z"
+  },
+  {
+    "step": "sort-applied",
+    "detail": {
+      "optText": "Match score"
+    },
+    "ts": "2026-07-17T15:58:14.441Z"
+  },
+  {
+    "step": "sort-applied",
+    "detail": {
+      "optText": "Company A–Z"
+    },
+    "ts": "2026-07-17T15:58:15.815Z"
+  },
+  {
+    "step": "clickability-inventory",
+    "detail": {
+      "nonClickableCards": 24,
+      "clickableCards": 10
+    },
+    "ts": "2026-07-17T15:58:16.474Z"
+  },
+  {
+    "step": "non-clickable-card-click",
+    "detail": {
+      "ncText": "A35Staff Product Manager, Onboardingairwallex4 min ago",
+      "detailAfterNonClickableClick": 0,
+      "expected": "should NOT open (job-pipeline card has no linked Application)"
+    },
+    "ts": "2026-07-17T15:58:17.005Z"
+  },
+  {
+    "step": "detail-panel-open",
+    "detail": {
+      "firstCardText": "E38Business AnalystEasyParkneeds approval8 min ago",
+      "detailVisible": 1
+    },
+    "ts": "2026-07-17T15:58:18.189Z"
+  },
+  {
+    "step": "detail-panel-close",
+    "detail": {
+      "detailVisibleAfterClose": 0
+    },
+    "ts": "2026-07-17T15:58:18.661Z"
+  },
+  {
+    "step": "detail-panel-keyboard",
+    "detail": {
+      "detailViaKeyboard": 1
+    },
+    "ts": "2026-07-17T15:58:19.829Z"
+  },
+  {
+    "step": "all-card-texts",
+    "detail": {
+      "allCardTexts": [
+        "A35Staff Product Manager, Onboardingairwallex4 min ago",
+        "A45Senior Data Center Capacity Delivery Manager, AUSAnthropic4 min ago",
+        "B43Onboarding Project ManagerBlock4 min ago",
+        "B46Technical Business AnalystBrighte4 min ago",
+        "C44Enterprise Project ManagerCanonical4 min ago",
+        "C44Project Manager - Ubuntu Embedded SystemsCanonical4 min ago",
+        "C39Junior Project ManagerCanonical4 min ago",
+        "CA30Lead Product ManagerCareers at Eucalyptus4 min ago",
+        "D43Sr. Engagement ManagerDatabricks4 min ago",
+        "D40Senior Agent Product Manager - Sydneydecagon4 min ago",
+        "GL39Senior Product Manager, Infrastructure Observability | Sweden | RemoteGrafana Labs4 min ago",
+        "H41GTM Technology Product Ownerharvey4 min ago",
+        "H41GTM Technology Product Ownerharvey4 min ago",
+        "H33Innovation Product Manager, Australiaharvey4 min ago",
+        "L30Senior Product ManagerLemon.io4 min ago",
+        "M24Staff Program Manager, Trust & SafetyMozilla4 min ago",
+        "O33Enablement Program Manager, APACOkta4 min ago",
+        "P36Program Manager, Sales Operations and TrainingPeloton4 min ago",
+        "P40Product Manager, Credit AutomationPlenti4 min ago",
+        "S34Senior Legal Analyst & Litigation Project ManagerSamsara4 min ago",
+        "S34Engagement ManagerStripe2 d ago",
+        "T43Project Manager 3Twilio4 min ago",
+        "V35Technical Product Manager, Energy StorageVoltus4 min ago",
+        "WF43Program Manager, People TransformationWikimedia Foundation4 min ago",
+        "E38Business AnalystEasyParkneeds approval8 min ago",
+        "EL27Project ManagerEmpire Lifeneeds approval7 min ago",
+        "IG30Business AnalystInterEx Groupneeds approval2 d ago",
+        "R38Enterprise Product Managerreplitneeds approval5 h ago",
+        "S37Program Manager, Intake & Portfolio ManagementStripeneeds approval1 d ago",
+        "A41Implementation Manager - Spend airwallexView Email Thread7 min ago",
+        "B46Business AnalystBrighteView Email Thread8 min ago",
+        "D45GRC Program ManagerDeputyView Email Thread2 d ago",
+        "O43Support Delivery Lead, GovernmentopenaiView Email Thread11 min ago",
+        "P50Senior Product Manager, Strategic Origination PlatformsPlentiView Email Thread2 min ago"
+      ]
+    },
+    "ts": "2026-07-17T15:58:20.196Z"
+  },
+  {
+    "step": "open-deputy-fixture-check",
+    "detail": {
+      "found": true,
+      "detailCount": 1,
+      "bodyTextSnippet": "GRC Program Manager @ Deputystatus: submitted · resume version: c2a50550cb977f5118c0f5a04 · updated 7/14/2026, 6:57:15 PMApply on company site ↗Cover letter15 July 2026\n\nHiring Team\nDeputy\nRe: GRC Program Manager\n\nDear Hiring Team at Deputy,\n\nMy background in end-to-end delivery leadership is a direct match for the GRC Program Manager role at Deputy.\n\nMy recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics.\n\nI would welcome the opportunity to discuss how this experience can support your team, and"
+    },
+    "ts": "2026-07-17T15:58:21.672Z"
+  },
+  {
+    "step": "open-stripe-fixture-check",
+    "detail": {
+      "found": true,
+      "detailCount": 1,
+      "bodyTextSnippet": "Program Manager, Intake & Portfolio Management @ Stripestatus: draft · resume version: c2a50550cb977f5118c0f5a04 · updated 7/16/2026, 11:46:59 AMApply on company site ↗Mark as submittedCover letter16 July 2026\n\nHiring Team\nStripe\nRe: Program Manager, Intake & Portfolio Management\n\nDear Hiring Team at Stripe,\n\nMy background in end-to-end delivery leadership is a direct match for the Program Manager, Intake & Portfolio Management role at Stripe. The demands this role places on mission-critical delivery ownership map directly onto how I already run programs.\n\nMy experience spans end-to-end delivery leadership and technical program management across mission-critical programs. I built LLM evaluation stacks with Langfuse and Phoenix, delivered analytics applications with Next.js and Supabase, an"
+    },
+    "ts": "2026-07-17T15:58:23.147Z"
+  },
+  {
+    "step": "closed-strip-click",
+    "detail": {
+      "closedDetailVisible": 1
+    },
+    "ts": "2026-07-17T15:58:24.292Z"
+  },
+  {
+    "step": "crosslink-email",
+    "detail": {
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/email"
+    },
+    "ts": "2026-07-17T15:58:26.146Z"
+  },
+  {
+    "step": "crosslink-crm",
+    "detail": {
+      "present": false
+    },
+    "ts": "2026-07-17T15:58:26.959Z"
+  },
+  {
+    "step": "pending-approvals-banner",
+    "detail": {
+      "bannerText": "4 items need your review → open the Approvals queue",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/approvals"
+    },
+    "ts": "2026-07-17T15:58:28.358Z"
+  },
+  {
+    "step": "my-created-app-visible",
+    "detail": {
+      "airwallexCard": 2
+    },
+    "ts": "2026-07-17T15:58:33.083Z"
+  },
+  {
+    "step": "data-integrity",
+    "detail": {
+      "subtitleAfter": "34 active applications across 8 stages",
+      "colCounts": {
+        "kanban-column-discovered": 24,
+        "kanban-column-evaluating": 0,
+        "kanban-column-tailoring": 0,
+        "kanban-column-ready": 5,
+        "kanban-column-submitted": 5,
+        "kanban-column-in-review": 0,
+        "kanban-column-interview": 0,
+        "kanban-column-offer": 0
+      },
+      "totalCards": 34
+    },
+    "ts": "2026-07-17T15:58:33.117Z"
+  },
+  {
+    "step": "sankey-wiring",
+    "detail": {
+      "sankeyApiResponse": {
+        "stages": [
+          {
+            "key": "jobs_found",
+            "label": "Jobs Found",
+            "value": 44,
+            "color": "#4F46E5"
+          },
+          {
+            "key": "applied",
+            "label": "Applied",
+            "value": 5,
+            "color": "#818CF8"
+          },
+          {
+            "key": "screened",
+            "label": "Screened",
+            "value": 0,
+            "color": "#FF6B35"
+          },
+          {
+            "key": "interviewed",
+            "label": "Interviewed",
+            "value": 0,
+            "color": "#F59E0B"
+          },
+          {
+            "key": "offers",
+            "label": "Offers",
+            "value": 0,
+            "color": "#34D399"
+          }
+        ],
+        "dropoffs": [
+          {
+            "after": "jobs_found",
+            "count": 39,
+            "reason": "below match threshold"
+          },
+          {
+            "after": "applied",
+            "count": 5,
+            "reason": "not shortlisted"
+          },
+          {
+            "after": "screened",
+            "count": 0,
+            "reason": "no response / screened out"
+          },
+          {
+            "after": "interviewed",
+            "count": 0,
+            "reason": "not selected"
+          }
+        ],
+        "insight": "44 jobs found, 5 applied. Track applications through the pipeline to improve conversion."
+      },
+      "sankeySvgTextSnippet": "Sankey Flowapplication flow & drop-off across stagesJobs Found44Applied5Screened0Interviewed0Offers0−39 · below match threshold−5 · not shortlisted−0 · no response / screened out−0 · not selected44 jobs found, 5 applied. Track applications through the pipeline to improve conversion."
+    },
+    "ts": "2026-07-17T15:58:34.572Z"
+  },
+  {
+    "step": "back-forward",
+    "detail": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/applications"
+    },
+    "ts": "2026-07-17T15:58:40.464Z"
+  },
+  {
+    "step": "throttled-reload",
+    "detail": {
+      "throttleMs": 14575
+    },
+    "ts": "2026-07-17T15:58:55.519Z"
+  },
+  {
+    "step": "mid-session-unauth",
+    "detail": {
+      "midSessionUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "redirected": true
+    },
+    "ts": "2026-07-17T15:58:57.215Z"
+  }
+]

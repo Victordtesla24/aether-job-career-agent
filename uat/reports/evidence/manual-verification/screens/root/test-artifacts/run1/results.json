@@ -1,0 +1,1171 @@
+{
+  "run_tag": "run1",
+  "started_utc": "2026-07-17T13:40:31.807110+00:00",
+  "scenario1_unauthenticated": {
+    "console_events": [],
+    "page_errors": [],
+    "request_failures": [],
+    "responses": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/",
+        "status": 307,
+        "ts": "2026-07-17T13:40:32.637895+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.651820+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.675603+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.684354+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.702664+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.719850+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.727330+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.727963+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.728189+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.728441+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.728626+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.728789+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.804220+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.810024+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/login?_rsc=189n2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.869959+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-f1da1d9ab7b71276.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.878962+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.948712+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-dd1fad4b48e6d501.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.963706+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.982356+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:32.992263+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/login",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.715176+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.731697+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.731937+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.732262+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.735741+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.735957+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.736132+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-f1da1d9ab7b71276.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.736296+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.736471+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.742430+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.759802+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.764511+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.807364+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-dd1fad4b48e6d501.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:35.810707+00:00"
+      }
+    ],
+    "initial_response_status": 200,
+    "initial_response_url": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "final_url": "https://5cb5f0620.abacusai.cloud/login",
+    "load_time_s": 0.973,
+    "localStorage_token_present": false,
+    "localStorage_token_prefix": null,
+    "back_url": "about:blank",
+    "back_status": "navigated",
+    "forward_url": "https://5cb5f0620.abacusai.cloud/login",
+    "forward_status": "navigated",
+    "history_length": 2
+  },
+  "scenario2_throttled_unauth": {
+    "console_events": [],
+    "page_errors": [],
+    "request_failures": [],
+    "responses": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/",
+        "status": 307,
+        "ts": "2026-07-17T13:40:37.388820+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:37.800372+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:38.272027+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:38.423634+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:38.562031+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:38.621885+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:38.697192+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:39.323378+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:39.587012+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:39.766376+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:39.821970+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:40.290138+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:41.141741+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:41.553851+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/login?_rsc=189n2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:42.021185+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-f1da1d9ab7b71276.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:42.517531+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+        "status": 200,
+        "ts": "2026-07-17T13:40:42.986791+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-dd1fad4b48e6d501.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:43.630883+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:44.365622+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:44.701844+00:00"
+      }
+    ],
+    "load_time_s": 8.258,
+    "initial_response_status": 200,
+    "timed_out": false,
+    "final_url": "https://5cb5f0620.abacusai.cloud/login"
+  },
+  "scenario3_authenticated": {
+    "console_events": [],
+    "page_errors": [],
+    "request_failures": [],
+    "responses": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/login",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.888214+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.910506+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.914949+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.926029+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.926286+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-f1da1d9ab7b71276.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.926528+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.926888+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.934941+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.951289+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:46.998440+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+        "status": 200,
+        "ts": "2026-07-17T13:40:47.062765+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-dd1fad4b48e6d501.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:47.071092+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:47.083577+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:47.085289+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.169986+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=urzlp",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.195093+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.220752+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.220997+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.233444+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.236217+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.411733+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.412065+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.503675+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.505503+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.622551+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.628042+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.840182+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.840737+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:48.841964+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.036212+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.091686+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/",
+        "status": 307,
+        "ts": "2026-07-17T13:40:49.454370+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.470776+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.487039+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.487410+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.487619+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.488707+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.488908+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.489144+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.489331+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.489563+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.489731+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.489901+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.490062+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.490222+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.514177+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.514870+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.516995+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.517212+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.663234+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.665764+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.768841+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.783699+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.976251+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:49.996394+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:50.017210+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:50.028590+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:50.033869+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.663114+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.672131+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.673357+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.673698+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.673901+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.674282+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.674490+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.676368+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.676973+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.677184+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.677502+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.677687+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.677936+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.678170+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.678342+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.680227+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.684666+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.727070+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.727605+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.896285+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:51.918125+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:52.091447+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:52.095229+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:52.117342+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:52.125352+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:52.125576+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.258856+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.270746+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.271792+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.272005+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.272434+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.272649+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.273337+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.273946+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.274189+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.274386+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.274552+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.277256+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.277534+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.279135+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.279340+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.279510+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.279670+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.323320+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.325137+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.512048+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.519518+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.695245+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.706650+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.717182+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.724969+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:53.729581+00:00"
+      }
+    ],
+    "login_success": true,
+    "token_prefix": "eyJhbGci",
+    "post_login_url": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "root_initial_status": 200,
+    "root_final_url": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "root_load_time_s": 1.104,
+    "bounced_to_login": false,
+    "back_url": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "forward_url": "https://5cb5f0620.abacusai.cloud/dashboard"
+  },
+  "scenario4_throttled_auth": {
+    "console_events": [],
+    "page_errors": [],
+    "request_failures": [],
+    "responses": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/login",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.943874+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.957688+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.959869+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.971708+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.973464+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.973858+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-f1da1d9ab7b71276.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.974035+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.974212+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:54.994909+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:55.035245+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+        "status": 200,
+        "ts": "2026-07-17T13:40:55.109446+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-dd1fad4b48e6d501.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:55.117776+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:55.124219+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:55.125280+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.227039+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=urzlp",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.247409+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.262028+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.266055+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.266271+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.268117+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.351358+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.382639+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.405694+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.411881+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.541230+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.557203+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.737466+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.750747+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.752715+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.769252+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:56.782418+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/",
+        "status": 307,
+        "ts": "2026-07-17T13:40:57.201703+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.615771+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/eab9b1290e680333.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.669239+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.671510+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.681515+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.701283+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.701576+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.701767+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.701934+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-8e653efd717ef9d9.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.702107+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-7df4057698cdd57d.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.704741+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-da0001c86d5a9a43.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.704938+00:00"
+      },
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.705558+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.707039+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.711033+00:00"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.711237+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.711421+00:00"
+      },
+      {
+        "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+        "status": 200,
+        "ts": "2026-07-17T13:40:57.715053+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.231156+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.254479+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.287771+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.313702+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.343838+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-c0eeabe0d8aec6ac.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.346392+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.658373+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/pricing?_rsc=hi3jv",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.791364+00:00"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/pricing/page-f428d33bafcb9328.js",
+        "status": 200,
+        "ts": "2026-07-17T13:40:58.791771+00:00"
+      }
+    ],
+    "load_time_s": 2.512,
+    "initial_response_status": 200,
+    "timed_out": false,
+    "final_url": "https://5cb5f0620.abacusai.cloud/dashboard"
+  },
+  "finished_utc": "2026-07-17T13:41:01.046912+00:00"
+}

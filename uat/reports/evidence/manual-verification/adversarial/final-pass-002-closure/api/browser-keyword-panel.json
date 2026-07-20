@@ -1,0 +1,37 @@
+{
+  "A2_caseless_repro": [
+    "Terraform (missing)",
+    "Docker (missing)",
+    "Engineer (missing)",
+    "Systems (missing)",
+    "competitive (missing)",
+    "quarterly (missing)",
+    "flexible (missing)",
+    "use (missing)"
+  ],
+  "A4_newvariants": [
+    "GraphQL (missing)",
+    "Reliability (missing)",
+    "Kafka (missing)",
+    "Engineer (missing)",
+    "flagged (missing)",
+    "listed (missing)",
+    "tagged (missing)",
+    "noted (missing)",
+    "shown (missing)",
+    "seen (missing)"
+  ],
+  "C1_thai_fragment": [
+    "Kubernetes (missing)",
+    "Redis (missing)",
+    "Architect (missing)",
+    "Offices (missing)",
+    "Cloud (missing)",
+    "cities (missing)",
+    "ยงใหม (missing)",
+    "งเทพ (missing)",
+    "use (missing)"
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

@@ -1,0 +1,14 @@
+=== scripts/run-tests.sh — refuses prod-shaped DATABASE_URL_TEST ===
+2026-07-18T01:29:31Z
+REFUSING TO RUN: DATABASE_URL_TEST does not carry '?schema=aether_test'.
+Resolved DSN's schema param must be exactly 'aether_test' — refusing
+to risk running the destructive test suite against any other schema.
+See docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md.
+exit code: 1
+
+=== scripts/run-tests.sh — proceeds + passes with the real aether_test DSN ===
+2026-07-18T01:29:31Z
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+..............                                                           [100%]
+14 passed in 0.03s
+exit code: 0

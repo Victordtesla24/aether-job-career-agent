@@ -1,0 +1,1314 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.14.1, cov-7.1.0
+collected 704 items
+
+tests/test_agents_screen.py .....................                        [  2%]
+tests/test_analytics.py ..........                                       [  4%]
+tests/test_applications_tracker.py ..........                            [  5%]
+tests/test_approval_modal.py ..........                                  [  7%]
+tests/test_approvals.py .........                                        [  8%]
+tests/test_ats_engine.py .......                                         [  9%]
+tests/test_auth.py .......................                               [ 12%]
+tests/test_career_data.py .....................                          [ 15%]
+tests/test_cover_letter_agent.py ..FFFFFFF..                             [ 17%]
+tests/test_cover_letter_studio.py ...FFFFF.FF                            [ 18%]
+tests/test_email_agent.py ............                                   [ 20%]
+tests/test_email_send_gate.py ....                                       [ 21%]
+tests/test_emails.py ......                                              [ 22%]
+tests/test_fit_scorer_agent.py ..                                        [ 22%]
+tests/test_gap6_sourcing_volume.py .........                             [ 23%]
+tests/test_gap_d1_dual_auth.py ..........                                [ 25%]
+tests/test_gap_d2_multi_inbox.py .................                       [ 27%]
+tests/test_gap_d3_agent_config.py ............                           [ 29%]
+tests/test_gap_e1_llm_mode.py ......                                     [ 29%]
+tests/test_gap_e2_conversion.py ...F                                     [ 30%]
+tests/test_gap_new003_injection.py .....                                 [ 31%]
+tests/test_gap_p5_auth_compliance.py ........                            [ 32%]
+tests/test_gap_p5_cover.py .....                                         [ 33%]
+tests/test_gap_p5_cover_voice.py .....                                   [ 33%]
+tests/test_gap_p5_pdf_bullets.py .......                                 [ 34%]
+tests/test_gap_p5_sourcing.py ................................           [ 39%]
+tests/test_gap_p5_tailoring.py ............                              [ 41%]
+tests/test_gap_p6_admin.py .............                                 [ 42%]
+tests/test_gap_p6_authenticity.py ..........                             [ 44%]
+tests/test_gap_p6_billing.py ...................                         [ 47%]
+tests/test_gap_p6_cov2.py ....                                           [ 47%]
+tests/test_gap_p6_cover_fabrication.py ....                              [ 48%]
+tests/test_gap_p6_cover_prompt_hardening.py ...                          [ 48%]
+tests/test_gap_p6_paywall.py ..........                                  [ 50%]
+tests/test_gap_p6_sourcing.py ............................               [ 53%]
+tests/test_gap_p6_tail3.py ......                                        [ 54%]
+tests/test_gap_p6_tail4.py ........                                      [ 55%]
+tests/test_gap_p6_tail5.py .........                                     [ 57%]
+tests/test_gap_p6_tailoring_ats.py .....                                 [ 57%]
+tests/test_gap_p7_async_001.py .............                             [ 59%]
+tests/test_gap_p7_async_concurrency.py ....                              [ 60%]
+tests/test_gap_p7_def_a_dual_mode.py ..............                      [ 62%]
+tests/test_gap_p7_def_b_email_validation.py ........                     [ 63%]
+tests/test_gap_p7_def_b_persist.py ..                                    [ 63%]
+tests/test_gap_p7_discovery_001.py ........                              [ 64%]
+tests/test_gmail_service.py .......                                      [ 65%]
+tests/test_google_oauth.py ..............                                [ 67%]
+tests/test_guard_normalization.py ................                       [ 70%]
+tests/test_health.py ..                                                  [ 70%]
+tests/test_interviews.py ..                                              [ 70%]
+tests/test_job_discovery.py ..........                                   [ 72%]
+tests/test_jobs_insights_apply.py ........                               [ 73%]
+tests/test_llm_resilience.py ......................FF                    [ 76%]
+tests/test_main.py .....                                                 [ 77%]
+tests/test_mv_clstudio_003.py .....                                      [ 78%]
+tests/test_mv_cluster_a_cover_letter.py ...F.FF                          [ 79%]
+tests/test_mv_no_fixture_content_in_prod_data.py ..                      [ 79%]
+tests/test_mv_system_003_prod_truncate_guard.py ..............           [ 81%]
+tests/test_networking.py ...........                                     [ 82%]
+tests/test_offers.py .....                                               [ 83%]
+tests/test_pipeline.py FF                                                [ 83%]
+tests/test_portfolio_scraper.py .....                                    [ 84%]
+tests/test_provider_config.py ..........................                 [ 88%]
+tests/test_resume_bullet_extraction.py ......                            [ 89%]
+tests/test_resume_ingest.py ...FF                                        [ 89%]
+tests/test_resume_parser.py ..........                                   [ 91%]
+tests/test_resume_pdf_layout.py ..                                       [ 91%]
+tests/test_resume_upload.py .......                                      [ 92%]
+tests/test_scout_live_sources.py .....................FF..               [ 96%]
+tests/test_story_bank.py ...                                             [ 96%]
+tests/test_story_bank_enrichment.py ......                               [ 97%]
+tests/test_tailor_jd_echo_guard.py ....                                  [ 98%]
+tests/test_tailoring_agent.py FFFFFF                                     [ 98%]
+tests/test_workspaces.py ........                                        [100%]
+
+=================================== FAILURES ===================================
+______ TestCoverLetterAgent.test_cover_letter_contains_no_invented_claims ______
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b84a0>
+client = <starlette.testclient.TestClient object at 0x7f45f8f75df0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNzBhNzliNThiZmJlN2FkNTk3OTY0N2VmIiwidXNlckl...4Yzg0Mjk2QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzE0LCJleHAiOjE3ODQ0MzUxMTR9.PfJNX7eIyd_I3zsDzgLkjVLMKyFkaPPHZeyk-aMBjO4'}
+
+    def test_cover_letter_contains_no_invented_claims(self, client, auth_headers):
+>       body, job = _run_cover_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8f75df0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNzBhNzliNThiZmJlN2FkNTk3OTY0N2VmIiwidXNlckl...4Yzg0Mjk2QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzE0LCJleHAiOjE3ODQ0MzUxMTR9.PfJNX7eIyd_I3zsDzgLkjVLMKyFkaPPHZeyk-aMBjO4'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"caf48534f88e3b32b9d12c22f","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+______ TestCoverLetterAgent.test_cover_letter_references_job_and_company _______
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b8830>
+client = <starlette.testclient.TestClient object at 0x7f45f8bc6300>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNzE4NDgwOGZkYWQyMjM1ZTRhOTcwODMwIiwidXNlckl...xNTljZTViQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzIwLCJleHAiOjE3ODQ0MzUxMjB9.RcWh47NkAb4zwiWAQmXUWPSPXBg9fIhMmcqi5KV42UM'}
+
+    def test_cover_letter_references_job_and_company(self, client, auth_headers):
+>       body, job = _run_cover_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8bc6300>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNzE4NDgwOGZkYWQyMjM1ZTRhOTcwODMwIiwidXNlckl...xNTljZTViQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzIwLCJleHAiOjE3ODQ0MzUxMjB9.RcWh47NkAb4zwiWAQmXUWPSPXBg9fIhMmcqi5KV42UM'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c71cdb70096bb8bcbd981065b","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+____________ TestCoverLetterAgent.test_cover_letter_business_format ____________
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b8b30>
+client = <starlette.testclient.TestClient object at 0x7f45f8beec30>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYzU2MDM0YzU1ZDNhYmZlOTViODEzYmM4IiwidXNlckl...iZDY3YWVmQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzI2LCJleHAiOjE3ODQ0MzUxMjZ9.vzpY_VQiXiEFNx716wVZH8xzAKG7B2WDnQaeEwBLN_E'}
+
+    def test_cover_letter_business_format(self, client, auth_headers):
+        """§10.2 output standards: date, addressee block, salutation,
+        sign-off — and never the banned generic opener."""
+>       body, job = _run_cover_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8beec30>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYzU2MDM0YzU1ZDNhYmZlOTViODEzYmM4IiwidXNlckl...iZDY3YWVmQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzI2LCJleHAiOjE3ODQ0MzUxMjZ9.vzpY_VQiXiEFNx716wVZH8xzAKG7B2WDnQaeEwBLN_E'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"caf6b80dc8fe1a42cf72d9284","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+___ TestCoverLetterAgent.test_cover_letter_enforces_three_paragraph_contract ___
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b8e30>
+client = <starlette.testclient.TestClient object at 0x7f45f88ef890>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDE0MmM3ZDk1YmFjNjFlZWE2MzZkYzcxIiwidXNlckl...iMGE2MzcyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzMyLCJleHAiOjE3ODQ0MzUxMzJ9.1uu3Ab23FmzO38pHdkGO3ihRX4URDpti4jcCQMGpdVs'}
+
+    def test_cover_letter_enforces_three_paragraph_contract(self, client, auth_headers):
+        """GAP-P4-049: a shipped letter always has exactly 3 body paragraphs,
+        a hook naming the role/company, and a real call-to-action in the close."""
+>       body, job = _run_cover_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f88ef890>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDE0MmM3ZDk1YmFjNjFlZWE2MzZkYzcxIiwidXNlckl...iMGE2MzcyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzMyLCJleHAiOjE3ODQ0MzUxMzJ9.1uu3Ab23FmzO38pHdkGO3ihRX4URDpti4jcCQMGpdVs'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c648969cea39c8c3c3536e597","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_____ TestCoverLetterAgent.test_configured_target_role_reaches_letter_hook _____
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b9130>
+client = <starlette.testclient.TestClient object at 0x7f45f8eb3e90>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWEzMjA2YjU2NDdmZjZmZmRlMDgxOWIyIiwidXNlckl...2ZjFjYTI1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzM5LCJleHAiOjE3ODQ0MzUxMzl9.C_rGZolMI6QMJEcskrTh6cDx2T7k_FyYpY9jmwjhm8Q'}
+
+    def test_configured_target_role_reaches_letter_hook(self, client, auth_headers):
+        """GAP-P4-049 (reviewer follow-up): a workspace ``targetRole`` the user
+        actually configured must surface in the deterministic §10.2 hook.
+    
+        Regression guard: ``UserRepository.get_by_id`` never selected
+        ``targetRole``, so ``current_position`` silently fell back to a
+        hardcoded phrase for 100% of users even when a real role was set.
+        """
+        role = "Principal Reliability Engineer"
+        me = client.get("/auth/me", headers=auth_headers).json()
+        put = client.put(
+            "/workspaces/settings",
+            json={
+                "profile": {
+                    "fullName": "Test Candidate",
+                    "email": me["email"],
+                    "targetRole": role,
+                    "location": "Melbourne",
+                },
+                "agentConfig": {
+                    "autoApply": False,
+                    "approvalGate": True,
+                    "matchThreshold": 80,
+                },
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200, put.text
+        assert put.json()["profile"]["targetRole"] == role
+    
+>       body, job = _run_cover_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8eb3e90>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWEzMjA2YjU2NDdmZjZmZmRlMDgxOWIyIiwidXNlckl...2ZjFjYTI1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzM5LCJleHAiOjE3ODQ0MzUxMzl9.C_rGZolMI6QMJEcskrTh6cDx2T7k_FyYpY9jmwjhm8Q'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c7558a1205076fd7b767eb44c","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+___________ TestCoverLetterAgent.test_cover_letter_requires_approval ___________
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186b9430>
+client = <starlette.testclient.TestClient object at 0x7f45f8df66c0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjM2M1NjE3ZTFjNmZhNjNhOGQwYTJlNDZhIiwidXNlckl...zNjAwOWYxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzQ1LCJleHAiOjE3ODQ0MzUxNDV9.YEMJqR9IBkFBa8DmYRweF4y5WZlubQyUCgGzLWFskVU'}
+
+    def test_cover_letter_requires_approval(self, client, auth_headers):
+>       body, _ = _run_cover_letter(client, auth_headers)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8df66c0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjM2M1NjE3ZTFjNmZhNjNhOGQwYTJlNDZhIiwidXNlckl...zNjAwOWYxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzQ1LCJleHAiOjE3ODQ0MzUxNDV9.YEMJqR9IBkFBa8DmYRweF4y5WZlubQyUCgGzLWFskVU'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c796b071d4b95a68e583872d4","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______________ TestCoverLetterAgent.test_cover_letter_endpoints _______________
+
+self = <test_cover_letter_agent.TestCoverLetterAgent object at 0x7f46186a3ec0>
+client = <starlette.testclient.TestClient object at 0x7f45f8a72120>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjY2Q1OWQ0ZDUxMGQzMDExNzhiYzkxN2M1IiwidXNlckl...jYTNjYzA4QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzUxLCJleHAiOjE3ODQ0MzUxNTF9.MzoBKmTqU8KJReir-z77WUzMJO0Uf5gdeoQ4wFTLKz8'}
+
+    def test_cover_letter_endpoints(self, client, auth_headers):
+>       body, _ = _run_cover_letter(client, auth_headers)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_agent.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8a72120>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjY2Q1OWQ0ZDUxMGQzMDExNzhiYzkxN2M1IiwidXNlckl...jYTNjYzA4QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzUxLCJleHAiOjE3ODQ0MzUxNTF9.MzoBKmTqU8KJReir-z77WUzMJO0Uf5gdeoQ4wFTLKz8'}
+
+    def _run_cover_letter(client, auth_headers) -> tuple[dict, dict]:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cf20cf9dd91604c0aaa5a499e","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_agent.py:29: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______________ TestAuthz.test_letter_not_visible_to_other_user ________________
+
+self = <test_cover_letter_studio.TestAuthz object at 0x7f46186ba090>
+client = <starlette.testclient.TestClient object at 0x7f45f81c9850>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYzQ3OWMzM2JlYjhmNmNlZThlMmEzMzY5IiwidXNlckl...5NDNhYzJlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzYzLCJleHAiOjE3ODQ0MzUxNjN9.qt2SWWCGMXdSzrQupbxFOco7G_6O4fy9IP-PDQvYw1Y'}
+
+    def test_letter_not_visible_to_other_user(self, client, auth_headers):
+>       body, _ = _make_letter(client, auth_headers)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f81c9850>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYzQ3OWMzM2JlYjhmNmNlZThlMmEzMzY5IiwidXNlckl...5NDNhYzJlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzYzLCJleHAiOjE3ODQ0MzUxNjN9.qt2SWWCGMXdSzrQupbxFOco7G_6O4fy9IP-PDQvYw1Y'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cca84623937a61dd918148346","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+______________ TestInsights.test_insights_computed_from_real_rows ______________
+
+self = <test_cover_letter_studio.TestInsights object at 0x7f46186ba330>
+client = <starlette.testclient.TestClient object at 0x7f45fa687620>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNTY1MDNjOTcyYzdmMGJlNDAyYTVkOWIwIiwidXNlckl...kNTg4MmVlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzY5LCJleHAiOjE3ODQ0MzUxNjl9.4OMRYHdeWij0gRiTr_XygowqJZLDViz7RmObtgRQTN0'}
+
+    def test_insights_computed_from_real_rows(self, client, auth_headers):
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45fa687620>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNTY1MDNjOTcyYzdmMGJlNDAyYTVkOWIwIiwidXNlckl...kNTg4MmVlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzY5LCJleHAiOjE3ODQ0MzUxNjl9.4OMRYHdeWij0gRiTr_XygowqJZLDViz7RmObtgRQTN0'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"ceb4158733b4516222ce62520","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+___________ TestInsights.test_evidence_grounds_claims_in_story_bank ____________
+
+self = <test_cover_letter_studio.TestInsights object at 0x7f46186ba630>
+client = <starlette.testclient.TestClient object at 0x7f45f8e62db0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjM2YyOWNmODc4NjY2MDU0ZTBlNGM1NmVmIiwidXNlckl...3ZmQ3NTk5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzc1LCJleHAiOjE3ODQ0MzUxNzV9.gy4GrEoX8i-hBqR7p4Hp274rkFa0BI-45ceL7q192s0'}
+
+    def test_evidence_grounds_claims_in_story_bank(self, client, auth_headers):
+>       body, _ = _make_letter(client, auth_headers)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8e62db0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjM2YyOWNmODc4NjY2MDU0ZTBlNGM1NmVmIiwidXNlckl...3ZmQ3NTk5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzc1LCJleHAiOjE3ODQ0MzUxNzV9.gy4GrEoX8i-hBqR7p4Hp274rkFa0BI-45ceL7q192s0'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c4a4cb3fbf23c7619d846aed6","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______ TestRefine.test_refine_creates_new_version_and_pending_approval ________
+
+self = <test_cover_letter_studio.TestRefine object at 0x7f46186ba8d0>
+client = <starlette.testclient.TestClient object at 0x7f45f91c54f0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZmM5ODNmNGVhYjQ4MWJlOTEwOWYyMTMwIiwidXNlckl...wNGQ0OTgzQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzgxLCJleHAiOjE3ODQ0MzUxODF9.18RpxeAi_hfauz1q4OgCI3XLjiqAH02b6PJGN1V4LM4'}
+
+    def test_refine_creates_new_version_and_pending_approval(self, client, auth_headers):
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f91c54f0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZmM5ODNmNGVhYjQ4MWJlOTEwOWYyMTMwIiwidXNlckl...wNGQ0OTgzQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4NzgxLCJleHAiOjE3ODQ0MzUxODF9.18RpxeAi_hfauz1q4OgCI3XLjiqAH02b6PJGN1V4LM4'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c239bd15b69a2cc3eaa5e8237","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+________________ TestRefine.test_refine_validates_slider_bounds ________________
+
+self = <test_cover_letter_studio.TestRefine object at 0x7f46186babd0>
+client = <starlette.testclient.TestClient object at 0x7f45f8934440>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYmNjYmRkODQyOWQ0YzA2ZmViZmY0NTg5IiwidXNlckl...zZGI5NThhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzg3LCJleHAiOjE3ODQ0MzUxODd9.HtQPTMPPGCU6-i2mJUHFSRGhONwRs1Qz-VoWpieKv9o'}
+
+    def test_refine_validates_slider_bounds(self, client, auth_headers):
+>       body, _ = _make_letter(client, auth_headers)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8934440>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYmNjYmRkODQyOWQ0YzA2ZmViZmY0NTg5IiwidXNlckl...zZGI5NThhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzg3LCJleHAiOjE3ODQ0MzUxODd9.HtQPTMPPGCU6-i2mJUHFSRGhONwRs1Qz-VoWpieKv9o'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cad1f3215f6c58b10761f545d","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+______________ TestPdfExport.test_pdf_is_real_and_contains_letter ______________
+
+self = <test_cover_letter_studio.TestPdfExport object at 0x7f46186bb230>
+client = <starlette.testclient.TestClient object at 0x7f45f8e72000>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOTgzMzg0NjM0YmMxMDViNjY0ZjhlOGM2IiwidXNlckl...zY2E4YTg1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzk1LCJleHAiOjE3ODQ0MzUxOTV9.NXgWN9rsNTVkmMTMbLS6MJAddiC_H10xrV7MZUrJORs'}
+
+    def test_pdf_is_real_and_contains_letter(self, client, auth_headers):
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8e72000>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOTgzMzg0NjM0YmMxMDViNjY0ZjhlOGM2IiwidXNlckl...zY2E4YTg1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4Nzk1LCJleHAiOjE3ODQ0MzUxOTV9.NXgWN9rsNTVkmMTMbLS6MJAddiC_H10xrV7MZUrJORs'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c4116262416ed1a3a9a603926","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+__________ TestPdfExport.test_pdf_is_submission_ready_business_letter __________
+
+self = <test_cover_letter_studio.TestPdfExport object at 0x7f46186bb530>
+client = <starlette.testclient.TestClient object at 0x7f45f9033380>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNTFhMDQxY2VmM2M0OTNmNjU4NWU4MjYzIiwidXNlckl...1YjhhYzNhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4ODAxLCJleHAiOjE3ODQ0MzUyMDF9.ysyScrgv7ZgI0COgPmJNzj5_2elXgEzEJoafeWccYoI'}
+
+    def test_pdf_is_submission_ready_business_letter(self, client, auth_headers):
+        """GAP-P4-048: the export is a neutral business letter — candidate contact
+        details present, no third-party/tool branding or AI-generated disclosure."""
+        import io
+    
+        import pdfplumber
+    
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cover_letter_studio.py:158: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f9033380>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNTFhMDQxY2VmM2M0OTNmNjU4NWU4MjYzIiwidXNlckl...1YjhhYzNhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4ODAxLCJleHAiOjE3ODQ0MzUyMDF9.ysyScrgv7ZgI0COgPmJNzj5_2elXgEzEJoafeWccYoI'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via scout replay fixtures, then draft a letter for it."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c9c365ed69976fa09cecb95e4","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_cover_letter_studio.py:17: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestConversionMetricsApi.test_tailor_run_response_includes_conversion_metrics _
+
+self = <test_gap_e2_conversion.TestConversionMetricsApi object at 0x7f4617010a70>
+client = <starlette.testclient.TestClient object at 0x7f45f7e84b30>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDYyYmE0YmY1ZTdjMmM2NTAyMGFiOWYzIiwidXNlckl...3OWI2NWM0QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ4OTMzLCJleHAiOjE3ODQ0MzUzMzN9.zxyG6Ig07U79gGZDmdSglfjvVhHsJJkQ7ZopPfuYLn8'}
+
+    def test_tailor_run_response_includes_conversion_metrics(self, client, auth_headers) -> None:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cfb85e262ea33cc8fbf613de5","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_gap_e2_conversion.py:115: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+__ TestRouter503Mapping.test_tailor_returns_503_not_500_when_llm_unavailable ___
+
+self = <test_llm_resilience.TestRouter503Mapping object at 0x7f4616afe840>
+client = <starlette.testclient.TestClient object at 0x7f45f71db560>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMzRkNDg1ZDE3NzU0YWUyNDMxOTEyMmVkIiwidXNlckl...jMzI4NDkxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MjY2LCJleHAiOjE3ODQ0MzU2NjZ9.aoBiiJWl4LAhpJkx_kKMysiO0zScPy3ZPS7w5yv9KOs'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f71d90d0>
+
+    def test_tailor_returns_503_not_500_when_llm_unavailable(
+        self, client, auth_headers, monkeypatch
+    ):
+        job = _seed_job(client, auth_headers)
+        from app.agents import tailor_agent as tailor_module
+    
+        def _boom(self, user_id, job_id, resume_id=None):
+            raise LLMUnavailableError("LLM backend unavailable: simulated outage")
+    
+        monkeypatch.setattr(tailor_module.TailoringAgent, "run", _boom)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 503, resp.text
+E       AssertionError: {"job_id":"c1285fcc6b8f2d99c1b94a005","status":"enqueued"}
+E       assert 202 == 503
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_llm_resilience.py:392: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______________ TestRouter503Mapping.test_failed_run_is_audited ________________
+
+self = <test_llm_resilience.TestRouter503Mapping object at 0x7f4616afc590>
+client = <starlette.testclient.TestClient object at 0x7f45f703be60>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZjYxYjk5MjQwNGJmODczN2IwNjE2MmYxIiwidXNlckl...4YWNkNWI5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MjcyLCJleHAiOjE3ODQ0MzU2NzJ9.8fpVpU9ICFgaZPOy9xvB4X0N5c4IATsAue2WzgZpY_M'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f6981af0>
+
+    def test_failed_run_is_audited(self, client, auth_headers, monkeypatch):
+        job = _seed_job(client, auth_headers)
+        from app.agents import cover_letter_agent as cl_module
+    
+        def _boom(self, user_id, job_id, resume_id=None):
+            raise LLMUnavailableError("LLM backend unavailable: simulated outage")
+    
+        monkeypatch.setattr(cl_module.CoverLetterAgent, "run", _boom)
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 503
+E       assert 202 == 503
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_llm_resilience.py:406: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestRefineDuplicatesStructure.test_refine_duplicates_salutation_hook_and_signoff _
+
+self = <test_mv_cluster_a_cover_letter.TestRefineDuplicatesStructure object at 0x7f4616927d10>
+client = <starlette.testclient.TestClient object at 0x7f45f985afc0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOGY3N2U1OTIzNWE5MDNmYmQyNWUwM2JjIiwidXNlckl...0Yjg5NjVhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MjkzLCJleHAiOjE3ODQ0MzU2OTN9.f7Ak_svhM5nbrtSPvIRs8RHsPk2NYsmpo5W1t-z9TKU'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f83c72c0>
+
+    def test_refine_duplicates_salutation_hook_and_signoff(
+        self, client, auth_headers, monkeypatch
+    ):
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mv_cluster_a_cover_letter.py:219: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f985afc0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOGY3N2U1OTIzNWE5MDNmYmQyNWUwM2JjIiwidXNlckl...0Yjg5NjVhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MjkzLCJleHAiOjE3ODQ0MzU2OTN9.f7Ak_svhM5nbrtSPvIRs8RHsPk2NYsmpo5W1t-z9TKU'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via the scout replay fixture, then draft a letter for it
+        through the normal (unpatched) LLM replay path."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c2f5dc15665b899321b0861a2","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_mv_cluster_a_cover_letter.py:85: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestRefineFabricatedSignOffName.test_fabricated_signoff_name_must_not_survive_refine _
+
+self = <test_mv_cluster_a_cover_letter.TestRefineFabricatedSignOffName object at 0x7f4616948290>
+client = <starlette.testclient.TestClient object at 0x7f45f6cb9460>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDc5ZjJlOTY0NjZhNDQ4YTk4YmQzNjA4IiwidXNlckl...2ZjI5ZjFkQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzAzLCJleHAiOjE3ODQ0MzU3MDN9.g9nVlkUIbmq9On9GlK9IdklU61W4o8Il2BdozqeHUas'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f92545f0>
+
+    def test_fabricated_signoff_name_must_not_survive_refine(
+        self, client, auth_headers, monkeypatch
+    ):
+        me = client.get("/auth/me", headers=auth_headers).json()
+        put = client.put(
+            "/workspaces/settings",
+            json={
+                "profile": {
+                    "fullName": "Test Candidate",
+                    "email": me["email"],
+                    "targetRole": "Support Delivery Lead",
+                    "location": "Melbourne",
+                },
+                "agentConfig": {
+                    "autoApply": False,
+                    "approvalGate": True,
+                    "matchThreshold": 80,
+                },
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200, put.text
+    
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mv_cluster_a_cover_letter.py:383: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f6cb9460>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDc5ZjJlOTY0NjZhNDQ4YTk4YmQzNjA4IiwidXNlckl...2ZjI5ZjFkQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzAzLCJleHAiOjE3ODQ0MzU3MDN9.g9nVlkUIbmq9On9GlK9IdklU61W4o8Il2BdozqeHUas'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via the scout replay fixture, then draft a letter for it
+        through the normal (unpatched) LLM replay path."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c7d03ae17bfa26c162233fa79","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_mv_cluster_a_cover_letter.py:85: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestApprovalPayloadShape.test_approval_payload_includes_preview_why_reasoning_confidence _
+
+self = <test_mv_cluster_a_cover_letter.TestApprovalPayloadShape object at 0x7f46169485c0>
+client = <starlette.testclient.TestClient object at 0x7f45f6e87b30>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjN2UxOTUzMDgwYjkzYjdkYjkwZTE1YmIxIiwidXNlckl...jZjgxMGFlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzEwLCJleHAiOjE3ODQ0MzU3MTB9.E5YWbOj-0OrdTV0ZLm148e_tZAmM-uf8gSp8z6gpy_I'}
+
+    def test_approval_payload_includes_preview_why_reasoning_confidence(
+        self, client, auth_headers
+    ):
+>       body, job = _make_letter(client, auth_headers)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mv_cluster_a_cover_letter.py:446: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f6e87b30>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjN2UxOTUzMDgwYjkzYjdkYjkwZTE1YmIxIiwidXNlckl...jZjgxMGFlQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzEwLCJleHAiOjE3ODQ0MzU3MTB9.E5YWbOj-0OrdTV0ZLm148e_tZAmM-uf8gSp8z6gpy_I'}
+
+    def _make_letter(client, auth_headers) -> tuple[dict, dict]:
+        """Seed a job via the scout replay fixture, then draft a letter for it
+        through the normal (unpatched) LLM replay path."""
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202, run.text
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c42c5d50e01fdb846c16a157a","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_mv_cluster_a_cover_letter.py:85: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestPipelineRun.test_pipeline_records_every_node_including_supervisor_and_matcher _
+
+self = <test_pipeline.TestPipelineRun object at 0x7f461694bf80>
+client = <starlette.testclient.TestClient object at 0x7f45f71a04a0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZmViMjNjYTUzMGE1ZmZhYWI3YjNjMjEyIiwidXNlckl...yMjEwODA3QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzQ3LCJleHAiOjE3ODQ0MzU3NDd9.Gmh8uMJUWv7Ow7U9xM7PmsU3MHynxgwUnRip9UCarf4'}
+
+    def test_pipeline_records_every_node_including_supervisor_and_matcher(
+        self, client, auth_headers
+    ):
+        resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
+>       assert resp.status_code == 200
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_pipeline.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+____ TestPipelineRun.test_pipeline_with_no_jobs_completes_with_empty_match _____
+
+self = <test_pipeline.TestPipelineRun object at 0x7f461694b620>
+client = <starlette.testclient.TestClient object at 0x7f45f70b4fb0>
+
+    def test_pipeline_with_no_jobs_completes_with_empty_match(self, client):
+        headers = _register_and_login(client)
+        resp = client.post("/agents/pipeline/run", json={}, headers=headers)
+>       assert resp.status_code == 200
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_pipeline.py:59: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+________ TestResumeIngestion.test_tailor_run_accepts_explicit_resume_id ________
+
+self = <test_resume_ingest.TestResumeIngestion object at 0x7f46169ccda0>
+client = <starlette.testclient.TestClient object at 0x7f45f8ea2630>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWI3OTZiZjdkMGY4ODBlOGQ3NGMyNjY0IiwidXNlckl...mYTMzOWFhQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5Mzc1LCJleHAiOjE3ODQ0MzU3NzV9.BOyQv-Z8DYm7v4dVeVo8Vm_COVnspOY4YZQILLBWoBs'}
+
+    def test_tailor_run_accepts_explicit_resume_id(self, client, auth_headers):
+        """The tailoring agent must tailor the SELECTED resume, not the base."""
+        created = _ingest_ba_resume(client, auth_headers)
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run",
+            json={"job_id": job["id"], "resume_id": created["id"]},
+            headers=auth_headers,
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cf9579c1a081728e414722aac","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_resume_ingest.py:113: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_________ TestResumeIngestion.test_tailor_run_unknown_resume_id_is_404 _________
+
+self = <test_resume_ingest.TestResumeIngestion object at 0x7f46169cd0a0>
+client = <starlette.testclient.TestClient object at 0x7f45f766deb0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZDg0NGJmODQ3NjYxZjJjNTAzNWNkOTU5IiwidXNlckl...3YzEwYjM5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5MzgxLCJleHAiOjE3ODQ0MzU3ODF9.QrJFezQLt7uN8B-RlUvd3njoxPuU5nByDNUB1W_Z_XY'}
+
+    def test_tailor_run_unknown_resume_id_is_404(self, client, auth_headers):
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run",
+            json={"job_id": job["id"], "resume_id": "cnotarealresumeid123456789"},
+            headers=auth_headers,
+        )
+>       assert resp.status_code == 404
+E       assert 202 == 404
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_resume_ingest.py:126: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_ TestApplicationSubmit.test_submit_marks_application_submitted_with_apply_url _
+
+self = <test_scout_live_sources.TestApplicationSubmit object at 0x7f46169eccb0>
+client = <starlette.testclient.TestClient object at 0x7f45f838df10>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOWJlZmMzZjZmZmYzMWY4ZTgwNjk1ZDE4IiwidXNlckl...jNjlkNzliQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDA3LCJleHAiOjE3ODQ0MzU4MDd9.iUaLaSRubTRrB345FA7dS8aC9tjG_ka9cxtxYGMgWY4'}
+
+    def test_submit_marks_application_submitted_with_apply_url(
+        self, client, auth_headers
+    ):
+>       app_id = self._seed_draft_application(client, auth_headers)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_scout_live_sources.py:211: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <test_scout_live_sources.TestApplicationSubmit object at 0x7f46169eccb0>
+client = <starlette.testclient.TestClient object at 0x7f45f838df10>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOWJlZmMzZjZmZmYzMWY4ZTgwNjk1ZDE4IiwidXNlckl...jNjlkNzliQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDA3LCJleHAiOjE3ODQ0MzU4MDd9.iUaLaSRubTRrB345FA7dS8aC9tjG_ka9cxtxYGMgWY4'}
+
+    def _seed_draft_application(self, client, auth_headers) -> str:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "delivery lead", "location": "Melbourne"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c6c2693633bd0dc70e09ee2d7","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_scout_live_sources.py:205: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______________ TestApplicationSubmit.test_submit_is_idempotent ________________
+
+self = <test_scout_live_sources.TestApplicationSubmit object at 0x7f46169ecfb0>
+client = <starlette.testclient.TestClient object at 0x7f45f6c0f9b0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDRhOTlhNmU5NGIxMDcwNzk4MDAxYWM2IiwidXNlckl...0ODA1ZWMwQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDEzLCJleHAiOjE3ODQ0MzU4MTN9.hQZvIY75NzzdRFzzVaVsNpBpTABfJeZbUy414A0hX7I'}
+
+    def test_submit_is_idempotent(self, client, auth_headers):
+>       app_id = self._seed_draft_application(client, auth_headers)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_scout_live_sources.py:227: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <test_scout_live_sources.TestApplicationSubmit object at 0x7f46169ecfb0>
+client = <starlette.testclient.TestClient object at 0x7f45f6c0f9b0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNDRhOTlhNmU5NGIxMDcwNzk4MDAxYWM2IiwidXNlckl...0ODA1ZWMwQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDEzLCJleHAiOjE3ODQ0MzU4MTN9.hQZvIY75NzzdRFzzVaVsNpBpTABfJeZbUy414A0hX7I'}
+
+    def _seed_draft_application(self, client, auth_headers) -> str:
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "delivery lead", "location": "Melbourne"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c12e4969accf376bdf429e35c","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_scout_live_sources.py:205: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_____________ TestTailoring.test_tailoring_does_not_invent_skills ______________
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169ef800>
+client = <starlette.testclient.TestClient object at 0x7f45f6c0d100>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjg0MjdjMDYzN2JhMjBjYjllZDJjOTQyIiwidXNlckl...3NzEwMTU5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDQzLCJleHAiOjE3ODQ0MzU4NDN9.9-YdU1KC1vuuc9ilAtxsY094awLJsEgKlhlCE86ypUM'}
+
+    def test_tailoring_does_not_invent_skills(self, client, auth_headers):
+        """Every accepted bullet is fully evidence-traced (D-0015 semantics)."""
+>       body = _run_tailor(client, auth_headers)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tailoring_agent.py:31: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f6c0d100>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjg0MjdjMDYzN2JhMjBjYjllZDJjOTQyIiwidXNlckl...3NzEwMTU5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDQzLCJleHAiOjE3ODQ0MzU4NDN9.9-YdU1KC1vuuc9ilAtxsY094awLJsEgKlhlCE86ypUM'}
+
+    def _run_tailor(client, auth_headers) -> dict:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cb7192c983aa50313b135467c","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+___________ TestTailoring.test_every_changed_bullet_has_evidence_ref ___________
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169efb00>
+client = <starlette.testclient.TestClient object at 0x7f45f9ab7ad0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZTFhMzlkZTU3YTYxM2RiMWMyMTliOGZhIiwidXNlckl...lZjNlMjU1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDQ5LCJleHAiOjE3ODQ0MzU4NDl9.MkZ-0lF8HD5kY-KnHFAY_m0-yFACSMn64y-MEDuoBd8'}
+
+    def test_every_changed_bullet_has_evidence_ref(self, client, auth_headers):
+>       body = _run_tailor(client, auth_headers)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tailoring_agent.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f9ab7ad0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZTFhMzlkZTU3YTYxM2RiMWMyMTliOGZhIiwidXNlckl...lZjNlMjU1QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDQ5LCJleHAiOjE3ODQ0MzU4NDl9.MkZ-0lF8HD5kY-KnHFAY_m0-yFACSMn64y-MEDuoBd8'}
+
+    def _run_tailor(client, auth_headers) -> dict:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"c93344aae450c3c528b2eecbb","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+___________ TestTailoring.test_format_hash_unchanged_after_tailoring ___________
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169efe00>
+client = <starlette.testclient.TestClient object at 0x7f45f8a32420>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYTEzYWViMzQ2OWEyNWQwZGM2MzQ1NTU1IiwidXNlckl...mN2IyNDM5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDU1LCJleHAiOjE3ODQ0MzU4NTV9.-8CR6ZWKkXraB4lHiDTU-HZCH49mMBE-Z3KRws75_t0'}
+
+    def test_format_hash_unchanged_after_tailoring(self, client, auth_headers):
+        before = compute_format_hash(get_base_resume_path())
+>       _run_tailor(client, auth_headers)
+
+tests/test_tailoring_agent.py:47: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f8a32420>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYTEzYWViMzQ2OWEyNWQwZGM2MzQ1NTU1IiwidXNlckl...mN2IyNDM5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDU1LCJleHAiOjE3ODQ0MzU4NTV9.-8CR6ZWKkXraB4lHiDTU-HZCH49mMBE-Z3KRws75_t0'}
+
+    def _run_tailor(client, auth_headers) -> dict:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cafff4d05158146d8e206ec23","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_____________ TestTailoring.test_tailored_resume_is_child_of_base ______________
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169fc140>
+client = <starlette.testclient.TestClient object at 0x7f45f66597f0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjMwNDU4MjY0ODUzMzMxMjE2Y2RkNzViIiwidXNlckl...kMWMxNGE2QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDYyLCJleHAiOjE3ODQ0MzU4NjJ9.pkWSc9P2P80gb2KY5VW1q3AO3k-GpcY42KkDNHBbM50'}
+
+    def test_tailored_resume_is_child_of_base(self, client, auth_headers):
+>       body = _run_tailor(client, auth_headers)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tailoring_agent.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f66597f0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjMwNDU4MjY0ODUzMzMxMjE2Y2RkNzViIiwidXNlckl...kMWMxNGE2QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDYyLCJleHAiOjE3ODQ0MzU4NjJ9.pkWSc9P2P80gb2KY5VW1q3AO3k-GpcY42KkDNHBbM50'}
+
+    def _run_tailor(client, auth_headers) -> dict:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"ca3ac9bbb981742662debd46f","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+_______ TestTailoring.test_retailoring_corrupted_parent_stays_consistent _______
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169efc20>
+client = <starlette.testclient.TestClient object at 0x7f45f7ebd4c0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNzg0MjZkOTdmZjNmMTYwZGM2ZTVhZDdkIiwidXNlckl...hYzM3MWYzQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDY4LCJleHAiOjE3ODQ0MzU4Njh9.bY84IoHubXENNpZQlGIOTKYJBZmdUeVDmjfq5dHamao'}
+
+    def test_retailoring_corrupted_parent_stays_consistent(self, client, auth_headers):
+        """A pre-fix tailored version storing two rows for one evidenceRef
+        must re-tailor cleanly: unique refs in the child and the run's
+        `changes` equal to what the diff endpoint reports (observed live:
+        run said 7, diff said 6)."""
+        from app.repositories.resume import ResumeRepository
+        from app.security import decode_access_token
+    
+        job = _seed_job(client, auth_headers)
+        token = auth_headers["Authorization"].removeprefix("Bearer ")
+        user_id = decode_access_token(token)["userId"]
+        repo = ResumeRepository()
+        corrupted = repo.create(
+            user_id,
+            {
+                "raw_text": "• Led delivery across squads\n• Reduced costs by 15%\n",
+                "bullets": [
+                    {"text": "Led delivery across squads", "evidenceRef": "bullet-0"},
+                    {"text": "Led delivery across squads again", "evidenceRef": "bullet-0"},
+                    {"text": "Reduced costs by 15%", "evidenceRef": "bullet-1"},
+                ],
+            },
+            "corrupthash",
+            label="Corrupted pre-fix version",
+            version=repo.next_version(user_id),
+        )
+        resp = client.post(
+            "/agents/tailor/run",
+            json={"job_id": job["id"], "resume_id": corrupted["id"]},
+            headers=auth_headers,
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cb4e1abab1c1c93847b6f12e1","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:88: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+______________ TestTailoring.test_resume_list_and_diff_endpoints _______________
+
+self = <test_tailoring_agent.TestTailoring object at 0x7f46169ef710>
+client = <starlette.testclient.TestClient object at 0x7f45f821f4a0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYjhlZTM5NmRiZDY4NTlhNzU4NTg4MGNmIiwidXNlckl...xZGQ4NjQ5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDc1LCJleHAiOjE3ODQ0MzU4NzV9.4dfD4ljTtCbp8QIY98ohUyoFON1dw3CvQxHdtt8RJaw'}
+
+    def test_resume_list_and_diff_endpoints(self, client, auth_headers):
+>       body = _run_tailor(client, auth_headers)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tailoring_agent.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7f45f821f4a0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYjhlZTM5NmRiZDY4NTlhNzU4NTg4MGNmIiwidXNlckl...xZGQ4NjQ5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg0MzQ5NDc1LCJleHAiOjE3ODQ0MzU4NzV9.4dfD4ljTtCbp8QIY98ohUyoFON1dw3CvQxHdtt8RJaw'}
+
+    def _run_tailor(client, auth_headers) -> dict:
+        job = _seed_job(client, auth_headers)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+>       assert resp.status_code == 200, resp.text
+E       AssertionError: {"job_id":"cf09a6a0529c8e34ad689a3dc","status":"enqueued"}
+E       assert 202 == 200
+E        +  where 202 = <Response [202 Accepted]>.status_code
+
+tests/test_tailoring_agent.py:24: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_analytics.py::TestAnalytics::test_time_period_filter_works
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/analytics.py:35: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    job_filter = _period_clause(period, '"createdAt"')
+
+tests/test_applications_tracker.py::TestListApplications::test_invalid_status_is_422_not_500
+tests/test_approval_modal.py::TestStatusFilterValidation::test_invalid_filter_is_422_not_500
+tests/test_email_agent.py::test_email_run_draft_without_thread_is_422
+tests/test_gap_d3_agent_config.py::test_credential_ref_must_belong_to_user
+tests/test_networking.py::test_create_contact_invalid_stage
+  /opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1029: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    result = context.run(func, *args)
+
+tests/test_cover_letter_agent.py: 7 warnings
+tests/test_cover_letter_studio.py: 7 warnings
+tests/test_gap_e2_conversion.py: 1 warning
+tests/test_llm_resilience.py: 2 warnings
+tests/test_mv_cluster_a_cover_letter.py: 3 warnings
+tests/test_pipeline.py: 2 warnings
+tests/test_resume_ingest.py: 2 warnings
+tests/test_scout_live_sources.py: 2 warnings
+tests/test_tailoring_agent.py: 6 warnings
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/workers/queue.py:38: DeprecationWarning: Call to deprecated close. (Use aclose() instead) -- Deprecated since version 5.0.1.
+    await pool.close()
+
+tests/test_gap_p5_auth_compliance.py::test_put_deployment_credential_rejects_subscription_oauth
+tests/test_gap_p7_def_a_dual_mode.py::test_garbage_credential_returns_422_naming_both_formats
+tests/test_gap_p7_def_a_dual_mode.py::test_legacy_subscription_oauth_label_still_rejected
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_anthropic_subscription_oauth_write_is_rejected
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:1941: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
+
+tests/test_gap_p5_auth_compliance.py::test_put_user_credential_rejects_subscription_oauth
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:2048: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
+
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_gap_p6_sourcing.py:351: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    posted = (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:20: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    token = pp.Word(tchar).setName("token")
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:21: PyparsingDeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+    token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:21: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:25: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:25: PyparsingDeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+    quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:26: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:26: PyparsingDeprecationWarning: 'addParseAction' deprecated - use 'add_parse_action'
+    auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:28: PyparsingDeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+    params = pp.Dict(pp.delimitedList(pp.Group(auth_param)))
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:34: PyparsingDeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+    www_authenticate = pp.delimitedList(pp.Group(challenge))
+
+tests/test_google_oauth.py::test_exchange_code_sets_verifier_from_state_before_fetch_token
+  /opt/abacus-python/lib/python3.12/site-packages/google_auth_oauthlib/helpers.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    credentials.expiry = datetime.datetime.utcfromtimestamp(session.token["expires_at"])
+
+tests/test_resume_upload.py::test_upload_rejects_too_short_content
+tests/test_resume_upload.py::test_upload_rejects_unparseable_pdf
+  /opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:313: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_contains_no_invented_claims
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_references_job_and_company
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_business_format
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_enforces_three_paragraph_contract
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_configured_target_role_reaches_letter_hook
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_requires_approval
+FAILED tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_endpoints
+FAILED tests/test_cover_letter_studio.py::TestAuthz::test_letter_not_visible_to_other_user
+FAILED tests/test_cover_letter_studio.py::TestInsights::test_insights_computed_from_real_rows
+FAILED tests/test_cover_letter_studio.py::TestInsights::test_evidence_grounds_claims_in_story_bank
+FAILED tests/test_cover_letter_studio.py::TestRefine::test_refine_creates_new_version_and_pending_approval
+FAILED tests/test_cover_letter_studio.py::TestRefine::test_refine_validates_slider_bounds
+FAILED tests/test_cover_letter_studio.py::TestPdfExport::test_pdf_is_real_and_contains_letter
+FAILED tests/test_cover_letter_studio.py::TestPdfExport::test_pdf_is_submission_ready_business_letter
+FAILED tests/test_gap_e2_conversion.py::TestConversionMetricsApi::test_tailor_run_response_includes_conversion_metrics
+FAILED tests/test_llm_resilience.py::TestRouter503Mapping::test_tailor_returns_503_not_500_when_llm_unavailable
+FAILED tests/test_llm_resilience.py::TestRouter503Mapping::test_failed_run_is_audited
+FAILED tests/test_mv_cluster_a_cover_letter.py::TestRefineDuplicatesStructure::test_refine_duplicates_salutation_hook_and_signoff
+FAILED tests/test_mv_cluster_a_cover_letter.py::TestRefineFabricatedSignOffName::test_fabricated_signoff_name_must_not_survive_refine
+FAILED tests/test_mv_cluster_a_cover_letter.py::TestApprovalPayloadShape::test_approval_payload_includes_preview_why_reasoning_confidence
+FAILED tests/test_pipeline.py::TestPipelineRun::test_pipeline_records_every_node_including_supervisor_and_matcher
+FAILED tests/test_pipeline.py::TestPipelineRun::test_pipeline_with_no_jobs_completes_with_empty_match
+FAILED tests/test_resume_ingest.py::TestResumeIngestion::test_tailor_run_accepts_explicit_resume_id
+FAILED tests/test_resume_ingest.py::TestResumeIngestion::test_tailor_run_unknown_resume_id_is_404
+FAILED tests/test_scout_live_sources.py::TestApplicationSubmit::test_submit_marks_application_submitted_with_apply_url
+FAILED tests/test_scout_live_sources.py::TestApplicationSubmit::test_submit_is_idempotent
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_every_changed_bullet_has_evidence_ref
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_format_hash_unchanged_after_tailoring
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_tailored_resume_is_child_of_base
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_retailoring_corrupted_parent_stays_consistent
+FAILED tests/test_tailoring_agent.py::TestTailoring::test_resume_list_and_diff_endpoints
+=========== 32 failed, 672 passed, 68 warnings in 974.39s (0:16:14) ============
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

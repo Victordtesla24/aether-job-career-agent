@@ -1,0 +1,121 @@
+{
+  "run": "MANUAL-VERIFICATION Stage 2 — PROD-VERIFY clusters F & G",
+  "role": "qa-adversary (opus), independent of fixers/reviewers of fix/mv-cluster-f (72d9f3f) and fix/mv-cluster-g (14c2a72)",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "deployed_main": "3b8a08d",
+  "run_started_utc": "2026-07-18T03:12:03Z",
+  "evidence_root": "uat/reports/evidence/manual-verification/fixes/prod-verify-FG/",
+  "disposable_accounts": [
+    "mv-verifyfg-20260718T031439Z@example.com (userId ca6e521cc0b19982537b3b4b5, free plan; API+UI probes)",
+    "mv-verifyfg-signup-2026-07-18T03-17-37-675Z@example.com (free plan; signup consent-gate test)"
+  ],
+  "epistemic_legend": {
+    "VERIFIED-WITH-FRESH-EVIDENCE": "closed only on artifact path + timestamp captured THIS run",
+    "INFERRED": "reasoned from fresh evidence but not directly observed",
+    "ASSUMED-PENDING-PROBE": "not exercised this run"
+  },
+  "findings": [
+    {
+      "id": "MV-terms-002",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "raw-terms-20260718T031218Z.html (captured 2026-07-18T03:12:18Z). Bracket scan of live rendered HTML returns only the RSC serialization token '[null,\"$L7\"]' (framework internal, not user-visible) — zero '[Operator ABN]', '[Business Name]', or '[Operator: ...]' placeholders. ABN/business-name copy is honest: 'operated by Aether' and 'An Australian Business Number has not yet been published'. No 11-digit (or any) fabricated ABN string present (grep 'ABN[^a-z0-9]{0,4}[0-9]{2,}' -> no match).",
+      "note": "Honest env-default naming confirmed live; no fabricated legal entity."
+    },
+    {
+      "id": "MV-terms-004",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "raw-terms-20260718T031218Z.html (2026-07-18T03:12:18Z). Currency: 'priced in Australian dollars (AUD)', plan prices A$0/A$19/A$39/A$69, liability cap 'fifty Australian dollars (A$50)'. Governing law: 'in accordance with the laws of Victoria, Australia' + 'jurisdiction of the courts of Victoria, Australia'. Negative checks: grep 'Delaware' -> no match; grep 'USD|US$' -> no match; no 'U.S. dollars'.",
+      "note": "Full AU jurisdiction/currency reconciliation; no USD/Delaware artifacts."
+    },
+    {
+      "id": "MV-privacy-policy-002",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "raw-privacy-policy-20260718T031218Z.html (2026-07-18T03:12:18Z). Contains 'Privacy Act 1988 (Cth)' (multiple), 'Australian Privacy Principles (APPs)', and OAIC complaint path 'Office of the Australian Information Commissioner (OAIC)' with a real anchor to oaic.gov.au.",
+      "note": "Australian Privacy Law section present and specific."
+    },
+    {
+      "id": "MV-terms-003",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "raw-terms-20260718T031218Z.html (2026-07-18T03:12:18Z). Section 18 Contact: 'A support contact address has not yet been published for this service. Once the operator configures one, it...' — AETHER_SUPPORT_EMAIL is unset in prod so the honest fallback renders (no mailto). Old promise 'reach us via the Settings page or the in-app support channel' is absent. Account-closure copy is honest negative framing: 'There is currently no self-service option to delete your account from within the app.'",
+      "note": "No promise of a nonexistent Settings/in-app support control."
+    },
+    {
+      "id": "MV-privacy-policy-003",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "raw-privacy-policy-20260718T031218Z.html (2026-07-18T03:12:18Z). Section 7 Contact: 'A support contact address has not yet been published for this service...' Data-rights copy honest: 'Full account data export or deletion is not yet a self-service, in-app feature' (no false 'delete my account button' promise). No 'in-app support channel' promise.",
+      "note": "Contact path honest; matches unset AETHER_SUPPORT_EMAIL."
+    },
+    {
+      "id": "MV-terms-001",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "Footer legal links present on /login, /signup, /pricing (raw-*.html grep: href=\"/terms\" and href=\"/privacy-policy\" on each). In-browser resolution (ui-results-t4, T1b_footer_resolve): clicking the /login footer Terms link navigated to https://5cb5f0620.abacusai.cloud/terms with h1 'Terms & Conditions' and A$ content; /pricing footer Privacy link -> /privacy-policy h1 'Privacy Policy' with 'Privacy Act 1988' content. Screenshots ui-terms-resolved-2026-07-18T03-25-06-377Z.png, ui-pricing-auth-checkout-error-2026-07-18T03-17-52-402Z.png (footer visible).",
+      "note": "Links present AND resolve to real legal content."
+    },
+    {
+      "id": "MV-privacy-policy-001",
+      "cluster": "F",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "Signup Terms/Privacy consent checkbox structurally blocks submission (ui-results-*.json T1_signup_consent + screenshot ui-signup-consent-blocked-2026-07-18T03-17-40-664Z.png): with consent UNCHECKED, clicking 'Create account' shows error 'You must agree to the Terms & Conditions and Privacy Policy to create an account.', stays on /signup, and NO POST /api/auth/register fired (register_calls_while_unchecked = []). After checking consent, exactly one POST /api/auth/register fired and the page navigated to /dashboard (ui-signup-consent-proceeds-*.png). Behavioral block, not a UI hint.",
+      "note": "Consent gate blocks the real API call, then permits it — verified via network trace, not just DOM."
+    },
+    {
+      "id": "MV-pricing-002",
+      "cluster": "G",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "Rendered /pricing DOM (ui-results-*.json T2_pricing_unauth + screenshot ui-pricing-auth-checkout-error-2026-07-18T03-17-52-402Z.png, 2026-07-18T03:17): honest note present verbatim 'Every plan uses the same AI models — plans differ by monthly agent-run quota and feature access, not model quality.' Visible-text scan of the plan cards: 0 hits for /model tier|model access/i and 0 hits for /anthropic|claude|gpt|openai/i. The 'Light/Standard/Advanced model tier' and 'Full model access' bullets the API returns are filtered out of the rendered cards.",
+      "note": "RESIDUAL (INFERRED, non-blocking): the backend API GET /api/billing/plans STILL returns modelTier + those model-tier feature strings (api-billing-plans-20260718T031358Z.json: 'model tier' x3, 'model access' x1, modelTier x4). MV-pricing-002 is closed at the DISPLAY layer only; any other API consumer still receives the misleading copy. Recommend a backend-scoped follow-up to remove modelTier/model-tier strings at source."
+    },
+    {
+      "id": "MV-pricing-004",
+      "cluster": "G",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "Distinct honest checkout errors confirmed end-to-end. API (probe-checkout-*-20260718T031505Z.txt): POST /billing/checkout starter -> 400 'This plan is not yet available for purchase (no Stripe price configured)'; free -> 400 'The Free plan does not require checkout'; bogus -> 400 'Unknown or inactive plan' (three DISTINCT messages, not one generic). UI (T3_pricing_authed_checkout + ui-pricing-auth-checkout-error-2026-07-18T03-17-52-402Z.png): clicking 'Subscribe to Starter' as the signed-in free account shows 'This plan isn't available for purchase yet (not yet configured for checkout). Please try a different plan or check back soon.' — distinct, NOT the generic 'Could not start checkout', and no navigation to Stripe (no fake success). 429 induced (probe-checkout-429-20260718T033129Z.txt): 14 consecutive 429s each with a real, decrementing 'Retry-After: ~2618' header — rate limiter + Retry-After are genuine and honored by the client.",
+      "note": "Config-missing 400 case (primary ask) verified in UI; 429 Retry-After verified at API."
+    },
+    {
+      "id": "MV-pricing-005",
+      "cluster": "G",
+      "verdict": "VERIFIED-CLOSED",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "Free 'Get started free' CTA is session-aware. Unauthenticated (T2_pricing_unauth, ui-pricing-unauth-2026-07-18T03-17-47-432Z.png): free-plan CTA text 'Get started free', href '/signup'. Authenticated as disposable account (T3_pricing_authed_checkout, ui-pricing-auth-checkout-error-*.png): same CTA reads 'Go to dashboard', href '/dashboard'.",
+      "note": "Both session branches observed with fresh evidence."
+    },
+    {
+      "id": "MV-pricing-003",
+      "cluster": "G",
+      "verdict": "STILL-BROKEN",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "/dashboard/settings does NOT render the real plan + quota for the free disposable account in production. Screenshot ui-settings-billing-2026-07-18T03-28-37-386Z.png shows the SubscriptionGate paywall 'Subscribe to unlock Aether' occupying the content area instead of the Billing section. DOM testid probe (ui-results-t4-2026-07-18T03-28-37-585Z.json T4_settings_billing.present): settings-page=false, settings-billing=false, billing-plan-name=false, billing-quota-runs=false, manage-subscription-btn=false — none rendered. Network trace shows /billing/entitlement fired (the gate) but /billing/subscription (the settings billing fetch) NEVER fired, because SettingsClient never mounts. Root cause: apps/web/src/app/dashboard/layout.tsx wraps ALL /dashboard/* children in <SubscriptionGate> (apps/web/src/components/subscription-gate.tsx) with NO route allowlist; for a free account entitlement.requiresSubscription && !active_paid is true, so the gate returns <Paywall/> in place of the settings page.",
+      "note": "The Cluster-G billing section is UNREACHABLE for a free user (the exact scenario the finding specifies). It was verified by the fixer/reviewer only via isolated vitest component tests, never through the live paywalled route. Backend GET /api/billing/subscription itself IS correct (probe-subscription-20260718T031505Z.txt: plan free, quota runsUsed 0 / runsAllowed 5, spend 0/1.0 USD) — but the UI deliverable required by MV-pricing-003 is not reachable."
+    },
+    {
+      "id": "MV-settings-003",
+      "cluster": "G",
+      "verdict": "STILL-BROKEN",
+      "epistemic": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": "The 'Manage subscription' control on /dashboard/settings is UNREACHABLE for the free disposable account: same paywall interception as MV-pricing-003 (ui-settings-billing-2026-07-18T03-28-37-386Z.png; manage-subscription-btn testid absent per ui-results-t4-2026-07-18T03-28-37-585Z.json). The paywall's only actionable links both go to /pricing; its text 'and manage your account' is NOT a link, so a free user has no UI path to view quota or manage/cancel billing. The underlying endpoint honesty is intact (probe-portal-20260718T031505Z.txt: POST /billing/portal -> 409 'No billing account yet — subscribe first', an honest non-dead-end, no fake success) — but the settings-page control that MV-settings-003 requires cannot be exercised in production.",
+      "note": "In this deployment the billing section is unreachable by ANY user: free users are paywalled out, and no paid account can be created (Stripe unconfigured -> checkout 400). Recommend exempting /dashboard/settings (at least the Billing section) from SubscriptionGate so users can always view plan/quota and reach billing management."
+    }
+  ],
+  "summary": {
+    "verified_closed": 10,
+    "still_broken": 2,
+    "still_broken_ids": ["MV-pricing-003", "MV-settings-003"]
+  },
+  "any_still_broken": true
+}

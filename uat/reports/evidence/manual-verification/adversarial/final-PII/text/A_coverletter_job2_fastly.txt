@@ -1,0 +1,16 @@
+20 July 2026
+
+Hiring Team
+Fastly
+Re: Principal Distributed Systems Engineer
+
+Dear Hiring Team at Fastly,
+
+My background in end-to-end delivery leadership is a direct match for the Principal Distributed Systems Engineer role at Fastly. My work designing a gRPC streaming API with Protocol Buffers for 90 million monthly active users and building NATS JetStream fan-out directly aligns with Fastly's need for fault-tolerant gRPC services and messaging.
+
+You require deep Rust expertise and fault-tolerant gRPC services. At Canva I designed a collaboration CRDT sync engine in Rust with a gRPC streaming API and Protocol Buffers serving 90 million monthly active users. At Atlassian I rearchitected a 4 billion event/day Kafka firehose in Rust with Tokio, cutting p99 latency from 380ms to 42ms. You also value NATS JetStream messaging—at Zendesk I built NATS JetStream fan-out for real-time notifications. I bring property-based testing with proptest and no_std embedded Rust from my skillset, and I have led teams delivering low-latency gRPC services processing over 4 billion events per day.
+
+I would welcome the opportunity to discuss how my experience with Rust, gRPC, Protocol Buffers, NATS JetStream, and large-scale distributed systems can contribute to Fastly's edge compute platform. I am available for an interview at your convenience and can elaborate on my work with no_std embedded Rust and property-based testing.
+
+Sincerely,
+

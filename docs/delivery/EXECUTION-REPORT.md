@@ -336,3 +336,26 @@ source reads, and the `uat/reports/evidence/phase7/` artifacts cited inline. It 
 GATE-24 — gate closure is the reviewer/QA sub-agent's sole authority, per the no-self-approval rule.
 `docs/delivery/phase7-gap-analysis.json` (machine ledger, orchestrator-owned) was read for the facts above
 but not modified by this pass.
+
+---
+
+## 11. MANUAL-VERIFICATION Update (2026-07-20) — Latest Phase Record
+
+**This §11 is a pointer, not a summary.** The current latest phase record is
+**[`docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md`](MANUAL-VERIFICATION-FINAL-REPORT.md)**
+— a per-wireframe human-grade manual testing → fix → adversarial re-verify run across all 29
+screens, run 2026-07-17 → 2026-07-20, final production commit `54c28e5`. Headline outcomes: 168
+findings filed (15 BLOCKER / 39 HIGH / 60 MEDIUM / 54 LOW), 129 VERIFIED-CLOSED on production by
+non-author agents, 28 accepted-deviations, 8 blocked-on-human, 3 other terminal, **0 open**; a
+cross-account PII-leak class (9 agent paths) found and closed; a production-DB-wipe incident
+(`INCIDENT-PROD-DB-WIPE-2026-07-18.md`) survived and fully remediated including seed-account and
+discovery-cron restoration; final regression gates green (backend 967/0 serialized, frontend
+477/0 vitest). Supporting artifacts: `MANUAL-VERIFICATION-GAPS.json` (machine ledger),
+`MANUAL-VERIFICATION-CLAIM-LEDGER.md`, `MANUAL-VERIFICATION-GOVERNANCE-AUDIT.md`,
+`MANUAL-VERIFICATION-BLOCKED-ON-HUMAN.md`, `MANUAL-VERIFICATION-TRIAGE.md`, `ADR-MV-02-paywall-marketing.md`,
+and the full evidence tree under `uat/reports/evidence/manual-verification/`.
+
+This §11 was appended by the `doc-updater` sub-agent as the exit-phase documentation pass; it does
+not itself close any gate — gate/finding closure was the `qa`/`qa-adversary` sub-agents' sole
+authority throughout the MANUAL-VERIFICATION run, per the no-self-approval rule. Nothing above
+§11 in this file was modified by this pass.

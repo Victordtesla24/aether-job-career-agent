@@ -1,0 +1,12 @@
+{
+  "note": "session3-verify2-results.json step 'unauth-load-repro2' had a regex bug: /\\bAPP\\b/i case-insensitively matched the common word 'app' (e.g. 'in-app', 'the app'), producing a false positive hasAustralianPrivacyAct:true. Corrected check below, re-run same production URL same session window.",
+  "url": "https://5cb5f0620.abacusai.cloud/privacy-policy",
+  "timestamp_utc_approx": "2026-07-17T13:55Z",
+  "contains_literal_Privacy_Act": false,
+  "contains_literal_Australian_Privacy": false,
+  "contains_standalone_capital_APP_case_sensitive": false,
+  "contains_ABN": false,
+  "contains_jurisdiction": false,
+  "contains_Australia_any_case": false,
+  "conclusion": "The live Privacy Policy page contains zero references to Australian privacy law, the Privacy Act 1988, Australian Privacy Principles (APP), ABN, or even the word 'Australia', despite the product being billed in AUD with GST to Australian users (confirmed on /pricing and /terms)."
+}

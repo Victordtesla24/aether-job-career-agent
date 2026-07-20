@@ -1,0 +1,105 @@
+{
+  "letterId": "c8b192dcdb7e4d8499cd89d5e",
+  "jobId": "c5b4c916b2f4077030a4931b4",
+  "jobTitle": "Principal Distributed Systems Engineer",
+  "company": "Fastly",
+  "wordCount": 217,
+  "needsResume": false,
+  "evidence": [
+    {
+      "claim": "Zendesk",
+      "storyId": "ce4558ec4797c93090e3ea5e5",
+      "storyTitle": "Implementing Erlang/OTP Rate Limiter at Zendesk",
+      "grounded": true
+    },
+    {
+      "claim": "Protocol Buffers",
+      "storyId": "c40f462409ef1917b304b5eda",
+      "storyTitle": "Designing CRDT Sync Engine for Canva\u2019s Real-Time Collaboration",
+      "grounded": true
+    },
+    {
+      "claim": "Distributed Systems",
+      "storyId": "cb0841a103bca5665111b65e1",
+      "storyTitle": "Rearchitecting Jira Activity-Stream Ingestion in Rust",
+      "grounded": true
+    },
+    {
+      "claim": "Fastly",
+      "storyId": null,
+      "storyTitle": null,
+      "grounded": false
+    },
+    {
+      "claim": "Principal",
+      "storyId": null,
+      "storyTitle": null,
+      "grounded": false
+    }
+  ],
+  "keywords": {
+    "covered": 10,
+    "total": 10,
+    "items": [
+      {
+        "keyword": "gRPC",
+        "covered": true
+      },
+      {
+        "keyword": "Distributed",
+        "covered": true
+      },
+      {
+        "keyword": "Rust",
+        "covered": true
+      },
+      {
+        "keyword": "NATS",
+        "covered": true
+      },
+      {
+        "keyword": "JetStream",
+        "covered": true
+      },
+      {
+        "keyword": "Experience",
+        "covered": true
+      },
+      {
+        "keyword": "Principal",
+        "covered": true
+      },
+      {
+        "keyword": "Engineer",
+        "covered": true
+      },
+      {
+        "keyword": "Protocol",
+        "covered": true
+      },
+      {
+        "keyword": "Systems",
+        "covered": true
+      }
+    ]
+  },
+  "voice": {
+    "authenticity": 65,
+    "aiDetectionRisk": 18,
+    "aiDetectionLabel": "Safe"
+  },
+  "versions": [
+    {
+      "id": "cfd09691a77a390252978df52",
+      "version": 1,
+      "createdAt": "2026-07-19T22:58:37.086000",
+      "current": false
+    },
+    {
+      "id": "c8b192dcdb7e4d8499cd89d5e",
+      "version": 2,
+      "createdAt": "2026-07-19T23:02:14.730000",
+      "current": true
+    }
+  ]
+}

@@ -66,6 +66,62 @@ The escape hatch `AETHER_ALLOW_PROD_TRUNCATE=1` exists only for a
 consciously-overridden local schema name and **must never be set in CI or
 any deploy script.**
 
+### 0.1 Concurrent pytest discipline — `flock` (shared `aether_test` schema)
+
+Multiple agents/sessions on this VM can run the backend suite against the
+**same** shared `aether_test` schema at the same time. A concurrent
+`TRUNCATE` from one run against tables another run is mid-assertion on
+produces non-deterministic, environment-caused failures that are easy to
+mistake for real regressions ("Aether shared test-DB flakiness" — see
+project memory). All sanctioned sub-agent charters (`.claude/agents/tester.md`,
+`fixer-medium.md`, `fixer-hard.md`) run pytest wrapped in
+`flock /tmp/aether-pytest.lock` for exactly this reason:
+
+```bash
+flock /tmp/aether-pytest.lock scripts/run-tests.sh
+```
+
+This is **in addition to**, not a replacement for, the `DATABASE_URL_TEST`
+discipline in §0 above — `flock` only serializes concurrent runs against the
+one shared schema; it does nothing to stop a wrong-DSN run from reaching
+production. A gate/deploy suite run that matters (i.e. one whose count is
+about to authorize a restart, per §0.2 below) should hold the lock for its
+whole duration so a second concurrent run cannot interleave truncations
+into it.
+
+### 0.2 ADDENDUM (2026-07-20, MANUAL-VERIFICATION exit, `docs/delivery/MANUAL-VERIFICATION-GOVERNANCE-AUDIT.md` entries 12–13) — gate-before-restart + self-matching liveness checks
+
+Two governance incidents during the MANUAL-VERIFICATION run exposed gaps in
+this runbook's implicit deploy discipline that are now made explicit:
+
+1. **Never restart a production service based on a partial or assumed test
+   count.** A deployer restarted `aether-api`/`aether-web` **before** the
+   full serialized backend gate (§0 above) had actually finished and
+   reported its final `N passed / M failed` line — the first suite run had
+   been `SIGTERM`'d and the second was still executing. **Rule: a deploy
+   restart is authorized only after the gate's own completed summary line
+   (`N passed, ... in ...s`) is read from the actual suite output — never
+   before, and never from a guess about how long it "should" take.** If a
+   gate run is killed or interrupted, it must be re-run from scratch to
+   completion before any restart tied to it proceeds.
+2. **Process-liveness checks must not self-match.** A separate incident: an
+   orchestrator checked whether a long-running gate suite was "still
+   running" using `pgrep -f <pattern>` — but the checking shell's own
+   command line contained the same pattern, so the check matched itself and
+   reported "STILL RUNNING" for ~30 minutes after the real suite process had
+   already died (a false positive that delayed detecting the dead gate).
+   **Rule: liveness checks must use self-excluding patterns** (e.g.
+   `pgrep -f "[p]ytest"`, which bracket-escapes one character so the pattern
+   no longer matches its own invocation) **or check `/proc/<pid>` /
+   `ps -p <pid>` directly against a captured PID** — never a bare
+   `pgrep -f <substring>` whose substring could appear in the checking
+   command itself. Prefer file-based completion detection (the suite writing
+   its own "done" marker/output file) over process-liveness polling
+   entirely when practical.
+
+Neither of these changes the deploy recipe's commands in §5 — they are
+process rules for *when* those commands are run, not new commands.
+
 ---
 
 ## 1. Systemd Unit Names and Service Definitions

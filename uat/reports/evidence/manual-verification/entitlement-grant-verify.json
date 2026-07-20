@@ -1,0 +1,23 @@
+{
+  "timestamp_utc": "2026-07-17T15:37:05Z",
+  "userId": "cc29a76e324fbf19f438eb8be",
+  "login_email": "admin@aether.local",
+  "token_first_8_chars": "eyJhbGci",
+  "endpoint": "GET /api/billing/entitlement",
+  "response": {
+    "active_paid": true,
+    "plan": {
+      "id": "pro",
+      "status": "active"
+    },
+    "requiresSubscription": true
+  },
+  "verification_notes": [
+    "active_paid=true confirms grant took effect",
+    "plan.id=pro matches database update",
+    "plan.status=active as expected",
+    "requiresSubscription=true is global gate flag (not user-specific)",
+    "Tested agent endpoint (POST /api/agents/scout/run) returns 422 validation error (not 402 paywall), confirming user is permitted through the subscription gate"
+  ],
+  "grant_status": "VERIFIED_ACTIVE"
+}

@@ -1,0 +1,29 @@
+........................................................................ [ 91%]
+.......                                                                  [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/test_cover_letter_agent.py::TestCoverLetterAgent::test_cover_letter_contains_no_invented_claims
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_gap_p5_auth_compliance.py::test_put_deployment_credential_rejects_subscription_oauth
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:1941: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
+
+tests/test_gap_p5_auth_compliance.py::test_put_user_credential_rejects_subscription_oauth
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:2048: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+79 passed, 8 warnings in 157.36s (0:02:37)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

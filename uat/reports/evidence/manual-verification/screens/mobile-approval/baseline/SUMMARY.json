@@ -1,0 +1,11 @@
+{
+  "screen_id": "mobile-approval",
+  "route": "/dashboard/approvals",
+  "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals",
+  "ts_utc": "2026-07-17T13:26:27Z",
+  "http_status": 200,
+  "console_error_count": 0,
+  "console_warning_count": 0,
+  "failed_request_count": 0,
+  "notes": ""
+}

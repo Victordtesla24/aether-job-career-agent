@@ -1,0 +1,20 @@
+{
+  "throttled": {
+    "test": "throttled-reload-unauth-admin-settings",
+    "elapsedMs": 39859,
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account"
+  },
+  "backForward": {
+    "test": "back-forward-demoted-user",
+    "afterAdminNav": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "afterUsersNav": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "afterBack": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "afterForward": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "bodyAfterBack": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Active\n\n2 of 8 agents running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 Jul",
+    "bodyAfterForward": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Active\n\n2 of 8 agents running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 Jul",
+    "consoleMsgs": []
+  }
+}

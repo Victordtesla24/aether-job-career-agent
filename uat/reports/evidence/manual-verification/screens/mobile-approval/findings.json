@@ -1,0 +1,58 @@
+[
+  {
+    "id": "MV-mobile-approval-001",
+    "screen": "mobile-approval",
+    "severity": "MEDIUM",
+    "category": "visual",
+    "summary": "Wireframe's sequential single-item review pattern (back-chevron header, \"1 of 2 pending\" position counter, implied step-through-the-queue flow) is not implemented on production; production instead always returns to the full scrollable card list after every decision, with no position counter and no auto-advance to the next pending item.",
+    "reproduction": [
+      "Login as admin/admin123 at https://5cb5f0620.abacusai.cloud/login (mobile viewport 390x844).",
+      "Navigate to /dashboard/approvals with 2+ pending approvals in the queue.",
+      "Tap 'Review' on any pending card -> modal opens with header 'Approval Needed' / '{agent} wants to {action}' and an X close icon (no back-chevron, no 'N of M pending' counter anywhere in the modal).",
+      "Tap 'Approve & Submit' (or Reject) -> modal closes and returns to the full card list; the next pending item is NOT automatically opened for review, and no position indicator ever appeared during the flow.",
+      "Compare against design/screens/mobile-approval.html: header shows a back-chevron (data-design-id=btn-back-ma02) and 'Approval / 1 of 2 pending' (data-design-id=m-topbar-ma01), implying a dedicated single-focus, step-through-the-queue screen."
+    ],
+    "expected": "Per the wireframe, reviewing an approval should feel like a dedicated, focused single-item screen with a back affordance and a position counter ('1 of 2 pending') that helps a user work through multiple pending approvals in sequence.",
+    "observed": "Production's mobile /dashboard/approvals renders the shared responsive queue-list + bottom-sheet-modal component (ApprovalModal.tsx). The modal has an X-close (not a back-chevron) and no position/count indicator; after a decision the modal simply closes back to the list and the user must manually tap 'Review' on the next card. The list page's own '5 pending' text is an aggregate count only, not a per-item position indicator, and is not visible while the modal is open.",
+    "evidence": [
+      "screens/mobile-approval/test-artifacts/06b-modal-viewport-only.png",
+      "screens/mobile-approval/test-artifacts/26-session2-modal-open.png",
+      "screens/mobile-approval/test-artifacts/00-FINAL-approvals-list-mobile-clean.png",
+      "design/screens/mobile-approval.html"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-approval-002",
+    "screen": "mobile-approval",
+    "severity": "MEDIUM",
+    "category": "wiring",
+    "summary": "The \"invalid/stale approval\" error message for a broken ?review=<id> deep link is race-conditioned: it is silently swallowed in the majority of real page loads because the pending-list fetch's success handler unconditionally calls setError(null), which can run after (and clear) the error set by the failed single-approval fetch.",
+    "reproduction": [
+      "Fresh browser session, mobile viewport 390x844, login as admin/admin123.",
+      "Navigate directly to https://5cb5f0620.abacusai.cloud/dashboard/approvals?review=<any-nonexistent-id> (a stale/garbage id).",
+      "GET /api/approvals/<id> correctly 404s (confirmed via network capture: {\"detail\":\"Approval not found\"}).",
+      "Poll the DOM every 100ms for up to 6-8s for a [role=alert] element containing 'The linked approval request could not be found.'",
+      "Result across 7 independent fresh-session repro attempts: the error banner was observed in only 2/7 runs; in the other 5/7 it never appeared at all -- the user lands on the plain, unannotated approvals queue with zero indication the deep link was broken.",
+      "Root cause confirmed in apps/web/src/app/dashboard/approvals/page.tsx: the review-param effect's .catch() calls setError('...could not be found.'), but the separate load() effect's success path unconditionally calls setError(null) after GET /approvals?status=pending resolves -- whichever promise settles last wins, and the list fetch usually wins the race."
+    ],
+    "expected": "A user following any stale/expired/mistyped approval deep link (e.g. from an old notification, bookmark, or shared link) should reliably see the existing, already-implemented error copy explaining the link is invalid.",
+    "observed": "The error message is nondeterministic: present in 2/7 fresh-session repro attempts, silently absent in 5/7. This is an unsurfaced failure -- the request genuinely fails (404) but the failure is usually never communicated to the user.",
+    "evidence": [
+      "screens/mobile-approval/test-artifacts/16-deeplink-invalid.png",
+      "screens/mobile-approval/test-artifacts/16b-deeplink-invalid-retest.png",
+      "screens/mobile-approval/test-artifacts/16c-deeplink-invalid-timeline.png",
+      "screens/mobile-approval/test-artifacts/16d-deeplink-invalid-final8s.png",
+      "screens/mobile-approval/test-artifacts/session2-log.txt (S2-STEP7: 0/2 additional runs showed the alert)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

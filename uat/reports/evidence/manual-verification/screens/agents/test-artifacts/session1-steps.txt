@@ -1,0 +1,18 @@
+[2026-07-17T15:19:36.229Z] STEP: navigate to /dashboard/agents WITHOUT auth
+[2026-07-17T15:19:38.594Z] unauth landed at: https://5cb5f0620.abacusai.cloud/login
+[2026-07-17T15:19:38.735Z] STEP: navigate to /login
+[2026-07-17T15:19:40.839Z] post-login url: https://5cb5f0620.abacusai.cloud/dashboard
+[2026-07-17T15:19:40.844Z] token present: true, prefix: eyJhbGciOiJI
+[2026-07-17T15:19:40.844Z] STEP: navigate to /dashboard/agents (authenticated)
+[2026-07-17T15:19:44.062Z] authed url: https://5cb5f0620.abacusai.cloud/dashboard/agents
+[2026-07-17T15:19:44.181Z] agent cards found: 0
+[2026-07-17T15:19:44.209Z] provider-related elements found: 0 -> []
+[2026-07-17T15:19:44.219Z] header h1: Good afternoon, AdministratorFri, 17 July · last agent run 3h agoADAdministratorAdministrator
+[2026-07-17T15:19:44.223Z] agents count text: 8 agents ready · none running
+[2026-07-17T15:19:44.226Z] wrote agent-cards-dump.json (0 cards)
+[2026-07-17T15:19:44.227Z] WARNING: agent-settings-toggle-jobDiscovery not found
+[2026-07-17T15:19:44.228Z] WARNING: agent-card-compliance not found
+[2026-07-17T15:19:44.231Z] WARNING: provider-action-anthropic not found
+[2026-07-17T15:19:44.232Z] WARNING: test-run-open not found
+[2026-07-17T15:19:44.232Z] STEP: about to click Run All / Run Pipeline button - capturing response only, will not force-wait completion
+[2026-07-17T15:19:44.233Z] run-pipeline-btn exists: false

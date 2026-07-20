@@ -1,0 +1,37 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST",
+    "body": "{\"access_token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYzI5YTc2ZTMyNGZiZjE5ZjQzOGViOGJlIiwidXNlcklkIjoiY2MyOWE3NmUzMjRmYmYxOWY0MzhlYjhiZSIsImVtYWlsIjoiYWRtaW5AYWV0aGVyLmxvY2FsIiwiaWF0IjoxNzg0Mjk1Nzg4LCJleHAiOjE3ODQzODIxODh9.ZJV_4SU12V0ZbrJ17-6PCGZ-EgtlccrjVwrtGsFRerQ\",\"token_type\":\"bearer\",\"userId\":\"cc29a76e324fbf19f438eb8be\",\"email\":\"admin@aether.local\"}",
+    "ts": "2026-07-17T13:43:08.213Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/plans",
+    "status": 200,
+    "method": "GET",
+    "body": "{\"currency\":\"AUD\",\"gstIncluded\":true,\"plans\":[{\"id\":\"free\",\"name\":\"Free\",\"modelTier\":\"light\",\"runsPerMonth\":5,\"monthly\":{\"total\":0.0,\"gst\":0.0,\"net\":0.0},\"annual\":null,\"features\":[\"5 tailored agent runs / month\",\"Light model tier\",\"Resume tailoring + ATS scoring\",\"Community support\"],\"purchasable\":false},{\"id\":\"starter\",\"name\":\"Starter\",\"modelTier\":\"standard\",\"runsPerMonth\":30,\"monthly\":{\"total\":19.0,\"gst\":1.73,\"net\":17.27},\"annual\":{\"total\":179.0,\"gst\":16.27,\"net\":162.73},\"features\":[\"30 tailored agent runs / month\",\"Standard model tier\",\"Cover letters + story bank\",\"Email agent (triage + drafts)\"],\"purchasable\":true},{\"id\":\"pro\",\"name\":\"Pro\",\"modelTier\":\"advanced\",\"runsPerMonth\":100,\"monthly\":{\"total\":39.0,\"gst\":3.55,\"net\":35.45},\"annual\":{\"total\":359.0,\"gst\":32.64,\"net\":326.36},\"features\":[\"100 tailored agent runs / month\",\"Advanced model tier\",\"Everything in Starter\",\"Priority email agent\"],\"purchasable\":true},{\"id\":\"power\",\"name\":\"Power\",\"modelTier\":\"premium\",\"runsPerMonth\":300,\"monthly\":{\"total\":69.0,\"gst\":6.27,\"net\":62.73},\"annual\":{\"total\":649.0,\"gst\":59.0,\"net\":590.0},\"features\":[\"300 tailored agent runs / month\",\"Full model access\",\"Everything in Pro\",\"Highest monthly run ceiling\"],\"purchasable\":true}]}",
+    "ts": "2026-07-17T13:43:08.513Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/checkout",
+    "status": 429,
+    "method": "POST",
+    "body": "{\"detail\":\"Too many checkout attempts, retry later\"}",
+    "ts": "2026-07-17T13:43:10.370Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/checkout",
+    "status": 429,
+    "method": "POST",
+    "body": "{\"detail\":\"Too many checkout attempts, retry later\"}",
+    "ts": "2026-07-17T13:43:12.838Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/plans",
+    "status": 200,
+    "method": "GET",
+    "body": "{\"currency\":\"AUD\",\"gstIncluded\":true,\"plans\":[{\"id\":\"free\",\"name\":\"Free\",\"modelTier\":\"light\",\"runsPerMonth\":5,\"monthly\":{\"total\":0.0,\"gst\":0.0,\"net\":0.0},\"annual\":null,\"features\":[\"5 tailored agent runs / month\",\"Light model tier\",\"Resume tailoring + ATS scoring\",\"Community support\"],\"purchasable\":false},{\"id\":\"starter\",\"name\":\"Starter\",\"modelTier\":\"standard\",\"runsPerMonth\":30,\"monthly\":{\"total\":19.0,\"gst\":1.73,\"net\":17.27},\"annual\":{\"total\":179.0,\"gst\":16.27,\"net\":162.73},\"features\":[\"30 tailored agent runs / month\",\"Standard model tier\",\"Cover letters + story bank\",\"Email agent (triage + drafts)\"],\"purchasable\":true},{\"id\":\"pro\",\"name\":\"Pro\",\"modelTier\":\"advanced\",\"runsPerMonth\":100,\"monthly\":{\"total\":39.0,\"gst\":3.55,\"net\":35.45},\"annual\":{\"total\":359.0,\"gst\":32.64,\"net\":326.36},\"features\":[\"100 tailored agent runs / month\",\"Advanced model tier\",\"Everything in Starter\",\"Priority email agent\"],\"purchasable\":true},{\"id\":\"power\",\"name\":\"Power\",\"modelTier\":\"premium\",\"runsPerMonth\":300,\"monthly\":{\"total\":69.0,\"gst\":6.27,\"net\":62.73},\"annual\":{\"total\":649.0,\"gst\":59.0,\"net\":590.0},\"features\":[\"300 tailored agent runs / month\",\"Full model access\",\"Everything in Pro\",\"Highest monthly run ceiling\"],\"purchasable\":true}]}",
+    "ts": "2026-07-17T13:43:15.133Z"
+  }
+]

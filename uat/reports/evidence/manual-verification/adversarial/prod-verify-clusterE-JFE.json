@@ -1,0 +1,202 @@
+{
+  "status": "OK",
+  "run": "MANUAL-VERIFICATION Stage-3 adversarial prod-verify — cluster E-JFE",
+  "role": "qa-adversary (opus)",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "git_sha_verified": "c5ae38944e5ba154089c7ffce9daee27cbea857f",
+  "verified_utc": "2026-07-18T17:45:00Z",
+  "evidence_dir": "uat/reports/evidence/manual-verification/adversarial/clusterE-JFE/",
+  "account": {
+    "email": "mv-qa-ej2-adv18@example.com",
+    "userId": "c88fc72d11082ac709fd6a801",
+    "note": "Fresh signup (prior disposable mv-qa-ej-2026-cebe password unrecoverable; fresh session is more adversarial anyway). WAF (Cloudflare 1010) requires a browser User-Agent on API calls."
+  },
+  "entitlement_grant_logged": true,
+  "entitlement_grant": {
+    "method": "SURGICAL single-row UPSERT keyed to userId under PGOPTIONS search_path=aether; schema= query param stripped from DSN",
+    "grant_sql": "UPDATE \"Subscription\" SET planId='pro',status='active' WHERE userId='c88fc72d11082ac709fd6a801'; UPDATE \"UsageQuota\" SET planId='pro',runsAllowed=100,spendCapUsd=15.0 WHERE userId='c88fc72d11082ac709fd6a801';",
+    "confirmed_live": "GET /api/billing/entitlement -> active_paid:true, plan.id=pro",
+    "reverted": false,
+    "revert_reason": "Per brief: Pro stays active through Stage-3; exit cleanup reverts using byte-for-byte REVERT SQL in ENTITLEMENT-GRANT-LOG.md"
+  },
+  "pro_still_active": true,
+  "zero_tolerance_sweep": {
+    "screens": ["/dashboard","/dashboard/interviews","/dashboard/agents","/dashboard/resume","/dashboard/settings","/dashboard/approvals"],
+    "console_errors": 0, "page_errors": 0, "http_5xx": 0, "unexpected_4xx": 0,
+    "artifact": "api/final-health-sweep.json"
+  },
+  "verify_twice_policy": "Every verdict used deliberately different data/orderings; borderline items cross-confirmed at both API and UI surfaces or across desktop+mobile.",
+  "verdicts": [
+    {
+      "finding": "MV-interview-center-001",
+      "status": "VERIFIED-CLOSED",
+      "severity": "BLOCKER",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-interview-center-001-load.png","har/interview-center-load.har","api/MV-interview-center-004-fk-validation.json"],
+      "adversarial_notes": "Fresh session load of /dashboard/interviews fires GET /api/interviews (HAR-confirmed) — was 0 data calls before. Real InterviewSchedule row renders in-page (Project Manager @ Empire Life, Scheduled, 60min video, prep notes). Old static 'No interview scheduled' placeholder is GONE. Zero console/page errors. Rendered two independently-created interviews (one via API, one via UI) proving live data binding, not a fixture."
+    },
+    {
+      "finding": "MV-interview-center-002",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-interview-center-001-load.png","screenshots/MV-interview-center-003-created.png","screenshots/MV-interview-center-003-form-open.png"],
+      "adversarial_notes": "The bare static empty-state card is replaced by a genuinely functional multi-state UI: real interview cards (type/date/duration/status/prep-notes), a full Schedule-interview form (application, type, datetime, duration, location, meeting link, contacts, notes), and status controls (Mark complete/Cancel/Delete). ADVERSARIAL CAVEAT (does not block closure): the wireframe's Prep/Live-Assist/Debrief tabs + live-coaching metrics are NOT present — but there is no backend for real-time coaching, so rendering them would be fabricated. The fix correctly chose an honest functional list+CRUD over fabricated panels; this resolves the 'only-empty-state-reachable / bare placeholder' defect."
+    },
+    {
+      "finding": "MV-interview-center-003",
+      "status": "VERIFIED-CLOSED",
+      "severity": "BLOCKER",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-interview-center-003-form-open.png","screenshots/MV-interview-center-003-created.png","har/interview-center-create.har"],
+      "adversarial_notes": "A real UI entry point now exists (data-testid=schedule-interview-btn). Filled the form end-to-end via the UI with DIFFERENT data than the API path (type=phone, 2026-10-20 09:30, 45min, distinct notes); HAR shows the UI's POST /api/interviews -> 201 and the interview list refreshed (cards 1->2). Verified reflected via GET /interviews (2 rows). Status transitions also exercised: complete->200, cancel->200, re-complete idempotent 200, bogus->404 (no 5xx)."
+    },
+    {
+      "finding": "MV-interview-center-004",
+      "status": "VERIFIED-CLOSED",
+      "severity": "MEDIUM",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-interview-center-004-fk-validation.json"],
+      "adversarial_notes": "7-case adversarial suite: POST /interviews with nonexistent id -> 404 'Referenced application not found'; empty string -> 422; whitespace-only -> 404; 214-char string -> 404; SQL-injection string ('; DROP TABLE ...) -> 404 (safely parameterized, no table dropped — subsequent queries succeeded); valid own application -> 201. GET /interviews after shows exactly the 1 legitimate row (no orphans). The old 201-orphan behavior is gone; ownership is enforced via SELECT 1 ... WHERE id AND userId."
+    },
+    {
+      "finding": "MV-agents-003",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-agents-003-testrun-all22.json"],
+      "adversarial_notes": "Exercised POST /agents/test-run for ALL 22 catalog agents (the full selectable dropdown), validating each response against the exact frontend zod TestRunSchema in Python. All 22 return HTTP 200 with a non-null string `model` ('deterministic' for the 6 deterministic + 12 planned agents; real model id for the 4 LLM agents) and creditsCharged=0. No raw Zod validation object can reach the UI for any agent — the 18/22 raw-error defect is eliminated."
+    },
+    {
+      "finding": "MV-agents-004",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-agents-004-anthropic-before-verify.png","screenshots/MV-agents-004-anthropic-after-verify.png","api/MV-agents-004-live-verify.json","har/agents-providers-before.har","har/agents-providers-after-verify.har"],
+      "adversarial_notes": "Anthropic Claude card status dot has aria-label 'Anthropic Claude warning' with class bg-aether-yellow (yellow warning), action button 'Re-authenticate', detail '... last verify: failed'. NO 'Anthropic Claude connected' dot exists; no green 'Connected' badge. (The green classes present in card HTML belong ONLY to the separate 'Saved in app' vault-source badge, which is honest.) Re-triggered the exact scenario with a FRESH live round-trip: POST /agents/providers/anthropic/verify -> real HTTP 401 'Invalid authentication credentials' from api.anthropic.com; DB lastVerifiedAt refreshed 2026-07-17->2026-07-18T17:28 with status still 'failed'. Card re-rendered post-verify: still warning/yellow, 0 connected dots. Verified twice (before + after fresh 401)."
+    },
+    {
+      "finding": "MV-resume-studio-001",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-resume-studio-001-approval.json","screenshots/MV-approval-modal-real-open.png","screenshots/MV-approval-modal-after-approve.png","har/approval-modal-approve.har"],
+      "adversarial_notes": "Ran a real Pro tailor via POST /agents/tailor/run (async worker path). Job completed with 4 changes and returned approval_id cc102bff35ab57946b2581393. GET /approvals/{id} confirms a REAL pending ApprovalRequest (status=pending, kind=resume_tailor) whose payload preview is genuine LLM output ('4 bullet(s) rewritten for Project Manager @ Empire Life: • Led the design and delivery of an event-driven billing pipeline...') — no placeholder/fixture. Opened it in the modal, exercised Approve; server state transitioned pending->approved. The gate is no longer decorative."
+    },
+    {
+      "finding": "MV-resume-studio-003",
+      "status": "VERIFIED-CLOSED",
+      "severity": "MEDIUM",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-resume-studio-003-noop.json"],
+      "adversarial_notes": "Forced 3 independent no-op runs (re-tailoring an already-tailored version). Each surfaced as an honest terminal job status=failed with error 'NoChangesApplied: No verifiable changes could be applied — every suggested edit ...' and created NO new resume version. Quota UNCHANGED across all three (runsUsed stayed 1->1, spendUsedUsd stayed 0.000742 — the reserved run is refunded). Resume version count stayed 2 (no byte-identical billed 'Tailored' version). The silent-billing defect is gone. Final runsUsed=1 corresponds only to the single genuine-change run."
+    },
+    {
+      "finding": "MV-resume-studio-004",
+      "status": "VERIFIED-CLOSED",
+      "severity": "LOW",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-resume-studio-004-005.png","har/resume-studio.har"],
+      "adversarial_notes": "Format Integrity Check text is now DERIVED from a real per-version formatHash comparison (formatIntact = selected.formatHash === baseHash), not a hardcoded string. Runtime proof it varies: selecting a hash-matching version renders GREEN 'Layout hash matches the base — typography, spacing, columns & margins preserved'; selecting a hash-differing version renders AMBER 'Layout hash differs from the base — review formatting before using this version'. A formatting regression is therefore visibly flagged."
+    },
+    {
+      "finding": "MV-resume-studio-005",
+      "status": "VERIFIED-CLOSED",
+      "severity": "LOW",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-resume-studio-004-005.png","har/resume-studio.har"],
+      "adversarial_notes": "Ingested resume variants to reach 10 versions. Versions list shows only 8 initially (VERSIONS_PAGE_SIZE=8) with a 'Show more (2 older)' control (data-testid=versions-show-more); clicking reveals all 10. Pagination works — no unbounded scroll."
+    },
+    {
+      "finding": "MV-settings-001",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-settings-001-notifications.png","screenshots/MV-settings-persist-after-reload.png","har/settings-persist-sync.har"],
+      "adversarial_notes": "Fix chose the honest-disable path (commit 'persist or disable'): all 3 notification toggles (approvals/apps/digest) are rendered disabled=true with an explicit notice 'Notification delivery isn't built yet — these preferences aren't functional and aren't saved.' Attempting to click a toggle is blocked (element not enabled) — no false 'saved' theater for notifications. Separately proved REAL settings persist + hit backend: set targetRole/location, Save -> PUT /api/workspaces/settings 200 (HAR), reload -> values persisted (Backend Engineer / Sydney, Australia)."
+    },
+    {
+      "finding": "MV-settings-002",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-settings-002-integrations.png","screenshots/MV-settings-002-sync-notice.png","screenshots/MV-settings-002-sync-all-fired.png","har/settings-persist-sync.har"],
+      "adversarial_notes": "The fake per-row 'Sync' buttons (Greenhouse/Ashby/Lever/...) are REMOVED (0 remaining); boards remain only as informational status rows. One real 'Sync All' (gated on role+location) now calls POST /api/agents/scout/run — HAR-confirmed 202 and re-confirmed 202 in a second run, showing a 'Syncing…' spinner then honest 'Job boards synced ✓'. No client-side theater."
+    },
+    {
+      "finding": "MV-approval-modal-003",
+      "status": "VERIFIED-CLOSED",
+      "severity": "HIGH",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-approval-modal-003-longstring.png","screenshots/MV-approval-modal-003-mobile375.png","har/approvals-003-004.har"],
+      "adversarial_notes": "Created an approval with a 214-char UNBROKEN token in BOTH job_title and company via POST /approvals. /dashboard/approvals shows ZERO horizontal overflow at 1440px (scrollWidth==clientWidth==1440) AND — the stronger test — at 375px mobile (scrollWidth==clientWidth==375). The card text wraps/truncates; the page never requires horizontal scrolling. No console errors."
+    },
+    {
+      "finding": "MV-approval-modal-004",
+      "status": "VERIFIED-CLOSED",
+      "severity": "LOW",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-approval-modal-004-confidence.json","screenshots/MV-approval-modal-004-confidence-last.png"],
+      "adversarial_notes": "Created 5 approvals with controlled confidence payloads. Rendered modal confidence badge: 1.5 -> NO badge (null, the exact fix — was '2%'); 150 -> null; -3 -> null; 0.85 -> '85%'; 95 -> '95%'. parseConfidence clamps out-of-range/ambiguous values to null instead of a misleading percentage."
+    },
+    {
+      "finding": "MV-approval-modal-005",
+      "status": "VERIFIED-CLOSED",
+      "severity": "MEDIUM",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-approval-modal-005-after-back.png"],
+      "adversarial_notes": "Verified twice with different data/entry paths: (1) opened modal by clicking a queue card (app pushState adds ?review=<id> history entry), browser Back -> modal closes, URL returns to /dashboard/approvals (no ?review), did NOT navigate away to /dashboard. (2) opened via deep-link navigation to ?review=<other id>, Back -> modal closes, stays on /dashboard/approvals. The history.pushState fix works."
+    },
+    {
+      "finding": "MV-approval-modal-006",
+      "status": "VERIFIED-CLOSED",
+      "severity": "MEDIUM",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-approval-deeplink-error.json","screenshots/MV-approval-modal-006-iter0.png"],
+      "adversarial_notes": "Deep-linked /dashboard/approvals?review=<bad-id> 6 independent times (distinct bad ids to exercise the list-load-vs-fetch race). The role=alert banner 'The linked approval request could not be found.' showed RELIABLY in all 6 iterations (fix uses a separate deepLinkError state with precedence: error = deepLinkError ?? listError, immune to the list-load's setError(null)). URL review param cleaned each time."
+    },
+    {
+      "finding": "MV-approval-modal-008",
+      "status": "VERIFIED-CLOSED",
+      "severity": "LOW",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["screenshots/MV-approval-modal-real-open.png"],
+      "adversarial_notes": "Coverage-note item (flagged N/A defect). Confirmed the execute endpoint state machine via API: execute-while-pending -> 403 'High-risk action requires an approved approval request'; approve -> 200; execute-while-approved -> 200 {status:executed}; execute bogus id -> 404. Confirmed there is intentionally NO 'Execute' UI affordance (0 Execute buttons in list/modal), matching the wireframe. Honest states, no 5xx."
+    },
+    {
+      "finding": "MV-mobile-approval-002",
+      "status": "VERIFIED-CLOSED",
+      "severity": "MEDIUM",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": ["api/MV-approval-deeplink-error.json","screenshots/MV-mobile-approval-002-iter0.png"],
+      "adversarial_notes": "Same deep-link-error race test at 375x812 mobile viewport, 6 independent iterations: the invalid-link error copy showed RELIABLY in all 6 (never swallowed). Mobile approval controls (modal-approve-btn-mobile / reject / edit variants) exist in the modal."
+    }
+  ],
+  "new_findings": [
+    {
+      "id": "MV-adv-resume-studio-006",
+      "screen": "resume-studio",
+      "severity": "MEDIUM",
+      "category": "placeholder-content-reachable (zero-tolerance §7)",
+      "summary": "The Resume Studio hero panes 'Original — Base Resume' (data-design-id=pane-original-rs04) and 'Tailored — Latest Version' (pane-tailored-rs05) display a HARDCODED name 'VIKRAM DESHPANDE' / 'Senior Technical Program Manager · Melbourne, AU' regardless of the logged-in user's actual resume. Verified live as the Pro user whose real base resume is 'Jordan Avery — Senior Software Engineer, Sydney' — the panes still render 'VIKRAM DESHPANDE'. The version list, diff, and approval preview below correctly show the real 'Jordan Avery' data, so these two static panes are decorative fixture content out of sync with real data.",
+      "expected": "The Original/Tailored preview panes should reflect the signed-in user's actual base and latest-tailored resume (name/title from the real Resume row), or omit the name entirely — never a hardcoded third party's identity.",
+      "observed": "Static 'VIKRAM DESHPANDE' string in apps/web/src/app/dashboard/resume/page.tsx (~lines 221-222 and 234-235). Reachable by any paying user on /dashboard/resume.",
+      "evidence": ["screenshots/NEW-resume-hardcoded-name-panes.png"],
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "not_a_regression_of": "Distinct from MV-resume-studio-004 (the Format Integrity strip is correctly derived); this is the hero preview panes."
+    }
+  ],
+  "operator_gated_or_partial": [],
+  "test_data_for_cleanup": {
+    "note": "Enumerated in ENTITLEMENT-GRANT-LOG.md; delete at Stage-3 exit cleanup",
+    "userId": "c88fc72d11082ac709fd6a801",
+    "counts": {"Job": 42, "Application": 1, "Resume": 10, "InterviewSchedule": 2, "ApprovalRequest": 8, "AgentRun": 8}
+  },
+  "summary": {
+    "total_findings_verified": 18,
+    "verified_closed": 18,
+    "fail": 0,
+    "partial": 0,
+    "new_findings": 1
+  }
+}

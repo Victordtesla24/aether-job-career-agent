@@ -1,0 +1,105 @@
+{
+  "results": {
+    "pro-01-dashboard-desktop": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "activeApplicationsSnippet": "ACTIVE APPLICATIONS 8",
+      "dashboardTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nPro\n\n0/100 runs this period\n\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood evening, MV\n\nSat, 18 July\n\nMP\nMV P.\nACTIVE APPLICATIONS\n8\n+8 this week\nINTERVIEW RATE\n50%\n4 of 8 applied\nOFFERS\n1\n1 pending decision\nAI CONFIDENCE\n72%\navg match quality\nAgent Activity\nlive\nView all\nAll"
+    },
+    "pro-02-analytics": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/analytics",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "hasAllTimeLabel": true,
+      "appliedInBody": "Applied\n8",
+      "topSkillsText": "Top Skills in DemandNot enough job data yet to surface top skills — matched jobs with recognized skill keywords will populate this.",
+      "bodyHasTopSkills": true
+    },
+    "pro-02b-analytics-period": {
+      "periodRequestsAfter7dClick": [
+        "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+        "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+        "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+        "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=7d",
+        "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard?period=7d"
+      ]
+    },
+    "pro-03-applications-tracker": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/applications",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "bodyHasNeedsApproval": true,
+      "bannerSnippet": null,
+      "textSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nPro\n\n0/100 runs this period\n\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood evening, MV\n\nSat, 18 July\n\nMP\nMV P.\nApplication Tracker\n\n11 active applications across 8 stages\n\nBoard View\nSankey Flow\nTimeline\nFilter\nSort\n\nAuto-apply is a high-risk action. Only applications with Match Score > 80% and your explicit approval will be submitted. Auto-apply is currently off.\n\nDiscover"
+    },
+    "pro-04-resume-hero": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "heroOriginalName": "ADVERSARY TESTPERSON",
+      "heroOriginalTitle": "Principal QA Adversary · Canberra, AU",
+      "heroOriginalEmpty": null,
+      "heroTailoredName": null,
+      "heroTailoredEmpty": "No tailored version yet.",
+      "bodyHasVikram": false,
+      "bodyHasAdversary": true
+    },
+    "pro-05-stories": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/stories",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "mapperHasLongStory": true,
+      "longTitleSpan": {
+        "found": true,
+        "scrollWidth": 1133,
+        "clientWidth": 237,
+        "overflowing": true,
+        "cls": "min-w-0 truncate"
+      }
+    },
+    "pro-06-offers": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/offers",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "offerDeleteButtons": 1,
+      "bodyHasAUD": true,
+      "bodyHasNegotiationCounter": true,
+      "bodyHas0Base": false,
+      "offerTextSample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nPro\n\n0/100 runs this period\n\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood evening, MV\n\nSat, 18 July\n\nMP\nMV P.\nOffers\nOffer Comparison\n\nCompare your live offers side by side.\n\nAdd Offer\nMVFA-Company-9\nTop pick\n$275k\nTotal comp / yr · AUD\nBase\n$220k\nBonus\n$22k\nEquity\n$33k\nLocation\nRemote\nFit score\n66\nMV-Final-A-Acme\n$261k\nTotal comp / yr · AUD\nBase\n$210k\nBonus\n$21k\nEquity\n$30k\nLocation\nSydney · Hybrid\nFit score\nPending\nNegotiation Coach\nYour strongest base offer is $220,00"
+    },
+    "pro-07-unknown-route": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/nonexistent-xyz-adv",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "hasSectionNotFound": true,
+      "hasPaywall": false,
+      "bodySample": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nPro\n\n0/100 runs this period\n\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood e"
+    },
+    "pro-08-jobs": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/jobs",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "hasRoleFilter": true,
+      "hasSalaryFilter": true
+    },
+    "pro-09-dashboard-mobile": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "consoleErrors": [],
+      "hasBrokenMinus": false,
+      "horizOverflow": false,
+      "activeApplicationsSnippet": "ACTIVE APPLICATIONS\n8",
+      "topSkillsText": "Top Skills in DemandNot enough job data yet to surface top skills — matched jobs with recognized skill keywords will populate this.",
+      "bodyHasTopSkills": true
+    }
+  },
+  "consoleErrorsSummary": []
+}

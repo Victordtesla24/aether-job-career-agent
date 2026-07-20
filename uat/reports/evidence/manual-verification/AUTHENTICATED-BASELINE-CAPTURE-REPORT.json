@@ -1,0 +1,12 @@
+{
+  "recipe_proof": {
+    "final_url": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "authed_200_count": 1
+  },
+  "rows_captured": 24,
+  "rows_failed": 0,
+  "total_console_errors": 16,
+  "total_failed_requests": 0,
+  "manifest_path": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/BASELINE-AUTHED-SWEEP.json",
+  "timestamp": "2026-07-17T15:20:51.524Z"
+}

@@ -1,0 +1,2 @@
+{"detail":"Could not validate credentials"}
+HTTP_STATUS:401

@@ -1,0 +1,263 @@
+{
+  "c6a2617e478293c9f2ec62e5c": {
+    "job_id": "c6a2617e478293c9f2ec62e5c",
+    "bg_job_id": "cf5eede4028df385a60f5b871",
+    "bg_status": "completed",
+    "cover_letter_id": "c9b2cf49e798485339b9c8ea8",
+    "insights": {
+      "letterId": "c9b2cf49e798485339b9c8ea8",
+      "jobId": "c6a2617e478293c9f2ec62e5c",
+      "jobTitle": "Staff Reliability Engineer",
+      "company": "Empire Life Digital",
+      "wordCount": 203,
+      "needsResume": false,
+      "evidence": [
+        {
+          "claim": "resilient",
+          "storyId": null,
+          "storyTitle": null,
+          "grounded": false
+        },
+        {
+          "claim": "microservices",
+          "storyId": null,
+          "storyTitle": null,
+          "grounded": false
+        }
+      ],
+      "keywords": {
+        "covered": 7,
+        "total": 10,
+        "items": [
+          {
+            "keyword": "JavaScript",
+            "covered": true
+          },
+          {
+            "keyword": "TypeScript",
+            "covered": true
+          },
+          {
+            "keyword": "PostgreSQL",
+            "covered": true
+          },
+          {
+            "keyword": "DevOps",
+            "covered": true
+          },
+          {
+            "keyword": "Reliability",
+            "covered": true
+          },
+          {
+            "keyword": "microservices",
+            "covered": true
+          },
+          {
+            "keyword": "MelbourneSalary",
+            "covered": false
+          },
+          {
+            "keyword": "BrisbaneLocation",
+            "covered": false
+          },
+          {
+            "keyword": "SydneySalary",
+            "covered": false
+          },
+          {
+            "keyword": "iPhone",
+            "covered": true
+          }
+        ]
+      },
+      "voice": {
+        "authenticity": 45,
+        "aiDetectionRisk": 28,
+        "aiDetectionLabel": "Review"
+      },
+      "versions": [
+        {
+          "id": "c9b2cf49e798485339b9c8ea8",
+          "version": 1,
+          "createdAt": "2026-07-20T01:15:47.657000",
+          "current": true
+        }
+      ]
+    },
+    "bg_result": {
+      "model": "deepseek/deepseek-v4-pro",
+      "run_id": "cd2e118e46c0aefe74c44509d",
+      "costUsd": 0.001274,
+      "flagged": [],
+      "tokensIn": 420,
+      "tokensOut": 427,
+      "approval_id": "c9377f3f9215524413847f99c",
+      "duration_ms": 43163,
+      "billingAudit": {
+        "authMode": "api_key",
+        "provider": "openrouter",
+        "quotaPath": "metered_api",
+        "credentialSource": "environment"
+      },
+      "cover_letter": "20 July 2026\n\nHiring Team\nEmpire Life Digital\nRe: Staff Reliability Engineer\n\nDear Hiring Team at Empire Life Digital,\n\nMy background in end-to-end delivery leadership is a direct match for the Staff Reliability Engineer role at Empire Life Digital. I rebuilt a JavaScript and TypeScript checkout tier on PostgreSQL, eliminating 92% of paging alerts \u2014 directly matching your need for resilient microservices and PostgreSQL operations.\n\nYour job description calls for building resilient services with JavaScript and TypeScript microservices and operating PostgreSQL clusters. At Zylophone Freight Systems, I rebuilt the JavaScript and TypeScript checkout tier on PostgreSQL, which eliminated 92% of paging alerts and cut p99 checkout latency from 3200ms to 340ms. You also emphasize a DevOps culture; I drove a blameless-postmortem culture across 7 squads and introduced the Wombat error-budget policy. While not required, my prior iPhone platform work \u2014 shipping the Quokka iPhone companion app used by 40k field couriers \u2014 adds a complementary skill set.\n\nI would welcome the chance to discuss how my experience with resilient services, PostgreSQL operations, and DevOps practices aligns with your team's goals. I am available for a call or interview at your convenience, and can be flexible on location as needed.\n\nSincerely,\nResid R1 Tester\n",
+      "approval_status": "pending",
+      "cover_letter_id": "c9b2cf49e798485339b9c8ea8",
+      "approvalRequired": true
+    },
+    "bg_error": null,
+    "chips": [
+      "JavaScript",
+      "TypeScript",
+      "PostgreSQL",
+      "DevOps",
+      "Reliability",
+      "microservices",
+      "MelbourneSalary",
+      "BrisbaneLocation",
+      "SydneySalary",
+      "iPhone"
+    ],
+    "artifact_hits": [
+      "MelbourneSalary",
+      "BrisbaneLocation",
+      "SydneySalary"
+    ],
+    "legit_present": [
+      "JavaScript",
+      "TypeScript",
+      "PostgreSQL",
+      "DevOps",
+      "iPhone"
+    ]
+  },
+  "c506f7d61968f3c595294e55a": {
+    "job_id": "c506f7d61968f3c595294e55a",
+    "bg_job_id": "cb8e6d4d4dda69a14501c96d3",
+    "bg_status": "completed",
+    "cover_letter_id": "c29b05ebf4e821337189e1e0e",
+    "insights": {
+      "letterId": "c29b05ebf4e821337189e1e0e",
+      "jobId": "c506f7d61968f3c595294e55a",
+      "jobTitle": "Senior Platform Engineer",
+      "company": "Redpanda Freight",
+      "wordCount": 150,
+      "needsResume": false,
+      "evidence": [
+        {
+          "claim": "strong",
+          "storyId": null,
+          "storyTitle": null,
+          "grounded": false
+        }
+      ],
+      "keywords": {
+        "covered": 4,
+        "total": 10,
+        "items": [
+          {
+            "keyword": "GraphQL",
+            "covered": false
+          },
+          {
+            "keyword": "GitHub",
+            "covered": false
+          },
+          {
+            "keyword": "Kubernetes",
+            "covered": true
+          },
+          {
+            "keyword": "Terraform",
+            "covered": true
+          },
+          {
+            "keyword": "Golang",
+            "covered": false
+          },
+          {
+            "keyword": "AdelaideSalary",
+            "covered": false
+          },
+          {
+            "keyword": "CanberraLocation",
+            "covered": false
+          },
+          {
+            "keyword": "PerthSalary",
+            "covered": false
+          },
+          {
+            "keyword": "Platform",
+            "covered": true
+          },
+          {
+            "keyword": "Engineer",
+            "covered": true
+          }
+        ]
+      },
+      "voice": {
+        "authenticity": 32,
+        "aiDetectionRisk": 34,
+        "aiDetectionLabel": "Review"
+      },
+      "versions": [
+        {
+          "id": "c29b05ebf4e821337189e1e0e",
+          "version": 1,
+          "createdAt": "2026-07-20T01:16:44.174000",
+          "current": true
+        }
+      ]
+    },
+    "bg_result": {
+      "model": "deepseek/deepseek-v4-pro",
+      "run_id": "c2f3fadd8568206aa26cd797d",
+      "costUsd": 0.00109,
+      "flagged": [],
+      "tokensIn": 420,
+      "tokensOut": 335,
+      "approval_id": "cdd762178bc87f3c4ce8022a8",
+      "duration_ms": 53053,
+      "billingAudit": {
+        "authMode": "api_key",
+        "provider": "openrouter",
+        "quotaPath": "metered_api",
+        "credentialSource": "environment"
+      },
+      "cover_letter": "20 July 2026\n\nHiring Team\nRedpanda Freight\nRe: Senior Platform Engineer\n\nDear Hiring Team at Redpanda Freight,\n\nMy background in end-to-end delivery leadership is a direct match for the Senior Platform Engineer role at Redpanda Freight. My hands-on experience with Kubernetes and Terraform, combined with a record of reducing latency and paging alerts, aligns with the Senior Platform Engineer role at Redpanda Freight.\n\nThe role calls for building and running Kubernetes fleets and strong Terraform skills. I have worked with both technologies, and in my previous role I cut p99 checkout latency from 3200ms to 340ms and eliminated 92% of paging alerts. I also drove a blameless-postmortem culture across 7 squads, which reflects the collaborative approach needed for platform engineering.\n\nI would be glad to discuss how my reliability engineering experience can contribute to Redpanda Freight's platform. I am available for a conversation at your convenience.\n\nSincerely,\nResid R1 Tester\n",
+      "approval_status": "pending",
+      "cover_letter_id": "c29b05ebf4e821337189e1e0e",
+      "approvalRequired": true
+    },
+    "bg_error": null,
+    "chips": [
+      "GraphQL",
+      "GitHub",
+      "Kubernetes",
+      "Terraform",
+      "Golang",
+      "AdelaideSalary",
+      "CanberraLocation",
+      "PerthSalary",
+      "Platform",
+      "Engineer"
+    ],
+    "artifact_hits": [
+      "AdelaideSalary",
+      "CanberraLocation",
+      "PerthSalary"
+    ],
+    "legit_present": [
+      "Golang",
+      "Terraform",
+      "GraphQL",
+      "Kubernetes"
+    ]
+  },
+  "_meta": {
+    "captured_utc": "2026-07-20T01:16:43.313879+00:00",
+    "run": 1
+  }
+}

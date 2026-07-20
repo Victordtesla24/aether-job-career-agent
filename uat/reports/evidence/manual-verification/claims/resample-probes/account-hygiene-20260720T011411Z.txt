@@ -1,0 +1,38 @@
+=== Account hygiene snapshot (read-only) ===
+captured_utc: 2026-07-20T01:14:11Z
+
+--- non-free Subscription rows joined to User email (redacted local-part >8) ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=5
+{'email': 'mv-qa-ej2-adv18@example.com', 'isAdmin': False, 'planId': 'pro', 'status': 'active', 'has_stripe': False}
+{'email': 'mv-qa-final-a-pro18@example.com', 'isAdmin': False, 'planId': 'pro', 'status': 'active', 'has_stripe': False}
+{'email': 'mv-qa-final-b-8f2a@example.com', 'isAdmin': False, 'planId': 'pro', 'status': 'active', 'has_stripe': False}
+{'email': 'mv-qa-resid-distinct-865c45@example.com', 'isAdmin': False, 'planId': 'pro', 'status': 'active', 'has_stripe': False}
+{'email': 'mv-qa-resid-noresume-865c45@example.com', 'isAdmin': False, 'planId': 'pro', 'status': 'active', 'has_stripe': False}
+
+--- all users: email + isAdmin + created (to confirm all disposable mv-*/fixture-*) ---
+# db=fdc4e11da schema=aether (read-only asserted)
+# rows=23
+{'email': 'fixture-user-d965c19c@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 0, 41, 18, 509000)}
+{'email': 'mv-verify-adversary@mv-verify-test.dev', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 0, 54, 18, 359000)}
+{'email': 'mv-verifyfg-20260718T031439Z@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 3, 14, 41, 134000)}
+{'email': 'mv-verifyfg-signup-2026-07-18T03-17-37-675Z@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 3, 17, 42, 11000)}
+{'email': 'mv-vbatch2-pro-20260718T045405Z@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 4, 54, 7, 56000)}
+{'email': 'mv-vbatch2-free-20260718T045405Z@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 4, 54, 7, 536000)}
+{'email': 'mv-vb3-signup001-1784355434@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 6, 17, 16, 482000)}
+{'email': 'mv-vb3-signup004-1784355468@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 6, 17, 50, 45000)}
+{'email': 'mv-vb3-pro-1784355683@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 6, 21, 24, 946000)}
+{'email': 'mv-vb45-pro-1784361227@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 7, 53, 49, 361000)}
+{'email': 'mv-qa-ej-2026-cebe@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 12, 20, 11, 692000)}
+{'email': 'mv-qa-ej2-adv18@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 17, 15, 56, 732000)}
+{'email': 'mv-qa-final-b-8f2a@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 22, 46, 16, 905000)}
+{'email': 'mv-qa-final-a-pro18@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 22, 46, 36, 441000)}
+{'email': 'mv-qa-final-a-free18@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 22, 46, 36, 953000)}
+{'email': 'mv-qa-final-b-victim-7c1@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 22, 49, 22, 927000)}
+{'email': 'mv-qa-final-a-rl-1784415107@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 18, 22, 51, 49, 264000)}
+{'email': 'mv-qa-pii-distinct-9f3k@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 19, 22, 49, 46, 266000)}
+{'email': 'mv-qa-pii-noresume-9f3k@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 19, 22, 49, 47, 475000)}
+{'email': 'admin@aether.local', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 20, 1, 5, 41, 71000)}
+{'email': 'mv-qa-resid-distinct-865c45@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 20, 1, 11, 38, 731000)}
+{'email': 'mv-qa-resid-noresume-865c45@example.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 20, 1, 11, 39, 749000)}
+{'email': 'sarkar.vikram@gmail.com', 'isAdmin': False, 'createdAt': datetime.datetime(2026, 7, 20, 1, 12, 59, 521000)}

@@ -1,0 +1,113 @@
+[
+  {
+    "id": "MV-signup-001",
+    "screen": "signup",
+    "severity": "HIGH",
+    "category": "security",
+    "summary": "Passwords longer than 72 bytes are silently truncated by the bcrypt hasher; a different password sharing only the first 72 bytes authenticates successfully. No max-length password validation exists client- or server-side.",
+    "reproduction": [
+      "1. Navigate to https://5cb5f0620.abacusai.cloud/signup",
+      "2. Register a new account with email mv-signup-nmgo8847@mv-signup-test.dev and a 91-character ASCII password P_FULL = ('x' * 90 + '1') (passes the 'at least 8 chars + 1 digit' policy with no upper-length check)",
+      "3. Observe POST /api/auth/register -> 201, auto-login -> 200, redirect to /dashboard (registration succeeded with the long password)",
+      "4. Clear localStorage (log out), open a fresh browser context, go to /login",
+      "5. Log in with the SAME email but a DIFFERENT password P_VARIANT = ('x' * 72 + 'ZZZZZZZZZZZZZZZZZZ9') -- identical to P_FULL for the first 72 bytes, then diverges",
+      "6. Observe POST /api/auth/login -> 200, redirect to /dashboard (login succeeded with the wrong password)",
+      "7. Negative control, same fresh session: log in with a password that differs WITHIN the first 72 bytes (position 10) -> POST /api/auth/login -> 401 'Invalid email or password.' (confirms the field is not simply ignored; only the >72-byte suffix is ignored)",
+      "8. Repeated step 5-6 a second time in a brand-new browser context with a different divergent tail ('totally-different-tail-999') -> again 200 / dashboard, confirming reproducibility"
+    ],
+    "expected": "Only the exact registered password should authenticate. If the backend intends to cap effective password length, it should reject (422) passwords over a stated maximum at registration time rather than silently accepting and then silently truncating during hashing.",
+    "observed": "The server accepts arbitrarily long passwords at registration (validate_password_policy in apps/api/app/repositories/user.py only checks a minimum of 8 chars + 1 digit, no maximum) and hashes them with passlib's default bcrypt CryptContext (apps/api/app/security.py:15), which truncates input to 72 bytes. Any login attempt whose password matches only the first 72 bytes of the real password succeeds. Verified live twice, from two independent fresh browser sessions, with two different divergent tails after byte 72, plus a negative control proving the boundary is exactly 72 bytes.",
+    "evidence": [
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/18-account2-dashboard.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/21-bcrypt-truncation-probe.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/22-negative-control-early-diff.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/23-bcrypt-truncation-variant2.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session2-network.json",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session3-network.json",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session2-log.json",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session3-log.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-signup-002",
+    "screen": "signup",
+    "severity": "MEDIUM",
+    "category": "defect",
+    "summary": "Visiting /signup while already authenticated does not redirect to /dashboard; the full create-account form renders as if no session exists, with no indication the user is already logged in.",
+    "reproduction": [
+      "1. Register/log in as any account (e.g. via /signup, land on /dashboard with a valid aether_token in localStorage)",
+      "2. Without logging out, navigate directly to https://5cb5f0620.abacusai.cloud/signup",
+      "3. Observe the page renders the ordinary empty 'Create account' form at the /signup URL (no redirect to /dashboard, no banner/notice about the existing session)",
+      "Reproduced twice: once with account 1's session (screenshot 11), once with account 2's session in a fully separate browser context (screenshot 19)"
+    ],
+    "expected": "Most SaaS apps guard public auth routes (/signup, /login) so an already-authenticated user is redirected to the authenticated area (/dashboard) rather than being shown the registration form again.",
+    "observed": "No such guard exists in apps/web/src/app/signup/page.tsx (no auth-state check/useEffect redirect). The form is fully rendered and interactive for an authenticated visitor, which -- had we not been budget-constrained to 2 accounts -- would presumably let a logged-in user submit a second registration without ever signing out.",
+    "evidence": [
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/11-signup-while-authed.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/19-account2-signup-while-authed.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session1-part2-log.json",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session2-log.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-signup-003",
+    "screen": "signup",
+    "severity": "LOW",
+    "category": "validation",
+    "summary": "Client-side email validation regex has no length cap, so an over-long email (365 chars) passes client validation and is submitted to the server, which then returns a raw/technical validator message surfaced verbatim in the UI.",
+    "reproduction": [
+      "1. Navigate to /signup",
+      "2. Enter an email of the form ('a'*300 + '@mv-signup-test.dev') and any policy-valid password",
+      "3. Submit -- no client-side inline error appears under the Email field (client regex only checks shape, not length)",
+      "4. Observe network: POST /api/auth/register -> 422",
+      "5. Observe the form-level error banner reads: 'value is not a valid email address: The email address is too long (65 characters too many).' -- this is pydantic/email_validator's internal message text, not a rewritten user-friendly string"
+    ],
+    "expected": "Either client-side validation catches unreasonable email lengths before submission, or the server 422 is translated into a clean, non-technical message (the codebase already does this pattern for 409/429/401 in apps/web/src/lib/api/auth.ts::toAuthApiError, but 422 detail is passed through verbatim).",
+    "observed": "The raw pydantic-generated string is shown to the end user. Not a stack trace and not a 5xx -- handled honestly and without crashing -- but it is unpolished, implementation-leaking copy for a paying user's first interaction with the product.",
+    "evidence": [
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/06-boundary-long.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session1-log.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-signup-004",
+    "screen": "signup",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "Dashboard header avatar/name-initials rendering mishandles a name containing markup-like text and emoji, producing a garbled display ('M日' avatar, 'MV 日.' name label) after registering with a Unicode/XSS-probe name. No script execution occurred (React escapes text content correctly) -- this is a cosmetic truncation/initials bug only.",
+    "reproduction": [
+      "1. Register a new account via /signup with Name = 'MV Signup <script>alert(1)</script> 日本語🎉', a valid email, and a valid password",
+      "2. On successful auto-login/redirect to /dashboard, inspect the top-right header avatar and name label",
+      "3. Observe avatar circle renders 'M日' and the adjacent label renders 'MV 日.' -- neither matches a sane truncation of the submitted name (e.g. 'MV' or 'MV S.')",
+      "4. Confirm via GET /api/auth/me that the server stored and returned the name field byte-for-byte intact ('MV Signup <script>alert(1)</script> 日本語🎉'), so the corruption is purely in the frontend's initials/truncation logic, not data loss",
+      "5. Confirm no console pageerror/uncaught-exception events and no visible script execution in the full-page screenshot -- ruling out actual XSS"
+    ],
+    "expected": "Either the initials/name-truncation logic degrades gracefully for names containing non-letter tokens and multi-byte/surrogate-pair characters (e.g. falls back to the first alphabetic character), or is simply not exercised by this kind of input without visibly garbling.",
+    "observed": "Header shows nonsensical partial output as described. Purely cosmetic; the underlying data is correct and safe.",
+    "evidence": [
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/09-dashboard.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/10-cropped-avatar.png",
+      "uat/reports/evidence/manual-verification/screens/signup/test-artifacts/session1-log.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

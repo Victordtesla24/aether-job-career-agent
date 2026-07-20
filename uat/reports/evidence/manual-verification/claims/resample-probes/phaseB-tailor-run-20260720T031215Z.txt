@@ -1,0 +1,35 @@
+=== CLM-082/058/091 tailor run + ATS before/after ===
+captured_utc: 2026-07-20T03:12:15Z
+base resume_id: c0d81ad4c71ddf1b85c791d46  job_id: c08ae75ba71918c613711e7b8
+-- BASELINE ATS (base resume vs job) --
+baseline: {"resume_id": "c0d81ad4c71ddf1b85c791d46", "job_id": "c08ae75ba71918c613711e7b8", "job_title": "Implementation Manager - Spend ", "company": "airwallex", "overall": 41.2, "keyword_match": 35.0, "semantic_similarity": 18.1, "experience_gap": 100.0, "matched_keywords": ["implementation", "complex", "m
+
+-- POST /agents/tailor/run {job_id, resume_id} (expect 202 job_id) --
+{"job_id":"cf0e131f44a89012009c100fb","status":"enqueued"}
+HTTP:202
+tailor bg job_id: cf0e131f44a89012009c100fb
+
+-- poll to terminal (up to ~150s) --
+  poll 1 (03:12:18Z) status=processing
+  poll 2 (03:12:23Z) status=processing
+  poll 3 (03:12:28Z) status=processing
+  poll 4 (03:12:33Z) status=processing
+  poll 5 (03:12:39Z) status=processing
+  poll 6 (03:12:44Z) status=processing
+  poll 7 (03:12:49Z) status=processing
+  poll 8 (03:12:55Z) status=processing
+  poll 9 (03:13:00Z) status=processing
+  poll 10 (03:13:05Z) status=processing
+  poll 11 (03:13:10Z) status=processing
+  poll 12 (03:13:16Z) status=processing
+  poll 13 (03:13:21Z) status=processing
+  poll 14 (03:13:26Z) status=processing
+  poll 15 (03:13:31Z) status=processing
+  poll 16 (03:13:37Z) status=processing
+  poll 17 (03:13:42Z) status=processing
+  poll 18 (03:13:47Z) status=processing
+  poll 19 (03:13:53Z) status=processing
+  poll 20 (03:13:58Z) status=processing
+  poll 21 (03:14:03Z) status=processing
+  poll 22 (03:14:08Z) status=processing
+  poll 23 (03:14:14Z) status=processing

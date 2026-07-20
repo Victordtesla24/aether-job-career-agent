@@ -1,0 +1,295 @@
+{
+  "run": "MANUAL-VERIFICATION Stage-3 adversarial prod-verify \u2014 SWEEP A",
+  "verifier": "qa-adversary (opus)",
+  "prod_url": "https://5cb5f0620.abacusai.cloud",
+  "main_sha_at_verify": "bdf6ef9",
+  "timestamp_utc": "2026-07-18T23:20Z",
+  "account": {
+    "email": "mv-qa-final-a-pro18@example.com",
+    "userId": "cb2b03a9bebcab4b7617d1c3c"
+  },
+  "free_account": {
+    "email": "mv-qa-final-a-free18@example.com",
+    "userId": "cc623625e6be90fc99b3fa4f4"
+  },
+  "entitlement_grant_logged": true,
+  "zero_tolerance_scan": {
+    "console_errors": "NONE across all Pro+Free screens",
+    "http_5xx": "NONE (546 requests across 3 HARs all 200)",
+    "placeholder_text_reachable": "NONE",
+    "dead_feedback_gt_2s": "NONE (tailor progress aria-live shown <4s, resolved ~9s)"
+  },
+  "verify_twice": "Count-consistency cross-verified via independent API endpoints AND desktop UI AND mobile UI; sankey non-negativity reproduced with TWO different data distributions; offers via API + UI; paywall via Pro + Free accounts.",
+  "verdicts": [
+    {
+      "finding": "MV-dashboard-001",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-07-unknown-route.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/free-01-unmapped-random.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/free-04-real-section-jobs.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/free-05-real-section-analytics.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/free-paywall-results.json"
+      ],
+      "adversarial_notes": "Unknown /dashboard/nonexistent-xyz-adv shows 'Section not found' (NOT paywall) for BOTH the Pro user AND the FREE user (via SubscriptionGate.isGateExempt exemption of unmapped catch-all routes). Adversarial variants with the FREE account: near-miss '/dashboard/jobsXYZ' and uppercase '/dashboard/JOBS' both correctly show 'Section not found' (genuinely unmapped \u2192 exempt), while real gated sections /dashboard/jobs, /analytics, /resume, /offers, and subroute /dashboard/jobs/some-id ALL still show the paywall (no leak through the exemption). /dashboard/settings stays reachable (account-mgmt exemption, by design). No real gated content rendered behind any exempt route (catch-all only ever renders 'Section not found'). 9/9 cases PASS; entitlement confirmed active_paid:false for the free account."
+    },
+    {
+      "finding": "MV-mobile-dashboard-005",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/funnel.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/market-pulse.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/applications-list.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-01-dashboard-desktop.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-09-dashboard-mobile.png"
+      ],
+      "adversarial_notes": "Seeded 10 applications (2 draft,3 submitted,3 interview,1 offer,1 rejected). Desktop 'ACTIVE APPLICATIONS'=8, mobile 'ACTIVE APPLICATIONS'=8, analytics funnel Applied=8, market-pulse 'Applications/month' you=8 \u2014 ALL agree on the submitted (non-draft) figure. Raw store GET /applications=10 (total incl drafts). The old impossible relationship ('you 14' monthly > 'Applied 7' all-time) is gone: market-pulse now derives from get_application_counts()['submitted']. No two 'applications' figures disagree for the same concept."
+    },
+    {
+      "finding": "MV-mobile-dashboard-006",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-09-dashboard-mobile.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/market-pulse.json"
+      ],
+      "adversarial_notes": "With jobs having NULL requirements (topSkills=[] server-side), the mobile Top Skills widget shows honest empty-state copy: 'Not enough job data yet to surface top skills \u2014 matched jobs with recognized skill keywords will populate this.' \u2014 not a broken blank."
+    },
+    {
+      "finding": "MV-analytics-004",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-detail-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-02b-analytics-7d.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-12-analytics-labels.png"
+      ],
+      "adversarial_notes": "Clicking the 7d period re-fetched /analytics/funnel?period=7d, /conversion?period=7d, /dashboard?period=7d (period-scoped panels) but ats-distribution and agent-roi were re-fetched WITHOUT a period param (permanently all-time). The all-time panels carry a visible disclaimer: '(all time \u2014 not affected by the period selector)' on both the ATS Score Distribution and Agent ROI panels. No panel silently ignores the selector without disclosure."
+    },
+    {
+      "finding": "MV-analytics-005",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/dashboard-summary-all.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/funnel.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-detail-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-12-analytics-labels.png"
+      ],
+      "adversarial_notes": "Dashboard-summary 'Applications' card = totalApplications = 10 (every record incl. drafts) with an explicit tooltip 'Every application record created in the selected period \u2014 draft through offer or rejection'; funnel 'Applied' stage = 8 (submitted/non-draft). The two are honestly differentiated by distinct labels + description (Applications=all records vs Applied=submitted). No longer '14 vs 7' with no cue."
+    },
+    {
+      "finding": "MV-analytics-006",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-02-analytics.png"
+      ],
+      "adversarial_notes": "Analytics 'Top Skills in Demand' with no skill-lexicon matches shows honest empty-state: 'Not enough job data yet to surface top skills \u2014 matched jobs with recognized skill keywords will populate this.' Consistent with the Market-vs-You 'Market data: not connected' honest-empty pattern on the same screen."
+    },
+    {
+      "finding": "MV-application-tracker-002",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-detail-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-10-tracker-needs-approval-filter.png"
+      ],
+      "adversarial_notes": "Created 3 pending ApprovalRequests linked to 3 applications. Banner reads '3 items need your review'; selecting the 'Needs approval' filter narrows the header to '3 active applications' \u2014 filter and banner count the EXACT same set (pendingApprovalIds derived from GET /approvals?status=pending), not a divergent status==='draft' heuristic. Both signals agree at 3."
+    },
+    {
+      "finding": "MV-application-tracker-005",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/sankey.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/funnel.json"
+      ],
+      "adversarial_notes": "funnel_sankey()'s 'applied' node = get_application_counts()['submitted'] = 8, identical to analytics funnel Applied=8 and the dashboard summary's submitted figure \u2014 the Sankey no longer diverges via a stage-exclusive status=='submitted' query. Canonical count is the single source."
+    },
+    {
+      "finding": "MV-application-tracker-006",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/sankey.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/sankey-variant2.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-03-applications-tracker.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json"
+      ],
+      "adversarial_notes": "Reproduced the exact negative-dropoff trap TWICE with different data. Variant 1 (screening bucket EMPTY: 3 interview+1 offer, 0 screening): stages applied8/screened4/interviewed4/offers1, dropoffs [4,4,0,3] \u2014 all >=0. Variant 2 (2 apps promoted submitted->offer skipping screening & interview: offer3, interview3, screening0): dropoffs [4,2,0,3] \u2014 all >=0. Under the OLD exact-status model these would have gone negative. Frontend also double-guards with '\u2212{Math.max(0,count)}'. bodyHasBrokenMinus=false on every rendered dashboard/tracker page; no '\u2212-N' literal anywhere."
+    },
+    {
+      "finding": "MV-adv-resume-studio-006",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-04-resume-hero.png"
+      ],
+      "adversarial_notes": "Seeded a resume with a distinctive real identity (contact.name='ADVERSARY TESTPERSON'). Hero 'Original \u2014 Base Resume' pane renders name='ADVERSARY TESTPERSON', title='Principal QA Adversary \u00b7 Canberra, AU' \u2014 derived from the resume's own sections, NOT the hardcoded 'VIKRAM DESHPANDE'. bodyHasVikram=false, bodyHasAdversary=true. Tailored pane shows honest empty-state 'No tailored version yet.'"
+    },
+    {
+      "finding": "MV-story-bank-008",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-05-stories.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/story-create.json"
+      ],
+      "adversarial_notes": "Created a 191-char single unbroken-token Leadership story title. In the Interview Question Mapper aside the title span has class 'min-w-0 truncate'; scrollWidth=1133 > clientWidth=237 (content clipped to the fixed-width aside), and the page has NO horizontal overflow (documentElement.scrollWidth == clientWidth). Title truncates like the STAR fields."
+    },
+    {
+      "finding": "MV-system-001",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/system-001-api-log-tail.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/system-001-web-log-tail.txt"
+      ],
+      "adversarial_notes": "Live-read /var/log/aether/api.log and web.log (per DEPLOYMENT-RUNBOOK \u00a74). Every line carries an ISO-8601 UTC timestamp prefix (e.g. '2026-07-18T22:50:54Z INFO: ...' and '2026-07-18T22:39:20Z \u2713 Ready in 549ms'); 77/200 recent api.log lines matched the ISO-8601 regex (the rest are multi-line tracebacks under a timestamped head). Window-scoped forensics now possible."
+    },
+    {
+      "finding": "MV-admin-settings-003",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/admin-003-unauth-malformed.json"
+      ],
+      "adversarial_notes": "POST /api/admin/users/<id>/spend-cap probed with 4 body shapes while UNAUTHENTICATED: malformed JSON, valid JSON, empty body, non-JSON garbage \u2014 ALL returned 401 ('Not authenticated'), never 422. A non-admin authenticated caller (Pro token) with malformed JSON returned 403 ('Admin privileges required') \u2014 AdminUser auth resolves before the body is parsed (_parse_spend_cap_body inside the handler). No 422-before-auth leak."
+    },
+    {
+      "finding": "MV-offer-comparison-001",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offer-01-empty.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offer-02-post1.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offer-04-after-2posts.json"
+      ],
+      "adversarial_notes": "POST /workspaces/offers persisted 2 offers (201). A FRESH independent GET returned both with correct totals (261000, 235000). Offers survive across separate requests \u2014 real backend Offer table write, not ephemeral React state."
+    },
+    {
+      "finding": "MV-offer-comparison-002",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offer-04-after-2posts.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offers-ui-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-06-offers.png"
+      ],
+      "adversarial_notes": "With offers present, negotiation.suggestedCounter = 231000 (computed ~10% above the strongest base 210000, rounded to $1k), insight = 'Your strongest base offer is $210,000. Anchoring a counter near $231,000...'. leverage names '2 active offers'. Empty state returns suggestedCounter:null with an honest 'Add an offer...' message \u2014 never $0. UI shows the real counter, bodyHas0Base=false."
+    },
+    {
+      "finding": "MV-offer-comparison-003",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offers-ui-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-13-add-offer-modal-open.png"
+      ],
+      "adversarial_notes": "Add-Offer modal (portaled to document.body) backdrop getBoundingClientRect = {top:0,left:0,width:1280,height:720} = FULL viewport (coversViewport:true). aria-modal='true' present. document.elementFromPoint at top-center (640,4) AND top-left (60,4) both resolve to the modal's backdrop DIV (bg-black/70), NOT any Topbar control \u2014 no 24px uncovered strip, no click-through. Escape closes it."
+    },
+    {
+      "finding": "MV-offer-comparison-004",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-06-offers.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offers-ui-results.json"
+      ],
+      "adversarial_notes": "The misleading static 'Priority Weights / Weighted decision analysis' panel was removed entirely (subtitle changed from 'Weighted decision analysis across your live offers' to the honest 'Compare your live offers side by side'). No 30/25/20/15/10 breakdown presented as live/interactive. Fit score is honestly sourced: real Job.fitScore for derived offers (e.g. 66), 'Pending' for manual offers \u2014 never a fabricated weighted score."
+    },
+    {
+      "finding": "MV-offer-comparison-005",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offers-ui-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-14-after-ui-delete.png"
+      ],
+      "adversarial_notes": "Delete affordance present ONLY on manual offers (offer-delete testid). API probes: owner DELETE -> 204 and the offer is gone on refetch; unknown/random id -> 404 (anti-enumeration); FREE user deleting the Pro user's offer -> 404 AND the offer still exists for the Pro owner (ownership-scoped DELETE ... WHERE id AND userId); double-delete -> 404. UI: clicking the trash icon fired DELETE /workspaces/offers/<id> and removed the card (2->1 cards), no console error."
+    },
+    {
+      "finding": "MV-offer-comparison-006",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-06-offers.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offer-04-after-2posts.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/offers-ui-results.json"
+      ],
+      "adversarial_notes": "Backend returns a per-offer currency field (AUD, USD). UI discloses it: OfferCard renders 'Total comp / yr \u00b7 AUD'. bodyHasAUD=true on the offers screen. Currency no longer omitted."
+    },
+    {
+      "finding": "MV-system-004",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/system-004-register-429.txt"
+      ],
+      "adversarial_notes": "Test-hygiene fix confirmed in source (tests/test_auth.py::test_register_spam_on_one_email_is_capped now uses a per-run unique email f'spam-{uuid4}@...' and even seeds pollution against the OLD literal to prove independence; asserts 4th->429 + Retry-After). LIVE production probe of a fresh email: attempts 1(201),2(409),3(409),4(429 Retry-After:3599),5(429). The register rate-limiter returns 429 with Retry-After after the 3/hr threshold."
+    },
+    {
+      "finding": "MV-job-discovery-002",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-bulk-analytics.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-11-bulk-apply-gate.png"
+      ],
+      "adversarial_notes": "Selected 9 jobs, clicked bulk Apply -> a confirmation gate (bulk-apply-gate) opens: '\u26a0\ufe0f Submit 9 applications without tailoring? These jobs will be recorded as Applied using your current, untailored resume \u2014 bulk submission does not run per-job tailoring. This action cannot be undone.' with the job list + Cancel + 'Submit 9 Applications' confirm. Clicking Cancel closes the gate and applies NOTHING (resultOnCancel=closed-no-apply). Matches the single-job flow's irreversible-action gate; no silent bulk apply."
+    },
+    {
+      "finding": "MV-job-discovery-004",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/pro-capture-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-08-jobs.png"
+      ],
+      "adversarial_notes": "The job filter bar now includes both a Role filter (job-role-filter) and a Salary filter (job-salary-filter: Any/$100k+/$150k+/$200k+) alongside Source/Location/Remote/Sort/Match-min. Both present on the live screen (hasRoleFilter=true, hasSalaryFilter=true)."
+    },
+    {
+      "finding": "MV-job-discovery-005",
+      "status": "VERIFIED-CLOSED",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/job-discovery-005-tailor-result.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/tailor-ui-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-15-tailor-noop-explanation.png"
+      ],
+      "adversarial_notes": "Reproduced the finding's exact '0 of N applied' scenario live (resume of 6 real bullets vs a JD demanding entirely foreign skills). The tailoring-progress indicator appears immediately (aria-live, no dead feedback) and resolves in ~9s (NOT the 90-100s the finding cited). The result now EXPLAINS why: 'No verifiable changes could be applied \u2014 every suggested edit was unsupported by your evidence, so your r\u00e9sum\u00e9 is unchanged and you were not charged.' runsUsed stayed 0 (the reserved metered run was refunded \u2014 the 'real LLM spend for nothing' complaint is resolved). NOTE: for the full-rejection path this explanation is delivered via the jobs-page error banner (see new finding MV-adv-A-002); the partial-apply tailor-rejected-note is present in deployed source but was not reproduced (would require a JD where some edits are guard-supported)."
+    }
+  ],
+  "new_findings": [
+    {
+      "id": "MV-adv-A-001",
+      "screen": "application-tracker",
+      "severity": "MEDIUM",
+      "category": "data-consistency / UI honesty",
+      "status": "OPEN",
+      "summary": "The Application Tracker header labels a pipeline board-card count as 'N active applications', which disagrees with the dashboard's 'ACTIVE APPLICATIONS' stat for the same account at the same moment. With 10 applications (2 draft,3 submitted,3 interview,1 offer,1 rejected) + 12 jobs, the tracker reads '11 active applications across 8 stages' (2 not-yet-applied pipeline JOBS in early columns + 9 non-closed applications incl. the 2 drafts), while the desktop dashboard, mobile dashboard, analytics funnel, and market-pulse all read 8 (submitted/non-draft). A user comparing the two screens sees '8 active applications' vs '11 active applications' for what reads as the same 'active applications' concept.",
+      "reproduction": [
+        "Grant Pro; seed 10 applications (2 draft,3 submitted,3 interview,1 offer,1 rejected) across 12 jobs (2 jobs without an application).",
+        "Open /dashboard -> 'ACTIVE APPLICATIONS' = 8.",
+        "Open /dashboard/applications -> header 'Application Tracker / 11 active applications across 8 stages'.",
+        "Both viewed same session, same account."
+      ],
+      "expected": "Either the tracker header uses the same canonical get_application_counts()-derived figure the dashboard/analytics use (the data-consistency ruling explicitly lists 'application tracker' as a surface that must derive from it), OR the tracker's count is labelled to make clear it is a pipeline board-card count (sourced jobs + non-closed applications incl. drafts), not the 'active applications' figure shown elsewhere.",
+      "observed": "activeCount = sum of board-stage card counts (buildStages(apps,jobs)); early stages are fed by Job.status (pre-application), so the leading number in 'N active applications' is not the submitted-application count the rest of the app shows. Number is real (not fabricated) but the 'active applications' label collides with the dashboard's.",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-03-applications-tracker.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-01-dashboard-desktop.png"
+      ],
+      "source_ref": "apps/web/src/app/dashboard/applications/page.tsx:312,322 (activeCount = stages.reduce(...cards.length); '{activeCount} active application{...} across 8 stages')"
+    },
+    {
+      "id": "MV-adv-A-002",
+      "screen": "job-discovery / resume-studio",
+      "severity": "LOW",
+      "category": "UI honesty / cross-surface consistency",
+      "status": "OPEN",
+      "summary": "When a tailor run rejects EVERY proposed edit (the finding MV-job-discovery-005 / MV-resume-studio-003 'no-op' outcome), the Jobs board surfaces it as a RED ERROR banner (role=alert, text-red-300) carrying a leaked internal exception-class prefix: 'NoChangesApplied: No verifiable changes could be applied \u2014 every suggested edit was unsupported by your evidence, so your r\u00e9sum\u00e9 is unchanged and you were not charged.' Resume Studio deliberately routes the identical outcome to an INFORMATIONAL NOTICE (not a red error) per MV-resume-studio-003, so the same honest no-op reads as a benign notice on one screen and a scary red error on another, with a raw 'NoChangesApplied:' Python-exception-class prefix a user should never see.",
+      "reproduction": [
+        "Pro user; tailor a resume against a JD demanding skills absent from the resume so the fabrication guard rejects all edits.",
+        "On /dashboard/jobs the result renders as a red error banner beginning 'NoChangesApplied: ...'.",
+        "On /dashboard/resume the same no-op renders as an informational notice (setNotice, not setError) with no exception prefix."
+      ],
+      "expected": "The full-rejection no-op should render as an informational notice (matching Resume Studio's MV-resume-studio-003 treatment) and must not expose the raw 'NoChangesApplied:' exception-class name; the async job should also not be reported as status='failed' for a legitimate business no-op.",
+      "observed": "apps/web/src/app/dashboard/jobs/page.tsx startTailoring() catches resolveRun's thrown ApiError and calls setError(message) verbatim; the async worker marks the no-op job status='failed' with error 'NoChangesApplied: ...', which resolveRun rethrows. Resume Studio's runTailor() has a NO_OP_HINT check that routes it to setNotice instead.",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-A/screenshots/pro-15-tailor-noop-explanation.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/tailor-ui-results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-A/api/job-discovery-005-tailor-result.json"
+      ],
+      "source_ref": "apps/web/src/app/dashboard/jobs/page.tsx:409-424 (startTailoring -> setError); apps/api/app/routers/agents.py:1250-1263 + async worker marks NoChangesApplied as status='failed'"
+    }
+  ],
+  "pro_still_active": true,
+  "evidence_dir": "uat/reports/evidence/manual-verification/adversarial/final-A/"
+}

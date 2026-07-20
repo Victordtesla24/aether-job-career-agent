@@ -1,0 +1,92 @@
+{
+  "jobId": "c5b4c916b2f4077030a4931b4",
+  "scored": true,
+  "needsResume": false,
+  "overall": 59,
+  "keywordMatch": 49,
+  "semantic": 49,
+  "experience": 100,
+  "skillsMatched": 16,
+  "skillsTotal": 34,
+  "matchedSkills": [
+    "fault-tolerant",
+    "property-based",
+    "distributed",
+    "jetstream",
+    "messaging",
+    "embedded",
+    "engineer",
+    "proptest"
+  ],
+  "missingSkills": [
+    "generation",
+    "essential",
+    "expertise",
+    "principal",
+    "resilient",
+    "billions"
+  ],
+  "skillGap": "generation",
+  "narrative": "Your resume covers 16 of 34 keywords this posting emphasises, with 49% semantic overlap and a 59% overall ATS fit for Principal Distributed Systems Engineer.",
+  "dimensions": [
+    {
+      "label": "Technical Skills",
+      "score": 49
+    },
+    {
+      "label": "Experience Level",
+      "score": 100
+    },
+    {
+      "label": "Industry Match",
+      "score": 49
+    },
+    {
+      "label": "Role Alignment",
+      "score": 59
+    },
+    {
+      "label": "Culture Fit",
+      "score": 74
+    },
+    {
+      "label": "Salary Fit",
+      "score": 70
+    },
+    {
+      "label": "Location Match",
+      "score": 100
+    },
+    {
+      "label": "Career Growth",
+      "score": 79
+    },
+    {
+      "label": "Company Stability",
+      "score": 76
+    },
+    {
+      "label": "North Star Align",
+      "score": 55
+    }
+  ],
+  "riskSignals": [
+    {
+      "label": "No salary listed",
+      "severity": "medium"
+    },
+    {
+      "label": "18 key skills not matched",
+      "severity": "high"
+    },
+    {
+      "label": "Low keyword coverage (49%)",
+      "severity": "high"
+    },
+    {
+      "label": "Domain overlap only 49%",
+      "severity": "medium"
+    }
+  ],
+  "isAustralia": true
+}

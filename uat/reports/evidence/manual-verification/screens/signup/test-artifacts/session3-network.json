@@ -1,0 +1,12 @@
+[
+  {
+    "ts": "2026-07-17T13:44:21.465654Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 401
+  },
+  {
+    "ts": "2026-07-17T13:44:23.564021Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200
+  }
+]

@@ -1,0 +1,136 @@
+{
+  "run": "MANUAL-VERIFICATION Stage-2 PROD-VERIFY batch-3",
+  "role": "qa-adversary (opus)",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "deployed_head": "466c1ed",
+  "run_window_utc": "2026-07-18T06:17:14Z .. 2026-07-18T06:28:33Z",
+  "evidence_root": "uat/reports/evidence/manual-verification/fixes/prod-verify-batch3/",
+  "epistemic_note": "All 19 assigned findings VERIFIED-CLOSED with fresh production evidence from THIS run (curl API probes bypass the client entirely for server-side proofs; Playwright/Chromium drove real UI flows against production; DB reads/writes on the dedicated aether DB). One NEW defect (ADV-agent-monitor-001) found by adversarial re-inspection of the agent-monitor screen.",
+  "findings": [
+    {
+      "id": "MV-signup-001",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "mv-signup-001-evidence.txt @2026-07-18T06:17:14Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Server-side (curl → live POST /api/auth/register + /login, no browser). (1) register 72-byte pw → 201; (2) login correct 72-byte pw → 200 token; (3) ATTACK login with 77-byte pw sharing first 72 bytes → 401 'Invalid email or password' (bcrypt-truncation attack BLOCKED by verify_password byte-cap); (4) register >72-byte pw → 422 'password must be at most 72 bytes'. Minor observation: the 422 body echoes the rejected password in the 'input' field (low-severity info-leak, not part of this finding)."
+    },
+    {
+      "id": "MV-login-003",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/login-003-*.png, browser-results.json @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Account menu (aria-label='Account menu') → 'Sign out' present; click clears aether_token (before=true after=false), redirects to /login; post-logout visit to /dashboard/networking bounces to /login?next=%2Fdashboard%2Fnetworking (protected route no longer accessible)."
+    },
+    {
+      "id": "MV-login-001",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/login-001-authed-login-redirect.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Authenticated visit to /login → replace to /dashboard, sign-in form NOT rendered (form[aria-label='Sign in'] count=0)."
+    },
+    {
+      "id": "MV-signup-002",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/signup-002-authed-signup-redirect.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Authenticated visit to /signup → replace to /dashboard, create-account form NOT rendered (form[aria-label='Create account'] count=0)."
+    },
+    {
+      "id": "MV-login-002",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/login-002-*.png, browser-results.json @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Unauthenticated deep-link /dashboard/jobs → /login?next=%2Fdashboard%2Fjobs; after login returns to /dashboard/jobs (intended page preserved). OPEN-REDIRECT SAFE: 5 attacker vectors all fell back same-origin to /dashboard — next=//evil.com, https://evil.com, /\\evil.com (backslash), /dashboard/../../evil (traversal), /admin (non-dashboard). No external navigation observed."
+    },
+    {
+      "id": "MV-login-004",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/login-004-forgot-password.png @2026-07-18T06:27Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] /forgot-password is honest: text 'Self-service password reset isn't available yet'; ZERO password inputs (no fake reset form); directs to operator support channel."
+    },
+    {
+      "id": "MV-signup-003",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "mv-signup-003-004-evidence.txt @2026-07-18T06:17:48Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Over-long email (312-char local part) → 422 honest human-readable 'The email address is too long (58 characters too many)'. Not a 500."
+    },
+    {
+      "id": "MV-signup-004",
+      "cluster": "H-auth",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "mv-signup-003-004-evidence.txt @2026-07-18T06:17:48Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Registered name 'Zoé <script>alert(1)</script> 日本語 Müller'; GET /api/auth/me returned it byte-identical (accents, CJK, umlaut intact — not garbled/mojibake; markup stored as inert JSON text). React auto-escapes on render."
+    },
+    {
+      "id": "MV-agent-monitor-001",
+      "cluster": "agent-monitor",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/agent-monitor-orchestration.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Reached /dashboard/agents under temp-Pro grant. 'Pause All' disabled=true title='Not yet available'; 'Manual Override' disabled=true. Neither is clickable/live."
+    },
+    {
+      "id": "MV-agent-monitor-002",
+      "cluster": "agent-monitor",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/agent-monitor-orchestration.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Observed under a REAL in-flight run (staged AgentRun status=running). Task Queue row 'Scout · In Progress' shows '…' + indeterminate pulse bar (NO fabricated percentage); only genuinely-completed runs render the real '100%'."
+    },
+    {
+      "id": "MV-agent-monitor-003",
+      "cluster": "agent-monitor",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/agent-monitor-orchestration.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Orchestration Performance card discloses its window: '· last 4 runs' with '50.0% success rate' over 4 staged runs (2 completed/4). Quick-stats Success Rate card independently discloses 'last 4 tasks'. Both windows labelled."
+    },
+    {
+      "id": "MV-networking-001",
+      "cluster": "networking",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/networking-add-modal-filled.png, networking-after-reload.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Add Contact → filled name/role/company → Save → contact appears; after FULL PAGE RELOAD the contact still shows in the 'New' pipeline column and Contacts stat=1 → real POST /networking/contacts persistence, not client-only."
+    },
+    {
+      "id": "MV-networking-003",
+      "cluster": "networking",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/networking-initial.png, browser-results.json @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] No 'Import from LinkedIn' text anywhere on the page (fake-import affordance removed); empty-state control honestly reads 'Add contact manually'."
+    },
+    {
+      "id": "MV-networking-004",
+      "cluster": "networking",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "browser-results.json @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] No 'Review all drafts' dead button present anywhere on /dashboard/networking."
+    },
+    {
+      "id": "MV-networking-005",
+      "cluster": "networking",
+      "verdict": "VERIFIED-CLOSED",
+      "evidence": "screenshots/networking-contact-detail.png @2026-07-18T06:26Z",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Contact card is clickable (role=button) → opens 'Contact details' panel sourced from GET /networking/contacts/{id} (Name/Role/Company/Stage/Email/LinkedIn rows)."
+    },
+    {
+      "id": "ADV-agent-monitor-001",
+      "cluster": "agent-monitor (NEW - not among assigned 19)",
+      "verdict": "STILL-BROKEN",
+      "evidence": "screenshots/agent-monitor-orchestration.png @2026-07-18T06:26Z; source apps/web/src/components/agents/Orchestration.tsx:106",
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] NEW adversarial finding. The Agent Orchestration header hardcodes a fabricated uptime metric: rendered live text '8 agents online · 1 task in queue · uptime 99.8%'. The '99.8%' is a static string literal (Orchestration.tsx:106) — no uptime source exists; the surrounding 'agents online' / 'tasks in queue' counts ARE real. This is the same class of defect the MV-agent-monitor cluster set out to eliminate (fabricated metrics reachable by paying users); the fix removed the fabricated in-progress % and added window disclosure but left this hardcoded uptime. Severity: MEDIUM (user-facing fabricated metric / trust). Recommend replacing with a real derived value or removing the '· uptime 99.8%' segment."
+    }
+  ],
+  "open_redirect_safe": true,
+  "add_contact_persists": true,
+  "logout_works": true,
+  "temp_grant_reverted": true,
+  "temp_grant_detail": "Disposable account mv-vb3-pro-1784355683@example.com (userId ce34e6ad8555f8a9a1f32fb4e): before-state = NO Subscription/UsageQuota rows. Granted via single INSERT Subscription(planId=pro,status=active); verified active_paid:true. Reverted 2026-07-18T06:28Z: DELETE grant Subscription row + 4 synthetic AgentRun fixtures. Final live-API entitlement = {active_paid:false, plan.id:free} — paywall restored. The residual planId=free Subscription + free UsageQuota rows are the app billing-bootstrap's normal free-user baseline (auto-provisioned on any billing read), NOT the grant.",
+  "any_still_broken": true,
+  "any_still_broken_detail": "All 19 ASSIGNED batch-3 findings are VERIFIED-CLOSED. any_still_broken=true is driven SOLELY by the NEW adversarial finding ADV-agent-monitor-001 (hardcoded 'uptime 99.8%' fabricated metric on the agent-monitor screen) — a newly-discovered defect, NOT a regression of any assigned fix.",
+  "disposable_accounts": [
+    "mv-vb3-signup001-1784355434@example.com (userId cd06395974c0e7a5fd42c865f) - 72-byte pw probe",
+    "mv-vb3-signup004-1784355468@example.com (userId c67b50546071be90ab831225c) - unicode-name probe",
+    "mv-vb3-pro-1784355683@example.com (userId ce34e6ad8555f8a9a1f32fb4e) - temp-Pro (reverted), owns 1 networking contact",
+    "mv-vb3-signup001b-1784355434@example.com - REGISTER REJECTED 422, no account created"
+  ]
+}

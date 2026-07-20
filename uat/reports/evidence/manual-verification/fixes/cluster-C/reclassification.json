@@ -1,0 +1,107 @@
+{
+  "artifact": "cluster-C reclassification (fixer-hard REWORK, independent of prior reviewer)",
+  "generated_at_utc": "2026-07-17T23:48:20.049811+00:00",
+  "generated_by": "fixer-hard (opus) — DIFFERENT instance from original cluster-C fixer",
+  "method": "For each of the 8 backed-up Application.coverLetter values, tested verbatim substring containment of each committed leaked fixture's (default.json, retry.json) hook_reason sentence and body first-paragraph (the fabricated-achievement span). TRUE_FIXTURE iff a fixture span is present verbatim; REAL iff only the short numeric metric phrase '3 hours'...'15 minutes' is present inside otherwise-original prose. Programmatic, reproducible (scratchpad/classify.py).",
+  "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE (this run, 2026-07-17)",
+  "fixture_reference_spans": {
+    "default.json:body_para1": "My recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics.",
+    "default.json:hook_reason": "The emphasis this posting places on shipping reliable, measurable delivery outcomes is exactly the work I already do day to day.",
+    "retry.json:body_para1": "My experience spans end-to-end delivery leadership and technical program management across mission-critical programs. I built LLM evaluation stacks with Langfuse and Phoenix, delivered analytics applications with Next.js and Supabase, and cut evidence effort from roughly 3 hours to about 15 minutes per scenario while owning governance and change management.",
+    "retry.json:hook_reason": "The demands this role places on mission-critical delivery ownership map directly onto how I already run programs."
+  },
+  "note_on_retry2_json": "apps/api/tests/fixtures/llm/cover_letter/retry2.json exists but is UNTRACKED (not committed) and its body overlaps real user StoryEntry evidence (ATO/COBOL, Next.js+Supabase, Langfuse+Phoenix, ~3 hours to ~15 minutes, 92% reduction). It is intentionally EXCLUDED from the fingerprint set: it is not a committed leaked fixture and using it would risk false positives on genuine user content. No real row contains its body verbatim either.",
+  "rows": [
+    {
+      "id": "c0e3601826b6258afd1ced52d",
+      "status": "draft",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "verdict": "REAL",
+      "deciding_evidence": "no fixture span present; only the numeric metric appears inside original prose",
+      "matching_span_quote": "Most recently, I spearheaded a test-automation strategy that compressed a critical evidence process from 3 hours to just 15 minutes per scenario—a 92% reduction—by working directly with technical and operational teams to re-engineer the toolchain. [distinct phrasing 'compressed a critical evidence process' ≠ fixture 'cut evidence effort from roughly 3 hours to about 15 minutes'; no fixture hook_reason/body present]"
+    },
+    {
+      "id": "c3ebf6a97e318dbcacc7473dc",
+      "status": "draft",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "verdict": "TRUE_FIXTURE",
+      "deciding_evidence": "retry.json hook_reason AND body first-paragraph present VERBATIM",
+      "matching_span_quote": "The demands this role places on mission-critical delivery ownership map directly onto how I already run programs.\\n\\nMy experience spans end-to-end delivery leadership and technical program management across mission-critical programs. I built LLM evaluation stacks with Langfuse and Phoenix, delivered analytics applications with Next.js and Supabase, and cut evidence effort from roughly 3 hours to about 15 minutes per scenario while owning governance and change management. [byte-for-byte == retry.json]"
+    },
+    {
+      "id": "c4bbc712a79c387b34580bb4a",
+      "status": "draft",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "verdict": "TRUE_FIXTURE",
+      "deciding_evidence": "default.json body first-paragraph present VERBATIM",
+      "matching_span_quote": "My recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics. [byte-for-byte == default.json body]"
+    },
+    {
+      "id": "c53d0b3ada038f7ce441dd018",
+      "status": "draft",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "verdict": "REAL",
+      "deciding_evidence": "no fixture span present; only the numeric metric appears inside original ACT-Government/executive-workshop prose",
+      "matching_span_quote": "Most recently, I spearheaded a test-automation strategy that compressed a critical evidence process from 3 hours to just 15 minutes per scenario, a 92% reduction, by working directly with operational and technical teams to re-engineer the toolchain. [unique long prose about Certified Scrum Master, 40-person squads, ACT Government; no fixture text]"
+    },
+    {
+      "id": "c597b074bbd6214c31dcf75ec",
+      "status": "submitted",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "verdict": "REAL",
+      "deciding_evidence": "SUBMITTED real application; no fixture span present; genuine ATO/COBOL + ANZ WebSocket evidence citing the real StoryEntry metric",
+      "matching_span_quote": "I also architected a COBOL/mainframe test-automation harness at the Australian Taxation Office that cut evidence effort from ~3 hours to ~15 minutes per scenario (≈92% reduction), demonstrating my ability to design first-of-kind workflows... [Harvey/Innovation-Product-Manager-specific; no fixture hook_reason/body present]"
+    },
+    {
+      "id": "c7bcdeedaaad8c702f1a7dae6",
+      "status": "draft",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "verdict": "TRUE_FIXTURE",
+      "deciding_evidence": "default.json hook_reason AND body first-paragraph present VERBATIM",
+      "matching_span_quote": "The emphasis this posting places on shipping reliable, measurable delivery outcomes is exactly the work I already do day to day.\\n\\nMy recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics. [byte-for-byte == default.json]"
+    },
+    {
+      "id": "ce01bad499189ac40e9e9c78f",
+      "status": "draft",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "verdict": "REAL",
+      "deciding_evidence": "no fixture span present; only the numeric metric appears inside original Stripe/regulatory-reform prose",
+      "matching_span_quote": "In my most recent engagement, I led end-to-end delivery for a regulatory reform program, converting a mathematically infeasible test window—75+ hours of manual work against 64 available hours—into an achievable plan through a tiered automation harness, cutting the evidence effort per scenario from ~3 hours to ~15 minutes. [unique 'mathematically infeasible test window / 75+ hours / 64 available hours' prose; no fixture text]"
+    },
+    {
+      "id": "cf876560bca329aeb86ec1391",
+      "status": "submitted",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "verdict": "TRUE_FIXTURE",
+      "deciding_evidence": "default.json body first-paragraph present VERBATIM (this row was status=submitted — a real fixture-fake letter really was submitted to Deputy)",
+      "matching_span_quote": "My recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics. [byte-for-byte == default.json body]"
+    }
+  ],
+  "summary": {
+    "true_fixture_ids": [
+      "c3ebf6a97e318dbcacc7473dc",
+      "c4bbc712a79c387b34580bb4a",
+      "c7bcdeedaaad8c702f1a7dae6",
+      "cf876560bca329aeb86ec1391"
+    ],
+    "real_restored_ids": [
+      "c0e3601826b6258afd1ced52d",
+      "c53d0b3ada038f7ce441dd018",
+      "c597b074bbd6214c31dcf75ec",
+      "ce01bad499189ac40e9e9c78f"
+    ],
+    "confirms_prior_reviewer_split": true,
+    "reviewer_split_true_fixture": [
+      "c3ebf6a9...",
+      "c4bbc712...",
+      "c7bcdeed...",
+      "cf876560..."
+    ],
+    "reviewer_split_real": [
+      "c0e36018...",
+      "c53d0b3a...",
+      "c597b074...",
+      "ce01bad4..."
+    ]
+  }
+}

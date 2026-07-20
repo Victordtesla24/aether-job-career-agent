@@ -1,0 +1,68 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST",
+    "ts": "2026-07-17T15:22:08.200Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:08.483Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:08.486Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:08.687Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:08.699Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:08.716Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:11.348Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:11.350Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:11.552Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:11.564Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:22:11.573Z"
+  }
+]

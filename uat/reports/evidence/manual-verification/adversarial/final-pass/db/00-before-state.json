@@ -1,0 +1,56 @@
+{
+  "Z1": {
+    "uid": "c669c1cdb0ff1b2cd0a9b8bf9",
+    "subscription": [
+      {
+        "id": "0dabad55-4ed0-41da-8055-9e764d67f7c4",
+        "planId": "free",
+        "status": "active",
+        "billingInterval": null,
+        "stripeCustomerId": null,
+        "stripeSubscriptionId": null,
+        "updatedAt": "2026-07-20 08:41:44.884144+00:00"
+      }
+    ],
+    "usagequota": [
+      {
+        "id": "4ba89603-5ef7-47ef-85ff-dd63f0cdbbfe",
+        "planId": "free",
+        "runsAllowed": 5,
+        "runsUsed": 0,
+        "spendCapUsd": "1.0",
+        "spendUsedUsd": "0",
+        "periodStart": "2026-07-01 00:00:00+00:00",
+        "periodEnd": "2026-08-01 00:00:00+00:00",
+        "updatedAt": "2026-07-20 08:41:44.884144+00:00"
+      }
+    ]
+  },
+  "Z2": {
+    "uid": "c472704ece8d0718539b47954",
+    "subscription": [
+      {
+        "id": "cb4c45c0-77b4-4db5-b236-6e36f4b365e6",
+        "planId": "free",
+        "status": "active",
+        "billingInterval": null,
+        "stripeCustomerId": null,
+        "stripeSubscriptionId": null,
+        "updatedAt": "2026-07-20 08:41:45.295654+00:00"
+      }
+    ],
+    "usagequota": [
+      {
+        "id": "9b52211e-3c82-454a-a215-b08fd332386b",
+        "planId": "free",
+        "runsAllowed": 5,
+        "runsUsed": 0,
+        "spendCapUsd": "1.0",
+        "spendUsedUsd": "0",
+        "periodStart": "2026-07-01 00:00:00+00:00",
+        "periodEnd": "2026-08-01 00:00:00+00:00",
+        "updatedAt": "2026-07-20 08:41:45.295654+00:00"
+      }
+    ]
+  }
+}

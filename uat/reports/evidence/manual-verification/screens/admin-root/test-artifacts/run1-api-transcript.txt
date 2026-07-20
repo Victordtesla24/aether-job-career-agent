@@ -1,0 +1,75 @@
+############ RUN1: UNAUTHENTICATED ############
+--- GET /admin/health (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/users (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/users/test-fake-id-mv-admin-001 (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/spend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/settings (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/audit-log (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-001/spend-cap (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-001/suspend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-001/unsuspend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/settings (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+############ RUN1: AUTHENTICATED AS DEMOTED admin/admin123 (isAdmin:false) ############
+--- GET /admin/health (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/users (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/users/test-fake-id-mv-admin-001 (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/spend (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/settings (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/audit-log (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-001/spend-cap (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-001/suspend (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-001/unsuspend (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/settings (demoted-user) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+############ EDGE CASES ############
+--- POST /admin/settings unauth with malformed-but-typed body {"signupEnabled":"not-a-bool-xyz"} ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/settings unauth with syntactically-invalid JSON body ---
+HTTP_STATUS:422
+{"detail":[{"type":"json_invalid","loc":["body",0],"msg":"JSON decode error","input":{},"ctx":{"error":"Expecting value"}}]}
+--- GET /admin/health with garbage bearer token ---
+HTTP_STATUS:401
+{"detail":"Could not validate credentials"}
+--- GET /admin/users with malformed JWT (wrong signature) ---
+HTTP_STATUS:401
+{"detail":"Could not validate credentials"}

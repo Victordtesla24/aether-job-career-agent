@@ -1,0 +1,139 @@
+Aether
+Career Agent
+Dashboard
+Jobs
+Resume Studio
+Cover Letter Studio
+Story Bank
+Applications
+Interview Center
+Networking
+Email Center
+Agents
+Analytics
+Offers
+Settings
+Agents Idle
+
+8 agents ready · none running
+
+Manage Agents
+Privacy Policy
+·
+Terms
+·
+© 2026 Aether
+Good afternoon, Administrator
+
+Fri, 17 July · last agent run 8m ago
+
+AD
+Administrator
+Administrator
+Settings & Profile
+
+Profile, agent behaviour and integrations.
+
+Save Changes
+Profile
+Resume Management
+Portfolio Sync
+Notifications
+Agent Configuration
+Integrations
+Privacy & Compliance
+Profile
+A
+
+Administrator
+
+Administrator
+
+Full name
+Email
+Target role
+Location
+Resume Management
+
+Tailored — Senior Product Manager, Strategic Origination Platforms @ Plenti
+
+uploaded 2026-07-17 · 43 versions
+
+Active
+Upload new version
+Career Data
+
+Aether consolidates your public GitHub, portfolio site and LinkedIn summary into the evidence your tailoring and cover-letter agents draw on. Update a source and press “Sync now” to re-ingest it.
+
+GITHUB USERNAME
+Synced· 2026-07-16
+PORTFOLIO URL
+Synced· 2026-07-16
+PASTE YOUR LINKEDIN SUMMARY
+Synced· 2026-07-16
+
+LinkedIn offers no public profile API to third-party apps, so it is not auto-synced. Paste your LinkedIn summary below and it will be consolidated into your tailoring evidence alongside GitHub and your portfolio.
+
+Sync now
+Agent Configuration
+
+Auto-apply
+
+Let agents submit applications without a manual approval step
+
+Approval gate
+
+Require explicit approval for anything that leaves the system
+
+Match threshold — only surface jobs above
+80%
+Job Board Integrations
+Sync All
+
+Greenhouse
+
+16 jobs discovered · last sync 2026-07-16 18:32 UTC
+
+connected
+Sync
+
+Ashby
+
+15 jobs discovered · last sync 2026-07-17 01:17 UTC
+
+connected
+Sync
+
+Lever
+
+9 jobs discovered · last sync 2026-07-16 18:32 UTC
+
+connected
+Sync
+
+Remoteok
+
+3 jobs discovered · last sync 2026-07-16 18:32 UTC
+
+connected
+Sync
+
+Remotive
+
+1 jobs discovered · last sync 2026-07-14 18:41 UTC
+
+connected
+Sync
+Connected Accounts & API Keys
+
+OpenRouter Connected
+
+Configured via server environment (legacy)
+
+Abacus Subscription (fallback) Connected
+
+Abacus subscription key (server environment) · standby (a higher-priority OpenRouter/Anthropic key is the active path)
+
+Google (Gmail) Connected
+
+Connected as melbvicduque@gmail.com (primary)

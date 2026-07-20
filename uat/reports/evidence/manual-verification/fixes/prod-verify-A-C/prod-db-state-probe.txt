@@ -1,0 +1,10 @@
+PROD DB STATE PROBE @ 2026-07-18T01:11:40.970193+00:00
+User count: 2
+  USER: c24222b002a043 fixture-user-d965c19c@example.com name=None 2026-07-18 00:41:18.509000
+  USER: cb6d3c2e1325cd mv-verify-adversary@mv-verify-test.dev name=Administrator 2026-07-18 00:54:18.359000
+  Application: 12
+  Job: 8
+  StoryEntry: 0
+  Resume: 1
+  ApprovalRequest: 8
+  BackgroundJob: 53

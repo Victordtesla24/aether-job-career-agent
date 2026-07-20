@@ -1,0 +1,145 @@
+[
+  {
+    "id": "MV-settings-001",
+    "screen": "settings",
+    "severity": "HIGH",
+    "category": "defect",
+    "summary": "All three Notifications-tab toggles (\"Approval requests\", \"Application updates\", \"Weekly digest\") are completely non-functional decorative controls. Clicking any of them never changes their state, yet the page's global \"Save Changes\" button still returns HTTP 200 and displays a \"Settings saved ✓\" confirmation, giving the user false assurance that their notification preference was changed.",
+    "reproduction": [
+      "1. Log in as admin/admin123 on production and navigate to https://5cb5f0620.abacusai.cloud/dashboard/settings.",
+      "2. Click the 'Notifications' sub-nav tab (data-testid=settings-nav-notifications).",
+      "3. Read the DOM state of the 'Weekly digest' switch: document.querySelector('[data-testid=\"toggle-notif-digest\"]').getAttribute('aria-checked') -> \"false\".",
+      "4. Click the switch (via a real Playwright locator.click(), which performs full actionability checks, AND separately via a native el.click() JS call).",
+      "5. Re-read aria-checked -> still \"false\" (unchanged). Same result for toggle-notif-approvals (stays \"true\") and toggle-notif-apps (stays \"true\").",
+      "6. Click 'Save Changes' -> UI shows 'Settings saved ✓' and PUT /api/workspaces/settings returns 200, but the PUT payload schema (SettingsUpdate: profile + agentConfig only) has no field for notification preferences at all, and GET /api/workspaces/settings never returns a 'notifications' key.",
+      "7. Source-level root cause confirmed at apps/web/src/app/dashboard/settings/page.tsx:504-509: all three <Toggle> elements are given hardcoded value={true}/value={false} props and onChange={() => undefined} (a literal no-op).",
+      "8. Repeated the entire sequence in a brand-new, isolated browser context (VERIFY TWICE) with a fresh login -> identical result (aria-checked unchanged for both toggle-notif-digest and toggle-notif-approvals)."
+    ],
+    "expected": "Clicking a notification toggle should flip its visual state and persist the new preference (via Save Changes), matching the interactive appearance of an on/off switch.",
+    "observed": "The three Notifications toggles never change state under any click method (Playwright locator click, raw mouse click at exact coordinates, or native DOM .click()), across two independent sessions. No console error is thrown; the failure is completely silent, and the surrounding 'Save Changes' flow reports success regardless.",
+    "evidence": [
+      "test-artifacts/toggle-all-report.json",
+      "test-artifacts/toggle-debug-results.json",
+      "test-artifacts/VERIFY-TWICE-report.json",
+      "test-artifacts/20-before-precise-toggle.png",
+      "test-artifacts/21-after-precise-toggle.png",
+      "test-artifacts/VERIFY2-02-notif-toggles-after-click.png",
+      "apps/web/src/app/dashboard/settings/page.tsx:500-512 (source citation)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-settings-002",
+    "screen": "settings",
+    "severity": "HIGH",
+    "category": "defect",
+    "summary": "The 'Job Board Integrations' Sync / Sync All buttons (Greenhouse, Ashby, Lever, Remoteok, Remotive, and the top-level 'Sync All') are entirely decorative client-side theater: clicking them fires zero network requests and never actually re-syncs anything, yet displays a convincing 'Syncing…' spinner and a temporary 'syncing' status badge for 1.5 seconds before silently reverting -- misleading the user into believing a real integration refresh occurred.",
+    "reproduction": [
+      "1. Log in as admin/admin123, navigate to /dashboard/settings, click the 'Integrations' sub-nav tab.",
+      "2. Record the visible text for the Greenhouse row: 'Greenhouse / 16 jobs discovered · last sync 2026-07-16 18:32 UTC / connected / Sync'.",
+      "3. With network request capture active, click the 'Sync' button for Greenhouse (data-testid=sync-greenhouse).",
+      "4. Observe the UI immediately shows a 'syncing' badge and 'Syncing…' text with a spinner icon, and the Sync button becomes a disabled '...' icon.",
+      "5. After ~1.5s the row silently reverts to its original 'connected' / 'Sync' appearance.",
+      "6. Inspect the captured network log for the entire interaction window: zero requests to any /api/* endpoint were made.",
+      "7. Re-read the row text: identical to step 2, byte-for-byte ('last sync 2026-07-16 18:32 UTC' unchanged).",
+      "8. Source-level root cause confirmed at apps/web/src/app/dashboard/settings/page.tsx:174-177: syncOne(name) only does setSyncing(...true) then setTimeout(()=>setSyncing(...false), 1500) -- no fetch/axios call anywhere in the function.",
+      "9. Repeated in a brand-new isolated browser session (VERIFY TWICE) with fresh login -> identical result: zero network calls, row text unchanged."
+    ],
+    "expected": "Clicking 'Sync' for a job board should call a real backend refresh endpoint and, on completion, update the 'last sync' timestamp / job count from live data (as the Career Data 'Sync now' button on the same screen genuinely does, calling POST /api/workspaces/career-data/refresh).",
+    "observed": "No backend call is ever made; the 1.5s 'Syncing…' animation is purely a local setTimeout with no effect on any server state. The wireframe's own script comment ('P0-S03 — job board sync affordances (wireframe-level feedback)') shows this fake behavior was carried verbatim from the wireframe mockup into the shipped product without ever being wired to a real endpoint.",
+    "evidence": [
+      "test-artifacts/jobboard-sync-evidence.json",
+      "test-artifacts/28-jobboard-before-sync-click.png",
+      "test-artifacts/29-jobboard-during-sync-click.png",
+      "test-artifacts/30-jobboard-after-sync-timeout.png",
+      "test-artifacts/VERIFY-TWICE-report.json",
+      "test-artifacts/VERIFY2-03-jobboard-sync-after.png",
+      "apps/web/src/app/dashboard/settings/page.tsx:174-177 (source citation)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-settings-003",
+    "screen": "settings",
+    "severity": "HIGH",
+    "category": "coverage-gap",
+    "summary": "The Settings screen's own backing-endpoint matrix lists 4 /billing/* endpoints (GET /billing/entitlement, GET /billing/subscription, POST /billing/checkout, POST /billing/portal), but only the first is ever called, and even its response is never rendered: GET /billing/entitlement fires on every Settings page load and returns real, live Pro-plan/active-status data for this account ({\"active_paid\":true,\"plan\":{\"id\":\"pro\",\"status\":\"active\"}}), yet no plan badge, quota indicator, or manage-subscription/cancel/billing-portal/invoice control exists anywhere on the Settings page. This directly corroborates MV-pricing-003 (filed by the pricing screen tester) from the Settings screen's own vantage point -- it is a cross-reference, not a duplicate, since it specifically documents that 3 of the 4 billing endpoints assigned to THIS screen's matrix are never invoked by it at all.",
+    "reproduction": [
+      "1. Log in as admin/admin123 (account holds a TEMP-granted Pro entitlement) and load /dashboard/settings with network capture active.",
+      "2. Confirm GET /api/billing/entitlement fires automatically on page load and returns HTTP 200 {\"active_paid\":true,\"plan\":{\"id\":\"pro\",\"status\":\"active\"},\"requiresSubscription\":true}.",
+      "3. Separately call GET /api/billing/subscription directly -> HTTP 200 with full real quota data ({\"plan\":{\"id\":\"pro\",\"name\":\"Pro\"},\"status\":\"active\",\"quota\":{\"runsUsed\":15,\"runsAllowed\":100,\"spendUsedUsd\":0.074688,\"spendCapUsd\":15.0,...}}) -- this endpoint is never called by the Settings page itself.",
+      "4. Enumerate every visible section/heading/button across all 7 Settings tabs (Profile, Resume Management, Portfolio Sync, Notifications, Agent Configuration, Integrations, Privacy & Compliance): none mention 'Pro', 'plan', 'subscription', 'billing', 'quota', 'upgrade', 'downgrade', 'cancel', or 'invoice'.",
+      "5. Call POST /api/billing/portal directly -> HTTP 409 {\"detail\":\"No billing account yet — subscribe first\"} even though this account's entitlement is active/Pro (the TEMP grant bypassed a real Stripe checkout, so there is no Stripe customer record).",
+      "6. Call POST /api/billing/checkout directly -> HTTP 400 {\"detail\":\"This plan is not yet available for purchase (no Stripe price configured)\"}, confirming CLM-068's still-blocked Stripe integration from this screen's own endpoint set."
+    ],
+    "expected": "A screen whose own backing-endpoint matrix includes GET /billing/subscription, POST /billing/checkout, and POST /billing/portal should surface at least a current-plan indicator and, ideally, a manage/cancel affordance driven by those endpoints.",
+    "observed": "3 of the 4 assigned billing endpoints are never called by the Settings screen; the one that is called (GET /billing/entitlement) has its response silently discarded from the UI. A Pro-plan user has no way to see their plan, usage, or a path to manage/cancel it anywhere on Settings.",
+    "evidence": [
+      "test-artifacts/01-settings-load-network.json",
+      "test-artifacts/01-settings-body-text.txt",
+      "test-artifacts/pass1-network.json",
+      "curl transcripts captured this session (billing/entitlement, billing/subscription, billing/portal, billing/checkout) -- see report body §Claim Verdicts CLM-068"
+    ],
+    "claimRefs": ["CLM-068"],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-settings-004",
+    "screen": "settings",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "The 'Portfolio Sync' sub-nav tab renders a panel whose visible section heading reads 'Resume Management' (byte-identical content to the actual 'Resume Management' tab) rather than anything labelled 'Portfolio Sync' -- a user clicking the 'Portfolio Sync' nav item sees a mismatched heading for the panel they landed on.",
+    "reproduction": [
+      "1. Log in and navigate to /dashboard/settings.",
+      "2. Click 'Resume Management' in the sub-nav -> panel heading reads 'Resume Management', followed by a 'Career Data' section.",
+      "3. Click 'Portfolio Sync' in the sub-nav (a different, distinctly-labelled nav item) -> panel heading STILL reads 'Resume Management', followed by the same 'Career Data' section -- pixel-identical to step 2's screenshot."
+    ],
+    "expected": "A distinctly-labelled nav item should render distinctly-labelled (or at least topically consistent) content, or the two nav items should be merged if they are meant to show the same panel.",
+    "observed": "Both 'Resume Management' and 'Portfolio Sync' nav items render the exact same panel, headed 'Resume Management'.",
+    "evidence": [
+      "test-artifacts/03-subnav-Resume_Management.png",
+      "test-artifacts/03-subnav-Portfolio_Sync.png",
+      "test-artifacts/03-subnav-results.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-settings-005",
+    "screen": "settings",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "Production Settings deviates from the settings.html wireframe in several presentational ways that are not functional defects but are worth recording for visual-conformance: (a) no 'Change avatar' upload control exists (wireframe shows one; production shows a static initials circle only); (b) the 'Job Board Integrations' section shows a completely different set of sources (Greenhouse/Ashby/Lever/Remoteok/Remotive -- generic ATS platforms) than the wireframe's AU-specific job-seeker boards (Seek/LinkedIn AU/Workforce Australia via MyGov/Jora/Indeed AU), and drops the wireframe's 4-state status legend (Connected/Syncing/Disconnected/Not configured) in favour of a single 'connected' badge for every row; (c) 'Connected Accounts & API Keys' shows OpenRouter / Abacus Subscription (fallback) / Google (Gmail) rather than the wireframe's LinkedIn / GitHub / OpenRouter API set.",
+    "reproduction": [
+      "1. Compare design/screens/settings.html against a full-page screenshot of https://5cb5f0620.abacusai.cloud/dashboard/settings (test-artifacts/01-settings-load-fullpage.png) side by side.",
+      "2. Confirm no avatar-upload button/element exists anywhere in the live DOM (grep of element inventory).",
+      "3. Confirm the Job Board Integrations row set and Connected Accounts row set differ from the wireframe's named entries."
+    ],
+    "expected": "Wireframe and production need not be pixel-identical, but component presence and general content categories are expected to correspond per protocol §3.2 point 1.",
+    "observed": "Structural/nav-label conformance is otherwise strong (all 7 sub-nav labels match exactly), but the specific integrations/accounts shown and the avatar-upload affordance differ from the wireframe.",
+    "evidence": [
+      "test-artifacts/01-settings-load-fullpage.png",
+      "test-artifacts/03-subnav-Integrations.png",
+      "design/screens/settings.html"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

@@ -1,0 +1,100 @@
+{
+  "account": "F2 no-r\u00e9sum\u00e9",
+  "userId": "cd63b6832b67eb3aa3d9a58c2",
+  "job_id": "c0241874f7217f381e6d4bac1",
+  "started_utc": "2026-07-20T06:31:27.284033+00:00",
+  "quota_before": {
+    "planId": "pro",
+    "runsUsed": 0,
+    "runsAllowed": 100,
+    "spendUsedUsd": "0"
+  },
+  "tailor": {
+    "post_status": 202,
+    "post_body": {
+      "job_id": "c863603302ae1ce64cea4555e",
+      "status": "enqueued"
+    },
+    "terminal": {
+      "job_id": "c863603302ae1ce64cea4555e",
+      "status": "completed",
+      "agentKey": "tailor",
+      "result": {
+        "message": "Add your resume before tailoring or generating an application.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "createdAt": "2026-07-20T06:31:28.651758+00:00",
+      "startedAt": "2026-07-20T06:31:28.776596+00:00",
+      "finishedAt": "2026-07-20T06:31:29.499773+00:00"
+    }
+  },
+  "coverLetter": {
+    "post_status": 202,
+    "post_body": {
+      "job_id": "ccec297bc2baae1a034875fa8",
+      "status": "enqueued"
+    },
+    "terminal": {
+      "job_id": "ccec297bc2baae1a034875fa8",
+      "status": "completed",
+      "agentKey": "coverLetter",
+      "result": {
+        "message": "Add your resume before generating a cover letter.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "createdAt": "2026-07-20T06:31:33.138970+00:00",
+      "startedAt": "2026-07-20T06:31:33.288024+00:00",
+      "finishedAt": "2026-07-20T06:31:33.965052+00:00"
+    }
+  },
+  "fitScorer": {
+    "post_status": 422,
+    "body": {
+      "detail": "Add your resume before scoring jobs against it."
+    }
+  },
+  "emailAgent_draft": {
+    "post_status": 422,
+    "body": {
+      "detail": "draft_reply requires thread_id"
+    }
+  },
+  "pipeline": {
+    "post_status": 202,
+    "post_body": {
+      "job_id": "c2abac7015f181e9e4ef1381a",
+      "status": "enqueued"
+    },
+    "terminal": {
+      "job_id": "c2abac7015f181e9e4ef1381a",
+      "status": "completed",
+      "agentKey": "pipeline",
+      "result": {
+        "message": "Add your resume before scoring jobs against it.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "createdAt": "2026-07-20T06:31:38.600394+00:00",
+      "startedAt": "2026-07-20T06:31:38.804576+00:00",
+      "finishedAt": "2026-07-20T06:31:58.538686+00:00"
+    }
+  },
+  "quota_after": {
+    "planId": "pro",
+    "runsUsed": 0,
+    "runsAllowed": 100,
+    "spendUsedUsd": "0"
+  },
+  "forbidden_scan": {
+    "MissingResumeError": false,
+    "Traceback": false,
+    "raise ": false,
+    "resume_grounding": false
+  },
+  "ended_utc": "2026-07-20T06:32:01.044631+00:00"
+}

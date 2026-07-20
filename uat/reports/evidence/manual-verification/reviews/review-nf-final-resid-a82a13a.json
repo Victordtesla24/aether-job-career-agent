@@ -1,0 +1,118 @@
+{
+  "finding": ["NF-final-resid-001", "NF-final-resid-002"],
+  "review_target": {
+    "branch": "fix/nf-final-resid",
+    "commit": "a82a13ae42039032f3acd2065dbe861f6b6571b5",
+    "base": "e1825717a139a092c9f857f8eca9dab26942ea22",
+    "repo": "/home/ubuntu/github_repos/aether-job-career-agent"
+  },
+  "reviewer": "reviewer (independent of fixer-medium; did not author the fix; never edited code; did not self-approve)",
+  "verdict": "PASS",
+  "timestamp_utc": "2026-07-20T05:45:45Z",
+  "review_window_utc": "2026-07-20T05:34Z - 2026-07-20T05:45Z",
+  "epistemic_note": "All test-execution and code-inspection claims below are [VERIFIED-WITH-FRESH-EVIDENCE] from THIS run: fresh disposable git worktrees at scratchpad/review-baseline (e182571) and scratchpad/review-fixed (a82a13a), removed after use via `git worktree remove --force`; a fresh throwaway Python venv (scratchpad/review-venv, deleted after use) built from apps/api/requirements.txt + requirements-dev.txt + python-multipart; apps/web tests run via symlinked (not copied) node_modules from the main tree, main tree never written to. DSN resolved by single-line grep of the repo-root .env for DATABASE_URL_TEST (schema=aether_test, confirmed by substring match before every pytest invocation) and AETHER_CREDENTIAL_KEY (first 8 chars X5-HScT0, matches EXIT-G06-FINAL-serialized.md's documented key) -- .env never sourced wholesale, never echoed in full, no prod DSN used anywhere. flock /tmp/aether-pytest.lock held for every pytest invocation. The fixer's fix-log.md and the qa-adversary's FINAL-RESIDUALS-REPORT.json were read as testimony/context before independent verification, and treated as unproven claims until reproduced fresh in this run. Main tree confirmed unmodified throughout (git status/rev-parse checked pre- and post-review).",
+  "checks": [
+    {
+      "id": "0-scope",
+      "finding": "both",
+      "description": "Cumulative diff e182571..a82a13a touches exactly the 4 claimed files + the 1 new test file (\"4 files + new test dir\"); commit message references both finding ids; the 2 flagged out-of-scope leads (agents/page.tsx, email/page.tsx, requirements.txt/stripe) are untouched",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git diff e182571 a82a13a --stat` => apps/api/app/routers/cover_letters.py, apps/api/tests/test_cover006_camelcase.py, apps/web/src/app/dashboard/cover-letters/__tests__/page.test.tsx (new), apps/web/src/app/dashboard/cover-letters/page.tsx, apps/web/src/lib/api/coverLetters.ts -- '5 files changed, 398 insertions(+), 20 deletions(-)', exactly matching fix-log.md §4. `git show a82a13a --stat` commit subject: 'fix(NF-final-resid-001,NF-final-resid-002): ...'. `git diff e182571 a82a13a --name-only | grep -E 'agents/page.tsx|email/page.tsx'` => no match. `git diff e182571 a82a13a --name-only | grep -i requirements` => no match."
+    },
+    {
+      "id": "1a-false-positive-hunt",
+      "finding": "NF-final-resid-001",
+      "description": "Adversarial false-positive hunt BEYOND the fixer's own 3-term survey (SlideShare/SharePoint/GeoLocation): searched for real tech/product/brand terms whose CamelCase split contains a segment in the new _ARTIFACT_LABEL_WORDS set (salary/location/locations/responsibilities/requirement(s)/qualifications/compensation/benefit(s)/employer/department/share)",
+      "result": "PASS (residual risk noted, not blocking)",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Called `_is_camel_concatenation_artifact()` directly (fresh venv, fixed worktree, 2026-07-20T05:39Z) against 24 candidates including the task's named leads (JobShare, WorkShare, TimeShare, iShares) plus my own design. iShares (starts lowercase, regex never captures a 2nd segment) and Workshare/Timeshare's real 1-capital styling => NOT flagged (safe, as their real brand casing never trips the 2-segment rule). BUT found 7 real, if niche, product/brand names that DO get wrongly flagged: ShareFile=True (Citrix file-sharing, used in enterprise-IT JDs), ShareGate=True (SharePoint migration tool, IT/SharePoint-admin JDs), ShareX=True (open-source screenshot tool), ShareVault=True (secure data room, M&A/legal-ops JDs), ShareThis=True (social-share widget, older web-dev JDs), LocationIQ=True (geocoding API, niche geo/logistics-dev JDs), SalaryFinance=True (UK workplace fintech). None of these are common, cross-industry terms on the level of JavaScript/PostgreSQL/GraphQL/Kubernetes (the task's own preserved-list bar) -- all are domain-niche enterprise/legal/fintech product names a general JD-keyword panel would rarely need to preserve. Per the review brief's explicit calibration ('a few exotic misses are acceptable for MEDIUM polish, a common term killed is a FAIL'), these are exotic misses, not common-term kills -- PASS, not a blocking defect. Noted gap: the fixer's fix-log.md §1.2 claim 'No collision found for salary/.../department against any known tech/brand term' is technically incomplete (SalaryFinance is a real 'salary'-segment brand they didn't find) -- a minor overclaim in the fixer's testimony, immaterial to the verdict given the real-world rarity of all 7 hits."
+    },
+    {
+      "id": "1b-6-cities-and-manager-location-class",
+      "finding": "NF-final-resid-001",
+      "description": "Confirm the 6 sweep-named city gluings (SydneySalary/MelbourneSalary/BrisbaneLocation/AdelaideSalary/PerthSalary/CanberraLocation) AND the original ManagerLocation-class artifacts (ManagerLocation/EngineerLocation/ResponsibilitiesBuild/EmployerShare) are all dropped at a82a13a",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Direct function calls against the fixed worktree's `app.routers.cover_letters._is_camel_concatenation_artifact` (2026-07-20T05:39Z): all 6 sweep cities => True; all 4 original ManagerLocation-class terms => True. Also independently confirmed via the parametrized pytest suite (see 1d)."
+    },
+    {
+      "id": "1c-legit-tech-preservation",
+      "finding": "NF-final-resid-001",
+      "description": "Confirm the legit-tech preservation list (JavaScript/TypeScript/PostgreSQL/DevOps/iPhone/Golang/Terraform/GraphQL/Kubernetes, plus the pre-existing GitHub/GitLab/OAuth2/MongoDB/Node.js) still passes at a82a13a",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Direct function calls (2026-07-20T05:39Z): all 14 legit mixed-case tech terms tested => False (not flagged as artifacts). Cross-checked by running the fixer's 2 end-to-end `_keyword_coverage()` integration tests (Empire-Life and Redpanda JD patterns) which assert both the city-artifact absence AND the legit-tech presence in the same keyword-chip list -- both passed (see 1d)."
+    },
+    {
+      "id": "1d-fail-before-pass-after-backend",
+      "finding": "NF-final-resid-001",
+      "description": "Run the 17 new backend tests against UNMODIFIED e182571 (must fail) and against a82a13a (must all pass), in a fresh disposable worktree with the new test file overlaid onto the unfixed router, under flock + aether_test schema DSN, never prod",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] FAIL-BEFORE (scratchpad/review-baseline @e182571, new test file copied in from a82a13a, unfixed cover_letters.py, 2026-07-20T05:37Z): `flock /tmp/aether-pytest.lock .../review-venv/bin/python3 -m pytest -q -p no:xdist -o addopts=\"\" tests/test_cover006_camelcase.py` => '17 failed, 17 passed in 0.65s', the exact same 17 test IDs the fixer's fix-log.md §1.3 lists (6 city-label cases, 9 adversarial-place cases, 2 integration tests). PASS-AFTER (scratchpad/review-fixed @a82a13a, 2026-07-20T05:38Z): same command => '34 passed, 1 warning in 0.61s'. DSN verified schema=aether_test before each run (grep of the single DATABASE_URL_TEST line in repo-root .env); no prod DSN used; flock held both times."
+    },
+    {
+      "id": "1e-broader-backend-regression",
+      "finding": "NF-final-resid-001",
+      "description": "Independently re-run the 10 cover-letter-related backend test files against a82a13a to check for regressions",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] scratchpad/review-fixed @a82a13a, same 10 files fixer's fix-log.md §1.6 lists, 2026-07-20T05:44Z: '146 passed, 6 warnings in 242.19s' -- exact match to the fixer's claimed '146 passed'. Zero failures."
+    },
+    {
+      "id": "1f-billing-stripe-unrelated-failure-corroboration",
+      "finding": "NF-final-resid-001",
+      "description": "Independently spot-check the fixer's claim that 3 pre-existing test_gap_p6_billing.py failures are unrelated to this fix (stripe package absent from requirements.txt, MV-system-009)",
+      "result": "PASS (claim corroborated, out of scope)",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `grep -i '^stripe' apps/api/requirements*.txt` => no match (stripe genuinely undeclared). Ran tests/test_gap_p6_billing.py against the UNFIXED e182571 worktree (which never had any of this fix's 4 changed files) independently of the fixer's stash-based repro: identical 3 failures, identical '503 Stripe webhook secret is not configured' error, 2026-07-20T05:45Z ('3 failed, 16 passed in 34.62s'). Confirms these failures are pre-existing and orthogonal to cover_letters.py/page.tsx/coverLetters.ts -- not a regression caused by this fix. Correctly left out of scope (requirements.txt untouched in the diff, per check 0-scope)."
+    },
+    {
+      "id": "2a-refusal-branch-line-level",
+      "finding": "NF-final-resid-002",
+      "description": "Does applyCoverLetterResult() correctly distinguish refusal (missingResume/no id) from real success AND from real failure? Is setError semantics consistent with the page's other error paths?",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Read apps/web/src/lib/api/agents.ts:79-107 `resolveRun()`: on BackgroundJob status='failed' it `throw`s an ApiError BEFORE ever returning a value -- so `runCoverLetterAgent()`'s promise only ever resolves for status='completed', meaning `applyCoverLetterResult()` in page.tsx can never receive a real-failure shape; real failures are caught in the existing `catch (e) { handleAgentError(...) }` branch, unaffected by this fix. Read apps/api/app/workers/tasks.py:250-261 `except MissingResumeError`: the ONLY completed-refusal shape emitted is `{resume_id: None, missingResume: True, message: honest_message}` -- no `cover_letter_id` key at all. The new branch's condition `result.missingResume || !result.cover_letter_id` (page.tsx:112) correctly and redundantly catches both signals of this exact shape; a real success always carries a truthy `cover_letter_id` (page.tsx:41-42 workers/tasks.py success path), so no overlap/ambiguity exists between the two branches. `setError(result.message ?? \"Add your resume before generating a cover letter.\")` (page.tsx:114) renders through the SAME pre-existing `<p role=\"alert\">` element (page.tsx:291-298) used by every other error path on this page (`handleAgentError`, `load()`'s catch, `exportPdf()`'s catch) -- consistent styling/semantics, no new UI element, matching the finding's own fix_hint ('surface result.message via setError(result.message) ... instead of clearing state'). `setRejection(null)` is also cleared in the refusal branch, mirroring the success branch's clear-both-panels behavior -- no stale rejection panel can mask the new alert."
+    },
+    {
+      "id": "2b-coverletterrunresult-type-consumers",
+      "finding": "NF-final-resid-002",
+      "description": "Verify NO other consumer of CoverLetterRunResult depends on the now-optional fields",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `grep -rn \"CoverLetterRunResult\" apps/web/src/` (fixed worktree, excluding the new test file) => only 2 files: lib/api/coverLetters.ts (declaration + return type) and dashboard/cover-letters/page.tsx (the new helper's param type). `grep -rn \"\\.approval_id\\b|\\.approval_status\\b|result\\.cover_letter\\b|result\\.cover_letter_id\\b\" apps/web/src/` => the only other approval_id/approval_status hits are in dashboard/page.tsx and components/dashboard/feed.ts, both reading `out.approval_status`/`out.approval_id` off `AgentRun.output` (a `Record<string, unknown>`, a structurally distinct type from CoverLetterRunResult) -- unrelated. `regenerateSelected()`/`requestChanges()` (page.tsx:164,179) call `refineCoverLetter()`, which returns a SEPARATE `RefineResult` interface (components/cover-letters/api.ts:48-53) with the 4 fields still required -- untouched by this diff, confirming the fixer's scope-check §2.2 claim that the refine/synchronous path is a different mechanism and correctly left alone."
+    },
+    {
+      "id": "2c-fail-before-pass-after-frontend",
+      "finding": "NF-final-resid-002",
+      "description": "Run the 2 new vitest tests against UNMODIFIED e182571 (1 must fail) and a82a13a (2/2), then the full vitest suite (465/465) and tsc --noEmit clean, in an isolated worktree using symlinked node_modules (main tree never modified)",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Worktree node_modules symlinked from the main tree (apps/web/node_modules and repo-root node_modules), main tree read-only throughout. FAIL-BEFORE (scratchpad/review-baseline @e182571, new __tests__/page.test.tsx overlaid, unfixed page.tsx/coverLetters.ts, 2026-07-20T05:40Z): `vitest run src/app/dashboard/cover-letters/__tests__/page.test.tsx` => 'surfaces the honest refusal message...' timed out on `screen.findByRole(\"alert\")` (never rendered) => 'Test Files 1 failed (1)', 'Tests 1 failed | 1 passed (2)' -- matches fix-log.md §2.3 exactly. PASS-AFTER (scratchpad/review-fixed @a82a13a, 2026-07-20T05:40Z): same command => 'Test Files 1 passed (1)', 'Tests 2 passed (2)'. FULL SUITE (scratchpad/review-fixed, 2026-07-20T05:41-05:42Z): `vitest run` (no path filter) => 'Test Files 70 passed (70)', 'Tests 465 passed (465)', duration 94.56s -- exact match to fix-log.md §2.7's claimed 465/465. TYPECHECK: `tsc --noEmit` in the fixed worktree, 2026-07-20T05:44Z, exit 0, zero output -- clean."
+    },
+    {
+      "id": "3-prohibited-patterns",
+      "finding": "both",
+      "description": "Scan the full diff for placeholders, suppressed errors, broad `any` casts, @ts-ignore, eslint-disable (beyond established convention), Math.random metrics, fake scores, TODO/FIXME stubs, --no-verify",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git diff e182571 a82a13a | grep -nE 'TODO|FIXME|@ts-ignore|eslint-disable|as any|Math\\.random|--no-verify|console\\.log\\('` => only one hit: `// eslint-disable-next-line import/first` in the NEW page.test.tsx, immediately before `import CoverLettersPage from \"../page\"` (required because `vi.mock()` calls must precede the mocked module's import). Checked this is NOT a novel suppression: `grep -rl 'eslint-disable-next-line import/first' apps/web/src --include='*.test.tsx'` => 18 pre-existing test files in the repo already use the identical single-rule, test-only pattern (analytics, applications, approvals, interviews, jobs, networking, settings, dashboard, login __tests__ dirs) -- an established repo convention for vi.mock-then-import structure, not a new prohibited pattern, does not suppress any error-handling or type-safety check, confined to test code. `git diff e182571 a82a13a | grep -nE ': any\\b|<any>|as any\\b'` => only false-positive hit was the English word 'any' inside a doc-comment sentence ('...ANY segment is one of...'), not an actual type cast -- zero real `any` usages. No Math.random, no fake scores, no --no-verify, no TODO/FIXME stubs, no swallowed-error patterns found anywhere in the diff."
+    },
+    {
+      "id": "4-root-cause-and-minimality",
+      "finding": "both",
+      "description": "Does the fix address root cause (not a superficial patch); is the diff minimal",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] Backend: root cause was the all-segments-must-be-boilerplate rule structurally unable to catch a real proper noun (unenumerable) glued to a known label (enumerable); the fix inverts which side needs enumerating (label side only, 12-word frozenset) rather than attempting city-name enumeration -- explicitly avoids the whack-a-mole the original finding's own fix_hint half-suggested ('extend _ARTIFACT_SPLIT_WORDS with common AU/global city names'). This is the more durable, generalizing fix, proven by the 9 adversarial place-name tests (London/Toronto/Auckland/.../Mumbai) that were never enumerated anywhere and still pass. Diff is a 4-line functional change (`_is_camel_concatenation_artifact`'s final 2 statements) plus 2 frozenset additions plus docstrings -- no other function touched; `_skill_score`/`_is_semantic_keyword` inherit the fix by calling through, unchanged (confirmed no diff hunks in those functions). Frontend: root cause was the async result being applied unconditionally without checking which of the 2 real completion shapes `workers/tasks.py` emits; the fix adds one guarded helper reused by both `generate()` and `regenerate()` (the two call sites sharing the exact same mechanism per §2.2's mechanism-scoped audit), leaves the synchronous refine path alone (different mechanism, verified in 2b), and makes the type honestly optional rather than lying about required fields. No scope creep into the flagged-but-out-of-scope agents/page.tsx, email/page.tsx, or requirements.txt (confirmed in check 0-scope)."
+    },
+    {
+      "id": "5-worktree-cleanup",
+      "finding": "both",
+      "description": "Clean up review worktrees; confirm main tree untouched",
+      "result": "PASS",
+      "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] `git worktree remove --force` run for both scratchpad/review-baseline and scratchpad/review-fixed; `git worktree list | grep review` => empty. `git rev-parse HEAD` in the main tree => e1825717a139a092c9f857f8eca9dab26942ea22 (unchanged). `git status --short` => only pre-existing unrelated untracked files (orchestrator agent defs, sibling fixer's fixture json) present before this review began, nothing touching the 5 reviewed files or the reviewed directories. Throwaway venv (scratchpad/review-venv) deleted after use."
+    }
+  ],
+  "not_reviewed_by_design": [
+    "apps/web/src/app/dashboard/agents/page.tsx and .../email/page.tsx (same resolveRun()/pollJob() mechanism, other agent types) -- fixer-flagged as a possible same-bug-class lead but explicitly out of scope for these 2 findings per the brief; confirmed untouched in the diff (check 0-scope), not otherwise investigated by this review.",
+    "apps/api/requirements.txt missing 'stripe' (MV-system-009) -- confirmed pre-existing and unrelated (check 1f), not investigated further, not this review's scope to fix or gate."
+  ],
+  "verdict_reasons": [
+    "NF-final-resid-001: root cause correctly addressed with a minimal, generalizing fix (label-side enumeration instead of unbounded place-name enumeration); independently reproduced FAIL-BEFORE (17/17 fail) and PASS-AFTER (34/34 pass) against fresh e182571/a82a13a worktrees; 6 sweep cities + original ManagerLocation-class artifacts confirmed dropped; legit-tech list confirmed preserved; adversarial false-positive hunt beyond the fixer's own survey found only niche/exotic real-brand collisions (ShareFile, ShareGate, LocationIQ, etc.), none common enough to fail the review's own calibration bar; 146/146 broader cover-letter regression suite passed; pre-existing unrelated stripe/billing failures independently corroborated as out of scope.",
+    "NF-final-resid-002: refusal branch correctly and unambiguously distinguishes refusal from success (structurally impossible to confuse with real failure, since resolveRun() throws before this code path is reached on 'failed'); setError/role=alert usage is consistent with every other error path on the page; CoverLetterRunResult's optional-field widening verified to have zero other consumers; independently reproduced FAIL-BEFORE (1/2 fail) and PASS-AFTER (2/2 pass); full vitest suite independently reproduced at 465/465 (70 files); tsc --noEmit independently reproduced clean.",
+    "Scope is exactly the claimed 4 files + 1 new test file; commit message references both finding ids; the 2 out-of-scope leads the fixer flagged (agents/page.tsx+email/page.tsx shared bug class, stripe/MV-system-009) are confirmed untouched, as instructed.",
+    "No prohibited patterns: the single eslint-disable hit is a pre-existing, test-only, single-rule repo convention (18 other files already use it), not a suppression of error-handling or type safety; no any casts, no @ts-ignore, no Math.random, no --no-verify, no TODO/FIXME stubs, no swallowed errors.",
+    "Tests are non-tautological: they assert on real function output (_is_camel_concatenation_artifact / _keyword_coverage) and drive the real page component through mocked API boundaries, not hand-asserted constants; fail-before/pass-after transcripts independently reproduced prove they exercise the actual fixed behavior."
+  ]
+}

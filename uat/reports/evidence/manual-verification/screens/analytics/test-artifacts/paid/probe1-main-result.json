@@ -1,0 +1,1338 @@
+{
+  "startedAt": "2026-07-17T16:50:48.272Z",
+  "steps": [
+    {
+      "step": "login",
+      "tokenPrefix": "eyJhbGciOiJI",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "navigate-analytics",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/analytics"
+    }
+  ],
+  "consoleEvents": [],
+  "pageErrors": [],
+  "networkLog": [],
+  "analyticsCalls": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "status": 200,
+      "body": {
+        "period": "all",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:50.526Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "status": 200,
+      "body": {
+        "period": "7d",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:50.527Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+      "status": 200,
+      "body": {
+        "sources": [
+          {
+            "label": "Greenhouse",
+            "value": 36,
+            "color": "#4F46E5"
+          },
+          {
+            "label": "Ashby",
+            "value": 34,
+            "color": "#FF6B35"
+          },
+          {
+            "label": "Lever",
+            "value": 21,
+            "color": "#34D399"
+          },
+          {
+            "label": "Remoteok",
+            "value": 7,
+            "color": "#7C3AED"
+          },
+          {
+            "label": "Remotive",
+            "value": 2,
+            "color": "#FBBF24"
+          }
+        ],
+        "sourcesTotal": 44,
+        "sourcesLabel": "jobs sourced",
+        "topSkills": [],
+        "activityHeatmap": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            4
+          ]
+        ],
+        "probability": {
+          "score": 44,
+          "label": "Job Probability Score",
+          "note": "Likelihood of landing an offer in the next 60 days",
+          "factors": [
+            {
+              "label": "Application volume",
+              "value": 47
+            },
+            {
+              "label": "Interview conversion",
+              "value": 0
+            },
+            {
+              "label": "Market demand",
+              "value": 88
+            },
+            {
+              "label": "Skill match",
+              "value": 39
+            }
+          ]
+        },
+        "employerActivity": [
+          {
+            "company": "harvey",
+            "event": "Received your application",
+            "when": "16m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Empire Life",
+            "event": "Application in progress",
+            "when": "51m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Plenti",
+            "event": "Received your application",
+            "when": "55m ago",
+            "signal": "new"
+          },
+          {
+            "company": "airwallex",
+            "event": "Received your application",
+            "when": "59m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Empire Life",
+            "event": "Application in progress",
+            "when": "1h ago",
+            "signal": "new"
+          }
+        ],
+        "recruiterTrends": {
+          "series": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            200
+          ],
+          "rows": [
+            {
+              "label": "Agent runs (last 12 wks)",
+              "delta": "200 total"
+            },
+            {
+              "label": "Avg runs / week",
+              "delta": "16.7 · no change"
+            }
+          ]
+        },
+        "marketVsYou": {
+          "marketDataConnected": false,
+          "comparisons": [
+            {
+              "label": "Applications / month",
+              "market": null,
+              "you": 14
+            },
+            {
+              "label": "Interview rate",
+              "market": null,
+              "you": 0,
+              "unit": "%"
+            }
+          ],
+          "summary": "No market data source connected — showing your own figures only."
+        },
+        "trendIndicators": [
+          {
+            "label": "Your application velocity",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              14
+            ]
+          },
+          {
+            "label": "Agent automation spend",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              0.12
+            ]
+          },
+          {
+            "label": "Avg job fit score",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              39
+            ]
+          }
+        ]
+      },
+      "t": "2026-07-17T16:50:50.619Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "status": 200,
+      "body": {
+        "period": "all",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:51.968Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "body": {
+        "buckets": [
+          {
+            "range": "0-10",
+            "count": 0
+          },
+          {
+            "range": "10-20",
+            "count": 0
+          },
+          {
+            "range": "20-30",
+            "count": 2
+          },
+          {
+            "range": "30-40",
+            "count": 20
+          },
+          {
+            "range": "40-50",
+            "count": 21
+          },
+          {
+            "range": "50-60",
+            "count": 1
+          },
+          {
+            "range": "60-70",
+            "count": 0
+          },
+          {
+            "range": "70-80",
+            "count": 0
+          },
+          {
+            "range": "80-90",
+            "count": 0
+          },
+          {
+            "range": "90-100",
+            "count": 0
+          }
+        ],
+        "total": 44
+      },
+      "t": "2026-07-17T16:50:51.969Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "body": {
+        "total_cost_usd": 0.1204,
+        "total_runs": 200,
+        "avg_duration_ms": 55035.88
+      },
+      "t": "2026-07-17T16:50:51.983Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=all",
+      "status": 200,
+      "body": {
+        "period": "all",
+        "found_to_applied": 15.91,
+        "applied_to_screened": 0,
+        "screened_to_interview": 0,
+        "interview_to_offer": 0
+      },
+      "t": "2026-07-17T16:50:51.983Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+      "status": 200,
+      "body": {
+        "sources": [
+          {
+            "label": "Greenhouse",
+            "value": 36,
+            "color": "#4F46E5"
+          },
+          {
+            "label": "Ashby",
+            "value": 34,
+            "color": "#FF6B35"
+          },
+          {
+            "label": "Lever",
+            "value": 21,
+            "color": "#34D399"
+          },
+          {
+            "label": "Remoteok",
+            "value": 7,
+            "color": "#7C3AED"
+          },
+          {
+            "label": "Remotive",
+            "value": 2,
+            "color": "#FBBF24"
+          }
+        ],
+        "sourcesTotal": 44,
+        "sourcesLabel": "jobs sourced",
+        "topSkills": [],
+        "activityHeatmap": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            4
+          ]
+        ],
+        "probability": {
+          "score": 44,
+          "label": "Job Probability Score",
+          "note": "Likelihood of landing an offer in the next 60 days",
+          "factors": [
+            {
+              "label": "Application volume",
+              "value": 47
+            },
+            {
+              "label": "Interview conversion",
+              "value": 0
+            },
+            {
+              "label": "Market demand",
+              "value": 88
+            },
+            {
+              "label": "Skill match",
+              "value": 39
+            }
+          ]
+        },
+        "employerActivity": [
+          {
+            "company": "harvey",
+            "event": "Received your application",
+            "when": "16m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Empire Life",
+            "event": "Application in progress",
+            "when": "51m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Plenti",
+            "event": "Received your application",
+            "when": "55m ago",
+            "signal": "new"
+          },
+          {
+            "company": "airwallex",
+            "event": "Received your application",
+            "when": "59m ago",
+            "signal": "new"
+          },
+          {
+            "company": "Empire Life",
+            "event": "Application in progress",
+            "when": "1h ago",
+            "signal": "new"
+          }
+        ],
+        "recruiterTrends": {
+          "series": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            200
+          ],
+          "rows": [
+            {
+              "label": "Agent runs (last 12 wks)",
+              "delta": "200 total"
+            },
+            {
+              "label": "Avg runs / week",
+              "delta": "16.7 · no change"
+            }
+          ]
+        },
+        "marketVsYou": {
+          "marketDataConnected": false,
+          "comparisons": [
+            {
+              "label": "Applications / month",
+              "market": null,
+              "you": 14
+            },
+            {
+              "label": "Interview rate",
+              "market": null,
+              "you": 0,
+              "unit": "%"
+            }
+          ],
+          "summary": "No market data source connected — showing your own figures only."
+        },
+        "trendIndicators": [
+          {
+            "label": "Your application velocity",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              14
+            ]
+          },
+          {
+            "label": "Agent automation spend",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              0.12
+            ]
+          },
+          {
+            "label": "Avg job fit score",
+            "delta": "no change",
+            "direction": "flat",
+            "series": [
+              39
+            ]
+          }
+        ]
+      },
+      "t": "2026-07-17T16:50:52.064Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "body": {
+        "totalApplications": 14,
+        "interviews": 0,
+        "offers": 0,
+        "jobsFound": 44,
+        "avgFitScore": 38.8,
+        "agentRuns": 200,
+        "agentCostUsd": 0.1204
+      },
+      "t": "2026-07-17T16:50:52.258Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "body": {
+        "total_cost_usd": 0.1204,
+        "total_runs": 200,
+        "avg_duration_ms": 55035.88
+      },
+      "t": "2026-07-17T16:50:56.710Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "status": 200,
+      "body": {
+        "period": "7d",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:56.720Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "body": {
+        "buckets": [
+          {
+            "range": "0-10",
+            "count": 0
+          },
+          {
+            "range": "10-20",
+            "count": 0
+          },
+          {
+            "range": "20-30",
+            "count": 2
+          },
+          {
+            "range": "30-40",
+            "count": 20
+          },
+          {
+            "range": "40-50",
+            "count": 21
+          },
+          {
+            "range": "50-60",
+            "count": 1
+          },
+          {
+            "range": "60-70",
+            "count": 0
+          },
+          {
+            "range": "70-80",
+            "count": 0
+          },
+          {
+            "range": "80-90",
+            "count": 0
+          },
+          {
+            "range": "90-100",
+            "count": 0
+          }
+        ],
+        "total": 44
+      },
+      "t": "2026-07-17T16:50:56.721Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=7d",
+      "status": 200,
+      "body": {
+        "period": "7d",
+        "found_to_applied": 15.91,
+        "applied_to_screened": 0,
+        "screened_to_interview": 0,
+        "interview_to_offer": 0
+      },
+      "t": "2026-07-17T16:50:56.742Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "body": {
+        "totalApplications": 14,
+        "interviews": 0,
+        "offers": 0,
+        "jobsFound": 44,
+        "avgFitScore": 38.8,
+        "agentRuns": 200,
+        "agentCostUsd": 0.1204
+      },
+      "t": "2026-07-17T16:50:57.023Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "body": {
+        "total_cost_usd": 0.1204,
+        "total_runs": 200,
+        "avg_duration_ms": 55035.88
+      },
+      "t": "2026-07-17T16:50:57.988Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=30d",
+      "status": 200,
+      "body": {
+        "period": "30d",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:57.998Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=30d",
+      "status": 200,
+      "body": {
+        "period": "30d",
+        "found_to_applied": 15.91,
+        "applied_to_screened": 0,
+        "screened_to_interview": 0,
+        "interview_to_offer": 0
+      },
+      "t": "2026-07-17T16:50:57.998Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "body": {
+        "buckets": [
+          {
+            "range": "0-10",
+            "count": 0
+          },
+          {
+            "range": "10-20",
+            "count": 0
+          },
+          {
+            "range": "20-30",
+            "count": 2
+          },
+          {
+            "range": "30-40",
+            "count": 20
+          },
+          {
+            "range": "40-50",
+            "count": 21
+          },
+          {
+            "range": "50-60",
+            "count": 1
+          },
+          {
+            "range": "60-70",
+            "count": 0
+          },
+          {
+            "range": "70-80",
+            "count": 0
+          },
+          {
+            "range": "80-90",
+            "count": 0
+          },
+          {
+            "range": "90-100",
+            "count": 0
+          }
+        ],
+        "total": 44
+      },
+      "t": "2026-07-17T16:50:57.998Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "body": {
+        "totalApplications": 14,
+        "interviews": 0,
+        "offers": 0,
+        "jobsFound": 44,
+        "avgFitScore": 38.8,
+        "agentRuns": 200,
+        "agentCostUsd": 0.1204
+      },
+      "t": "2026-07-17T16:50:58.224Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "body": {
+        "total_cost_usd": 0.1204,
+        "total_runs": 200,
+        "avg_duration_ms": 55035.88
+      },
+      "t": "2026-07-17T16:50:59.233Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "body": {
+        "buckets": [
+          {
+            "range": "0-10",
+            "count": 0
+          },
+          {
+            "range": "10-20",
+            "count": 0
+          },
+          {
+            "range": "20-30",
+            "count": 2
+          },
+          {
+            "range": "30-40",
+            "count": 20
+          },
+          {
+            "range": "40-50",
+            "count": 21
+          },
+          {
+            "range": "50-60",
+            "count": 1
+          },
+          {
+            "range": "60-70",
+            "count": 0
+          },
+          {
+            "range": "70-80",
+            "count": 0
+          },
+          {
+            "range": "80-90",
+            "count": 0
+          },
+          {
+            "range": "90-100",
+            "count": 0
+          }
+        ],
+        "total": 44
+      },
+      "t": "2026-07-17T16:50:59.239Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=90d",
+      "status": 200,
+      "body": {
+        "period": "90d",
+        "found_to_applied": 15.91,
+        "applied_to_screened": 0,
+        "screened_to_interview": 0,
+        "interview_to_offer": 0
+      },
+      "t": "2026-07-17T16:50:59.250Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=90d",
+      "status": 200,
+      "body": {
+        "period": "90d",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:50:59.264Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "body": {
+        "totalApplications": 14,
+        "interviews": 0,
+        "offers": 0,
+        "jobsFound": 44,
+        "avgFitScore": 38.8,
+        "agentRuns": 200,
+        "agentCostUsd": 0.1204
+      },
+      "t": "2026-07-17T16:50:59.499Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "body": {
+        "buckets": [
+          {
+            "range": "0-10",
+            "count": 0
+          },
+          {
+            "range": "10-20",
+            "count": 0
+          },
+          {
+            "range": "20-30",
+            "count": 2
+          },
+          {
+            "range": "30-40",
+            "count": 20
+          },
+          {
+            "range": "40-50",
+            "count": 21
+          },
+          {
+            "range": "50-60",
+            "count": 1
+          },
+          {
+            "range": "60-70",
+            "count": 0
+          },
+          {
+            "range": "70-80",
+            "count": 0
+          },
+          {
+            "range": "80-90",
+            "count": 0
+          },
+          {
+            "range": "90-100",
+            "count": 0
+          }
+        ],
+        "total": 44
+      },
+      "t": "2026-07-17T16:51:00.529Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "body": {
+        "total_cost_usd": 0.1204,
+        "total_runs": 200,
+        "avg_duration_ms": 55035.88
+      },
+      "t": "2026-07-17T16:51:00.530Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "status": 200,
+      "body": {
+        "period": "all",
+        "jobs_found": 44,
+        "applied": 7,
+        "screened": 0,
+        "interviewed": 0,
+        "offers": 0
+      },
+      "t": "2026-07-17T16:51:00.545Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=all",
+      "status": 200,
+      "body": {
+        "period": "all",
+        "found_to_applied": 15.91,
+        "applied_to_screened": 0,
+        "screened_to_interview": 0,
+        "interview_to_offer": 0
+      },
+      "t": "2026-07-17T16:51:00.571Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "body": {
+        "totalApplications": 14,
+        "interviews": 0,
+        "offers": 0,
+        "jobsFound": 44,
+        "avgFitScore": 38.8,
+        "agentRuns": 200,
+        "agentCostUsd": 0.1204
+      },
+      "t": "2026-07-17T16:51:00.809Z"
+    }
+  ],
+  "elementInventory": {
+    "period-selector": {
+      "count": 1,
+      "visible": true
+    },
+    "dashboard-summary": {
+      "count": 1,
+      "visible": true
+    },
+    "funnel-chart": {
+      "count": 1,
+      "visible": true
+    },
+    "conversion-rates": {
+      "count": 1,
+      "visible": true
+    },
+    "ats-distribution": {
+      "count": 1,
+      "visible": true
+    },
+    "agent-roi": {
+      "count": 1,
+      "visible": true
+    },
+    "market-pulse": {
+      "count": 1,
+      "visible": true
+    },
+    "market-pulse-skeleton": {
+      "count": 0,
+      "visible": false
+    },
+    "trend-indicators": {
+      "count": 1,
+      "visible": true
+    },
+    "sources-donut": {
+      "count": 1,
+      "visible": true
+    },
+    "top-skills": {
+      "count": 1,
+      "visible": true
+    },
+    "probability-score": {
+      "count": 1,
+      "visible": true
+    },
+    "activity-heatmap": {
+      "count": 1,
+      "visible": true
+    },
+    "employer-activity": {
+      "count": 1,
+      "visible": true
+    },
+    "recruiter-trends": {
+      "count": 1,
+      "visible": true
+    },
+    "market-vs-you": {
+      "count": 1,
+      "visible": true
+    }
+  },
+  "exportButtonCheck": {
+    "byText": 0,
+    "byButtonText": 0
+  },
+  "freshnessLabelCheck": {
+    "found": 0
+  },
+  "displayedSummary": [
+    {
+      "label": "Applications",
+      "value": "14Total roles you've applied to, across all sources and time periods."
+    },
+    {
+      "label": "Interviews",
+      "value": "0Applications that have progressed to at least one interview stage."
+    },
+    {
+      "label": "Offers",
+      "value": "0Applications where an employer has extended a formal offer."
+    },
+    {
+      "label": "Jobs Found",
+      "value": "44Roles discovered by the Scout agent and matched against your profile."
+    },
+    {
+      "label": "Avg Fit Score",
+      "value": "38.8%Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting."
+    },
+    {
+      "label": "Agent Runs",
+      "value": "200Total number of agent executions (discovery, tailoring, scoring, etc.) in this period."
+    },
+    {
+      "label": "Agent Spend",
+      "value": "$0.12Total LLM API cost incurred by agent runs in this period."
+    }
+  ],
+  "displayedFunnel": [
+    {
+      "label": "Jobs Found",
+      "value": "44"
+    },
+    {
+      "label": "Applied",
+      "value": "7"
+    },
+    {
+      "label": "Screened",
+      "value": "0"
+    },
+    {
+      "label": "Interviewed",
+      "value": "0"
+    },
+    {
+      "label": "Offers",
+      "value": "0"
+    }
+  ],
+  "displayedConversion": [
+    {
+      "label": "Found → Applied",
+      "value": "15.91%Share of discovered jobs you went on to apply for."
+    },
+    {
+      "label": "Applied → Screened",
+      "value": "0%Share of applications that advanced to a recruiter screen."
+    },
+    {
+      "label": "Screened → Interview",
+      "value": "0%Share of screened applications that reached an interview."
+    },
+    {
+      "label": "Interview → Offer",
+      "value": "0%Share of interviews that resulted in a formal offer."
+    }
+  ],
+  "displayedAtsTotal": "44 scored jobs",
+  "displayedRoi": [
+    {
+      "label": "Total spend",
+      "value": "$0.12Cumulative LLM API cost across all agent runs in this period."
+    },
+    {
+      "label": "Agent runs",
+      "value": "200Total number of agent executions recorded in this period."
+    },
+    {
+      "label": "Avg duration",
+      "value": "55.0sAverage wall-clock time per agent run in this period."
+    }
+  ],
+  "displayedSourcesTotalSvgText": "44",
+  "displayedSources": [
+    "Greenhouse36%",
+    "Ashby34%",
+    "Lever21%",
+    "Remoteok7%",
+    "Remotive2%"
+  ],
+  "displayedTopSkillsCount": 0,
+  "topSkillsRawText": "Top Skills in Demand",
+  "displayedProbabilityScore": "44%",
+  "displayedEmployerActivity": [
+    "harvey Received your application16m ago",
+    "Empire Life Application in progress51m ago",
+    "Plenti Received your application55m ago",
+    "airwallex Received your application59m ago",
+    "Empire Life Application in progress1h ago"
+  ],
+  "displayedRecruiterTrends": [
+    "Agent runs (last 12 wks)200 total",
+    "Avg runs / week16.7 · no change"
+  ],
+  "displayedMarketVsYou": "Market vs. Your PerformanceApplications / monthMarket data: not connectedyou 14Interview rateMarket data: not connectedyou 0%No market data source connected — showing your own figures only.",
+  "displayedTrendIndicators": [
+    "Your application velocityno changeYour application velocity: percentage change vs. the prior period.",
+    "Agent automation spendno changeAgent automation spend: percentage change vs. the prior period.",
+    "Avg job fit scoreno changeAvg job fit score: percentage change vs. the prior period."
+  ],
+  "heatmapCellCount": 35,
+  "periodClickResults": [
+    {
+      "period": "7d",
+      "newNetworkCalls": [
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=7d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+          "status": 200
+        }
+      ],
+      "funnelDisplayed": [
+        {
+          "label": "Jobs Found",
+          "value": "44"
+        },
+        {
+          "label": "Applied",
+          "value": "7"
+        },
+        {
+          "label": "Screened",
+          "value": "0"
+        },
+        {
+          "label": "Interviewed",
+          "value": "0"
+        },
+        {
+          "label": "Offers",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "period": "30d",
+      "newNetworkCalls": [
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=30d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=30d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+          "status": 200
+        }
+      ],
+      "funnelDisplayed": [
+        {
+          "label": "Jobs Found",
+          "value": "44"
+        },
+        {
+          "label": "Applied",
+          "value": "7"
+        },
+        {
+          "label": "Screened",
+          "value": "0"
+        },
+        {
+          "label": "Interviewed",
+          "value": "0"
+        },
+        {
+          "label": "Offers",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "period": "90d",
+      "newNetworkCalls": [
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=90d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=90d",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+          "status": 200
+        }
+      ],
+      "funnelDisplayed": [
+        {
+          "label": "Jobs Found",
+          "value": "44"
+        },
+        {
+          "label": "Applied",
+          "value": "7"
+        },
+        {
+          "label": "Screened",
+          "value": "0"
+        },
+        {
+          "label": "Interviewed",
+          "value": "0"
+        },
+        {
+          "label": "Offers",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "period": "all",
+      "newNetworkCalls": [
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=all",
+          "status": 200
+        },
+        {
+          "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+          "status": 200
+        }
+      ],
+      "funnelDisplayed": [
+        {
+          "label": "Jobs Found",
+          "value": "44"
+        },
+        {
+          "label": "Applied",
+          "value": "7"
+        },
+        {
+          "label": "Screened",
+          "value": "0"
+        },
+        {
+          "label": "Interviewed",
+          "value": "0"
+        },
+        {
+          "label": "Offers",
+          "value": "0"
+        }
+      ]
+    }
+  ],
+  "tooltipHoverTest": {
+    "tooltipRoleCount": 20
+  },
+  "finishedAt": "2026-07-17T16:51:03.035Z",
+  "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/analytics"
+}

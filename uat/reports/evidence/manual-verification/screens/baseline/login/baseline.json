@@ -1,0 +1,17 @@
+{
+  "timestamp_utc": "2026-07-17T13:32:07.692Z",
+  "url": "https://5cb5f0620.abacusai.cloud/login",
+  "final_url_after_redirects": "https://5cb5f0620.abacusai.cloud/login",
+  "document_http_status": 200,
+  "console_messages": [],
+  "failed_requests": [],
+  "page_title": "Aether Career Agent",
+  "visible_h1_or_main_heading": "Sign in",
+  "load_time_ms": 597,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "auth_mode": "public",
+  "notes": "FINDING: No wireframe; CRITICAL PATH. Testable: form validation, error states, rate limiting, token storage, redirect."
+}

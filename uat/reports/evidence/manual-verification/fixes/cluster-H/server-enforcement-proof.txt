@@ -1,0 +1,22 @@
+=== apps/api/app/security.py (branch fix/mv-cluster-h @ 336d7ad) ===
+23:BCRYPT_MAX_PASSWORD_BYTES = 72
+40:def verify_password(password: str, password_hash: str) -> bool:
+46:    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+47:        return False
+52:        return False
+
+=== apps/api/app/repositories/user.py ===
+14:from app.security import BCRYPT_MAX_PASSWORD_BYTES
+20:#: Password policy: at least 8 characters, at least one digit, and at most
+21:#: ``BCRYPT_MAX_PASSWORD_BYTES`` (72) UTF-8 bytes. The upper bound closes
+32:def validate_password_policy(password: str) -> list[str]:
+36:        problems.append(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
+37:    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+39:            f"password must be at most {BCRYPT_MAX_PASSWORD_BYTES} bytes"
+42:        problems.append("password must contain at least one digit")
+118:        columns are UNIQUE, so at most one row matches per column; when a value
+
+=== commit 336d7ad touches apps/api (server) ===
+ apps/api/app/repositories/user.py                  | 10 ++-
+ apps/api/app/security.py                           | 17 ++++
+ apps/api/tests/test_mv_signup_001_bcrypt.py        | 86 +++++++++++++++++++++

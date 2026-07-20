@@ -1,0 +1,13 @@
+{
+  "surface": "d",
+  "iter": "2",
+  "account": "mv-qa-final2-2a385f-nr@example.com",
+  "url": "https://5cb5f0620.abacusai.cloud/dashboard/cover-letters",
+  "utc": "2026-07-20T09:01:12.953Z",
+  "chosen_job": "c274027be6e3faa0496d20d9d",
+  "alertPresent": true,
+  "alertText": "Add your resume before generating a cover letter.",
+  "letterCards": 0,
+  "consoleErrors": [],
+  "pageErrors": []
+}

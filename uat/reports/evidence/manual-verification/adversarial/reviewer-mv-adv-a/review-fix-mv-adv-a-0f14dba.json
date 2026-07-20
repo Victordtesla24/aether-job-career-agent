@@ -1,0 +1,64 @@
+{
+  "reviewedBranch": "fix/mv-adv-a",
+  "reviewedCommit": "0f14dba07f5967ed35200e88c3dbe8d7399e9f4a",
+  "baseCommit": "bdf6ef9",
+  "reviewer": "reviewer agent (non-author, adversarial, MANUAL-VERIFICATION Stage 3 §5)",
+  "timestampUtc": "2026-07-19T00:06:30Z",
+  "verdict": "FAIL",
+  "label_collision_gone": true,
+  "no_exception_leak": true,
+  "refund_correct": true,
+  "no_regression": true,
+  "node_modules_env_clean": true,
+  "targeted_tests": "backend: 14 passed (apps/api/tests/test_gap_p7_async_001.py, incl. new test_noop_tailor_completes_not_failed); frontend: 463/463 passed full vitest suite (69 files), including the two targeted files: jobs/__tests__/page.test.tsx 9/9, applications/__tests__/page.test.tsx 2/2, and the pre-existing Resume Studio no-op regression test (src/__tests__/dashboard/resume-mv-honesty.test.tsx) unaffected",
+  "per_check": [
+    {
+      "n": "1a",
+      "ok": true,
+      "note": "apps/web/src/app/dashboard/applications/page.tsx:328 now reads '{activeCount} pipeline item(s) across 8 stages' (was 'active application(s)', diff base line ~322). grep -rniE 'active.{0,3}application' apps/web/src apps/api/app (excluding tests) returns only apps/web/src/components/dashboard/DashboardStats.tsx:38 ('Active Applications' label) and apps/api/app/routers/analytics.py:47 (comment) -- both are the CANONICAL submitted-count surfaces the finding says should keep the label. The tracker is the only place the label changed and the only place it was wrong."
+    },
+    {
+      "n": "1b",
+      "ok": true,
+      "note": "Diff for applications/page.tsx is a single-string text change plus a comment (git diff bdf6ef9..0f14dba -- apps/web/src/app/dashboard/applications/page.tsx: +8/-1 lines, all within the <p data-testid=\"tracker-subtitle\"> element). activeCount computation, board columns, and card content are untouched."
+    },
+    {
+      "n": "1c",
+      "ok": true,
+      "note": "grep -rn \"active application\" apps/web/src apps/api/app (fix branch checked out) returns zero matches outside the new test file's assertions/comments (apps/web/src/app/dashboard/applications/__tests__/page.test.tsx:100,109,172) -- confirmed no other UI-rendered label collision remains."
+    },
+    {
+      "n": "2a",
+      "ok": true,
+      "note": "apps/api/app/workers/tasks.py:192 'except NoChangesApplied as exc:' is placed BEFORE the generic 'except Exception as exc:' (line 213) in run_agent_job's single-agent branch, and calls repo.mark_completed (line 210), never repo.mark_failed, so BackgroundJob.error stays null and _honest_message (which prefixes 'ClassName: msg') is never invoked for this path. Verified live: reverting tasks.py to bdf6ef9 and re-running the new test reproduced the original leak verbatim in the log -- 'job ... failed: NoChangesApplied: No verifiable changes could be applied...' -- and the test asserted row['status']=='failed' (fail-before). Restoring the fix, the same test passes (row['status']=='completed', row['error'] is None). apps/web/src/app/dashboard/jobs/page.tsx:425 checks out.noChangesApplied and renders an amber data-testid='tailor-notice' (line 822), never the red role='alert' banner (that only renders from the separate 'error' state, page.tsx:796-797, untouched by this diff)."
+    },
+    {
+      "n": "2b",
+      "ok": true,
+      "note": "tasks.py's honest_result dict (lines 203-209ish: resume_id: None, changes: 0, rejected: exc.rejected, conversionMetrics: None, noChangesApplied: True, approvalRequired: False, message: str(exc)) is field-for-field identical to the synchronous /tailor/run route's except NoChangesApplied return in apps/api/app/routers/agents.py (~1254-1262)."
+    },
+    {
+      "n": "2c",
+      "ok": true,
+      "note": "Async worker calls _execute_reserved_run with manage_quota=False (apps/api/app/routers/agents.py:663-671,694-696), so its generic 'except Exception' refund-once is a no-op for the worker path; the ONLY refund for the no-op case is tasks.py:211 repo.refund_single_reservation(job_id), gated behind mark_completed succeeding (first-terminal-wins) -- exactly once. The pre-existing generic 'except Exception as exc:' handler in run_agent_job (tasks.py:213-218, UNCHANGED by this diff) still calls mark_failed + refund_single_reservation for any REAL failure -- confirmed by diff (no lines removed/changed in that block) and by the unrelated existing tests in test_gap_p7_async_001.py continuing to pass (14/14)."
+    },
+    {
+      "n": "2d",
+      "ok": false,
+      "note": "FAIL. The commit message characterizes the still-'failed' AgentRun audit-table row as 'pre-existing, internal' -- this is factually wrong. Fresh evidence (Read, this run): apps/api/app/routers/agents.py:1131-1137 GET /agents/runs is gated only by 'current_user: CurrentUser' (the plain authenticated-user dependency, apps/api/app/middleware/auth.py:58), NOT an admin guard (contrast apps/api/app/routers/admin.py, every route on AdminUser). apps/api/app/repositories/agent_run.py:76-84 list_recent() selects status+error filtered only by userId. apps/web/src/app/dashboard/agents/page.tsx:374-404 renders this in a 'Recent runs' table (data-testid='agent-runs-table') on the ordinary /dashboard/agents route: line 388-397 colors run.status red when 'failed', line 403 renders run.error verbatim. Root cause: apps/api/app/routers/agents.py:735-738 (_execute_reserved_run's generic 'except Exception as exc: runs.finish(run_id, \"failed\", error=str(exc))') marks the AgentRun row failed for ANY exception including NoChangesApplied, and this diff does not touch agents.py at all -- so a user tailoring from the Jobs board, on a full-rejection no-op, will see the Jobs page correctly show an honest amber notice, but if they then check /dashboard/agents 'Recent runs' they will see the SAME tailor run marked red 'failed' with the (non-leaking but still failure-framed) message text. This is the same category of dishonesty (no-op mislabeled as failure) MV-adv-A-002 exists to eliminate, just via a sibling surface the fix did not cover. Note this is NOT a NEW regression introduced by this diff -- confirmed via a second fresh probe that this exact behavior is also present, unchanged, in the already-shipped/verified-good synchronous Resume Studio path (_dispatch -> _record_run -> _execute_reserved_run, same code, agents.py:892-900,587-660) -- so the gap pre-dates this diff and is shared with MV-resume-studio-003's approved flow. It is nonetheless user-visible today, contradicting the scope note, and the review brief's explicit rule for this check is: if it surfaces to users anywhere, FAIL."
+    },
+    {
+      "n": "3",
+      "ok": true,
+      "note": "git show --stat 0f14dba: 6 files (apps/api/app/workers/tasks.py +23, apps/api/tests/test_gap_p7_async_001.py +46, applications/__tests__/page.test.tsx +77, applications/page.tsx +8/-1, jobs/__tests__/page.test.tsx +47, jobs/page.tsx +35/-5) -- all directly scoped to MV-adv-A-001/002, no unrelated files. grep -iE 'node_modules|\\.env' on 'git show --stat 0f14dba' is empty (exit 1). grep for eslint-disable/@ts-ignore/@ts-expect-error/Math.random/TODO/FIXME/--no-verify/'as any' across the diff: zero matches. No pre-commit hooks configured in this repo (.git/hooks has only *.sample files, no husky/.pre-commit-config.yaml) so there is no hook-bypass mechanism to check for a --no-verify flag against; nothing to detect either way, treated as no finding."
+    },
+    {
+      "n": "4",
+      "ok": true,
+      "note": "cd apps/api && DATABASE_URL=$DATABASE_URL_TEST AETHER_CREDENTIAL_KEY=<redacted, first 8: X5-HScT0> AETHER_ASYNC_GENERATION=false pytest tests/test_gap_p7_async_001.py -q -> 14 passed. cd apps/web && pnpm test -- --run <the 2 files> -> ran full 69-file/463-test suite (vitest ignored the file filter under this invocation form but both target files are visible in the output and passed): jobs/__tests__/page.test.tsx 9/9, applications/__tests__/page.test.tsx 2/2, 463/463 overall, 0 regressions. Fail-before/pass-after spot-checked BOTH a backend and a frontend fix file in the dedicated worktree (.claude/worktrees/agent-a752b21a1217a19b5, already checked out at 0f14dba): (1) reverted apps/api/app/workers/tasks.py to bdf6ef9 -> test_noop_tailor_completes_not_failed genuinely FAILS ('assert 'failed' == 'completed'', with the exact leaked log line 'job ... failed: NoChangesApplied: ...' captured) -> restored -> passes again. (2) reverted apps/web/src/app/dashboard/applications/page.tsx to bdf6ef9 -> the MV-adv-A-001 test genuinely FAILS ('expected .. not to match /active application/', actual '11 active applications across 8 stages') -> restored -> passes again (462/463 -> 463/463). Both tests are non-tautological: they assert on rendered/persisted content, not on mocks of the code under test."
+    }
+  ],
+  "blocking_issues": [
+    "apps/api/app/routers/agents.py:735-738 (_execute_reserved_run generic except) + apps/api/app/routers/agents.py:1131-1137 (GET /agents/runs, CurrentUser-gated not admin-gated) + apps/web/src/app/dashboard/agents/page.tsx:388-403 (Recent runs table, ordinary /dashboard/agents route): the AgentRun row for a tailoring no-op is still user-visible with status='failed' (red) even after this fix, contradicting the commit message's 'pre-existing, internal' characterization. Pre-existing (shared with the already-approved Resume Studio sync path, not introduced by this diff) but explicitly in scope per the review brief's FAIL rule for this check. Recommend a narrow follow-up: either (a) extend NoChangesApplied handling one level up so _execute_reserved_run finishes the AgentRun with a distinct honest, non-'failed' status for this specific exception type (mirroring what tasks.py now does for BackgroundJob), or (b) soften the Agents-dashboard 'Recent runs' rendering to distinguish an honest no-op from a real failure. This should be filed and tracked (e.g. as a new MV finding) rather than silently accepted, and equally applies to the pre-existing Resume Studio flow, not just Jobs-board."
+  ]
+}

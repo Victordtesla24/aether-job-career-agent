@@ -1,0 +1,57 @@
+{
+  "A1_Platform_forward": {
+    "present": true,
+    "score": "0 / 10",
+    "chips": [
+      "JavaScript (missing)",
+      "PostgreSQL (missing)",
+      "DevOps (missing)",
+      "SlideShare (missing)",
+      "Platform (missing)",
+      "Engineer (missing)",
+      "Core (missing)",
+      "competitive (missing)",
+      "quarterly (missing)",
+      "flexible (missing)"
+    ]
+  },
+  "A4_Systems_novel": {
+    "present": true,
+    "score": "0 / 10",
+    "chips": [
+      "Terraform (missing)",
+      "Docker (missing)",
+      "القاهرةSalary (missing)",
+      "बईLocation (missing)",
+      "ソウルSalary (missing)",
+      "東京Salary (missing)",
+      "Engineer (missing)",
+      "Systems (missing)",
+      "competitive (missing)",
+      "quarterly (missing)"
+    ]
+  },
+  "A3_Backend_standalone": {
+    "present": true,
+    "score": "0 / 10",
+    "chips": [
+      "Ansible (missing)",
+      "Redis (missing)",
+      "Engineer (missing)",
+      "İstanbul (missing)",
+      "Backend (missing)",
+      "Zürich (missing)",
+      "Киев (missing)",
+      "offices (missing)",
+      "daily (missing)",
+      "open (missing)"
+    ]
+  },
+  "consoleErrors": [
+    "Failed to fetch RSC payload for https://5cb5f0620.abacusai.cloud/forgot-password. Falling back to browser navigation. TypeError: Failed to fetch\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:45419)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58942\n    at Object.u [as task] (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31819)\n    at c.s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:32524)\n    at c.enqueue (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31949)\n    at s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58905)\n    at i (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58445)\n    at a (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:65225)\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:75079)\n    at Object.action (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:2:7084)",
+    "Failed to fetch RSC payload for https://5cb5f0620.abacusai.cloud/signup. Falling back to browser navigation. TypeError: Failed to fetch\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:45419)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58942\n    at Object.u [as task] (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31819)\n    at c.s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:32524)\n    at c.enqueue (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31949)\n    at s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58905)\n    at i (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58445)\n    at a (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:65225)\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:75079)\n    at Object.action (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:2:7084)",
+    "Failed to fetch RSC payload for https://5cb5f0620.abacusai.cloud/privacy-policy. Falling back to browser navigation. TypeError: Failed to fetch\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:45419)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58942\n    at Object.u [as task] (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31819)\n    at c.s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:32524)\n    at c.enqueue (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31949)\n    at s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58905)\n    at i (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58445)\n    at a (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:65225)\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:75079)\n    at Object.action (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:2:7084)",
+    "Failed to fetch RSC payload for https://5cb5f0620.abacusai.cloud/terms. Falling back to browser navigation. TypeError: Failed to fetch\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:45419)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58942\n    at Object.u [as task] (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31819)\n    at c.s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:32524)\n    at c.enqueue (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:31949)\n    at s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58905)\n    at i (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:58445)\n    at a (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:65225)\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:1:75079)\n    at Object.action (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js:2:7084)"
+  ],
+  "pageErrors": []
+}

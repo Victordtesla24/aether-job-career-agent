@@ -1,0 +1,76 @@
+{
+  "id": "c1fae2c27a2f5e808f1d9be78",
+  "userId": "c6c99121d1d2a26ae37543ddd",
+  "version": 1,
+  "label": "Uploaded \u2014 Priya_Natarajan_Resume",
+  "sections": {
+    "bullets": [
+      {
+        "text": "Rearchitected the Jira activity-stream ingestion service in Rust with Tokio, cutting p99 latency from 380ms to 42ms on a 4 billion event/day Kafka firehose.",
+        "evidenceRef": "bullet-0"
+      },
+      {
+        "text": "Built an Elixir/Phoenix presence fabric on Erlang/OTP supervision trees that sustained 2.1 million concurrent websocket sessions during Confluence launches.",
+        "evidenceRef": "bullet-1"
+      },
+      {
+        "text": "Migrated the Bitbucket audit log store from Cassandra to ScyllaDB, reducing storage cost 41% and tail read latency 63%.",
+        "evidenceRef": "bullet-2"
+      },
+      {
+        "text": "Designed the design-collaboration CRDT sync engine in Rust, shipping a gRPC streaming API with Protocol Buffers used by 90 million monthly active users.",
+        "evidenceRef": "bullet-3"
+      },
+      {
+        "text": "Introduced Redpanda to replace a legacy queue, halving broker fleet size.",
+        "evidenceRef": "bullet-4"
+      },
+      {
+        "text": "Wrote the ClickHouse analytics rollup that powered Canva's editor telemetry.",
+        "evidenceRef": "bullet-5"
+      },
+      {
+        "text": "Implemented an Erlang/OTP rate-limiter guarding the ticketing ingestion path.",
+        "evidenceRef": "bullet-6"
+      },
+      {
+        "text": "Built NATS JetStream fan-out for real-time agent notifications.",
+        "evidenceRef": "bullet-7"
+      }
+    ],
+    "contact": {},
+    "raw_text": "PRIYA NATARAJAN\nStaff Distributed Systems Engineer\nSydney, NSW, Australia\nEmail: priya.natarajan@example.com | Phone: +61 411 908 772\nLinkedIn: linkedin.com/in/priyanatarajan-rust | GitHub: github.com/pnatarajan-elixir\n\nPROFESSIONAL SUMMARY\nStaff-level backend engineer with 9 years building high-throughput streaming\nand messaging platforms in Rust and Elixir. Specialist in Kafka event\npipelines, ScyllaDB storage, and Erlang/OTP fault-tolerant supervision trees.\nI have led teams delivering low-latency gRPC services processing over 4 billion\nevents per day.\n\nCORE SKILLS\nRust (Tokio, async), Elixir, Erlang/OTP, Phoenix LiveView, Apache Kafka,\nScyllaDB, ClickHouse, gRPC, Protocol Buffers, Redpanda, NATS JetStream,\nRust embedded (no_std), property-based testing with proptest.\n\nEXPERIENCE\n\nAtlassian - Staff Distributed Systems Engineer (2021 - Present)\n- Rearchitected the Jira activity-stream ingestion service in Rust with Tokio,\n  cutting p99 latency from 380ms to 42ms on a 4 billion event/day Kafka firehose.\n- Built an Elixir/Phoenix presence fabric on Erlang/OTP supervision trees that\n  sustained 2.1 million concurrent websocket sessions during Confluence launches.\n- Migrated the Bitbucket audit log store from Cassandra to ScyllaDB, reducing\n  storage cost 41% and tail read latency 63%.\n\nCanva - Senior Backend Engineer (2018 - 2021)\n- Designed the design-collaboration CRDT sync engine in Rust, shipping a gRPC\n  streaming API with Protocol Buffers used by 90 million monthly active users.\n- Introduced Redpanda to replace a legacy queue, halving broker fleet size.\n- Wrote the ClickHouse analytics rollup that powered Canva's editor telemetry.\n\nZendesk - Backend Engineer (2015 - 2018)\n- Implemented an Erlang/OTP rate-limiter guarding the ticketing ingestion path.\n- Built NATS JetStream fan-out for real-time agent notifications.\n\nEDUCATION\nB.E. Computer Science, University of New South Wales (UNSW Sydney), 2015\n\nCERTIFICATIONS\nConfluent Certified Developer for Apache Kafka\n"
+  },
+  "sourceJobId": null,
+  "parentId": null,
+  "formatHash": "2749802b1badd0c6",
+  "approvalStatus": "approved",
+  "createdAt": "2026-07-19T22:52:03.903000",
+  "updatedAt": "2026-07-19T22:52:03.903000",
+  "storyExtraction": {
+    "created": 5,
+    "dropped": [
+      "Replacing Legacy Queue with Redpanda at Canva"
+    ],
+    "story_ids": [
+      "cb0841a103bca5665111b65e1",
+      "c4f22778b47300c75a2790d2b",
+      "c00c0ef421545073d6ff0371c",
+      "c40f462409ef1917b304b5eda",
+      "ce4558ec4797c93090e3ea5e5"
+    ],
+    "duration_ms": 8183,
+    "approvalRequired": false,
+    "billingAudit": {
+      "credentialSource": "environment",
+      "authMode": "api_key",
+      "provider": "openrouter",
+      "quotaPath": "metered_api"
+    },
+    "model": "qwen/qwen3-coder-next",
+    "tokensIn": 401,
+    "tokensOut": 103,
+    "costUsd": 0.000607,
+    "run_id": "c62b6e0d37d0f23337c688cc8"
+  }
+}

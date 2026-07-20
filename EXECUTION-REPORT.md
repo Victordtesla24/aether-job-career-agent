@@ -12,3 +12,10 @@ allowlist + persistence fix (DEFECT-B), asynchronous background generation (ARQ/
 and a discovery-cron paywall bypass — see **§10** of `docs/delivery/EXECUTION-REPORT.md` and,
 for the full Phase-7 record, `docs/delivery/PHASE7-GAP-ANALYSIS.md`, `PHASE7-CLAIM-LEDGER.md`,
 `PHASE7-GOVERNANCE-AUDIT.md`, and `PHASE7-BLOCKED-ON-HUMAN.md`.
+
+**MANUAL-VERIFICATION (2026-07-20)** is the current latest phase record, superseding Phase 7 as
+the most recent delivery event: a per-wireframe human-grade manual testing → fix → adversarial
+re-verify pass across all 29 screens. See
+**[`docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md`](docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md)**
+for the full record (168 findings, 129 VERIFIED-CLOSED, gate table G-01..G-11, governance audit,
+claim ledger, blocked-on-human checklist).

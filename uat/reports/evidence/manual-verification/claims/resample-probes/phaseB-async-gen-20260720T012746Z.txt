@@ -1,0 +1,27 @@
+=== CLM-014 async 202 {job_id,enqueued} for generation endpoints (Pro account) ===
+captured_utc: 2026-07-20T01:27:46Z
+sample job_id for tailor/cover: c612473570eecbae250920a60
+
+### POST /agents/pipeline/run
+{"job_id":"c2c5633d8ea570d90c7d55944","status":"enqueued"}
+HTTP:202
+
+----
+### POST /agents/tailor/run
+{"job_id":"cecfe109c9d44c58c79e0fd32","status":"enqueued"}
+HTTP:202
+
+----
+### POST /agents/cover-letter/run
+{"job_id":"cabaee70736fa47acee08f0ba","status":"enqueued"}
+HTTP:202
+
+----
+### POST /agents/cover-letters/run
+{"detail":"Unknown agent 'cover-letters'"}
+HTTP:404
+
+----
+
+-- list current resumes for this account (tailor/cover may need one) --
+resume count: 0

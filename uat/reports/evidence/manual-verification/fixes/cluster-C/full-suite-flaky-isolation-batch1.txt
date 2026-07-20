@@ -1,0 +1,26 @@
+...........................................                              [100%]
+=============================== warnings summary ===============================
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_tailoring_agent.py::TestTailoring::test_tailoring_does_not_invent_skills
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_anthropic_subscription_oauth_write_is_rejected
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:1941: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode = _validate_provider_auth(provider, body.authMode, body.secret)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+43 passed, 9 warnings in 135.84s (0:02:15)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

@@ -1,0 +1,10 @@
+{
+  "R1": {
+    "active_paid": false,
+    "plan": "free"
+  },
+  "R2": {
+    "active_paid": false,
+    "plan": "free"
+  }
+}

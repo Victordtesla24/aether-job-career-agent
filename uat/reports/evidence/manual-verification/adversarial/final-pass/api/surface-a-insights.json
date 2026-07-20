@@ -1,0 +1,64 @@
+{
+  "utc": "2026-07-20T08:58:01Z",
+  "jobs": {
+    "muni-precomposed": "cc110aac2c4fc9b4de597bdb9",
+    "novel-unicode": "cb5e1a7c9aff181558b258a11"
+  },
+  "results": {
+    "muni-precomposed": {
+      "job_id": "cc110aac2c4fc9b4de597bdb9",
+      "letter_id": "c57fa039d2e758e6368e726ed",
+      "via": "db-seeded-letter (chips are deployed-tokenizer output on real JD; letter text is fixture)",
+      "insights_http": 200,
+      "keywords": [
+        "PostgreSQL",
+        "GraphQL",
+        "Kubernetes",
+        "Prometheus",
+        "Terraform",
+        "Golang",
+        "Docker",
+        "microservices",
+        "observability",
+        "Platform"
+      ],
+      "score": "9/10",
+      "attempts": [
+        {
+          "cover_letter_id": null,
+          "failed": true,
+          "error": "The AI service is temporarily unavailable. Please try again in a moment.",
+          "missingResume": null
+        }
+      ]
+    },
+    "novel-unicode": {
+      "job_id": "cb5e1a7c9aff181558b258a11",
+      "letter_id": "c7981175d0ff1fc84dc2330eb",
+      "via": "db-seeded-letter (chips are deployed-tokenizer output on real JD; letter text is fixture)",
+      "insights_http": 200,
+      "keywords": [
+        "PostgreSQL",
+        "gRPC",
+        "Reliability",
+        "Kubernetes",
+        "Terraform",
+        "Kafka",
+        "Rust",
+        "observability",
+        "\u0130stanbulSalary",
+        "\u041a\u0438\u0435\u0432Location"
+      ],
+      "score": "7/10",
+      "attempts": [
+        {
+          "cover_letter_id": null,
+          "failed": true,
+          "error": "The AI service is temporarily unavailable. Please try again in a moment.",
+          "missingResume": null
+        }
+      ]
+    }
+  },
+  "note": "Chips = GET /cover-letters/{id}/insights on prod @f491170 (deployed _jd_keywords tokenizer). Where via=db-seeded, only the letter row is a fixture; the keyword SET is genuine deployed-code output on the real crafted JD."
+}

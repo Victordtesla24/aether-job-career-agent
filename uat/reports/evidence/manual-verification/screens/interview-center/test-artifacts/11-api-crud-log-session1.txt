@@ -1,0 +1,143 @@
+=== 1. CREATE valid interview ===
+{"id":"cf23fcdc8e6662852e2f0a0c0","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"video","status":"scheduled","scheduled_at":"2026-08-01T10:00:00Z","duration_minutes":45,"location":null,"meeting_link":null,"notes":"MV-interview-center-001 create test","contact_name":"Jane Recruiter","contact_email":"jane@example.com","created_at":"2026-07-17T16:14:30.146122Z","updated_at":"2026-07-17T16:14:30.146122Z"}
+HTTP_STATUS:201
+=== 2. GET list -> appears ===
+[
+    {
+        "id": "cf23fcdc8e6662852e2f0a0c0",
+        "user_id": "cc29a76e324fbf19f438eb8be",
+        "application_id": "cc3aaae4343a969731915097b",
+        "type": "video",
+        "status": "scheduled",
+        "scheduled_at": "2026-08-01T10:00:00Z",
+        "duration_minutes": 45,
+        "location": null,
+        "meeting_link": null,
+        "notes": "MV-interview-center-001 create test",
+        "contact_name": "Jane Recruiter",
+        "contact_email": "jane@example.com",
+        "created_at": "2026-07-17T16:14:30.146122Z",
+        "updated_at": "2026-07-17T16:14:30.146122Z"
+    }
+]
+=== 3. GET single ===
+{"id":"cf23fcdc8e6662852e2f0a0c0","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"video","status":"scheduled","scheduled_at":"2026-08-01T10:00:00Z","duration_minutes":45,"location":null,"meeting_link":null,"notes":"MV-interview-center-001 create test","contact_name":"Jane Recruiter","contact_email":"jane@example.com","created_at":"2026-07-17T16:14:30.146122Z","updated_at":"2026-07-17T16:14:30.146122Z"}
+HTTP:200
+=== 4. GET /workspaces/interviews/prep after creating scheduled (not yet 'interview' app status) ===
+{
+    "session": null,
+    "compliance": {
+        "message": "No interview scheduled. Once an application progresses to the interview stage, your prep brief and predicted questions will appear here.",
+        "level": "info"
+    },
+    "brief": null,
+    "questions": [],
+    "liveAssist": {
+        "enabled": false,
+        "fillerWordsPerMin": 0,
+        "wordsPerMin": 0,
+        "talkListenRatio": {
+            "talk": 50,
+            "listen": 50
+        },
+        "coachingCue": null
+    },
+    "debrief": null
+}
+=== 5. PATCH edit notes + location ===
+{"id":"cf23fcdc8e6662852e2f0a0c0","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"video","status":"scheduled","scheduled_at":"2026-08-01T10:00:00Z","duration_minutes":45,"location":"Zoom - Melbourne","meeting_link":null,"notes":"MV-interview-center-001 EDITED note <script>alert(1)</script> üñîçøđé 😀","contact_name":"Jane Recruiter","contact_email":"jane@example.com","created_at":"2026-07-17T16:14:30.146122Z","updated_at":"2026-07-17T16:14:39.199483Z"}
+HTTP:200
+=== 6. GET single -> verify edit persisted ===
+{
+    "id": "cf23fcdc8e6662852e2f0a0c0",
+    "user_id": "cc29a76e324fbf19f438eb8be",
+    "application_id": "cc3aaae4343a969731915097b",
+    "type": "video",
+    "status": "scheduled",
+    "scheduled_at": "2026-08-01T10:00:00Z",
+    "duration_minutes": 45,
+    "location": "Zoom - Melbourne",
+    "meeting_link": null,
+    "notes": "MV-interview-center-001 EDITED note <script>alert(1)</script> \u00fc\u00f1\u00ee\u00e7\u00f8\u0111\u00e9 \ud83d\ude00",
+    "contact_name": "Jane Recruiter",
+    "contact_email": "jane@example.com",
+    "created_at": "2026-07-17T16:14:30.146122Z",
+    "updated_at": "2026-07-17T16:14:39.199483Z"
+}
+=== 7. CREATE empty body -> expect 422 ===
+{"detail":[{"type":"missing","loc":["body","application_id"],"msg":"Field required","input":{}},{"type":"missing","loc":["body","scheduled_at"],"msg":"Field required","input":{}}]}
+HTTP:422
+=== 8. CREATE invalid type -> expect 422 ===
+{"detail":"Invalid type 'telepathic'. Valid: ['hr', 'onsite', 'panel', 'phone', 'technical', 'video']"}
+HTTP:422
+=== 9. CREATE boundary duration too low (10 < 15) -> expect 422 ===
+{"detail":[{"type":"greater_than_equal","loc":["body","duration_minutes"],"msg":"Input should be greater than or equal to 15","input":10,"ctx":{"ge":15}}]}
+HTTP:422
+=== 10. CREATE boundary duration too high (481 > 480) -> expect 422 ===
+{"detail":[{"type":"less_than_equal","loc":["body","duration_minutes"],"msg":"Input should be less than or equal to 480","input":481,"ctx":{"le":480}}]}
+HTTP:422
+=== 11. CREATE with application_id referencing NON-EXISTENT app -> check FK behavior ===
+{"id":"c4fcb3bb3f5c4c245c37117a3","user_id":"cc29a76e324fbf19f438eb8be","application_id":"MV-interview-center-nonexistent-app-id","type":"video","status":"scheduled","scheduled_at":"2026-08-01T10:00:00Z","duration_minutes":60,"location":null,"meeting_link":null,"notes":null,"contact_name":null,"contact_email":null,"created_at":"2026-07-17T16:15:19.073102Z","updated_at":"2026-07-17T16:15:19.073102Z"}
+HTTP:201
+=== 12. UNAUTHENTICATED GET /interviews -> expect 401 ===
+{"detail":"Not authenticated"}
+HTTP:401
+=== 13. COMPLETE interview ===
+{"id":"cf23fcdc8e6662852e2f0a0c0","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"video","status":"completed","scheduled_at":"2026-08-01T10:00:00Z","duration_minutes":45,"location":"Zoom - Melbourne","meeting_link":null,"notes":"MV-interview-center-001 EDITED note <script>alert(1)</script> üñîçøđé 😀","contact_name":"Jane Recruiter","contact_email":"jane@example.com","created_at":"2026-07-17T16:14:30.146122Z","updated_at":"2026-07-17T16:15:19.545396Z"}
+HTTP:200
+=== 14. CREATE 2nd interview for cancel test ===
+{"id":"cdcfcc2cd6c11b0217f2c88ed","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"phone","status":"scheduled","scheduled_at":"2026-08-05T09:00:00Z","duration_minutes":60,"location":null,"meeting_link":null,"notes":"MV-interview-center-002 cancel test","contact_name":null,"contact_email":null,"created_at":"2026-07-17T16:15:37.200096Z","updated_at":"2026-07-17T16:15:37.200096Z"}
+IID2=cdcfcc2cd6c11b0217f2c88ed
+=== 15. CANCEL interview 2 ===
+{"id":"cdcfcc2cd6c11b0217f2c88ed","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"phone","status":"cancelled","scheduled_at":"2026-08-05T09:00:00Z","duration_minutes":60,"location":null,"meeting_link":null,"notes":"MV-interview-center-002 cancel test","contact_name":null,"contact_email":null,"created_at":"2026-07-17T16:15:37.200096Z","updated_at":"2026-07-17T16:15:37.669848Z"}
+HTTP:200
+=== 16. GET single -> verify status=cancelled persisted ===
+{"id":"cdcfcc2cd6c11b0217f2c88ed","user_id":"cc29a76e324fbf19f438eb8be","application_id":"cc3aaae4343a969731915097b","type":"phone","status":"cancelled","scheduled_at":"2026-08-05T09:00:00Z","duration_minutes":60,"location":null,"meeting_link":null,"notes":"MV-interview-center-002 cancel test","contact_name":null,"contact_email":null,"created_at":"2026-07-17T16:15:37.200096Z","updated_at":"2026-07-17T16:15:37.669848Z"}
+=== 17. DELETE interview 2 ===
+
+HTTP:204
+=== 18. GET single after delete -> expect 404 ===
+{"detail":"Interview not found"}
+HTTP:404
+=== 19. GET list -> confirm gone ===
+[
+    {
+        "id": "c4fcb3bb3f5c4c245c37117a3",
+        "user_id": "cc29a76e324fbf19f438eb8be",
+        "application_id": "MV-interview-center-nonexistent-app-id",
+        "type": "video",
+        "status": "scheduled",
+        "scheduled_at": "2026-08-01T10:00:00Z",
+        "duration_minutes": 60,
+        "location": null,
+        "meeting_link": null,
+        "notes": null,
+        "contact_name": null,
+        "contact_email": null,
+        "created_at": "2026-07-17T16:15:19.073102Z",
+        "updated_at": "2026-07-17T16:15:19.073102Z"
+    },
+    {
+        "id": "cf23fcdc8e6662852e2f0a0c0",
+        "user_id": "cc29a76e324fbf19f438eb8be",
+        "application_id": "cc3aaae4343a969731915097b",
+        "type": "video",
+        "status": "completed",
+        "scheduled_at": "2026-08-01T10:00:00Z",
+        "duration_minutes": 45,
+        "location": "Zoom - Melbourne",
+        "meeting_link": null,
+        "notes": "MV-interview-center-001 EDITED note <script>alert(1)</script> \u00fc\u00f1\u00ee\u00e7\u00f8\u0111\u00e9 \ud83d\ude00",
+        "contact_name": "Jane Recruiter",
+        "contact_email": "jane@example.com",
+        "created_at": "2026-07-17T16:14:30.146122Z",
+        "updated_at": "2026-07-17T16:15:19.545396Z"
+    }
+]
+=== CLEANUP: delete remaining MV-interview-center test rows ===
+
+HTTP:204
+
+HTTP:204
+=== confirm list empty ===
+[]

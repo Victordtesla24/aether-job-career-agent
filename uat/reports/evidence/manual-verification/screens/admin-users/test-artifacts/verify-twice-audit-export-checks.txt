@@ -1,0 +1,13 @@
+=== VERIFY-TWICE PASS 2 (fresh curl invocations) ===
+--- DELETE /admin/audit-log (unauth) ---
+HTTP_STATUS:405
+{"detail":"Method Not Allowed"}
+--- DELETE /admin/audit-log/1 (unauth) ---
+HTTP_STATUS:404
+{"detail":"Not Found"}
+--- GET /admin/users/{id}/export (unauth) ---
+HTTP_STATUS:404
+{"detail":"Not Found"}
+--- DELETE /admin/users/{id} (unauth) ---
+HTTP_STATUS:405
+{"detail":"Method Not Allowed"}

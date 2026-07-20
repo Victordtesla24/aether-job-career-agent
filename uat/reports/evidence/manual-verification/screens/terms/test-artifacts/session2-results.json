@@ -1,0 +1,66 @@
+{
+  "session": 2,
+  "ts_start": "2026-07-17T13:41:50.764Z",
+  "steps": [
+    {
+      "step": "S2-A-unauth-load-and-logo-click",
+      "httpStatus": 200,
+      "containsLorem": false,
+      "containsOperatorABN": true,
+      "containsBusinessNamePlaceholder": true,
+      "containsRefundPlaceholder": true,
+      "governingLawText": "Governing Law\n\nThese Terms are governed by and construed in accordance with the laws of the State of Delaware, USA, without regard to its conflict-of-law principles.\n\n18. Contact\n\nIf you have questions about these Terms, you can reach us via the Settings page or the in-app support channel.\n\n← Back to Dashboard",
+      "consoleMsgs": [],
+      "afterLogoClickUrl": "https://5cb5f0620.abacusai.cloud/login"
+    },
+    {
+      "step": "S2-B-mobile",
+      "httpStatus": 200,
+      "consoleMsgs": []
+    },
+    {
+      "step": "S2-C-cross-ref",
+      "crossRef": [
+        {
+          "route": "/",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+          "allLinks": [
+            "/signup"
+          ],
+          "hasTerms": false
+        },
+        {
+          "route": "/login",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+          "allLinks": [
+            "/signup"
+          ],
+          "hasTerms": false
+        },
+        {
+          "route": "/signup",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/signup",
+          "allLinks": [
+            "/login"
+          ],
+          "hasTerms": false
+        },
+        {
+          "route": "/pricing",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/pricing",
+          "allLinks": [
+            "/signup",
+            "/login"
+          ],
+          "hasTerms": false
+        }
+      ]
+    },
+    {
+      "step": "S2-D-authenticated",
+      "httpStatus": 200,
+      "url": "https://5cb5f0620.abacusai.cloud/terms"
+    }
+  ],
+  "ts_end": "2026-07-17T13:42:01.092Z"
+}

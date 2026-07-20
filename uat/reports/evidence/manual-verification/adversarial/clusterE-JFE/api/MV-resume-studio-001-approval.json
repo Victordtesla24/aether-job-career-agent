@@ -1,0 +1,81 @@
+{
+  "approval": {
+    "id": "cc102bff35ab57946b2581393",
+    "userId": "c88fc72d11082ac709fd6a801",
+    "applicationId": null,
+    "type": "application_submit",
+    "status": "pending",
+    "payload": {
+      "why": "This tailored r\u00e9sum\u00e9 version awaits your sign-off before it becomes an approved, authoritative version for this role. Review the reworded bullets, then approve or request changes.",
+      "kind": "resume_tailor",
+      "agent": "Tailoring Agent",
+      "action": "apply a tailored r\u00e9sum\u00e9",
+      "job_id": "c7b5597eead551b1ce3b0f98f",
+      "company": "Empire Life",
+      "preview": "4 bullet(s) rewritten for Project Manager @ Empire Life:\n\u2022 Led the design and delivery of an event-driven billing pipeline, processing 2M transactions/day with Kafka and PostgreSQL.\n\u2022 Drove a 43% reduction in p99 API latency by implementing read-replica routing and query caching.\n\u2022 Delivered a payments reconciliation service in Go, processing A$120M in monthly transactions.\n\u2022 Implemented GST-compliant invoicing for the Australian market.",
+      "job_title": "Project Manager",
+      "reasoning": [
+        {
+          "kind": "check",
+          "text": "Every reworded bullet is grounded in your r\u00e9sum\u00e9 and career evidence (fabrication + entailment guards passed)."
+        },
+        {
+          "kind": "check",
+          "text": "Original layout preserved \u2014 the source PDF's format hash is carried through untouched."
+        },
+        {
+          "kind": "check",
+          "text": "4 bullet(s) reworded to surface Project Manager-relevant keywords you already prove."
+        }
+      ],
+      "resume_id": "c5b59f78cb940b0b24e46c8cb",
+      "confidence": 79
+    },
+    "createdAt": "2026-07-18T17:29:52.930000",
+    "resolvedAt": null
+  },
+  "pending": [
+    {
+      "id": "cc102bff35ab57946b2581393",
+      "userId": "c88fc72d11082ac709fd6a801",
+      "applicationId": null,
+      "type": "application_submit",
+      "status": "pending",
+      "payload": {
+        "why": "This tailored r\u00e9sum\u00e9 version awaits your sign-off before it becomes an approved, authoritative version for this role. Review the reworded bullets, then approve or request changes.",
+        "kind": "resume_tailor",
+        "agent": "Tailoring Agent",
+        "action": "apply a tailored r\u00e9sum\u00e9",
+        "job_id": "c7b5597eead551b1ce3b0f98f",
+        "company": "Empire Life",
+        "preview": "4 bullet(s) rewritten for Project Manager @ Empire Life:\n\u2022 Led the design and delivery of an event-driven billing pipeline, processing 2M transactions/day with Kafka and PostgreSQL.\n\u2022 Drove a 43% reduction in p99 API latency by implementing read-replica routing and query caching.\n\u2022 Delivered a payments reconciliation service in Go, processing A$120M in monthly transactions.\n\u2022 Implemented GST-compliant invoicing for the Australian market.",
+        "job_title": "Project Manager",
+        "reasoning": [
+          {
+            "kind": "check",
+            "text": "Every reworded bullet is grounded in your r\u00e9sum\u00e9 and career evidence (fabrication + entailment guards passed)."
+          },
+          {
+            "kind": "check",
+            "text": "Original layout preserved \u2014 the source PDF's format hash is carried through untouched."
+          },
+          {
+            "kind": "check",
+            "text": "4 bullet(s) reworded to surface Project Manager-relevant keywords you already prove."
+          }
+        ],
+        "resume_id": "c5b59f78cb940b0b24e46c8cb",
+        "confidence": 79
+      },
+      "createdAt": "2026-07-18T17:29:52.930000",
+      "resolvedAt": null
+    }
+  ],
+  "quota_after": {
+    "runsUsed": 1,
+    "runsAllowed": 100,
+    "spendUsedUsd": 0.000742,
+    "spendCapUsd": 15.0,
+    "periodEnd": "2026-08-01T00:00:00+00:00"
+  }
+}

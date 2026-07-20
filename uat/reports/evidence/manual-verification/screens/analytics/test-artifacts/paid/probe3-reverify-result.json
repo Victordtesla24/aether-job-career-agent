@@ -1,0 +1,104 @@
+{
+  "startedAt": "2026-07-17T16:54:46.366Z",
+  "analyticsCalls": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "status": 200,
+      "t": "2026-07-17T16:54:48.496Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "status": 200,
+      "t": "2026-07-17T16:54:48.508Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+      "status": 200,
+      "t": "2026-07-17T16:54:48.591Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "t": "2026-07-17T16:54:49.860Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "status": 200,
+      "t": "2026-07-17T16:54:49.861Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "t": "2026-07-17T16:54:49.861Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=all",
+      "status": 200,
+      "t": "2026-07-17T16:54:49.862Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+      "status": 200,
+      "t": "2026-07-17T16:54:49.999Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "t": "2026-07-17T16:54:50.121Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "status": 200,
+      "t": "2026-07-17T16:54:52.397Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "status": 200,
+      "t": "2026-07-17T16:54:52.410Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "status": 200,
+      "t": "2026-07-17T16:54:52.417Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=7d",
+      "status": 200,
+      "t": "2026-07-17T16:54:52.430Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard",
+      "status": 200,
+      "t": "2026-07-17T16:54:52.696Z"
+    }
+  ],
+  "dualApplicationsRepro": {
+    "summaryApplicationsCardText": "Applications14Total roles you've applied to, across all sources and time periods.",
+    "funnelAppliedRowText": "Applied7"
+  },
+  "periodWiringRepro": {
+    "urlsCalledOnPeriodChange": [
+      "https://5cb5f0620.abacusai.cloud/api/analytics/agent-roi",
+      "https://5cb5f0620.abacusai.cloud/api/analytics/ats-distribution",
+      "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "https://5cb5f0620.abacusai.cloud/api/analytics/conversion?period=7d",
+      "https://5cb5f0620.abacusai.cloud/api/analytics/dashboard"
+    ],
+    "dashboardSummaryEndpointCalledWithPeriod": false,
+    "atsDistributionEndpointCalledAtAll": true,
+    "agentRoiEndpointCalledAtAll": true,
+    "dashboardSummaryTextUnchanged": true,
+    "atsTextUnchanged": true,
+    "roiTextUnchanged": true
+  },
+  "topSkillsEmptyRepro": {
+    "childCount": 0,
+    "bodyTextTrimmed": "",
+    "hasAnyFallbackMessage": false
+  },
+  "exportAbsentRepro": 0,
+  "freshnessAbsentRepro": 0,
+  "interviewConversionLineChartCount": 4,
+  "conversionSectionSnippet": "<section class=\"glass rounded-2xl border border-white/10 p-5\" data-testid=\"conversion-rates\"><h2 class=\"text-sm font-semibold uppercase tracking-wide text-aether-muted\">Stage conversion (7d)</h2><dl class=\"mt-4 grid grid-cols-2 gap-4 md:grid-cols-4\"><div class=\"rounded-xl border border-white/10 p-4 ",
+  "finishedAt": "2026-07-17T16:54:53.836Z"
+}

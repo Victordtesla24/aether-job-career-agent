@@ -1,0 +1,175 @@
+{
+  "utc": "2026-07-20T09:02:06Z",
+  "account": "mv-qa-final2-2a385f-nr@example.com",
+  "uid": "c472704ece8d0718539b47954",
+  "resume_count": 0,
+  "quota": [
+    {
+      "planId": "pro",
+      "runsUsed": 0,
+      "spendUsedUsd": "0",
+      "runsAllowed": 100
+    }
+  ],
+  "backgroundjob_refusals": [
+    {
+      "agentKey": "tailor",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before tailoring or generating an application.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 08:55:16.393193+00:00"
+    },
+    {
+      "agentKey": "coverLetter",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before generating a cover letter.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 08:55:22.439656+00:00"
+    },
+    {
+      "agentKey": "pipeline",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before scoring jobs against it.",
+      "error": null,
+      "quotaRefundedAt": "None"
+    },
+    {
+      "agentKey": "tailor",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before tailoring or generating an application.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 08:57:45.659147+00:00"
+    },
+    {
+      "agentKey": "coverLetter",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before generating a cover letter.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 08:57:51.676256+00:00"
+    },
+    {
+      "agentKey": "pipeline",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before scoring jobs against it.",
+      "error": null,
+      "quotaRefundedAt": "None"
+    },
+    {
+      "agentKey": "coverLetter",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before generating a cover letter.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 09:01:01.443447+00:00"
+    },
+    {
+      "agentKey": "coverLetter",
+      "status": "completed",
+      "missingResume": true,
+      "message": "Add your resume before generating a cover letter.",
+      "error": null,
+      "quotaRefundedAt": "2026-07-20 09:01:15.394538+00:00"
+    }
+  ],
+  "agentruns": [
+    {
+      "agent": "tailor",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before tailoring or generating an application."
+    },
+    {
+      "agent": "coverLetter",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before generating a cover letter."
+    },
+    {
+      "agent": "fitScorer",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before scoring jobs against it."
+    },
+    {
+      "agent": "supervisor",
+      "status": "completed",
+      "costUsd": "0.0000",
+      "error": ""
+    },
+    {
+      "agent": "scout",
+      "status": "completed",
+      "costUsd": "0.0000",
+      "error": ""
+    },
+    {
+      "agent": "fitScorer",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before scoring jobs against it."
+    },
+    {
+      "agent": "tailor",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before tailoring or generating an application."
+    },
+    {
+      "agent": "coverLetter",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before generating a cover letter."
+    },
+    {
+      "agent": "fitScorer",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before scoring jobs against it."
+    },
+    {
+      "agent": "supervisor",
+      "status": "completed",
+      "costUsd": "0.0000",
+      "error": ""
+    },
+    {
+      "agent": "scout",
+      "status": "completed",
+      "costUsd": "0.0000",
+      "error": ""
+    },
+    {
+      "agent": "fitScorer",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before scoring jobs against it."
+    },
+    {
+      "agent": "coverLetter",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before generating a cover letter."
+    },
+    {
+      "agent": "coverLetter",
+      "status": "failed",
+      "costUsd": "None",
+      "error": "Add your resume before generating a cover letter."
+    }
+  ],
+  "leak_scan": {
+    "forbidden_terms": [
+      "MissingResumeError",
+      "Traceback",
+      "resume_grounding",
+      "resume_grounding_error"
+    ],
+    "leaks": []
+  }
+}

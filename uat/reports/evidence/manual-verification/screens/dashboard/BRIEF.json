@@ -1,0 +1,77 @@
+{
+  "generated_utc": "2026-07-17T13:31:36.425417+00:00",
+  "git_sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "screen": {
+    "screen_id": "dashboard",
+    "screen_name": "Dashboard",
+    "wireframe_files": [
+      "dashboard.html"
+    ],
+    "routes": [
+      "/dashboard",
+      "/dashboard/[...slug]"
+    ],
+    "endpoints": [
+      "GET /workspaces/career-data",
+      "GET /analytics",
+      "GET /applications",
+      "GET /jobs",
+      "GET /agents"
+    ],
+    "agents": [
+      "supervisor"
+    ],
+    "coverage_gap": null,
+    "notes": "Main hub; sidebar nav + hero cards; [...slug] catch-all for subroute fallback."
+  },
+  "claim_rows": [
+    {
+      "id": "CLM-024",
+      "claim": "All 27 core Phase-7 gates were VERIFIED-CLOSED including: 0 console errors across 20 routes (GATE-16), 0 same-origin 5xx (GATE-17), backend 676 pytest passed (GATE-19), frontend 297 vitest passed (GATE-20), Playwright E2E green (GATE-21)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT-PHASE7.md",
+      "source_line": "45-62",
+      "endpoints": [],
+      "method": "Playwright console/network sweep across the 20 documented routes on prod; re-run backend pytest / frontend vitest suites (suite-run for counts); manual click-through spot-check for E2E flows"
+    },
+    {
+      "id": "CLM-062",
+      "claim": "A Playwright sweep of 14 dashboard routes + /pricing + /admin as a paid admin showed 0 console errors / 0 failed requests / 0 page errors (GATE-03)",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "50",
+      "endpoints": [],
+      "method": "Playwright sweep of the listed routes on prod, capture console + network errors"
+    },
+    {
+      "id": "CLM-063",
+      "claim": "After Phase-6-rerun's paid-subscription test cleanup, production was restored exactly: entitlement.active_paid=false, POST /agents/scout/run returns 402 again, and the dashboard shows the paywall again",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "52",
+      "endpoints": [
+        "GET /billing/entitlement",
+        "POST /agents/scout/run"
+      ],
+      "method": "Check current entitlement state for the test account and confirm the paywall is showing (does not require mutating production billing state -- read-only check)"
+    },
+    {
+      "id": "CLM-086",
+      "claim": "The root path / redirects (HTTP 307) to /dashboard",
+      "source_doc": "docs/delivery/PHASE-1-VERIFICATION.md",
+      "source_line": "39",
+      "endpoints": [
+        "GET /"
+      ],
+      "method": "curl -I https://5cb5f0620.abacusai.cloud/ and check for a 307 redirect to /dashboard"
+    },
+    {
+      "id": "CLM-087",
+      "claim": "An unmapped /dashboard/<unknown> subroute returns a generic placeholder (HTTP 200), not a 404 -- via the [...slug] catch-all",
+      "source_doc": "docs/delivery/PHASE-1-VERIFICATION.md",
+      "source_line": "42",
+      "endpoints": [],
+      "method": "Visit an arbitrary /dashboard/nonexistent-xyz path, confirm 200 with fallback content rather than a 404"
+    }
+  ],
+  "canonical_login": "uat/reports/evidence/manual-verification/canonical-login.md",
+  "baseline_note": "Baseline captures from Step 6 are under uat/reports/evidence/manual-verification/screens/ (folder named dashboard or dashboard_auth/dashboard_unauth or baseline/dashboard depending on sweep layout) \u2014 use as the 'before' record.",
+  "output_report": "uat/reports/evidence/manual-verification/screens/dashboard/TESTING-OUTCOME-REPORT.md"
+}

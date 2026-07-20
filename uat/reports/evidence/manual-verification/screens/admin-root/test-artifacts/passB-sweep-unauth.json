@@ -1,0 +1,80 @@
+[
+  {
+    "screen": "admin-root",
+    "route": "/admin",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:05.881Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-root/test-artifacts/unauth-admin-root-fullpage.png"
+  },
+  {
+    "screen": "admin-health",
+    "route": "/admin/health",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:09.566Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-health/test-artifacts/unauth-admin-health-fullpage.png"
+  },
+  {
+    "screen": "admin-users",
+    "route": "/admin/users",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:13.042Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-users/test-artifacts/unauth-admin-users-fullpage.png"
+  },
+  {
+    "screen": "admin-settings",
+    "route": "/admin/settings",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:16.505Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-settings/test-artifacts/unauth-admin-settings-fullpage.png"
+  },
+  {
+    "screen": "admin-audit-log",
+    "route": "/admin/audit-log",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:19.882Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-audit-log/test-artifacts/unauth-admin-audit-log-fullpage.png"
+  },
+  {
+    "screen": "admin-spend",
+    "route": "/admin/spend",
+    "phase": "unauth",
+    "timestamp": "2026-07-17T15:45:23.299Z",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+    "navError": null,
+    "consoleMsgs": [],
+    "netFailed": [],
+    "netReqs": [],
+    "bodyTextSample": "A\nAether\njob & career agent\nSign in\n\nAccess your agent dashboard.\n\nEmail or username\nPassword\nSign in\n\nDon't have an account? Create account",
+    "screenshot": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/admin-spend/test-artifacts/unauth-admin-spend-fullpage.png"
+  }
+]

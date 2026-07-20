@@ -1,0 +1,33 @@
+{
+  "allTestIds": [
+    "settings-page",
+    "save-settings-btn",
+    "settings-nav-profile",
+    "settings-nav-resume",
+    "settings-nav-portfolio",
+    "settings-nav-notifications",
+    "settings-nav-agents",
+    "settings-nav-integrations",
+    "settings-nav-privacy",
+    "settings-agents",
+    "toggle-autoapply",
+    "toggle-approvalgate",
+    "threshold-slider"
+  ],
+  "candidates": [
+    "toggle-autoapply",
+    "toggle-approvalgate"
+  ],
+  "report": {
+    "toggle-autoapply": {
+      "before": "false",
+      "after": "true",
+      "toggled": true
+    },
+    "toggle-approvalgate": {
+      "before": "true",
+      "after": "false",
+      "toggled": true
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "session": 2,
+  "startedAt": "2026-07-17T16:58:02.785Z",
+  "steps": [
+    {
+      "step": "unauth-access-dashboard",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "redirectedToLogin": true
+    },
+    {
+      "step": "login",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "tokenPrefix": "eyJhbGci"
+    },
+    {
+      "step": "dashboard-reverify",
+      "hasPaywall": 0,
+      "statCards": [
+        "ACTIVE APPLICATIONS\n7\n+7 this week",
+        "INTERVIEW RATE\n0%\n0 of 7 applied",
+        "OFFERS\n0\nnone yet — agents hunting",
+        "AI CONFIDENCE\n38%\navg match quality"
+      ]
+    },
+    {
+      "step": "plan-quota-indicator-check",
+      "topbarText": "Good afternoon, Administrator\n\nFri, 17 July · last agent run 28m ago\n\nAD\nAdministrator\nAdministrator",
+      "sidebarText": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether",
+      "mentionsPlanOrQuota": false
+    },
+    {
+      "step": "top-skills-reverify",
+      "topSkillsText": "TOP SKILLS IN DEMAND",
+      "hasEmptyStateCopy": false
+    },
+    {
+      "step": "agent-feed-reverify",
+      "feedItemMentionsGenericAgent": true
+    },
+    {
+      "step": "catchall-paid-nonexistent-route",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/nonexistent-mv-dashboard-paid-check",
+      "hasPaywall": 0,
+      "bodyContainsNotFound": true,
+      "bodySnippet": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood afternoon, Administrator\n\nFri, 17 July · last agent run 28m ago\n\nAD\nAdministrator\nAdministrator\nSection not found\n\nunknown route\n\n/dashboard/nonexistent-mv-dashboard-paid-check does not map to a known section. Use the sidebar to re"
+    },
+    {
+      "step": "throttled-reload",
+      "throttledHasSkeletonsAtCheck": 0,
+      "throttledFinalStats": [
+        "ACTIVE APPLICATIONS\n7\n+7 this week",
+        "INTERVIEW RATE\n0%\n0 of 7 applied",
+        "OFFERS\n0\nnone yet — agents hunting",
+        "AI CONFIDENCE\n—\nno scored jobs yet"
+      ]
+    },
+    {
+      "step": "back-to-dashboard-2",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "forward-to-agents-2",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/agents"
+    }
+  ],
+  "finishedAt": "2026-07-17T16:58:29.144Z"
+}

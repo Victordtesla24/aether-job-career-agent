@@ -1,0 +1,126 @@
+[
+  {
+    "id": "MV-mobile-dashboard-004",
+    "screen": "mobile-dashboard",
+    "severity": "HIGH",
+    "category": "visual",
+    "summary": "The desktop topbar's account-identity chip (avatar 'AD' + 'Administrator' name + 'Administrator' role, two lines) renders unconditionally at 390px width — it has no responsive hide class, unlike its sibling search box in the same header which correctly carries 'max-lg:hidden'. This crowds the header's left-side greeting text into a narrower column and is a direct, newly-identified contributing cause of the previously-filed header clipping bug (MV-mobile-dashboard-001), which this paid re-test confirms still reproduces byte-for-byte with real content present.",
+    "reproduction": [
+      "1. Viewport 390x844, sign in as admin/admin123 (now Pro entitlement, active_paid=true).",
+      "2. Navigate to https://5cb5f0620.abacusai.cloud/dashboard.",
+      "3. Inspect the <header> element's DOM: it contains three children — (a) greeting/subtitle text block, (b) a search <input> with class 'w-72 max-lg:hidden' (correctly hidden at mobile widths, confirmed 0-width in computed layout), and (c) a user-identity chip '<div class=\"flex items-center gap-2.5 pl-3 border-l border-white/10\">' containing avatar 'AD' + 'Administrator' (name) + 'Administrator' (role) — this chip carries NO responsive hide class and is fully visible/rendered at 390px (confirmed via getBoundingClientRect: top:16.5 bottom:46.5, within the header).",
+      "4. Confirm the same missing-hide-class chip is present at /dashboard/settings (same shared layout header), reproducing identically.",
+      "5. Cross-check MV-mobile-dashboard-001: measure h1 ('Good afternoon, Administrator') and p ('Fri, 17 July · last agent run Nm ago') rects — h1.top=-15 (15px clipped above the 64px-tall header box), p.bottom=78 (14px overflowing below the header) — identical to the original free-tier measurement, now confirmed with full paid content rendering behind it, and reproduced in a second fresh session (headerClipReproduced in session2-verify-summary.json: h1Top:-15, pBottom:78, both flags true)."
+    ],
+    "expected": "Per design/screens/mobile-dashboard.html (data-design-id=m-topbar-md01), the mobile header contains only an avatar + single-line greeting on the left and the notification bell on the right — no duplicate account-identity block. At minimum, if the desktop topbar component is reused, its account-chip element should carry the same 'max-lg:hidden' (or equivalent) responsive treatment already correctly applied to its sibling search box.",
+    "observed": "The account-identity chip is unconditionally rendered at all viewport widths, redundantly repeating 'Administrator' a third time on screen (greeting says 'Good afternoon, Administrator'; chip says 'Administrator' / 'Administrator' again) while consuming header width that the greeting/subtitle text needs, worsening the pre-existing clip/overflow bug. Verified in two independent fresh sessions.",
+    "evidence": [
+      "test-artifacts/paid/header-info.json",
+      "test-artifacts/paid/header-clip-precise.json",
+      "test-artifacts/paid/header-clip-precise-settings.json",
+      "test-artifacts/paid/p07-header-zoom-authed.png",
+      "test-artifacts/paid/p21-settings-fullname-viewport-real.png",
+      "test-artifacts/paid/session2-verify-summary.json",
+      "test-artifacts/paid/s2-02-header-zoom.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-dashboard-005",
+    "screen": "mobile-dashboard",
+    "severity": "HIGH",
+    "category": "wiring",
+    "summary": "The dashboard shows three mutually-inconsistent counts for the same underlying concept ('how many jobs has this user applied to') on the same page, same session, same moment: the 'ACTIVE APPLICATIONS' stat card and 'Application Funnel > Applied' row both show 7 (sourced from GET /api/analytics/funnel: {\"applied\":7}), while 'Real-Time Market Pulse > Market vs. Your Performance > Applications / month' shows 'you 14' (sourced from GET /api/analytics/market-pulse: marketVsYou.comparisons[0].you=14). A direct query of the raw record store, GET /api/applications, returns a THIRD number: 12 records (6 submitted, 5 draft, 1 rejected). None of the three numbers agree.",
+    "reproduction": [
+      "1. Sign in as admin/admin123 (Pro entitlement) at 390x844, land on /dashboard.",
+      "2. Read 'ACTIVE APPLICATIONS' stat card: 7. Scroll to 'Application Funnel': 'Applied' row also reads 7.",
+      "3. Continue scrolling to 'Real-Time Market Pulse > Market vs. Your Performance': 'Applications / month ... you 14'.",
+      "4. With the same session token, call GET /api/analytics/funnel directly -> {\"jobs_found\":44,\"applied\":7,...} (matches stat card/funnel).",
+      "5. Call GET /api/analytics/market-pulse directly -> marketVsYou.comparisons contains {\"label\":\"Applications / month\",\"you\":14} (matches the Market Pulse widget, contradicting the funnel's 7).",
+      "6. Call GET /api/applications directly (with limit=1000 to rule out pagination) -> returns exactly 12 application records, matching neither 7 nor 14.",
+      "7. Repeated in a fresh session 2 (session2-verify-summary.json): activeApplicationsCard=7, funnelApplied=7, and body-text re-confirms 'you 14' under Market vs. Your Performance — identical inconsistency reproduced."
+    ],
+    "expected": "A single, internally-consistent 'applications' figure — or at minimum, distinctly-labelled metrics with an explanation of why they differ (e.g., '7 this cycle vs 14 all-time') should not silently disagree without a period/definition label distinguishing them, since both widgets appear on the identical unfiltered dashboard view for the same time period.",
+    "observed": "GET /api/analytics/funnel and GET /api/analytics/market-pulse compute 'applications' using different logic/source and disagree (7 vs 14); a third source of truth (the raw /api/applications table, 12 records) agrees with neither. This is real, dynamically-fetched data (not hardcoded — confirmed against wireframe placeholder values which are completely different, and against fixture-string greps which found no matches), so the 'is it real data' check passes, but the paying user is shown self-contradictory numbers about their own core usage metric on the primary hub screen with no explanation.",
+    "evidence": [
+      "test-artifacts/paid/session1-network.json (GET /api/analytics/funnel?period=7d and ?period=all bodies)",
+      "test-artifacts/paid/api-crosscheck.json (GET /api/applications, GET /api/analytics)",
+      "test-artifacts/paid/dashboard-body-text.txt",
+      "test-artifacts/paid/session2-verify-summary.json",
+      "test-artifacts/paid/p04-dashboard-full.png",
+      "test-artifacts/paid/p06-scroll-08-y5600.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-dashboard-006",
+    "screen": "mobile-dashboard",
+    "severity": "MEDIUM",
+    "category": "defect",
+    "summary": "The 'Top Skills in Demand' widget (data-testid=top-skills, part of the Real-Time Market Pulse section) renders its heading with a completely empty content area and zero empty-state messaging, reading as a broken or stuck-loading section rather than an honest 'no data yet' state — inconsistent with how every other empty widget on the same screen is handled.",
+    "reproduction": [
+      "1. Sign in as admin/admin123 (Pro entitlement) at 390x844, scroll to 'Real-Time Market Pulse > Top Skills in Demand'.",
+      "2. Observe: the heading 'TOP SKILLS IN DEMAND' renders, followed immediately by the next widget ('Your Job Probability Score') with no chips, no text, no placeholder in between.",
+      "3. Inspect DOM: <div data-testid=\"top-skills\"><h3>Top Skills in Demand</h3><div class=\"space-y-3\"></div></div> — the content container is a literal empty <div>.",
+      "4. Confirm via API: GET /api/analytics/market-pulse returns \"topSkills\":[] — the backend genuinely has no data for this field, so the emptiness is not a fetch failure.",
+      "5. Compare to sibling empty states on the SAME page which DO handle emptiness honestly: 'Market vs. Your Performance' shows explicit copy 'No market data source connected — showing your own figures only'; the Agent Activity filter pills show 'No \"Waiting\" activity in the latest runs.' when a filter yields zero results.",
+      "6. Reproduced identically in fresh session 2 (topSkillsCheck.hasEmptyStateText=false)."
+    ],
+    "expected": "Per the app's own established pattern elsewhere on this exact screen, an empty Top Skills dataset should show explanatory copy (e.g., 'Not enough job data yet to surface top skills' or similar), matching the honest-empty-state bar the rest of the page sets.",
+    "observed": "A silent, unexplained blank content area under a visible section heading — indistinguishable from a rendering bug to an end user.",
+    "evidence": [
+      "test-artifacts/paid/session1-network.json (GET /api/analytics/market-pulse body, topSkills:[])",
+      "test-artifacts/paid/session2-verify-summary.json (topSkillsCheck)",
+      "test-artifacts/paid/p06-scroll-07-y4800.png",
+      "test-artifacts/paid/dashboard-body-text.txt"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-dashboard-007",
+    "screen": "mobile-dashboard",
+    "severity": "MEDIUM",
+    "category": "coverage-gap",
+    "summary": "Now that Pro entitlement makes the dashboard hub reachable, this confirms production does NOT implement the wireframe's purpose-built, glanceable mobile hub (design/screens/mobile-dashboard.html: compact 2x2 stat grid + 1 approval banner + 3-item activity feed, fitting in roughly one screen height). Instead /dashboard serves the entire desktop dashboard (11 widgets: stats, filterable activity feed, Today's Opportunities, Application Funnel, Story Bank, Recruiter CRM, Needs Approval, and a 6-part Real-Time Market Pulse block) reflowed to a single 390px-wide column, 6382px tall (~7.5x the 844px viewport).",
+    "reproduction": [
+      "1. Sign in as admin/admin123 (Pro entitlement) at 390x844, land on /dashboard.",
+      "2. Query all elements with a data-design-id attribute (the wireframe's own component markers): only m-notif-md02 (bell) and m-tabbar-md08 (bottom nav) are present in the DOM.",
+      "3. m-topbar-md01 (compact header), m-main-md03 (main content wrapper), m-stats-md04 (2x2 stat grid), m-approval-md05/btn-review-md06 (single approval banner), and m-feed-md07 (3-item activity feed) are entirely absent — the actual header and main content use different, desktop-shared component markup instead.",
+      "4. Measure document.documentElement.scrollHeight = 6382px vs. viewport 844px — the user must scroll roughly 7.5 full screens to reach the bottom of the hub.",
+      "5. Confirm the additional desktop widgets not in the wireframe are all present and functioning at mobile width: Today's Opportunities, Application Funnel, Story Bank, Recruiter CRM, Needs Approval, Real-Time Market Pulse (Trend Indicators, Jobs by Source donut, Top Skills, Job Probability Score, Weekly Activity heatmap, Employer Hiring Activity, Recruiter Activity chart, Market vs. Your Performance)."
+    ],
+    "expected": "A dedicated, compact mobile hub as specified in the wireframe — quick stats, one approval prompt, a short activity feed — optimized for a quick mobile glance, with deeper content reachable via the other tab-bar destinations (Jobs/Apps/Agents/Profile) rather than all on one infinite-scroll home screen.",
+    "observed": "The full desktop dashboard's component tree is reused verbatim and reflowed responsively for mobile. This is NOT broken — verified zero horizontal overflow (overflow-check.json: overflowCount=0), clean single-column card stacking at every scroll depth (p06-scroll-01 through 08), no touch targets under 44x44 (touch-targets.json: 0 of 38 too small) — but it is a significant, systematic deviation from the wireframe's design intent for a 'quick mobile glance' pattern, and directly explains why MV-mobile-dashboard-003 (the free-tier coverage-gap finding) could not have anticipated this: the hidden content is ~8x larger and structurally different from what the wireframe specifies.",
+    "evidence": [
+      "test-artifacts/paid/design-ids-inventory.json",
+      "test-artifacts/paid/overflow-check.json",
+      "test-artifacts/paid/touch-targets.json",
+      "test-artifacts/paid/p04-dashboard-full.png",
+      "test-artifacts/paid/p06-scroll-01-y0.png",
+      "test-artifacts/paid/p06-scroll-02-y800.png",
+      "test-artifacts/paid/p06-scroll-03-y1600.png",
+      "test-artifacts/paid/p06-scroll-04-y2400.png",
+      "test-artifacts/paid/p06-scroll-05-y3200.png",
+      "test-artifacts/paid/p06-scroll-06-y4000.png",
+      "test-artifacts/paid/p06-scroll-07-y4800.png",
+      "test-artifacts/paid/p06-scroll-08-y5600.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

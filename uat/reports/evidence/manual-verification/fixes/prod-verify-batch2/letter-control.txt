@@ -1,0 +1,16 @@
+18 July 2026
+
+Hiring Team
+Northwind Platform Labs
+Re: Senior Technical Program Manager
+
+Dear Hiring Team at Northwind Platform Labs,
+
+My background in end-to-end delivery leadership is a direct match for the Senior Technical Program Manager role at Northwind Platform Labs. I have led end-to-end delivery for a large platform initiative across multiple engineering teams, directly matching your need for a Senior Technical Program Manager to drive complex platform programs.
+
+Your description calls for someone to drive end-to-end delivery, manage stakeholder communication and reporting, and steward on-time delivery of complex technical programs. At the Australian Taxation Office, I lead end-to-end delivery for the Agile Kookaburras squad on the Payday Super reform program, owning sprint cadence, PI Planning, capacity management, and executive status reporting. I also authored an executive change request that re-baselined test capacity from 30 to up to 90 person-days, including options analysis, costed recommendation, and risk assessment with full Azure DevOps traceability. Earlier, at ANZ, I directed a program portfolio valued at over $5M, leading 5+ cross-functional squads to deliver on-time, high-quality releases, and facilitated workshops for 40+ GMs and executives that improved decision-making efficiency and project clarity by >55%.
+
+I would welcome the opportunity to discuss how my experience coordinating engineering teams and managing program risks and dependencies can support Northwind Platform Labs' platform delivery goals. I am available for a call or interview at your convenience and can provide further detail on the governance and delivery frameworks I have implemented to keep complex initiatives on track.
+
+Sincerely,
+Jordan Ellis

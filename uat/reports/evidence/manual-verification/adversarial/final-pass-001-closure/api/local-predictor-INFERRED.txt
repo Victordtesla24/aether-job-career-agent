@@ -1,0 +1,43 @@
+
+== reported_forward ==
+  'İstanbulSalary'         humps=['İstanbul', 'Salary'] artifact=True semantic=False score=39
+  'КиевLocation'           humps=['Киев', 'Location'] artifact=True semantic=False score=37
+  'МоскваSalary'           humps=['Москва', 'Salary'] artifact=True semantic=False score=37
+  'İzmirLocation'          humps=['İzmir', 'Location'] artifact=True semantic=False score=38
+  'ΑθήναLocation'          humps=['Αθήνα', 'Location'] artifact=True semantic=False score=38
+
+== reverse_order ==
+  'SalaryМосква'           humps=['Salary', 'Москва'] artifact=True semantic=False score=37
+  'LocationКиев'           humps=['Location', 'Киев'] artifact=True semantic=False score=37
+  'Salaryİstanbul'         humps=['Salary', 'İstanbul'] artifact=True semantic=False score=39
+  'Locationİzmir'          humps=['Location', 'İzmir'] artifact=True semantic=False score=38
+  'LocationΑθήνα'          humps=['Location', 'Αθήνα'] artifact=True semantic=False score=38
+
+== muni_control ==
+  'MünchenLocation'        humps=['München', 'Location'] artifact=True semantic=False score=39
+  'LocationMünchen'        humps=['Location', 'München'] artifact=True semantic=False score=39
+  'MünchenSalary'          humps=['München', 'Salary'] artifact=True semantic=False score=38
+  'ZürichLocation'         humps=['Zürich', 'Location'] artifact=True semantic=False score=39
+
+== standalone_city ==
+  'Киев'                   humps=['Киев'] artifact=False semantic=True score=29
+  'İstanbul'               humps=['İstanbul'] artifact=False semantic=True score=33
+  'Zürich'                 humps=['Zürich'] artifact=False semantic=True score=31
+  'Москва'                 humps=['Москва'] artifact=False semantic=False score=31
+  'Αθήνα'                  humps=['Αθήνα'] artifact=False semantic=True score=30
+
+== legit_tech ==
+  'JavaScript'             humps=['Java', 'Script'] artifact=False semantic=True score=200
+  'PostgreSQL'             humps=['Postgre', 'SQL'] artifact=False semantic=True score=200
+  'DevOps'                 humps=['Dev', 'Ops'] artifact=False semantic=True score=196
+  'SlideShare'             humps=['Slide', 'Share'] artifact=False semantic=True score=80
+  'Kubernetes'             humps=['Kubernetes'] artifact=False semantic=True score=155
+  'GraphQL'                humps=['Graph', 'QL'] artifact=False semantic=True score=197
+
+== NOVEL_caseless ==
+  '東京Salary'               humps=['Salary'] artifact=False semantic=True score=53
+  '北京Location'             humps=['Location'] artifact=False semantic=True score=55
+  'मुंबईLocation'          humps=['Location'] artifact=False semantic=True score=58
+  'القاهرةSalary'          humps=['Salary'] artifact=False semantic=True score=58
+  '東京Location'             humps=['Location'] artifact=False semantic=True score=55
+  'ソウルSalary'              humps=['Salary'] artifact=False semantic=True score=54

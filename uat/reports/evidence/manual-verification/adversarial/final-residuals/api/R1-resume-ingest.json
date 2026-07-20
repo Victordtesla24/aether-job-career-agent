@@ -1,0 +1,40 @@
+{
+  "status": 201,
+  "resp": {
+    "id": "cf4da499d3500ab9cd6f750a5",
+    "userId": "cf6bb0e8a91954a87e00c0ee0",
+    "version": 1,
+    "label": "Quincey Adversario-Residual \u2014 Base",
+    "sections": {
+      "bullets": [
+        {
+          "text": "Rebuilt the JavaScript and TypeScript checkout tier on PostgreSQL, eliminating 92% of paging alerts.",
+          "evidenceRef": "bullet-0"
+        },
+        {
+          "text": "Drove a DevOps blameless-postmortem culture across 7 squads; introduced the Wombat error-budget policy.",
+          "evidenceRef": "bullet-1"
+        },
+        {
+          "text": "Shipped the Quokka iPhone companion app used by 40k field couriers.",
+          "evidenceRef": "bullet-2"
+        },
+        {
+          "text": "Designed the Bandersnatch autoscaling controller that survived a 14x Black-Friday spike.",
+          "evidenceRef": "bullet-3"
+        }
+      ],
+      "contact": {
+        "name": "Quincey Adversario-Residual",
+        "email": "mv-qa-resid-distinct-865c45@example.com"
+      },
+      "raw_text": "QUINCEY ADVERSARIO-RESIDUAL\nStaff Reliability Engineer \u2014 Zylophone Freight Systems (Perth, AU)\n\nSUMMARY\nReliability engineer who cut p99 checkout latency from 3200ms to 340ms on the Kestrel-9 order platform and authored the Marmoset incident-runbook adopted org-wide.\n\nEXPERIENCE\nZylophone Freight Systems \u2014 Staff Reliability Engineer (2021-2026)\n- Rebuilt the JavaScript and TypeScript checkout tier on PostgreSQL, eliminating 92% of paging alerts.\n- Drove a DevOps blameless-postmortem culture across 7 squads; introduced the Wombat error-budget policy.\n- Shipped the Quokka iPhone companion app used by 40k field couriers.\nFrobnitz Logistics \u2014 Senior SRE (2017-2021)\n- Designed the Bandersnatch autoscaling controller that survived a 14x Black-Friday spike.\n\nSKILLS: JavaScript, TypeScript, PostgreSQL, Kubernetes, DevOps, Terraform, incident response.\nEDUCATION: B.Eng (Software), University of Woop Woop, 2016."
+    },
+    "sourceJobId": null,
+    "parentId": null,
+    "formatHash": "79bb7497a38ab1b9",
+    "approvalStatus": "approved",
+    "createdAt": "2026-07-20T01:14:28.244000",
+    "updatedAt": "2026-07-20T01:14:28.244000"
+  }
+}

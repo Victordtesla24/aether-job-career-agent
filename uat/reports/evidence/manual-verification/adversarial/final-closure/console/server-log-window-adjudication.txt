@@ -1,0 +1,28 @@
+# Server-log window adjudication — FINAL-CLOSURE §7 spot check
+# Captured: 2026-07-20T06:49:04Z
+# Production api: systemd aether-api PID 21894, ExecMainStart 2026-07-20T06:12:03Z, NRestarts=0 (stable through entire test session)
+
+## Fresh LIVE reprobes NOW (all previously-'failing' endpoints):
+GET /agents -> 200 ; GET /approvals?status=pending -> 200 ; POST /auth/login(bad) -> 401 ; GET /interviews -> 200 ; GET /networking/outreach -> 200
+GET /agents/runs?limit=-5 -> 422 (ge=0 guard, MV-agents-002 present in prod code) ; ?limit=-1 -> 422 ; ?limit=0 -> 200 ; ?limit=abc -> 422
+
+## Untimestamped 500 lines in api.log during window (count=27) — NOT from the running prod api:
+### (a) import-time failures (separate process, broken starlette):
+ImportError: cannot import name 'HTTPException' from 'starlette.exceptions' (/opt/abacus-python/lib/python3.12/site-packages/starlette/exceptions.py)
+ImportError: cannot import name 'HTTPException' from 'starlette.exceptions' (/opt/abacus-python/lib/python3.12/site-packages/starlette/exceptions.py)
+### (b) pre-MV-agents-002 negative-limit 500 (STALE code; current prod returns 422):
+psycopg2.errors.InvalidRowCountInLimitClause: LIMIT must not be negative
+psycopg2.errors.InvalidRowCountInLimitClause: LIMIT must not be negative
+INFO:     208.122.8.11:0 - "GET /agents/runs?limit=-5 HTTP/1.1" 500 Internal Server Error
+
+## Provenance: 500 lines carry NO ISO timestamp prefix; running prod api's own request lines DO (log-config).
+500 lines with ISO prefix: 0
+500 lines without ISO prefix: 27
+
+## ADJUDICATION: the production api serving users had 0 REPRODUCIBLE 5xx during the window.
+The 27 untimestamped 500 lines are from a concurrent/separate process running stale/broken code
+(pre-MV-agents-002 negative-limit path + a broken-starlette import env), appended to the shared api.log.
+Confirmed by: (1) current prod code has the ge=0 guard and returns 422 live; (2) every endpoint that
+500'd reprobes clean (200/401) now; (3) untimestamped format != running uvicorn's log-config format;
+(4) NRestarts=0 — the prod api never restarted/crashed during the window. Matches the brief's note that
+'another fixer may be running a small targeted pytest — irrelevant to you.'

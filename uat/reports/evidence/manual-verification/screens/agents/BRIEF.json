@@ -1,0 +1,64 @@
+{
+  "generated_utc": "2026-07-17T13:31:36.425417+00:00",
+  "git_sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "screen": {
+    "screen_id": "agents",
+    "screen_name": "Agents",
+    "wireframe_files": [
+      "agents.html"
+    ],
+    "routes": [
+      "/dashboard/agents"
+    ],
+    "endpoints": [
+      "GET /agents",
+      "GET /agents/catalog",
+      "GET /agents/config",
+      "GET /agents/runs",
+      "GET /agents/stats",
+      "GET /agents/user/providers",
+      "POST /agents/{name}/run",
+      "POST /agents/test-run"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Duplicate of agent-monitor (design evolution)."
+  },
+  "claim_rows": [
+    {
+      "id": "CLM-005",
+      "claim": "PUT /api/agents/providers/anthropic/credential (and the per-user PUT /api/agents/user/providers/anthropic/credential) auto-detect and accept two credential formats: a Console API key (sk-ant-api03-...) sent via x-api-key header, OR a Claude Code OAuth token (sk-ant-oat01-...) sent via Authorization: Bearer + anthropic-beta: oauth-2025-04-20 header",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "252-258",
+      "endpoints": [
+        "PUT /agents/providers/anthropic/credential",
+        "PUT /agents/user/providers/anthropic/credential"
+      ],
+      "method": "Submit both credential formats via the agent-config credential UI/API on prod; inspect stored authMode and confirm the correct auth header is used on the subsequent live call"
+    },
+    {
+      "id": "CLM-006",
+      "claim": "A mismatched or unrecognized Anthropic credential prefix is rejected with HTTP 422 naming both accepted formats (sk-ant-api03-.../sk-ant-oat01-...)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "257-258",
+      "endpoints": [
+        "PUT /agents/providers/anthropic/credential"
+      ],
+      "method": "Submit a garbage-prefixed credential via the credential UI/API, expect 422 with a message naming both accepted formats"
+    },
+    {
+      "id": "CLM-011",
+      "claim": "The in-app interactive \"Connect with Anthropic\" OAuth-consent flow remains removed and unsupported (only paste-token credential entry exists)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "263-265",
+      "endpoints": [
+        "GET /agents/auth/anthropic/start",
+        "POST /agents/auth/anthropic/start"
+      ],
+      "method": "Inspect agent-monitor/agents/settings UI for absence of an interactive OAuth-consent button; curl GET/POST /api/agents/auth/anthropic/start expecting 404"
+    }
+  ],
+  "canonical_login": "uat/reports/evidence/manual-verification/canonical-login.md",
+  "baseline_note": "Baseline captures from Step 6 are under uat/reports/evidence/manual-verification/screens/ (folder named agents or agents_auth/agents_unauth or baseline/agents depending on sweep layout) \u2014 use as the 'before' record.",
+  "output_report": "uat/reports/evidence/manual-verification/screens/agents/TESTING-OUTCOME-REPORT.md"
+}

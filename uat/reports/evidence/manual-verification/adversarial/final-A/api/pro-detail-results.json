@@ -1,0 +1,36 @@
+{
+  "tracker": {
+    "bannerText": "3 items need your review → open the Approvals queue",
+    "headerBefore": "Application Tracker11 active applications across 8 stages",
+    "headerAfter": "Application Tracker3 active applications across 8 stages",
+    "filterApplied": true
+  },
+  "bulkApply": {
+    "selectedCount": null,
+    "gateAppeared": false,
+    "gateText": null,
+    "hasCancel": false,
+    "hasConfirm": false,
+    "appliedOnCancel": "n/a",
+    "err": "TimeoutError: page.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"bulk-apply\"]')\u001b[22m\n"
+  },
+  "analytics": {
+    "tiles": [
+      "Applications",
+      "Offers",
+      "Interviews",
+      "Jobs Found",
+      "Applied",
+      "Applied → Screened",
+      "Applications / month"
+    ],
+    "allTimeMarkers": [
+      "(all time — not affected by the period selector)",
+      "Agent ROI(all time — not affected by the period selector)",
+      "(all time — not affected by the period selector)"
+    ],
+    "hasApplicationsWord": true,
+    "hasAppliedWord": true
+  },
+  "consoleErrors": []
+}

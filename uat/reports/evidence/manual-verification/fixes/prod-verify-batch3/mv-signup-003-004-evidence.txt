@@ -1,0 +1,15 @@
+RUN TIMESTAMP: 2026-07-18T06:17:48Z
+=== MV-signup-003: over-long email (expect honest 4xx, NOT 500) ===
+email local-part length: 312
+{"detail":[{"type":"value_error","loc":["body","email"],"msg":"value is not a valid email address: The email address is too long (58 characters too many).","input":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com","ctx":{"reason":"The email address is too long (58 characters too many)."}}]}
+HTTP=422
+
+
+=== MV-signup-004: unicode/markup name preserved, not garbled/executed ===
+submitted name: Zoé <script>alert(1)</script> 日本語 Müller
+REGISTER: {"id":"c67b50546071be90ab831225c","email":"mv-vb3-signup004-1784355468@example.com","createdAt":"2026-07-18T06:17:50.045000"}
+HTTP=201
+token first8: eyJhbGci
+ME raw: {"id":"c67b50546071be90ab831225c","email":"mv-vb3-signup004-1784355468@example.com","name":"Zoé <script>alert(1)</script> 日本語 Müller","targetRole":"","location":"","isAdmin":false}
+HTTP=200
+UEMAIL=mv-vb3-signup004-1784355468@example.com

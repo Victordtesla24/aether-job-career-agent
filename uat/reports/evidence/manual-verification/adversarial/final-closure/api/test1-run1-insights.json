@@ -1,0 +1,473 @@
+{
+  "run": "run1",
+  "session": "F1 fresh login",
+  "started_utc": "2026-07-20T06:28:13.631214+00:00",
+  "jobs": {
+    "J1": {
+      "label": "J1:Senior Platform Engineer@Empirical Life",
+      "job_id": "c65bb241b9dd42342bd1df702",
+      "bg_job": "cbc2668a06b20c8e4b621baa7",
+      "terminal": "completed",
+      "error": null,
+      "cover_letter_id": "c3dba0aee4de8cc28e18531ac",
+      "run_result_keys": [
+        "model",
+        "run_id",
+        "costUsd",
+        "flagged",
+        "tokensIn",
+        "tokensOut",
+        "approval_id",
+        "duration_ms",
+        "billingAudit",
+        "cover_letter",
+        "approval_status",
+        "cover_letter_id",
+        "approvalRequired"
+      ],
+      "insights_status": 200,
+      "insights_full": {
+        "letterId": "c3dba0aee4de8cc28e18531ac",
+        "jobId": "c65bb241b9dd42342bd1df702",
+        "jobTitle": "Senior Platform Engineer",
+        "company": "Empirical Life",
+        "wordCount": 158,
+        "needsResume": false,
+        "evidence": [
+          {
+            "claim": "resilient",
+            "storyId": null,
+            "storyTitle": null,
+            "grounded": false
+          }
+        ],
+        "keywords": {
+          "covered": 8,
+          "total": 10,
+          "items": [
+            {
+              "keyword": "JavaScript",
+              "covered": false
+            },
+            {
+              "keyword": "TypeScript",
+              "covered": true
+            },
+            {
+              "keyword": "PostgreSQL",
+              "covered": true
+            },
+            {
+              "keyword": "DevOps",
+              "covered": true
+            },
+            {
+              "keyword": "microservices",
+              "covered": true
+            },
+            {
+              "keyword": "reliability",
+              "covered": true
+            },
+            {
+              "keyword": "iPhone",
+              "covered": false
+            },
+            {
+              "keyword": "Platform",
+              "covered": true
+            },
+            {
+              "keyword": "Engineer",
+              "covered": true
+            },
+            {
+              "keyword": "Senior",
+              "covered": true
+            }
+          ]
+        },
+        "voice": {
+          "authenticity": 45,
+          "aiDetectionRisk": 28,
+          "aiDetectionLabel": "Review"
+        },
+        "versions": [
+          {
+            "id": "cc109fb6758c31638b637723a",
+            "version": 1,
+            "createdAt": "2026-07-20T06:26:22.337000",
+            "current": false
+          },
+          {
+            "id": "c3dba0aee4de8cc28e18531ac",
+            "version": 2,
+            "createdAt": "2026-07-20T06:29:25.633000",
+            "current": true
+          }
+        ]
+      },
+      "keywords": {
+        "covered": 8,
+        "total": 10,
+        "items": [
+          {
+            "keyword": "JavaScript",
+            "covered": false
+          },
+          {
+            "keyword": "TypeScript",
+            "covered": true
+          },
+          {
+            "keyword": "PostgreSQL",
+            "covered": true
+          },
+          {
+            "keyword": "DevOps",
+            "covered": true
+          },
+          {
+            "keyword": "microservices",
+            "covered": true
+          },
+          {
+            "keyword": "reliability",
+            "covered": true
+          },
+          {
+            "keyword": "iPhone",
+            "covered": false
+          },
+          {
+            "keyword": "Platform",
+            "covered": true
+          },
+          {
+            "keyword": "Engineer",
+            "covered": true
+          },
+          {
+            "keyword": "Senior",
+            "covered": true
+          }
+        ]
+      }
+    },
+    "J2": {
+      "label": "J2:Streaming Platform Engineer@Redpanda-ish Data",
+      "job_id": "c016d5e2e50e6637dff2ed250",
+      "bg_job": "c9fcb74c28024659e07c7c32c",
+      "terminal": "failed",
+      "error": "The AI service is temporarily unavailable. Please try again in a moment.",
+      "cover_letter_id": null,
+      "run_result_keys": null,
+      "insights_status": null,
+      "insights_full": null,
+      "keywords": null
+    },
+    "J3": {
+      "label": "J3:Senior Backend Engineer@Novatlas Global",
+      "job_id": "c05cfd43feee9942fed596bd5",
+      "bg_job": "c6c08287ed3397e27326e45a8",
+      "terminal": "completed",
+      "error": null,
+      "cover_letter_id": "cc2f5ca6cd1fb77031f8e263e",
+      "run_result_keys": [
+        "model",
+        "run_id",
+        "costUsd",
+        "flagged",
+        "tokensIn",
+        "tokensOut",
+        "approval_id",
+        "duration_ms",
+        "billingAudit",
+        "cover_letter",
+        "approval_status",
+        "cover_letter_id",
+        "approvalRequired"
+      ],
+      "insights_status": 200,
+      "insights_full": {
+        "letterId": "cc2f5ca6cd1fb77031f8e263e",
+        "jobId": "c05cfd43feee9942fed596bd5",
+        "jobTitle": "Senior Backend Engineer",
+        "company": "Novatlas Global",
+        "wordCount": 176,
+        "needsResume": false,
+        "evidence": [
+          {
+            "claim": "Backend",
+            "storyId": null,
+            "storyTitle": null,
+            "grounded": false
+          },
+          {
+            "claim": "stack",
+            "storyId": null,
+            "storyTitle": null,
+            "grounded": false
+          }
+        ],
+        "keywords": {
+          "covered": 7,
+          "total": 10,
+          "items": [
+            {
+              "keyword": "Kubernetes",
+              "covered": true
+            },
+            {
+              "keyword": "Docker",
+              "covered": true
+            },
+            {
+              "keyword": "Golang",
+              "covered": true
+            },
+            {
+              "keyword": "React",
+              "covered": true
+            },
+            {
+              "keyword": "NZD",
+              "covered": false
+            },
+            {
+              "keyword": "nchenLocation",
+              "covered": false
+            },
+            {
+              "keyword": "Engineer",
+              "covered": true
+            },
+            {
+              "keyword": "Backend",
+              "covered": true
+            },
+            {
+              "keyword": "Unicode",
+              "covered": false
+            },
+            {
+              "keyword": "Senior",
+              "covered": true
+            }
+          ]
+        },
+        "voice": {
+          "authenticity": 45,
+          "aiDetectionRisk": 28,
+          "aiDetectionLabel": "Review"
+        },
+        "versions": [
+          {
+            "id": "cc2f5ca6cd1fb77031f8e263e",
+            "version": 1,
+            "createdAt": "2026-07-20T06:32:29.222000",
+            "current": true
+          }
+        ]
+      },
+      "keywords": {
+        "covered": 7,
+        "total": 10,
+        "items": [
+          {
+            "keyword": "Kubernetes",
+            "covered": true
+          },
+          {
+            "keyword": "Docker",
+            "covered": true
+          },
+          {
+            "keyword": "Golang",
+            "covered": true
+          },
+          {
+            "keyword": "React",
+            "covered": true
+          },
+          {
+            "keyword": "NZD",
+            "covered": false
+          },
+          {
+            "keyword": "nchenLocation",
+            "covered": false
+          },
+          {
+            "keyword": "Engineer",
+            "covered": true
+          },
+          {
+            "keyword": "Backend",
+            "covered": true
+          },
+          {
+            "keyword": "Unicode",
+            "covered": false
+          },
+          {
+            "keyword": "Senior",
+            "covered": true
+          }
+        ]
+      }
+    },
+    "J4": {
+      "label": "J4:Staff Engineer@Brandglue Corp",
+      "job_id": "c9b32a7fc142a00e803689a18",
+      "bg_job": "ccb74a8313141599f1cf707a8",
+      "terminal": "completed",
+      "error": null,
+      "cover_letter_id": "c3396fb8ecd6ec7326eb226e3",
+      "run_result_keys": [
+        "model",
+        "run_id",
+        "costUsd",
+        "flagged",
+        "tokensIn",
+        "tokensOut",
+        "approval_id",
+        "duration_ms",
+        "billingAudit",
+        "cover_letter",
+        "approval_status",
+        "cover_letter_id",
+        "approvalRequired"
+      ],
+      "insights_status": 200,
+      "insights_full": {
+        "letterId": "c3396fb8ecd6ec7326eb226e3",
+        "jobId": "c9b32a7fc142a00e803689a18",
+        "jobTitle": "Staff Engineer",
+        "company": "Brandglue Corp",
+        "wordCount": 171,
+        "needsResume": false,
+        "evidence": [
+          {
+            "claim": "Staff",
+            "storyId": null,
+            "storyTitle": null,
+            "grounded": false
+          },
+          {
+            "claim": "platform.",
+            "storyId": null,
+            "storyTitle": null,
+            "grounded": false
+          }
+        ],
+        "keywords": {
+          "covered": 4,
+          "total": 10,
+          "items": [
+            {
+              "keyword": "Docker",
+              "covered": true
+            },
+            {
+              "keyword": "React",
+              "covered": true
+            },
+            {
+              "keyword": "GeoLocation",
+              "covered": false
+            },
+            {
+              "keyword": "SlideShare",
+              "covered": false
+            },
+            {
+              "keyword": "SharePoint",
+              "covered": false
+            },
+            {
+              "keyword": "APIs",
+              "covered": false
+            },
+            {
+              "keyword": "Label-first",
+              "covered": false
+            },
+            {
+              "keyword": "Engineer",
+              "covered": true
+            },
+            {
+              "keyword": "Staff",
+              "covered": true
+            },
+            {
+              "keyword": "Niche",
+              "covered": false
+            }
+          ]
+        },
+        "voice": {
+          "authenticity": 31,
+          "aiDetectionRisk": 34,
+          "aiDetectionLabel": "Review"
+        },
+        "versions": [
+          {
+            "id": "c3396fb8ecd6ec7326eb226e3",
+            "version": 1,
+            "createdAt": "2026-07-20T06:32:56.726000",
+            "current": true
+          }
+        ]
+      },
+      "keywords": {
+        "covered": 4,
+        "total": 10,
+        "items": [
+          {
+            "keyword": "Docker",
+            "covered": true
+          },
+          {
+            "keyword": "React",
+            "covered": true
+          },
+          {
+            "keyword": "GeoLocation",
+            "covered": false
+          },
+          {
+            "keyword": "SlideShare",
+            "covered": false
+          },
+          {
+            "keyword": "SharePoint",
+            "covered": false
+          },
+          {
+            "keyword": "APIs",
+            "covered": false
+          },
+          {
+            "keyword": "Label-first",
+            "covered": false
+          },
+          {
+            "keyword": "Engineer",
+            "covered": true
+          },
+          {
+            "keyword": "Staff",
+            "covered": true
+          },
+          {
+            "keyword": "Niche",
+            "covered": false
+          }
+        ]
+      }
+    }
+  },
+  "ended_utc": "2026-07-20T06:33:00.634695+00:00"
+}

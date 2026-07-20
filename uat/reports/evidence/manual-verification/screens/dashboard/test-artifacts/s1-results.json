@@ -1,0 +1,154 @@
+{
+  "session": 1,
+  "startedAt": "2026-07-17T15:17:08.367Z",
+  "steps": [
+    {
+      "step": "unauth-access-dashboard",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "redirectedToLogin": true
+    },
+    {
+      "step": "root-redirect",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "status": 200
+    },
+    {
+      "step": "login",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "tokenPrefix": "eyJhbGci"
+    },
+    {
+      "step": "dashboard-content-inventory",
+      "hasPaywall": true,
+      "hasGateLoading": false,
+      "hasAgentFeed": false,
+      "hasFunnel": false,
+      "hasStoryBank": false,
+      "hasCrm": false,
+      "hasApprovals": false,
+      "hasOpportunities": false
+    },
+    {
+      "step": "sidebar-nav-inventory",
+      "links": [
+        {
+          "text": "Dashboard",
+          "href": "/dashboard"
+        },
+        {
+          "text": "Jobs",
+          "href": "/dashboard/jobs"
+        },
+        {
+          "text": "Resume Studio",
+          "href": "/dashboard/resume"
+        },
+        {
+          "text": "Cover Letter Studio",
+          "href": "/dashboard/cover-letters"
+        },
+        {
+          "text": "Story Bank",
+          "href": "/dashboard/stories"
+        },
+        {
+          "text": "Applications",
+          "href": "/dashboard/applications"
+        },
+        {
+          "text": "Interview Center",
+          "href": "/dashboard/interviews"
+        },
+        {
+          "text": "Networking",
+          "href": "/dashboard/networking"
+        },
+        {
+          "text": "Email Center",
+          "href": "/dashboard/email"
+        },
+        {
+          "text": "Agents",
+          "href": "/dashboard/agents"
+        },
+        {
+          "text": "Analytics",
+          "href": "/dashboard/analytics"
+        },
+        {
+          "text": "Offers",
+          "href": "/dashboard/offers"
+        },
+        {
+          "text": "Settings",
+          "href": "/dashboard/settings"
+        }
+      ]
+    },
+    {
+      "step": "sidebar-agent-pulse-text",
+      "text": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether"
+    },
+    {
+      "step": "topbar-greeting",
+      "greeting": "Good afternoon, Administrator",
+      "subtitle": "Fri, 17 July · last agent run 3h ago"
+    },
+    {
+      "step": "topbar-search-xss-probe",
+      "query": "<script>alert(1)</script>",
+      "resultsHtmlContainsRawScript": null,
+      "resultsHtmlSnippet": null
+    },
+    {
+      "step": "topbar-search-eng",
+      "resultCount": 2
+    },
+    {
+      "step": "notification-bell-click",
+      "ariaLabel": "Notifications — 2 pending approvals",
+      "urlAfterClick": "https://5cb5f0620.abacusai.cloud/dashboard/approvals"
+    },
+    {
+      "step": "paywall-cta-href",
+      "href": "/pricing"
+    },
+    {
+      "step": "paywall-cta-click-result",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "step": "sidebar-nav-click-Jobs",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+    },
+    {
+      "step": "sidebar-nav-click-Agents",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/agents"
+    },
+    {
+      "step": "sidebar-nav-click-Settings",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/settings"
+    },
+    {
+      "step": "sidebar-nav-click-Dashboard",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "catchall-nonexistent-route",
+      "httpStatus": 200,
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/nonexistent-xyz",
+      "bodyContainsNotFound": false,
+      "bodyContainsBackToDashboard": false
+    },
+    {
+      "step": "back-forward",
+      "afterBackUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "afterForwardUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+    },
+    {
+      "step": "throttled-reload",
+      "durationMs": 3564
+    }
+  ],
+  "endedAt": "2026-07-17T15:18:22.510Z"
+}

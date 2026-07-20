@@ -1,0 +1,100 @@
+{
+  "registeredBadge": {
+    "visible": true,
+    "text": "Account created — sign in to continue."
+  },
+  "emptySubmit": {
+    "identifierValidity": {
+      "valid": false,
+      "valueMissing": true
+    },
+    "url": "https://5cb5f0620.abacusai.cloud/login",
+    "netlogCount": 0,
+    "netlog": []
+  },
+  "xssEcho": {
+    "errorText": "Invalid email or password.",
+    "scriptInjectedRaw": false,
+    "netlog": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 401,
+        "method": "POST",
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      }
+    ],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ]
+  },
+  "unicode": {
+    "errorText": "Invalid email or password.",
+    "netlog": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 401,
+        "method": "POST",
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      }
+    ]
+  },
+  "longString": {
+    "errorText": "Invalid email or password.",
+    "netlog": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 401,
+        "method": "POST",
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      }
+    ]
+  },
+  "wrongPasswordGhost": {
+    "errorText": "Invalid email or password.",
+    "netlog": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 401,
+        "method": "POST",
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      }
+    ],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ],
+    "identifier": "mv-login-ghost-1784295533814"
+  },
+  "passwordMasking": {
+    "inputType": "password"
+  },
+  "enterKeySubmit": {
+    "errorText": "Invalid email or password.",
+    "netlog": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+        "status": 401,
+        "method": "POST",
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      }
+    ]
+  },
+  "signupLinkNav": {
+    "url": "https://5cb5f0620.abacusai.cloud/signup"
+  },
+  "unauthDashboardRedirect": {
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login"
+  },
+  "alreadyAuthedVisitLogin": {
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login"
+  }
+}

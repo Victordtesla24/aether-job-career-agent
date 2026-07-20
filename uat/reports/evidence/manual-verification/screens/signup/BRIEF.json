@@ -1,0 +1,23 @@
+{
+  "generated_utc": "2026-07-17T13:31:36.425417+00:00",
+  "git_sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "screen": {
+    "screen_id": "signup",
+    "screen_name": "Signup",
+    "wireframe_files": [],
+    "routes": [
+      "/signup"
+    ],
+    "endpoints": [
+      "POST /auth/register",
+      "POST /auth/login"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; CRITICAL PATH. Testable: registration, validation, email, redirect."
+  },
+  "claim_rows": [],
+  "canonical_login": "uat/reports/evidence/manual-verification/canonical-login.md",
+  "baseline_note": "Baseline captures from Step 6 are under uat/reports/evidence/manual-verification/screens/ (folder named signup or signup_auth/signup_unauth or baseline/signup depending on sweep layout) \u2014 use as the 'before' record.",
+  "output_report": "uat/reports/evidence/manual-verification/screens/signup/TESTING-OUTCOME-REPORT.md"
+}

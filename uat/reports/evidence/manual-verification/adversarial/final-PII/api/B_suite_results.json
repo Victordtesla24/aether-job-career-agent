@@ -1,0 +1,64 @@
+{
+  "resumes_list": {
+    "status": 200,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    },
+    "body_head": "[]"
+  },
+  "job_insights": {
+    "status": 200,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    },
+    "body_head": "{\"jobId\":\"cc165c8e3af88240a87617735\",\"scored\":false,\"needsResume\":true,\"overall\":0,\"keywordMatch\":0,\"semantic\":0,\"experience\":0,\"skillsMatched\":0,\"skillsTotal\":0,\"matchedSkills\":[],\"missingSkills\":[],\"skillGap\":null,\"narrative\":\"Add your resume to see how you match this role \u2014 we score your fit against your own resume, never a sample.\",\"dimensions\":[{\"label\":\"Technical Skills\",\"score\":0},{\"label\":"
+  },
+  "email_draft_reply": {
+    "status": 422,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    },
+    "body_head": "{\"detail\":\"Add your resume before drafting a reply.\"}"
+  },
+  "fit_scorer_run": {
+    "status": 422,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    },
+    "body_head": "{\"detail\":\"Add your resume before scoring jobs against it.\"}"
+  },
+  "fit_scorer_quota": {
+    "before": {
+      "runsUsed": 0,
+      "spendUsedUsd": "0"
+    },
+    "after": {
+      "runsUsed": 0,
+      "spendUsedUsd": "0"
+    },
+    "runsUsed_unchanged": true,
+    "spendUsed_unchanged": true
+  },
+  "job_fitscores": [
+    {
+      "id": "cc165c8e3af88240a87617735",
+      "fitScore": null
+    }
+  ]
+}

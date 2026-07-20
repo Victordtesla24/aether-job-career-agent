@@ -1,0 +1,161 @@
+[
+  {
+    "id": "MV-dashboard-004",
+    "screen": "dashboard",
+    "severity": "MEDIUM",
+    "category": "visual",
+    "summary": "The wireframe's 'Market Intelligence' section (market-intel-mi01: AU/US Demand Heatmap by Role, Remote Work Index, Hot Sectors, Salary Trends by role, Best Time to Apply, and an AI 'Where to Focus' recommendation + Explore matching roles CTA) is entirely absent from /dashboard. In its place ships the unrelated 'Real-Time Market Pulse' component (shared with the Analytics screen). This was invisible to the free-plan pass (masked by the paywall) — new information from this pass.",
+    "reproduction": [
+      "Login as admin/admin123 (confirmed active_paid:true via GET /billing/entitlement)",
+      "Load /dashboard, scroll to the bottom section",
+      "Compare the rendered data-testid panels/headings against design/screens/dashboard.html's market-intel-mi01 block",
+      "Observe none of Demand Heatmap by Role / Remote Work Index / Hot Sectors / Salary Trends / Best Time to Apply / Where to Focus / Explore matching roles are present",
+      "Repeated in a fresh session with identical result"
+    ],
+    "expected": "The wireframed Demand-Heatmap-by-Role / Remote-Work-Index / Hot-Sectors / Salary-Trends / Best-Time-to-Apply / Where-to-Focus widget set including the 'Explore matching roles' CTA.",
+    "observed": "A different, fully-functional, DB-driven 'Real-Time Market Pulse' widget set (Trend Indicators, Jobs-by-Source donut, Top Skills, Job Probability Score, Weekly Activity heatmap, Employer Hiring Activity, Recruiter Activity, Market-vs-You) with no equivalent AI-recommendation CTA anywhere on this screen.",
+    "evidence": [
+      "test-artifacts/paid/p1-01-dashboard-loaded-full.png",
+      "test-artifacts/paid/p2-01-dashboard-loaded.png",
+      "test-artifacts/paid/p1-results.json (step market-pulse-content)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-005",
+    "screen": "dashboard",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "'Top Skills in Demand' panel (inside Market Pulse) renders its header only with a blank body whenever GET /analytics/market-pulse returns topSkills:[] — no empty-state fallback copy, unlike every sibling widget on this screen. Root cause confirmed via DB: all 44 of this user's Job rows have an empty requirements array, so the server-side skill-lexicon match has nothing to match.",
+    "reproduction": [
+      "Login as admin/admin123",
+      "Load /dashboard, scroll to Market Pulse -> Top Skills in Demand",
+      "Observe the header with no bars/rows/message beneath it",
+      "Confirm via GET /analytics/market-pulse that topSkills is []",
+      "Confirm via DB SELECT jsonb_array_length(to_jsonb(requirements)) ... GROUP BY len that all 44 Job rows for this user have len=0",
+      "Repeated in a fresh session with identical result"
+    ],
+    "expected": "Either populated skill bars or explicit 'No skills data yet' messaging, consistent with sibling widgets (Story Bank, CRM, Approvals, Agent Feed all show explicit empty-state copy).",
+    "observed": "Blank void beneath the 'TOP SKILLS IN DEMAND' header.",
+    "evidence": [
+      "test-artifacts/paid/p1-01-dashboard-loaded-full.png",
+      "test-artifacts/paid/ground-truth-cross-check.txt",
+      "test-artifacts/paid/p2-results.json (step top-skills-reverify)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-006",
+    "screen": "dashboard",
+    "severity": "MEDIUM",
+    "category": "coverage-gap",
+    "summary": "No plan-tier or quota/usage indicator is displayed anywhere on the dashboard hub (topbar user chip shows name + target role only; sidebar shows agent count only), despite the wireframe explicitly showing 'Pro plan' text under the user's name, and despite a real, populated quota system existing server-side (GET /billing/subscription) that is never surfaced on this screen.",
+    "reproduction": [
+      "Login as admin/admin123 with confirmed active_paid:true",
+      "Inspect the topbar user chip and the sidebar bottom panel — both fully rendered",
+      "Search rendered text for any plan/tier/quota/usage string via regex /pro plan|plan:|quota|usage/i",
+      "No match found; repeated in a fresh session with identical result"
+    ],
+    "expected": "Some visible confirmation of plan tier (per wireframe) and/or usage, consistent with the brief's explicit ask to check whether the dashboard 'should show Pro now'.",
+    "observed": "Absent in both sessions (mentionsPlanOrQuota:false).",
+    "evidence": [
+      "test-artifacts/paid/p1-01-dashboard-loaded-top.png",
+      "test-artifacts/paid/p2-results.json (step plan-quota-indicator-check)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-007",
+    "screen": "dashboard",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "Two agent types that actively run in production (emailAgent, storyExtractor) are not registered in the Agent Activity feed's display-name/tile/badge maps (apps/web/src/components/dashboard/feed.ts), so they fall back to generic robot icon/copy ('emailAgent agent run completed') instead of dedicated readable copy like the other 5 agents get.",
+    "reproduction": [
+      "Login as admin/admin123",
+      "Load /dashboard, read the Agent Activity feed",
+      "Locate entries for emailAgent (present in this account's real run history)",
+      "Observe generic 'emailAgent agent' / 'run completed' fallback copy",
+      "Repeated in a fresh session with identical result"
+    ],
+    "expected": "A friendly display name/icon/description consistent with scout/tailor/coverLetter/submission/supervisor.",
+    "observed": "Generic 'emailAgent agent run completed' fallback copy and default robot tile.",
+    "evidence": [
+      "test-artifacts/paid/p1-01-dashboard-loaded-top.png",
+      "test-artifacts/paid/p2-results.json (step agent-feed-reverify)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-008",
+    "severity": "LOW",
+    "screen": "dashboard",
+    "category": "performance",
+    "summary": "On a throttled connection, all 4 stat cards render as soon as the small/fast GET /analytics/funnel response resolves, without gating on the much larger GET /jobs?sort=fitScore response the AI Confidence card also depends on. This produces a misleading transient state — 'AI CONFIDENCE — no scored jobs yet' (implying zero data) for ~15-20 seconds under 50kbps/400ms throttling — self-correcting once the jobs payload finishes downloading.",
+    "reproduction": [
+      "Login as admin/admin123",
+      "Apply CDP Network.emulateNetworkConditions (50kbps down/up, 400ms latency)",
+      "Reload /dashboard",
+      "Poll the AI Confidence card every 2s for 30s",
+      "Observe 'no scored jobs yet' from ~3.5s to ~17.6s elapsed, then self-corrects to '38% avg match quality' at ~19.6s elapsed",
+      "Reproduced twice: inline in session 2 and in a dedicated 30s polling follow-up run"
+    ],
+    "expected": "Either a shared loading gate across all 4 stat cards, or a card-level skeleton/spinner instead of the zero-state copy while its dependency is still in flight.",
+    "observed": "Misleading 'no scored jobs yet' shown for 15-20s before self-correcting; no data loss, but the interim state reads as 'you have zero scored jobs' rather than 'still loading'.",
+    "evidence": [
+      "test-artifacts/paid/p2-03-throttled-mid-load.png",
+      "test-artifacts/paid/p2-04-throttled-final.png",
+      "test-artifacts/paid/p2-05-throttle-followup-final.png",
+      "test-artifacts/paid/p2-results.json (step throttled-reload)",
+      "test-artifacts/paid/throttle_followup.js"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-009",
+    "screen": "dashboard",
+    "severity": "HIGH",
+    "category": "wiring",
+    "summary": "The Agent Activity feed's inline 'Approve' button for a coverLetter run's 'drafted a cover letter -- awaiting your approval' entry is driven by AgentRun.output.approval_status, a field cached at generation time that is never updated once the linked ApprovalRequest is resolved through another surface. Confirmed live: ApprovalRequest c3df4494103f796021d8aae69 has status:'approved' (resolvedAt 2026-07-17 16:34:47) yet its originating AgentRun's output.approval_status still reads 'pending', so the feed keeps showing an active Approve button for it indefinitely (still present 45+ minutes after resolution). Clicking it fails closed (409, no double-mutation) but surfaces a raw, unpolished technical string to the paying user: the literal HTTP method, endpoint path, record id, status code and a raw JSON blob concatenated into the toast.",
+    "reproduction": [
+      "Login as admin/admin123",
+      "In the Agent Activity feed, find a coverLetter 'drafted a cover letter -- awaiting your approval' entry with a visible Approve button",
+      "(Verify first via DB/API read that the underlying ApprovalRequest is already resolved, to avoid mutating live shared data)",
+      "Click the Approve button",
+      "Read the toast: \"Couldn't approve -- POST /approvals/c3df4494103f796021d8aae69/approve failed (409): {\\\"detail\\\":\\\"Approval already approved -- terminal state\\\"}\"",
+      "Reproduced identically in two independent fresh browser sessions"
+    ],
+    "expected": "Either the button should not render once the underlying approval is resolved (fresh-check or hide-after-resolve), or at minimum the failure should surface a clean, non-technical message such as 'This request was already handled.'",
+    "observed": "Button remains indefinitely; click 409s; raw REST method/path/id/JSON leaks directly into the user-facing toast.",
+    "evidence": [
+      "test-artifacts/paid/p3-00-before-stale-approve-click.png",
+      "test-artifacts/paid/p3-01-after-stale-approve-click.png",
+      "test-artifacts/paid/ground-truth-cross-check.txt",
+      "test-artifacts/paid/stale_approval_check.js"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

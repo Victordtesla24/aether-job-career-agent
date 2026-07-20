@@ -1,0 +1,100 @@
+{
+  "task": "MANUAL-VERIFICATION Stage 2 — REVIEW cluster-E story-bank",
+  "reviewer": "sonnet (reviewer, independent of fixer agent-a6f1d791)",
+  "reviewed_commit": "1122dab",
+  "branch": "fix/mv-e-story-bank-rebased",
+  "parent_commit": "1122dab^ = 466c1ed (main tip at rebase time)",
+  "timestamp_utc": "2026-07-18T06:23:21Z",
+  "verdict": "PASS",
+  "scope_note": "Frontend only per brief: vitest/tsc/next build. No backend pytest run (out of scope).",
+  "method": "Independent git worktree created at /tmp/.../scratchpad/review-cluster-e pinned to commit 1122dab (separate from fixer's own worktree agent-a6f1d791b6bae9da2). pnpm install --frozen-lockfile, then vitest/tsc/build run directly, plus a temporary revert-to-parent-then-restore to confirm fail-before/pass-after for the 5 new tests.",
+
+  "findings": {
+    "MV-story-bank-001": {
+      "claim": "Import from Portfolio button removed (was fake, same handler as Add-Manually, no backend call); empty-state portfolio copy trimmed",
+      "status": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "git diff 1122dab^ 1122dab -- apps/web/src/app/dashboard/stories/page.tsx: the entire <button data-testid=\"empty-import-portfolio\"> block (onClick={openCreate}, same handler as Add-Manually) is deleted, not just hidden/disabled.",
+        "Empty-state copy changed from 'Import achievements from your resume and portfolio to build...' to 'Import achievements from your resume to build...' — grep -ni 'portfolio' apps/web/src/app/dashboard/stories/page.tsx (post-fix, worktree) returns zero matches.",
+        "Only two entry points remain: empty-import-resume (real POST /agents/story-extractor/run trigger) and empty-add-manual (honestly-labeled manual form).",
+        "src/__tests__/stories/story-bank-page.test.tsx asserts empty-import-resume and empty-add-manual render, and queryByTestId('empty-import-portfolio') / queryByText(/import from portfolio/i) are both null."
+      ],
+      "gap_noted": "Test asserts absence of the button/its label text, but does not separately assert the empty-state paragraph no longer contains the word 'portfolio'. Verified this by direct source grep instead (see evidence above) — not a blocking gap, just noting the test coverage is narrower than the full claim."
+    },
+    "MV-story-bank-002": {
+      "claim": "Long unbroken STAR-field string no longer blows out page layout — min-w-0 on grid items + break-words",
+      "status": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "git diff: grid item div gains className min-w-0; the <p> rendering the field value gains min-w-0 break-words (in addition to its existing text color class).",
+        "This is the correct CSS mechanism: CSS Grid/Flexbox items default to min-width:auto (content-based sizing), so wrap CSS alone (break-words) on the text node does not stop the ancestor grid track from stretching to a single unbroken token's intrinsic width — min-w-0 on the ancestor is required. Both were added, matching the root cause.",
+        "src/__tests__/stories/story-card.test.tsx: renders a 500-char unbroken string, asserts the text node's className matches /break-words|break-all/ AND its parentElement's className matches /\\bmin-w-0\\b/.",
+        "Reverted to pre-fix story-card.tsx and re-ran: test failed with 'expected text-[#C7C7D6] to match /break-words|break-all/' — confirms this test is not tautological, it genuinely distinguishes fixed from unfixed code."
+      ]
+    },
+    "MV-story-bank-003": {
+      "claim": "Delete gated behind window.confirm() naming the story",
+      "status": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "story-card.tsx: new confirmDelete() calls window.confirm(`Delete \"${story.title}\"? This cannot be undone.`) — the message names the specific story title, not a generic prompt.",
+        "Trash-can button's onClick rewired from onDelete directly to confirmDelete; grep confirms this is the sole call site of onDelete() in the component and the sole path to deleteStory() in the page (page.tsx:310 onDelete={() => void remove(story.id)} is the only wiring).",
+        "src/__tests__/stories/story-card.test.tsx: two tests — window.confirm mocked to return false -> onDelete NOT called; mocked to return true -> onDelete called exactly once. Both assert window.confirm was invoked exactly once.",
+        "Reverted to pre-fix story-card.tsx and re-ran: both tests failed ('expected \"bound \" to be called 1 times, but got 0 times') because window.confirm was never invoked and the old code deleted unconditionally — confirms non-tautological fail-before/pass-after."
+      ],
+      "gap_noted": "Tests check confirm() was called and gate the onDelete callback correctly, but do not assert the exact message text/story title interpolation. Verified the title-naming claim directly from source instead."
+    },
+    "MV-story-bank-004": {
+      "claim": "client.ts 204 fast-path now drains the body (fixes net::ERR_ABORTED)",
+      "status": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "git diff: `if (res.status === 204) { await res.text().catch(() => undefined); return undefined as T; }` — body is now consumed before returning, matching every other response branch (.json() success path, .text() error path) which already drain the stream.",
+        "src/__tests__/stories/story-bank-client.test.ts: mocks fetch to return {ok:true, status:204, text: textSpy, json: vi.fn()}, calls deleteStory(), asserts textSpy called exactly once.",
+        "Reverted to pre-fix client.ts and re-ran: test failed ('expected \"spy\" to be called 1 times, but got 0 times') — confirms genuine fail-before/pass-after, not a tautology."
+      ]
+    },
+    "cluster_g_retryafter_intact": {
+      "status": "VERIFIED-WITH-FRESH-EVIDENCE — CRITICAL CHECK PASSED",
+      "evidence": [
+        "git show 1122dab:apps/web/src/lib/api/client.ts | grep -n 'retryAfterSeconds|formatRetryAfter|class ApiError|status === 204' shows all present: class ApiError (line 26) with readonly retryAfterSeconds?: number (line 32); exported formatRetryAfter(seconds: number) at line 40; retryAfterSeconds computed from the Retry-After header (lines 117-124) and passed into the thrown ApiError.",
+        "The MV-story-bank-004 diff only touches the res.status === 204 success branch (adds await res.text()); it does not touch the 429/error-path retryAfterSeconds logic or the ApiError class definition at all — confirmed by the unified diff hunk boundaries in git diff 1122dab^ 1122dab -- apps/web/src/lib/api/client.ts (single hunk at the 204 branch, +7/-1 lines).",
+        "This confirms the rebase (fix/mv-e-story-bank-rebased onto main 466c1ed, which already contains the merged fix/mv-cluster-g work) did not drop cluster-G's Retry-After plumbing — the entire reason this branch needed rebasing."
+      ]
+    }
+  },
+
+  "tests_meaningful": true,
+  "vitest_result": {
+    "targeted_stories_suite": "PASS — 4 test files, 14 tests passed (src/__tests__/stories/*)",
+    "fail_before_spotcheck": "PASS — reverted page.tsx, story-card.tsx, client.ts to 1122dab^ (pre-fix) content in an isolated worktree, re-ran the same 4 files: exactly the 5 new tests failed with genuine assertion mismatches (not errors/timeouts), 9 pre-existing tests still passed. Restored fixed files afterward (worktree since deleted).",
+    "full_suite": "PASS — 53 test files, 380 tests, 0 failures",
+    "tsc": "PASS — npx tsc --noEmit -p tsconfig.json, zero errors",
+    "next_build": "PASS — npx next build, compiled successfully, 29/29 static pages generated, zero errors"
+  },
+
+  "prohibited_patterns": [],
+  "prohibited_patterns_checked": [
+    "@ts-ignore / @ts-expect-error — none found in diff",
+    "eslint-disable — none found in diff",
+    "Math.random() metrics — none found in diff",
+    "broad `any` casts (`: any`, `as any`) — none found in diff",
+    "--no-verify / commit hook bypass — not applicable, no commit commands in diff",
+    "TODO/FIXME/placeholder/mock reachable-by-user content — none found; the only 'mock'-matching hits are legitimate vitest test doubles (vi.fn, vi.mock, vi.stubGlobal) confined to *.test.ts(x) files, not production code"
+  ],
+
+  "regression_or_security_risk": "None identified. Diff is minimal and scoped: one dead button removed (page.tsx), one confirm-gate added around a single existing delete call site (story-card.tsx), two Tailwind classes added to existing grid cells (story-card.tsx), and a single `await res.text()` added to an already-successful 204 branch in client.ts. No new dependencies, no new endpoints, no changes to auth/entitlement/error-handling logic outside the touched lines. Full 380-test vitest suite, tsc, and next build all green with zero collateral failures.",
+
+  "minor_notes_non_blocking": [
+    "MV-story-bank-001 and MV-story-bank-003 test coverage is slightly narrower than the full prose claim (copy-trim substring and confirm-message-text-interpolation are not directly asserted by the new tests) — verified these sub-claims independently via source/grep instead of relying on the tests alone. Not a fix defect; noted for completeness.",
+    "Root cause fixes are minimal and targeted — no scope creep observed (no unrelated refactors, no drive-by changes to other components)."
+  ],
+
+  "reasons": [
+    "apps/web/src/app/dashboard/stories/page.tsx:279-284 (pre-fix) — dead 'Import from Portfolio' button (onClick={openCreate}, identical to Add-Manually handler) fully removed at 1122dab; empty-state copy at page.tsx:264-265 no longer mentions 'portfolio'. MV-story-bank-001 addressed at root (control removed, not just hidden).",
+    "apps/web/src/components/stories/story-card.tsx:159-168 — grid item div now `className=\"min-w-0\"` and field <p> now `className=\"min-w-0 break-words text-[#C7C7D6]\"`, correctly targeting both the CSS Grid ancestor's default min-width:auto AND the text node's wrap behavior. MV-story-bank-002 root cause (grid track sizing) is fixed, not papered over.",
+    "apps/web/src/components/stories/story-card.tsx:70-74,145 — new confirmDelete() wraps onDelete() in window.confirm() naming story.title; trash-can button's onClick rewired from onDelete to confirmDelete; this is the sole delete call site in the codebase. MV-story-bank-003 addressed at the only entry point.",
+    "apps/web/src/lib/api/client.ts:127-134 — 204 branch now awaits res.text() before returning, matching the pattern already used by the success (.json()) and error (.text()) branches. MV-story-bank-004 root cause (unread body stream) fixed.",
+    "apps/web/src/lib/api/client.ts:26-40,117-124 — cluster-G's ApiError.retryAfterSeconds and formatRetryAfter confirmed present and untouched by this diff (git show 1122dab:... plus diff hunk-boundary check). CRITICAL check passed.",
+    "5 new tests (story-bank-client.test.ts, story-bank-page.test.tsx, story-card.test.tsx x3) independently confirmed to fail against 1122dab^ code and pass against 1122dab code — genuine fail-before/pass-after, not tautologies.",
+    "Full frontend gate green: vitest 380/380, tsc 0 errors, next build succeeds with all 29 routes generated.",
+    "No prohibited patterns found in the diff."
+  ]
+}

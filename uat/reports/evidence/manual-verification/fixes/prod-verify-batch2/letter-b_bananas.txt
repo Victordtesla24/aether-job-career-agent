@@ -1,0 +1,16 @@
+18 July 2026
+
+Hiring Team
+Northwind Platform Labs
+Re: Senior Technical Program Manager
+
+Dear Hiring Team at Northwind Platform Labs,
+
+My background in end-to-end delivery leadership is a direct match for the Senior Technical Program Manager role at Northwind Platform Labs. My experience converting a mathematically infeasible test window into an achievable plan through automation and governance directly supports the requirement to steward on-time delivery of complex technical programs.
+
+The role calls for leading cross-functional delivery of large platform initiatives, managing stakeholder communication, and tracking program risks, dependencies, and milestones. At the Australian Taxation Office, I led end-to-end delivery for a squad on the Payday Super reform program, owning sprint cadence, PI Planning, and executive status reporting. I authored an executive change request that re-baselined test capacity from 30 to up to 90 person-days, including options analysis, a costed recommendation, and full Azure DevOps traceability across 40 scenarios. To manage a critical dependency, I convened a cross-discipline technical war room that produced a binding automation recommendation in under three hours, unblocking stalled function testing.
+
+I would welcome the opportunity to discuss how this approach to delivery leadership and risk management could support Northwind Platform Labs' platform initiatives. I am available for a call or interview at your convenience and can be reached at sarkar.vikram@gmail.com or +61 433 224 556.
+
+Sincerely,
+Jordan Ellis

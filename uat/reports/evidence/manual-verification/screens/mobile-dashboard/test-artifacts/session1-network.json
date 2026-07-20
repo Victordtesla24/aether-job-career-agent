@@ -1,0 +1,38 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST",
+    "ts": "2026-07-17T15:15:44.205Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:15:44.510Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:15:44.527Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:15:44.715Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:15:44.718Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "method": "GET",
+    "ts": "2026-07-17T15:15:44.791Z"
+  }
+]

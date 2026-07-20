@@ -1,0 +1,36 @@
+{
+  "pass": "3_postrestart_13:40:58Z_reverify",
+  "prod_commit": "54c28e5",
+  "utc": "2026-07-20T13:44:18Z",
+  "results": {
+    "B1_caseless_repro2": {
+      "http": 200,
+      "keywords": [
+        "Prometheus",
+        "Ansible",
+        "Engineer",
+        "Tooling",
+        "Cloud",
+        "competitive",
+        "quarterly",
+        "flexible",
+        "extra",
+        "งเทพ"
+      ]
+    },
+    "C1_thai_standalone_NOgluing": {
+      "http": 200,
+      "keywords": [
+        "Kubernetes",
+        "Redis",
+        "Architect",
+        "Offices",
+        "Cloud",
+        "cities",
+        "ยงใหม",
+        "งเทพ",
+        "use"
+      ]
+    }
+  }
+}

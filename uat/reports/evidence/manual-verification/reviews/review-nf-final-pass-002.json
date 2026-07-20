@@ -1,0 +1,145 @@
+{
+  "run": "MANUAL-VERIFICATION / adversarial code review of fix branch",
+  "role": "reviewer (≠ author — did not write the fix; reviewed the sibling segmenter fix NF-final-pass-001 immediately prior, so this code is familiar but was NOT authored by this reviewer)",
+  "finding": "NF-final-pass-002",
+  "severity": "LOW",
+  "branch_reviewed": "fix/nf-final-pass-002",
+  "commit_reviewed": "9ceb92ff58a42154ee18109699131693f969f721",
+  "parent_sha_prod": "c158729818cecc0e4788b75bbbb6b6481143bd96",
+  "repo": "/home/ubuntu/github_repos/aether-job-career-agent",
+  "generated_utc": "2026-07-20T13:08:00Z",
+  "epistemic_legend": "[VERIFIED-WITH-FRESH-EVIDENCE]=produced by this review run, this VM, timestamps below; [INFERRED]=reasoned from code read but not independently executed; [ASSUMED-PENDING-PROBE]=not proven. Prior-phase reports (fixer fix-log.md, CLOSURE-REPORT.json) are testimony only — every check below was independently re-executed.",
+  "verdict": "PASS",
+
+  "checks": [
+    {
+      "id": "C1-fail-before-pass-after",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Two independent git worktrees created (wt-before @ c158729818cecc0e4788b75bbbb6b6481143bd96, wt-after @ 9ceb92ff58a42154ee18109699131693f969f721); repo-root .env copied into each (gitignored, required for conftest's DSN loader), removed after; ran via the repo's sanctioned scripts/run-tests.sh (never sourced .env wholesale, DSN schema=aether_test guard enforced by the script itself), under flock /tmp/aether-pytest.lock.",
+      "fail_before": {
+        "setup": "Copied the POST-fix test file (119 cases) from wt-after onto wt-before's (pre-fix) code",
+        "command": "flock /tmp/aether-pytest.lock bash scripts/run-tests.sh -q -p no:xdist -o addopts=\"\" tests/test_cover006_camelcase.py",
+        "result": "13 failed, 106 passed, 6 warnings in 0.85s",
+        "timestamp_utc": "2026-07-20T13:02:03Z",
+        "failed_tests_match": "All 13 failures are exactly the 4 named caseless gluings + 4 reverse-order + 3 Thai/Hebrew variants + 1 end-to-end keyword-panel repro + 1 false-positive-decision characterization (eSalary-style) — matches fixer's claimed 13/106 exactly",
+        "cleanup": "git checkout -- apps/api/tests/test_cover006_camelcase.py in wt-before to restore original pre-fix file"
+      },
+      "pass_after": {
+        "command": "flock /tmp/aether-pytest.lock bash scripts/run-tests.sh -q -p no:xdist -o addopts=\"\" tests/test_cover006_camelcase.py (in wt-after, unmodified checkout of 9ceb92f)",
+        "result": "119 passed, 6 warnings in 0.71s",
+        "timestamp_utc": "2026-07-20T13:02:08Z"
+      },
+      "verdict": "MATCHES fixer's claimed counts exactly (13 failed/106 passed before, 119/119 after)"
+    },
+    {
+      "id": "C2-line-level-branch-placement-and-untouched-paths",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "git show c158729:...cover_letters.py and git show 9ceb92f:...cover_letters.py, diffed by hand at the function level for _is_camel_concatenation_artifact.",
+      "finding": "The ONLY code change is a nested `if len(segments) == 1: ...` block inserted inside the existing `if len(segments) < 2: return False` guard. Traced all 3 reachable paths: (a) len(segments)==0 — the new nested if's condition (len==1) is False, so control falls through to the unchanged `return False` — confirmed byte-identical to before. (b) len(segments)==1 and token==segment (standalone label, e.g. bare 'Salary') — the new branch's `token != solo` guard is False, so it returns False exactly as before — confirmed via test_standalone_label_word_behavior_unchanged AND my own independent harness (0 mismatches on token==segment cases, see C5). (c) len(segments)>=2 — that whole code path (the `all(...)` boilerplate rule and the `any(...)` label rule) is untouched, character-for-character identical text in the diff.",
+      "verdict": "Branch placement is exactly as documented; zero-segment and token==segment behavior is provably unchanged; the 2+-segment path is untouched"
+    },
+    {
+      "id": "C3-independent-2plus-segment-byte-identical-fuzz",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Own harness (/tmp/review-nf-final-pass-002/differential/diff_test.py) with the OLD (c158729) and NEW (9ceb92f) _is_camel_concatenation_artifact re-implemented verbatim from `git show`, run over 398 generated multi-word CamelCase tokens (2-4 chained words from the label/split-word vocabularies plus common tech-term fragments) that produce genuine 2+-segment splits.",
+      "result": "0 mismatches / 398 tokens — confirms the pre-existing 2+-segment detection path is provably untouched, independently, beyond just reading the diff",
+      "timestamp_utc": "2026-07-20T13:05:00Z (approx, this run)"
+    },
+    {
+      "id": "C4-coordinator-directed-false-positive-hunt",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Same harness, three targeted probe sets beyond the fixer's own analysis: (1) currency/number/ordinal gluings directly against each _ARTIFACT_LABEL_WORDS entry (150k/80k/1.2m/50000/3rd/1st/2nd/21st/USD150k/2x/24x7/9to5/5G x {Salary,Location,Benefits,Department}, both orders) — 112 tokens; (2) non-label single-segment controls (caseless-script AND ASCII-noise prefixes/suffixes glued to non-label words Manager/Engineer/Director/Build/Experience/Consultant/Specialist, mirroring 東京Manager) — 56 tokens; (3) near-miss label-word spelling/plural/possessive variants glued to a caseless prefix (Salaries/Salaried/Locational/Locations/Benefitting/Departments/Shares/Shared/Sharing etc.) — 30 tokens. Also independently verified the tokenizer's real _WORD_RE behavior on colon-trailing/glued labels via direct execution (not inference).",
+      "currency_ordinal_result": "44/112 flip False→True (e.g. '150kSalary', '3rdLocation', '24x7Benefits'). MATERIALITY JUDGMENT: not a false positive — this is architecturally the identical shape the fixer already explicitly surveyed and intentionally decided to flag (test_single_label_segment_with_lowercase_ascii_prefix_or_suffix_is_flagged, 'eSalary'/'iLocation'). A bare number/ordinal glued with no separator directly onto a JD structural label ('150kSalary', '3rdLocation') has no value as a keyword chip in any case — dropping it from the panel is correct, not harmful, and is the same class of scrape-gluing artifact this whole finding family targets.",
+      "non_label_controls_result": "0/56 flips — confirms 東京Manager-style tokens (any non-label word with any caseless-script OR ASCII-noise prefix/suffix) remain correctly unflagged, exactly matching the documented any-segment-is-a-LABEL (not boilerplate) asymmetry",
+      "label_variant_result": "14/30 flip, and they are EXACTLY the tokens whose word is a literal, exact member of _ARTIFACT_LABEL_WORDS (including 'locations' and 'benefits', which are themselves literal set entries, not just 'location'/'benefit'). The other 16 (Salaries/Salaried/Locational/Benefitting/Departments/Shares/Shared/Sharing) do NOT flip — confirms exact-string-match safety for plural/possessive/derived forms independently, beyond just the fixer's single 'Salaries' example",
+      "tokenizer_colon_check": "Directly executed the real _WORD_RE regex (`[^\\W_](?:[^\\W_]|[+#./-])*`) against 'Location: Sydney', 'Location:Sydney', 'Salary:negotiable', '150kSalary', 'Location:東京', '東京Location:', 'Location:東京Salary:150k'. Result: a colon (with or without following space) is NEVER an in-word continuation character, so it always acts as a hard token boundary — 'Location:Sydney' tokenizes to two SEPARATE tokens ['Location','Sydney'], never a single glued token. The one case where a colon does NOT split ('東京Location:' → single token '東京Location', trailing colon dropped) correctly reaches the new rule and is flagged, matching the already-tested reverse-order gluing pattern. Conclusion: colon-trailing JD field labels are structurally immune to this fix's new branch — they were never a false-positive/negative surface to begin with.",
+      "verdict": "No genuine false positive found in the hunted space; the one flip category with volume (currency/ordinal) is in-scope and desirable, not a regression"
+    },
+    {
+      "id": "C5-random-len1-path-fuzz-500-tokens",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Randomized fuzz (seed=4242, 500 tokens) specifically targeting the new len(segments)==1 branch: random choice of a label or non-label word, random choice of caseless-script/ASCII-lowercase/no-noise prefix-or-suffix, verdict computed both ways.",
+      "result": "175/500 flipped False→True. Of those flips, verified BOTH invariants the branch's logic guarantees: (a) 0 flips where the underlying cased word is NOT a member of _ARTIFACT_LABEL_WORDS (would indicate the label check leaked scope — did not happen); (b) 0 flips where noise=='' i.e. token==segment (would indicate a standalone label word got wrongly flagged — did not happen).",
+      "timestamp_utc": "2026-07-20T13:05:30Z (approx, this run)",
+      "verdict": "Independently confirms, at fuzz scale, that flips occur if and only if (lone segment is an exact _ARTIFACT_LABEL_WORDS member) AND (token carries material beyond that segment) — exactly the documented rule, no more, no less"
+    },
+    {
+      "id": "C6-reported-cases-and-standalone-preservation",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Ran the actual pytest suite (not just my own harness) for the 4 named reported gluings + reverse order + Thai/Hebrew + standalone-preserved-caseless + standalone-label-unchanged test groups, all passing at 9ceb92f (part of the 119/119 pass-after result in C1). Cross-checked with my own harness for قاهرةSalary/बईLocation/ソウルSalary/東京Salary and their reverses.",
+      "verdict": "All 4 named prod-observed gluings + reverses now correctly flagged; standalone caseless proper nouns (東京, السعودية, ソウル, ירושלים) remain correctly unflagged; standalone label words (Salary, Location, Benefits, Department, Share) remain correctly unflagged"
+    },
+    {
+      "id": "C7-broader-regression-batch",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Independently selected 7-file batch (own selection, run against wt-after 9ceb92f via scripts/run-tests.sh under the same flock, backgrounded and polled via the log FILE and the lock's free/busy state directly, not via process-grep or relying on the harness's completion-notification mechanism which has been unreliable this run).",
+      "files": [
+        "tests/test_cover_letter_agent.py",
+        "tests/test_cover_letter_studio.py",
+        "tests/test_gap_p5_cover.py",
+        "tests/test_gap_p6_cover_fabrication.py",
+        "tests/test_mv_clstudio_003.py",
+        "tests/test_mv_clstudio_j_residuals.py",
+        "tests/test_mv_cluster_a_cover_letter.py"
+      ],
+      "result": "95 passed, 0 failed, 6 warnings in 203.42s (0:03:23)",
+      "timestamp_utc": "2026-07-20T13:05:38Z (approx; log observed complete and lock free at that check)",
+      "verdict": "0 regressions in this independent sample"
+    },
+    {
+      "id": "C8-scope-and-prohibited-patterns",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "git diff --stat c158729 9ceb92f; deletion-line count on the test file diff; grep -niE 'TODO|FIXME|type:\\s*ignore|noqa|except:|placeholder|mock|Math\\.random|--no-verify|eslint-disable|@ts-ignore' on the full commit diff; grep -rn '_is_camel_concatenation_artifact|_camel_humps' across the whole repo excluding other agents' worktrees.",
+      "diff_stat": "apps/api/app/routers/cover_letters.py | 29 ++++  ;  apps/api/tests/test_cover006_camelcase.py | 254 ++++++++++++++++++++++++++++++  ;  2 files changed, 283 insertions(+), 0 deletions(-)",
+      "test_file_deletions": "0 (the single '^-' match is the diff header line itself) — purely additive, no existing test modified or removed",
+      "prod_file_change": "Purely additive — 29 new lines (docstring + 6-line logic branch) inserted into the existing function; zero lines removed",
+      "single_call_site": "Confirmed — sole definition and sole call site both in apps/api/app/routers/cover_letters.py (unchanged from the NF-final-pass-001 review); test file only references the function by name, does not redefine it",
+      "prohibited_patterns_found": "NONE",
+      "commit_message_accuracy": "Verified against the actual diff and actual test-run counts — accurate; correctly frames this as the third path to the same len(segments)<2 early-return family, consistent with the two prior fixes and the CLOSURE-REPORT.json finding that named it",
+      "no_no_verify": "Confirmed via git log — ordinary commit, no bypass flags",
+      "verdict": "Scope is exactly the two files claimed; no prohibited patterns; commit message accurate"
+    },
+    {
+      "id": "C9-tests-assert-real-behavior-not-tautology",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "method": "Read all 254 added lines of the test file. Every new test calls the real _is_camel_concatenation_artifact / _camel_humps / _keyword_coverage functions with literal input strings/dicts and asserts real boolean/list/dict outputs. The false-positive characterization tests (test_hyphen_slash_continuation_tokens_unaffected_by_single_segment_rule, test_single_label_segment_with_lowercase_ascii_prefix_or_suffix_is_flagged, test_single_non_label_segment_with_caseless_prefix_is_not_flagged, test_allowlisted_two_segment_terms_unaffected_by_single_segment_rule) each assert a specific, previously-reasoned-through decision against the real function — not tautological, and independently reproduced by my own harness (C4/C5) using code extracted from git history rather than trusting the test file's own assertions.",
+      "verdict": "Tests assert real, fixed behavior; no tautologies found"
+    }
+  ],
+
+  "differential_audit_summary": {
+    "two_plus_segment_tokens_tested": 398,
+    "two_plus_segment_mismatches": 0,
+    "len1_path_random_fuzz_tokens": 500,
+    "len1_path_flips": 175,
+    "len1_path_invariant_violations": 0,
+    "currency_ordinal_probe_tokens": 112,
+    "currency_ordinal_flips": 44,
+    "currency_ordinal_materiality": "in-scope/desirable, not a regression",
+    "non_label_control_tokens": 56,
+    "non_label_control_flips": 0,
+    "label_variant_tokens": 30,
+    "label_variant_flips": 14,
+    "label_variant_flips_all_exact_set_members": true,
+    "conclusion": "The len(segments)==1 branch fires if and only if the lone segment is an EXACT member of _ARTIFACT_LABEL_WORDS and the token carries material beyond it — confirmed at fuzz scale, with zero invariant violations and zero genuine false positives found in a targeted hunt that went beyond the fixer's own documented false-positive survey (currency/ordinal gluings, colon-tokenizer interaction)."
+  },
+
+  "artifacts_this_run": [
+    "/tmp/review-nf-final-pass-002/before-with-new-tests.log",
+    "/tmp/review-nf-final-pass-002/after.log",
+    "/tmp/review-nf-final-pass-002/batch.log",
+    "/tmp/review-nf-final-pass-002/differential/diff_test.py"
+  ],
+
+  "cleanup": {
+    "worktrees_removed": [
+      "/tmp/review-nf-final-pass-002/wt-before (c158729)",
+      "/tmp/review-nf-final-pass-002/wt-after (9ceb92f)"
+    ],
+    "env_files_removed": true,
+    "verified_utc": "2026-07-20T13:07:15Z"
+  },
+
+  "overall_verdict": "PASS",
+  "reasoning": "The fix is minimal (a single nested branch of 6 logic lines plus docstring, purely additive, inserted inside the existing len(segments)<2 guard; zero lines of the 2+-segment path touched), addresses the verified root cause (caseless-script characters cannot start or continue a hump under any case-function-based segmenter, so a caseless proper noun glued to an ASCII label collapses to that label as the sole segment and the historical early-return fires), and is independently reproducible: fail-before (13/106) and pass-after (119/119) counts match exactly on fresh execution. Line-level tracing confirms all three reachable paths through the modified function (zero segments, token==segment, 2+ segments) are provably unchanged, and a 398-token independent fuzz of the 2+-segment path found zero mismatches. A 500-token random fuzz of the new len==1 branch confirmed, with zero invariant violations, that it fires only when the lone segment exactly matches _ARTIFACT_LABEL_WORDS and the token carries extra material — never for non-label words (0/56 in the targeted 東京Manager-style probe) and never for standalone label mentions (0/500 in the fuzz). A coordinator-directed false-positive hunt beyond the fixer's own analysis (currency/ordinal gluings, near-miss label-word spellings, and the tokenizer's real colon-handling) found no genuine false positive: the one flip category with volume (150kSalary/3rdLocation-style number-or-ordinal-plus-label gluings, 44/112) is architecturally identical to the 'eSalary' shape the fixer already surveyed and intentionally decided to flag, and dropping such tokens from the keyword panel is correct behavior, not harmful, since they carry no keyword value regardless. Colon-trailing JD field labels ('Location:', 'Salary:') were verified via direct execution of the real _WORD_RE tokenizer to always split into separate tokens, so they never reach the new branch as a combined token — not a false-positive/negative surface. Scope is exactly cover_letters.py + its test file, purely additive on both sides; grep confirms the single call site and unchanged output contract; no prohibited patterns found; commit message is accurate; an independently-selected 7-file/95-test batch of adjacent cover-letter suites passed with 0 failures."
+}

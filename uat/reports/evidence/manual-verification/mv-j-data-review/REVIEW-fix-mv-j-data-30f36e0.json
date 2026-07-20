@@ -1,0 +1,77 @@
+{
+  "run": "MANUAL-VERIFICATION Stage 2 §5 REVIEW — cluster-J2 data-consistency, PASS 3 (delta review)",
+  "reviewer_role": "reviewer (non-author, adversarial)",
+  "branch": "fix/mv-j-data",
+  "delta_reviewed": "git diff be7b240..30f36e0",
+  "commit": "30f36e07532d163bbc25184ee38bb811ba89acf6",
+  "prior_commits_reviewed": ["23ad8e6f8895853d09c7bd35a6c1924b6aa3597d", "be7b2405108fbe56db71be32bc5e406f21382beb"],
+  "base": "c5ae38944e5ba154089c7ffce9daee27cbea857f",
+  "review_timestamp_utc": "2026-07-18T18:15:00Z",
+  "verdict": "PASS",
+  "issue1_still_ok": true,
+  "issue2_resolved": true,
+  "tracker_005_resolved": true,
+  "tracker_006_resolved": true,
+  "negative_dropoff_gone": true,
+  "targeted_tests": "22 pass (test_analytics.py + test_applications_tracker.py) / 30 pass (+ test_workspaces.py) / 47 pass (+ test_gap6_sourcing_volume.py + test_jobs_insights_apply.py, tried for extra confidence) — 0 failures in every subset run. vitest: 457/457 (matches author's exact claim). Could not independently reconstruct the author's precise 'backend 39/39' file selection, but found zero failures in every combination I tried, including two broader ones beyond the standard targeted set.",
+  "checks": [
+    {
+      "n": "a",
+      "name": "Re-run live aging-pipeline repro against 30f36e0",
+      "ok": true,
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Re-seeded the EXACT scenario from the prior review pass (3 applications at status='interview', 1 at 'offer', 0 at 'screening') via a temporary scratch pytest against the live fix branch. Result: stages={'jobs_found':4,'applied':4,'screened':4,'interviewed':4,'offers':1}, dropoffs=[{'after':'jobs_found','count':0},{'after':'applied','count':0},{'after':'screened','count':0},{'after':'interviewed','count':3}] — every dropoff >= 0, the -3 is gone. Scratch test file removed after the run via restoring from a pre-probe backup; worktree verified clean (git status --short empty) afterward. Also confirmed via the new frontend test (see check (c) below) that SankeyFlow.tsx no longer emits '−-N' for any negative input, thanks to the Math.max(0, ...) clamp at line ~114."
+    },
+    {
+      "n": "b",
+      "name": "Cumulative stage definitions correct/monotonic, match funnel()'s IN-clause semantics",
+      "ok": true,
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Diffed apps/api/app/routers/applications.py funnel_sankey()'s new query character-for-character against the unchanged analytics.py funnel() query: both now use identical `COUNT(*) FILTER (WHERE \"status\" IN ('screening','interview','offer')) AS screened`, `... IN ('interview','offer') AS interviewed`, `... = 'offer' AS offers`. 'Applied' now comes from `get_application_counts(cur, uid)['submitted']` (no period_clause passed, i.e. all-time — correct since funnel_sankey has no period param), which is the same canonical non-draft count analytics.funnel() uses at period='all'. Because each stage's IN-list is a superset of the next (offer ⊆ {interview,offer} ⊆ {screening,interview,offer} ⊆ all non-draft statuses), every dropoff is guaranteed >= 0 by construction — proved both mathematically and live (check a)."
+    },
+    {
+      "n": "c",
+      "name": "New pytest genuinely fails on be7b240",
+      "ok": true,
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] Transplanted test_aging_pipeline_never_produces_a_negative_dropoff verbatim onto be7b240 in a disposable worktree and ran it: FAILED with `assert 0 == 4` on the `values['applied'] == 4` assertion (be7b240's stage-exclusive funnel_sankey() found 0 applications with literal status=='submitted', since all 4 seeded apps were at 'interview'/'offer') — matches the author's exact claimed fail-before result. Ran on 30f36e0: passes. Disposable worktree removed after. Also transplanted the new frontend apps/web/src/components/applications/__tests__/SankeyFlow.test.tsx onto be7b240 (node_modules symlinked from the fix-branch worktree): FAILED with the received text literally containing '−-3 · no response / screened out' — proving the frontend clamp test is genuine, not tautological. Disposable worktree removed after."
+    },
+    {
+      "n": "d",
+      "name": "Both MV-application-tracker-005 (undercount) and MV-application-tracker-006 (negative-dropoff render) resolved",
+      "ok": true,
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] tracker-005 (Sankey 'Applied' diverging from canonical submitted count): resolved — 'Applied' now derives from get_application_counts(), and the new test asserts `sankey['stages'][1]['value'] == funnel['applied'] == 4`, i.e. the two now agree by construction, live-verified. analytics.py's get_application_counts() docstring (lines ~44-60) no longer excludes funnel_sankey() from its 'single source of truth' claim — it now correctly states 'funnel_sankey() now also calls this function for its Applied node — every cumulative surface derives from this one function, with no divergent queries left,' which is accurate given the diff. tracker-006 (negative-dropoff broken render): resolved at both layers — backend query is now monotonic (proved in check b), and the frontend has a defense-in-depth Math.max(0, f.dropoff.count) clamp (SankeyFlow.tsx) plus a dedicated regression test that feeds a deliberately negative dropoff and asserts the render clamps to '−0' instead of '−-3'. Both the root cause (backend model) and a defensive belt-and-suspenders guard (frontend clamp) are in place — this is good defensive engineering, not just a patch at one layer."
+    },
+    {
+      "n": "e",
+      "name": "Issue-1 tooltip/header still intact",
+      "ok": true,
+      "note": "[VERIFIED-WITH-FRESH-EVIDENCE] `git diff be7b240..30f36e0 --name-only` does not touch apps/web/src/app/dashboard/analytics/page.tsx or DashboardStats.tsx at all. Directly read apps/web/src/app/dashboard/analytics/page.tsx at 30f36e0: line 95 still reads 'Every application record created in the selected period — draft through offer or rejection.' and line 150 still renders 'Dashboard summary ({period})' — unchanged from the already-PASSED be7b240 state."
+    }
+  ],
+  "scope_and_hygiene": {
+    "delta_diff_stat": "5 files, +137/-56 (analytics.py, applications.py, test_applications_tracker.py, SankeyFlow.tsx, new SankeyFlow.test.tsx) — tightly scoped to the funnel_sankey rewrite and its tests.",
+    "full_branch_diff_stat": "18 files, +661/-59 across all three stacked commits — consistent, no stray files.",
+    "node_modules_clean": true,
+    "prohibited_patterns": "none found in the delta (grepped for eslint-disable/@ts-ignore/'as any'/Math.random/TODO/FIXME/--no-verify)",
+    "commit_message": "fix(MV-application-tracker-006): rewrite Sankey funnel to the cumulative model, fixing a live negative-dropoff bug — accurately describes the change"
+  },
+  "blocking_issues": [],
+  "positive_findings_for_the_record": [
+    "The rework correctly implements Path 2 (cumulative model) exactly as the review evidence indicated it should, rather than defending the disproven Path 1 further.",
+    "The author's own new test directly reproduces the reviewer's exact adversarial repro scenario (3x interview + 1x offer + 0x screening) as a permanent regression test, and also removed the now-inaccurate MV-application-tracker-005 pinning test and docstring claims rather than leaving stale/contradictory documentation.",
+    "Defense-in-depth: both the root-cause backend fix AND a frontend render-side clamp were added, with dedicated tests for each layer.",
+    "All independently-reproduced fail-before/pass-after checks (2 backend, 1 frontend) confirm genuine, non-tautological tests.",
+    "No regressions across three passes of this review: issue-1's fix (from pass 2) remains completely untouched and intact in this delta."
+  ],
+  "evidence_commands_run": [
+    "git diff be7b240..30f36e0 (full delta read, all 5 files) and git diff --stat c5ae389..30f36e0 (full branch)",
+    "git show --stat 30f36e0 | grep -i node_modules (empty); git ls-tree -r 30f36e0 --name-only | grep -i node_modules (empty)",
+    "grep of delta diff for eslint-disable/@ts-ignore/'as any'/Math.random/TODO/FIXME/--no-verify (empty)",
+    "scratch pytest probe re-running the exact 3x-interview+1x-offer scenario against 30f36e0 live -> all dropoffs >= 0, -3 gone; probe removed after, worktree clean",
+    "test_aging_pipeline_never_produces_a_negative_dropoff transplanted onto be7b240 in a disposable worktree -> FAILED assert 0 == 4 (fail-before proof); worktree removed after",
+    "SankeyFlow.test.tsx transplanted onto be7b240 in a disposable worktree (node_modules symlinked) -> FAILED, received text contained literal '−-3 · no response / screened out' (fail-before proof); worktree removed after",
+    "pytest tests/test_analytics.py tests/test_applications_tracker.py -q on 30f36e0 -> 22 passed",
+    "pytest tests/test_analytics.py tests/test_applications_tracker.py tests/test_workspaces.py -q -> 30 passed",
+    "pytest (+ test_gap6_sourcing_volume.py + test_jobs_insights_apply.py) -q -> 47 passed (broader sanity check, no failures)",
+    "npx vitest run (full apps/web suite) on 30f36e0 -> 457 passed (matches author's exact claim)",
+    "git diff be7b240..30f36e0 --name-only confirmed analytics/page.tsx and DashboardStats.tsx untouched; direct read of page.tsx at 30f36e0 confirms issue-1 tooltip/header text unchanged from the already-passed be7b240 state"
+  ]
+}

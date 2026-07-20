@@ -1,0 +1,1 @@
+accounts: [{'email': 'priya.vb45@northwind-talent.example', 'status': 'connected', 'isPrimary': True}]

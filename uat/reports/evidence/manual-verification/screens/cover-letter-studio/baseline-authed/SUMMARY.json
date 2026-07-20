@@ -1,0 +1,12 @@
+{
+  "screen_id": "cover-letter-studio",
+  "route": "/cover-letter-studio",
+  "url": "https://5cb5f0620.abacusai.cloud/cover-letter-studio",
+  "ts_utc": "2026-07-17T15:19:41.759Z",
+  "http_status": 200,
+  "final_url": "https://5cb5f0620.abacusai.cloud/cover-letter-studio",
+  "authenticated_200_xhr_count": 1,
+  "console_error_count": 1,
+  "console_warning_count": 0,
+  "failed_request_count": 0
+}

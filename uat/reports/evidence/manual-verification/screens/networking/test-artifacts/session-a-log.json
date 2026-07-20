@@ -1,0 +1,265 @@
+[
+  {
+    "ts": "2026-07-17T16:16:04.332Z",
+    "step": "STEP0_UNAUTH_NAV_START",
+    "data": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/networking"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:07.484Z",
+    "step": "STEP0_UNAUTH_RESULT",
+    "data": {
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:07.485Z",
+    "step": "STEP1_LOGIN_START",
+    "data": {}
+  },
+  {
+    "ts": "2026-07-17T16:16:09.748Z",
+    "step": "STEP1_LOGIN_RESULT",
+    "data": {
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "tokenPrefix": "eyJhbGciOiJI"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:09.748Z",
+    "step": "STEP2_NAV_NETWORKING_START",
+    "data": {}
+  },
+  {
+    "ts": "2026-07-17T16:16:12.934Z",
+    "step": "STEP2_NAV_NETWORKING_RESULT",
+    "data": {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/networking",
+      "hasCRM": true,
+      "hasEmpty": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:12.943Z",
+    "step": "STEP3_ELEMENT_INVENTORY",
+    "data": {
+      "networking-crm": 1,
+      "add-contact-btn": 1,
+      "networking-stats": 0,
+      "contact-pipeline": 0,
+      "outreach-queue": 0,
+      "communication-log": 0,
+      "networking-empty-state": 1,
+      "networking-skeleton": 0
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:12.945Z",
+    "step": "STEP3_PIPELINE_COLUMNS",
+    "data": {
+      "columns": []
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:12.946Z",
+    "step": "STEP3_CONTACT_CARD_COUNT",
+    "data": {
+      "count": 0
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:12.947Z",
+    "step": "STEP4_REVIEW_DRAFTS_BUTTON",
+    "data": {
+      "count": 0
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:12.947Z",
+    "step": "STEP5_ADD_CONTACT_OPEN_START",
+    "data": {}
+  },
+  {
+    "ts": "2026-07-17T16:16:13.780Z",
+    "step": "STEP5_ADD_CONTACT_OPEN_RESULT",
+    "data": {
+      "modalVisible": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:14.788Z",
+    "step": "STEP5a_EMPTY_SUBMIT",
+    "data": {
+      "formErrorShown": true,
+      "networkCallsDuring": []
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:16.255Z",
+    "step": "STEP5b_VALID_SUBMIT",
+    "data": {
+      "contactName": "MV-networking-Contact-1784304974788",
+      "modalStillVisible": false,
+      "networkCallsDuring": [],
+      "contactVisibleInDOM": true,
+      "xssScriptEchoedRaw": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:16.255Z",
+    "step": "STEP6_RELOAD_START",
+    "data": {}
+  },
+  {
+    "ts": "2026-07-17T16:16:19.269Z",
+    "step": "STEP6_RELOAD_RESULT",
+    "data": {
+      "contactStillPresent": false
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:19.499Z",
+    "step": "STEP7_DIRECT_NETWORKING_CONTACTS_API",
+    "data": {
+      "status": 200,
+      "bodyPrefix": "[]"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:19.499Z",
+    "step": "STEP7b_MV_CONTACT_IN_CRUD_API",
+    "data": {
+      "mvContactInCrudApi": false
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:19.823Z",
+    "step": "STEP8_DIRECT_API_CREATE_CONTACT",
+    "data": {
+      "status": 201,
+      "body": "{\"id\":\"cc3164bdc593858860145d0a9\",\"userId\":\"cc29a76e324fbf19f438eb8be\",\"name\":\"MV-networking-DirectAPI-Test\",\"title\":\"Tester\",\"company\":\"MV Co\",\"stage\":\"identified\",\"email\":null,\"linkedinUrl\":null,\"createdAt\":\"2026-07-17T16:16:19.904000\",\"updatedAt\":\"2026-07-17T16:16:19.904000\"}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:22.883Z",
+    "step": "STEP8b_UI_SHOWS_DIRECT_API_CONTACT",
+    "data": {
+      "visible": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:23.332Z",
+    "step": "STEP9_DIRECT_API_PATCH_CONTACT",
+    "data": {
+      "status": 200,
+      "body": "{\"id\":\"cc3164bdc593858860145d0a9\",\"userId\":\"cc29a76e324fbf19f438eb8be\",\"name\":\"MV-networking-DirectAPI-Test\",\"title\":\"MV-networking-Edited-Title\",\"company\":\"MV Co\",\"stage\":\"contacted\",\"email\":null,\"linkedinUrl\":null,\"createdAt\":\"2026-07-17T16:16:19.904000\",\"updatedAt\":\"2026-07-17T16:16:23.397000\"}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:26.319Z",
+    "step": "STEP9b_UI_SHOWS_PATCHED_CONTACT",
+    "data": {
+      "titleVisible": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:26.638Z",
+    "step": "STEP10_DIRECT_API_DELETE_CONTACT",
+    "data": {
+      "status": 204
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:29.501Z",
+    "step": "STEP10b_UI_CONFIRMS_DELETE",
+    "data": {
+      "stillVisible": false
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:32.153Z",
+    "step": "STEP11_EMPTY_STATE_DEMO",
+    "data": {
+      "emptyStateVisible": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:32.840Z",
+    "step": "STEP11b_LINKEDIN_IMPORT_BUTTON",
+    "data": {
+      "count": 1,
+      "modalOpenedAfterLIClick": true
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:33.142Z",
+    "step": "STEP12_XSS_CREATE_VIA_API",
+    "data": {
+      "status": 201,
+      "body": "{\"id\":\"cfedf56296d193a324ad0ae2b\",\"userId\":\"cc29a76e324fbf19f438eb8be\",\"name\":\"MV-networking-XSS-<img src=x onerror=alert(1)>\",\"title\":\"T\",\"company\":\"C\",\"stage\":\"identified\",\"email\":null,\"linkedinUrl\":null,\"createdAt\":\"2026-07-17T16:16:33.230000\",\"updatedAt\":\"2026-07-17T16:16:33.230000\"}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:36.744Z",
+    "step": "STEP12b_XSS_RENDER_CHECK",
+    "data": {
+      "dialogFired": false,
+      "rawImgTagInHTML": false
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:37.044Z",
+    "step": "STEP12c_XSS_CLEANUP_DELETE",
+    "data": {
+      "status": 204
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:37.143Z",
+    "step": "STEP13_BOUNDARY_LONG_NAME",
+    "data": {
+      "status": 422,
+      "body": "{\"detail\":[{\"type\":\"string_too_long\",\"loc\":[\"body\",\"name\"],\"msg\":\"String should have at most 200 characters\",\"input\":\"MV-networking-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"ctx\":{\"max_length\":200}}]}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:37.242Z",
+    "step": "STEP14_INVALID_STAGE",
+    "data": {
+      "status": 422,
+      "body": "{\"detail\":\"Invalid stage 'not-a-real-stage'. Valid: ['contacted', 'identified', 'meeting', 'referral', 'responded']\"}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:37.486Z",
+    "step": "STEP15_GET_NONEXISTENT_CONTACT",
+    "data": {
+      "status": 404,
+      "body": "{\"detail\":\"Contact not found\"}"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:46.668Z",
+    "step": "STEP16_BACK_FORWARD",
+    "data": {
+      "urlAfterBack": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "urlAfterForward": "https://5cb5f0620.abacusai.cloud/dashboard/networking"
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:46.683Z",
+    "step": "STEP17_EMAILAGENT_UI_PRESENCE",
+    "data": {
+      "hasEmailAgentUI": false
+    }
+  },
+  {
+    "ts": "2026-07-17T16:16:47.015Z",
+    "step": "STEP18_OUTREACH_LIST_API",
+    "data": {
+      "status": 200,
+      "bodyPrefix": "[]"
+    }
+  }
+]

@@ -1,0 +1,249 @@
+
+ RUN  v2.1.9 /home/ubuntu/github_repos/aether-job-career-agent/apps/web
+
+ ✓ src/__tests__/agents/provider-config-modal.test.tsx (12 tests) 213ms
+ ✓ src/app/dashboard/networking/__tests__/page.test.tsx (11 tests) 243ms
+ ✓ src/app/dashboard/settings/__tests__/page.test.tsx (6 tests) 163ms
+ ✓ src/app/dashboard/__tests__/page.test.tsx (4 tests) 290ms
+ ✓ src/app/signup/__tests__/page.test.tsx (11 tests) 371ms
+ ✓ src/app/pricing/__tests__/page.test.tsx (9 tests) 262ms
+ ✓ src/app/terms/__tests__/page.test.tsx (14 tests) 193ms
+ ✓ src/app/login/__tests__/page.test.tsx (11 tests) 233ms
+ ✓ src/__tests__/dashboard/subscription-gate.test.tsx (6 tests) 91ms
+ ✓ src/__tests__/agents/orchestration.test.tsx (7 tests) 132ms
+ ✓ src/app/dashboard/jobs/__tests__/page.test.tsx (1 test) 193ms
+ ✓ src/app/privacy-policy/__tests__/page.test.tsx (9 tests) 248ms
+ ✓ src/__tests__/dashboard/resume-conversion-tooltip.test.tsx (1 test) 105ms
+ ✓ src/__tests__/metric-tooltip.test.tsx (5 tests) 121ms
+ ✓ src/app/dashboard/applications/__tests__/page.test.tsx (1 test) 92ms
+stderr | src/components/__tests__/topbar.test.tsx > Topbar mobile header clip (MV-mobile-dashboard-001) > truncates the greeting to a single line instead of letting it wrap and clip
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+
+stderr | src/components/__tests__/topbar.test.tsx > Topbar mobile header clip (MV-mobile-dashboard-001) > truncates the subtitle to a single line instead of letting it wrap and overflow
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+
+stderr | src/components/__tests__/topbar.test.tsx > Topbar mobile header clip (MV-mobile-dashboard-001) > uses a flexible min-height for the header instead of a hard-clamped fixed height
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+
+stderr | src/components/__tests__/topbar.test.tsx > Topbar account-identity chip at mobile width (MV-mobile-dashboard-004) > hides the redundant name/role text below the lg breakpoint
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+Warning: An update to Topbar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Topbar (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/src/components/topbar.tsx:93:19)
+
+ ✓ src/components/__tests__/topbar.test.tsx (4 tests) 94ms
+ ✓ src/__tests__/stories/story-card.test.tsx (3 tests) 40ms
+ ✓ src/components/__tests__/sidebar.test.tsx (3 tests) 75ms
+ ✓ src/components/__tests__/user-menu.test.tsx (4 tests) 97ms
+ ✓ src/components/analytics/__tests__/MarketPulse.test.tsx (1 test) 81ms
+ ✓ src/__tests__/stories/story-bank-page.test.tsx (1 test) 48ms
+ ✓ src/components/__tests__/auth-guard.test.tsx (2 tests) 27ms
+ ✓ src/lib/auth/__tests__/logout.test.ts (2 tests) 9ms
+ ✓ src/components/applications/__tests__/tracker-lib.test.ts (15 tests) 26ms
+ ✓ src/__tests__/agents/agents-screen.test.ts (20 tests) 12ms
+ ✓ src/__tests__/settings/career-data.test.ts (13 tests) 10ms
+ ✓ src/__tests__/auth/auth-api-client.test.ts (10 tests) 13ms
+ ✓ src/__tests__/audit/phase2-audit-clients.test.ts (9 tests) 17ms
+ ✓ src/app/dashboard/networking/__tests__/lib.test.ts (13 tests) 11ms
+ ✓ src/components/approvals/__tests__/lib.test.ts (14 tests) 7ms
+ ✓ src/__tests__/dashboard/agents-feedback.test.ts (15 tests) 6ms
+ ✓ src/__tests__/stories/story-bank-client.test.ts (7 tests) 10ms
+ ✓ src/__tests__/admin/admin-client.test.ts (7 tests) 22ms
+ ✓ src/__tests__/offers/offers-lib.test.ts (16 tests) 10ms
+ ✓ src/__tests__/dashboard/feed-helpers.test.ts (8 tests) 4ms
+ ✓ src/__tests__/auth/signup-validation.test.ts (17 tests) 7ms
+ ✓ src/__tests__/dashboard/live-stats.test.ts (4 tests) 8ms
+ ✓ src/__tests__/cover-letters/rejection.test.ts (5 tests) 5ms
+ ✓ src/__tests__/dashboard/source-status.test.ts (7 tests) 6ms
+ ✓ src/__tests__/cover-letters/insights-helpers.test.ts (9 tests) 5ms
+ ✓ __tests__/navigation.test.ts (9 tests) 6ms
+ ✓ src/__tests__/jobs/job-api.test.ts (6 tests) 16ms
+ ✓ __tests__/auth/require-auth.test.ts (6 tests) 6ms
+ ✓ src/__tests__/cover-letters/actions.test.ts (5 tests) 3ms
+ ✓ src/__tests__/jobs/application-submit.test.ts (4 tests) 7ms
+ ✓ __tests__/auth/credentials.test.ts (7 tests) 4ms
+ ✓ src/__tests__/email/email-intelligence-guard.test.ts (5 tests) 4ms
+ ✓ src/__tests__/dashboard/topbar-search.test.ts (5 tests) 4ms
+ ✓ src/lib/auth/__tests__/next-path.test.ts (6 tests) 3ms
+ ✓ __tests__/auth/jwt.test.ts (5 tests) 7ms
+ ✓ src/__tests__/dashboard/topbar-chip.test.ts (6 tests) 4ms
+ ✓ src/__tests__/settings/settings-subnav.test.ts (3 tests) 3ms
+ ✓ src/components/applications/__tests__/tracker-api.test.ts (2 tests) 6ms
+ ✓ src/__tests__/stories/story-extractor-feedback.test.ts (3 tests) 2ms
+ ✓ src/__tests__/email/google-connect.test.ts (4 tests) 4ms
+ ✓ __tests__/health.test.ts (2 tests) 2ms
+
+ Test Files  56 passed (56)
+      Tests  395 passed (395)
+   Start at  07:06:47
+   Duration  56.37s (transform 1.46s, setup 0ms, collect 9.99s, tests 3.68s, environment 26.37s, prepare 6.45s)
+

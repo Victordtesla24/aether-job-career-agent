@@ -1,0 +1,254 @@
+{
+  "windowStart": "2026-07-17T13:32:05.872Z",
+  "captured": [
+    {
+      "screen_id": "root",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/root/root.png"
+    },
+    {
+      "screen_id": "login",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/login/login.png"
+    },
+    {
+      "screen_id": "signup",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/signup/signup.png"
+    },
+    {
+      "screen_id": "pricing",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/pricing/pricing.png"
+    },
+    {
+      "screen_id": "privacy-policy",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/privacy-policy/privacy-policy.png"
+    },
+    {
+      "screen_id": "terms",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/terms/terms.png"
+    },
+    {
+      "screen_id": "dashboard",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 9,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/dashboard/dashboard.png"
+    },
+    {
+      "screen_id": "mobile-dashboard",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 18,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/mobile-dashboard/mobile-dashboard.png"
+    },
+    {
+      "screen_id": "job-discovery",
+      "status": "SUCCESS",
+      "console_error_count": 4,
+      "failed_request_count": 8,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/job-discovery/job-discovery.png"
+    },
+    {
+      "screen_id": "analytics",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 9,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/analytics/analytics.png"
+    },
+    {
+      "screen_id": "resume-studio",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 11,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/resume-studio/resume-studio.png"
+    },
+    {
+      "screen_id": "story-bank",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 9,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/story-bank/story-bank.png"
+    },
+    {
+      "screen_id": "cover-letter-studio",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 11,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/cover-letter-studio/cover-letter-studio.png"
+    },
+    {
+      "screen_id": "application-tracker",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 7,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/application-tracker/application-tracker.png"
+    },
+    {
+      "screen_id": "approval-modal",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 6,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/approval-modal/approval-modal.png"
+    },
+    {
+      "screen_id": "mobile-approval",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 10,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/mobile-approval/mobile-approval.png"
+    },
+    {
+      "screen_id": "interview-center",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 7,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/interview-center/interview-center.png"
+    },
+    {
+      "screen_id": "networking",
+      "status": "SUCCESS",
+      "console_error_count": 6,
+      "failed_request_count": 11,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/networking/networking.png"
+    },
+    {
+      "screen_id": "email-center",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 7,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/email-center/email-center.png"
+    },
+    {
+      "screen_id": "settings",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 11,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/settings/settings.png"
+    },
+    {
+      "screen_id": "offer-comparison",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 8,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/offer-comparison/offer-comparison.png"
+    },
+    {
+      "screen_id": "agent-monitor",
+      "status": "SUCCESS",
+      "console_error_count": 6,
+      "failed_request_count": 15,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/agent-monitor/agent-monitor.png"
+    },
+    {
+      "screen_id": "agents",
+      "status": "SUCCESS",
+      "console_error_count": 5,
+      "failed_request_count": 9,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/agents/agents.png"
+    },
+    {
+      "screen_id": "admin-root",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-root/admin-root-unauth.png"
+    },
+    {
+      "screen_id": "admin-health",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-health/admin-health-unauth.png"
+    },
+    {
+      "screen_id": "admin-users",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-users/admin-users-unauth.png"
+    },
+    {
+      "screen_id": "admin-settings",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-settings/admin-settings-unauth.png"
+    },
+    {
+      "screen_id": "admin-audit-log",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-audit-log/admin-audit-log-unauth.png"
+    },
+    {
+      "screen_id": "admin-spend",
+      "status": "SUCCESS",
+      "console_error_count": 0,
+      "failed_request_count": 0,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-spend/admin-spend-unauth.png"
+    },
+    {
+      "screen_id": "admin-root",
+      "status": "SUCCESS",
+      "console_error_count": 2,
+      "failed_request_count": 3,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-root/admin-root-authed.png"
+    },
+    {
+      "screen_id": "admin-health",
+      "status": "SUCCESS",
+      "console_error_count": 1,
+      "failed_request_count": 1,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-health/admin-health-authed.png"
+    },
+    {
+      "screen_id": "admin-users",
+      "status": "SUCCESS",
+      "console_error_count": 1,
+      "failed_request_count": 2,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-users/admin-users-authed.png"
+    },
+    {
+      "screen_id": "admin-settings",
+      "status": "SUCCESS",
+      "console_error_count": 1,
+      "failed_request_count": 1,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-settings/admin-settings-authed.png"
+    },
+    {
+      "screen_id": "admin-audit-log",
+      "status": "SUCCESS",
+      "console_error_count": 1,
+      "failed_request_count": 2,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-audit-log/admin-audit-log-authed.png"
+    },
+    {
+      "screen_id": "admin-spend",
+      "status": "SUCCESS",
+      "console_error_count": 1,
+      "failed_request_count": 2,
+      "screenshot": "./uat/reports/evidence/manual-verification/screens/baseline/admin-spend/admin-spend-authed.png"
+    }
+  ],
+  "failed": [],
+  "totalConsoleErrors": 93,
+  "totalFailedRequests": 177,
+  "windowEnd": "2026-07-17T13:32:35.781Z"
+}

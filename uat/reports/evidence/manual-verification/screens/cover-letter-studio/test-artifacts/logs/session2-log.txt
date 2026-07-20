@@ -1,0 +1,52 @@
+[2026-07-17T15:56:43.667Z] STEP 0: unauth access to /dashboard/cover-letters (fresh context, no login yet)
+[2026-07-17T15:56:45.572Z] unauth landed at: https://5cb5f0620.abacusai.cloud/login
+[2026-07-17T15:56:45.670Z] STEP 1: login
+[2026-07-17T15:56:47.762Z] post-login url: https://5cb5f0620.abacusai.cloud/dashboard
+[2026-07-17T15:56:51.430Z] cover-letter-card count at load: 9
+[2026-07-17T15:56:51.430Z] STEP 3: select "Voltus" job, click Generate Draft, wait properly for completion
+[2026-07-17T15:56:51.456Z] target job option: Technical Product Manager, Energy Storage · Voltus
+[2026-07-17T15:56:51.534Z] button text right after click: "Drafting..."
+[2026-07-17T15:56:51.744Z] waiting (properly, up to 150s) for Generate Draft button to return to idle...
+[2026-07-17T15:58:28.305Z] post-generate url: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T15:58:29.392Z] rejection panel visible: false
+[2026-07-17T15:58:29.411Z] expanded letter preview (first 500 chars): Cover Letter — DraftAI-generated · editable245 words · 1 page18 July 2026
+
+Hiring Team
+Empire Life
+Re: Project Manager
+
+Dear Hiring Team at Empire Life,
+
+My background as an Administrator is a direct match for the Project Manager role at Empire Life.
+
+Dear Hiring Team at Empire Life,
+
+My background as a Senior Technical Program/Delivery Manager with 15+ years of experience aligns with the Project Manager role at Empire Life. I have led end-to-end delivery for the Australian Taxation Office's Pay
+[2026-07-17T15:58:29.411Z] HOOK-CORRUPTION BUG PRESENT (verify-twice check): false
+[2026-07-17T15:58:29.422Z] cover-letter-card count after generate: 9 (was 9)
+[2026-07-17T15:58:29.422Z] STEP 4: reload, confirm persistence
+[2026-07-17T15:58:33.531Z] cover-letter-card count after reload: 9
+[2026-07-17T15:58:33.533Z] hook bug still present after reload (persistence check): false
+[2026-07-17T15:58:33.987Z] STEP 5: open Request Changes on the freshly-selected (Voltus) letter, submit clean instructions
+[2026-07-17T15:58:34.811Z] waiting (properly) for refine to complete...
+[2026-07-17T15:59:53.314Z] rejection panel visible after refine: false
+[2026-07-17T15:59:53.316Z] refined letter text (first 700 chars): Cover Letter — DraftAI-generated · editable259 words · 1 page18 July 2026
+
+Hiring Team
+Empire Life
+Re: Project Manager
+
+Dear Hiring Team at Empire Life,
+
+My background as an Administrator is a direct match for the Project Manager role at Empire Life.
+
+Dear Hiring Team at Empire Life,
+
+My background as a Senior Technical Program/Delivery Manager and Solutions Architect aligns well with the Project Manager role at Empire Life. I have led AI/ML-driven solutions, including architecting real-time WebSocket telemetry servers for 10k+ device concurrency, improving user response time by reducing P95 latency to under 200 ms. I also orchestrated agile transformations that cut end-to-end delivery time 
+[2026-07-17T15:59:53.316Z] DUPLICATE-SALUTATION CHECK: "Dear Hiring Team" occurrences=2, "Sincerely" occurrences=2 (>1 = structural bug)
+[2026-07-17T15:59:53.316Z] STEP 6: throttled network reload
+[2026-07-17T15:59:57.079Z] throttled reload total time: 3761ms
+[2026-07-17T15:59:57.681Z] STEP 7: back/forward navigation
+[2026-07-17T16:00:01.975Z] url after back: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T16:00:01.989Z] card count after back navigation: 10
+[2026-07-17T16:00:03.871Z] url after forward: https://5cb5f0620.abacusai.cloud/dashboard

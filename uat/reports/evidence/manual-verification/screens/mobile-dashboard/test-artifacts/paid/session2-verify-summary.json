@@ -1,0 +1,29 @@
+{
+  "session": 2,
+  "start": "2026-07-17T17:00:43.920Z",
+  "headerClipReproduced": {
+    "headerHeight": 64,
+    "h1Top": -15,
+    "h1ClippedAbove": true,
+    "pBottom": 78,
+    "pOverflowsBelow": true
+  },
+  "userChipClass": "flex items-center gap-2.5 pl-3 border-l border-white/10",
+  "applicationsNumbers": {
+    "activeApplicationsCard": "7",
+    "funnelApplied": "7",
+    "marketVsYouApplications": "0"
+  },
+  "topSkillsCheck": {
+    "outerHTML": "<div class=\"glass rounded-2xl border border-white/10 p-5\" data-testid=\"top-skills\"><h3 class=\"mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim\">Top Skills in Demand</h3><div class=\"space-y-3\"></div></div>",
+    "hasEmptyStateText": false
+  },
+  "navJobsUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs",
+  "navProfileUrl": "https://5cb5f0620.abacusai.cloud/dashboard/settings",
+  "profilePaidStatus": {
+    "hasPaywall": false,
+    "hasSettingsForm": true
+  },
+  "consoleEventCount": 0,
+  "end": "2026-07-17T17:00:52.472Z"
+}

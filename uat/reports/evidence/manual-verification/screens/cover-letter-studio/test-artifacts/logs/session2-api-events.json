@@ -1,0 +1,344 @@
+[
+  {
+    "t": "2026-07-17T15:56:46.304Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T15:56:46.614Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:46.835Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:47.123Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:48.065Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:48.291Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:48.480Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:49.018Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/c82107d2e8f625b6f65559a3e/insights",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:52.701Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/cover-letter/run",
+    "status": 202,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T15:56:55.900Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:56:59.121Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:02.397Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:05.616Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:08.861Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:12.041Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:15.240Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:18.032Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:18.448Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:21.638Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:24.827Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:28.030Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:31.231Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:34.433Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:37.621Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:40.833Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:56.003Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:56.009Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:57:59.221Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:12.949Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:16.163Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:18.066Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:19.381Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:22.592Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:25.812Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe33011647f4247b3a99c65",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:29.839Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:30.072Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:30.356Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:31.006Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/c82107d2e8f625b6f65559a3e/insights",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:58:59.812Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:29.804Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:49.978Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/c82107d2e8f625b6f65559a3e/refine",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T15:59:50.199Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:50.827Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/cc3aaae4343a969731915097b/insights",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:54.269Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:54.670Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:54.760Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:56.576Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/cc3aaae4343a969731915097b/insights",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:57.968Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:58.179Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:58.490Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:59.407Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:59.604Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:59:59.790Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:00:00.469Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/cc3aaae4343a969731915097b/insights",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:00:02.566Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:00:02.815Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:00:03.150Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  }
+]

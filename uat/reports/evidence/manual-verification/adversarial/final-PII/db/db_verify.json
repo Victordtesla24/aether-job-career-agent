@@ -1,0 +1,44 @@
+{
+  "A_tailor_agentruns": [
+    {
+      "agentName": "tailor",
+      "status": "completed",
+      "costUsd": "0.0000",
+      "error": null
+    }
+  ],
+  "A_tailor_bgjobs": [
+    {
+      "agentKey": "tailor",
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "B_resume_rows": 0,
+  "B_quota": {
+    "runsUsed": 0,
+    "spendUsedUsd": "0"
+  },
+  "B_agentruns": [
+    {
+      "agentName": "tailor",
+      "status": "failed",
+      "costUsd": null
+    },
+    {
+      "agentName": "coverLetter",
+      "status": "failed",
+      "costUsd": null
+    },
+    {
+      "agentName": "fitScorer",
+      "status": "failed",
+      "costUsd": null
+    },
+    {
+      "agentName": "emailAgent",
+      "status": "failed",
+      "costUsd": null
+    }
+  ]
+}

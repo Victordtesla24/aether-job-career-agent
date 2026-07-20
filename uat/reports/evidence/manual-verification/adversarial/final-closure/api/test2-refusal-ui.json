@@ -1,0 +1,268 @@
+{
+  "started_utc": "2026-07-20T06:41:30.533Z",
+  "account": "mv-qa-fr-69d1e2-nr@example.com",
+  "iterations": [
+    {
+      "iteration": 1,
+      "job_options": [
+        {
+          "v": "",
+          "t": "Select a job…"
+        },
+        {
+          "v": "cf9a359c315c607466bcf16b0",
+          "t": "Senior Product Manager Platform · Delinea"
+        },
+        {
+          "v": "cef794ca37c86efab5824fd12",
+          "t": "Senior Product Manager · Lemon.io"
+        },
+        {
+          "v": "c7736339ec101503633c2fbe5",
+          "t": "GTM Technology Product Owner · harvey"
+        },
+        {
+          "v": "c01bef399ac5268a995c402f4",
+          "t": "GTM Technology Product Owner · harvey"
+        },
+        {
+          "v": "c18ed0eb13bf11579d8483f4c",
+          "t": "Implementation Manager - Spend  · airwallex"
+        },
+        {
+          "v": "c42143d0e24396678d93033df",
+          "t": "Support Delivery Lead, Government · openai"
+        },
+        {
+          "v": "c519b85b34791774a7043aa91",
+          "t": "Innovation Product Manager, Australia · harvey"
+        },
+        {
+          "v": "c68fc7ec753eaa3b6d5025b8f",
+          "t": "Staff Product Manager, Onboarding · airwallex"
+        },
+        {
+          "v": "c900f2aa8c2fe3759eed86fd4",
+          "t": "Technical Product Manager, Energy Storage · Voltus"
+        },
+        {
+          "v": "c76e24f0a1dec89bb83cbd561",
+          "t": "Senior Product Manager, Strategic Origination Platforms · Plenti"
+        },
+        {
+          "v": "c0080f9754dc24b94249c829e",
+          "t": "Product Manager, Credit Automation · Plenti"
+        },
+        {
+          "v": "c9fa10134170267c2780b99ce",
+          "t": "Technical Business Analyst · Brighte"
+        },
+        {
+          "v": "c0d9636d579e940e069a133cc",
+          "t": "Business Analyst · Brighte"
+        },
+        {
+          "v": "cd1ed4bf714d7839740f34803",
+          "t": "Program Manager, People Transformation · Wikimedia Foundation"
+        },
+        {
+          "v": "c077cc43de40d6db361a6b704",
+          "t": "Staff Program Manager, Trust & Safety · Mozilla"
+        },
+        {
+          "v": "c4828cc87616d8b2a682de194",
+          "t": "Senior Legal Analyst & Litigation Project Manager · Samsara"
+        },
+        {
+          "v": "ca8e4c81dde844a54e2f78147",
+          "t": "Project Manager 3 · Twilio"
+        },
+        {
+          "v": "cc926222a5abe1b1ca9bf2bc1",
+          "t": "Senior Product Manager, Infrastructure Observability | Sweden | Remote · Grafana Labs"
+        },
+        {
+          "v": "c6abe0b2ae8a34c4e909f1acb",
+          "t": "Enterprise Project Manager · Canonical"
+        },
+        {
+          "v": "c64cffbc393dd2e5b8888fec5",
+          "t": "Program Manager, Intake & Portfolio Management · Stripe"
+        },
+        {
+          "v": "ccd5f3370227192ac0cc6fa43",
+          "t": "Program Manager, Sales Operations and Training · Peloton"
+        },
+        {
+          "v": "c161bfd6a15a26f363e942e70",
+          "t": "Sr. Engagement Manager · Databricks"
+        },
+        {
+          "v": "cf37ef689f0e80fe2b518260b",
+          "t": "Onboarding Project Manager · Block"
+        },
+        {
+          "v": "c3a5a27a903876fe7a6dcedd4",
+          "t": "Enablement Program Manager, APAC · Okta"
+        },
+        {
+          "v": "ce1de268f729b42642ded7c8a",
+          "t": "Project Manager - Ubuntu Embedded Systems · Canonical"
+        },
+        {
+          "v": "cfdb9bdec19bc1bbe1e8f40c2",
+          "t": "Junior Project Manager · Canonical"
+        },
+        {
+          "v": "c422ffb9e9f915e8036fad4fd",
+          "t": "Senior Data Center Capacity Delivery Manager, AUS · Anthropic"
+        },
+        {
+          "v": "c2da4d4dbc0fad1ee3198f989",
+          "t": "Lead Product Manager · Careers at Eucalyptus"
+        },
+        {
+          "v": "c0241874f7217f381e6d4bac1",
+          "t": "Backend Engineer · Leadchase Inc"
+        }
+      ],
+      "alert_before": null,
+      "generate_btn_present": true,
+      "alert_after": "Add your resume before generating a cover letter.",
+      "letter_cards": 0
+    },
+    {
+      "iteration": 2,
+      "job_options": [
+        {
+          "v": "",
+          "t": "Select a job…"
+        },
+        {
+          "v": "cf9a359c315c607466bcf16b0",
+          "t": "Senior Product Manager Platform · Delinea"
+        },
+        {
+          "v": "cef794ca37c86efab5824fd12",
+          "t": "Senior Product Manager · Lemon.io"
+        },
+        {
+          "v": "c7736339ec101503633c2fbe5",
+          "t": "GTM Technology Product Owner · harvey"
+        },
+        {
+          "v": "c01bef399ac5268a995c402f4",
+          "t": "GTM Technology Product Owner · harvey"
+        },
+        {
+          "v": "c18ed0eb13bf11579d8483f4c",
+          "t": "Implementation Manager - Spend  · airwallex"
+        },
+        {
+          "v": "c42143d0e24396678d93033df",
+          "t": "Support Delivery Lead, Government · openai"
+        },
+        {
+          "v": "c519b85b34791774a7043aa91",
+          "t": "Innovation Product Manager, Australia · harvey"
+        },
+        {
+          "v": "c68fc7ec753eaa3b6d5025b8f",
+          "t": "Staff Product Manager, Onboarding · airwallex"
+        },
+        {
+          "v": "c900f2aa8c2fe3759eed86fd4",
+          "t": "Technical Product Manager, Energy Storage · Voltus"
+        },
+        {
+          "v": "c76e24f0a1dec89bb83cbd561",
+          "t": "Senior Product Manager, Strategic Origination Platforms · Plenti"
+        },
+        {
+          "v": "c0080f9754dc24b94249c829e",
+          "t": "Product Manager, Credit Automation · Plenti"
+        },
+        {
+          "v": "c9fa10134170267c2780b99ce",
+          "t": "Technical Business Analyst · Brighte"
+        },
+        {
+          "v": "c0d9636d579e940e069a133cc",
+          "t": "Business Analyst · Brighte"
+        },
+        {
+          "v": "cd1ed4bf714d7839740f34803",
+          "t": "Program Manager, People Transformation · Wikimedia Foundation"
+        },
+        {
+          "v": "c077cc43de40d6db361a6b704",
+          "t": "Staff Program Manager, Trust & Safety · Mozilla"
+        },
+        {
+          "v": "c4828cc87616d8b2a682de194",
+          "t": "Senior Legal Analyst & Litigation Project Manager · Samsara"
+        },
+        {
+          "v": "ca8e4c81dde844a54e2f78147",
+          "t": "Project Manager 3 · Twilio"
+        },
+        {
+          "v": "cc926222a5abe1b1ca9bf2bc1",
+          "t": "Senior Product Manager, Infrastructure Observability | Sweden | Remote · Grafana Labs"
+        },
+        {
+          "v": "c6abe0b2ae8a34c4e909f1acb",
+          "t": "Enterprise Project Manager · Canonical"
+        },
+        {
+          "v": "c64cffbc393dd2e5b8888fec5",
+          "t": "Program Manager, Intake & Portfolio Management · Stripe"
+        },
+        {
+          "v": "ccd5f3370227192ac0cc6fa43",
+          "t": "Program Manager, Sales Operations and Training · Peloton"
+        },
+        {
+          "v": "c161bfd6a15a26f363e942e70",
+          "t": "Sr. Engagement Manager · Databricks"
+        },
+        {
+          "v": "cf37ef689f0e80fe2b518260b",
+          "t": "Onboarding Project Manager · Block"
+        },
+        {
+          "v": "c3a5a27a903876fe7a6dcedd4",
+          "t": "Enablement Program Manager, APAC · Okta"
+        },
+        {
+          "v": "ce1de268f729b42642ded7c8a",
+          "t": "Project Manager - Ubuntu Embedded Systems · Canonical"
+        },
+        {
+          "v": "cfdb9bdec19bc1bbe1e8f40c2",
+          "t": "Junior Project Manager · Canonical"
+        },
+        {
+          "v": "c422ffb9e9f915e8036fad4fd",
+          "t": "Senior Data Center Capacity Delivery Manager, AUS · Anthropic"
+        },
+        {
+          "v": "c2da4d4dbc0fad1ee3198f989",
+          "t": "Lead Product Manager · Careers at Eucalyptus"
+        },
+        {
+          "v": "c0241874f7217f381e6d4bac1",
+          "t": "Backend Engineer · Leadchase Inc"
+        }
+      ],
+      "alert_before": null,
+      "generate_btn_present": true,
+      "alert_after": "Add your resume before generating a cover letter.",
+      "letter_cards": 0
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": [],
+  "ended_utc": "2026-07-20T06:41:53.023Z"
+}

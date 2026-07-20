@@ -1,0 +1,6 @@
+{
+  "access_token": "eyJhbGci...REDACTED",
+  "token_type": "bearer",
+  "userId": "cc29a76e324fbf19f438eb8be",
+  "email": "admin@aether.local"
+}

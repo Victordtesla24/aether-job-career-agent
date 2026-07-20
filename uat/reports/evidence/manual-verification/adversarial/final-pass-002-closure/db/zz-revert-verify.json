@@ -1,0 +1,54 @@
+{
+  "userId": "cc62794585997022a7897e2f0",
+  "op": "REVERT",
+  "usage_before_revert": [
+    {
+      "planId": "pro",
+      "runsAllowed": 100,
+      "runsUsed": 0,
+      "spendCapUsd": 15.0,
+      "spendUsedUsd": 0.0
+    }
+  ],
+  "Subscription_rowcount": 1,
+  "UsageQuota_rowcount": 1,
+  "Subscription_after": [
+    {
+      "id": "f8b68ee7-69fc-41d4-b21f-907477bfcfa4",
+      "planId": "free",
+      "status": "active",
+      "billingInterval": null,
+      "stripeCustomerId": null,
+      "stripeSubscriptionId": null,
+      "cancelAtPeriodEnd": false,
+      "createdAt": "2026-07-20T13:38:16.965884+00:00",
+      "updatedAt": "2026-07-20T13:38:16.965884+00:00"
+    }
+  ],
+  "UsageQuota_after": [
+    {
+      "id": "0bfd7b8d-cd17-44ee-8571-74de7297df1a",
+      "planId": "free",
+      "runsAllowed": 5,
+      "runsUsed": 0,
+      "spendCapUsd": 1.0,
+      "spendUsedUsd": 0.0,
+      "periodStart": "2026-07-01T00:00:00+00:00",
+      "periodEnd": "2026-08-01T00:00:00+00:00",
+      "updatedAt": "2026-07-20T13:38:16.965884+00:00"
+    }
+  ],
+  "byte_for_byte_checks": {
+    "sub_planId": true,
+    "sub_status": true,
+    "sub_billingInterval_null": true,
+    "sub_updatedAt_match": true,
+    "uq_planId": true,
+    "uq_runsAllowed": true,
+    "uq_runsUsed": true,
+    "uq_spendCapUsd": true,
+    "uq_spendUsedUsd": true,
+    "uq_updatedAt_match": true
+  },
+  "byte_for_byte_match": true
+}

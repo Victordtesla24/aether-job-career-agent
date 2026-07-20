@@ -1,0 +1,239 @@
+{
+  "session": 1,
+  "startedAt": "2026-07-17T16:53:28.964Z",
+  "steps": [
+    {
+      "step": "login",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "tokenPrefix": "eyJhbGci"
+    },
+    {
+      "step": "dashboard-content-inventory",
+      "hasPaywall": 0,
+      "testidPresence": {
+        "live-stats": 1,
+        "agent-feed": 1,
+        "todays-opportunities": 1,
+        "funnel-widget": 1,
+        "story-bank-widget": 1,
+        "crm-summary": 1,
+        "needs-approval-widget": 1,
+        "market-pulse": 1,
+        "trend-indicators": 1,
+        "sources-donut": 1,
+        "top-skills": 1,
+        "probability-score": 1,
+        "activity-heatmap": 1,
+        "employer-activity": 1,
+        "recruiter-trends": 1,
+        "market-vs-you": 1
+      }
+    },
+    {
+      "step": "stat-cards",
+      "statCards": [
+        "ACTIVE APPLICATIONS\n7\n+7 this week",
+        "INTERVIEW RATE\n0%\n0 of 7 applied",
+        "OFFERS\n0\nnone yet — agents hunting",
+        "AI CONFIDENCE\n38%\navg match quality"
+      ]
+    },
+    {
+      "step": "agent-feed-filters",
+      "feedFilterResults": [
+        {
+          "filter": "All",
+          "itemCount": 10,
+          "emptyMsg": "37 min ago · 42 refreshed"
+        },
+        {
+          "filter": "Discovered",
+          "itemCount": 6,
+          "emptyMsg": "1 hr ago · 42 refreshed"
+        },
+        {
+          "filter": "Tailored",
+          "itemCount": 10,
+          "emptyMsg": "5 hr ago · 0 edits"
+        },
+        {
+          "filter": "Submitted",
+          "itemCount": 0,
+          "emptyMsg": "No “Submitted” activity in the latest runs."
+        },
+        {
+          "filter": "Waiting",
+          "itemCount": 0,
+          "emptyMsg": "No “Waiting” activity in the latest runs."
+        }
+      ]
+    },
+    {
+      "step": "agent-feed-view-all-href",
+      "href": "/dashboard/agents"
+    },
+    {
+      "step": "opportunity-cards",
+      "oppCards": 3,
+      "oppCardTexts": [
+        "P\n50%\nSenior Product Manager, Strategic Origination Platforms\n\nPlenti · Sydney\n\nvia lever · posting ↗\n\nTailor & Apply",
+        "B\n46%\nTechnical Business Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match",
+        "B\n46%\nBusiness Analyst\n\nBrighte · Sydney, NSW\n\nvia lever · posting ↗\n\nReview Match"
+      ],
+      "tailorApplyHref": "/dashboard/resume?job=ce2f682aeba72f9e9b07ff083",
+      "postingLinks": 3,
+      "postingHrefs": [
+        "https://jobs.lever.co/plenti/293d397c-df8b-408f-9776-dccb211e3f80",
+        "https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2",
+        "https://jobs.lever.co/brighte/a0005d61-f0fc-43cb-afbf-028a08a6320e"
+      ]
+    },
+    {
+      "step": "click-tailor-apply",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/resume?job=ce2f682aeba72f9e9b07ff083"
+    },
+    {
+      "step": "back-after-tailor-apply",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "click-review-match",
+      "href": "/dashboard/jobs",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+    },
+    {
+      "step": "browse-all-jobs-href",
+      "href": "/dashboard/jobs"
+    },
+    {
+      "step": "funnel-widget-text",
+      "funnelText": "Application Funnel\nJobs Found\n44\nApplied\n7\nScreened\n0\nInterviewed\n0\nOffers\n0"
+    },
+    {
+      "step": "story-bank-widget",
+      "storyBankText": "Story Bank\nOpen\n\n26 STAR achievements ready to deploy\n\nLATEST STORIES\n\nJIRA Analytics Dashboard for Agile Team Insights at Independent Consulting\n0 metrics\nLLM Evaluation Stack for Production-Grade AI Governance at Independent Consulting\n1 metrics\nExecutive Strategy Alignment Workshop for 40+ GMs at ANZ\n1 metrics",
+      "storyOpenHref": "/dashboard/stories"
+    },
+    {
+      "step": "crm-summary",
+      "crmText": "Recruiter CRM\nOpen\n\n0 active recruiter conversations\n\n0 follow-ups due today\n\n0 warm intro pending",
+      "crmOpenHref": "/dashboard/networking"
+    },
+    {
+      "step": "needs-approval-widget",
+      "approvalText": "Needs Approval\n4\n\nSend cover letter\n\nProject Manager · Empire Life\n\nrequested 1 hr ago · waiting on you\n\nApprove\nReject\n\nSend cover letter\n\nBusiness Analyst · EasyPark\n\nrequested 1 hr ago · waiting on you\n\nApprove\nReject\n\nSend cover letter\n\nEnterprise Product Manager · replit\n\nrequested 5 hr ago · waiting on you\n\nApprove\nReject\n+1 more waiting — review all",
+      "approvalCount": "4",
+      "approveBtnCount": 3,
+      "rejectBtnCount": 3,
+      "moreLink": "/dashboard/approvals"
+    },
+    {
+      "step": "click-review-all-approvals",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/approvals"
+    },
+    {
+      "step": "market-pulse-content",
+      "marketPulseText": "Real-Time Market Pulse\nhiring & recruitment trends · AU\nTREND INDICATORS\nYour application velocity\nno change\nAgent automation spend\nno change\nAvg job fit score\nno change\nJOBS BY SOURCE\n44\njobs sourced\nGreenhouse\n36%\nAshby\n34%\nLever\n21%\nRemoteok\n7%\nRemotive\n2%\nTOP SKILLS IN DEMAND\nYOUR JOB PROBABILITY SCORE\n44%\nApplication volume\n47\nInterview conversion\n0\nMarket demand\n88\nSkill match\n39\n\nLikelihood of landing an offer in the next 60 days\n\nWEEKLY ACTIVITY\nless\nmore\nEMPLOYER HIRING ACTIVITY\n\nharvey Received your application\n\n19m ago\n\nEmpire Life Application in progress\n\n53m ago\n\nPlenti Received your application\n\n58m ago\n\nairwallex Received your application\n\n1h ago\n\nEmpire Life Application in progress\n\n1h ago\n\nRECRUITER ACTIVITY\nAgent runs (last 12 wks)\n200 total\nAvg runs / week\n16.7 · no change\nMARKET VS. YOUR PERFORMANCE\n\nApplications / month\n\nMarket data: not connected\n\nyou 14\n\nInterview rate\n\nMarket data: not connected\n\nyou 0%\n\nNo market data source connected — showing your own figures only."
+    },
+    {
+      "step": "sidebar-text",
+      "sidebarText": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\nAgents Idle\n\n8 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether"
+    },
+    {
+      "step": "topbar-text",
+      "topbarText": "Good afternoon, Administrator\n\nFri, 17 July · last agent run 24m ago\n\nAD\nAdministrator\nAdministrator"
+    },
+    {
+      "step": "manage-agents-link",
+      "href": "/dashboard/agents"
+    },
+    {
+      "step": "sidebar-nav-items",
+      "navItems": [
+        {
+          "text": "Dashboard",
+          "href": "/dashboard"
+        },
+        {
+          "text": "Jobs",
+          "href": "/dashboard/jobs"
+        },
+        {
+          "text": "Resume Studio",
+          "href": "/dashboard/resume"
+        },
+        {
+          "text": "Cover Letter Studio",
+          "href": "/dashboard/cover-letters"
+        },
+        {
+          "text": "Story Bank",
+          "href": "/dashboard/stories"
+        },
+        {
+          "text": "Applications",
+          "href": "/dashboard/applications"
+        },
+        {
+          "text": "Interview Center",
+          "href": "/dashboard/interviews"
+        },
+        {
+          "text": "Networking",
+          "href": "/dashboard/networking"
+        },
+        {
+          "text": "Email Center",
+          "href": "/dashboard/email"
+        },
+        {
+          "text": "Agents",
+          "href": "/dashboard/agents"
+        },
+        {
+          "text": "Analytics",
+          "href": "/dashboard/analytics"
+        },
+        {
+          "text": "Offers",
+          "href": "/dashboard/offers"
+        },
+        {
+          "text": "Settings",
+          "href": "/dashboard/settings"
+        }
+      ]
+    },
+    {
+      "step": "topbar-search",
+      "query": "engineer",
+      "resultsCount": 0
+    },
+    {
+      "step": "search-xss-probe",
+      "xssEchoRaw": false
+    },
+    {
+      "step": "notif-bell-click",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/approvals"
+    },
+    {
+      "step": "reload-persistence",
+      "statCardsAfterReload": [
+        "ACTIVE APPLICATIONS\n7\n+7 this week",
+        "INTERVIEW RATE\n0%\n0 of 7 applied",
+        "OFFERS\n0\nnone yet — agents hunting",
+        "AI CONFIDENCE\n38%\navg match quality"
+      ]
+    },
+    {
+      "step": "back-to-dashboard",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "forward-to-jobs",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+    }
+  ],
+  "finishedAt": "2026-07-17T16:54:03.904Z"
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "t": "2026-07-17T15:19:39.526Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T15:19:39.869Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:19:40.088Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:19:41.280Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T15:19:41.500Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  }
+]

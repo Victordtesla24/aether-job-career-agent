@@ -1,0 +1,122 @@
+[
+  {
+    "id": "MV-resume-studio-001",
+    "screen": "resume-studio",
+    "severity": "HIGH",
+    "category": "defect",
+    "summary": "Tailor agent's approval gate is decorative only — approvalRequired:true is returned but no approval record is ever created; the tailored resume is immediately live/downloadable with zero human sign-off, contradicting the router's own documented intent and the wireframe's Approve Tailoring / Request Changes buttons.",
+    "reproduction": [
+      "Log in as admin/admin123 at https://5cb5f0620.abacusai.cloud/login.",
+      "Navigate to /dashboard/resume, select any job in the target dropdown, click 'Tailor Resume'.",
+      "Wait for the POST /agents/tailor/run (202 enqueued) -> GET /agents/jobs/{id} to reach status:completed; inspect result.approvalRequired (true) and confirm result has NO approval_id field.",
+      "Call GET /approvals?status=all with the same token and confirm zero rows with type/kind related to 'tailor' or 'resume' (only application_submit / cover_letter kinds exist).",
+      "Observe the new tailored version card appears in the Versions list and its Download button works immediately, with no pending-approval state, banner, or blocking UI anywhere."
+    ],
+    "expected": "Per apps/api/app/routers/agents.py module docstring ('High-risk outputs (tailored resumes, cover letters) surface an approvalRequired flag — nothing is submitted without human sign-off') and the wireframe's Approve Tailoring / Request Changes footer buttons, a tailored resume should require an explicit human approval step before being treated as the authoritative/exportable version.",
+    "observed": "4 separate live tailor runs (run ids c1b7738702004606769cebace, cd3fa90ec41e4d601643228e2, cbf95f26c6fe29c0fa764c728, cce12e12aaed3b967f90daf7f — reproduced in 2 independent sessions plus a pipeline-embedded run) all returned approvalRequired:true with no approval_id; GET /approvals never contains a tailor-kind row (8/8 existing rows are application_submit/cover_letter only). The resume is fully usable (visible, selectable, downloadable) the instant the async job completes.",
+    "evidence": [
+      "test-artifacts/my-full-run-audit-trail.json",
+      "test-artifacts/tailor-network-events.json",
+      "test-artifacts/mini-soak-session2.json",
+      "test-artifacts/07-tailoring-result.png",
+      "test-artifacts/09-after-reload.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-resume-studio-002",
+    "screen": "resume-studio",
+    "severity": "HIGH",
+    "category": "visual",
+    "summary": "Live /dashboard/resume diverges structurally from design/screens/resume-studio.html: no in-app PDF preview panes, no ATS radial gauge / Confidence% in the top bar, no Approve Tailoring / Request Changes / Revert / Export PDF / Compare controls, no version-compare modal, and no Voice DNA (tone/formality sliders) or AI Detection meter — the whole right-hand 'Voice DNA' wireframe panel and the footer action/version bar are absent.",
+    "reproduction": [
+      "Log in as admin/admin123, navigate to /dashboard/resume.",
+      "Take a full-page screenshot and compare element-by-element against design/screens/resume-studio.html (data-design-id anchors rs03, rs04/05 PDF panes, rs07-rs11 footer buttons, rs12/13 page nav, rs14-16 evidence/voice section, rs17-23 compare modal).",
+      "Search the rendered page text for 'Approve Tailoring', 'Request Changes', 'Revert', 'Compare', 'Export PDF', 'Voice DNA', 'AI Detection' — all return no match."
+    ],
+    "expected": "Wireframe shows a split-pane PDF preview (original vs tailored), a top-bar ATS radial gauge + Confidence%, footer buttons (Revert / Request Changes / Export PDF / Approve Tailoring / Compare-with-modal), and a Voice DNA control panel (tone/formality sliders + AI Detection %).",
+    "observed": "The live page (apps/web/src/app/dashboard/resume/page.tsx) implements a simplified version-list + selected-diff layout: static name/title text panes (no real PDF rendering), a plain 'Download' button, and no Approve/Revert/Compare/Voice-DNA affordances anywhere. Confirmed twice (session 1 visual screenshot inspection + session 2 explicit DOM text-search assertion, both returning all-false for the wireframe control set).",
+    "evidence": [
+      "test-artifacts/03-resume-studio-load.png",
+      "test-artifacts/21-resume-studio-load-v2.png",
+      "test-artifacts/session2-results.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-resume-studio-003",
+    "screen": "resume-studio",
+    "severity": "MEDIUM",
+    "category": "wiring",
+    "summary": "When the anti-fabrication entailment guard rejects 100% of the LLM's proposed rewrites (observed in 3 of 4 live runs, 75%), the system still creates, labels 'Tailored — <job>', and bills a brand-new resume version that is byte-identical to its parent (0 diff, 0.0% ATS lift) — the UI gives no visual distinction from a genuinely-changed version, so a paying user must manually open the diff to discover the run produced nothing.",
+    "reproduction": [
+      "Run Tailor Resume against 'Enablement Program Manager, APAC @ Okta' (job id ca14ed2e5d8f152cd35f7a3dd) or 'Sr. Engagement Manager @ Databricks' (ce761fcd8330f81753fc8e7de).",
+      "Poll GET /agents/jobs/{id} to completed; inspect result.changes (0) and result.rejected (8 entries).",
+      "GET /resumes/{new_resume_id}/diff -> {\"changes\": []} confirms zero actual content difference from the parent.",
+      "Reload /dashboard/resume — the new version card renders identically styled/labelled to a real tailored version ('vNN · Tailored — Enablement Program Manager, APAC @ Okta')."
+    ],
+    "expected": "A tailoring run that produces zero net safe edits should either not create a new version, or should clearly flag the version as unchanged/no-op so the user isn't misled or billed without visible value.",
+    "observed": "New resume rows c0175bcc3527b9a4f77a562db (v38) and cafd7d45e9080ccfc3253270c both created with parentId set, label 'Tailored — ...', 0 diff changes, quota/spend consumed (costUsd 0.0015/0.0014) — indistinguishable in the Versions list from a real tailored version.",
+    "evidence": [
+      "test-artifacts/mini-soak-session2.json",
+      "test-artifacts/my-full-run-audit-trail.json",
+      "test-artifacts/27-xss-upload-rendered.png"
+    ],
+    "claimRefs": ["CLM-040", "CLM-058", "CLM-091", "CLM-092"],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-resume-studio-004",
+    "screen": "resume-studio",
+    "severity": "LOW",
+    "category": "wiring",
+    "summary": "The 'Format Integrity Check' panel text ('Typography, spacing, columns & margins preserved') is a hardcoded static string in page.tsx, not derived from any live per-version verification result — it would render identically even if a hypothetical future tailored version broke formatting.",
+    "reproduction": [
+      "Read apps/web/src/app/dashboard/resume/page.tsx lines ~204-230 — the 'Format Integrity Check' heading and green success text are unconditional JSX, not gated on any API field.",
+      "Confirm live: the text renders the same before and after running Tailor, and for every version selected."
+    ],
+    "expected": "Ideally the format-integrity claim is backed by a real per-version signal (e.g. formatHash comparison surfaced to the UI) so a genuine formatting regression would be visibly flagged.",
+    "observed": "Static text always shown; in my testing the backend DID genuinely preserve formatting (verified independently via PDF diff — pdfinfo/pdftotext showed identical page count/size/producer and only the target bullet's text changed), so this is a wiring/honesty gap rather than an active false claim today.",
+    "evidence": [
+      "test-artifacts/downloaded-resume-session1.pdf",
+      "test-artifacts/03-resume-studio-load.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-resume-studio-005",
+    "screen": "resume-studio",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "The Versions list has no pagination, search, or filter; on the shared test account it had grown to 42 entries during this test session, producing a very long unstyled scroll — a UX regression vs the wireframe's compact 3-pill version bar.",
+    "reproduction": [
+      "Log in as admin/admin123, navigate to /dashboard/resume.",
+      "Observe the Versions column renders all 40+ historical version cards in one continuous list with no page size limit, search box, or collapse control."
+    ],
+    "expected": "A scalable version history control (pagination, recent-N with 'show more', or search) as versions accumulate over normal product use.",
+    "observed": "All versions rendered in a single unbounded list.",
+    "evidence": [
+      "test-artifacts/27-xss-upload-rendered.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

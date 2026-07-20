@@ -1,0 +1,57 @@
+# Captured 2026-07-17T17:14:21Z UTC — guard test run BEFORE deletion (must FAIL)
+# Command: cd apps/api && flock /tmp/aether-pytest.lock pytest tests/test_mv_no_fixture_content_in_prod_data.py -v
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/abacus-python/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 1 item
+
+tests/test_mv_no_fixture_content_in_prod_data.py::test_no_fixture_cover_letter_fingerprints_in_production FAILED [100%]
+
+=================================== FAILURES ===================================
+___________ test_no_fixture_cover_letter_fingerprints_in_production ____________
+
+production_connection = <connection object at 0x7f7631e17380; dsn: 'user=role_fdc4e11da password=xxx connect_timeout=10 dbname=fdc4e11da host=db-fdc4e11da.db005.hosteddb.reai.io port=5432 options=-csearch_path=aether', closed: 0>
+
+    def test_no_fixture_cover_letter_fingerprints_in_production(
+        production_connection: Any,
+    ) -> None:
+        """No Application.coverLetter row may contain known fixture text.
+    
+        Regression guard for MV-application-tracker-001 (BLOCKER): stale seed
+        data previously left 8 rows in production carrying fixture-derived
+        cover-letter content, visible to real users. This asserts zero such rows
+        exist, using fingerprints derived directly from the offending fixtures
+        (default.json, retry.json) rather than hard-coded strings.
+        """
+        patterns = _fixture_fingerprint_patterns()
+        offending = _rows_matching_fingerprints(production_connection, patterns)
+    
+>       assert offending == [], (
+            f"{len(offending)} Application row(s) contain fixture-derived cover "
+            "letter text (fixture fingerprint match) and are reachable by real "
+            "users. This is the exact condition described in "
+            "MV-application-tracker-001 (verdict: stale-seed-data). Offending "
+            f"row ids: {sorted(r['id'] for r in offending)}. See RCA at "
+            "uat/reports/evidence/manual-verification/fixes/"
+            "MV-application-tracker-001/RCA.json for remediation steps."
+        )
+E       AssertionError: 8 Application row(s) contain fixture-derived cover letter text (fixture fingerprint match) and are reachable by real users. This is the exact condition described in MV-application-tracker-001 (verdict: stale-seed-data). Offending row ids: ['c0e3601826b6258afd1ced52d', 'c3ebf6a97e318dbcacc7473dc', 'c4bbc712a79c387b34580bb4a', 'c53d0b3ada038f7ce441dd018', 'c597b074bbd6214c31dcf75ec', 'c7bcdeedaaad8c702f1a7dae6', 'ce01bad499189ac40e9e9c78f', 'cf876560bca329aeb86ec1391']. See RCA at uat/reports/evidence/manual-verification/fixes/MV-application-tracker-001/RCA.json for remediation steps.
+E       assert [{'id': 'cf87...615000)}, ...] == []
+E         
+E         Left contains 8 more items, first extra item: {'id': 'cf876560bca329aeb86ec1391', 'userId': 'cc29a76e324fbf19f438eb8be', 'jobId': 'c73b8f8e6a2f271ec06338fc8', 'createdAt': datetime.datetime(2026, 7, 14, 18, 56, 7, 18000)}
+E         
+E         Full diff:
+E         - []
+E         + [
+E         +     {...
+E         
+E         ...Full output truncated (48 lines hidden), use '-vv' to show
+
+tests/test_mv_no_fixture_content_in_prod_data.py:186: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_mv_no_fixture_content_in_prod_data.py::test_no_fixture_cover_letter_fingerprints_in_production
+============================== 1 failed in 0.17s ===============================

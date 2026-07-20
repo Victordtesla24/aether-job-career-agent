@@ -1,0 +1,77 @@
+{
+  "generated_utc": "2026-07-17T13:31:36.425417+00:00",
+  "git_sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "screen": {
+    "screen_id": "admin-settings",
+    "screen_name": "Admin Settings",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/settings"
+    ],
+    "endpoints": [
+      "GET /admin/settings",
+      "POST /admin/settings"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; global configuration. Operator-gated; testable: unauthenticated."
+  },
+  "claim_rows": [
+    {
+      "id": "CLM-044",
+      "claim": "Admin flows -- spend-cap-429-before-LLM, user suspend, signup toggle, audit log -- are functionality-verified live via a temporary admin account; formal closure needs operator-rotated admin credential (GATE-17)",
+      "source_doc": "docs/delivery/PHASE6-EXECUTION-SUMMARY.md",
+      "source_line": "56",
+      "endpoints": [
+        "GET /admin/spend",
+        "POST /admin/users/{id}/suspend",
+        "POST /admin/users/{id}/spend-cap",
+        "GET /admin/audit-log",
+        "POST /admin/settings"
+      ],
+      "method": "Requires an admin session -- if no operator admin credential is configured, at minimum confirm /admin/* endpoints reject unauthenticated/non-admin requests (401/403); full flow test needs admin access (may be UNVERIFIABLE-FROM-UI without one)"
+    },
+    {
+      "id": "CLM-089",
+      "claim": "All 10 /admin/* routes are gated server-side on isAdmin: unauthenticated requests get 401, non-admin authenticated requests get 403 -- never client-side-only trust",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "174-176",
+      "endpoints": [
+        "GET /admin/health",
+        "GET /admin/users",
+        "GET /admin/settings",
+        "GET /admin/audit-log",
+        "GET /admin/spend",
+        "POST /admin/settings",
+        "POST /admin/users/{id}/suspend",
+        "POST /admin/users/{id}/unsuspend",
+        "POST /admin/users/{id}/spend-cap"
+      ],
+      "method": "curl each /admin/* endpoint with no auth (expect 401) and with a non-admin authenticated session (expect 403)"
+    },
+    {
+      "id": "CLM-100",
+      "claim": "The admin panel includes a signup toggle (enable/disable public signup) and an append-only audit log whose entries cannot be edited or deleted",
+      "source_doc": "docs/delivery/PHASE6-EXECUTION-SUMMARY.md",
+      "source_line": "30",
+      "endpoints": [
+        "POST /admin/settings",
+        "GET /admin/audit-log"
+      ],
+      "method": "Requires admin access: toggle the signup setting and confirm signup is blocked/allowed accordingly; attempt to modify an audit-log entry via the API and confirm rejection or absence of any such endpoint"
+    },
+    {
+      "id": "CLM-101",
+      "claim": "The admin panel provides a data export/delete capability for user data",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "159",
+      "endpoints": [
+        "(TBD - not explicitly listed in SCREEN-MATRIX's admin endpoint inventory; confirm exact path via admin UI network trace)"
+      ],
+      "method": "Requires admin access: locate the data export/delete control in the admin UI and exercise it"
+    }
+  ],
+  "canonical_login": "uat/reports/evidence/manual-verification/canonical-login.md",
+  "baseline_note": "Baseline captures from Step 6 are under uat/reports/evidence/manual-verification/screens/ (folder named admin-settings or admin-settings_auth/admin-settings_unauth or baseline/admin-settings depending on sweep layout) \u2014 use as the 'before' record.",
+  "output_report": "uat/reports/evidence/manual-verification/screens/admin-settings/TESTING-OUTCOME-REPORT.md"
+}

@@ -1,0 +1,50 @@
+{
+  "utc": "2026-07-20T09:04:35Z",
+  "byte_for_byte_match": true,
+  "after": {
+    "Z1": {
+      "subscription": {
+        "planId": "free",
+        "status": "active",
+        "billingInterval": null,
+        "updatedAt": "2026-07-20 08:41:44.884144+00:00"
+      },
+      "usagequota": {
+        "planId": "free",
+        "runsAllowed": 5,
+        "runsUsed": 0,
+        "spendCapUsd": "1.0",
+        "spendUsedUsd": "0",
+        "updatedAt": "2026-07-20 08:41:44.884144+00:00"
+      }
+    },
+    "Z2": {
+      "subscription": {
+        "planId": "free",
+        "status": "active",
+        "billingInterval": null,
+        "updatedAt": "2026-07-20 08:41:45.295654+00:00"
+      },
+      "usagequota": {
+        "planId": "free",
+        "runsAllowed": 5,
+        "runsUsed": 0,
+        "spendCapUsd": "1.0",
+        "spendUsedUsd": "0",
+        "updatedAt": "2026-07-20 08:41:45.295654+00:00"
+      }
+    }
+  },
+  "entitlement": {
+    "Z1": {
+      "http": 200,
+      "active_paid": false,
+      "plan": "free"
+    },
+    "Z2": {
+      "http": 200,
+      "active_paid": false,
+      "plan": "free"
+    }
+  }
+}

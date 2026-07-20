@@ -1,0 +1,101 @@
+{
+  "pass": "2_session_B_fresh_login_fresh_job",
+  "prod_commit": "54c28e5",
+  "utc": "2026-07-20T13:40:52Z",
+  "results": {
+    "B1_caseless_repro2": {
+      "http": 200,
+      "letterId": "cd8316af629fc9964d5107fbb",
+      "keywords": [
+        "Prometheus",
+        "Ansible",
+        "Engineer",
+        "Tooling",
+        "Cloud",
+        "competitive",
+        "quarterly",
+        "flexible",
+        "extra",
+        "งเทพ"
+      ]
+    },
+    "A1_cased_control": {
+      "http": 200,
+      "letterId": "c21f9d79a25210334ecfe69fe",
+      "keywords": [
+        "JavaScript",
+        "PostgreSQL",
+        "DevOps",
+        "SlideShare",
+        "Platform",
+        "Engineer",
+        "Core",
+        "competitive",
+        "quarterly",
+        "flexible"
+      ]
+    },
+    "A2_caseless_repro": {
+      "http": 200,
+      "letterId": "c86a1f70697338dc2ddb25056",
+      "keywords": [
+        "Terraform",
+        "Docker",
+        "Engineer",
+        "Systems",
+        "competitive",
+        "quarterly",
+        "flexible",
+        "use"
+      ]
+    },
+    "A3_standalone_labelmention": {
+      "http": 200,
+      "letterId": "cdb642c4bf89883ffd44bff7f",
+      "keywords": [
+        "Redis",
+        "Competitive",
+        "Engineer",
+        "Backend",
+        "Zürich",
+        "Salary",
+        "Киев",
+        "offered",
+        "open",
+        "東京都"
+      ]
+    },
+    "A4_newvariants": {
+      "http": 200,
+      "letterId": "c5d034732f7757fc9efeb6062",
+      "keywords": [
+        "GraphQL",
+        "Reliability",
+        "Kafka",
+        "Engineer",
+        "flagged",
+        "listed",
+        "tagged",
+        "noted",
+        "shown",
+        "seen"
+      ]
+    },
+    "A5_boundary_probes": {
+      "http": 200,
+      "letterId": "c54734045f3e65a0ff583cbbb",
+      "keywords": [
+        "MongoDB",
+        "Elasticsearch",
+        "TokyoManager",
+        "東京Salaries",
+        "東京Manager",
+        "東京Zürich",
+        "Engineer",
+        "Data",
+        "sample",
+        "use"
+      ]
+    }
+  }
+}

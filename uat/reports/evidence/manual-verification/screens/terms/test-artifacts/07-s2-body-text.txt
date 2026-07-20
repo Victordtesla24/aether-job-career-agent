@@ -1,0 +1,111 @@
+Aether
+Career Agent
+Terms & Conditions
+
+Last updated: July 16, 2026
+
+These Terms & Conditions (“Terms”) govern your access to and use of Aether Career Agent (“Aether Career Agent”, “we”, “us”, or “our”). Please read them carefully before using the service.
+
+1. Acceptance of Terms
+
+By accessing or using Aether Career Agent, you acknowledge that you have read, understood, and agree to be bound by these Terms and our Privacy Policy. If you do not agree with any part of these Terms, you must not access or use the service.
+
+2. Description of Service
+
+Aether Career Agent is an AI-powered career management platform. Its features include:
+
+Autonomous job discovery and role matching across multiple job boards.
+AI-assisted resume enhancement and cover letter generation.
+Email management for job-related correspondence via Gmail OAuth (optional).
+Interview preparation with practice questions and feedback.
+Application tracking and status management.
+Networking CRM to organize professional contacts.
+Analytics on your application funnel and progress.
+3. Eligibility
+
+You must be at least 18 years of age to use Aether Career Agent. By using the service, you represent that you have the legal right to work in any jurisdiction in which you apply to jobs through the platform, and that all information you provide is accurate and lawful.
+
+4. User Accounts
+You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account.
+Demo accounts are provided for evaluation purposes only and may be reset or removed at any time.
+You must not share your login credentials with any third party or allow others to access your account.
+5. Subscription Plans & Pricing
+
+Aether Career Agent is offered on four plans, priced in Australian dollars (AUD) and inclusive of the 10% Goods and Services Tax (GST):
+
+Free — A$0/month · 5 agent runs per month.
+Starter — A$19/month or A$179/year · 30 agent runs per month.
+Pro — A$39/month or A$359/year · 100 agent runs per month.
+Power — A$69/month or A$649/year · 300 agent runs per month.
+
+GST disclosure: all prices above are GST-inclusive. The GST component of any price is computed as gst = round(total / 11, 2), with the net (ex-GST) amount equal to the total minus the GST. This computation is shown on every invoice and is available for each plan from the pricing page.
+
+Tax invoices require a registered Australian Business Number. [Operator ABN] and [Business Name] are placeholders the operator must supply before GST tax invoices are legally complete.
+
+6. Billing Cycle & Payment
+You choose monthly or annual billing at checkout for any paid plan.
+Payment is processed by Stripe; the current billing period and renewal are managed by Stripe and kept in sync with your Aether account automatically.
+Live payment processing is not yet active in production. Going live requires the operator to complete Stripe account setup (secret key, product/price configuration, and webhook registration). Until then, starting checkout or opening the billing portal returns an honest error rather than pretending to process a payment.
+7. Agent-Run Quota
+
+Each plan includes a monthly quota of metered agent runs — actions that invoke the LLM, such as resume tailoring, cover letter drafting, story extraction, and email drafting (see the plan quotas in §5 above: 5 agent runs per month on Free, 30 agent runs per month on Starter, 100 agent runs per month on Pro, and 300 agent runs per month on Power).
+
+Your quota resets automatically at the start of each billing period — no manual action is needed.
+When your quota is exhausted, further metered runs are blocked and the app will prompt you to upgrade your plan.
+A run that fails or errors does not count against your quota.
+8. Cancellation
+
+You can manage or cancel a paid subscription at any time through the Stripe Billing Portal (“Manage billing” from your dashboard). From the portal you can change plan, update your payment method, or cancel.
+
+Cancellation takes effect at the end of your current billing period — you keep your plan’s access (run quota and model tier) through that date; there is no pro-rated mid-period cutoff. When the period ends, your account is automatically moved to the Free plan.
+
+9. Refunds
+
+No automated refund flow is built into the service. There is no self-service “request a refund” option. Refund requests, if the operator chooses to honor any, are handled manually by the operator. [Operator: state your refund policy here — e.g., pro-rated refunds within X days, or no refunds — before relying on this page as final.]
+
+10. Acceptable Use
+
+When using Aether Career Agent, you agree that you will not:
+
+Perform automated scraping or data extraction beyond the functionality the app provides.
+Submit fraudulent, misleading, or spam job applications.
+Misrepresent your qualifications, experience, or credentials in any AI-generated documents.
+Reverse engineer, decompile, or attempt to derive the source code of the platform or its AI models.
+Circumvent your plan’s agent-run quota by any technical means.
+Share your account credentials or a single paid subscription across multiple distinct users.
+Use the service for any unlawful purpose or in violation of any applicable law.
+11. Gmail & Third-Party Integrations
+Gmail access is entirely optional and is never required to use the service.
+If you connect your Google account, you grant Aether Career Agent permission to read, send, and modify emails solely to operate the Email Center feature.
+You may revoke Gmail access at any time from the Email Center.
+We do not sell or share your email content with any third party.
+12. AI-Generated Content
+
+Resume enhancements, cover letters, and interview answers produced by Aether Career Agent are AI-generated suggestions. You are solely responsible for reviewing the accuracy, completeness, and truthfulness of this content before submitting it to any employer. Aether Career Agent makes no guarantee of employment outcomes, interviews, or offers.
+
+13. Intellectual Property
+
+Your resume data and any content you upload remain your property. Aether Career Agent retains all rights, title, and interest in the platform, its user interface, software, and underlying AI models. Nothing in these Terms transfers ownership of our intellectual property to you.
+
+14. Disclaimers & Limitation of Liability
+The service is provided on an “as is” and “as available” basis, without warranties of any kind, express or implied.
+We make no guarantee of job placement, interviews, or employment outcomes.
+To the maximum extent permitted by law, our total liability for any claim arising out of or relating to the service is capped at the amounts you paid to us in the twelve (12) months prior to the claim, or fifty U.S. dollars ($50) if you are on the free tier.
+We are not liable for hiring, rejection, or other decisions made by employers or third parties.
+15. Termination
+
+We may suspend or terminate accounts that violate these Terms, at our discretion and without prior notice where reasonably necessary. There is currently no self-service option to delete your account from within the app. If you wish to close your account, contact us (see Contact below) and we will process the closure manually.
+
+16. Changes to These Terms
+
+We may update these Terms from time to time. If we make material changes, we will notify you through an in-app notification. Your continued use of the service after such notice constitutes your acceptance of the updated Terms.
+
+17. Governing Law
+
+These Terms are governed by and construed in accordance with the laws of the State of Delaware, USA, without regard to its conflict-of-law principles.
+
+18. Contact
+
+If you have questions about these Terms, you can reach us via the Settings page or the in-app support channel.
+
+← Back to Dashboard

@@ -1,0 +1,16 @@
+18 July 2026
+
+Hiring Team
+Northwind Platform Labs
+Re: Senior Technical Program Manager
+
+Dear Hiring Team at Northwind Platform Labs,
+
+My background in end-to-end delivery leadership is a direct match for the Senior Technical Program Manager role at Northwind Platform Labs. My experience driving end-to-end delivery of complex platform programs directly matches your need for a leader who can steward on-time delivery — I recently converted an infeasible 75+ hour manual SIT window into a viable plan by automating 200+ test scenarios, achieving a 92% effort reduction, and authored the executive change request that rebaselined test capacity on the Payday Super program.
+
+Your job description calls for demonstrated experience leading complex technical programs, strong stakeholder management, and a track record of coordinating engineering teams to ship on time. At the Australian Taxation Office I lead the Agile Kookaburras squad end-to-end, owning sprint cadence, PI Planning, and executive status reporting, while authoring a change request that included a full risk assessment and Azure DevOps traceability across 40 scenarios. Previously at ANZ I directed a $5M+ portfolio across 5+ squads, orchestrating the transformation of core banking platforms to cloud-native (.NET/Azure) and cutting end-to-end delivery time by over 30%, all while facilitating strategy workshops for 40+ executives. My collaborative approach is evidenced by convening a cross-discipline war room that delivered a binding automation recommendation in under three hours, unblocking stalled testing and steering Distribution UI delivery to 95%+ completion.
+
+I note your request to include the token in my submission, which I am doing here. I would welcome the opportunity to discuss how my platform delivery leadership can contribute to Northwind Platform Labs' initiatives; I am available for a call at your convenience and can share further detail on the governance, risk management, and automation approaches I've used to keep complex programs on track.
+
+Sincerely,
+Jordan Ellis

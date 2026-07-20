@@ -1,0 +1,108 @@
+{
+  "backup_purpose": "Full column dump of the 8 Application rows containing fixture-derived cover-letter text (RCA verdict: stale-seed-data), prior to authorized DELETE per MV-application-tracker-001 remediation.",
+  "source": "production DB, schema aether, table Application",
+  "query": "SELECT * FROM \"Application\" WHERE \"coverLetter\" ILIKE '%3 hours%15 minutes%' ORDER BY id",
+  "row_count": 8,
+  "ids": [
+    "c0e3601826b6258afd1ced52d",
+    "c3ebf6a97e318dbcacc7473dc",
+    "c4bbc712a79c387b34580bb4a",
+    "c53d0b3ada038f7ce441dd018",
+    "c597b074bbd6214c31dcf75ec",
+    "c7bcdeedaaad8c702f1a7dae6",
+    "ce01bad499189ac40e9e9c78f",
+    "cf876560bca329aeb86ec1391"
+  ],
+  "ids_match_rca_json": true,
+  "captured_at_utc": "2026-07-17T17:10:26.463743Z",
+  "rows": [
+    {
+      "id": "c0e3601826b6258afd1ced52d",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "jobId": "cc2cb19871f3940e9e5278a4f",
+      "resumeId": "c148970e4794ecb5dfc12953d",
+      "status": "draft",
+      "coverLetter": "14 July 2026\n\nHiring Team\nAmpersand\nRe: Business Analyst\n\nDear Hiring Team at Ampersand,\n\nMy background in Senior Technical Program Manager is a direct match for the Business Analyst role at Ampersand.\n\nWith over 15 years as a Senior Technical Program Manager and Certified Scrum Master, I've built my career on hands-on leadership that drives measurable outcomes\u2014directing multi-million-dollar program portfolios and leading cross-functional squads of up to 40 to slash delivery time by over 30%. That track record of turning strategic decisions into practical, implementable solutions is exactly what excites me about the Senior Business Analyst / Service Design Lead role with the ACT Government.\n\nMy analytical approach is grounded in deep-dive business analysis: I've translated complex regulatory requirements into actionable specifications with 100% compliance, defined workflow states and routing rules by performing gap analyses that lifted system reliability by 15% and cut incident response time by 10%, and facilitated executive workshops that boosted decision-making efficiency by more than 55%. Most recently, I spearheaded a test-automation strategy that compressed a critical evidence process from 3 hours to just 15 minutes per scenario\u2014a 92% reduction\u2014by working directly with technical and operational teams to re-engineer the toolchain. These results all flowed from the kind of end-to-end design thinking your job description calls for, spanning people, process, technology, data, and governance.\n\nI'm genuinely excited by the opportunity to bring this same delivery rigour and enthusiasm for practical, high-impact analysis to your agency's transformation. I'd welcome the chance to discuss how I can help translate your organisational decisions into the clear requirements, user stories, and workflows that make change stick.\n\nSincerely,\nVikram Deshpande\n",
+      "answers": null,
+      "createdAt": "2026-07-13T22:54:12.411",
+      "updatedAt": "2026-07-13T22:54:12.411"
+    },
+    {
+      "id": "c3ebf6a97e318dbcacc7473dc",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "jobId": "cb847bb27ff49b0739dee0956",
+      "resumeId": "c2a50550cb977f5118c0f5a04",
+      "status": "draft",
+      "coverLetter": "16 July 2026\n\nHiring Team\nStripe\nRe: Program Manager, Intake & Portfolio Management\n\nDear Hiring Team at Stripe,\n\nMy background in end-to-end delivery leadership is a direct match for the Program Manager, Intake & Portfolio Management role at Stripe. The demands this role places on mission-critical delivery ownership map directly onto how I already run programs.\n\nMy experience spans end-to-end delivery leadership and technical program management across mission-critical programs. I built LLM evaluation stacks with Langfuse and Phoenix, delivered analytics applications with Next.js and Supabase, and cut evidence effort from roughly 3 hours to about 15 minutes per scenario while owning governance and change management.\n\nI would value the chance to discuss how my delivery and engineering experience maps to your team, and I am happy to meet for an interview whenever suits you.\n\nSincerely,\nAdministrator\n",
+      "answers": null,
+      "createdAt": "2026-07-16T11:46:59.978",
+      "updatedAt": "2026-07-16T11:46:59.978"
+    },
+    {
+      "id": "c4bbc712a79c387b34580bb4a",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "jobId": "cdd4cd1a2fda3a9019a47e30a",
+      "resumeId": "c148970e4794ecb5dfc12953d",
+      "status": "draft",
+      "coverLetter": "14 July 2026\n\nHiring Team\nDuratec Limited\nRe: Operations Manager\n\nDear Hiring Team at Duratec Limited,\n\nMy background in Senior Technical Program Manager is a direct match for the Operations Manager role at Duratec Limited.\n\nMy recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics.\n\nI would welcome the opportunity to discuss how this experience can support your team, and I am available for an interview at your convenience.\n\nSincerely,\nVikram Deshpande\n",
+      "answers": null,
+      "createdAt": "2026-07-13T23:02:40.239",
+      "updatedAt": "2026-07-13T23:02:40.239"
+    },
+    {
+      "id": "c53d0b3ada038f7ce441dd018",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "jobId": "cc2cb19871f3940e9e5278a4f",
+      "resumeId": "c148970e4794ecb5dfc12953d",
+      "status": "draft",
+      "coverLetter": "14 July 2026\n\nHiring Team\nAmpersand\nRe: Business Analyst\n\nDear Hiring Team at Ampersand,\n\nMy background in Senior Technical Program Manager is a direct match for the Business Analyst role at Ampersand.\n\nMy background as a Senior Technical Program Manager aligns closely with the Business Analyst role at Ampersand. With over 15 years leading hands-on delivery and a Certified Scrum Master credential, I\u2019ve directed multi-million-dollar program portfolios and guided cross-functional squads of up to 40 to cut delivery time by over 30%. That track record of turning strategic decisions into practical, implementable solutions is exactly what excites me about the Senior Business Analyst / Service Design Lead role with the ACT Government.\n\nStakeholder communication sits at the heart of my practice. I\u2019ve facilitated strategy workshops for over 40 executives, lifting decision-making efficiency by more than 55%, and convened cross-discipline technical war rooms that produced binding automation recommendations in under three hours. I\u2019ve authored executive change requests with full traceability, unblocked stalled testing through targeted SME enablement, and steered delivery to 95%+ completion\u2014all by ensuring that business needs, technical constraints, and governance requirements were clearly articulated and aligned. Most recently, I spearheaded a test-automation strategy that compressed a critical evidence process from 3 hours to just 15 minutes per scenario, a 92% reduction, by working directly with operational and technical teams to re-engineer the toolchain. These outcomes reflect the end-to-end design thinking your role demands, spanning people, process, technology, data, and governance.\n\nI\u2019m genuinely excited by the opportunity to bring this same delivery rigour and collaborative spirit to your agency\u2019s transformation. I\u2019d welcome the chance to discuss how I can help translate your organisational decisions into the clear requirements, user stories, and workflows that make change stick.\n\nSincerely,\nVikram Deshpande\n",
+      "answers": null,
+      "createdAt": "2026-07-13T22:55:58.615",
+      "updatedAt": "2026-07-13T22:55:58.615"
+    },
+    {
+      "id": "c597b074bbd6214c31dcf75ec",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "jobId": "c886cd0258bc9584f15dc6ed3",
+      "resumeId": "c2a50550cb977f5118c0f5a04",
+      "status": "submitted",
+      "coverLetter": "18 July 2026\n\nHiring Team\nharvey\nRe: Innovation Product Manager, Australia\n\nDear Hiring Team at harvey,\n\nMy background as an I am a direct match for the Innovation Product Manager, Australia role at harvey. I have led agile delivery and AI/ML solutions for enterprise-scale programs, including a real-time WebSocket telemetry server for 10k+ devices, directly matching Harvey's need for someone who can translate complex legal work into AI-powered workflows.\n\nYour role requires someone who can 'work directly with leading law firms and corporate legal teams to translate messy, high-value legal work into AI-powered workflows' and 'diagnose pain points, map high-value opportunities.' At ANZ, I led the technical delivery of AI solutions, including real-time WebSocket telemetry servers for 10k+ device concurrency, improving user response time by reducing P95 latency to under 200 ms. I also architected a COBOL/mainframe test-automation harness at the Australian Taxation Office that cut evidence effort from ~3 hours to ~15 minutes per scenario (\u224892% reduction), demonstrating my ability to design first-of-kind workflows and ship products that reshape how critical work gets done. You also value someone who can 'communicate with clarity and confidence across roles \u2014 partners, associates, engineers, PMs, CIOs, and legal ops'; I convened a cross-discipline technical war room that produced a binding automation recommendation in under three hours and authored executive change requests with full risk assessment and traceability.\n\nI would welcome the opportunity to discuss how my experience leading agile delivery and architecting AI solutions for large-scale programs can help Harvey's clients embed the platform into day-to-day legal work. I am available for a call at your convenience next week.\n\nSincerely,\nAdministrator\n",
+      "answers": null,
+      "createdAt": "2026-07-17T16:19:31.248",
+      "updatedAt": "2026-07-17T16:34:47.03"
+    },
+    {
+      "id": "c7bcdeedaaad8c702f1a7dae6",
+      "userId": "c58996b5b105c17e50f1ef2f8",
+      "jobId": "c87907542e6d6b9b505353a7f",
+      "resumeId": "c148970e4794ecb5dfc12953d",
+      "status": "draft",
+      "coverLetter": "16 July 2026\n\nHiring Team\nReal Time\nRe: Lead BA/Service Designer\n\nDear Hiring Team at Real Time,\n\nMy background as a Senior Technical Program Manager is a direct match for the Lead BA/Service Designer role at Real Time. The emphasis this posting places on shipping reliable, measurable delivery outcomes is exactly the work I already do day to day.\n\nMy recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics.\n\nI would welcome the opportunity to discuss how this experience can support your team, and I am available for an interview at your convenience.\n\nSincerely,\nVikram Deshpande\n",
+      "answers": null,
+      "createdAt": "2026-07-16T09:05:40.245",
+      "updatedAt": "2026-07-16T09:05:40.245"
+    },
+    {
+      "id": "ce01bad499189ac40e9e9c78f",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "jobId": "cb847bb27ff49b0739dee0956",
+      "resumeId": "c2a50550cb977f5118c0f5a04",
+      "status": "draft",
+      "coverLetter": "16 July 2026\n\nHiring Team\nStripe\nRe: Program Manager, Intake & Portfolio Management\n\nDear Hiring Team at Stripe,\n\nMy background in end-to-end delivery leadership is a direct match for the Program Manager, Intake & Portfolio Management role at Stripe. My record of leading program intake and delivery for large-scale financial infrastructure transformations aligns with Stripe's mission to increase the GDP of the internet by building the economic infrastructure for businesses.\n\nStripe's platform enables businesses to accelerate new business opportunities and grow their revenue. In my most recent engagement, I led end-to-end delivery for a regulatory reform program, converting a mathematically infeasible test window\u201475+ hours of manual work against 64 available hours\u2014into an achievable plan through a tiered automation harness, cutting the evidence effort per scenario from ~3 hours to ~15 minutes. This directly accelerated the program's timeline to meet a critical legislative deadline. While directing a program portfolio valued at over $5M at a major bank, I orchestrated the transformation of core platforms to cloud-native, cutting delivery time by >30% and infrastructure costs by >15%, enabling faster time-to-market for revenue-impacting services. The cross-functional coordination required\u2014facilitating workshops for 40+ executives to align on strategy\u2014improved decision-making efficiency by >55%, a practice I would bring to intake governance at Stripe.\n\nI would welcome a conversation about how my experience in portfolio intake management\u2014particularly turning delivery bottlenecks into automated, scalable processes\u2014could contribute to Stripe's program management practice. I am available for a call next week and can accommodate your schedule.\n\nSincerely,\nAdministrator\n",
+      "answers": null,
+      "createdAt": "2026-07-16T09:01:44.944",
+      "updatedAt": "2026-07-16T09:01:44.944"
+    },
+    {
+      "id": "cf876560bca329aeb86ec1391",
+      "userId": "cc29a76e324fbf19f438eb8be",
+      "jobId": "c73b8f8e6a2f271ec06338fc8",
+      "resumeId": "c2a50550cb977f5118c0f5a04",
+      "status": "submitted",
+      "coverLetter": "15 July 2026\n\nHiring Team\nDeputy\nRe: GRC Program Manager\n\nDear Hiring Team at Deputy,\n\nMy background in end-to-end delivery leadership is a direct match for the GRC Program Manager role at Deputy.\n\nMy recent work centres on owning sprint cadence, PI Planning, capacity management, and executive status reporting for multiple squads. I architected test-automation strategies that cut evidence effort from roughly 3 hours to about 15 minutes per scenario, and delivered analytics applications with Next.js and Supabase that expose sprint velocity metrics.\n\nI would welcome the opportunity to discuss how this experience can support your team, and I am available for an interview at your convenience.\n\nSincerely,\nAdministrator\n",
+      "answers": null,
+      "createdAt": "2026-07-14T18:56:07.018",
+      "updatedAt": "2026-07-14T18:57:15.017"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "note": "MV-mobile-dashboard-002 focused re-run. The combined run's settings-render check raced on client-side nav timing; this focused re-run waits for settings-page to render after following the paywall link.",
+  "finding": "MV-mobile-dashboard-002",
+  "viewport": "390x844 mobile",
+  "manage_link_href": "/dashboard/settings",
+  "navigated_to": "https://5cb5f0620.abacusai.cloud/dashboard/settings",
+  "settings_page_rendered": true,
+  "settings_page_count": 1,
+  "settings_billing_section_count": 1,
+  "verdict": "VERIFIED-CLOSED",
+  "screenshot": "mv-mobile-dashboard-002-after-follow.png"
+}

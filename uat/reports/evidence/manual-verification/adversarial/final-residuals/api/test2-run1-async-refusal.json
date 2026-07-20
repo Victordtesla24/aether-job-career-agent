@@ -1,0 +1,72 @@
+{
+  "account": "mv-qa-resid-noresume-865c45@example.com",
+  "userId": "c1561fd2195e1801d85872755",
+  "captured_utc": "2026-07-20T01:21:01.724124+00:00",
+  "resume_count_before": 0,
+  "usage_before": {
+    "runsUsed": 0,
+    "spendUsedUsd": "0",
+    "runsAllowed": 100
+  },
+  "entitlement_before": {
+    "active_paid": true,
+    "plan": "pro",
+    "usage": null
+  },
+  "target_job": "cdc5aee99f0c02b074d5e9e7f",
+  "usage_after": {
+    "runsUsed": 0,
+    "spendUsedUsd": "0",
+    "runsAllowed": 100
+  },
+  "resume_count_after": 0,
+  "entitlement_after": {
+    "active_paid": true,
+    "usage": null
+  },
+  "tests": {
+    "2a_cover_letter": {
+      "run_resp_status_202": true,
+      "bg_job_id": "cd32b14504b4e2046e45fa507",
+      "terminal_status": "completed",
+      "result": {
+        "message": "Add your resume before generating a cover letter.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "leak_hits": []
+    },
+    "2a_tailor": {
+      "run_resp": {
+        "job_id": "c7ee1fd820fe7e695208f0737",
+        "status": "enqueued"
+      },
+      "bg_job_id": "c7ee1fd820fe7e695208f0737",
+      "terminal_status": "completed",
+      "result": {
+        "message": "Add your resume before tailoring or generating an application.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "leak_hits": []
+    },
+    "2b_pipeline": {
+      "run_resp": {
+        "job_id": "c5d19c73ba1b5f3cecbc83fd9",
+        "status": "enqueued"
+      },
+      "bg_job_id": "c5d19c73ba1b5f3cecbc83fd9",
+      "terminal_status": "completed",
+      "result": {
+        "message": "Add your resume before scoring jobs against it.",
+        "resume_id": null,
+        "missingResume": true
+      },
+      "error": null,
+      "leak_hits": []
+    }
+  },
+  "quota_charged": 0
+}

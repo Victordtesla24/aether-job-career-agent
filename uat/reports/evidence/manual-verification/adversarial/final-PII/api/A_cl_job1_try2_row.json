@@ -1,0 +1,10 @@
+{
+  "id": "c4f564a68d83b13ccabed18d5",
+  "userId": "c6c99121d1d2a26ae37543ddd",
+  "jobId": "c70b37ded830f070980ba30f1",
+  "resumeId": "c1fae2c27a2f5e808f1d9be78",
+  "status": "draft",
+  "coverLetter": "20 July 2026\n\nHiring Team\nRedpanda Data\nRe: Staff Streaming Platform Engineer\n\nDear Hiring Team at Redpanda Data,\n\nMy background in end-to-end delivery leadership is a direct match for the Staff Streaming Platform Engineer role at Redpanda Data. I have built low-latency services in Rust with Tokio and operated Apache Kafka and Redpanda clusters at a 4 billion event/day scale, directly matching the core requirements of this role.\n\nYou require a Staff Streaming Platform Engineer to own a high-throughput event pipeline, build low-latency services in Rust with Tokio, and operate Apache Kafka and Redpanda clusters at multi-billion event/day scale. At Atlassian, I rearchitected the Jira activity-stream ingestion service in Rust with Tokio, cutting p99 latency from 380ms to 42ms on a 4 billion event/day Kafka firehose. I also introduced Redpanda at Canva to replace a legacy queue, halving broker fleet size. Additionally, I have strong gRPC and Protocol Buffers experience, having designed a gRPC streaming API with Protocol Buffers for Canva's design-collaboration CRDT sync engine used by 90 million monthly active users. My Elixir/Erlang OTP background is evidenced by building an Elixir/Phoenix presence fabric on Erlang/OTP supervision trees that sustained 2.1 million concurrent websocket sessions, and I have mentored engineers as a staff-level team lead.\n\nI would welcome the opportunity to discuss how my experience with ScyllaDB storage layers, ClickHouse analytics, and globally distributed streaming fabrics can contribute to Redpanda Data's engineering team. I am available for a call at your convenience next week to explore this role further.\n\nSincerely,\n\n",
+  "createdAt": "2026-07-19T23:03:47.267000",
+  "updatedAt": "2026-07-19T23:03:47.267000"
+}

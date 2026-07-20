@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"jobId\":\"cc165c8e3af88240a87617735\",\"scored\":false,\"needsResume\":true,\"overall\":0,\"keywordMatch\":0,\"semantic\":0,\"experience\":0,\"skillsMatched\":0,\"skillsTotal\":0,\"matchedSkills\":[],\"missingSkills\":[],\"skillGap\":null,\"narrative\":\"Add your resume to see how you match this role \u2014 we score your fit against your own resume, never a sample.\",\"dimensions\":[{\"label\":\"Technical Skills\",\"score\":0},{\"label\":\"Experience Level\",\"score\":0},{\"label\":\"Industry Match\",\"score\":0},{\"label\":\"Role Alignment\",\"score\":0},{\"label\":\"Culture Fit\",\"score\":0},{\"label\":\"Salary Fit\",\"score\":70},{\"label\":\"Location Match\",\"score\":100},{\"label\":\"Career Growth\",\"score\":0},{\"label\":\"Company Stability\",\"score\":76},{\"label\":\"North Star Align\",\"score\":0}],\"riskSignals\":[{\"label\":\"No salary listed\",\"severity\":\"medium\"}],\"isAustralia\":false}"
+}

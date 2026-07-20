@@ -1,0 +1,15 @@
+=== MV-system-003 review — prod aether counts, independent reviewer verification ===
+BEFORE (pre guarded-suite run), captured 2026-07-18T02:54:05Z [recorded earlier this run]:
+  User count=2, max(createdAt)=2026-07-18 00:54:18.359
+  Application=12 Job=8 StoryEntry=0 Resume=1 Subscription=7 ApprovalRequest=8
+
+AFTER (post guarded-suite run: 695 passed/5 failed, see guarded-full-suite.txt), captured 2026-07-18T02:54:05Z:
+User count=2 max(createdAt)=2026-07-18 00:54:18.359
+  Application=12
+  Job=8
+  StoryEntry=0
+  Resume=1
+  Subscription=7
+  ApprovalRequest=8
+
+VERDICT: all prod aether counts IDENTICAL before vs after. prod_untouched=true (independently verified by reviewer, not fixer).

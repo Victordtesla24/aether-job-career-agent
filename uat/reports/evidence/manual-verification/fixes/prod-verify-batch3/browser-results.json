@@ -1,0 +1,120 @@
+{
+  "openRedirectSafe": true,
+  "results": [
+    {
+      "id": "MV-login-002-next-redirect",
+      "ok": true,
+      "detail": "deep-link /dashboard/jobs -> https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fjobs"
+    },
+    {
+      "id": "MV-login-002-returns-to-intended",
+      "ok": true,
+      "detail": "after login -> https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+    },
+    {
+      "id": "MV-login-003-logout-control-exists",
+      "ok": true,
+      "detail": "account menu present=true, signout clicked=true"
+    },
+    {
+      "id": "MV-login-003-token-cleared",
+      "ok": true,
+      "detail": "token before=true after=false"
+    },
+    {
+      "id": "MV-login-003-redirect-login",
+      "ok": true,
+      "detail": "after logout url=https://5cb5f0620.abacusai.cloud/login"
+    },
+    {
+      "id": "MV-login-003-protected-blocked",
+      "ok": true,
+      "detail": "visit protected after logout -> https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fnetworking"
+    },
+    {
+      "id": "MV-login-002-openredirect-proto-relative",
+      "ok": true,
+      "detail": "next=//evil.com -> https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "id": "MV-login-002-openredirect-absolute-https",
+      "ok": true,
+      "detail": "next=https://evil.com -> https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "id": "MV-login-002-openredirect-backslash",
+      "ok": true,
+      "detail": "next=/\\evil.com -> https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "id": "MV-login-002-openredirect-traversal",
+      "ok": true,
+      "detail": "next=/dashboard/../../evil -> https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "id": "MV-login-002-openredirect-non-dashboard",
+      "ok": true,
+      "detail": "next=/admin -> https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "id": "MV-login-001-authed-login-redirects",
+      "ok": true,
+      "detail": "authed /login -> https://5cb5f0620.abacusai.cloud/dashboard, signInForm=0"
+    },
+    {
+      "id": "MV-signup-002-authed-signup-redirects",
+      "ok": true,
+      "detail": "authed /signup -> https://5cb5f0620.abacusai.cloud/dashboard, createForm=0"
+    },
+    {
+      "id": "MV-agent-monitor-001-pauseall-disabled",
+      "ok": true,
+      "detail": "Pause All disabled=true title=\"Not yet available\""
+    },
+    {
+      "id": "MV-agent-monitor-001-override-disabled",
+      "ok": true,
+      "detail": "Manual Override disabled=true"
+    },
+    {
+      "id": "MV-agent-monitor-002-no-fabricated-pct",
+      "ok": true,
+      "detail": "task-queue text=\"TASK QUEUE | Scout · In Progress | … | FitScorer · Completed | 100% | Matcher · Completed | 100%\""
+    },
+    {
+      "id": "MV-agent-monitor-003-window-disclosed",
+      "ok": true,
+      "detail": "perf text=\"PERFORMANCE | · last 4 runs | 4 | tasks run | 17.3s | avg duration | 50.0% | success rate\""
+    },
+    {
+      "id": "ADV-agent-monitor-uptime-hardcoded",
+      "ok": false,
+      "detail": "orchestration header mentions 'uptime 99.8%'? true :: \"Agent Orchestration\""
+    },
+    {
+      "id": "MV-networking-003-no-fake-linkedin",
+      "ok": true,
+      "detail": "page contains 'Import from LinkedIn'? false"
+    },
+    {
+      "id": "MV-networking-004-review-drafts-gone",
+      "ok": true,
+      "detail": "page contains 'Review all drafts'? false"
+    },
+    {
+      "id": "MV-networking-001-add-contact-persists",
+      "ok": true,
+      "detail": "contact 'MV-vb3 Contact 1784356009425' present after reload=true (immediately=true)"
+    },
+    {
+      "id": "MV-networking-005-card-detail-panel",
+      "ok": true,
+      "detail": "contact card opens detail panel=true"
+    },
+    {
+      "id": "MV-login-004-forgot-honest",
+      "ok": true,
+      "detail": "pwInputs=0, text=\"A | Aether | job & career agent | Reset your password |  | Self-service password reset isn't available yet. |  | A support contact address has not yet been published for this service. Once the operator configures one it \""
+    }
+  ]
+}

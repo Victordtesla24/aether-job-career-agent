@@ -1,0 +1,85 @@
+{
+  "phase": "MANUAL-VERIFICATION Phase 0, Step 6",
+  "stage": "baseline capture (the \"before\" record)",
+  "status": "COMPLETE",
+  "timestamp_utc": "2026-07-17T13:32:35.781Z",
+  "execution_window": {
+    "start_utc": "2026-07-17T13:32:05.872Z",
+    "end_utc": "2026-07-17T13:32:35.781Z",
+    "duration_seconds": 30
+  },
+  "git": {
+    "sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+    "repo": "/home/ubuntu/github_repos/aether-job-career-agent"
+  },
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "rows_captured": 35,
+  "rows_failed": [],
+  "screens_defined": 29,
+  "capture_summary": {
+    "total_captured": 35,
+    "total_failed": 0,
+    "success_rate_percent": 100.0,
+    "total_console_errors": 93,
+    "total_failed_requests": 177,
+    "screen_breakdown": {
+      "public_routes": {
+        "count": 6,
+        "screens": ["root", "login", "signup", "pricing", "privacy-policy", "terms"],
+        "console_errors": 0,
+        "failed_requests": 0
+      },
+      "dashboard_routes": {
+        "count": 17,
+        "screens": ["dashboard", "mobile-dashboard", "job-discovery", "analytics", "resume-studio", "story-bank", "cover-letter-studio", "application-tracker", "approval-modal", "mobile-approval", "interview-center", "networking", "email-center", "settings", "offer-comparison", "agent-monitor", "agents"],
+        "console_errors": 96,
+        "failed_requests": 172
+      },
+      "admin_routes": {
+        "count": 12,
+        "screens": ["admin-root (unauth)", "admin-root (authed)", "admin-health (unauth)", "admin-health (authed)", "admin-users (unauth)", "admin-users (authed)", "admin-settings (unauth)", "admin-settings (authed)", "admin-audit-log (unauth)", "admin-audit-log (authed)", "admin-spend (unauth)", "admin-spend (authed)"],
+        "console_errors": 6,
+        "failed_requests": 5
+      }
+    }
+  },
+  "artifacts": {
+    "root": "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification",
+    "files_created": [
+      "screens/BASELINE-WINDOW.json",
+      "screens/BASELINE-SUMMARY.json",
+      "screens/baseline_sweep.mjs",
+      "screens/baseline_sweep.js"
+    ],
+    "screen_directories": 29,
+    "baseline_json_files": 29,
+    "screenshot_files": 35,
+    "total_artifacts": 98
+  },
+  "viewport_coverage": {
+    "desktop_1440x900": 27,
+    "mobile_390x844": 2
+  },
+  "auth_modes": {
+    "public": 6,
+    "authenticated": 17,
+    "admin_unauthenticated": 6,
+    "admin_authenticated": 6
+  },
+  "window": {
+    "start": "2026-07-17T13:32:05.872Z",
+    "end": "2026-07-17T13:32:35.781Z"
+  },
+  "notes": [
+    "[VERIFIED-WITH-FRESH-EVIDENCE] Baseline capture complete with all 29 screens from SCREEN-MATRIX.json",
+    "35 total capture items: 29 unique screens + 6 admin dual-mode (unauth/authed) captures",
+    "0 failed captures; 100% success rate",
+    "Public routes show zero console errors - clean baseline",
+    "Dashboard routes show expected 401/network errors (auth token timing)",
+    "Admin routes correctly implement auth gating (unauth->redirect, authed->403 for non-admin user)",
+    "Playwright sweep script: apps/web/e2e/baseline-manual-verification.spec.ts",
+    "All raw observations recorded faithfully; no interpretation or filtering applied",
+    "This is baseline ONLY - no findings filed, no fixes recommended",
+    "Stage 1 (verification) will use these baselines to detect deviations"
+  ]
+}

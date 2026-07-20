@@ -1,0 +1,20 @@
+2026-07-17T16:25:22.253Z S2-STEP1: login
+2026-07-17T16:25:25.182Z S2-STEP1: logged in url=https://5cb5f0620.abacusai.cloud/dashboard
+2026-07-17T16:25:25.182Z S2-STEP2: navigate to approvals, mobile viewport
+2026-07-17T16:25:27.261Z S2-STEP2: overflow check {"sw":390,"cw":390}
+2026-07-17T16:25:27.261Z S2-STEP3: approve MV-mobile-approval- Session2 Approve Role via modal
+2026-07-17T16:25:27.298Z S2-STEP3: card count = 1
+2026-07-17T16:25:28.701Z S2-STEP3: POST /approve response status = 200
+2026-07-17T16:25:29.703Z S2-STEP4: reload, verify persistence in approved filter
+2026-07-17T16:25:32.491Z S2-STEP4: found in approved filter after reload = true
+2026-07-17T16:25:32.580Z S2-STEP5: reject MV-mobile-approval- Session2 Reject Role via inline card button
+2026-07-17T16:25:33.360Z S2-STEP5: card count = 1
+2026-07-17T16:25:33.681Z S2-STEP5: POST /reject response status = 200
+2026-07-17T16:25:34.683Z S2-STEP6: reload, verify persistence in rejected filter
+2026-07-17T16:25:37.433Z S2-STEP6: found in rejected filter after reload = true
+2026-07-17T16:25:37.508Z S2-STEP7: re-verify invalid deep-link race (2x more repro attempts)
+2026-07-17T16:25:40.730Z S2-STEP7: run0 invalid-deeplink error-alert ever shown in 3s window = false
+2026-07-17T16:25:43.864Z S2-STEP7: run1 invalid-deeplink error-alert ever shown in 3s window = false
+2026-07-17T16:25:43.864Z S2-STEP8: consoleErrors total = 2
+2026-07-17T16:25:43.864Z   consoleError: Failed to load resource: the server responded with a status of 404 ()
+2026-07-17T16:25:43.864Z   consoleError: Failed to load resource: the server responded with a status of 404 ()

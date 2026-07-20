@@ -1,0 +1,194 @@
+{
+  "log": [
+    {
+      "t": "2026-07-17T15:48:36.357Z",
+      "name": "selected-target-job",
+      "data": {
+        "targetTitle": "Business Analyst",
+        "targetIdx": 2
+      }
+    },
+    {
+      "t": "2026-07-17T15:48:37.196Z",
+      "name": "clicked-tailor-resume",
+      "data": {
+        "t0": "2026-07-17T15:48:37.196Z"
+      }
+    },
+    {
+      "t": "2026-07-17T15:48:37.701Z",
+      "name": "tailoring-progress-visible",
+      "data": {
+        "progressVisible": true
+      }
+    },
+    {
+      "t": "2026-07-17T15:48:37.911Z",
+      "name": "poll-0",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 797
+      }
+    },
+    {
+      "t": "2026-07-17T15:48:47.020Z",
+      "name": "poll-3",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 9906
+      }
+    },
+    {
+      "t": "2026-07-17T15:48:56.083Z",
+      "name": "poll-6",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 18969
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:05.147Z",
+      "name": "poll-9",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 28033
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:14.224Z",
+      "name": "poll-12",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 37110
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:23.300Z",
+      "name": "poll-15",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 46186
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:32.348Z",
+      "name": "poll-18",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 55234
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:41.403Z",
+      "name": "poll-21",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 64289
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:50.452Z",
+      "name": "poll-24",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 73338
+      }
+    },
+    {
+      "t": "2026-07-17T15:49:59.499Z",
+      "name": "poll-27",
+      "data": {
+        "s2": 0,
+        "errCount": 1,
+        "errText": "",
+        "progCount": 1,
+        "elapsedMs": 82385
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:05.603Z",
+      "name": "poll-final",
+      "data": {
+        "i": 29,
+        "s2": 1,
+        "errCount": 1,
+        "errText": "",
+        "elapsedMs": 88489
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:05.603Z",
+      "name": "tailor-wait-result",
+      "data": {
+        "step2Appeared": true,
+        "durationMs": 88489
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:07.338Z",
+      "name": "tailor-step2-content",
+      "data": {
+        "changesText": "✓ Resume tailored · 0 changes applied· 8 rejected by fabrication guardPull from Story Bank →Open in Resume Studio✈ Review & Apply →Re-tailor"
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:08.318Z",
+      "name": "submit-gate-opened",
+      "data": {
+        "gateVisible": true,
+        "gateTitle": "Submit application to Brighte?"
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:09.297Z",
+      "name": "submit-gate-cancel",
+      "data": {
+        "gateVisibleAfterCancel": false
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:11.787Z",
+      "name": "submit-confirmed",
+      "data": {
+        "submittedVisible": true,
+        "submittedText": "✓ Application recorded for Brighte. Tracking in Applications · finish the submission on the job board ↗"
+      }
+    },
+    {
+      "t": "2026-07-17T15:50:14.223Z",
+      "name": "gate-auto-closed",
+      "data": {
+        "gateVisibleAfterAutoClose": false
+      }
+    }
+  ],
+  "consoleMsgs": [],
+  "netFailures": []
+}

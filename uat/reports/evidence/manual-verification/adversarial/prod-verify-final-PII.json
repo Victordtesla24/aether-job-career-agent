@@ -1,0 +1,174 @@
+{
+  "status": "OK",
+  "run": "MANUAL-VERIFICATION Stage-3 DEFINITIVE live-prod re-verify — cross-account PII-leak class + SWEEP-A residuals (real LLM, no fixtures)",
+  "role": "qa-adversary (opus)",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "git_sha_deployed": "d313d23b6e7177b94f11c1419ffd21b0ac0a0e87",
+  "deployed_code_confirmed": "HEAD @d313d23 committed 2026-07-19T22:16:17Z; aether-api + aether-worker ActiveEnterTimestamp 2026-07-19T22:41:05Z (both restarted AFTER the merge commit — running deployed code). AETHER_ASYNC_GENERATION=true in prod (cover-letter/tailor run async via ARQ worker; email/refine/fit-scorer are synchronous).",
+  "verified_utc": "2026-07-19T23:20:00Z",
+  "evidence_dir": "uat/reports/evidence/manual-verification/adversarial/final-PII/",
+  "epistemic_note": "Every verdict below carries THIS-RUN fresh artifacts (real-LLM generated text greps + API JSON + DB reads + screenshots + HAR). Prior-phase reports treated as testimony only. Operator PII markers grounded in the ACTUAL bundled operator resume (assets/resume/Vik_Resume_Final.pdf parsed this run) — NOT guessed: DESHPANDE / VIKRAM / sarkar.vikram@gmail.com / +61 433 224 556 / Australian Taxation Office / ANZ / Telstra / NAB / Payday Super / Kookaburras / Monash / vikramd-profile + operator skills (kubernetes/typescript/azure/scrum/financial-services). Scanner validated: operator resume -> LEAK=true(17 markers); PRIYA resume -> LEAK=false.",
+  "accounts": [
+    {"role": "A_distinct_resume", "email": "mv-qa-pii-distinct-9f3k@example.com", "userId": "c6c99121d1d2a26ae37543ddd", "note": "Uploaded distinctive PRIYA NATARAJAN resume (Atlassian/Canva; Rust/Kafka/Elixir/Erlang/ScyllaDB; +61 411 908 772; priya.natarajan@example.com). Pro-granted then REVERTED to free at stage exit."},
+    {"role": "B_no_resume", "email": "mv-qa-pii-noresume-9f3k@example.com", "userId": "c43d8b2f3cbda5c787c107417", "note": "NO resume uploaded (Resume rows=0 throughout). Pro-granted then REVERTED to free."}
+  ],
+  "entitlement_grants_logged": true,
+  "entitlement_grant": {
+    "method": "SURGICAL single-row UPDATEs keyed to each userId via psycopg2 under options=-c search_path=aether; ?schema= stripped from DSN via python urllib.urlsplit/parse_qsl (NOT sed); current_schema()==aether asserted before every op; rowcount asserted ==1 each. Logged to ENTITLEMENT-GRANT-LOG.md BEFORE running.",
+    "granted_utc": "2026-07-19T22:51Z",
+    "reverted_utc": "2026-07-19T23:20Z",
+    "reverted": true,
+    "revert_confirmed_live": "GET /api/billing/entitlement -> active_paid:false, plan.id=free for BOTH accounts after revert; before-state (planId=free, runsAllowed=5, runsUsed=0, spendCapUsd=1.0, spendUsedUsd=0, signup updatedAt) restored byte-for-byte.",
+    "prod_db_safety": "NO pytest against prod. NO TRUNCATE / unqualified DELETE/UPDATE (guarded + refused by helper). All writes single-row WHERE-keyed."
+  },
+  "operator_pii_found_anywhere": false,
+  "operator_pii_scan_summary": "ZERO hard operator-PII (identity/employer) leak across EVERY captured artifact: 2 cover letters (real LLM), 2 refined letters, 2 email drafts, the downloaded resume PDF (extracted text), fit-insights (x2 jobs), voice-corpus (x2), 5 extracted stories, and ALL account-B refusal/empty-state bodies. Load-bearing greps saved under final-PII/text and final-PII/api.",
+  "zero_tolerance_sweep": {
+    "console_errors": 0,
+    "http_5xx": 0,
+    "note": "Playwright sweeps of A {tracker, cover-letters, resume} and B {jobs, cover-letters, resume}: 0 console errors, 0 responses >=500 on any dashboard screen. Studio UI (A) rendered PRIYA's letter (Atlassian/Canva/Rust/Kafka/Elixir/ScyllaDB/Redpanda/Tokio) with 0 operator PII. No fixture/placeholder text. The intermittent 'The AI service is temporarily unavailable' on some async cover-letter/tailor attempts is the HONEST LLM-degradation message (mapped to a failed BackgroundJob / 503, quota-refunded) — NOT a 5xx on a user request and NOT a leak; retries succeeded.",
+    "har": ["uat/reports/evidence/manual-verification/adversarial/final-PII/har/A-ui-sweep.har", "uat/reports/evidence/manual-verification/adversarial/final-PII/har/B-ui-sweep.har (full JWTs redacted to first-8)"]
+  },
+  "verify_twice_policy": "Core paths exercised >=2x with different jobs/orderings: cover-letter on Job1(Redpanda) + Job2(Fastly); insights on both jobs; refine on job1 + job2; email draft x2; account-B fit-scorer quota checked before+after. Deterministic non-LLM checks (PDF download, empty-states, quota) re-read from independent surfaces (API + DB).",
+  "verdicts": [
+    {
+      "finding": "NF-final-B-001",
+      "severity": "HIGH",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_coverletter_job1_redpanda.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_coverletter_job2_fastly.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_refine_job1.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_refine_job2.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/screenshots/A-cover-letter-studio-expanded.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_cover_letter_bgjob.json"
+      ],
+      "adversarial_notes": "Account A (with PRIYA resume) generated cover letters on TWO distinct jobs via the REAL LLM (deepseek-v4-pro, async worker). Both letters are 100% PRIYA-grounded (Atlassian, Canva, Rust, Tokio, Kafka, Elixir, Erlang, ScyllaDB, ClickHouse, Redpanda, Protocol Buffers, gRPC, 90M MAU, 4B events/day, p99 380ms->42ms) with ZERO operator markers — the old leak ('At ANZ I led... my work at Telstra... Agile Kookaburras... ATO Payday Super... $5M') is GONE. Refine on both letters equally PRIYA-grounded, no leak (verify-twice). Account B (no resume) cover-letter async POST->202 then BackgroundJob honestly 'failed' with 'Add your resume before generating a cover letter.' — no operator content, no 500. Studio UI corroboration: 0 console errors, 0 operator PII."
+    },
+    {
+      "finding": "NF-final-B-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_insights_job1.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_insights_job2.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_job_insights.json"
+      ],
+      "adversarial_notes": "Account A fit-insights scored PRIYA's OWN resume: Job1 overall=68 matchedSkills=[high-throughput,distributed,low-latency,clickhouse,streaming,engineer,protocol,scylladb]; Job2 overall=59 matchedSkills=[fault-tolerant,property-based,distributed,jetstream,messaging,embedded,engineer,proptest] — every matched skill traces to PRIYA's resume + JD; ZERO operator skills (no kubernetes/typescript/azure). The old leak (matched=[telecommunications,kubernetes,typescript,certified,executive] from the operator resume) is GONE. Account B insights -> needsResume=True, scored=False, overall=0, matchedSkills=[] — honest empty-state, no operator-derived score."
+    },
+    {
+      "finding": "NF-final-B-005",
+      "severity": "HIGH",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_resume_download_extracted.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_insights_download_results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_resumes_list.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/db/db_verify.json"
+      ],
+      "adversarial_notes": "Account A GET /resumes/{id}/download -> 200 application/pdf (4056 bytes) rendered from PRIYA's OWN structured content via the branded template ('PRIYA NATARAJAN ... Rearchitected the Jira activity-stream ingestion service in Rust with Tokio ...') — 14 PRIYA markers, ZERO operator markers, NOT the bundled operator PDF. Account B: GET /resumes=[] (nothing to download); the refused async tailor did NOT seed the operator PDF as B's base (DB: Resume rows=0 for B throughout)."
+    },
+    {
+      "finding": "NF-final-B-006",
+      "severity": "MEDIUM",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_email_draft_reply.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_email_draft_reply_2.txt",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_email_draft_reply.json"
+      ],
+      "adversarial_notes": "Account A email draft_reply (REAL LLM, x2) grounded on PRIYA's resume ('rearchitecting a high-throughput ingestion service in Rust with Tokio to handle a 4 billion event/day Kafka firehose at Atlassian ... Confluent Certified Developer for Apache Kafka') — ZERO operator PII. Account B email draft_reply -> HTTP 422 'Add your resume before drafting a reply.' (synchronous, honest refusal, no operator content, no charge)."
+    },
+    {
+      "finding": "NF-final-B-007",
+      "severity": "MEDIUM",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_job_insights.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_voicecorpus_job1.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_voicecorpus_job2.json"
+      ],
+      "adversarial_notes": "Account B internal read-only analytics degrade honestly: GET /jobs/{id}/insights -> 200 needsResume=True, scored=False, matchedSkills=[], skillsMatched=0, overall=0 — resume-derived dims zeroed, no operator content [VERIFIED-WITH-FRESH-EVIDENCE]. Account A cover-letter voice-corpus (GET /cover-letters/{id}/insights) grounds only on PRIYA (needsResume=False), zero operator PII. The no-resume cover-letter-insights needsResume=True branch is naturally unreachable in prod (a no-resume user cannot possess a letter) — it is the SAME resolve_user_resume_text(allow_operator_fallback=False) code path as the job-insights empty-state proven here [INFERRED for that sub-branch only]."
+    },
+    {
+      "finding": "NF-final-B-008",
+      "severity": "MEDIUM",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_fit_scorer_run.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_suite_results.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/db/db_verify.json"
+      ],
+      "adversarial_notes": "Account B POST /agents/fit-scorer/run -> HTTP 422 'Add your resume before scoring jobs against it.' with NO CHARGE: DB UsageQuota runsUsed 0->0 and spendUsedUsd unchanged across the call; the seeded job's fitScore stays NULL (no operator-derived score persisted). No operator PII in the 422 body. Cross-checked quota before+after (DB) and job-list fitScore (API)."
+    },
+    {
+      "finding": "MV-cover-letter-studio-006",
+      "severity": "MEDIUM",
+      "status": "FAIL",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_messy_insights.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/text/A_messy_jd_letter.txt"
+      ],
+      "adversarial_notes": "PARTIAL fix, NOT fully closed. The fix's skill-prioritization works: for a messy JD the panel now surfaces real skills FIRST (gRPC,Kafka,Rust,reliability,distributed) so real skills are no longer crowded out past the 10-item cap (that sub-defect IS fixed). BUT the tokenizer-artifact class the finding is literally about STILL surfaces: a messy JD yields keyword chips 'EngineerLocation','AustraliaApply','ResponsibilitiesBuild','RequirementsExperience','EmployerShare'. Direct fresh test of the pure _jd_keywords() on the EXACT original-finding pattern ('Project ManagerLocation: Toronto, CanadaPosted...') returns 'ManagerLocation' as the #1 keyword chip — the identical token the original finding cited. Root cause: _is_semantic_keyword does not detect CamelCase word-concatenation artifacts, and _skill_score REWARDS them (+45 for internal uppercase, treating 'EngineerLocation' like 'PostgreSQL'). Filed as new finding NF-final-PII-001. NOTE: this is a cosmetic coverage-panel quality gap, NOT a PII leak — the PII-leak class is unaffected."
+    },
+    {
+      "finding": "MV-adv-A-001",
+      "severity": "LOW",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/screenshots/A-tracker.png",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/shots_A.json"
+      ],
+      "adversarial_notes": "Applications tracker subtitle (data-testid=tracker-subtitle) renders LIVE as '6 pipeline items across 8 stages' — the 'N pipeline item(s)' label, NOT 'N active applications'. Captured from the real UI (Playwright, fresh session, 0 console errors). Frontend source confirms `{activeCount} pipeline item{activeCount===1?'':'s'} across 8 stages` (applications/page.tsx:328)."
+    },
+    {
+      "finding": "MV-adv-A-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED-CLOSED",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_noop_tailor_bgjob.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/db/db_verify.json"
+      ],
+      "adversarial_notes": "A no-op tailor (PRIYA resume vs a Pastry-Chef mismatch job, async worker) resolved to BackgroundJob status='completed' (NOT 'failed'), result.noChangesApplied=true, changes=0, with an INFORMATIONAL message 'No verifiable changes could be applied — every suggested edit was unsupported by your evidence, so your resume is unchanged and you were not charged.' DB confirms the AgentRun row status='completed', error=NULL, costUsd=0.0000 (NOT failed, refunded). No leaked exception-class text on the no-op path (contrast the no-resume MissingResumeError path — see NF-final-PII-002)."
+    }
+  ],
+  "new_findings": [
+    {
+      "id": "NF-final-PII-001",
+      "severity": "MEDIUM",
+      "screen": "cover-letter-studio",
+      "class": "coverage-gap (residual of MV-cover-letter-studio-006)",
+      "summary": "The JD Keyword Coverage panel still surfaces CamelCase word-concatenation scraper artifacts as 'keywords' (e.g. 'ManagerLocation', 'EngineerLocation', 'ResponsibilitiesBuild', 'RequirementsExperience', 'EmployerShare'). The MV-cover-letter-studio-006 fix added real-skill prioritization (real skills now rank first and are not crowded out past the 10-item cap) but did not filter this artifact class — and _skill_score actively rewards internal-uppercase tokens (+45), so a glued token like 'EngineerLocation' scores like 'PostgreSQL'.",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/A_messy_insights.json"
+      ],
+      "repro": "GET /cover-letters/{id}/insights for a letter whose job JD has scraper-glued words; OR call app.routers.cover_letters._jd_keywords('Project ManagerLocation: Toronto, CanadaPosted 3 days ago...') -> ['ManagerLocation','CanadaPosted','agoAbout','Project',...]. Fix suggestion: split/penalize interior-caps tokens that are not known acronyms/skills in _is_semantic_keyword, or split on lower->UPPER boundaries before scoring.",
+      "detail": "MEDIUM severity — degrades a paid intelligence-rail feature by telling the user their letter is 'missing' nonsense keywords; NOT a PII leak."
+    },
+    {
+      "id": "NF-final-PII-002",
+      "severity": "LOW",
+      "screen": "cover-letter-studio / resume-studio (async generation)",
+      "class": "honesty/UX consistency (async no-resume refusal)",
+      "summary": "With AETHER_ASYNC_GENERATION=true (prod), a no-resume user's cover-letter and tailor runs return 202 then resolve to a BackgroundJob status='failed' whose user-visible error carries the internal exception-class prefix: 'MissingResumeError: Add your resume before generating a cover letter.' The synchronous paths (email/refine/fit-scorer) instead return a clean 422 'Add your resume before ...' with NO class-name prefix, and the NoChangesApplied no-op path is gracefully marked 'completed'. So the benign 'add your resume' condition is presented as a red 'failed' job with a leaked class name only on the async outbound paths.",
+      "evidence_class": "VERIFIED-WITH-FRESH-EVIDENCE",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_cover_letter_bgjob.json",
+        "uat/reports/evidence/manual-verification/adversarial/final-PII/api/B_tailor_bgjob.json"
+      ],
+      "repro": "As a no-resume user with async on: POST /agents/cover-letter/run {job_id} -> 202; poll GET /agents/jobs/{id} -> status='failed', error='MissingResumeError: Add your resume before generating a cover letter.' Root: worker tasks.py catches MissingResumeError under the generic `except Exception` -> mark_failed + _honest_message (which prefixes non-HTTPException with the class name). Fix suggestion: handle MissingResumeError like NoChangesApplied (complete with an informational needs-resume result, or strip the class-name prefix). Acceptance impact: honest + PII-free + not a 5xx, so it does NOT reopen the PII class — but it diverges from the brief's expected clean '422 Add your resume' on the async paths."
+    }
+  ],
+  "audit_of_prior_testimony": "The fix-branch review (fix-mv-resume-grounding-016de70-final.json) claimed 'class COMPLETE'. Independently CONFIRMED for the PII-leak class (NF-final-B-001/002/005/006/007/008) with fresh real-LLM prod evidence and zero operator PII anywhere. However MV-cover-letter-studio-006, bundled into the same branch and marked closed, is REOPENED here with fresh evidence (residual tokenizer artifacts). The reviewer only exercised clean/skill-heavy JDs; the messy-JD artifact class the finding cited was not re-probed.",
+  "closure_authority": "qa-adversary — VERIFIED-CLOSED set only where THIS-RUN fresh production evidence supports it. 8/9 target findings VERIFIED-CLOSED; MV-cover-letter-studio-006 = FAIL. operator_pii_found_anywhere=false."
+}

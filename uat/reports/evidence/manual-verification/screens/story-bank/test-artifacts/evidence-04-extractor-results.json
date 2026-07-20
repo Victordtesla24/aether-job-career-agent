@@ -1,0 +1,209 @@
+{
+  "results": {
+    "steps": [
+      {
+        "step": "delete_huge_input_story",
+        "data": {
+          "delCall": "NOT FOUND",
+          "noConfirmDialogNeeded": true
+        },
+        "ts": "2026-07-17T15:50:40.230Z"
+      },
+      {
+        "step": "filter_results",
+        "data": {
+          "Leadership": {
+            "networkUrl": "https://5cb5f0620.abacusai.cloud/api/stories?category=Leadership",
+            "networkStatus": 200,
+            "visibleCount": 1,
+            "categories": [
+              "Leadership"
+            ],
+            "ariaPressed": "true"
+          },
+          "Delivery": {
+            "networkUrl": "https://5cb5f0620.abacusai.cloud/api/stories?category=Delivery",
+            "networkStatus": 200,
+            "visibleCount": 2,
+            "categories": [
+              "Delivery",
+              "Delivery"
+            ],
+            "ariaPressed": "true"
+          },
+          "Technical": {
+            "networkUrl": "https://5cb5f0620.abacusai.cloud/api/stories?category=Technical",
+            "networkStatus": 200,
+            "visibleCount": 0,
+            "categories": [],
+            "ariaPressed": "true"
+          },
+          "Risk & Compliance": {
+            "networkUrl": "https://5cb5f0620.abacusai.cloud/api/stories?category=Risk%20%26%20Compliance",
+            "networkStatus": 200,
+            "visibleCount": 2,
+            "categories": [
+              "Risk & Compliance",
+              "Risk & Compliance"
+            ],
+            "ariaPressed": "true"
+          },
+          "All": {
+            "networkUrl": "https://5cb5f0620.abacusai.cloud/api/stories",
+            "networkStatus": 200,
+            "visibleCount": 5,
+            "categories": [
+              "Delivery",
+              "Delivery",
+              "Risk & Compliance",
+              "Leadership",
+              "Risk & Compliance"
+            ],
+            "ariaPressed": "true"
+          }
+        },
+        "ts": "2026-07-17T15:50:45.051Z"
+      },
+      {
+        "step": "insert_clipboard",
+        "data": {
+          "firstCardTitleForInsert": "MV-storybank-002 <script>alert(1)</script> XSS 测试 🚀 émoji",
+          "clipboardTextSnippet": "MV-storybank-002 <script>alert(1)</script> XSS 测试 🚀 émoji\nSituation: MV-storybank XSS test situation <img src=x onerror=alert(2)> unicode: 日本語 Ñoño\nTask: MV-storybank XSS test task with \"quotes\" & <b",
+          "insertBtnText": "Copied",
+          "matchesTitle": true
+        },
+        "ts": "2026-07-17T15:50:46.319Z"
+      },
+      {
+        "step": "quota_before_extractor_run",
+        "data": {
+          "status": 200,
+          "body": {
+            "plan": {
+              "id": "pro",
+              "name": "Pro",
+              "modelTier": "advanced"
+            },
+            "status": "active",
+            "interval": null,
+            "currentPeriodEnd": null,
+            "cancelAtPeriodEnd": false,
+            "quota": {
+              "runsUsed": 10,
+              "runsAllowed": 100,
+              "spendUsedUsd": 0.066076,
+              "spendCapUsd": 15,
+              "periodEnd": "2026-08-01T00:00:00+00:00"
+            }
+          }
+        },
+        "ts": "2026-07-17T15:50:46.955Z"
+      },
+      {
+        "step": "story_extractor_run_network",
+        "data": {
+          "btnTextBeforeClick": "Draft missing stories",
+          "btnTextDuringRun": "Drafting from resume…",
+          "btnDisabledDuringRun": true,
+          "extractCall": {
+            "url": "https://5cb5f0620.abacusai.cloud/api/agents/story-extractor/run",
+            "method": "POST",
+            "status": 200,
+            "postData": null,
+            "respBody": "{\"created\":8,\"dropped\":[\"Delivering Real-Time Telemetry Platform for 10k+ Devices at ANZ\"],\"story_ids\":[\"cc18e8b65429874cc59aded56\",\"cacfacca8feacdbcf9fcbb77d\",\"cfb31c85f79a6b5513adc84ab\",\"ca8c444c84e57c25f3f5d1682\",\"ce6ee3b5ff0af9891731e9067\",\"cad0df5889006cbe04cc01c93\",\"c11c66343cc138f9600768428\",\"cfe74fb5d1d346424db84a677\"],\"duration_ms\":12458,\"approvalRequired\":false,\"billingAudit\":{\"credentialSource\":\"environment\",\"authMode\":\"api_key\",\"provider\":\"openrouter\",\"quotaPath\":\"metered_api\"},\"model\":\"qwen/qwen3-coder-next\",\"tokensIn\":401,\"tokensOut\":130,\"costUsd\":0.000661,\"run_id\":\"cfb8f5408c4a09f58992b803a\"}"
+          }
+        },
+        "ts": "2026-07-17T15:51:02.678Z"
+      },
+      {
+        "step": "extractor_before_after_stats",
+        "data": {
+          "statsBeforeExtract": "Total Stories\n5\nQuantified w/ Metrics\n3\nStarred\n1\nCategories Covered\n3",
+          "statsAfterExtract": "Total Stories\n13\nQuantified w/ Metrics\n9\nStarred\n1\nCategories Covered\n4",
+          "cardCountBeforeExtract": 5,
+          "cardCountAfterExtract": 13
+        },
+        "ts": "2026-07-17T15:51:03.753Z"
+      },
+      {
+        "step": "quota_after_extractor_run",
+        "data": {
+          "status": 200,
+          "body": {
+            "plan": {
+              "id": "pro",
+              "name": "Pro",
+              "modelTier": "advanced"
+            },
+            "status": "active",
+            "interval": null,
+            "currentPeriodEnd": null,
+            "cancelAtPeriodEnd": false,
+            "quota": {
+              "runsUsed": 12,
+              "runsAllowed": 100,
+              "spendUsedUsd": 0.066737,
+              "spendCapUsd": 15,
+              "periodEnd": "2026-08-01T00:00:00+00:00"
+            }
+          }
+        },
+        "ts": "2026-07-17T15:51:04.418Z"
+      },
+      {
+        "step": "story_extractor_audit_runs",
+        "data": [
+          {
+            "id": "cfb8f5408c4a09f58992b803a",
+            "userId": "cc29a76e324fbf19f438eb8be",
+            "agentName": "storyExtractor",
+            "status": "completed",
+            "input": {},
+            "output": {
+              "model": "qwen/qwen3-coder-next",
+              "costUsd": 0.000661,
+              "created": 8,
+              "dropped": [
+                "Delivering Real-Time Telemetry Platform for 10k+ Devices at ANZ"
+              ],
+              "tokensIn": 401,
+              "story_ids": [
+                "cc18e8b65429874cc59aded56",
+                "cacfacca8feacdbcf9fcbb77d",
+                "cfb31c85f79a6b5513adc84ab",
+                "ca8c444c84e57c25f3f5d1682",
+                "ce6ee3b5ff0af9891731e9067",
+                "cad0df5889006cbe04cc01c93",
+                "c11c66343cc138f9600768428",
+                "cfe74fb5d1d346424db84a677"
+              ],
+              "tokensOut": 130,
+              "duration_ms": 12458,
+              "billingAudit": {
+                "authMode": "api_key",
+                "provider": "openrouter",
+                "quotaPath": "metered_api",
+                "credentialSource": "environment"
+              },
+              "approvalRequired": false
+            },
+            "error": null,
+            "costUsd": "0.0007",
+            "startedAt": "2026-07-17T15:50:48.056000",
+            "completedAt": "2026-07-17T15:51:00.722000",
+            "createdAt": "2026-07-17T15:50:48.056000"
+          }
+        ],
+        "ts": "2026-07-17T15:51:04.679Z"
+      }
+    ]
+  },
+  "consoleMsgs": [],
+  "failedRequests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/c03d10840f5699d290b84f0ed",
+      "method": "DELETE",
+      "failure": "net::ERR_ABORTED"
+    }
+  ]
+}

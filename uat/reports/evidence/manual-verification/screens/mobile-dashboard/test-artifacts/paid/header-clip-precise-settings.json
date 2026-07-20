@@ -1,0 +1,20 @@
+{
+  "headerFound": true,
+  "headerRect": {
+    "top": 0,
+    "bottom": 64,
+    "height": 64
+  },
+  "h1": {
+    "text": "Good afternoon, Administrator",
+    "top": -15,
+    "bottom": 30
+  },
+  "p": {
+    "text": "Fri, 17 July · last agent run 29m ago",
+    "top": 30,
+    "bottom": 78
+  },
+  "h1ClippedAboveHeader": true,
+  "pOverflowsBelowHeader": true
+}

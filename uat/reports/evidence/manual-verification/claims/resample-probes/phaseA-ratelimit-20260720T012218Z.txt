@@ -1,0 +1,15 @@
+=== CLM-048 login rate-limit: 429 after 5 attempts (throwaway identifier, NOT admin) ===
+captured_utc: 2026-07-20T01:22:18Z
+identifier: mv-qa-resample-rl-6630@example.com (nonexistent; wrong password each time)
+-- 8 rapid POST /auth/login attempts --
+  attempt 1 -> HTTP:401
+  attempt 2 -> HTTP:401
+  attempt 3 -> HTTP:401
+  attempt 4 -> HTTP:401
+  attempt 5 -> HTTP:401
+  attempt 6 -> HTTP:429
+  attempt 7 -> HTTP:429
+  attempt 8 -> HTTP:429
+-- capture the 429 body + Retry-After on a 9th attempt --
+{"detail":"Too many failed login attempts for this account. Please wait and try again."}
+  HTTP:429 Retry-After:900

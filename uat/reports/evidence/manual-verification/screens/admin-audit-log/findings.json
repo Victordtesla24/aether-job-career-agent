@@ -1,0 +1,23 @@
+[
+  {
+    "id": "MV-admin-audit-log-001",
+    "screen": "admin-audit-log",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "No wireframe exists for /admin/audit-log (route-without-wireframe, as flagged in BRIEF.json). Visual conformance (§3.2.1) could only be assessed against product/security sense, not a design spec.",
+    "reproduction": [
+      "1. Search design/screens/ for any admin-audit-log wireframe file.",
+      "2. Confirm BRIEF.json screen.wireframe_files is an empty array and coverage_gap = 'route-without-wireframe'."
+    ],
+    "expected": "A wireframe file to compare the rendered /admin/audit-log screen against.",
+    "observed": "No wireframe file exists anywhere in the repo for this route; brief confirms this is a known, pre-flagged coverage gap.",
+    "evidence": [
+      "screens/admin-audit-log/BRIEF.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

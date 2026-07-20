@@ -1,0 +1,8 @@
+{
+  "active_paid": false,
+  "plan": {
+    "id": "free",
+    "status": "active"
+  },
+  "requiresSubscription": true
+}

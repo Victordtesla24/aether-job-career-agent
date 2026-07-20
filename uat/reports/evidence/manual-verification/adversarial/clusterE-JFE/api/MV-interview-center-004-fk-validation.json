@@ -1,0 +1,96 @@
+{
+  "tested_utc": "2026-07-18T17:21:46.875080+00:00",
+  "all_pass": true,
+  "cases": [
+    {
+      "case": "bogus-nonexistent-1",
+      "expected": 404,
+      "got": 404,
+      "pass": true,
+      "created_id": null,
+      "detail": "Referenced application not found"
+    },
+    {
+      "case": "bogus-nonexistent-2",
+      "expected": 404,
+      "got": 404,
+      "pass": true,
+      "created_id": null,
+      "detail": "Referenced application not found"
+    },
+    {
+      "case": "empty-string",
+      "expected": 422,
+      "got": 422,
+      "pass": true,
+      "created_id": null,
+      "detail": [
+        {
+          "type": "string_too_short",
+          "loc": [
+            "body",
+            "application_id"
+          ],
+          "msg": "String should have at least 1 character",
+          "input": "",
+          "ctx": {
+            "min_length": 1
+          }
+        }
+      ]
+    },
+    {
+      "case": "whitespace-only",
+      "expected": 404,
+      "got": 404,
+      "pass": true,
+      "created_id": null,
+      "detail": "Referenced application not found"
+    },
+    {
+      "case": "sql-ish",
+      "expected": 404,
+      "got": 404,
+      "pass": true,
+      "created_id": null,
+      "detail": "Referenced application not found"
+    },
+    {
+      "case": "very-long",
+      "expected": 404,
+      "got": 404,
+      "pass": true,
+      "created_id": null,
+      "detail": "Referenced application not found"
+    },
+    {
+      "case": "valid-own-app",
+      "expected": 201,
+      "got": 201,
+      "pass": true,
+      "created_id": "c97fda39556d086b9455bf2b9",
+      "detail": null
+    }
+  ],
+  "listing_after": [
+    {
+      "id": "c97fda39556d086b9455bf2b9",
+      "user_id": "c88fc72d11082ac709fd6a801",
+      "application_id": "c1eee7b59d57f564258be797c",
+      "type": "video",
+      "status": "scheduled",
+      "scheduled_at": "2026-09-15T04:00:00Z",
+      "duration_minutes": 60,
+      "location": null,
+      "meeting_link": null,
+      "notes": "MV-adv valid create",
+      "contact_name": null,
+      "contact_email": null,
+      "created_at": "2026-07-18T17:21:47.982279Z",
+      "updated_at": "2026-07-18T17:21:47.982279Z"
+    }
+  ],
+  "created_ids": [
+    "c97fda39556d086b9455bf2b9"
+  ]
+}

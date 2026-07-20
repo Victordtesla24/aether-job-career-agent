@@ -1,0 +1,254 @@
+{
+  "generated_utc": "2026-07-17T13:31:36.425417+00:00",
+  "git_sha": "53f0e084da5b460835c32d3e07d496e6e67a8616",
+  "screen": {
+    "screen_id": "job-discovery",
+    "screen_name": "Job Discovery",
+    "wireframe_files": [
+      "job-discovery.html"
+    ],
+    "routes": [
+      "/dashboard/jobs"
+    ],
+    "endpoints": [
+      "GET /jobs",
+      "GET /jobs/{id}/insights",
+      "POST /jobs/{id}/save",
+      "POST /jobs/{id}/apply",
+      "POST /agents/scout/run",
+      "POST /agents/fit-scorer/run",
+      "GET /agents/scout/sources"
+    ],
+    "agents": [
+      "scout",
+      "matcher",
+      "fitScorer"
+    ],
+    "coverage_gap": null,
+    "notes": "Market tabs; source filter bar; 2-step apply flow; agent integration."
+  },
+  "claim_rows": [
+    {
+      "id": "CLM-018",
+      "claim": "A scoped X-Aether-System-Run header (checked against AETHER_SYSTEM_RUN_SECRET) bypasses the subscription paywall ONLY for scout/fitScorer (deterministic, zero-LLM-token agents) -- never for tailor/coverLetter/pipeline, and never for an unpaid interactive user lacking the header",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "300-306",
+      "endpoints": [
+        "POST /agents/scout/run",
+        "POST /agents/fit-scorer/run",
+        "POST /agents/tailor/run"
+      ],
+      "method": "As an unpaid test account: call scout/run with header+secret (expect success, bypassing paywall) and call tailor/run with header+secret (expect still-402, header does not exempt metered agents)"
+    },
+    {
+      "id": "CLM-023",
+      "claim": "Four pre-seeded Phase-7 gap hypotheses were rejected on fresh evidence: FIXTURE-001 (0/60 fixture fingerprints in prod), SRC-001 (33 jobs/5 sources, floor exceeded), REPO-001 (already 1 branch/0 PRs), NONPROD-001 (0 suspicious matches; replay-guard present)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT-PHASE7.md",
+      "source_line": "30",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "Re-probe fixture fingerprints in live generation output; re-count live jobs/sources via GET /jobs; repo branch/PR check; grep for non-prod code markers"
+    },
+    {
+      "id": "CLM-024",
+      "claim": "All 27 core Phase-7 gates were VERIFIED-CLOSED including: 0 console errors across 20 routes (GATE-16), 0 same-origin 5xx (GATE-17), backend 676 pytest passed (GATE-19), frontend 297 vitest passed (GATE-20), Playwright E2E green (GATE-21)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT-PHASE7.md",
+      "source_line": "45-62",
+      "endpoints": [],
+      "method": "Playwright console/network sweep across the 20 documented routes on prod; re-run backend pytest / frontend vitest suites (suite-run for counts); manual click-through spot-check for E2E flows"
+    },
+    {
+      "id": "CLM-026",
+      "claim": "Sourcing yields >=2 sources x >=5 jobs each, fresh (GATE-10)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT-PHASE7.md",
+      "source_line": "58",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "GET /jobs on prod, group by source, count per-source volume and freshness (posting age)"
+    },
+    {
+      "id": "CLM-035",
+      "claim": "Sourcing (Phase-6): Seek scraping removed (ToS-compliant); Adzuna AU + ATS-API adapters live; 30 live jobs across 3 sources each >=5; 0 duplicates; 10/10 sampled cards live",
+      "source_doc": "docs/delivery/PHASE6-EXECUTION-SUMMARY.md",
+      "source_line": "31",
+      "endpoints": [
+        "GET /jobs",
+        "POST /agents/scout/run"
+      ],
+      "method": "GET /jobs on prod: verify no Seek-sourced rows appear, count sources/freshness/dedup; sample 10 job card URLs for liveness (HTTP 200)"
+    },
+    {
+      "id": "CLM-053",
+      "claim": "The subscription paywall (AETHER_REQUIRE_PAID_SUBSCRIPTION=true) is ACTIVE in production -- an unpaid agent run attempt returns HTTP 402 subscription_required",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "29",
+      "endpoints": [
+        "POST /agents/scout/run",
+        "POST /agents/tailor/run"
+      ],
+      "method": "Attempt an agent run as an unpaid/free-tier user on prod, confirm 402 with subscription_required error code"
+    },
+    {
+      "id": "CLM-054",
+      "claim": "Production shows 32 jobs across 5 sources with 0 duplicates; billing/admin DB tables and User.isAdmin/suspended columns are present; 8 runtime agents confirmed; auth rate-limit 429-after-5 confirmed; the billing webhook rejects an unsigned payload with HTTP 400",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "29",
+      "endpoints": [
+        "GET /jobs",
+        "POST /billing/webhooks/stripe"
+      ],
+      "method": "GET /jobs and count sources/dedup; POST an unsigned payload to the webhook endpoint expecting 400"
+    },
+    {
+      "id": "CLM-056",
+      "claim": "Under a temporary paid subscription: POST /agents/scout/run returns 202 with honest per-source status (e.g. Wellfound 403 surfaced, not swallowed); GET /jobs returns 32 jobs, 3 sources each >=5 (greenhouse 16/ashby 7/lever 5), max posting age 28 days, 0 dup, 0 Seek-origin rows",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "44",
+      "endpoints": [
+        "POST /agents/scout/run",
+        "GET /jobs"
+      ],
+      "method": "Requires a paid-subscription test context; trigger scout run, inspect per-source status; GET /jobs and count/group by source"
+    },
+    {
+      "id": "CLM-057",
+      "claim": "10/10 sampled job cards return HTTP 200 with 0 expiry markers, 100% title-token match, 0 Seek-sourced cards (Phase-6-rerun GATE-08)",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "45",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "Sample 10 live job card source URLs, curl each for HTTP 200 and absence of expiry/closed-posting text"
+    },
+    {
+      "id": "CLM-062",
+      "claim": "A Playwright sweep of 14 dashboard routes + /pricing + /admin as a paid admin showed 0 console errors / 0 failed requests / 0 page errors (GATE-03)",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "50",
+      "endpoints": [],
+      "method": "Playwright sweep of the listed routes on prod, capture console + network errors"
+    },
+    {
+      "id": "CLM-063",
+      "claim": "After Phase-6-rerun's paid-subscription test cleanup, production was restored exactly: entitlement.active_paid=false, POST /agents/scout/run returns 402 again, and the dashboard shows the paywall again",
+      "source_doc": "docs/delivery/PHASE6-RERUN-EXECUTION-SUMMARY.md",
+      "source_line": "52",
+      "endpoints": [
+        "GET /billing/entitlement",
+        "POST /agents/scout/run"
+      ],
+      "method": "Check current entitlement state for the test account and confirm the paywall is showing (does not require mutating production billing state -- read-only check)"
+    },
+    {
+      "id": "CLM-066",
+      "claim": "Seek's robots.txt explicitly names anthropic-ai as disallowed; 10/10 sampled Seek-sourced job cards returned HTTP 403",
+      "source_doc": "docs/delivery/PHASE6-GAP-ANALYSIS.md",
+      "source_line": "14-15",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "Fetch Seek's robots.txt directly and check for an anthropic-ai disallow rule; confirm no Seek-origin job currently appears live in /jobs"
+    },
+    {
+      "id": "CLM-067",
+      "claim": "6 dead view-toggle controls (GAP-P6-WIRE-001) were identified pre-fix and are claimed fixed/wired",
+      "source_doc": "docs/delivery/PHASE6-GAP-ANALYSIS.md",
+      "source_line": "42",
+      "endpoints": [
+        "(TBD - exact controls not named in this doc; identify via probe-06 or live UI inspection of view-toggle controls)"
+      ],
+      "method": "UI inspection: locate view-toggle controls referenced by probe-06, click each, confirm it changes displayed state -- likely needs additional discovery before a definitive verdict is possible"
+    },
+    {
+      "id": "CLM-071",
+      "claim": "Adzuna AU API credentials are optional and absent; without them the sourcing floor (GATE-07, >=25 jobs) is still met via ATS + public APIs, but with a thin/decaying fresh-jobs margin",
+      "source_doc": "docs/delivery/PHASE6-BLOCKED-ON-HUMAN.md",
+      "source_line": "20,46-53",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "Count live jobs by source on prod, confirm the >=25 threshold currently holds and whether Adzuna contributes 0 jobs"
+    },
+    {
+      "id": "CLM-074",
+      "claim": "Every job card on job-discovery has a \"Tailor Resume ->\" deep link to /dashboard/resume?job=<id>",
+      "source_doc": "docs/delivery/FINAL-REPORT-PHASE-2-AUDIT.md",
+      "source_line": "46",
+      "endpoints": [],
+      "method": "UI inspection: click the Tailor link on a job card, confirm navigation to Resume Studio with the job pre-selected"
+    },
+    {
+      "id": "CLM-080",
+      "claim": "A per-source status endpoint/surface returns honest per-source status distinguishing genuine-zero results from a total outage (e.g. Wellfound status=error for a real 403; Indeed/LinkedIn status=skipped), never a silent errors:[] masking failures",
+      "source_doc": "docs/delivery/PHASE5-EXECUTION-SUMMARY.md",
+      "source_line": "33",
+      "endpoints": [
+        "(TBD - per-source status endpoint not explicitly named in SCREEN-MATRIX; likely surfaced via GET /jobs or a dedicated /agents/scout/sources-style endpoint -- confirm exact path during probe)"
+      ],
+      "method": "Trigger a scout run and inspect the per-source status response/UI panel for honest status codes per source"
+    },
+    {
+      "id": "CLM-081",
+      "claim": "A per-source \"Sync Status\" panel is shown on /dashboard/jobs, displaying honest ok/error/skipped badges matching the API 1:1",
+      "source_doc": "docs/delivery/PHASE5-EXECUTION-SUMMARY.md",
+      "source_line": "34",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "UI inspection of the job-discovery source bar (source-bar-jd22 per wireframe), compare displayed badges to the underlying API response"
+    },
+    {
+      "id": "CLM-084",
+      "claim": "The Wellfound sourcing adapter is 403-blocked from the production VM, surfaced honestly as status=error (not silently skipped or faked)",
+      "source_doc": "docs/delivery/PHASE5-EXECUTION-SUMMARY.md",
+      "source_line": "90",
+      "endpoints": [],
+      "method": "Trigger a scout run, inspect Wellfound's per-source status for status=error"
+    },
+    {
+      "id": "CLM-085",
+      "claim": "The Indeed/LinkedIn sourcing adapters are fixture-only (no live mode) and are reported as status=skipped, never faked as live results",
+      "source_doc": "docs/delivery/PHASE5-EXECUTION-SUMMARY.md",
+      "source_line": "91",
+      "endpoints": [],
+      "method": "Trigger a scout run, inspect Indeed/LinkedIn per-source status for status=skipped"
+    },
+    {
+      "id": "CLM-090",
+      "claim": "A fresh live scout run yielded 30 active-feed jobs across 5 sources (up from a 6-job/4-source pre-fix baseline), 100% fresh <=30 days, 0 duplicates, 0 Seek rows; 10/10 sampled job cards independently confirmed live",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "186-189",
+      "endpoints": [
+        "GET /jobs",
+        "POST /agents/scout/run"
+      ],
+      "method": "GET /jobs on prod, count sources/freshness/dedup; sample 10 job cards for liveness"
+    },
+    {
+      "id": "CLM-096",
+      "claim": "Quota is reserved atomically before an agent run executes, with refund-on-failure; deterministic agents (scout/fitScorer/matcher/supervisor) are unmetered and do not consume quota",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "169-170",
+      "endpoints": [
+        "POST /agents/scout/run",
+        "GET /billing/entitlement"
+      ],
+      "method": "Check quota/usage before and after running scout (expect unchanged, unmetered) vs running tailor (expect decremented)"
+    },
+    {
+      "id": "CLM-099",
+      "claim": "Historical Seek-sourced job rows are retained in the database but hidden from every user-facing list (not shown in the job-discovery UI or API responses)",
+      "source_doc": "docs/delivery/EXECUTION-REPORT.md",
+      "source_line": "188-189",
+      "endpoints": [
+        "GET /jobs"
+      ],
+      "method": "GET /jobs and inspect the response for any Seek-origin source field; confirm none appear despite DB retention"
+    }
+  ],
+  "canonical_login": "uat/reports/evidence/manual-verification/canonical-login.md",
+  "baseline_note": "Baseline captures from Step 6 are under uat/reports/evidence/manual-verification/screens/ (folder named job-discovery or job-discovery_auth/job-discovery_unauth or baseline/job-discovery depending on sweep layout) \u2014 use as the 'before' record.",
+  "output_report": "uat/reports/evidence/manual-verification/screens/job-discovery/TESTING-OUTCOME-REPORT.md"
+}

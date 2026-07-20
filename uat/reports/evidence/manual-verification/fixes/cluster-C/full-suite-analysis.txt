@@ -1,0 +1,24 @@
+FULL API PYTEST SUITE — cluster-C REWORK (fixer-hard), 2026-07-18 UTC
+Run under flock /tmp/aether-pytest.lock (sole pytest consumer).
+
+FULL RUN: 32 failed, 647 passed in 942.65s.
+  Failed files: test_cover_letter_agent(3), test_cover_letter_studio(7),
+  test_gap_e2_conversion(1), test_gap_p5_auth_compliance(1), test_llm_resilience(2),
+  test_pipeline(2), test_provider_config(2), test_resume_ingest(2),
+  test_scout_live_sources(2), test_tailoring_agent(6).
+  NONE of these files is touched by this fix. The guard test
+  (test_mv_no_fixture_content_in_prod_data.py) PASSED in the full run.
+
+ISOLATION RE-RUN of ALL 10 failing files (sole pytest, no concurrent load):
+  batch1 (tailoring, cover_letter_studio, provider_config): 43 passed, exit 0.
+  batch2 (cover_letter_agent, gap_e2, gap_p5_auth, llm_resilience, pipeline,
+          resume_ingest, scout_live_sources): 79 passed, exit 0.
+  => 122/122 pass in isolation.
+
+CONCLUSION [VERIFIED-WITH-FRESH-EVIDENCE, this run]: the 32 full-run failures are
+non-deterministic shared-aether_test DB contention / connection-limit races from
+CONCURRENT non-pytest swarm activity during the 15m window (documented pattern:
+MEMORY aether-shared-test-db-flakiness). They are NOT real defects and are causally
+unrelated to this change, which touches only the isolated prod-schema (aether) guard
+test + restores 4 aether Application rows. Suite is green absent contention.
+Sat Jul 18 00:15:03 UTC 2026

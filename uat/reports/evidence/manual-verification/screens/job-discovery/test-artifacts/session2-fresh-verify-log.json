@@ -1,0 +1,104 @@
+{
+  "log": [
+    {
+      "t": "2026-07-17T15:58:31.728Z",
+      "name": "fresh-login-ok",
+      "data": {}
+    },
+    {
+      "t": "2026-07-17T15:58:36.819Z",
+      "name": "session2-loaded",
+      "data": {}
+    },
+    {
+      "t": "2026-07-17T15:58:37.467Z",
+      "name": "reverify-xss-safe",
+      "data": {
+        "xssInDom": false,
+        "xssCount": 0
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:38.176Z",
+      "name": "reverify-source-status",
+      "data": {
+        "wellfoundChip": "wellfounderror· 4 min ago— AdapterFetchError: Wellfound public listings unavailable: HTTP Error 403: Forbidden",
+        "allChipsCount": 10
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:38.384Z",
+      "name": "reverify-bad-job-id",
+      "data": {
+        "status": 404,
+        "body": "{\"detail\":\"Job not found\"}"
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:45.587Z",
+      "name": "reverify-save-persistence",
+      "data": {
+        "titleBeforeSave": "Technical Business Analyst",
+        "savedTitles": [
+          "Technical Business Analyst"
+        ],
+        "persisted": true
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:46.485Z",
+      "name": "reverify-cleanup-unsave-done",
+      "data": {}
+    },
+    {
+      "t": "2026-07-17T15:58:48.631Z",
+      "name": "reverify-unauth-redirect",
+      "data": {
+        "url": "https://5cb5f0620.abacusai.cloud/login"
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:48.653Z",
+      "name": "console-hygiene-summary",
+      "data": {
+        "totalConsoleMsgs": 1,
+        "errorCount": 1,
+        "errors": [
+          {
+            "t": "2026-07-17T15:58:38.384Z",
+            "type": "error",
+            "text": "Failed to load resource: the server responded with a status of 404 ()"
+          }
+        ]
+      }
+    },
+    {
+      "t": "2026-07-17T15:58:48.653Z",
+      "name": "network-hygiene-summary",
+      "data": {
+        "failureCount": 1,
+        "failures": [
+          {
+            "t": "2026-07-17T15:58:38.383Z",
+            "url": "https://5cb5f0620.abacusai.cloud/api/jobs/MV-jobdiscovery-doesnotexist-999/insights",
+            "status": 404
+          }
+        ]
+      }
+    }
+  ],
+  "consoleMsgs": [
+    {
+      "t": "2026-07-17T15:58:38.384Z",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 ()"
+    }
+  ],
+  "netFailures": [
+    {
+      "t": "2026-07-17T15:58:38.383Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/MV-jobdiscovery-doesnotexist-999/insights",
+      "status": 404
+    }
+  ]
+}

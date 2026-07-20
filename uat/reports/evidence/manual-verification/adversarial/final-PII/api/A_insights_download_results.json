@@ -1,0 +1,79 @@
+{
+  "insights_job1": {
+    "status": 200,
+    "needsResume": false,
+    "scored": true,
+    "overall": 68,
+    "matchedSkills": [
+      "high-throughput",
+      "distributed",
+      "low-latency",
+      "clickhouse",
+      "streaming",
+      "engineer",
+      "protocol",
+      "scylladb"
+    ],
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "scylladb",
+        "clickhouse"
+      ],
+      "LEAK": false
+    }
+  },
+  "insights_job2": {
+    "status": 200,
+    "needsResume": false,
+    "scored": true,
+    "overall": 59,
+    "matchedSkills": [
+      "fault-tolerant",
+      "property-based",
+      "distributed",
+      "jetstream",
+      "messaging",
+      "embedded",
+      "engineer",
+      "proptest"
+    ],
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "jetstream"
+      ],
+      "LEAK": false
+    }
+  },
+  "resume_pdf": {
+    "status": 200,
+    "len": 1881,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "priya",
+        "natarajan",
+        "canva",
+        "rust",
+        "kafka",
+        "elixir",
+        "erlang",
+        "scylladb",
+        "clickhouse",
+        "redpanda",
+        "protocol buffers",
+        "grpc",
+        "tokio",
+        "jetstream"
+      ],
+      "LEAK": false
+    }
+  }
+}

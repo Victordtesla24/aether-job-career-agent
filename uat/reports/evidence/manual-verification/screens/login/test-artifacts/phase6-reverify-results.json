@@ -1,0 +1,63 @@
+{
+  "reverifyRateLimit": {
+    "identifier": "mv-login-ghost-reverify-1784295740738-num9fg",
+    "attempts": [
+      {
+        "attempt": 1,
+        "status": 401,
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      },
+      {
+        "attempt": 2,
+        "status": 401,
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      },
+      {
+        "attempt": 3,
+        "status": 401,
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      },
+      {
+        "attempt": 4,
+        "status": 401,
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      },
+      {
+        "attempt": 5,
+        "status": 401,
+        "body": {
+          "detail": "Invalid email or password"
+        }
+      },
+      {
+        "attempt": 6,
+        "status": 429,
+        "body": {
+          "detail": "Too many failed login attempts for this account. Please wait and try again."
+        }
+      }
+    ]
+  },
+  "reverifyAuthedVisitLogin": {
+    "url": "https://5cb5f0620.abacusai.cloud/login",
+    "formStillShown": true
+  },
+  "reverifyUnauthDashboard": {
+    "url": "https://5cb5f0620.abacusai.cloud/login"
+  },
+  "reverifyXss": {
+    "xssFired": false,
+    "errorText": "Invalid email or password.",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ]
+  }
+}

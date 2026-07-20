@@ -1,0 +1,112 @@
+{
+  "run": "MANUAL-VERIFICATION / adversarial FINAL-PASS-001 CLOSURE (focused re-verify of the run's last finding NF-final-pass-001)",
+  "role": "qa-adversary (independent closure verifier; NOT the author/fixer/deployer of the NF-final-pass-001 fix commit 9e7befb / merge c158729)",
+  "status": "COMPLETE",
+  "generated_utc": "2026-07-20T12:40:00Z",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "prod_commit": "c158729 (Merge fix/nf-final-pass-001) — fix commit 9e7befb: unicode case-based CamelCase segmenter _camel_humps replacing ASCII-only _CAMEL_HUMP_RE",
+  "prod_health": "GET /api/health -> HTTP 200 {\"status\":\"ok\",\"version\":\"0.2.0\"} @2026-07-20T12:24Z; aether-api ActiveEnterTimestamp 2026-07-20T12:20:16Z (running deployed code)",
+  "llm_mode": "n/a for keyword chips — the JD Keyword Coverage chips are pure deterministic tokenizer output of _jd_keywords(job.title + ' ' + job.description); letter TEXT (fixture) does not affect chip membership, only the covered/total score.",
+  "epistemic_legend": "[VERIFIED-WITH-FRESH-EVIDENCE]=artifact path + timestamp from THIS run (prod @c158729, 2026-07-20T12:26-12:40Z); [INFERRED]=deployed-source reading / local predictor; [ASSUMED-PENDING-PROBE]=not proven. Only [VERIFIED-WITH-FRESH-EVIDENCE] closes.",
+
+  "verdict": "VERIFIED-CLOSED-RECOMMENDED (for the exact reported scope of NF-final-pass-001) — WITH ONE NEW FINDING in the same class (NF-final-pass-002, caseless-script residual, LOW)",
+  "verdict_epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+  "closure_caveat": "The 5 SPECIFICALLY REPORTED gluings + reverse-order variants + all named controls are clean on prod @c158729, reproduced across TWO independent jobs and TWO independent sessions plus a real-browser panel render — so NF-final-pass-001's enumerated reproduction genuinely no longer reproduces and is closeable. HOWEVER, my own novel adversarial proves the fix's structural-termination claim is FALSE: a CASELESS-script proper noun (CJK / Devanagari / Arabic / Korean-Katakana / Hebrew / Thai ...) glued to an ASCII label word STILL leaks as a keyword chip via the IDENTICAL len(segments)<2 early-return that NF-final-pass-001 itself named. NF-final-pass-001's own acceptance criterion is 'No concatenation artifact surfaces ... REGARDLESS of which proper noun ... is glued to the label' — a strict reading of that criterion is still violated. Orchestrator to adjudicate: (a) close NF-final-pass-001 scoped to the reported cased-script cases + track NF-final-pass-002 as the caseless residual (mirrors the accented->non-Latin residual chain), or (b) hold NF-final-pass-001 open until the caseless case is also fixed. GAPS.json NOT edited by this agent.",
+
+  "setup": {
+    "account": {"email": "mv-qa-lastcheck-be068b@example.com", "userId": "c644b4d74664667b71f26e438", "name": "Verity Lastcheck", "registered_utc": "2026-07-20T12:26:02Z (POST /auth/register, browser UA, HTTP 201)"},
+    "resume": {"id": "c88a8a643f0b220fd2c7502b5", "via": "POST /api/resumes (label 'MV closure base résumé', 287-char synthetic raw_text, HTTP 201) — NO operator fallback used"},
+    "grant": {"applied_utc": "2026-07-20T12:26:~35Z", "sql": "2x keyed UPDATE (Subscription pro/active + UsageQuota pro/100/15.0), rowcount==1 each", "verify": "GET /billing/entitlement -> active_paid:true plan.id=pro (api/00-entitlement-granted.json)", "before_state": "db/00-before-state.json (Subscription+UsageQuota updatedAt 2026-07-20T12:26:11.939328+00; free/5/0/1.0/0)"},
+    "test_data": "5 Job rows + 5 minimal CoverLetter(Application) rows seeded via single-row keyed INSERTs under search_path=aether (source='mv-qa-lastcheck'); map in db/seed-map.json. Chips are genuine deployed _jd_keywords output on the crafted JDs (only the letter body is a fixture — irrelevant to chip membership)."
+  },
+
+  "verification": {
+    "method": "GET /cover-letters/{id}/insights (deployed tokenizer) x2 independent passes (pass1 session A, pass2 fresh-login session B) + 1 real-browser KeywordCoveragePanel render. Two independent jobs carry the forward gluings (A1 + B1, different token orderings/data/company).",
+    "twice_satisfied": "TWO independent jobs (A1_forward, B1_forward_indep) AND TWO independent sessions (A=first login, B=fresh re-login) — pass1 and pass2 byte-identical for every job.",
+    "results_1_reported_5_gluings_NO_artifact": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "detail": "İstanbulSalary / КиевLocation / МоскваSalary / İzmirLocation / ΑθήναLocation ABSENT from job A1 chips [JavaScript,PostgreSQL,DevOps,SlideShare,Platform,Engineer,Core,competitive,quarterly,flexible] AND independent job B1 chips [GraphQL,MongoDB,Kubernetes,Infrastructure,Engineer,Tooling,München,competitive,quarterly,optional]. No FRAGMENT of them (no 'İstanbul','Salary','Location','nchen','Москва',...) surfaced as a chip either. Both passes identical.",
+      "evidence": ["api/pass1-insights.json","api/pass2-insights.json","api/assertions.json","screenshots/panel-A1-forward.png"]
+    },
+    "results_2_reverse_order_variants_clean": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "detail": "SalaryМосква / LocationКиев / Salaryİstanbul / Locationİzmir / LocationΑθήνα ABSENT from job A2 chips [Reliability,Prometheus,Grafana,Kafka,Engineer,Tooling,remote-friendly,competitive,listed,set]. Both passes identical.",
+      "evidence": ["api/pass1-insights.json","api/pass2-insights.json"]
+    },
+    "results_3_controls_preserved": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "munich_glued_still_dropped": "MünchenLocation (precomposed-Latin, prior NF-final-closure-001 fix) ABSENT from A1 chips — prior fix intact.",
+      "standalone_cities_NOT_suppressed": "Standalone unglued Киев + İstanbul + Zürich ALL PRESENT as chips in job A3 [Ansible,Redis,Engineer,İstanbul,Backend,Zürich,Киев,offices,daily,open]; standalone München also present in B1 — proving the fix suppresses only the GLUING artifact, never the legitimate standalone proper noun.",
+      "legit_tech_present": "JavaScript, PostgreSQL, DevOps, SlideShare (A1) + Kafka/Prometheus/Grafana (A2) + Redis/Ansible (A3) + Terraform/Docker (A4) + GraphQL/Kubernetes/MongoDB (B1) all present. SlideShare (contains label word 'Share') and DevOps correctly protected by the mixed-case-tech allowlist.",
+      "evidence": ["api/pass1-insights.json","api/assertions.json","screenshots/panel-A3-standalone.png"]
+    },
+    "results_5_sec7_spot": {
+      "verdict": "PASS", "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "console": "0 uncaught pageerrors on the exercised page (/dashboard/cover-letters). The only console 'errors' are benign Next.js RSC prefetch-aborts on the /login landing-page footer links (signup/forgot-password/privacy-policy/terms), captured before token injection — identical to the prior FINAL-PASS §7 note; none on any /dashboard page.",
+      "server_5xx": "/var/log/aether/api.log window 2026-07-20T12:26:00Z–12:40:00Z (45 ISO-8601 timestamped lines): status histogram {200:37, 201:2, 202:1, 422:1}; 0 lines with a 5xx status; 0 Traceback/Internal Server Error/MissingResumeError/resume_grounding. The lone 202 (POST /agents/scout/run) + 422 (POST /agents/fit-scorer/run) are the localhost 12:31 discovery cron (127.0.0.1, X-Aether-System-Run), NOT my activity and NOT server errors.",
+      "evidence": ["api/browser-keyword-panel.json","logs/api-window-1226-1240Z.log"]
+    }
+  },
+
+  "novel_adversarial": {
+    "design": "My own design, same class, targeting the fix's explicit structural claim. Rather than another CASED non-Latin script (already covered by _camel_humps' ch.isupper()), I glued CASELESS-script proper nouns to ASCII label words — the exact case the fix commit asserts 'genuinely ends here structurally' because 'a caseless character can neither start nor continue a hump — it is simply skipped'.",
+    "tokens_tested": ["東京Salary (CJK/Kanji)", "मुंबईLocation (Devanagari)", "القاهرةSalary (Arabic)", "ソウルSalary (Katakana)"],
+    "outcome": "LEAKED — new finding. Job A4 chips (prod @c158729, both passes + real browser panel): [Terraform, Docker, القاهرةSalary, बईLocation, ソウルSalary, 東京Salary, Engineer, Systems, competitive, quarterly]. Three caseless gluings surfaced intact (東京Salary, القاهرةSalary, ソウルSalary) and the Devanagari one surfaced as a garbage fragment 'बईLocation'. The structural fix does NOT drop these.",
+    "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+    "evidence": ["api/pass1-insights.json (A4_novel_caseless)","api/pass2-insights.json (A4_novel_caseless)","api/browser-keyword-panel.json (A4_Systems_novel)","screenshots/panel-A4-novel-caseless.png"]
+  },
+
+  "new_findings": [
+    {
+      "id": "NF-final-pass-002",
+      "screen": "cover-letter-studio",
+      "severity": "LOW",
+      "category": "defect",
+      "class": "residual of NF-final-pass-001 / NF-final-closure-001 / NF-final-PII-001 / MV-cover-letter-studio-006 — the CASELESS-SCRIPT proper-noun case (CJK / Devanagari / Arabic / Korean-Katakana / Hebrew / Thai / ...) that the unicode-CASE-based _camel_humps segmenter does not cover",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE] leak observed on prod @c158729 (insights API x2 sessions + real-browser KeywordCoveragePanel); [INFERRED] root cause from deployed-source reading + local predictor",
+      "summary": "JD Keyword Coverage still leaks a CamelCase concatenation artifact when the glued proper noun is written in a CASELESS script and glued to an ASCII label word — e.g. a scraped JD gluing a city to a label surfaces '東京Salary', 'القاهرةSalary', 'ソウルSalary' as top keyword chips on the paid intelligence rail (Devanagari 'मुंबईLocation' surfaces as the garbage fragment 'बईLocation'). NF-final-pass-001's _camel_humps rewrite made hump-recognition Unicode-CASE-correct (so Cyrillic/Greek/Turkish-İ proper nouns now form their own hump and get flagged), but a CASELESS letter has no upper/lower distinction, so ch.isupper() and ch.islower() are both False and the character is SKIPPED like punctuation — contributing NO hump. The glued ASCII label ('Salary'/'Location') is then the SOLE segment, so _is_camel_concatenation_artifact hits `len(segments) < 2` and early-returns False (not an artifact) BEFORE the any-segment-is-a-label check runs. Same early-return NF-final-pass-001 and NF-final-closure-001 both named — now reached via a THIRD tokenizer path.",
+      "reproduction": [
+        "1. Log in as a Pro user with a résumé.",
+        "2. Create/seed a Job whose scraped-style description glues a caseless-script city to an ASCII label with no space — e.g. '東京Salary competitive. मुंबईLocation hybrid. القاهرةSalary quarterly. ソウルSalary flexible.' plus a couple legit tech terms so the panel populates.",
+        "3. Attach/generate a cover letter for that job.",
+        "4. GET /cover-letters/{id}/insights → keywords.items CONTAINS '東京Salary','القاهرةSalary','ソウルSalary' (and 'बईLocation') as top-ranked chips.",
+        "5. Open the letter in Cover Letter Studio → the JD Keyword Coverage panel renders the same artifact chips (screenshots/panel-A4-novel-caseless.png)."
+      ],
+      "expected": "No concatenation artifact surfaces as a keyword regardless of which proper noun (including CASELESS scripts) is glued to the label; legit mixed-case tech preserved. (This is NF-final-pass-001's own acceptance criterion.)",
+      "observed": "東京Salary + القاهرةSalary + ソウルSalary leaked as top chips (job A4, prod @c158729, pass1 API + pass2 fresh-session re-GET + real-browser panel — all identical). Devanagari मुंबईLocation leaked as the fragment 'बईLocation'. The reported CASED gluings (5 forward + 5 reverse) and precomposed-Latin controls (MünchenLocation) were correctly DROPPED in the same run — isolating the residual to CASELESS scripts specifically. Reproduced deterministically twice; INFERRED-confirmed for 北京Location/東京Location/ソウルSalary by the local deployed-code predictor (api/local-predictor-INFERRED.txt).",
+      "root_cause_inferred": "apps/api/app/routers/cover_letters.py::_camel_humps walks characters using ch.isupper()/ch.islower()/ch.isdigit(). For a caseless-script character all three are False, so `if not ch.isupper(): i += 1; continue` skips it (identical to how punctuation is skipped). A token like '東京Salary' therefore yields exactly ONE hump ['Salary']; _is_camel_concatenation_artifact returns False at `if len(segments) < 2: return False` before `any(seg.lower() in _ARTIFACT_LABEL_WORDS ...)` runs, so _is_semantic_keyword keeps the token and _skill_score awards +45 internal-uppercase (the ASCII 'S') — ranking the artifact above generic prose. The fix commit's rationale ('Caseless scripts (CJK, etc.) ... a caseless character can neither start nor continue a hump — it is simply skipped ... meaning the class genuinely ends here structurally') is precisely the defect: skipping the caseless proper-noun side leaves the ASCII label as the sole segment, so the gluing survives.",
+      "fix_hint": "Any of: (a) in _is_camel_concatenation_artifact, when the token's sole CamelCase segment is a label word BUT the token contains additional letters (caseless script) outside that segment, flag it — i.e. drop/relax the len(segments)<2 gate for the label-word branch when leading/trailing non-hump letters exist; or (b) have _camel_humps emit a run of consecutive caseless letters as its own segment so a caseless-noun+label token yields 2 segments and hits the existing label rule; or (c) detect a token that mixes a caseless-script run with a trailing/leading ASCII label word and treat that mix as a gluing artifact directly. Also fix the Devanagari tokenizer split that leaves the 'बईLocation' fragment (combining vowel signs/anusvara dropped by _WORD_RE).",
+      "materiality": "Narrow per instance (LOW): requires a caseless-script place/proper name directly glued to a label word in a scraped JD; degrades one keyword chip on the paid JD-Keyword-Coverage rail — no PII, no security, no fabricated user content (the chip is a genuine JD token, just an ugly glued one). BUT the trigger surface is BROADER than NF-final-pass-001's cased-script residual: caseless scripts cover CJK (Chinese/Japanese), Korean Hangul, Arabic, Hebrew, Devanagari (Hindi/Marathi), Thai and more — a large share of international job boards. It directly refutes the fix's stated structural-termination guarantee and violates NF-final-pass-001's own 'regardless of which proper noun' acceptance criterion. Filed to keep the fixers honest against that criterion; the brief explicitly asked for a novel unicode adversarial and this is the result.",
+      "evidence": [
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-001-closure/api/pass1-insights.json (A4_novel_caseless chips)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-001-closure/api/pass2-insights.json (fresh-session re-GET, identical)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-001-closure/api/browser-keyword-panel.json (A4_Systems_novel real-browser chips)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-001-closure/api/assertions.json (NOVEL_caseless_LEAKS check, both passes true)",
+        "uat/reports/evidence/manual-verification/adversarial/final-pass-001-closure/screenshots/panel-A4-novel-caseless.png"
+      ],
+      "claimRefs": [],
+      "status": "OPEN",
+      "owner": null,
+      "fixCommits": [],
+      "verifiedBy": null
+    }
+  ],
+
+  "grant_revert_status": {
+    "granted_utc": "2026-07-20T12:26:~35Z (2x UPDATE 1, rowcount==1 each; active_paid:true verified — api/00-entitlement-granted.json)",
+    "reverted_utc": "2026-07-20T12:38Z (self-applied, BEFORE finishing; 2x UPDATE 1, rowcount==1 each; byte_for_byte_match=True — db/zz-revert-verify.json)",
+    "verify": "GET /billing/entitlement -> active_paid:false, plan.id=free (api/zz-post-revert-entitlement.json). Subscription+UsageQuota updatedAt restored to before-state 2026-07-20T12:26:11.939328+00; runsUsed stayed 0 throughout (insights reads are unmetered; no Regenerate/Generate clicked).",
+    "discipline": "psycopg2 under options=-c search_path=aether; ?schema= stripped via python urllib (not sed); current_schema()==aether asserted before every op; single-row WHERE-keyed on my userId only; NO TRUNCATE / unqualified DELETE; secrets never printed beyond first 8 chars. Ledgers updated: ENTITLEMENT-GRANT-LOG.md (FINAL-PASS-001 CLOSURE grant+revert block) + TEST-DATA-CLEANUP-LEDGER.md (account registered under mv-qa-% DELETE pattern).",
+    "before_state_evidence": "db/00-before-state.json"
+  },
+
+  "evidence_index": {
+    "entitlement": ["db/00-before-state.json","api/00-entitlement-granted.json","db/zz-revert-verify.json","api/zz-post-revert-entitlement.json"],
+    "insights_api": ["api/pass1-insights.json","api/pass2-insights.json","api/assertions.json"],
+    "browser": ["api/browser-keyword-panel.json","screenshots/panel-A1-forward.png","screenshots/panel-A3-standalone.png","screenshots/panel-A4-novel-caseless.png","screenshots/studio-full.png"],
+    "server_log": ["logs/api-window-1226-1240Z.log"],
+    "design_aid_INFERRED": ["api/local-predictor-INFERRED.txt","db/seed-map.json"]
+  },
+
+  "prohibitions_respected": "No pytest anywhere; no service restarts; no code edits; no force-push; did NOT edit GAPS.json (orchestrator is sole writer); only my one disposable mv-qa-lastcheck account touched; never touched sarkar.vikram/admin/other users; all DB ops single-row WHERE-keyed under search_path=aether with current_schema() asserted, ?schema= stripped via urllib (not sed); NO TRUNCATE/unqualified DELETE; server log accessed read-only; secrets never printed beyond first 8 chars (token8 'eyJhbGci' only). Grant reverted byte-for-byte BEFORE finishing (active_paid:false verified). File polling used, no process-greps for completion."
+}

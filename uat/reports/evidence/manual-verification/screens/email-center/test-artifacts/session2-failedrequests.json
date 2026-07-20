@@ -1,0 +1,8 @@
+[
+  {
+    "url": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=311800663906-dr1q622vmgr3vcnlvm9bfb5loofjrkj6.apps.googleusercontent.com&redirect_uri=https%3A%2F%2F5cb5f0620.abacusai.cloud%2Fapi%2Fauth%2Fgoogle%2Fcallback&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.modify+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.send+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.labels+openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJjYzI5YTc2ZTMyNGZiZjE5ZjQzOGViOGJlIiwiYXVkIjoiZ29vZ2xlLW9hdXRoLXN0YXRlIiwiaWF0IjoxNzg0MzA1MzEzLCJleHAiOjE3ODQzMDU2MTMsImN2IjoiQWJURTdyeDZWVGM3SE5CbXRsNTJsbUdNT3RPU0F6dGZhUUZJWTVDLWxXenVQeUZKQWRvR0EzZFhNRzNuNm81RF9qa0MwbFhzU04tTzBwNnpLQktGbF8xN2h5ckZZOWdMRVktNEhQVXd2QUxxNkVJMU1LRnRFWTQ4YU1HVEJLaXIifQ.b3SZu_n9tOg_oV-VHpR_pOj1mn_q-jJzqUUkLWlLwDY&code_challenge=DrVby2O6FxTFEo7OGtwzspY-dafXEXGSbemLF0T6KUM&code_challenge_method=S256&access_type=offline&include_granted_scopes=true&prompt=select_account",
+    "method": "GET",
+    "failure": "net::ERR_FAILED",
+    "ts": "2026-07-17T16:21:53.161Z"
+  }
+]

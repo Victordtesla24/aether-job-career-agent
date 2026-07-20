@@ -1,0 +1,81 @@
+[
+  {
+    "id": "MV-dashboard-001",
+    "screen": "dashboard",
+    "severity": "MEDIUM",
+    "category": "claim-refuted",
+    "summary": "The [...slug] catch-all's own 'Section not found' placeholder never renders for a free-plan user — the SubscriptionGate paywall masks it on every unmapped /dashboard/<unknown> route, so a mistyped/stale-bookmark URL is visually indistinguishable from a paid-feature paywall.",
+    "reproduction": [
+      "Login as admin/admin123 (free plan, active_paid=false) via https://5cb5f0620.abacusai.cloud/login",
+      "Navigate to https://5cb5f0620.abacusai.cloud/dashboard/nonexistent-xyz",
+      "Observe HTTP 200 (confirmed, not a 404)",
+      "Read the rendered page body: it shows the 'Subscribe to unlock Aether' panel (data-testid=subscription-paywall), NOT the [...slug] route's own 'Section not found' / 'unknown route' / 'Back to Dashboard' placeholder defined in apps/web/src/app/dashboard/[...slug]/page.tsx",
+      "Repeat in a fresh browser session — identical result both times"
+    ],
+    "expected": "Per CLM-087 and the [...slug] page's own docstring/component (apps/web/src/app/dashboard/[...slug]/page.tsx), an unmapped subroute should render the in-shell 'Section not found' panel telling the user the specific route they typed doesn't map to a known section.",
+    "observed": "Because apps/web/src/app/dashboard/layout.tsx wraps ALL children (including the catch-all) in <SubscriptionGate>, and this test account is free-plan (active_paid=false, requiresSubscription=true from GET /billing/entitlement), the catch-all's own content is replaced by the generic subscription paywall. The user gets no signal that the specific URL they hit doesn't exist — they just see the same paywall shown on every other /dashboard/* route (confirmed identical paywall screenshot on /dashboard, /dashboard/jobs, /dashboard/agents, /dashboard/settings, /dashboard/approvals, /dashboard/nonexistent-xyz).",
+    "evidence": [
+      "test-artifacts/s1-07-catchall-nonexistent.png",
+      "test-artifacts/s2-02-catchall-nonexistent.png",
+      "test-artifacts/s1-results.json (step catchall-nonexistent-route: bodyContainsNotFound=false)",
+      "test-artifacts/s2-results.json (step catchall-nonexistent-route: bodyContainsNotFound=false, hasPaywall=true)"
+    ],
+    "claimRefs": ["CLM-087"],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-002",
+    "screen": "dashboard",
+    "severity": "LOW",
+    "category": "visual",
+    "summary": "Sidebar nav has a 'Cover Letter Studio' item (href /dashboard/cover-letters) that is not present in design/screens/dashboard.html's 12-item nav list — an additive deviation from the wireframe, not a missing/broken item.",
+    "reproduction": [
+      "Login as admin/admin123",
+      "Land on /dashboard, inspect the sidebar <nav>",
+      "Count 13 items: Dashboard, Jobs, Resume Studio, Cover Letter Studio, Story Bank, Applications, Interview Center, Networking, Email Center, Agents, Analytics, Offers, Settings",
+      "Compare to design/screens/dashboard.html nav-primary-d4e5f6 which lists 12 items (no Cover Letter Studio)"
+    ],
+    "expected": "Wireframe-listed nav items present (pixel-perfect parity not required per protocol).",
+    "observed": "One extra, fully-functional nav item beyond the wireframe. Purely additive — product has grown a dedicated Cover Letter Studio screen since the wireframe was authored. Not missing/broken/misleading, flagged only for completeness per §3.2.1's 'every visible deviation'.",
+    "evidence": [
+      "test-artifacts/s1-results.json (step sidebar-nav-inventory)",
+      "test-artifacts/s2-results.json (step sidebar-nav-inventory)",
+      "test-artifacts/s1-01-dashboard-loaded.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-dashboard-003",
+    "screen": "dashboard",
+    "severity": "MEDIUM",
+    "category": "coverage-gap",
+    "summary": "Under the assigned free-plan test account (admin/admin123, active_paid=false), the entire wireframed dashboard hub (stat cards, Agent Activity feed, Today's Opportunities, Application Funnel, Story Bank quick access, Recruiter CRM summary, Needs Approval queue, Market Intelligence) never mounts — SubscriptionGate replaces DashboardPage with the paywall before any of its useLoad() hooks fire — so none of the matrix-listed hub endpoints (GET /analytics/funnel, GET /jobs [hub context], GET /agents/runs, GET /stories, GET /workspaces/networking/summary, GET /approvals [hub display]) could be exercised, and none of the hub's interactive elements (feed filters, Approve/Reject, Tailor & Apply, Browse all jobs, Story Bank/CRM 'Open' links, Explore matching roles) could be tested.",
+    "reproduction": [
+      "Login as admin/admin123, land on /dashboard",
+      "Confirm GET /billing/entitlement returns {active_paid:false, requiresSubscription:true}",
+      "Observe the main content area shows only the 'Subscribe to unlock Aether' paywall; data-testid=agent-feed / funnel-widget / story-bank-widget / crm-summary / needs-approval-widget / todays-opportunities are all absent from the DOM",
+      "Capture network requests for the full session: only GET /agents, GET /approvals, GET /billing/entitlement, GET /workspaces/settings fire (from Sidebar/Topbar, which sit OUTSIDE the gate) plus GET /jobs and GET /applications (only when the topbar search box is focused, for its lazy search index) — GET /analytics/funnel, GET /agents/runs, GET /stories, GET /workspaces/networking/summary never fire in either session"
+    ],
+    "expected": "Brief instructed testing 'the backing GETs (workspaces/career-data, analytics, applications, jobs, agents) actually fire and drive the UI' for the dashboard hub, and assumed the dashboard would SHOW agent/quota state (just not let the user RUN agents).",
+    "observed": "The actual behavior blocks the whole hub's render (and thus its data fetches), not just agent-run actions — this matches the SubscriptionGate/GAP-P6-PAYWALL design and CLM-063 (paywall shows for free plan) but means this screen-tester could not exercise ~90% of the wireframed dashboard hub or its backend wiring under the credentials assigned in the brief. Chrome elements outside the gate (Sidebar, Topbar, search) ARE correctly wired to live data (verified: GET /agents drives sidebar pulse text, GET /workspaces/settings drives topbar greeting, search box wired to GET /jobs + GET /applications + GET /agents). This is filed as coverage-gap, not a proven defect — escalating for orchestrator adjudication on whether a paid-tier re-test of the dashboard hub is needed.",
+    "evidence": [
+      "test-artifacts/s1-api-requests.json",
+      "test-artifacts/s2-api-requests.json",
+      "test-artifacts/api-entitlement-and-scout-run-check.json",
+      "test-artifacts/s1-01-dashboard-loaded.png",
+      "test-artifacts/s1-results.json (step dashboard-content-inventory: all hub testids false)"
+    ],
+    "claimRefs": ["CLM-063"],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

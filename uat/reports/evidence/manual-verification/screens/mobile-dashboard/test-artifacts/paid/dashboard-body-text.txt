@@ -1,0 +1,267 @@
+Good afternoon, Administrator
+
+Fri, 17 July · last agent run 20m ago
+
+AD
+Administrator
+Administrator
+ACTIVE APPLICATIONS
+7
++7 this week
+INTERVIEW RATE
+0%
+0 of 7 applied
+OFFERS
+0
+none yet — agents hunting
+AI CONFIDENCE
+38%
+avg match quality
+Agent Activity
+live
+View all
+All
+Discovered
+Tailored
+Submitted
+Waiting
+
+Cover Letter Agent run failed
+
+20 min ago · LLM backend unavailable: budget exhausted before any live at
+
+Failed
+
+Cover Letter Agent run failed
+
+23 min ago · LLM backend unavailable: live call failed: LLM call exceeded
+
+Failed
+
+Cover Letter Agent run failed
+
+25 min ago · LLM backend unavailable: live call for 'cover_letter' return
+
+Failed
+
+Cover Letter Agent run failed
+
+27 min ago · LLM backend unavailable: budget exhausted before any live at
+
+Failed
+
+Cover Letter Agent run failed
+
+28 min ago · LLM backend unavailable: live call failed: LLM call exceeded
+
+Failed
+
+Cover Letter Agent drafted a cover letter — awaiting your approval
+
+32 min ago · needs approval
+
+Approve
+Drafted
+
+emailAgent agent run completed
+
+32 min ago
+
+Completed
+
+emailAgent agent run completed
+
+33 min ago
+
+Completed
+
+Cover Letter Agent run failed
+
+33 min ago · Fabricated entities detected: ['AI-first']
+
+Failed
+
+Scout Agent checked job boards — no new roles
+
+34 min ago · 42 refreshed
+
+Discovered
+Today's Opportunities
+Browse all jobs
+P
+50%
+Senior Product Manager, Strategic Origination Platforms
+
+Plenti · Sydney
+
+via lever · posting ↗
+
+Tailor & Apply
+B
+46%
+Technical Business Analyst
+
+Brighte · Sydney, NSW
+
+via lever · posting ↗
+
+Review Match
+B
+46%
+Business Analyst
+
+Brighte · Sydney, NSW
+
+via lever · posting ↗
+
+Review Match
+Application Funnel
+Jobs Found
+44
+Applied
+7
+Screened
+0
+Interviewed
+0
+Offers
+0
+Story Bank
+Open
+
+26 STAR achievements ready to deploy
+
+LATEST STORIES
+
+JIRA Analytics Dashboard for Agile Team Insights at Independent Consulting
+0 metrics
+LLM Evaluation Stack for Production-Grade AI Governance at Independent Consulting
+1 metrics
+Executive Strategy Alignment Workshop for 40+ GMs at ANZ
+1 metrics
+Recruiter CRM
+Open
+
+0 active recruiter conversations
+
+0 follow-ups due today
+
+0 warm intro pending
+
+Needs Approval
+4
+
+Send cover letter
+
+Project Manager · Empire Life
+
+requested 59 min ago · waiting on you
+
+Approve
+Reject
+
+Send cover letter
+
+Business Analyst · EasyPark
+
+requested 1 hr ago · waiting on you
+
+Approve
+Reject
+
+Send cover letter
+
+Enterprise Product Manager · replit
+
+requested 5 hr ago · waiting on you
+
+Approve
+Reject
++1 more waiting — review all
+Real-Time Market Pulse
+hiring & recruitment trends · AU
+TREND INDICATORS
+Your application velocity
+no change
+Agent automation spend
+no change
+Avg job fit score
+no change
+JOBS BY SOURCE
+44
+jobs sourced
+Greenhouse
+36%
+Ashby
+34%
+Lever
+21%
+Remoteok
+7%
+Remotive
+2%
+TOP SKILLS IN DEMAND
+YOUR JOB PROBABILITY SCORE
+44%
+Application volume
+47
+Interview conversion
+0
+Market demand
+88
+Skill match
+39
+
+Likelihood of landing an offer in the next 60 days
+
+WEEKLY ACTIVITY
+less
+more
+EMPLOYER HIRING ACTIVITY
+
+harvey Received your application
+
+15m ago
+
+Empire Life Application in progress
+
+50m ago
+
+Plenti Received your application
+
+54m ago
+
+airwallex Received your application
+
+59m ago
+
+Empire Life Application in progress
+
+59m ago
+
+RECRUITER ACTIVITY
+Agent runs (last 12 wks)
+200 total
+Avg runs / week
+16.7 · no change
+MARKET VS. YOUR PERFORMANCE
+
+Applications / month
+
+Market data: not connected
+
+you 14
+
+Interview rate
+
+Market data: not connected
+
+you 0%
+
+No market data source connected — showing your own figures only.
+
+Home
+Jobs
+Apps
+Agents
+Profile

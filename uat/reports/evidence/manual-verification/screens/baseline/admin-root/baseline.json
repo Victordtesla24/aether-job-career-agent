@@ -1,0 +1,42 @@
+{
+  "timestamp_utc": "2026-07-17T13:32:32.153Z",
+  "url": "https://5cb5f0620.abacusai.cloud/admin",
+  "final_url_after_redirects": "https://5cb5f0620.abacusai.cloud/login",
+  "document_http_status": 200,
+  "console_messages": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 ()"
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch RSC payload for https://5cb5f0620.abacusai.cloud/login. Falling back to browser navigation. TypeError: Failed to fetch\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:45419)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:58942\n    at Object.u [as task] (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:31819)\n    at c.s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:32524)\n    at c.enqueue (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:31949)\n    at s (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:58905)\n    at i (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:58445)\n    at b (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:63136)\n    at f (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:1:74789)\n    at Object.action (https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-06ad7a3dfd0f3093.js:2:7084)"
+    }
+  ],
+  "failed_requests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/auth/me",
+      "method": "GET",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/login?_rsc=jecle",
+      "method": "GET",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "method": "GET",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "page_title": "Aether Career Agent",
+  "visible_h1_or_main_heading": "Sign in",
+  "load_time_ms": 783,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "auth_mode": "admin-dual-authed",
+  "notes": "FINDING: No wireframe; /admin/page.tsx. Operator-admin HUMAN-GATED (governance/human-gated-admin.md). Testable: unauthenticated (401/redirect), error copy. Authenticated testing requires operator credential."
+}

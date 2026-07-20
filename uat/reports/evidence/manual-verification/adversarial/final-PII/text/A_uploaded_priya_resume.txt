@@ -1,0 +1,43 @@
+PRIYA NATARAJAN
+Staff Distributed Systems Engineer
+Sydney, NSW, Australia
+Email: priya.natarajan@example.com | Phone: +61 411 908 772
+LinkedIn: linkedin.com/in/priyanatarajan-rust | GitHub: github.com/pnatarajan-elixir
+
+PROFESSIONAL SUMMARY
+Staff-level backend engineer with 9 years building high-throughput streaming
+and messaging platforms in Rust and Elixir. Specialist in Kafka event
+pipelines, ScyllaDB storage, and Erlang/OTP fault-tolerant supervision trees.
+I have led teams delivering low-latency gRPC services processing over 4 billion
+events per day.
+
+CORE SKILLS
+Rust (Tokio, async), Elixir, Erlang/OTP, Phoenix LiveView, Apache Kafka,
+ScyllaDB, ClickHouse, gRPC, Protocol Buffers, Redpanda, NATS JetStream,
+Rust embedded (no_std), property-based testing with proptest.
+
+EXPERIENCE
+
+Atlassian - Staff Distributed Systems Engineer (2021 - Present)
+- Rearchitected the Jira activity-stream ingestion service in Rust with Tokio,
+  cutting p99 latency from 380ms to 42ms on a 4 billion event/day Kafka firehose.
+- Built an Elixir/Phoenix presence fabric on Erlang/OTP supervision trees that
+  sustained 2.1 million concurrent websocket sessions during Confluence launches.
+- Migrated the Bitbucket audit log store from Cassandra to ScyllaDB, reducing
+  storage cost 41% and tail read latency 63%.
+
+Canva - Senior Backend Engineer (2018 - 2021)
+- Designed the design-collaboration CRDT sync engine in Rust, shipping a gRPC
+  streaming API with Protocol Buffers used by 90 million monthly active users.
+- Introduced Redpanda to replace a legacy queue, halving broker fleet size.
+- Wrote the ClickHouse analytics rollup that powered Canva's editor telemetry.
+
+Zendesk - Backend Engineer (2015 - 2018)
+- Implemented an Erlang/OTP rate-limiter guarding the ticketing ingestion path.
+- Built NATS JetStream fan-out for real-time agent notifications.
+
+EDUCATION
+B.E. Computer Science, University of New South Wales (UNSW Sydney), 2015
+
+CERTIFICATIONS
+Confluent Certified Developer for Apache Kafka

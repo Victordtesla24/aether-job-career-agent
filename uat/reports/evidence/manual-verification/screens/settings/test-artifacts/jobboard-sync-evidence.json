@@ -1,0 +1,24 @@
+{
+  "allTestIds": [
+    "settings-page",
+    "save-settings-btn",
+    "settings-nav-profile",
+    "settings-nav-resume",
+    "settings-nav-portfolio",
+    "settings-nav-notifications",
+    "settings-nav-agents",
+    "settings-nav-integrations",
+    "settings-nav-privacy",
+    "settings-integrations",
+    "sync-all-btn",
+    "sync-greenhouse",
+    "sync-ashby",
+    "sync-lever",
+    "sync-remoteok",
+    "sync-remotive",
+    "settings-accounts"
+  ],
+  "networkRequestsDuringAndAfterClick": [],
+  "greenhouseTextBefore": "Greenhouse\n\n16 jobs discovered · last sync 2026-07-16 18:32 UTC\n\nconnected\nSync\n\nAshby\n\n15",
+  "greenhouseTextAfter": "Greenhouse\n\n16 jobs discovered · last sync 2026-07-16 18:32 UTC\n\nconnected\nSync\n\nAshby\n\n15"
+}

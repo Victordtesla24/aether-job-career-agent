@@ -1,0 +1,522 @@
+{
+  "run": "MANUAL-VERIFICATION / adversarial final-residuals",
+  "role": "qa-adversary",
+  "generated_utc": "2026-07-20T03:16:32.739347+00:00",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "prod_commit_tests_1_2_3": "084e04b (backend-only residuals: CamelCase JD-keyword filter + async no-resume honest refusal); api+worker restarted 2026-07-20T00:59:08Z",
+  "prod_commit_sec7_sweep": "e182571 (Merge fix/mv-system-008-cron-logging; api/web/worker restarted 2026-07-20T03:03:48Z)",
+  "code_delta_084e04b_to_e182571": "ONLY scripts/discovery_cron.sh + its test shell \u2014 does NOT touch cover_letters.py keyword filter, workers/tasks.py async refusal, or the cover-letters frontend; therefore tests 1/2 verdicts hold at current prod e182571",
+  "llm_mode": "auto (real LLM, no fixtures)",
+  "async_generation": "AETHER_ASYNC_GENERATION=true (async path exercised)",
+  "accounts": {
+    "R1_distinct_resume": {
+      "email": "mv-qa-resid-distinct-865c45@example.com",
+      "userId": "cf6bb0e8a91954a87e00c0ee0"
+    },
+    "R2_no_resume": {
+      "email": "mv-qa-resid-noresume-865c45@example.com",
+      "userId": "c1561fd2195e1801d85872755"
+    }
+  },
+  "grant_revert_status": {
+    "R1": "granted Pro 01:13Z; orchestrator emergency-reverted 03:05:45Z; re-granted 03:08Z for \u00a77 sweep; qa-adversary reverted byte-for-byte 03:13Z -> active_paid:false CONFIRMED",
+    "R2": "granted Pro 01:13Z; orchestrator emergency-reverted 03:05:45Z; stayed FREE thereafter -> active_paid:false CONFIRMED",
+    "both_final_state": "active_paid:false (evidence api/zz-post-revert-entitlement.json); ENTITLEMENT-GRANT-LOG.md revert markers set; accounts+data registered in TEST-DATA-CLEANUP-LEDGER.md"
+  },
+  "tests": {
+    "test1_MV-cover-letter-studio-006_+_NF-final-PII-001_camelcase_chips": {
+      "verdict": "STILL-BROKEN (residual) / NEW-FINDING",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "summary": "Documented artifacts (ManagerLocation, EngineerLocation, ResponsibilitiesBuild, EmployerShare, DirectorLocation, QualificationsBuild, CompensationShare, DepartmentLocation) are correctly DROPPED \u2014 the NF-final-PII-001 fix works for the heading-word gluings it enumerated. BUT City/place-name + boilerplate-label CamelCase concatenation artifacts SURVIVE and rank as top chips, including 'SydneySalary' which the acceptance criterion explicitly names as must-not-appear.",
+      "artifact_chips_that_leaked": [
+        "SydneySalary",
+        "MelbourneSalary",
+        "BrisbaneLocation",
+        "AdelaideSalary",
+        "PerthSalary",
+        "CanberraLocation"
+      ],
+      "root_cause_inferred": "_is_camel_concatenation_artifact() flags a token only when EVERY CamelCase segment is in _ARTIFACT_SPLIT_WORDS; that set holds country names (australia/canada/...) but NOT city names (sydney/melbourne/brisbane/adelaide/perth/canberra). So 'Sydney'+'Salary' fails the all-segments test, survives _is_semantic_keyword, then scores high in _skill_score (+45 internal-uppercase, +25 leading-cap) and ranks into the 10-chip panel (cover_letters.py:161-202,205-228).",
+      "legit_mixedcase_tech_preserved": {
+        "empire_life": [
+          "JavaScript",
+          "TypeScript",
+          "PostgreSQL",
+          "DevOps",
+          "iPhone"
+        ],
+        "redpanda": [
+          "Golang",
+          "Terraform",
+          "GraphQL",
+          "Kubernetes"
+        ]
+      },
+      "observations": {
+        "api_run1_empire_chips": [
+          "JavaScript",
+          "TypeScript",
+          "PostgreSQL",
+          "DevOps",
+          "Reliability",
+          "microservices",
+          "MelbourneSalary",
+          "BrisbaneLocation",
+          "SydneySalary",
+          "iPhone"
+        ],
+        "api_run2_fresh_session_empire_chips": [
+          "JavaScript",
+          "TypeScript",
+          "PostgreSQL",
+          "DevOps",
+          "Reliability",
+          "microservices",
+          "MelbourneSalary",
+          "BrisbaneLocation",
+          "SydneySalary",
+          "iPhone"
+        ],
+        "ui_real_browser_empire_chips": [
+          "JavaScript",
+          "TypeScript",
+          "PostgreSQL",
+          "DevOps",
+          "Reliability",
+          "microservices",
+          "MelbourneSalary",
+          "BrisbaneLocation",
+          "SydneySalary",
+          "iPhone"
+        ],
+        "api_run1_redpanda_chips": [
+          "GraphQL",
+          "GitHub",
+          "Kubernetes",
+          "Terraform",
+          "Golang",
+          "AdelaideSalary",
+          "CanberraLocation",
+          "PerthSalary",
+          "Platform",
+          "Engineer"
+        ],
+        "ui_console_errors": 0
+      },
+      "reproduced": "3x (API run1, API run2 fresh session, real-browser Playwright UI) \u2014 VERIFIED TWICE+",
+      "adversarial_variants_of_my_design": "MelbourneSalary/BrisbaneLocation/AdelaideSalary/PerthSalary/CanberraLocation (city+label) \u2014 all broke the filter, beyond the task-named SydneySalary"
+    },
+    "test2a_single_agent_async_no_resume_refusal": {
+      "verdict": "VERIFIED-CLOSED-RECOMMENDED (backend/API); adjacent UI NEW-FINDING (see new_findings)",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "summary": "coverLetter + tailor async runs for R2 (no resume) each complete the BackgroundJob with status='completed' (NOT 'failed'), result.missingResume=true and an honest user-actionable message; 'MissingResumeError' appears NOWHERE user-visible; quota NOT charged; no operator resume seeded.",
+      "cover_letter_message": "Add your resume before generating a cover letter.",
+      "tailor_message": "Add your resume before tailoring or generating an application.",
+      "forbidden_string_scan_all_user_visible_surfaces": [],
+      "surfaces_scanned": [
+        "BackgroundJob poll payload (status/result/error)",
+        "GET /agents/runs",
+        "GET /agents/stats",
+        "DB AgentRun.error",
+        "DB BackgroundJob.error/result"
+      ],
+      "quota_charged": 0,
+      "resume_count_before_after": [
+        0,
+        0
+      ],
+      "note_agentrun_rows": "the internal AgentRun audit rows show status='failed' but their error text is the honest message ('Add your resume...'), never the class name \u2014 surfaced via /agents/runs with no leak",
+      "reproduced": "2x (run1 + run2 fresh session)"
+    },
+    "test2b_pipeline_async_no_resume_refusal": {
+      "verdict": "VERIFIED-CLOSED-RECOMMENDED",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "summary": "THE round-1 review gap. POST /agents/pipeline/run for R2 (no resume) -> 202 BackgroundJob; the pipeline refuses at the fitScorer step and the pipeline branch's MissingResumeError handler completes the job with status='completed', missingResume=true, honest message 'Add your resume before scoring jobs against it.', error=None. No 'MissingResumeError' anywhere user-visible; quota not charged. VERIFIED ON PROD.",
+      "pipeline_message": "Add your resume before scoring jobs against it.",
+      "pipeline_terminal_status": "completed",
+      "leak_hits": [],
+      "reproduced": "2x (run1 + run2 fresh session)"
+    },
+    "test3_CLM-027_fixture_fingerprint_adjudication": {
+      "verdict": "ADJUDICATED \u2014 CASE (a) TEST DATA; NOT a \u00a77 violation",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "flagged_rows": {
+        "cf876560bca329aeb86ec1391": "ABSENT (wiped in 2026-07-18 prod DB incident)",
+        "c3ebf6a97e318dbcacc7473dc": "ABSENT (wiped in 2026-07-18 prod DB incident)"
+      },
+      "findings": [
+        "The 2 specifically-flagged cover letters (cf876560bca329aeb86ec1391 @2026-07-14, c3ebf6a97e318dbcacc7473dc @2026-07-16) are ABSENT from production \u2014 wiped in the 2026-07-18 prod DB incident.",
+        "ZERO byte-identical fixture body/hook exists in ANY of the 33 current cover letters (exact-substring scan vs decoded default/retry/retry2 fixture bodies).",
+        "The 18 fixture-PHRASE matches are genuine resume-grounded LLM echoes (the fixtures were built from a real resume; test accounts uploaded similar achievements), NOT fixture-fallback.",
+        "ALL cover letters in current prod are owned by disposable mv-*/fixture-* test accounts; ZERO owned by any non-disposable/real/paid user (there are no real users \u2014 20 accounts, all disposable + freshly re-created admin@aether.local with 0 data)."
+      ],
+      "owners_of_phrase_matches": [
+        {
+          "email": "mv-qa-final-b-8f2a@example.com",
+          "n": 2
+        },
+        {
+          "email": "mv-verify-adversary@mv-verify-test.dev",
+          "n": 7
+        }
+      ],
+      "reachable_by_real_user": false,
+      "cleanup_note": "the phrase-matching rows belong to mv-verify-adversary / mv-qa-final-b-8f2a (already in the mv-* DELETE pattern) \u2014 deleted with those accounts at cleanup"
+    },
+    "test4_sec7_threshold_sweep": {
+      "verdict": "PASS (all thresholds met)",
+      "epistemic": "[VERIFIED-WITH-FRESH-EVIDENCE]",
+      "window_utc": "2026-07-20T03:10:17Z .. 2026-07-20T03:11:30Z",
+      "counts": {
+        "routes_total": 27,
+        "routes_http_200": 27,
+        "routes_non_200": 0,
+        "total_uncaught_console_errors": 0,
+        "total_server_5xx_in_responses": 0,
+        "server_5xx_in_api_log_window": 0,
+        "non_401_4xx_in_api_log_window": 0,
+        "total_fixture_fingerprint_hits": 0,
+        "genuine_unsurfaced_failed_requests": 0,
+        "admin_routes_refusing_R1": 6,
+        "admin_routes_total": 6
+      },
+      "curl_400_adjudication": {
+        "deployer_observation": "deployer's earlier curl probe saw HTTP 400 on dashboard routes",
+        "my_fresh_result": "NOT reproducible \u2014 /dashboard, /dashboard/jobs, /dashboard/analytics all return 200 via plain curl, browser-UA curl, AND browser-UA+Accept:text/html curl; real-browser Playwright navigation returns main_status 200 for all 15 dashboard routes",
+        "verdict": "Transient/probe artifact (likely probed during a web-service restart window or against a stale deploy). Current prod serves 200 for every dashboard route in both curl and real browser."
+      },
+      "failed_request_characterization": {
+        "public_ERR_ABORTED": "Next.js <Link> RSC prefetch requests (?_rsc=...) to /forgot-password,/privacy-policy,/terms aborted on navigation after the 2.5s settle \u2014 speculative prefetch, not a user-facing failure; the pages themselves return 200 when visited",
+        "analytics_ERR_ABORTED": "2x /api/jobs/{id}/insights aborted on navigation; independently re-probed as R1 -> BOTH return HTTP 200 with valid data (jobId/scored/overall/keywordMatch). Not a real failure.",
+        "genuine_unsurfaced_failures": 0
+      },
+      "ui_feedback_note": "load_ms figures INCLUDE a fixed 2500ms post-nav settle wait; actual nav->domcontentloaded was ~40-500ms, i.e. honest sub-2s feedback",
+      "table": [
+        {
+          "route": "/",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/login?next=%2Fdashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 2,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 3006
+        },
+        {
+          "route": "/login",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/login",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 3,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2554
+        },
+        {
+          "route": "/signup",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/signup",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 1,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2532
+        },
+        {
+          "route": "/pricing",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/pricing",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 2,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2563
+        },
+        {
+          "route": "/privacy-policy",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/privacy-policy",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2592
+        },
+        {
+          "route": "/terms",
+          "kind": "public",
+          "main_status": 200,
+          "final_url": "/terms",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2562
+        },
+        {
+          "route": "/dashboard",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2561
+        },
+        {
+          "route": "/dashboard/jobs",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/jobs",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2544
+        },
+        {
+          "route": "/dashboard/analytics",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/analytics",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 2,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2583
+        },
+        {
+          "route": "/dashboard/resume",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/resume",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2593
+        },
+        {
+          "route": "/dashboard/stories",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/stories",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2561
+        },
+        {
+          "route": "/dashboard/cover-letters",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/cover-letters",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2533
+        },
+        {
+          "route": "/dashboard/applications",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/applications",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2554
+        },
+        {
+          "route": "/dashboard/approvals",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/approvals",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2540
+        },
+        {
+          "route": "/dashboard/interviews",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/interviews",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2568
+        },
+        {
+          "route": "/dashboard/networking",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/networking",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2569
+        },
+        {
+          "route": "/dashboard/email",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/email",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2537
+        },
+        {
+          "route": "/dashboard/settings",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/settings",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2558
+        },
+        {
+          "route": "/dashboard/offers",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/offers",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2574
+        },
+        {
+          "route": "/dashboard/agents",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/agents",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2540
+        },
+        {
+          "route": "/dashboard/does-not-exist-catchall",
+          "kind": "dashboard",
+          "main_status": 200,
+          "final_url": "/dashboard/does-not-exist-catchall",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2592
+        },
+        {
+          "route": "/admin",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2535,
+          "admin_refused_or_redirected": true
+        },
+        {
+          "route": "/admin/health",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2557,
+          "admin_refused_or_redirected": true
+        },
+        {
+          "route": "/admin/users",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2549,
+          "admin_refused_or_redirected": true
+        },
+        {
+          "route": "/admin/settings",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2548,
+          "admin_refused_or_redirected": true
+        },
+        {
+          "route": "/admin/audit-log",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2546,
+          "admin_refused_or_redirected": true
+        },
+        {
+          "route": "/admin/spend",
+          "kind": "admin",
+          "main_status": 200,
+          "final_url": "/dashboard",
+          "console_errors": 0,
+          "failed_requests_ERR_ABORTED": 0,
+          "server_5xx": 0,
+          "fixture_fingerprint_hits": 0,
+          "load_ms_incl_2500ms_settle": 2543,
+          "admin_refused_or_redirected": true
+        }
+      ]
+    }
+  },
+  "new_findings": [
+    {
+      "id": "NF-final-resid-001",
+      "severity": "MEDIUM",
+      "title": "JD Keyword Coverage still surfaces City/place-name + boilerplate-label CamelCase concatenation artifacts (SydneySalary, MelbourneSalary, ...) as top chips",
+      "class": "residual of NF-final-PII-001 / re-opened MV-cover-letter-studio-006",
+      "evidence": "api/test1-run1-insights.json, api/test1-run2-insights.json, api/test1-ui-panel.json, screenshots/test1-keyword-panel-empire.png",
+      "repro": "As any Pro user, create a job whose scraped JD contains 'ManagerLocation: SydneySalary: $180k ...'; generate a cover letter; GET /cover-letters/{id}/insights -> keywords.items contains 'SydneySalary','MelbourneSalary','BrisbaneLocation'. Reproduced 3x incl. real browser.",
+      "fix_hint": "_is_camel_concatenation_artifact should also flag a token whose CamelCase split yields a place-name segment + a boilerplate/label segment (extend _ARTIFACT_SPLIT_WORDS with common AU/global city names, OR relax the all-segments rule so any boilerplate-label segment paired with a Capitalized non-skill word is dropped), while keeping the _MIXED_CASE_TECH_ALLOWLIST guard so JavaScript/PostgreSQL/etc. remain."
+    },
+    {
+      "id": "NF-final-resid-002",
+      "severity": "MEDIUM",
+      "title": "Cover-letter studio UI silently drops the honest async no-resume refusal message",
+      "class": "adjacent to NF-final-PII-002 (backend fix itself is correct)",
+      "evidence": "api/test2-r2-ui-refusal.json, api/test2-r2-ui-refusal-run2.json, screenshots/test2-r2-after-generate.png",
+      "detail": "The backend correctly returns a 'completed' BackgroundJob with result.message='Add your resume before generating a cover letter.' and missingResume=true (no class leak, quota refunded). But apps/web/src/app/dashboard/cover-letters/page.tsx generate() calls load(result.cover_letter_id) [undefined] and setError(null) for the missingResume-completed case, so the honest message is never surfaced \u2014 clicking 'Generate Draft' with no resume yields a silent no-op (empty alert, no message, no letter, 0 console errors). Reproduced 2x in real browser.",
+      "fix_hint": "In generate()/regenerate(): if result.missingResume (or !result.cover_letter_id), surface result.message via setError(result.message) (or a dedicated non-error banner) instead of clearing state."
+    }
+  ],
+  "prohibitions_respected": "no pytest; no service restarts; no code edits; no force-push; only my 2 accounts touched (+ read-only CLM-027 lookups); never touched sarkar.vikram/admin; all secrets truncated; DB ops single-row WHERE-keyed under search_path=aether with current_schema() asserted, ?schema= stripped via urllib."
+}

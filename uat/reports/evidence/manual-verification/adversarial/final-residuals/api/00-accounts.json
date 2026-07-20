@@ -1,0 +1,18 @@
+{
+  "R1": {
+    "email": "mv-qa-resid-distinct-865c45@example.com",
+    "password": "ResidQA2026xy",
+    "userId": "cf6bb0e8a91954a87e00c0ee0",
+    "register_status": 201,
+    "login_status": 200,
+    "token_prefix": "eyJhbGci"
+  },
+  "R2": {
+    "email": "mv-qa-resid-noresume-865c45@example.com",
+    "password": "ResidQA2026xy",
+    "userId": "c1561fd2195e1801d85872755",
+    "register_status": 201,
+    "login_status": 200,
+    "token_prefix": "eyJhbGci"
+  }
+}

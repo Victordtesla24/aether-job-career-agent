@@ -1,0 +1,289 @@
+{
+  "status": "COMPLETE",
+  "timestamp": "2026-07-17T11:45:00Z",
+  "scout": "haiku",
+  "read_only": true,
+  "entitlement": {
+    "table": "Subscription",
+    "columns": {
+      "userId": "text",
+      "planId": "text",
+      "status": "text"
+    },
+    "source_of_truth_condition": "status='active' AND planId != 'free'",
+    "verified_source_file": "apps/api/app/repositories/billing.py:400-419",
+    "verified_source_query": "SELECT 1 FROM \"Subscription\" WHERE \"userId\" = %s AND \"status\" = 'active' AND \"planId\" <> 'free' LIMIT 1"
+  },
+  "gate_scope": {
+    "frontend": {
+      "scope_type": "whole-tree",
+      "coverage": "/dashboard/*",
+      "allowlist": false,
+      "component": "SubscriptionGate",
+      "verified_file": "apps/web/src/app/dashboard/layout.tsx",
+      "gating_condition": "requiresSubscription && !active_paid",
+      "gated_same_as_action_pages": true,
+      "notes": "All children of /dashboard layout are gated identically; no special allowlist for read-only pages"
+    },
+    "backend": {
+      "scope_type": "all-agent-runs",
+      "coverage": "Every POST /agents/{name}/run endpoint",
+      "gating_location": "_require_active_subscription()",
+      "verified_file": "apps/api/app/routers/agents.py:539-571",
+      "enforcement_points": [
+        {
+          "path": "_record_run()",
+          "line": 608,
+          "description": "Sync agent run path"
+        },
+        {
+          "path": "_enqueue_single_agent()",
+          "line": 958,
+          "description": "Async single-agent (tailor, coverLetter) path"
+        },
+        {
+          "path": "_enqueue_pipeline()",
+          "line": 1018,
+          "description": "Async pipeline composite path"
+        }
+      ],
+      "http_response": 402,
+      "response_detail": {
+        "error": "subscription_required",
+        "message": "An active subscription is required to use Aether. Subscribe to unlock.",
+        "upgradeUrl": "/pricing"
+      }
+    }
+  },
+  "free_tier_promises": [
+    {
+      "promise": "5 tailored agent runs / month",
+      "metering_note": "Only LLM-invoked agents counted: tailor, coverLetter, storyExtractor, emailAgent. Deterministic agents (scout, fitScorer, matcher, supervisor) have zero cost and are not metered."
+    },
+    {
+      "promise": "Light model tier",
+      "implementation": "Haiku-class models on OpenRouter (deepseek/deepseek-v4-flash)"
+    },
+    {
+      "promise": "Resume tailoring + ATS scoring",
+      "implementation": "Subset of backend agents available in Free plan"
+    },
+    {
+      "promise": "Community support",
+      "implementation": "User-facing promise only"
+    }
+  ],
+  "free_plan_details": {
+    "runsPerMonth": 5,
+    "modelTier": "light",
+    "spendCapUsd": 1.0,
+    "design_intent": "Loss-leader with explicit bounded costs; max exposure ~A$0.16-A$1.9/user/mo",
+    "verified_in_docs": "docs/subscription/billing-architecture.md §1.2 & §1.4 (ratified per ADR-P6-PRICING)"
+  },
+  "agent_run_gate": {
+    "gate_function": "_require_active_subscription(user_id, agent_name, system_run=False)",
+    "file": "apps/api/app/routers/agents.py",
+    "line_start": 539,
+    "line_end": 571,
+    "invocation_order": "BEFORE quota reserve, BEFORE LLM call, BEFORE AgentRun row creation",
+    "system_run_exempt_agents": ["scout", "fitScorer"],
+    "system_run_exemption_note": "Only when system_run=True AND agent in exempt set; all other agents require active paid subscription even with valid X-Aether-System-Run header",
+    "non_metered_agents": {
+      "agents": ["scout", "fitScorer", "matcher", "supervisor"],
+      "note": "These agents make zero LLM calls and do not consume plan run quotas; they pass through unmetered"
+    }
+  },
+  "design_intent_summary": {
+    "gate_enabled_by_default": true,
+    "env_var": "AETHER_REQUIRE_PAID_SUBSCRIPTION",
+    "default_value": "true",
+    "production_current_value": "true",
+    "when_false": "Reverts to freemium; Free-tier users get their 5-run quota without paywall",
+    "gate_enforcement_phase": "Phase 6 (Cluster D)",
+    "design_doc": "docs/subscription/billing-architecture.md",
+    "design_approval": "Ratified per ADR-P6-PRICING",
+    "free_tier_vision": "Bounded funnel funnel cost; max exposure capped by run count (5) + USD spend ceiling ($1/mo)"
+  },
+  "existing_admin_grant_endpoint": {
+    "exists": false,
+    "available_endpoints": [
+      "GET /admin/users — list users with plan",
+      "POST /admin/users/{user_id}/spend-cap — adjust USD spend cap only",
+      "POST /admin/users/{user_id}/suspend / unsuspend — toggle suspension"
+    ],
+    "verified_file": "apps/api/app/routers/admin.py"
+  },
+  "admin_user_current_state": {
+    "email": "admin@aether.local",
+    "user_id": "cc29a76e324fbf19f438eb8be",
+    "username": "admin",
+    "isAdmin": false,
+    "subscription": {
+      "id": "6f3839c0-7cc0-4c8f-885f-009a11105c01",
+      "planId": "free",
+      "status": "active",
+      "billingInterval": null,
+      "stripeCustomerId": null,
+      "stripeSubscriptionId": null,
+      "currentPeriodStart": null,
+      "currentPeriodEnd": null,
+      "cancelAtPeriodEnd": false,
+      "createdAt": "2026-07-16T11:37:10.116379+00:00",
+      "updatedAt": "2026-07-17T11:26:01.52178+00:00"
+    },
+    "usage_quota": {
+      "id": "0df03084-76d2-484b-a35a-9dc67dfeeaaf",
+      "planId": "free",
+      "periodStart": "2026-07-01T00:00:00+00:00",
+      "periodEnd": "2026-08-01T00:00:00+00:00",
+      "runsAllowed": 5,
+      "runsUsed": 3,
+      "spendCapUsd": 1.0,
+      "spendUsedUsd": 0.058292,
+      "createdAt": "2026-07-16T11:37:10.116379+00:00",
+      "updatedAt": "2026-07-17T11:26:01.683608+00:00"
+    },
+    "verified_timestamp": "2026-07-17T11:45:00Z"
+  },
+  "grant_mechanism": {
+    "strategy": "Minimal SQL UPDATE on two rows: Subscription.planId (free→pro) and UsageQuota (free→pro quotas)",
+    "atomicity": "Single transaction; both rows committed together or not at all",
+    "revertibility": "Byte-for-byte snapshot preserved; REVERT SQL restores exact original state including timestamps",
+    "grant_sql": {
+      "description": "Promote admin to Pro subscription",
+      "steps": [
+        {
+          "table": "Subscription",
+          "action": "UPDATE",
+          "condition": "WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'",
+          "changes": [
+            {
+              "column": "planId",
+              "from": "free",
+              "to": "pro"
+            },
+            {
+              "column": "updatedAt",
+              "from": "2026-07-17T11:26:01.52178+00:00",
+              "to": "now()"
+            }
+          ],
+          "sql_text": "UPDATE \"Subscription\" SET \"planId\" = 'pro', \"updatedAt\" = now() WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';"
+        },
+        {
+          "table": "UsageQuota",
+          "action": "UPDATE",
+          "condition": "WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'",
+          "changes": [
+            {
+              "column": "planId",
+              "from": "free",
+              "to": "pro"
+            },
+            {
+              "column": "runsAllowed",
+              "from": 5,
+              "to": 100
+            },
+            {
+              "column": "spendCapUsd",
+              "from": 1.0,
+              "to": 15.0
+            },
+            {
+              "column": "updatedAt",
+              "from": "2026-07-17T11:26:01.683608+00:00",
+              "to": "now()"
+            }
+          ],
+          "sql_text": "UPDATE \"UsageQuota\" SET \"planId\" = 'pro', \"runsAllowed\" = 100, \"spendCapUsd\" = 15.0, \"updatedAt\" = now() WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';"
+        }
+      ],
+      "complete_transaction": "BEGIN;\n\nUPDATE \"Subscription\" SET \"planId\" = 'pro', \"updatedAt\" = now() WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';\n\nUPDATE \"UsageQuota\" SET \"planId\" = 'pro', \"runsAllowed\" = 100, \"spendCapUsd\" = 15.0, \"updatedAt\" = now() WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';\n\nCOMMIT;",
+      "post_grant_verification": "SELECT 1 FROM \"Subscription\" WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be' AND \"status\" = 'active' AND \"planId\" <> 'free' LIMIT 1; -- Expected: (1 row) → entitlement granted"
+    },
+    "revert_sql": {
+      "description": "Restore admin to Free subscription (exact byte-for-byte revert)",
+      "steps": [
+        {
+          "table": "Subscription",
+          "action": "UPDATE",
+          "condition": "WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'",
+          "changes": [
+            {
+              "column": "planId",
+              "from": "pro",
+              "to": "free"
+            },
+            {
+              "column": "updatedAt",
+              "from": "now()",
+              "to": "2026-07-17T11:26:01.52178+00:00"
+            }
+          ],
+          "sql_text": "UPDATE \"Subscription\" SET \"planId\" = 'free', \"updatedAt\" = '2026-07-17 11:26:01.52178+00' WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';"
+        },
+        {
+          "table": "UsageQuota",
+          "action": "UPDATE",
+          "condition": "WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'",
+          "changes": [
+            {
+              "column": "planId",
+              "from": "pro",
+              "to": "free"
+            },
+            {
+              "column": "runsAllowed",
+              "from": 100,
+              "to": 5
+            },
+            {
+              "column": "spendCapUsd",
+              "from": 15.0,
+              "to": 1.0
+            },
+            {
+              "column": "updatedAt",
+              "from": "now()",
+              "to": "2026-07-17T11:26:01.683608+00:00"
+            }
+          ],
+          "sql_text": "UPDATE \"UsageQuota\" SET \"planId\" = 'free', \"runsAllowed\" = 5, \"spendCapUsd\" = 1.0, \"updatedAt\" = '2026-07-17 11:26:01.683608+00' WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';"
+        }
+      ],
+      "complete_transaction": "BEGIN;\n\nUPDATE \"Subscription\" SET \"planId\" = 'free', \"updatedAt\" = '2026-07-17 11:26:01.52178+00' WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';\n\nUPDATE \"UsageQuota\" SET \"planId\" = 'free', \"runsAllowed\" = 5, \"spendCapUsd\" = 1.0, \"updatedAt\" = '2026-07-17 11:26:01.683608+00' WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be';\n\nCOMMIT;",
+      "post_revert_verification": [
+        "SELECT \"planId\", \"status\" FROM \"Subscription\" WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'; -- Expected: (free | active)",
+        "SELECT \"planId\", \"runsAllowed\", \"spendCapUsd\" FROM \"UsageQuota\" WHERE \"userId\" = 'cc29a76e324fbf19f438eb8be'; -- Expected: (free | 5 | 1.0)"
+      ]
+    }
+  },
+  "findings_summary": {
+    "coverage": {
+      "backend_api_gate": "100% — every /run endpoint enforced",
+      "frontend_route_gate": "100% — /dashboard/* tree wrapped in SubscriptionGate",
+      "quota_enforcement": "100% — Free tier: 5 metered runs/month + $1 USD spend cap",
+      "design_documentation": "100% — ratified per ADR-P6-PRICING, docs/subscription/billing-architecture.md"
+    },
+    "gaps_found": "None",
+    "no_bypass_paths": [
+      "Free-tier users cannot bypass gate via /pricing (public, no auth)",
+      "Free-tier users cannot bypass gate via direct /dashboard access (gated)",
+      "No system-run exemption for metered agents (only scout/fitScorer exempt)",
+      "No read-only route exception (all /dashboard/* covered identically)"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "uat/reports/evidence/manual-verification/ENTITLEMENT-DECISION-PACKET.md",
+      "format": "markdown",
+      "content_type": "human-readable decision packet with full evidence citations"
+    },
+    {
+      "path": "uat/reports/evidence/manual-verification/ENTITLEMENT-DECISION-PACKET.json",
+      "format": "json",
+      "content_type": "machine-readable inventory and SQL specification"
+    }
+  ]
+}

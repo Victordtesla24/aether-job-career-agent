@@ -1,0 +1,14 @@
+[
+  {
+    "t": "2026-07-17T15:50:11.787Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/c7812e33948443e40b3c17be1/refine",
+    "method": "POST",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": "2026-07-17T15:50:11.788Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/emails/inbox",
+    "method": "GET",
+    "failure": "net::ERR_ABORTED"
+  }
+]

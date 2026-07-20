@@ -1,0 +1,18 @@
+=== MV-system-003 NEGATIVE CONTROL (reviewer, independent) — corrected exit-code capture ===
+started: 2026-07-18T02:54:20Z
+Pointing DATABASE_URL_TEST at the REAL production DSN (schema=aether) and invoking pytest_configure's guard.
+cmd: DATABASE_URL_TEST=<prod DSN, schema=aether> python3 -m pytest tests/test_mv_system_003_prod_truncate_guard.py -q -x
+
+Exit: REFUSING TO RUN: REFUSING TO RUN: test truncation would target schema 'aether', not 'aether_test'. See docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md. Set AETHER_ALLOW_PROD_TRUNCATE=1 to consciously override (NEVER in CI/deploy).
+
+pytest exit code: 2
+finished: 2026-07-18T02:54:20Z
+=== prod aether counts AFTER negative control (2026-07-18T02:54:30Z) ===
+User count=2 max(createdAt)=2026-07-18 00:54:18.359
+  Application=12
+  Job=8
+  StoryEntry=0
+  Resume=1
+  Subscription=7
+  ApprovalRequest=8
+unchanged vs before/after-suite snapshot => negative control performed NO destructive SQL against prod.

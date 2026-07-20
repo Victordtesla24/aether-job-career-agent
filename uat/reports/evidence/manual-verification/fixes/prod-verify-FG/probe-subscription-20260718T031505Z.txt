@@ -1,0 +1,11 @@
+HTTP/2 200 
+date: Sat, 18 Jul 2026 03:15:07 GMT
+content-type: application/json
+content-length: 256
+server: cloudflare
+access-control-allow-origin: https://5cb5f0620.abacusai.cloud
+x-envoy-upstream-service-time: 536
+cf-cache-status: DYNAMIC
+cf-ray: a1ce51eebb2de102-PDX
+
+{"plan":{"id":"free","name":"Free","modelTier":"light"},"status":"active","interval":null,"currentPeriodEnd":null,"cancelAtPeriodEnd":false,"quota":{"runsUsed":0,"runsAllowed":5,"spendUsedUsd":0.0,"spendCapUsd":1.0,"periodEnd":"2026-08-01T00:00:00+00:00"}}

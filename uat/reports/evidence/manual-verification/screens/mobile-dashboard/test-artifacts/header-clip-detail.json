@@ -1,0 +1,30 @@
+{
+  "header": {
+    "top": 0,
+    "bottom": 64,
+    "left": 0,
+    "right": 390,
+    "width": 390,
+    "height": 64
+  },
+  "h1": {
+    "top": -15,
+    "bottom": 30,
+    "left": 32,
+    "right": 160,
+    "width": 128,
+    "height": 45
+  },
+  "h1Text": "Good afternoon, Administrator",
+  "p": {
+    "top": 30,
+    "bottom": 78,
+    "left": 32,
+    "right": 160,
+    "width": 128,
+    "height": 48
+  },
+  "pText": "Fri, 17 July · last agent run 3h ago",
+  "headerComputedHeight": "64px",
+  "headerOverflow": "visible"
+}

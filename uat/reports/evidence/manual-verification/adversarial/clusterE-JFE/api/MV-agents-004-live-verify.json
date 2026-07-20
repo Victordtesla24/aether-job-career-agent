@@ -1,0 +1,9 @@
+{
+  "tested_utc": "2026-07-18T17:28:00.880587+00:00",
+  "http": 200,
+  "result": {
+    "ok": false,
+    "status": "failed",
+    "detail": "anthropic returned HTTP 401: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid authentication credentials\"},\"request_id\":\"req_011Cd9v8knaxLoFQdDWVsEEx\"}"
+  }
+}

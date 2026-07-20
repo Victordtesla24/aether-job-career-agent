@@ -1,0 +1,248 @@
+[
+  {
+    "t": "2026-07-17T16:56:04.163Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T16:56:04.470Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:04.685Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:04.696Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:05.012Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:05.980Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.204Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.220Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.519Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.524Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.535Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:06.616Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:07.114Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:11.719Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers/anthropic/verify",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T16:56:12.508Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:18.250Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/test-run",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T16:56:21.663Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/test-run",
+    "status": 200,
+    "method": "POST"
+  },
+  {
+    "t": "2026-07-17T16:56:25.259Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:25.459Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:25.459Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:25.753Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:27.543Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:27.752Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:27.810Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:28.029Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:28.080Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:28.082Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:28.155Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:28.612Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:31.327Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:31.511Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:31.538Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:31.790Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.180Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.249Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.594Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.735Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.766Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:34.797Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:35.029Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "method": "GET"
+  },
+  {
+    "t": "2026-07-17T16:56:35.095Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+    "status": 200,
+    "method": "GET"
+  }
+]

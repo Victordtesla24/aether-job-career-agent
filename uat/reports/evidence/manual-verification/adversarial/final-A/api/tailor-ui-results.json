@@ -1,0 +1,15 @@
+{
+  "jobSelected": true,
+  "tailorButtonPresent": true,
+  "progressIndicator": "shown",
+  "tailorTerminal": {
+    "errors": [
+      "NoChangesApplied: No verifiable changes could be applied — every suggested edit was unsupported by your evidence, so your résumé is unchanged and you were not charged."
+    ],
+    "rejNoteText": null,
+    "step2Present": false,
+    "noticeText": "NoChangesApplied: No verifiable changes could be applied — every suggested edit was unsupported by your evidence, so your résumé is unchanged and you were not charged.",
+    "stillProgressing": false
+  },
+  "consoleErrors": []
+}

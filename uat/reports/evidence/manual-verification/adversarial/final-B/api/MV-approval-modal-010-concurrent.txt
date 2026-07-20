@@ -1,0 +1,11 @@
+MV-approval-modal-010 CONCURRENT (8 parallel execute on approval c644c09ab43f05d5c8b5e0704) — 2026-07-18T23:06:18Z
+  req#1 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#2 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#3 -> HTTP:200 body:{"status":"executed","approval_id":"c644c09ab43f05d5c8b5e0704","type":"application_submit"}
+  req#4 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#5 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#6 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#7 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+  req#8 -> HTTP:409 body:{"detail":"Approval already executed — no action taken."}
+TOTALS: 200(executed)=1  409(no-op)=7  other=0
+EXPECT exactly ONE 200 and the rest 409, zero 5xx/other

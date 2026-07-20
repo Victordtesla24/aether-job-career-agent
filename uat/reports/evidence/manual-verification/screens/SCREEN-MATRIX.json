@@ -1,0 +1,560 @@
+[
+  {
+    "screen_id": "root",
+    "screen_name": "Root (Redirect)",
+    "wireframe_files": [],
+    "routes": [
+      "/"
+    ],
+    "endpoints": [],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: Root route; next.config.mjs redirects to /login or /dashboard based on auth. Testable: redirect behavior, auth-based routing."
+  },
+  {
+    "screen_id": "dashboard",
+    "screen_name": "Dashboard",
+    "wireframe_files": [
+      "dashboard.html"
+    ],
+    "routes": [
+      "/dashboard",
+      "/dashboard/[...slug]"
+    ],
+    "endpoints": [
+      "GET /workspaces/career-data",
+      "GET /analytics",
+      "GET /applications",
+      "GET /jobs",
+      "GET /agents"
+    ],
+    "agents": [
+      "supervisor"
+    ],
+    "coverage_gap": null,
+    "notes": "Main hub; sidebar nav + hero cards; [...slug] catch-all for subroute fallback."
+  },
+  {
+    "screen_id": "mobile-dashboard",
+    "screen_name": "Mobile Dashboard",
+    "wireframe_files": [
+      "mobile-dashboard.html"
+    ],
+    "routes": [
+      "/dashboard"
+    ],
+    "endpoints": [
+      "GET /workspaces/career-data",
+      "GET /analytics",
+      "GET /applications",
+      "GET /jobs",
+      "GET /agents"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Responsive variant; same route, adaptive layout."
+  },
+  {
+    "screen_id": "job-discovery",
+    "screen_name": "Job Discovery",
+    "wireframe_files": [
+      "job-discovery.html"
+    ],
+    "routes": [
+      "/dashboard/jobs"
+    ],
+    "endpoints": [
+      "GET /jobs",
+      "GET /jobs/{id}/insights",
+      "POST /jobs/{id}/save",
+      "POST /jobs/{id}/apply",
+      "POST /agents/scout/run",
+      "POST /agents/fit-scorer/run",
+      "GET /agents/scout/sources"
+    ],
+    "agents": [
+      "scout",
+      "matcher",
+      "fitScorer"
+    ],
+    "coverage_gap": null,
+    "notes": "Market tabs; source filter bar; 2-step apply flow; agent integration."
+  },
+  {
+    "screen_id": "analytics",
+    "screen_name": "Analytics",
+    "wireframe_files": [
+      "analytics.html"
+    ],
+    "routes": [
+      "/dashboard/analytics"
+    ],
+    "endpoints": [
+      "GET /analytics",
+      "GET /analytics/dashboard",
+      "GET /analytics/funnel",
+      "GET /analytics/agent-roi",
+      "GET /analytics/conversion",
+      "GET /analytics/ats-distribution",
+      "GET /analytics/market-pulse"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Funnel/ROI charts; market pulse; backed by agent stats."
+  },
+  {
+    "screen_id": "resume-studio",
+    "screen_name": "Resume Studio",
+    "wireframe_files": [
+      "resume-studio.html"
+    ],
+    "routes": [
+      "/dashboard/resume"
+    ],
+    "endpoints": [
+      "GET /resumes",
+      "GET /resumes/{id}",
+      "POST /resumes/upload",
+      "GET /resumes/{id}/download",
+      "GET /resumes/{id}/ats",
+      "GET /resumes/{id}/diff",
+      "POST /agents/tailor/run"
+    ],
+    "agents": [
+      "tailor"
+    ],
+    "coverage_gap": null,
+    "notes": "Multi-resume carousel; ATS parser; tailor agent approval-gated."
+  },
+  {
+    "screen_id": "story-bank",
+    "screen_name": "Story Bank",
+    "wireframe_files": [
+      "story-bank.html"
+    ],
+    "routes": [
+      "/dashboard/stories"
+    ],
+    "endpoints": [
+      "GET /stories",
+      "POST /stories",
+      "PUT /stories/{id}",
+      "DELETE /stories/{id}",
+      "POST /agents/story-extractor/run",
+      "GET /agents/stats"
+    ],
+    "agents": [
+      "storyExtractor"
+    ],
+    "coverage_gap": null,
+    "notes": "Story add/edit/delete; extraction agent autonomous."
+  },
+  {
+    "screen_id": "cover-letter-studio",
+    "screen_name": "Cover Letter Studio",
+    "wireframe_files": [
+      "cover-letter-studio.html"
+    ],
+    "routes": [
+      "/dashboard/cover-letters"
+    ],
+    "endpoints": [
+      "GET /cover-letters",
+      "GET /cover-letters/{id}",
+      "POST /cover-letters/{id}/refine",
+      "GET /cover-letters/{id}/pdf",
+      "GET /cover-letters/{id}/insights",
+      "POST /agents/cover-letter/run"
+    ],
+    "agents": [
+      "coverLetter"
+    ],
+    "coverage_gap": null,
+    "notes": "Letter browser; refine; PDF export; approval-gated."
+  },
+  {
+    "screen_id": "application-tracker",
+    "screen_name": "Application Tracker",
+    "wireframe_files": [
+      "application-tracker.html"
+    ],
+    "routes": [
+      "/dashboard/applications"
+    ],
+    "endpoints": [
+      "GET /applications",
+      "GET /applications/{id}",
+      "POST /applications/{id}/submit",
+      "GET /applications/funnel/sankey"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Application list by status; funnel chart."
+  },
+  {
+    "screen_id": "approval-modal",
+    "screen_name": "Approval Modal",
+    "wireframe_files": [
+      "approval-modal.html"
+    ],
+    "routes": [
+      "/dashboard/approvals"
+    ],
+    "endpoints": [
+      "GET /approvals",
+      "GET /approvals/{id}",
+      "POST /approvals/{id}/approve",
+      "POST /approvals/{id}/reject",
+      "POST /approvals/{id}/execute"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Approval request list; approve/reject/execute."
+  },
+  {
+    "screen_id": "mobile-approval",
+    "screen_name": "Mobile Approval",
+    "wireframe_files": [
+      "mobile-approval.html"
+    ],
+    "routes": [
+      "/dashboard/approvals"
+    ],
+    "endpoints": [
+      "GET /approvals",
+      "GET /approvals/{id}",
+      "POST /approvals/{id}/approve",
+      "POST /approvals/{id}/reject",
+      "POST /approvals/{id}/execute"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Responsive variant of approval-modal."
+  },
+  {
+    "screen_id": "interview-center",
+    "screen_name": "Interview Center",
+    "wireframe_files": [
+      "interview-center.html"
+    ],
+    "routes": [
+      "/dashboard/interviews"
+    ],
+    "endpoints": [
+      "GET /interviews",
+      "POST /interviews",
+      "GET /interviews/{id}",
+      "PATCH /interviews/{id}",
+      "POST /interviews/{id}/cancel",
+      "POST /interviews/{id}/complete",
+      "GET /workspaces/interviews/prep"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Interview scheduling; prep resources; cancel/complete."
+  },
+  {
+    "screen_id": "networking",
+    "screen_name": "Networking",
+    "wireframe_files": [
+      "networking.html"
+    ],
+    "routes": [
+      "/dashboard/networking"
+    ],
+    "endpoints": [
+      "GET /networking",
+      "GET /networking/contacts",
+      "POST /networking/contacts",
+      "GET /networking/contacts/{id}",
+      "PATCH /networking/contacts/{id}",
+      "DELETE /networking/contacts/{id}",
+      "GET /networking/outreach",
+      "POST /networking/outreach",
+      "GET /networking/outreach/{id}",
+      "PATCH /networking/outreach/{id}",
+      "DELETE /networking/outreach/{id}"
+    ],
+    "agents": [
+      "emailAgent"
+    ],
+    "coverage_gap": null,
+    "notes": "Contacts (CRM); outreach tasks; emailAgent approval-gated."
+  },
+  {
+    "screen_id": "email-center",
+    "screen_name": "Email Center",
+    "wireframe_files": [
+      "email-center.html"
+    ],
+    "routes": [
+      "/dashboard/email"
+    ],
+    "endpoints": [
+      "GET /emails",
+      "GET /emails/accounts",
+      "POST /emails/accounts/connect",
+      "GET /emails/accounts/{id}/sync-status",
+      "PATCH /emails/accounts/{id}/set-primary",
+      "DELETE /emails/accounts/{id}",
+      "GET /emails/{id}",
+      "POST /emails/draft",
+      "POST /emails/{id}/reply",
+      "GET /emails/oauth/status"
+    ],
+    "agents": [
+      "emailAgent"
+    ],
+    "coverage_gap": null,
+    "notes": "Gmail sync; thread browser; draft/reply; emailAgent approval-gated."
+  },
+  {
+    "screen_id": "settings",
+    "screen_name": "Settings",
+    "wireframe_files": [
+      "settings.html"
+    ],
+    "routes": [
+      "/dashboard/settings"
+    ],
+    "endpoints": [
+      "GET /workspaces/settings",
+      "PUT /workspaces/settings",
+      "GET /workspaces/career-data",
+      "POST /workspaces/career-data/refresh",
+      "GET /billing/entitlement",
+      "GET /billing/subscription",
+      "POST /billing/checkout",
+      "POST /billing/portal"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Profile; career data; billing info. Billing routing: /billing/* from settings UI."
+  },
+  {
+    "screen_id": "offer-comparison",
+    "screen_name": "Offer Comparison",
+    "wireframe_files": [
+      "offer-comparison.html"
+    ],
+    "routes": [
+      "/dashboard/offers"
+    ],
+    "endpoints": [
+      "GET /workspaces/offers",
+      "GET /offers"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Offer comparison table."
+  },
+  {
+    "screen_id": "agent-monitor",
+    "screen_name": "Agent Monitor",
+    "wireframe_files": [
+      "agent-monitor.html"
+    ],
+    "routes": [
+      "/dashboard/agents"
+    ],
+    "endpoints": [
+      "GET /agents",
+      "GET /agents/catalog",
+      "GET /agents/config",
+      "GET /agents/runs",
+      "GET /agents/stats",
+      "GET /agents/user/providers",
+      "POST /agents/{name}/run",
+      "POST /agents/test-run"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Agent status; catalog; config; runs; stats."
+  },
+  {
+    "screen_id": "agents",
+    "screen_name": "Agents",
+    "wireframe_files": [
+      "agents.html"
+    ],
+    "routes": [
+      "/dashboard/agents"
+    ],
+    "endpoints": [
+      "GET /agents",
+      "GET /agents/catalog",
+      "GET /agents/config",
+      "GET /agents/runs",
+      "GET /agents/stats",
+      "GET /agents/user/providers",
+      "POST /agents/{name}/run",
+      "POST /agents/test-run"
+    ],
+    "agents": [],
+    "coverage_gap": null,
+    "notes": "Duplicate of agent-monitor (design evolution)."
+  },
+  {
+    "screen_id": "login",
+    "screen_name": "Login",
+    "wireframe_files": [],
+    "routes": [
+      "/login"
+    ],
+    "endpoints": [
+      "POST /auth/login",
+      "GET /auth/me"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; CRITICAL PATH. Testable: form validation, error states, rate limiting, token storage, redirect."
+  },
+  {
+    "screen_id": "signup",
+    "screen_name": "Signup",
+    "wireframe_files": [],
+    "routes": [
+      "/signup"
+    ],
+    "endpoints": [
+      "POST /auth/register",
+      "POST /auth/login"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; CRITICAL PATH. Testable: registration, validation, email, redirect."
+  },
+  {
+    "screen_id": "pricing",
+    "screen_name": "Pricing",
+    "wireframe_files": [],
+    "routes": [
+      "/pricing"
+    ],
+    "endpoints": [
+      "GET /billing/plans",
+      "POST /billing/checkout"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; REVENUE-CRITICAL. Testable: plan load, interval switching, GST pricing, subscribe (unauthenticated)."
+  },
+  {
+    "screen_id": "privacy-policy",
+    "screen_name": "Privacy Policy",
+    "wireframe_files": [],
+    "routes": [
+      "/privacy-policy"
+    ],
+    "endpoints": [],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; static legal page. Testable: page renders, links."
+  },
+  {
+    "screen_id": "terms",
+    "screen_name": "Terms of Service",
+    "wireframe_files": [],
+    "routes": [
+      "/terms"
+    ],
+    "endpoints": [],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; static legal page. Testable: page renders, links."
+  },
+  {
+    "screen_id": "admin-root",
+    "screen_name": "Admin Dashboard",
+    "wireframe_files": [],
+    "routes": [
+      "/admin"
+    ],
+    "endpoints": [
+      "GET /admin/health",
+      "GET /admin/users",
+      "GET /admin/spend",
+      "GET /admin/settings",
+      "GET /admin/audit-log"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; /admin/page.tsx. Operator-admin HUMAN-GATED (governance/human-gated-admin.md). Testable: unauthenticated (401/redirect), error copy. Authenticated testing requires operator credential."
+  },
+  {
+    "screen_id": "admin-health",
+    "screen_name": "Admin Health",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/health"
+    ],
+    "endpoints": [
+      "GET /admin/health"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; service/agent/cron status. Operator-gated; testable: unauthenticated."
+  },
+  {
+    "screen_id": "admin-users",
+    "screen_name": "Admin Users",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/users",
+      "/admin/users/[id]"
+    ],
+    "endpoints": [
+      "GET /admin/users",
+      "GET /admin/users/{user_id}",
+      "POST /admin/users/{user_id}/spend-cap",
+      "POST /admin/users/{user_id}/suspend",
+      "POST /admin/users/{user_id}/unsuspend"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; dynamic routes. User list (plan, spend), detail, mutations. Operator-gated; testable: unauthenticated."
+  },
+  {
+    "screen_id": "admin-settings",
+    "screen_name": "Admin Settings",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/settings"
+    ],
+    "endpoints": [
+      "GET /admin/settings",
+      "POST /admin/settings"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; global configuration. Operator-gated; testable: unauthenticated."
+  },
+  {
+    "screen_id": "admin-audit-log",
+    "screen_name": "Admin Audit Log",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/audit-log"
+    ],
+    "endpoints": [
+      "GET /admin/audit-log"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; immutable audit log. Operator-gated; testable: unauthenticated."
+  },
+  {
+    "screen_id": "admin-spend",
+    "screen_name": "Admin Spend",
+    "wireframe_files": [],
+    "routes": [
+      "/admin/spend"
+    ],
+    "endpoints": [
+      "GET /admin/spend"
+    ],
+    "agents": [],
+    "coverage_gap": "route-without-wireframe",
+    "notes": "FINDING: No wireframe; spend overview (USD). Operator-gated; testable: unauthenticated."
+  }
+]

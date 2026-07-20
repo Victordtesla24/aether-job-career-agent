@@ -1,0 +1,62 @@
+############ RUN2: UNAUTHENTICATED ############
+--- GET /admin/health (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/users (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/users/test-fake-id-mv-admin-run2 (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/spend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/settings (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- GET /admin/audit-log (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/spend-cap (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/suspend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/unsuspend (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+--- POST /admin/settings (unauth) ---
+HTTP_STATUS:401
+{"detail":"Not authenticated"}
+############ RUN2: AUTHENTICATED AS DEMOTED ############
+--- GET /admin/health (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/users (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/users/test-fake-id-mv-admin-run2 (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/spend (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/settings (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- GET /admin/audit-log (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/spend-cap (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/suspend (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/users/test-fake-id-mv-admin-run2/unsuspend (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}
+--- POST /admin/settings (demoted) ---
+HTTP_STATUS:403
+{"detail":"Admin privileges required"}

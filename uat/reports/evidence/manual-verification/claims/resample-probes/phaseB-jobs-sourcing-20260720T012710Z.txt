@@ -1,0 +1,14 @@
+=== CLM-056/026/071/080/081/084/085 GET /jobs sourcing analysis (Pro account) ===
+captured_utc: 2026-07-20T01:27:10Z
+-- AETHER_ASYNC_GENERATION env (CLM-003) --
+AETHER_ASYNC_GENERATION=true
+AETHER_ASYNC_GENERATION=true
+
+-- GET /jobs : count, group by source, freshness, Seek check, dup check --
+total jobs: 28
+by source: {'remoteok': 1, 'remotive': 1, 'ashby': 6, 'lever': 5, 'greenhouse': 15}
+sources >=5: {'ashby': 6, 'lever': 5, 'greenhouse': 15}
+seek-origin rows: 0
+duplicate (title,company) groups: 1
+posting age days: min 2 max 26 n 28
+SAMPLE_JOB_ID: c612473570eecbae250920a60

@@ -1,0 +1,113 @@
+=== curl -sI unauthenticated GET / ===
+HTTP/2 307 
+date: Fri, 17 Jul 2026 13:37:31 GMT
+server: cloudflare
+location: /dashboard
+x-envoy-upstream-service-time: 3
+cf-cache-status: DYNAMIC
+cf-ray: a1c9a44a2de1fef1-PDX
+
+
+=== follow redirects -L -v ===
+* Host 5cb5f0620.abacusai.cloud:443 was resolved.
+* IPv6: 2606:4700::6812:15b7, 2606:4700::6812:14b7
+* IPv4: 104.18.21.183, 104.18.20.183
+*   Trying 104.18.21.183:443...
+* Connected to 5cb5f0620.abacusai.cloud (104.18.21.183) port 443
+* ALPN: curl offers h2,http/1.1
+} [5 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+} [512 bytes data]
+*  CAfile: /etc/ssl/certs/ca-certificates.crt
+*  CApath: /etc/ssl/certs
+{ [5 bytes data]
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+{ [19 bytes data]
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+{ [3433 bytes data]
+* TLSv1.3 (IN), TLS handshake, CERT verify (15):
+{ [80 bytes data]
+* TLSv1.3 (IN), TLS handshake, Finished (20):
+{ [52 bytes data]
+* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
+} [1 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Finished (20):
+} [52 bytes data]
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519 / id-ecPublicKey
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=abacusai.cloud
+*  start date: Jul  3 22:44:34 2026 GMT
+*  expire date: Oct  1 22:44:33 2026 GMT
+*  subjectAltName: host "5cb5f0620.abacusai.cloud" matched cert's "*.abacusai.cloud"
+*  issuer: C=US; O=Let's Encrypt; CN=YE2
+*  SSL certificate verify ok.
+*   Certificate level 0: Public key type EC/prime256v1 (256/128 Bits/secBits), signed using ecdsa-with-SHA384
+*   Certificate level 1: Public key type EC/secp384r1 (384/192 Bits/secBits), signed using ecdsa-with-SHA384
+*   Certificate level 2: Public key type EC/secp384r1 (384/192 Bits/secBits), signed using ecdsa-with-SHA384
+*   Certificate level 3: Public key type EC/secp384r1 (384/192 Bits/secBits), signed using ecdsa-with-SHA384
+} [5 bytes data]
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://5cb5f0620.abacusai.cloud/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: 5cb5f0620.abacusai.cloud]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.5.0]
+* [HTTP/2] [1] [accept: */*]
+} [5 bytes data]
+> GET / HTTP/2
+> Host: 5cb5f0620.abacusai.cloud
+> User-Agent: curl/8.5.0
+> Accept: */*
+> 
+{ [5 bytes data]
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+{ [230 bytes data]
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+{ [230 bytes data]
+* old SSL session ID is stale, removing
+{ [5 bytes data]
+< HTTP/2 307 
+< date: Fri, 17 Jul 2026 13:37:31 GMT
+< server: cloudflare
+< location: /dashboard
+< x-envoy-upstream-service-time: 1
+< cf-cache-status: DYNAMIC
+< cf-ray: a1c9a44a9de6ff15-PDX
+< 
+* Ignoring the response-body
+* Connection #0 to host 5cb5f0620.abacusai.cloud left intact
+* Issue another request to this URL: 'https://5cb5f0620.abacusai.cloud/dashboard'
+* Found bundle for host: 0x55c9e7150940 [can multiplex]
+* Re-using existing connection with host 5cb5f0620.abacusai.cloud
+* [HTTP/2] [3] OPENED stream for https://5cb5f0620.abacusai.cloud/dashboard
+* [HTTP/2] [3] [:method: GET]
+* [HTTP/2] [3] [:scheme: https]
+* [HTTP/2] [3] [:authority: 5cb5f0620.abacusai.cloud]
+* [HTTP/2] [3] [:path: /dashboard]
+* [HTTP/2] [3] [user-agent: curl/8.5.0]
+* [HTTP/2] [3] [accept: */*]
+} [5 bytes data]
+> GET /dashboard HTTP/2
+> Host: 5cb5f0620.abacusai.cloud
+> User-Agent: curl/8.5.0
+> Accept: */*
+> 
+{ [5 bytes data]
+< HTTP/2 200 
+< date: Fri, 17 Jul 2026 13:37:31 GMT
+< content-type: text/html; charset=utf-8
+< server: cloudflare
+< vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Accept-Encoding
+< x-nextjs-cache: HIT
+< x-powered-by: Next.js
+< cache-control: s-maxage=31536000, stale-while-revalidate
+< x-envoy-upstream-service-time: 2
+< cf-cache-status: DYNAMIC
+< cf-ray: a1c9a44aae01ff15-PDX
+< 
+{ [7559 bytes data]
+* Connection #0 to host 5cb5f0620.abacusai.cloud left intact

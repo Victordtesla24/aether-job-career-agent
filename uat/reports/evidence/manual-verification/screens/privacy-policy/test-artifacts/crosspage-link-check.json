@@ -1,0 +1,39 @@
+{
+  "login": {
+    "route": "/login",
+    "hasPrivacy": false,
+    "hasTerms": false,
+    "allLinks": [
+      {
+        "href": "/signup",
+        "text": "Create account"
+      }
+    ]
+  },
+  "signup": {
+    "route": "/signup",
+    "hasPrivacy": false,
+    "hasTerms": false,
+    "allLinks": [
+      {
+        "href": "/login",
+        "text": "Sign in"
+      }
+    ]
+  },
+  "pricing": {
+    "route": "/pricing",
+    "hasPrivacy": false,
+    "hasTerms": false,
+    "allLinks": [
+      {
+        "href": "/signup",
+        "text": "Get started free"
+      },
+      {
+        "href": "/login",
+        "text": "Sign in"
+      }
+    ]
+  }
+}

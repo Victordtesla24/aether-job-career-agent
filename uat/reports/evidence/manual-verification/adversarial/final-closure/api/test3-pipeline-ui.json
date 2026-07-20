@@ -1,0 +1,13 @@
+{
+  "started_utc": "2026-07-20T06:43:08.885Z",
+  "account": "mv-qa-fr-69d1e2-nr@example.com",
+  "run_all_present": true,
+  "pipeline_notice": {
+    "present": true,
+    "text": "Pipeline complete — no jobs matched yet. Run Scout with a different query, or browse what was discovered: open Jobs →",
+    "kind": "success"
+  },
+  "consoleErrors": [],
+  "pageErrors": [],
+  "ended_utc": "2026-07-20T06:43:41.614Z"
+}

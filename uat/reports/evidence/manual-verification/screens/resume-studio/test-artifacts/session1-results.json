@@ -1,0 +1,122 @@
+{
+  "session": 1,
+  "start": "2026-07-17T15:44:53.850Z",
+  "steps": [
+    {
+      "step": "unauth_access",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+      "httpStatus": 200,
+      "consoleMsgs": [],
+      "failedReqs": [],
+      "screenshot": "00-unauth-access.png"
+    },
+    {
+      "step": "login",
+      "tokenPrefix": "eyJhbGciOiJI",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "load_resume_studio",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+      "elementCount": 66
+    },
+    {
+      "step": "job_select_inspect",
+      "optionsCount": 34,
+      "tailorBtnDisabledWithNoJob": true
+    },
+    {
+      "step": "deep_link_preselect",
+      "selectedVal": "ce16baf9bd028f7dfdbad024a",
+      "expected": "ce16baf9bd028f7dfdbad024a",
+      "match": true
+    },
+    {
+      "step": "download_btn_before_select",
+      "exists": false
+    },
+    {
+      "step": "select_first_version",
+      "atsVisible": true,
+      "atsOverall": "41.6"
+    },
+    {
+      "step": "run_tailor",
+      "btnDisabledAtClick": false,
+      "completed": true,
+      "runDurationMs": 60958,
+      "errorBanner": null,
+      "networkEventsCount": 19
+    },
+    {
+      "step": "conversion_panel",
+      "conversionVisible": true,
+      "beforeAfterText": "Before: 43.26% → After: 43.26%",
+      "liftText": "Estimated interview conversion improvement+0.0%Like-for-like ATS delta (shared context) × population baseline (2.5%) This is an illustrative estimate, not a measured outcome."
+    },
+    {
+      "step": "metric_tooltip",
+      "tooltipRevealed": true,
+      "tooltipText": "Like-for-like ATS delta (shared context) × population baseline (2.5%) This is an illustrative estimate, not a measured outcome."
+    },
+    {
+      "step": "quota_check",
+      "before": {
+        "runsUsed": 4,
+        "runsAllowed": 100,
+        "spendUsedUsd": 0.059732,
+        "spendCapUsd": 15,
+        "periodEnd": "2026-08-01T00:00:00+00:00"
+      },
+      "after": {
+        "runsUsed": 6,
+        "runsAllowed": 100,
+        "spendUsedUsd": 0.06039,
+        "spendCapUsd": 15,
+        "periodEnd": "2026-08-01T00:00:00+00:00"
+      }
+    },
+    {
+      "step": "reload_persistence",
+      "firstThreeVersions": [
+        "v357/17/2026Tailored — Senior Data Center Capacity Delivery Manager, AUS @ Anthropic",
+        "v347/17/2026Tailored — Product Manager, Credit Automation @ Plenti",
+        "v337/17/2026Tailored — Senior Product Manager, Strategic Origination Platforms @ Plenti"
+      ]
+    },
+    {
+      "step": "newest_version_detail",
+      "newestVersionText": "v357/17/2026Tailored — Senior Data Center Capacity Delivery Manager, AUS @ Anthropic",
+      "atsAfterTailor": "43.3",
+      "diffVisible": true,
+      "diffChangesCount": 1
+    },
+    {
+      "step": "download",
+      "downloadResult": {
+        "success": true,
+        "sizeBytes": 189194,
+        "isPdf": true,
+        "downloadNote": "Downloaded — format-preserving PDF saved."
+      }
+    },
+    {
+      "step": "hygiene_summary",
+      "consoleErrorsCount": 0,
+      "apiFailed5xxCount": 0,
+      "failedRequestsCount": 0,
+      "consoleErrors": [],
+      "apiFailed": []
+    },
+    {
+      "step": "back_forward",
+      "urlAfterBack": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+      "urlAfterForward": "https://5cb5f0620.abacusai.cloud/dashboard/resume?job=ce16baf9bd028f7dfdbad024a"
+    },
+    {
+      "step": "edge_no_job_selected",
+      "disabledNoJob": true
+    }
+  ],
+  "end": "2026-07-17T15:46:26.859Z"
+}

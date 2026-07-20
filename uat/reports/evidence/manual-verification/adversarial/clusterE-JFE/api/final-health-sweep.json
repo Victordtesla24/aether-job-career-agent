@@ -1,0 +1,38 @@
+{
+  "/dashboard": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  },
+  "/dashboard/interviews": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  },
+  "/dashboard/agents": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  },
+  "/dashboard/resume": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  },
+  "/dashboard/settings": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  },
+  "/dashboard/approvals": {
+    "console_errors": [],
+    "page_errors": [],
+    "5xx": [],
+    "4xx": []
+  }
+}

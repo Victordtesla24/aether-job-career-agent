@@ -1,0 +1,27 @@
+{
+  "before": {
+    "approval": "NOT_FOUND",
+    "application": "NOT_FOUND",
+    "digest": "false"
+  },
+  "allTestIds": [
+    "settings-page",
+    "save-settings-btn",
+    "settings-nav-profile",
+    "settings-nav-resume",
+    "settings-nav-portfolio",
+    "settings-nav-notifications",
+    "settings-nav-agents",
+    "settings-nav-integrations",
+    "settings-nav-privacy",
+    "settings-notifications",
+    "toggle-notif-approvals",
+    "toggle-notif-apps",
+    "toggle-notif-digest"
+  ],
+  "afterClick1": "false",
+  "afterClick2": "false",
+  "approvalBefore": null,
+  "approvalAfter": null,
+  "consoleErrors": []
+}

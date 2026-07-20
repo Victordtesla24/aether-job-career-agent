@@ -1,0 +1,70 @@
+{
+  "MV-email-center-004": {
+    "message_cards": 12,
+    "scrollHeight": 1402,
+    "clientHeight": 630,
+    "scrollable": true,
+    "movedTo": 772,
+    "before": 0,
+    "at": "2026-07-18T09:25:12.649Z"
+  },
+  "MV-email-center-001-badges": {
+    "badges_sample": [
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—"
+    ],
+    "any_literal_zero": false,
+    "all_em_dash": true,
+    "at": "2026-07-18T09:25:12.802Z"
+  },
+  "MV-email-center-007": {
+    "link_present_for_named_sender": true,
+    "href": "https://www.linkedin.com/search/results/people/?keywords=Priya%20Sharma%20Northwind%20Talent",
+    "is_people_search": true,
+    "not_bare_linkedin": true,
+    "at": "2026-07-18T09:25:14.109Z"
+  },
+  "MV-email-center-001-preanalyze": {
+    "ai_intelligence_empty_shown": true,
+    "detail_score_badge_before": "—",
+    "empty_copy": "AI INTELLIGENCE\n\nNot analyzed yet — run the AI email agent on this thread to see a real recruiter-engagement score, breakdown and summary.\n\nAnalyze this thread",
+    "at": "2026-07-18T09:25:14.121Z"
+  },
+  "MV-email-center-001-analyze": {
+    "outcome": "real-intelligence",
+    "real_score_header": "AI Intelligence · score 85",
+    "breakdown_bars": 6,
+    "honest_error": null,
+    "at": "2026-07-18T09:26:08.502Z"
+  },
+  "MV-email-center-002-draft": {
+    "outcome": "draft-generated",
+    "draft_len": 305,
+    "draft_preview": "Thank you for reaching out. Your Senior Backend Engineer role aligns with my experience in Python and building high-throughput services, suc",
+    "draft_error": null,
+    "at": "2026-07-18T09:26:57.028Z"
+  },
+  "MV-email-center-002-sendgate": {
+    "fake_sent_shown": false,
+    "sent_notice": null,
+    "honest_send_error": "No email provider connected — connect your Gmail account to send. No email has been sent.",
+    "error_says_not_sent": true,
+    "error_says_connect_gmail": true,
+    "at": "2026-07-18T09:27:30.261Z"
+  },
+  "MV-email-center-007-unnamed": {
+    "linkedin_link_count_for_unnamed": 0,
+    "detail_from": "Unknown <> · 2026-07-18",
+    "at": "2026-07-18T09:27:31.275Z"
+  }
+}

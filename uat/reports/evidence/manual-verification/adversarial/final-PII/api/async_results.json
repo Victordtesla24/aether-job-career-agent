@@ -1,0 +1,187 @@
+{
+  "refine_job1": {
+    "status": 200,
+    "try": 0,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "canva",
+        "rust",
+        "kafka",
+        "scylladb",
+        "clickhouse",
+        "redpanda",
+        "protocol buffers",
+        "grpc",
+        "tokio"
+      ],
+      "LEAK": false
+    },
+    "len": 1207,
+    "text_head": "20 July 2026\n\nHiring Team\nRedpanda Data\nRe: Staff Streaming Platform Engineer\n\nDear Hiring Team at Redpanda Data,\n\nMy background in end-to-end delivery leadership is a direct match for the Staff Streaming Platform Engineer role at Redpanda Data.\n\nMy background in Rust and Kafka aligns directly with the Staff Streaming Platform Engineer role. I rearchitected the Jira activity-stream ingestion service in Rust with Tokio, cutting p99 latency from 380ms to 42ms on a 4 billion event/day Kafka firehose. I also introduced Redpanda at Canva to replace a legacy queue, halving broker fleet size. Additio"
+  },
+  "email_thread": {
+    "create_status": 201,
+    "thread_id": "ce6f5538b74e2717e051030c2"
+  },
+  "email_draft_reply": {
+    "status": 200,
+    "try": 0,
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "atlassian",
+        "rust",
+        "kafka",
+        "tokio"
+      ],
+      "LEAK": false
+    },
+    "keys": [
+      "mode",
+      "connected",
+      "degraded",
+      "message",
+      "synced",
+      "triaged",
+      "categories",
+      "draft",
+      "thread_id",
+      "insights",
+      "labels_applied",
+      "approval_id",
+      "approval_status",
+      "flagged",
+      "duration_ms",
+      "approvalRequired",
+      "billingAudit",
+      "model",
+      "tokensIn",
+      "tokensOut",
+      "costUsd",
+      "run_id"
+    ],
+    "text_head": "Hi, thank you for reaching out. Based on the resume, I have extensive Kafka experience, including rearchitecting a high-throughput ingestion service in Rust with Tokio to handle a 4 billion event/day Kafka firehose at Atlassian. I also hold a Confluent Certified Developer for Apache Kafka certification. I am open to discussing the Staff Rust role further."
+  },
+  "messy_jd": {
+    "status": "completed",
+    "try": 0,
+    "letter_id": "c8d5f818a4ffdac28a8683d6c",
+    "keywords": {
+      "covered": 5,
+      "total": 10,
+      "items": [
+        {
+          "keyword": "gRPC",
+          "covered": true
+        },
+        {
+          "keyword": "Kafka",
+          "covered": true
+        },
+        {
+          "keyword": "Rust",
+          "covered": true
+        },
+        {
+          "keyword": "reliability",
+          "covered": true
+        },
+        {
+          "keyword": "distributed",
+          "covered": true
+        },
+        {
+          "keyword": "EngineerLocation",
+          "covered": false
+        },
+        {
+          "keyword": "AustraliaApply",
+          "covered": false
+        },
+        {
+          "keyword": "ResponsibilitiesBuild",
+          "covered": false
+        },
+        {
+          "keyword": "RequirementsExperience",
+          "covered": false
+        },
+        {
+          "keyword": "EmployerShare",
+          "covered": false
+        }
+      ]
+    },
+    "letter_scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [
+        "atlassian",
+        "canva",
+        "rust",
+        "kafka",
+        "elixir",
+        "erlang",
+        "scylladb",
+        "protocol buffers",
+        "grpc",
+        "tokio"
+      ],
+      "LEAK": false
+    }
+  },
+  "B_cover_letter": {
+    "post_status": 202,
+    "bg_status": "failed",
+    "error": "MissingResumeError: Add your resume before generating a cover letter.",
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    }
+  },
+  "B_tailor": {
+    "post_status": 202,
+    "bg_status": "failed",
+    "error": "MissingResumeError: Add your resume before tailoring or generating an application.",
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    }
+  },
+  "noop_tailor": {
+    "status": "completed",
+    "try": 0,
+    "job": "c6480e3de973fc0f378972429",
+    "result": {
+      "changes": 0,
+      "message": "No verifiable changes could be applied \u2014 every suggested edit was unsupported by your evidence, so your r\u00e9sum\u00e9 is unchanged and you were not charged.",
+      "rejected": [],
+      "resume_id": null,
+      "approvalRequired": false,
+      "noChangesApplied": true,
+      "conversionMetrics": null
+    },
+    "error": "",
+    "bg_not_failed": true,
+    "message": "No verifiable changes could be applied \u2014 every suggested edit was unsupported by your evidence, so your r\u00e9sum\u00e9 is unchanged and you were not charged.",
+    "scan": {
+      "operator_identity_hits": [],
+      "operator_wordbound_hits": [],
+      "operator_skill_hits": [],
+      "priya_hits": [],
+      "LEAK": false
+    }
+  }
+}

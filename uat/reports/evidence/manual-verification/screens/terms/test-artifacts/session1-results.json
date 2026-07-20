@@ -1,0 +1,109 @@
+{
+  "session": 1,
+  "ts_start": "2026-07-17T13:39:33.631Z",
+  "steps": [
+    {
+      "step": "A-unauth-load",
+      "url": "https://5cb5f0620.abacusai.cloud/terms",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/terms",
+      "httpStatus": 200,
+      "title": "Terms & Conditions · Aether Career Agent",
+      "bodyTextLength": 7840,
+      "containsLorem": false,
+      "links": [
+        {
+          "href": "/dashboard",
+          "text": "AetherCareer Agent"
+        },
+        {
+          "href": "/dashboard",
+          "text": "← Back to Dashboard"
+        }
+      ],
+      "consoleMsgs": [],
+      "failedRequests": [],
+      "networkStatusesNon2xx": []
+    },
+    {
+      "step": "B-mobile-390x844",
+      "httpStatus": 200,
+      "consoleMsgs": []
+    },
+    {
+      "step": "C-click-every-link",
+      "linkResults": [
+        {
+          "href": "/dashboard",
+          "full": "https://5cb5f0620.abacusai.cloud/dashboard",
+          "status": 200,
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+        },
+        {
+          "href": "/dashboard",
+          "full": "https://5cb5f0620.abacusai.cloud/dashboard",
+          "status": 200,
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+        }
+      ]
+    },
+    {
+      "step": "D-back-forward",
+      "backLinkExists": true,
+      "afterClickUrl": "https://5cb5f0620.abacusai.cloud/terms",
+      "afterBackUrl": "https://5cb5f0620.abacusai.cloud/terms",
+      "afterForwardUrl": "https://5cb5f0620.abacusai.cloud/login"
+    },
+    {
+      "step": "E-cross-ref-public-pages",
+      "crossRefResults": [
+        {
+          "route": "/",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+          "hasTermsLink": false,
+          "hasPrivacyLink": false,
+          "allLinks": [
+            "/signup"
+          ]
+        },
+        {
+          "route": "/login",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/login",
+          "hasTermsLink": false,
+          "hasPrivacyLink": false,
+          "allLinks": [
+            "/signup"
+          ]
+        },
+        {
+          "route": "/signup",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/signup",
+          "hasTermsLink": false,
+          "hasPrivacyLink": false,
+          "allLinks": [
+            "/login"
+          ]
+        },
+        {
+          "route": "/pricing",
+          "finalUrl": "https://5cb5f0620.abacusai.cloud/pricing",
+          "hasTermsLink": false,
+          "hasPrivacyLink": false,
+          "allLinks": [
+            "/signup",
+            "/login"
+          ]
+        }
+      ]
+    },
+    {
+      "step": "F-authenticated-access",
+      "tokenPresent": true,
+      "tokenPrefix": "eyJhbGci",
+      "dashUrlAfterLogin": "https://5cb5f0620.abacusai.cloud/dashboard",
+      "authTermsStatus": 200,
+      "authTermsFinalUrl": "https://5cb5f0620.abacusai.cloud/terms",
+      "consoleMsgs": []
+    }
+  ],
+  "ts_end": "2026-07-17T13:39:49.465Z"
+}

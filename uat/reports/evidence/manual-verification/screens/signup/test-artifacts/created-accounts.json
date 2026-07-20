@@ -1,0 +1,25 @@
+[
+  {
+    "seq": 1,
+    "email": "mv-signup-xofzhxs6@mv-signup-test.dev",
+    "password": "MvSignup1pass",
+    "name_submitted": "MV Signup <script>alert(1)</script> 日本語🎉",
+    "created_ts_utc": "2026-07-17T13:40:25Z",
+    "created_via": "POST /api/auth/register (Playwright, real browser session, session1)",
+    "purpose": "Primary registration/validation-matrix account: success flow, dashboard/plan copy, duplicate-email + rate-limit probing, explicit login verification, XSS/unicode name persistence.",
+    "user_id_observed": "cf1b71b09cc8d21ee2bde1225",
+    "register_rate_limit_bucket_status": "EXHAUSTED as of 2026-07-17T13:41:50Z (3 attempts consumed: 1 success + 2 duplicate-409; 4th attempt returned 429, Retry-After ~3515s). Confirmed still blocked via a second curl probe and a second fresh Playwright session.",
+    "disposal_note": "Disposable test credential on production; not a real person. Orchestrator/operator to adjudicate cleanup at end of MV run."
+  },
+  {
+    "seq": 2,
+    "email": "mv-signup-nmgo8847@mv-signup-test.dev",
+    "password_note": "91-character ASCII password ('x' * 90 + '1') used deliberately to probe bcrypt's 72-byte truncation behavior. Full password value not reproduced here verbatim (repeated char + 1 digit) - trivially reconstructable, not a meaningful secret, but omitted per 'no full secrets' evidence rule. See TESTING-OUTCOME-REPORT.md finding MV-signup-003 for full methodology.",
+    "name_submitted": "MV Signup Verify2",
+    "created_ts_utc": "2026-07-17T13:43:35Z",
+    "created_via": "POST /api/auth/register (Playwright, real browser session, session2 - fresh context)",
+    "purpose": "Fresh-session (verify-twice) reproduction of successful registration/auto-login/dashboard flow, plus bcrypt 72-byte password-truncation security probe (MV-signup-003).",
+    "register_rate_limit_bucket_status": "1 of 3 attempts consumed (registration succeeded on first attempt); not exhausted.",
+    "disposal_note": "Disposable test credential on production; not a real person. Orchestrator/operator to adjudicate cleanup at end of MV run."
+  }
+]

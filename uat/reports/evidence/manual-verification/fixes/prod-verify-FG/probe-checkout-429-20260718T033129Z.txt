@@ -1,0 +1,15 @@
+attempt 1 -> HTTP 400 
+attempt 2 -> HTTP 429 retry-after: 2618
+attempt 3 -> HTTP 429 retry-after: 2618
+attempt 4 -> HTTP 429 retry-after: 2618
+attempt 5 -> HTTP 429 retry-after: 2618
+attempt 6 -> HTTP 429 retry-after: 2617
+attempt 7 -> HTTP 429 retry-after: 2617
+attempt 8 -> HTTP 429 retry-after: 2617
+attempt 9 -> HTTP 429 retry-after: 2617
+attempt 10 -> HTTP 429 retry-after: 2617
+attempt 11 -> HTTP 429 retry-after: 2617
+attempt 12 -> HTTP 429 retry-after: 2616
+attempt 13 -> HTTP 429 retry-after: 2616
+attempt 14 -> HTTP 429 retry-after: 2616
+attempt 15 -> HTTP 429 retry-after: 2616

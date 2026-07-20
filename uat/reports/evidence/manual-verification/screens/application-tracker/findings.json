@@ -1,0 +1,115 @@
+[
+  {
+    "id": "MV-application-tracker-001",
+    "screen": "application-tracker",
+    "severity": "BLOCKER",
+    "category": "defect",
+    "summary": "Application detail panel renders cover-letter content for real applications (Deputy, Stripe) that is byte-for-byte identical to checked-in LLM test fixtures (apps/api/tests/fixtures/llm/cover_letter/default.json and retry.json), including a fabricated, generic achievement claim ('cut evidence effort from roughly 3 hours to about 15 minutes per scenario') repeated verbatim across two unrelated job applications for different companies/roles.",
+    "reproduction": [
+      "1. Log in as admin/admin123 at https://5cb5f0620.abacusai.cloud/login",
+      "2. Navigate to /dashboard/applications",
+      "3. Click the 'GRC Program Manager @ Deputy' card (status: submitted) to open the detail panel",
+      "4. Read the 'Cover letter' section body paragraph: 'My recent work centres on owning sprint cadence, PI Planning, capacity management...cut evidence effort from roughly 3 hours to about 15 minutes per scenario...'",
+      "5. Diff this text against apps/api/tests/fixtures/llm/cover_letter/default.json -> content.body in the repo: byte-identical",
+      "6. Close panel, click the 'Program Manager, Intake & Portfolio Management @ Stripe' card (status: draft)",
+      "7. Read its Cover letter body: 'My experience spans end-to-end delivery leadership...cut evidence effort from roughly 3 hours to about 15 minutes per scenario...'",
+      "8. Diff against apps/api/tests/fixtures/llm/cover_letter/retry.json -> content.body in the repo: byte-identical",
+      "9. Repeated in a second, fresh browser session (session2) with identical byte-for-byte results"
+    ],
+    "expected": "Cover letters shown to a paying user should be genuinely generated for their specific resume + the specific job description (per app's own 'fabrication-guarded cover letter' design intent in apps/api/app/routers/agents.py), never checked-in unit-test fixture boilerplate.",
+    "observed": "2 of 6 applications present in the account (Deputy, Stripe) show coverLetter text that is a verbatim, character-for-character match to apps/api/tests/fixtures/llm/cover_letter/default.json and retry.json respectively -- test-only LLM record/replay fixtures per apps/api/app/services/llm_client.py's own docstring ('Fixtures are served ONLY in replay mode... never served as if it were live output'). The other 4 applications (openai, replit, InterEx, and the tester's own freshly-created ones) contain unique, job-specific text, confirming most generation in this environment is live/real -- these 2 rows are an isolated, reproducible anomaly, not universal fixture leakage.",
+    "evidence": [
+      "test-artifacts/session1-17-detail-deputy-fixture-check.png",
+      "test-artifacts/session1-18-detail-stripe-fixture-check.png",
+      "test-artifacts/session2-03-detail-deputy-fixture-check-repro.png",
+      "test-artifacts/session2-04-detail-stripe-fixture-check-repro.png",
+      "test-artifacts/api-evidence-11-fixture-content-match-proof.txt",
+      "test-artifacts/api-evidence-09-applications-snapshot.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null,
+    "notes": "ROOT CAUSE UNCERTAIN -- flagged as BLOCKER because the observable, user-facing fact (fabricated/canned content reachable and displayed to a paying user on this screen) is what matters for MV adjudication, per the prohibition on placeholder/mock content reachable by users. Two plausible explanations, NOT distinguished by this tester (out of application-tracker's scope to root-cause the cover-letter agent -- that belongs to cover-letter-studio): (a) a live code path intermittently/previously served AETHER_LLM_MODE=replay fixture content into production Application rows (would be an ongoing defect -- verify AETHER_LLM_MODE in the runbook/prod env), or (b) these 2 rows are stale test-seed artifacts left over from earlier phases of this same shared admin account (createdAt 2026-07-14 and 2026-07-16, both predate this MV run) that were never purged, and current live generation is unaffected (2 fresh live-agent attempts by this tester in this session both returned an honest 503 'LLM backend unavailable' rather than silently falling back to a fixture -- see MV-application-tracker-003 -- which is evidence AGAINST an ongoing fixture-leak bug and FOR the stale-data explanation). Either way, the DATA is live in production today and visible to any user of this screen. Escalating to orchestrator to root-cause and to decide whether to purge the 2 contaminated rows (this tester did not create them and per protocol never modifies data it did not create)."
+  },
+  {
+    "id": "MV-application-tracker-002",
+    "screen": "application-tracker",
+    "severity": "MEDIUM",
+    "category": "wiring",
+    "summary": "The 'Needs approval' filter (client-side heuristic: card.app.status === 'draft') and the pending-approvals banner (server count from GET /approvals?status=pending) are two different signals for the same 'work I need to review' concept on the same screen, and they disagree: filter shows 5 cards, banner says '4 items need your review'.",
+    "reproduction": [
+      "1. Log in as admin/admin123, navigate to /dashboard/applications",
+      "2. Observe the amber banner: '4 items need your review -> open the Approvals queue'",
+      "3. Click Filter -> 'Needs approval'",
+      "4. Observe the subtitle now reads '5 active applications across 8 stages' and 5 cards are shown, all tagged 'needs approval' (Empire Life, EasyPark, replit, Stripe, InterEx Group)",
+      "5. Cross-check via API: GET /applications shows 5 rows with status=draft; GET /approvals?status=pending returns only 4 rows",
+      "6. Identify the odd one out: the Stripe draft application (id c3ebf6a97e318dbcacc7473dc, created 2026-07-16T11:46:59) has no corresponding ApprovalRequest row at all in GET /approvals?status=all",
+      "7. Reproduced identically in a second, fresh browser session ~6 minutes later: still 5 vs 4, still Stripe missing its approval"
+    ],
+    "expected": "Both 'needs review' signals on the same screen should count the same underlying set of items, or the screen should make explicit that they are different concepts (e.g. 'draft applications' vs 'pending approval requests').",
+    "observed": "Filter 'Needs approval' = 5 cards; banner = '4 items'. A user reading both on the same page reasonably expects them to match; they consistently do not, because one draft Application (Stripe) exists with no linked approval request.",
+    "evidence": [
+      "test-artifacts/session1-10-filter-Needs-approval.png",
+      "test-artifacts/session2-05-needs-approval-filter-repro.png",
+      "test-artifacts/session1-actions-log.json",
+      "test-artifacts/session2-actions-log.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null,
+    "notes": "This tester did not create or touch the Stripe application/approval state (pre-existing shared-account data, not this tester's test data) -- reported as observed, reproducible behavior only."
+  },
+  {
+    "id": "MV-application-tracker-003",
+    "screen": "application-tracker",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "Could not click-test the 'Mark as submitted' button (POST /applications/{id}/submit on a draft->submitted transition) end-to-end on tester-owned data: the only legitimate way to create a fresh draft Application is the Cover Letter AI agent (POST /agents/cover-letter/run), which is out of scope for this screen (agents: [] per BRIEF.json) and, when attempted twice by this tester (different jobs, ~90s each), both times returned HTTPException 503 'LLM backend unavailable' via the background job poller.",
+    "reproduction": [
+      "1. POST /agents/cover-letter/run {job_id: c9424bbb46d07f5311df7b540} -> 202 enqueued",
+      "2. Poll GET /agents/jobs/{job_id} for ~90s -> status: failed, error: 'HTTPException: 503: LLM backend unavailable'",
+      "3. Repeated with a second, different job (c4c2b512ad476b76b98ef9596) -> same failure, same error, ~90s"
+    ],
+    "expected": "N/A -- this is a coverage-gap record, not a defect claim against application-tracker itself.",
+    "observed": "Both attempts to manufacture test fixture data via the Cover Letter agent failed honestly (503, no silent fallback to canned content -- consistent with the 'never serve fixture as live output' design in llm_client.py, and indirect corroborating evidence for the MV-application-tracker-001 stale-data hypothesis). Per this tester's hard stop-after-two-failures rule, further attempts were not made. The button's rendering (visible + correctly labelled on draft cards), its correct code wiring (POST /applications/{id}/submit, source-verified), and its idempotency (see verified-with-fresh-evidence idempotent-resubmit test on tester-owned data, HTTP 200, no-op) were all verified by other means; only the literal live click-through of a fresh draft->submitted transition was not exercised by this tester, to avoid (a) invoking another screen's AI agent merely as test-data plumbing, and (b) mutating a pre-existing draft Application not created by this tester (prohibited by protocol) while a concurrent tester was actively exercising the same approval-queue data.",
+    "evidence": [
+      "test-artifacts/api-evidence-02-coverletter-agent-attempt1-failed.json",
+      "test-artifacts/api-evidence-03-coverletter-agent-attempt2-failed.json",
+      "test-artifacts/api-evidence-04-idempotent-submit.json",
+      "test-artifacts/session2-08-draft-detail-apply-link-check.png"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null,
+    "notes": "Recommend a follow-up pass once the Cover Letter agent is confirmed healthy, OR the orchestrator supplies a pre-seeded draft application dedicated to this screen's tester."
+  },
+  {
+    "id": "MV-application-tracker-004",
+    "screen": "application-tracker",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "The 'In Review', 'Interview', and 'Offer' kanban columns, their stage-specific card metadata (auto-follow-up badge, interview round/date badge, offer amount/deadline), and the 'View in CRM' cross-link (rendered only for interview/offer-stage cards) could not be exercised -- the shared admin test account currently has zero applications in screening/interview/offer status, and application-tracker itself exposes no endpoint capable of moving an application into these statuses (that lifecycle appears to be owned by other screens/agents, e.g. Interview Center, Offer Comparison, outside this screen's 4-endpoint matrix).",
+    "reproduction": [
+      "1. Log in, navigate to /dashboard/applications",
+      "2. Observe kanban-column-in-review, kanban-column-interview, kanban-column-offer all render 'Empty'",
+      "3. Confirm via GET /applications/funnel/sankey: screened=0, interviewed=0, offers=0"
+    ],
+    "expected": "N/A -- coverage-gap record.",
+    "observed": "Card rendering logic for these 3 stages (CardMeta / CardLink in page.tsx) was source-reviewed but not exercised against live data since no qualifying application exists.",
+    "evidence": [
+      "test-artifacts/session1-actions-log.json (sankey-wiring entry: screened=0, interviewed=0, offers=0)"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null,
+    "notes": "Not this screen's fault -- data availability gap in the shared test account, not a defect."
+  }
+]

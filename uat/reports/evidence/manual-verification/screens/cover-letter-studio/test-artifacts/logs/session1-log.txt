@@ -1,0 +1,56 @@
+[2026-07-17T15:48:44.345Z] STEP 0: navigate to /dashboard/cover-letters WITHOUT auth
+[2026-07-17T15:48:46.773Z] unauth landed at: https://5cb5f0620.abacusai.cloud/login
+[2026-07-17T15:48:46.877Z] STEP 1: navigate to /login
+[2026-07-17T15:48:49.417Z] post-login url: https://5cb5f0620.abacusai.cloud/dashboard
+[2026-07-17T15:48:49.427Z] token present: true, prefix: eyJhbGciOiJI
+[2026-07-17T15:48:49.427Z] STEP 2: navigate to /dashboard/cover-letters (authenticated)
+[2026-07-17T15:48:53.335Z] authed url: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T15:48:53.997Z] data-testid elements found (50): ["voice-authenticity-indicator","ai-detection-indicator","cover-letter-job-select","run-cover-letter-btn","cover-letter-card","regenerate-letter-btn","letter-preview","word-count","highlight-ungrounded","highlight-grounded","cover-letter-card","regenerate-letter-btn","cover-letter-card","regenerate-letter-btn","cover-letter-card","regenerate-letter-btn","cover-letter-card","regenerate-letter-btn","cover-letter-card","regenerate-letter-btn","cover-letter-card","regenerate-letter-btn","evidence-trace-panel","pull-from-story-bank-link","evidence-grounded","evidence-ungrounded","voice-dna-panel","tone-label","tone-slider","formality-label","formality-slider","keyword-coverage-panel","keyword-score","keyword-covered","keyword-covered","keyword-missing","keyword-missing","keyword-missing","keyword-missing","keyword-missing","keyword-covered","keyword-covered","keyword-missing","letter-actions-panel","rail-regenerate-btn","request-changes-btn","export-pdf-btn","email-center-link","versions-panel","version-btn-v1"]
+[2026-07-17T15:48:54.004Z] cover-letter-card count: 7
+[2026-07-17T15:48:54.008Z] h1: Good afternoon, Administrator
+[2026-07-17T15:48:54.014Z] job select initial value: ""
+[2026-07-17T15:48:54.023Z] Generate Draft button disabled with no job selected: true
+[2026-07-17T15:48:54.229Z] STEP 5: select job option containing "EasyPark" and click Generate Draft
+[2026-07-17T15:48:54.245Z] job select options (34): ["Select a job…","Support Delivery Lead, Government · openai","Business Analyst · EasyPark","Project Manager · Empire Life","GTM Technology Product Owner · harvey","GTM Technology Product Owner · harvey","Enterprise Product Manager · replit","Implementation Manager - Spend  · airwallex","Innovation Product Manager, Australia · harvey","Senior Agent Product Manager - Sydney · decagon","Staff Product Manager, Onboarding · airwallex","Technical Product Manager, Energy Storage · Voltus","Senior Product Manager, Strategic Origination Platforms · Plenti","Product Manager, Credit Automation · Plenti","Technical Business Analyst · Brighte"]
+[2026-07-17T15:48:54.291Z] selected job option: Business Analyst · EasyPark
+[2026-07-17T15:48:54.304Z] Generate Draft button disabled after selecting job: false
+[2026-07-17T15:48:54.405Z] button text immediately after click: "Drafting..."
+[2026-07-17T15:48:54.625Z] waiting up to 120s for generation to complete (async job poll)...
+[2026-07-17T15:49:24.632Z] WARN: generate-complete wait failed: TimeoutError: page.waitForFunction: Timeout 30000ms exceeded.
+[2026-07-17T15:49:26.134Z] post-generate url: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T15:49:26.751Z] alert/rejection panel text after generate: 
+[2026-07-17T15:49:26.753Z] cover-letter-card count after generate: 7
+[2026-07-17T15:49:26.755Z] expanded letter preview text (first 600 chars): Cover Letter — DraftAI-generated · editable204 words · 1 page18 July 2026
+
+Hiring Team
+Empire Life
+Re: Project Manager
+
+Dear Hiring Team at Empire Life,
+
+My background as an I am a direct match for the Project Manager role at Empire Life. My experience leading end-to-end delivery for the Australian Taxation Office's Payday Super reform program — a large-scale, multi-squad government initiative — directly aligns with the project management demands of this role at Empire Life.
+
+The role calls for a Project Manager who can drive agile delivery, manage stakeholder expectations, and ensure on-time,
+[2026-07-17T15:49:26.759Z] word count label: 204 words · 1 page
+[2026-07-17T15:49:26.759Z] STEP 6: reload page, confirm letter persists
+[2026-07-17T15:49:30.643Z] cover-letter-card count after reload: 7
+[2026-07-17T15:49:31.082Z] version buttons: [{"testid":"version-btn-v1","text":"v1 · current","pressed":"true"}]
+[2026-07-17T15:49:31.082Z] STEP 8: open Request Changes form, submit XSS + unicode payload
+[2026-07-17T15:49:31.089Z] request-changes-btn disabled: false
+[2026-07-17T15:49:31.747Z] request-changes-form visible after toggle: true
+[2026-07-17T15:49:32.167Z] submitting request-changes form...
+[2026-07-17T15:50:02.306Z] WARN: refine-complete wait failed: TimeoutError: page.waitForFunction: Timeout 30000ms exceeded.
+[2026-07-17T15:50:04.692Z] rejection panel visible after refine submit: false
+[2026-07-17T15:50:04.697Z] alert text after refine submit: 
+[2026-07-17T15:50:04.703Z] raw <script>alert(1)</script> tags found in DOM (should be 0 - React escapes): 0
+[2026-07-17T15:50:04.703Z] STEP 9: click Export PDF
+[2026-07-17T15:50:04.713Z] export-pdf-btn disabled: false
+[2026-07-17T15:50:06.028Z] PDF downloaded: /tmp/claude-2000/-home-ubuntu/ed97cdcc-8020-45f6-a0a1-0682f1cdef5b/scratchpad/cover-letter-mv/artifacts/exported-cover-letter.pdf, size=22916 bytes
+[2026-07-17T15:50:06.028Z] PDF file header: "%PDF-1.4"
+[2026-07-17T15:50:07.652Z] STEP 10: click "Attach & send via Email Center" link
+[2026-07-17T15:50:07.661Z] email-center-link href: /dashboard/email?letter=c7812e33948443e40b3c17be1
+[2026-07-17T15:50:09.781Z] url after clicking email-center-link: https://5cb5f0620.abacusai.cloud/dashboard/email?letter=c7812e33948443e40b3c17be1
+[2026-07-17T15:50:11.763Z] url after goBack: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T15:50:11.763Z] STEP 11: browser back/forward navigation test
+[2026-07-17T15:50:17.503Z] url after back from dashboard: https://5cb5f0620.abacusai.cloud/dashboard/cover-letters
+[2026-07-17T15:50:20.387Z] url after forward: https://5cb5f0620.abacusai.cloud/dashboard

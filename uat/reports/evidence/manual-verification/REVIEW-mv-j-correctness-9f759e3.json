@@ -1,0 +1,33 @@
+{
+  "status": "OK",
+  "run": "MANUAL-VERIFICATION Stage2 §5 REVIEW",
+  "reviewer": "adversarial non-author (opus-tier)",
+  "branch": "fix/mv-j-correctness",
+  "commit": "9f759e3",
+  "base": "c5ae389",
+  "review_timestamp_utc": "2026-07-18T18:20Z",
+  "verdict": "PASS",
+  "idempotency_sound": true,
+  "ddl_additive": true,
+  "no_cross_account_leak": true,
+  "node_modules_clean": true,
+  "targeted_tests": "97 pass (0 fail, 221.62s) — 16 new + 81 pre-existing touched-module; no regressions",
+  "fail_before_proof": "6/6 spot-checked new tests FAIL on base c5ae389 with exact defect signatures (transplant-only, source unchanged)",
+  "per_check": [
+    {"n": 1, "ok": true, "note": "MV-approval-modal-010 idempotency SOUND. Atomic conditional UPDATE (status=approved AND executedAt IS NULL -> stamp, RETURNING id) serializes racing callers via row-lock+EvalPlanQual under READ COMMITTED; side-effect fires ONLY on the claim win. release_execution clears executedAt ONLY inside `except Exception: release; raise` so honest 4xx/5xx surface and the approval stays retryable; a successful send keeps the stamp (no post-send code can raise); the lost-claim 409 is raised BEFORE the try so an already-executed approval is never released. Lazy DDL ensure_approval_columns = ADD COLUMN IF NOT EXISTS \"executedAt\" timestamptz (additive/nullable/metadata-only) with info_schema fast path + advisory xact lock. Lock id 7420240725 does NOT collide (enumerated all existing 7420240711..724 + named constants; 725 is next free). ApprovalStatus enum untouched. Proven: test_execute_email_send_is_idempotent pass-after send-counter==1; fail-before send-counter==2 (returned gmailMessageId gmail-msg-2)."},
+    {"n": 2, "ok": true, "note": "MV-story-bank-006 no cross-account leak. _resolve_resume_text grounds on ResumeRepository().get_base(user_id) sections.raw_text (fallback bullets); bundled PDF fallback fires ONLY when the user has no resume. Fail-before proved the shared operator resume (Vikram Deshpande / sarkar.vikram@gmail.com / phone / LinkedIn) was injected into EVERY user's Story Bank extraction prompt — a real cross-account PII leak now closed."},
+    {"n": 3, "ok": true, "note": "MV-networking-007. create_outreach_task now calls get_contact(contact_id, current_user) which is ownership-scoped (WHERE id AND userId) -> honest 404 for nonexistent AND other-users' contacts, no orphan, no raw psycopg. delete_contact app-cascade DELETEs OutreachTask WHERE contactId AND userId before deleting Contact. Fail-before showed raw psycopg2 ForeignKeyViolation 500."},
+    {"n": 4, "ok": true, "note": "MV-agents-002. limit=Query(default=50, ge=0) -> negative -> 422; limit=0 -> 200 ([]); large limit clamped by min(limit,200). Fail-before showed raw InvalidRowCountInLimitClause 500."},
+    {"n": 5, "ok": true, "note": "MV-job-discovery-001. _is_noise_token drops >=2-dot/url/www/http fragments + digit-gibberish (>=3 runs, or >=2 runs in >=12 chars); EEO/benefits stopwords expanded. Guard test preserves python3/log4j/log4j2/oauth2/k8s/i18n/a11y/node.js/asp.net; drops cdn.openai.com/base64-honeypot/foo.bar.baz.io. fitScorer distinctness: match>=60, other<=40, match>other (non-degenerate). Fail-before showed garbage tokens surfaced as skills."},
+    {"n": 6, "ok": true, "note": "MV-admin-settings-002. Body param removed from handler; AdminUser dependency resolves first, then _parse_settings_body reads/validates inside handler -> unauth 401 for malformed JSON AND wrong-type; authed 200(valid)/422(malformed) unchanged. Fail-before showed 422-before-auth for unauth malformed JSON."},
+    {"n": 7, "ok": true, "note": "MV-admin-users-002 disposition correct (no code change). Fresh reads: routers/admin.py has no export/gdpr/delete endpoints; lib/api/admin.ts exposes only TS module exports + fetchAdminUsers/fetchAdminUser (no data export/delete); admin/users pages have no export/delete UI. 404(export)/405(delete) are honest HTTP for non-existent routes; NOT fabricating the feature is the correct anti-fabrication call."},
+    {"n": 8, "ok": true, "note": "General. DDL additive-only (ADD COLUMN IF NOT EXISTS timestamptz + prisma additive executedAt DateTime?; no DROP/ALTER TYPE/rename). DELETE FROM OutreachTask is runtime DML cascade, ownership-scoped, not schema-destructive. No prohibited patterns (no Math.random/@ts-ignore/eslint-disable/as any/--no-verify/TODO stubs; noqa on genuinely-handled/re-raised exceptions only). node_modules clean. Minimal, no scope creep."},
+    {"n": 9, "ok": true, "note": "Targeted suite: 97 passed, 0 failed in 221.62s on 9f759e3 (isolated detached worktree, DATABASE_URL_TEST set, flock serialized)."}
+  ],
+  "non_blocking_observations": [
+    "Idempotency claim commits in a separate txn before the send; a hard process crash in the narrow claim-commit->send window would leave the approval stamped-but-unsent and non-retryable (release fires only on a caught exception). This is an inherent at-most-once trade-off favoring never-double-send over guaranteed delivery — the correct conservative choice for a real outbound email; the brief's requirement (raised failures surface + retryable) is fully met.",
+    "fit_scorer.py still uses the bundled operator resume for job ATS scoring (documented 'resume upload lands later'). OUT OF SCOPE for MV-story-bank-006/MV-job-discovery-001 and correctly left untouched (no scope creep); not a cross-account leak (fixed shared asset, not another user's data).",
+    "workspaces.py:562 has a separate GmailService.send path — out of scope for /approvals/{id}/execute; untouched, not a regression."
+  ],
+  "blocking_issues": []
+}

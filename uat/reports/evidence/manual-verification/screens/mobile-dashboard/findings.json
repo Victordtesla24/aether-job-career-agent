@@ -1,0 +1,87 @@
+[
+  {
+    "id": "MV-mobile-dashboard-001",
+    "screen": "mobile-dashboard",
+    "severity": "HIGH",
+    "category": "visual",
+    "summary": "Mobile top header (greeting + last-agent-run subtitle) is visually clipped at 390px viewport — a fixed-height desktop header component is reused unresponsively, cutting off the top of the greeting text and overflowing the subtitle below the header box.",
+    "reproduction": [
+      "1. Set viewport to 390x844.",
+      "2. Navigate to https://5cb5f0620.abacusai.cloud/login and sign in as admin/admin123.",
+      "3. Land on https://5cb5f0620.abacusai.cloud/dashboard.",
+      "4. Observe the top-left header text without scrolling.",
+      "5. Measure via DOM: header box is top:0 bottom:64 (fixed h-16, 64px); h1 'Good afternoon, Administrator' wraps to 2 lines with rendered top:-15px (partially rendered above the viewport/header box, top ~15px of the glyphs invisible); p 'Fri, 17 July · last agent run Xh ago' wraps to 3 lines with rendered bottom:78px, overflowing 14px past the header's bottom edge (64px) into the page body below."
+    ],
+    "expected": "Per design/screens/mobile-dashboard.html (data-design-id=m-topbar-md01), the mobile header is a compact single-row layout: small avatar + 'Good morning, {name}' inline on the left, notification bell alone on the right — sized to read cleanly on one line at 390px with no wrapping or clipping.",
+    "observed": "Production reuses the desktop header (class 'h-16 ... px-8', confirmed via computed style: height fixed at 64px) verbatim at mobile width. The greeting ('Good afternoon, Administrator') and subtitle ('Fri, 17 July · last agent run 3h ago') do not fit the available ~128px text column at 390px width and wrap to multiple lines, which the fixed 64px header cannot accommodate: the first line's top ~15px is rendered above the header (invisible/clipped) and the subtitle's last line spills 14px below the header into the content area. Desktop viewport (1440px) renders the identical text on one line with no clipping, confirming this is mobile-width-specific.",
+    "evidence": [
+      "test-artifacts/04-dashboard-mobile-loaded.png",
+      "test-artifacts/05-viewport-only-top.png",
+      "test-artifacts/07-header-zoom.png",
+      "test-artifacts/06-desktop-comparison-1440.png",
+      "test-artifacts/header-info.json",
+      "test-artifacts/header-clip-detail.json",
+      "test-artifacts/21-fresh-dashboard-loaded.png",
+      "test-artifacts/session2-fresh-verify-summary.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-dashboard-002",
+    "screen": "mobile-dashboard",
+    "severity": "HIGH",
+    "category": "defect",
+    "summary": "Bottom-nav 'Profile' tab (design-id m-tabbar-md08, matches wireframe) routes to /dashboard/settings, which — for a non-subscribed account — renders the identical generic 'Subscribe to unlock Aether' paywall card with zero account-management UI, directly contradicting the paywall's own on-screen copy: 'You can still browse pricing and manage your account.'",
+    "reproduction": [
+      "1. Viewport 390x844, sign in as admin/admin123 (confirmed via GET /api/billing/entitlement: active_paid=false, requiresSubscription=true).",
+      "2. From https://5cb5f0620.abacusai.cloud/dashboard tap the 'Profile' item in the bottom tab bar (href=/dashboard/settings).",
+      "3. Observe the resulting page.",
+      "4. Read the paywall copy on /dashboard: 'You can still browse pricing and manage your account.' — 'pricing' is a hyperlink to /pricing; 'manage your account' is plain, non-interactive text with no corresponding link anywhere on the page.",
+      "5. Confirm /dashboard/settings shows: header + identical 'Subscribe to unlock Aether' card + 'View plans & subscribe' button + bottom nav — no account fields, no settings form."
+    ],
+    "expected": "Tapping 'Profile' should lead to an account-management screen (name/email/preferences, or at minimum a billing/account summary), consistent with the app's own copy promising account management remains available without a subscription.",
+    "observed": "/dashboard/settings renders the exact same generic subscription-paywall component as every other /dashboard/* route for this account tier. There is no UI path from mobile to any account-management screen; the 'manage your account' promise in the paywall copy is not backed by any reachable UI.",
+    "evidence": [
+      "test-artifacts/11-tap-profile-tab.png",
+      "test-artifacts/14-direct-settings-fresh.png",
+      "test-artifacts/settings-body-text.txt",
+      "test-artifacts/22-fresh-settings-deadend.png",
+      "test-artifacts/session2-fresh-verify-summary.json",
+      "test-artifacts/dashboard-full-html.html"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  },
+  {
+    "id": "MV-mobile-dashboard-003",
+    "screen": "mobile-dashboard",
+    "severity": "LOW",
+    "category": "coverage-gap",
+    "summary": "Wireframe's core dashboard content (2x2 stats grid, 'needs approval' banner + Review Now button, Agent Activity feed) could not be exercised on mobile because the assigned test account (admin/admin123) has no active subscription; the frontend correctly short-circuits to a paywall before calling any of the BRIEF-listed data endpoints, so their mobile-specific rendering (card stacking, truncation, overflow) is unverified.",
+    "reproduction": [
+      "1. Sign in as admin/admin123 at 390x844 viewport, land on /dashboard.",
+      "2. Inspect DOM for data-design-id attributes matching the wireframe: only m-notif-md02 (bell) and m-tabbar-md08 (bottom nav) are present; m-topbar-md01 (full header), m-stats-md04 (stats grid), m-approval-md05/btn-review-md06 (approval banner), and m-feed-md07 (activity feed) are entirely absent, replaced by a single subscription-paywall block.",
+      "3. Directly query GET /api/billing/entitlement with the session token -> {active_paid:false, plan:{id:'free',status:'active'}, requiresSubscription:true}.",
+      "4. Directly query GET /api/workspaces/career-data, /api/analytics, /api/applications, /api/jobs, /api/agents with the same token -> all return HTTP 200 (backend endpoints work), but none of these calls are ever issued by the /dashboard page load network trace (confirmed via captured network log) because the paywall renders before those data hooks fire."
+    ],
+    "expected": "N/A for this account tier — this is documented, expected product behavior (subscription gating), not a defect. Flagged as a coverage gap: full wireframe conformance of the main dashboard content cannot be confirmed without a subscribed test account.",
+    "observed": "UI-backend wiring for the entitlement gate itself is CONFIRMED correct (GET /api/billing/entitlement drives the paywall render faithfully). The stats/approval/activity sections specified in the wireframe are unreachable in this session and therefore untested on mobile.",
+    "evidence": [
+      "test-artifacts/dashboard-full-html.html",
+      "test-artifacts/session1-network.json",
+      "test-artifacts/session2-network.json"
+    ],
+    "claimRefs": [],
+    "status": "OPEN",
+    "owner": null,
+    "fixCommits": [],
+    "verifiedBy": null
+  }
+]

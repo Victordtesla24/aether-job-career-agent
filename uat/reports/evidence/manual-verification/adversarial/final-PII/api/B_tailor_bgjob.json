@@ -1,0 +1,10 @@
+{
+  "job_id": "c722e50785a3b9cdeeb1fea0d",
+  "status": "failed",
+  "agentKey": "tailor",
+  "result": null,
+  "error": "MissingResumeError: Add your resume before tailoring or generating an application.",
+  "createdAt": "2026-07-19T23:09:11.817283+00:00",
+  "startedAt": "2026-07-19T23:09:12.220756+00:00",
+  "finishedAt": "2026-07-19T23:09:12.888288+00:00"
+}

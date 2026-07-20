@@ -1,0 +1,49 @@
+=== 2026-07-17T17:03:56Z Ground-truth cross-check for MV-dashboard PAID pass ===
+--- entitlement ---
+{"active_paid":true,"plan":{"id":"pro","status":"active"},"requiresSubscription":true}
+--- funnel?period=all ---
+{"period":"all","jobs_found":44,"applied":7,"screened":0,"interviewed":0,"offers":0}
+--- DB: Job count for user ---
+ count 
+-------
+    44
+(1 row)
+
+--- DB: Application status breakdown ---
+  status   | count 
+-----------+-------
+ rejected  |     1
+ draft     |     7
+ submitted |     6
+(3 rows)
+
+--- DB: StoryEntry count ---
+ count 
+-------
+    26
+(1 row)
+
+--- DB: ApprovalRequest pending count ---
+ count 
+-------
+     4
+(1 row)
+
+--- DB: Job.requirements emptiness (topSkills root cause) ---
+ len | count 
+-----+-------
+   0 |    44
+(1 row)
+
+--- API: jobs?sort=fitScore avg fitScore computation ---
+scored count: 33 avg: 38.301212121212124 round: 38
+--- API: analytics/market-pulse topSkills ---
+topSkills: []
+--- DB: stale approval_status repro — ApprovalRequest c3df4494103f796021d8aae69 ---
+            id             |  status  |       resolvedAt       
+---------------------------+----------+------------------------
+ c3df4494103f796021d8aae69 | approved | 2026-07-17 16:34:47.03
+(1 row)
+
+--- API: matching AgentRun output.approval_status (stale) ---
+run id: cba20c272104702a17d61233e output.approval_status: pending

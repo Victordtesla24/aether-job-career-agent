@@ -1,0 +1,403 @@
+{
+  "tested_utc": "2026-07-18T17:18:41.200443Z",
+  "total": 22,
+  "all_pass_zod": true,
+  "results": [
+    {
+      "agent_key": "jobDiscovery",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "jobDiscovery",
+        "name": "Job Discovery Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "resumeTailoring",
+      "http": 200,
+      "violations": [],
+      "model": "deepseek/deepseek-v4-pro",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "resumeTailoring",
+        "name": "Resume Tailoring Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "estTokens": 4200,
+        "estCost": 0.006,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "coverLetter",
+      "http": 200,
+      "violations": [],
+      "model": "deepseek/deepseek-v4-pro",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "coverLetter",
+        "name": "Cover Letter Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "estTokens": 4200,
+        "estCost": 0.006,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "atsOptimization",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "atsOptimization",
+        "name": "ATS Optimization Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "compliance",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "compliance",
+        "name": "Compliance Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "submission",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "submission",
+        "name": "Submission Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "matchScoring",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "matchScoring",
+        "name": "Match Scoring Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "jobMatching",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "jobMatching",
+        "name": "Job Matching Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "salaryIntelligence",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "salaryIntelligence",
+        "name": "Salary Intelligence Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "interviewPrep",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "interviewPrep",
+        "name": "Interview Prep Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "companyResearch",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "companyResearch",
+        "name": "Company Research Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "skillGap",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "skillGap",
+        "name": "Skill Gap Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "recruiterOutreach",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "recruiterOutreach",
+        "name": "Recruiter Outreach Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "emailAgent",
+      "http": 200,
+      "violations": [],
+      "model": "deepseek/deepseek-v4-pro",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "emailAgent",
+        "name": "Email Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "estTokens": 4200,
+        "estCost": 0.006,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "marketTrends",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "marketTrends",
+        "name": "Market Trends Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "scheduling",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "scheduling",
+        "name": "Scheduling Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "sentimentAnalysis",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "sentimentAnalysis",
+        "name": "Sentiment Analysis Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "reference",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "reference",
+        "name": "Reference Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "storyExtraction",
+      "http": 200,
+      "violations": [],
+      "model": "qwen/qwen3-coder-next",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "storyExtraction",
+        "name": "Story Extraction Agent",
+        "model": "qwen/qwen3-coder-next",
+        "estTokens": 4200,
+        "estCost": 0.006,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "learningFeedback",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "learningFeedback",
+        "name": "Learning / Feedback Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "orchestration",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "orchestration",
+        "name": "Orchestration Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    },
+    {
+      "agent_key": "notification",
+      "http": 200,
+      "violations": [],
+      "model": "deterministic",
+      "creditsCharged": 0.0,
+      "resp": {
+        "agent_key": "notification",
+        "name": "Notification Agent",
+        "model": "deterministic",
+        "estTokens": null,
+        "estCost": null,
+        "actualCost": null,
+        "actualTokens": null,
+        "responseSeconds": null,
+        "creditsCharged": 0.0
+      }
+    }
+  ]
+}

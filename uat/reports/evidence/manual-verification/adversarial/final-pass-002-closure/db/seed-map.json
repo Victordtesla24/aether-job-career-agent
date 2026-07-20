@@ -1,0 +1,50 @@
+{
+  "userId": "cc62794585997022a7897e2f0",
+  "resumeId": "c67ad3bad59510aad85ad4920",
+  "setA": {
+    "A1_cased_control": {
+      "jobId": "c3fa560d2bc41a8fd965e1f14",
+      "letterId": "c21f9d79a25210334ecfe69fe",
+      "title": "Platform Engineer",
+      "company": "MV Closure2 Co"
+    },
+    "A2_caseless_repro": {
+      "jobId": "c7e928fab685331485fd2f296",
+      "letterId": "c86a1f70697338dc2ddb25056",
+      "title": "Systems Engineer",
+      "company": "MV Closure2 Co"
+    },
+    "A3_standalone_labelmention": {
+      "jobId": "cb1b386da97c94fb82c818d53",
+      "letterId": "cdb642c4bf89883ffd44bff7f",
+      "title": "Backend Engineer",
+      "company": "MV Closure2 Co"
+    },
+    "A4_newvariants": {
+      "jobId": "c16b4f72ef451e86a2e74a845",
+      "letterId": "c5d034732f7757fc9efeb6062",
+      "title": "Reliability Engineer",
+      "company": "MV Closure2 Co"
+    },
+    "A5_boundary_probes": {
+      "jobId": "cb091cebfd7d1f07069f492d3",
+      "letterId": "c54734045f3e65a0ff583cbbb",
+      "title": "Data Engineer",
+      "company": "MV Closure2 Co"
+    }
+  },
+  "setB_freshjob": {
+    "B1_caseless_repro2": {
+      "jobId": "c46b6733fc44d3e8cfc14a093",
+      "letterId": "cd8316af629fc9964d5107fbb",
+      "title": "Cloud Engineer"
+    }
+  },
+  "setC_thai_probe": {
+    "C1_thai_standalone_NOgluing": {
+      "jobId": "c0f9ee2f6703669ea89039858",
+      "letterId": "c093070124ffbc9c84ddbb7bf",
+      "title": "Cloud Architect"
+    }
+  }
+}

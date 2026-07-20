@@ -1,0 +1,61 @@
+Privacy Policy
+
+Last updated: July 16, 2026
+
+This Privacy Policy explains how Aether Career Agent (“Aether Career Agent”, “we”, “us”, or “our”) collects, uses, retains, and protects your information when you use our application. By using Aether Career Agent, you agree to the practices described below.
+
+1. Information We Collect
+
+We collect the following categories of information to operate the service:
+
+Account information — your email address and name, used to create and secure your account.
+Resume data — the resumes you upload or generate, including work history, skills, and contact details.
+Job applications — the roles you save, apply to, and track, along with their status and related notes.
+Subscription & billing metadata — your selected plan (Free, Starter, Pro, or Power), billing interval, subscription status, and monthly agent-run usage, used to enforce plan limits and, once payment processing is active, to bill you.
+Gmail messages — if you connect your Google account, we access relevant email messages via the Gmail API strictly to help you manage job-related correspondence.
+Interview recordings — practice interview sessions and their transcripts, when you choose to use interview preparation features.
+Usage analytics — anonymized interaction data (such as features used and application activity) that helps us improve the product.
+2. How We Use Your Information
+
+We use your information solely to provide and improve Aether Career Agent:
+
+AI-powered job matching — to discover and rank roles that fit your experience and preferences.
+Cover letter and resume generation — to tailor resumes and draft cover letters for specific roles.
+Email management — to organize, summarize, and draft responses to job-related messages in your connected inbox.
+Interview preparation — to generate practice questions and feedback based on your target roles.
+Analytics dashboard — to give you visibility into your application funnel and progress.
+3. Third-Party Services
+
+Aether Career Agent relies on a small number of trusted third-party services:
+
+Google Gmail API (OAuth2) — used, with your explicit consent, to read and manage job-related email. OAuth tokens are encrypted at rest, and access can be revoked at any time.
+Stripe — processes payment for paid subscription plans. Live payment processing is not yet active in production; it goes live once we finish our Stripe account setup. Until then, no payment data is transmitted to Stripe. See our Terms & Conditions for full pricing, GST, and billing details.
+LLM provider — large language model inference (our configured provider, currently OpenRouter) is used to generate resumes, cover letters, and interview material. Content is sent to this provider only as needed to produce your requested output.
+Hosted PostgreSQL database — your account and application data is stored in a single hosted PostgreSQL database.
+4. Data Retention
+Account data is retained for as long as your account remains active.
+A connected Gmail account can be disconnected at any time from the Email Center; disconnecting immediately deletes that account’s stored (encrypted) tokens and stops all Gmail data access for that account.
+Full account data export or deletion is not yet a self-service, in-app feature (see “Your Rights” below) — there is no automatic deletion timeline guaranteed by the app; requests are handled manually by us.
+5. Your Rights
+
+You remain in control of your data.
+
+Correction (self-service) — you can correct inaccurate account, profile, or resume information directly in the app at any time.
+Gmail access revocation (self-service) — you can disconnect any connected Gmail account at any time from the Email Center, which immediately deletes that account’s stored tokens.
+Data export or full account deletion — there is currently no self-service “export my data” or “delete my account” button in the app. To request an export or deletion of your data, contact us (see Contact below) and we will process your request manually.
+6. Security
+All data is encrypted in transit using TLS.
+OAuth tokens and any LLM provider API keys you supply are encrypted at rest (Fernet symmetric encryption) and stored server-side only, never exposed to the browser or third parties.
+Passwords are never stored in plaintext — they are one-way hashed (bcrypt).
+Login and registration are rate-limited to slow automated abuse; billing actions (checkout, billing portal) are separately rate-limited.
+No secrets or API keys are stored in our source code — they are configured through environment variables only.
+An administrator can suspend an account found to violate our Terms & Conditions, which blocks that account’s access until the suspension is lifted.
+7. Contact
+
+If you have questions about this Privacy Policy or how your data is handled, you can reach us via the Settings page or the in-app support channel.
+
+8. Changes to This Policy
+
+We may update this Privacy Policy from time to time. If we make material changes, we will notify you through an in-app notification so you are aware before the changes take effect.
+
+← Back to Dashboard

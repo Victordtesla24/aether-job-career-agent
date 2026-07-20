@@ -1,0 +1,31 @@
+{
+  "created_utc": "2026-07-20T06:22:47.333545+00:00",
+  "accounts": {
+    "F1": {
+      "email": "mv-qa-fr-69d1e2@example.com",
+      "register_status": 201,
+      "userId": "c6b1aca1f10731e9866b7dd38",
+      "login_status": 200,
+      "have_token": true,
+      "entitlement_status": 200,
+      "active_paid": false,
+      "plan": {
+        "id": "free",
+        "status": "active"
+      }
+    },
+    "F2": {
+      "email": "mv-qa-fr-69d1e2-nr@example.com",
+      "register_status": 201,
+      "userId": "cd63b6832b67eb3aa3d9a58c2",
+      "login_status": 200,
+      "have_token": true,
+      "entitlement_status": 200,
+      "active_paid": false,
+      "plan": {
+        "id": "free",
+        "status": "active"
+      }
+    }
+  }
+}

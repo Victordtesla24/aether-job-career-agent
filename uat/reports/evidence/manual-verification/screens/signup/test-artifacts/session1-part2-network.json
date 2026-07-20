@@ -1,0 +1,77 @@
+[
+  {
+    "ts": "2026-07-17T13:41:42.524455Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:42.534416Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:42.717069Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:42.726235Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:42.745377Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:43.933806Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "ts": "2026-07-17T13:41:45.822235Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/register",
+    "method": "POST",
+    "status": 409
+  },
+  {
+    "ts": "2026-07-17T13:41:48.125456Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/register",
+    "method": "POST",
+    "status": 409
+  },
+  {
+    "ts": "2026-07-17T13:41:50.054104Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/register",
+    "method": "POST",
+    "status": 429
+  },
+  {
+    "ts": "2026-07-17T13:41:54.025299Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "method": "POST",
+    "status": 200,
+    "ctx": "explicit-login"
+  },
+  {
+    "ts": "2026-07-17T13:41:54.343636Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "method": "GET",
+    "status": 200,
+    "ctx": "explicit-login"
+  },
+  {
+    "ts": "2026-07-17T13:41:54.355455Z",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "method": "GET",
+    "status": 200,
+    "ctx": "explicit-login"
+  }
+]

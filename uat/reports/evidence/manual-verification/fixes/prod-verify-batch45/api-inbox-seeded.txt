@@ -1,0 +1,5 @@
+accounts_status: ['not_connected']
+stats: {'received': 12, 'recruiterEmails': 5, 'autoDrafted': 1, 'sentApproved': 0, 'followUpsSent': 0, 'avgResponseHrs': 0}
+num_messages: 12
+scores(first5): [None, None, None, None, None]
+thr01_score: None

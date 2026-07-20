@@ -1,0 +1,88 @@
+{
+  "CLM_050": {
+    "url": "/dashboard/agents",
+    "table_headers": [
+      "Agent",
+      "Status",
+      "Started",
+      "Error"
+    ],
+    "per_run_cost_column_present": [],
+    "mentions_avg_cost_stat": false,
+    "has_recent_runs_text": true,
+    "paywalled": false
+  },
+  "CLM_075": {
+    "url": "/dashboard/resume",
+    "download_control_present": [],
+    "total_buttons": 25,
+    "paywalled": false
+  },
+  "CLM_081": {
+    "url": "/dashboard/jobs",
+    "has_sync_status_text": true,
+    "source_badges_visible": [
+      "greenhouse",
+      "lever",
+      "ashby",
+      "wellfound",
+      "linkedin",
+      "indeed",
+      "adzuna"
+    ],
+    "status_words_visible": [
+      "error",
+      "403"
+    ],
+    "sync_testids": [
+      "source-bar",
+      "source-status-panel",
+      "source-status-list",
+      "source-status-chip",
+      "source-status-badge",
+      "source-status-chip",
+      "source-status-badge",
+      "source-status-chip",
+      "source-status-badge",
+      "source-status-chip",
+      "source-status-badge",
+      "source-status-chip"
+    ]
+  },
+  "CLM_078": {
+    "url": "/dashboard/analytics",
+    "has_funnel_or_conversion": true,
+    "percent_values_present": [
+      "0%",
+      "0%",
+      "0%",
+      "0%",
+      "0%",
+      "37%",
+      "37%",
+      "22%"
+    ],
+    "period_filter_controls": 3,
+    "refetch_probe": {
+      "before": [
+        "0%",
+        "0%",
+        "0%",
+        "0%",
+        "0%",
+        "37%"
+      ],
+      "after": [
+        "0%",
+        "0%",
+        "0%",
+        "0%",
+        "0%",
+        "37%"
+      ],
+      "control_count": 3
+    },
+    "paywalled": false
+  },
+  "console_errors": []
+}

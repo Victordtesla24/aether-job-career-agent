@@ -1,0 +1,103 @@
+{
+  "log": [
+    {
+      "t": "2026-07-17T15:26:41.009161Z",
+      "msg": "[VERIFY-2] Unauth redirect URL: https://5cb5f0620.abacusai.cloud/login"
+    },
+    {
+      "t": "2026-07-17T15:26:43.063214Z",
+      "msg": "[VERIFY-2] Login OK, url=https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "t": "2026-07-17T15:26:46.105018Z",
+      "msg": "[VERIFY-2] Direct load: paywall present = True"
+    },
+    {
+      "t": "2026-07-17T15:26:52.026328Z",
+      "msg": "[VERIFY-2] fail-open: orchestration rendered = True"
+    },
+    {
+      "t": "2026-07-17T15:26:54.909018Z",
+      "msg": "[VERIFY-2] Dead-button re-test: network calls before=22 after=22 (expect unchanged)"
+    },
+    {
+      "t": "2026-07-17T15:26:54.918775Z",
+      "msg": "[VERIFY-2] Table headers: ['AGENT', 'STATUS', 'STARTED', 'ERROR'] (expect no Cost column)"
+    },
+    {
+      "t": "2026-07-17T15:26:54.926963Z",
+      "msg": "[VERIFY-2] Performance widget text: PERFORMANCE\n50\ntasks run\n50.5s\navg duration\n82.0%\nsuccess rate"
+    },
+    {
+      "t": "2026-07-17T15:26:54.930353Z",
+      "msg": "[VERIFY-2] AgentStats widget text: API SPEND (MONTH)\n$0.10\n\nacross 7 providers \u00b7 ~$0.001 avg / run\n\nTOKENS USED\n67.9K\n\n35.4K in \u00b7 32.5K out\n\nMOST ACTIVE AGENT\nResume Tailoring\n\n119 tasks\n\nSUCCESS RATE\n66.9%\n\nlast 160 tasks"
+    },
+    {
+      "t": "2026-07-17T15:26:54.930372Z",
+      "msg": "[VERIFY-2] console errors (excluding induced entitlement-abort): []"
+    },
+    {
+      "t": "2026-07-17T15:26:54.930379Z",
+      "msg": "[VERIFY-2] ALL console errors count: 2"
+    }
+  ],
+  "console": [],
+  "network": [
+    {
+      "t": "2026-07-17T15:26:42.000313Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:42.308382Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:42.329263Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:42.516111Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:42.537272Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:42.537477Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:43.342034Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:43.363671Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:43.519789Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:43.562994Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200
+    },
+    {
+      "t": "2026-07-17T15:26:43.591398Z",
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200
+    }
+  ],
+  "page_errors": []
+}

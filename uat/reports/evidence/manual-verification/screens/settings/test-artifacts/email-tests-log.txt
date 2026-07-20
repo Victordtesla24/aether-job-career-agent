@@ -1,0 +1,48 @@
+########## BEFORE ##########
+=== GET /workspaces/settings email :: before ===
+email= admin@aether.local
+
+=== PUT /workspaces/settings :: A-allowlisted-domain-aether.local-mv-prefix ===
+BODY: {"profile":{"fullName":"Administrator","email":"mv-settings-persisttest@aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"profile":{"fullName":"Administrator","email":"mv-settings-persisttest@aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"resume":{"activeFile":"Tailored — Senior Product Manager, Strategic Origination Platforms @ Plenti","uploadedAt":"2026-07-17","versions":43},"portfolio":{"url":"https://forgotten-mistory.web.app/","cadence":null,"lastSynced":"2026-07-16 18:48:00","status":"ok"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80},"integrations":[{"name":"Greenhouse","status":"connected","detail":"16 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Ashby","status":"connected","detail":"15 jobs discovered · last sync 2026-07-17 01:17 UTC"},{"name":"Lever","status":"connected","detail":"9 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Remoteok","status":"connected","detail":"3 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Remotive","status":"connected","detail":"1 jobs discovered · last sync 2026-07-14 18:41 UTC"}],"connectedAccounts":[{"name":"OpenRouter","status":"connected","detail":"Configured via server environment (legacy)"},{"name":"Abacus Subscription (fallback)","status":"connected","detail":"Abacus subscription key (server environment) · standby (a higher-priority OpenRouter/Anthropic key is the active path)"},{"name":"Google (Gmail)","status":"connected","detail":"Connected as melbvicduque@gmail.com (primary)"}]}
+HTTP_STATUS:200
+
+=== GET /workspaces/settings email :: after-A-allowlisted-domain-persist-check ===
+email= mv-settings-persisttest@aether.local
+
+=== PUT /workspaces/settings :: B-non-allowlisted-evil.local ===
+BODY: {"profile":{"fullName":"Administrator","email":"mv-settings-persisttest@evil.local","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"detail":[{"type":"value_error","loc":["body","profile","email"],"msg":"Value error, The part after the @-sign is a special-use or reserved name that cannot be used with email.","input":"mv-settings-persisttest@evil.local","ctx":{"error":{}}}]}
+HTTP_STATUS:422
+
+=== GET /workspaces/settings email :: after-B-evil.local-attempt (should be unchanged from A) ===
+email= mv-settings-persisttest@aether.local
+
+=== PUT /workspaces/settings :: C-sub.aether.local-reserved-tld-diff-domain ===
+BODY: {"profile":{"fullName":"Administrator","email":"mv-settings-persisttest@sub.aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"detail":[{"type":"value_error","loc":["body","profile","email"],"msg":"Value error, The part after the @-sign is a special-use or reserved name that cannot be used with email.","input":"mv-settings-persisttest@sub.aether.local","ctx":{"error":{}}}]}
+HTTP_STATUS:422
+
+=== GET /workspaces/settings email :: after-C-sub.aether.local-attempt (should be unchanged from A) ===
+email= mv-settings-persisttest@aether.local
+
+=== PUT /workspaces/settings :: D-malformed-no-at-sign ===
+BODY: {"profile":{"fullName":"Administrator","email":"not-an-email","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"detail":[{"type":"value_error","loc":["body","profile","email"],"msg":"Value error, An email address must have an @-sign.","input":"not-an-email","ctx":{"error":{}}}]}
+HTTP_STATUS:422
+
+=== PUT /workspaces/settings :: E-xss-in-email-localpart ===
+BODY: {"profile":{"fullName":"Administrator","email":"<script>alert(1)</script>@aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"detail":[{"type":"value_error","loc":["body","profile","email"],"msg":"Value error, There can't be anything after the email address.","input":"<script>alert(1)</script>@aether.local","ctx":{"error":{}}}]}
+HTTP_STATUS:422
+
+########## RESTORE ##########
+=== PUT /workspaces/settings :: restore-original-email ===
+BODY: {"profile":{"fullName":"Administrator","email":"admin@aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80}}
+{"profile":{"fullName":"Administrator","email":"admin@aether.local","targetRole":"Administrator","location":"Melbourne, Australia"},"resume":{"activeFile":"Tailored — Senior Product Manager, Strategic Origination Platforms @ Plenti","uploadedAt":"2026-07-17","versions":43},"portfolio":{"url":"https://forgotten-mistory.web.app/","cadence":null,"lastSynced":"2026-07-16 18:48:00","status":"ok"},"agentConfig":{"autoApply":false,"approvalGate":true,"matchThreshold":80},"integrations":[{"name":"Greenhouse","status":"connected","detail":"16 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Ashby","status":"connected","detail":"15 jobs discovered · last sync 2026-07-17 01:17 UTC"},{"name":"Lever","status":"connected","detail":"9 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Remoteok","status":"connected","detail":"3 jobs discovered · last sync 2026-07-16 18:32 UTC"},{"name":"Remotive","status":"connected","detail":"1 jobs discovered · last sync 2026-07-14 18:41 UTC"}],"connectedAccounts":[{"name":"OpenRouter","status":"connected","detail":"Configured via server environment (legacy)"},{"name":"Abacus Subscription (fallback)","status":"connected","detail":"Abacus subscription key (server environment) · standby (a higher-priority OpenRouter/Anthropic key is the active path)"},{"name":"Google (Gmail)","status":"connected","detail":"Connected as melbvicduque@gmail.com (primary)"}]}
+HTTP_STATUS:200
+
+=== GET /workspaces/settings email :: after-restore-final-check ===
+email= admin@aether.local
+
+DONE
