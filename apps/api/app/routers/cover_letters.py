@@ -320,11 +320,40 @@ def _is_camel_concatenation_artifact(token: str) -> bool:
       structural field-label ("Salary", "Location", "Responsibilities", ...)
       glued to literally anything (most often a scraped place name) is a
       gluing artifact regardless of what the other segment is.
+
+    NF-final-pass-002: a token can also glue a JD structural label to a
+    CASELESS-script proper noun (CJK, Kana, Hangul, Arabic, Hebrew,
+    Devanagari, Thai, ...). Caseless characters have no upper/lower
+    distinction at all, so they can neither start nor continue a hump in
+    ``_camel_humps`` — they are skipped exactly like punctuation. The glued
+    proper noun therefore contributes NO segment of its own, and the ASCII
+    label ends up as the token's SOLE segment (e.g. "東京Salary" ->
+    ``["Salary"]``). This is a third path to the same historical
+    ``len(segments) < 2`` early-return bug (previously reached via severed
+    unicode fragments — NF-final-closure-001 — and via non-Latin CASED
+    proper nouns — NF-final-pass-001). Rather than add a fourth script-family
+    branch, a single cased segment is now ALSO judged an artifact when:
+
+    * that lone segment is one of the narrower ``_ARTIFACT_LABEL_WORDS``, AND
+    * the token carries material beyond that segment (``token != segment`` —
+      a glued caseless/other-noise prefix or suffix is present).
+
+    A token that IS its segment (``token == segment``, e.g. the bare word
+    "Salary" appearing on its own) is a standalone label mention, not a
+    gluing artifact, and keeps its prior (unflagged) behavior. A token with
+    ZERO segments (e.g. a caseless proper noun with no glued ASCII label,
+    "東京" alone) is unaffected and stays unflagged too. This closes the
+    ``len(segments) < 2`` early-return family for cased and caseless scripts
+    alike — no further per-script enumeration is needed.
     """
     if token.lower() in _MIXED_CASE_TECH_ALLOWLIST:
         return False
     segments = _camel_humps(token)
     if len(segments) < 2:
+        if len(segments) == 1:
+            solo = segments[0]
+            if token != solo and solo.lower() in _ARTIFACT_LABEL_WORDS:
+                return True
         return False
     if all(len(seg) >= 3 and seg.lower() in _ARTIFACT_SPLIT_WORDS for seg in segments):
         return True

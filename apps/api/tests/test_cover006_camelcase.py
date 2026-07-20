@@ -656,3 +656,257 @@ def test_ascii_camel_hump_segmentation_characterization_byte_identical(
         f"{got!r} — ASCII/acronym behavior must stay byte-identical across "
         "the NF-final-pass-001 rewrite"
     )
+
+
+# ---------------------------------------------------------------------------
+# NF-final-pass-002 — closure-qa novel adversarial sweep, THIRD path to the
+# same historical ``len(segments) < 2`` early-return family (previously:
+# severed unicode fragments -- NF-final-closure-001; non-Latin CASED proper
+# nouns -- NF-final-pass-001). A CASELESS-script proper noun (CJK/Kana/
+# Hangul/Arabic/Hebrew/Devanagari/Thai) glued to a JD structural label
+# contributes NO cased segment at all -- caseless characters have no
+# upper/lower distinction, so ``_camel_humps`` skips them exactly like
+# punctuation. The ASCII label therefore becomes the token's SOLE segment
+# and the ``len(segments) < 2`` early-return fires before the label-word
+# check ever runs, silently accepting the gluing.
+#
+# ORCHESTRATOR DESIGN RULING: kill the early-return pattern itself rather
+# than add a fourth script-family branch. When segmentation yields exactly
+# ONE cased segment, the token is now ALSO judged an artifact when that lone
+# segment is one of the narrower ``_ARTIFACT_LABEL_WORDS`` AND the token
+# carries material beyond that segment (``token != segment`` -- a glued
+# caseless/other-noise prefix or suffix is present). A token that IS its
+# segment (a standalone label mention, e.g. bare "Salary") is unaffected.
+# Zero segments (a caseless proper noun with no glued label) is unaffected.
+# ---------------------------------------------------------------------------
+
+# The exact 4 gluings named in the CLOSURE-REPORT.json sweep (prod, top
+# chips): CJK/Kanji, Devanagari (observed as a garbage `_WORD_RE`-fragmented
+# "बईLocation" -- the leading combining-vowel-shredded remnant of "मुंबई",
+# accepted as the real-world token exactly as the sweep captured it),
+# Katakana, Arabic.
+_CASELESS_LABEL_ARTIFACTS = (
+    "القاهرةSalary",  # Arabic (Cairo)
+    "बईLocation",  # Devanagari fragment (Mumbai, as actually observed on prod)
+    "ソウルSalary",  # Katakana (Seoul)
+    "東京Salary",  # CJK/Kanji (Tokyo)
+)
+
+
+@pytest.mark.parametrize("artifact", _CASELESS_LABEL_ARTIFACTS)
+def test_caseless_script_label_camel_artifact_is_detected(artifact):
+    """The exact 4 caseless-script gluings named in the closure-qa novel
+    adversarial sweep (NF-final-pass-002) must be detected as concatenation
+    artifacts."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a caseless-script proper noun to a JD "
+        "structural label and must be detected as a concatenation artifact "
+        "(NF-final-pass-002)"
+    )
+
+
+# Label-FIRST order with the same 4 scripts (my own design, not sweep-named).
+# Verified live against unmodified c158729 BEFORE writing this test: e.g.
+# ``_camel_humps("Salaryソウル") == ['Salary']`` and
+# ``_is_camel_concatenation_artifact("Salaryソウル") is False`` pre-fix (the
+# CORRECT post-fix expectation is True) -- the fix must be order-independent
+# since it operates on segment membership, not position.
+_CASELESS_LABEL_ARTIFACTS_REVERSED = (
+    "Salary東京",  # CJK/Kanji, label first
+    "Locationソウル",  # Katakana, label first
+    "Salaryالقاهرة",  # Arabic, label first
+    "Locationबई",  # Devanagari fragment, label first
+)
+
+
+@pytest.mark.parametrize("artifact", _CASELESS_LABEL_ARTIFACTS_REVERSED)
+def test_caseless_script_label_camel_artifact_reverse_order_is_detected(artifact):
+    """Reverse gluing order (JD structural label FIRST, caseless-script
+    proper noun glued directly after) must also be detected -- the fix
+    operates on hump membership, not position (NF-final-pass-002 adversarial
+    variant beyond the sweep-named order)."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a JD structural label to a caseless-script "
+        "proper noun (reverse order) and must be detected as a "
+        "concatenation artifact (NF-final-pass-002)"
+    )
+
+
+# Thai and Hebrew variants of my own design (NOT enumerated by the sweep),
+# spanning two more caseless scripts. Hebrew has no combining marks in these
+# words so it tokenizes as ONE whole glued token; Thai carries combining
+# vowel signs that ``_WORD_RE`` (out of scope for this fix -- a tokenizer
+# concern, not a segmenter concern) shreds identically to how the Devanagari
+# "बईLocation" fragment above was already produced -- exercised here as-is
+# to prove the segmenter-level fix is script-agnostic regardless of how the
+# tokenizer upstream happened to fragment the caseless prefix.
+_THAI_HEBREW_LABEL_ARTIFACTS = (
+    "חיפהSalary",  # Hebrew, whole word (Haifa), no combining marks
+    "ירושליםLocation",  # Hebrew, whole word (Jerusalem)
+    "งเทพSalary",  # Thai fragment (as `_WORD_RE` actually emits from "กรุงเทพSalary")
+)
+
+
+@pytest.mark.parametrize("artifact", _THAI_HEBREW_LABEL_ARTIFACTS)
+def test_thai_hebrew_caseless_label_camel_artifact_is_detected(artifact):
+    """Thai and Hebrew variants (my own design, spanning two more caseless
+    scripts beyond the sweep-named CJK/Devanagari/Katakana/Arabic) must also
+    be detected as concatenation artifacts (NF-final-pass-002)."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a caseless-script (Thai/Hebrew) proper noun to "
+        "a JD structural label and must be detected as a concatenation "
+        f"artifact (NF-final-pass-002)"
+    )
+
+
+_CASELESS_STANDALONE_PRESERVED = (
+    "東京",  # Tokyo, unglued
+    "السعودية",  # Saudi Arabia, unglued
+    "ソウル",  # Seoul, unglued
+    "ירושלים",  # Jerusalem, unglued
+)
+
+
+@pytest.mark.parametrize("term", _CASELESS_STANDALONE_PRESERVED)
+def test_standalone_caseless_proper_noun_not_flagged_as_artifact(term):
+    """A caseless-script proper noun standing ALONE -- not glued to a label,
+    zero cased segments -- is a legitimate JD term, not a concatenation
+    artifact (NF-final-pass-002 preserved case, mirrors NF-final-pass-001's
+    own unglued-Киев/İstanbul guard)."""
+    assert not _is_camel_concatenation_artifact(term), (
+        f"{term!r} is a legitimate standalone caseless-script proper noun "
+        "and must NOT be flagged as a concatenation artifact merely for "
+        "having zero cased CamelCase segments"
+    )
+
+
+def test_standalone_label_word_behavior_unchanged():
+    """A bare JD structural-label word appearing on its own (``token ==
+    segment``, no glued material) is a standalone mention, not a gluing
+    artifact -- this behavior must stay EXACTLY as it was before
+    NF-final-pass-002 (the len==1 special case only fires when the token
+    carries material beyond its lone segment)."""
+    for term in ("Salary", "Location", "Benefits", "Department", "Share"):
+        assert not _is_camel_concatenation_artifact(term), (
+            f"standalone label word {term!r} must not be flagged as an "
+            "artifact merely for being a JD structural label on its own"
+        )
+    # A different word entirely (plural/possessive) is exact-match-only, so
+    # it was never affected by the label-word rule and must stay that way.
+    assert not _is_camel_concatenation_artifact("Salaries"), (
+        "'Salaries' is a distinct word from 'Salary' (exact-match label "
+        "comparison) and must not be flagged"
+    )
+
+
+def test_keyword_coverage_drops_caseless_label_camel_artifacts_reported_pattern():
+    """The exact reported pattern (NF-final-pass-002): a scraped JD gluing
+    caseless-script proper nouns to JD structural labels with no space, plus
+    the reverse order. None of the artifacts may surface as keyword chips;
+    legit tech terms AND an UNGLUED caseless proper noun mentioned in the
+    same JD must still survive."""
+    job = {
+        "title": "Senior Backend Engineer, APAC/MEA",
+        "description": (
+            "東京Salary: negotiable, relocation assistance available. "
+            "ソウルSalary: DOE, relocation assistance available. "
+            "القاهرةSalary: competitive, quarterly bonus. "
+            "Salary東京: negotiable (duplicate posting fragment). "
+            "We are proud to have engineers based in 東京 itself. "
+            "Stack: JavaScript, TypeScript, PostgreSQL, Kubernetes, "
+            "Terraform and Docker. DevOps and microservices experience "
+            "required."
+        ),
+    }
+    letter = (
+        "I bring deep JavaScript, TypeScript, PostgreSQL, Kubernetes, "
+        "Terraform and Docker experience building reliable DevOps "
+        "microservices."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    for artifact in ("東京salary", "ソウルsalary", "القاهرةsalary", "salary東京"):
+        assert artifact not in words, (
+            f"Caseless-script proper-noun+label CamelCase artifact "
+            f"{artifact!r} leaked into keyword chips: {words!r}"
+        )
+
+    for term in (
+        "javascript",
+        "typescript",
+        "postgresql",
+        "kubernetes",
+        "terraform",
+        "docker",
+    ):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10
+
+
+# ---------------------------------------------------------------------------
+# False-positive survey (documented per orchestrator's explicit instruction
+# to think through false positives BEFORE coding):
+# ---------------------------------------------------------------------------
+
+
+def test_hyphen_slash_continuation_tokens_unaffected_by_single_segment_rule():
+    """`_WORD_RE` allows ``+#./-`` as in-word continuation characters, so a
+    JD string like "Salary/Benefits" or "Salary-Location" tokenizes as ONE
+    token -- but `_camel_humps` still yields 2+ segments for these (the
+    punctuation is skipped like a caseless character, but there IS a second
+    cased hump on the other side), so they were ALREADY caught by the
+    pre-existing len>=2 path and are UNAFFECTED by the new len==1 branch.
+    Characterizes that no interaction bug was introduced between the two
+    branches."""
+    assert _cl_module._camel_humps("Salary/Benefits") == ["Salary", "Benefits"]
+    assert _cl_module._camel_humps("Salary-Location") == ["Salary", "Location"]
+    assert _is_camel_concatenation_artifact("Salary/Benefits")
+    assert _is_camel_concatenation_artifact("Salary-Location")
+
+
+def test_single_label_segment_with_lowercase_ascii_prefix_or_suffix_is_flagged():
+    """Documented decision (surveyed `_MIXED_CASE_TECH_ALLOWLIST`, 21 entries
+    at the time of this fix): no established real product matches the
+    single-cased-label-segment-plus-glued-noise shape (e.g. a hypothetical
+    "eSalary"/"iLocation"/"eShare"-style name) closely enough to allowlist
+    without evidence. Per the orchestrator's explicit false-positive
+    instruction ("decide and document; allowlist if real"), these are
+    intentionally treated as artifacts under the new rule -- the same
+    ``_MIXED_CASE_TECH_ALLOWLIST`` escape hatch (checked FIRST, before this
+    logic runs) is available the moment a real product is identified, with
+    no further code change required."""
+    for token in ("eSalary", "iLocation", "eShare", "eBenefits"):
+        assert _is_camel_concatenation_artifact(token), (
+            f"{token!r} glues ASCII noise to a lone JD-label segment and "
+            "is treated as an artifact by design (no allowlisted real "
+            f"product identified for this shape)"
+        )
+
+
+def test_single_non_label_segment_with_caseless_prefix_is_not_flagged():
+    """A caseless-script prefix glued to a SOLE cased segment that is NOT
+    one of the narrower ``_ARTIFACT_LABEL_WORDS`` (e.g. "Manager"/
+    "Engineer", which live only in the broader ``_ARTIFACT_SPLIT_WORDS``)
+    stays unflagged -- the new len==1 rule deliberately mirrors the existing
+    len>=2 asymmetry (ANY-segment-is-a-LABEL, not ANY-segment-is-boilerplate)
+    rather than widening scope beyond the orchestrator's ruling."""
+    for token in ("東京Manager", "東京Engineer", "ソウルDirector"):
+        assert not _is_camel_concatenation_artifact(token), (
+            f"{token!r} has a single non-label cased segment and must NOT "
+            f"be flagged under the narrower len==1 rule"
+        )
+
+
+def test_allowlisted_two_segment_terms_unaffected_by_single_segment_rule():
+    """Existing 2-segment allowlisted terms (SlideShare, SharePoint,
+    GeoLocation) are unaffected by the new len==1 branch -- they never reach
+    it, since the allowlist check runs first and short-circuits before
+    `_camel_humps` is even called."""
+    for term in ("SlideShare", "SharePoint", "GeoLocation"):
+        assert not _is_camel_concatenation_artifact(term)
