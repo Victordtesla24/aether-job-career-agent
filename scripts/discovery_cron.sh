@@ -29,7 +29,16 @@ fi
 API="${AETHER_API_URL:-http://127.0.0.1:8000}"
 EMAIL="${AETHER_CRON_EMAIL:-sarkar.vikram@gmail.com}"
 
-log() { echo "[discovery-cron $(date -u +%FT%TZ)] $*"; }
+# Write to stderr (MV-system-008): every log() caller inside http_call() is
+# itself invoked via command substitution (e.g. LOGIN_RESP=$(http_call ...)),
+# which only captures stdout. A plain stdout echo here was captured into the
+# caller's response variable instead of reaching the process's real
+# stdout/stderr, so FATAL diagnostics never reached /var/log/aether/
+# discovery.log (the systemd drop-in's StandardError=append: target) --
+# hiding a 48h+ total outage. stderr is never swallowed by $(...), so this
+# survives command substitution without touching the captured HTTP-response
+# value callers parse.
+log() { echo "[discovery-cron $(date -u +%FT%TZ)] $*" >&2; }
 
 # Never hardcode a real credential in shipped, scheduled tooling (GAP-P4-068).
 # Resolve the cron's login password from the environment only: dedicated
