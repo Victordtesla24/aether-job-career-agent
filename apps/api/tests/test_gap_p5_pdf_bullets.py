@@ -161,11 +161,32 @@ class TestHealOnRead:
         from app.agents.tailor_agent import TailoringAgent
         from app.repositories.resume import ResumeRepository
 
+        # A no-résumé user no longer gets the operator PDF auto-seeded as their
+        # base — ensure_base_resume now refuses (resume_grounding; NF-final-B-005:
+        # persisting the operator's PDF as "their" résumé leaked operator PII).
+        # The subject here is heal IDEMPOTENCE (no re-fork), so seed a HEALTHY own
+        # base first: the bundled PDF's complete bullets under its own format hash.
+        repo = ResumeRepository()
+        parsed = parse_resume_pdf(get_base_resume_path())
+        repo.create(
+            test_user_id,
+            {
+                "raw_text": parsed["raw_text"],
+                "bullets": [
+                    {"text": b, "evidenceRef": f"bullet-{i}"}
+                    for i, b in enumerate(extract_pdf_bullets(get_base_resume_path()))
+                ],
+                "contact": parsed["contact"],
+            },
+            EXPECTED_FORMAT_HASH,
+            label="Base resume",
+            version=1,
+        )
+
         agent = TailoringAgent()
         first = agent.ensure_base_resume(test_user_id)
         again = agent.ensure_base_resume(test_user_id)
         assert first["id"] == again["id"]
-        repo = ResumeRepository()
         bases = [
             r for r in repo.list_by_user(test_user_id) if r.get("parentId") is None
         ]

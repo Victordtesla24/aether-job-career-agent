@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "http"
 
@@ -192,6 +193,14 @@ class TestScoutDedupe:
 
 class TestApplicationSubmit:
     def _seed_draft_application(self, client, auth_headers) -> str:
+        # The submit endpoint itself requires NO résumé (it only flips a draft
+        # Application to submitted). This helper uses a cover-letter run purely
+        # to MANUFACTURE the draft application to submit; that OUTBOUND
+        # generation now (correctly) refuses a user with no résumé of their own
+        # (resume_grounding; NF-final-B-001), so seed a real own résumé for the
+        # setup. FIXTURE_LLM_RESUME_TEXT matches the replay generation fixtures'
+        # vocabulary.
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         run = client.post(
             "/agents/scout/run",
             json={"query": "delivery lead", "location": "Melbourne"},
