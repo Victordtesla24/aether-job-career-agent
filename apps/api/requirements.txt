@@ -33,6 +33,17 @@ google-api-python-client>=2.130
 # when AETHER_ASYNC_GENERATION is ON.
 arq>=0.25
 redis>=5
+# Stripe SDK (ADR-P6-STRIPE-MOCK) — checkout, billing-portal, and webhook
+# signature verification (app/services/stripe_gateway.py, imported lazily so a
+# deploy without it degrades to an honest 503 instead of crashing at import
+# time). Historically installed out-of-band in prod at 13.2.0; declared here
+# so a fresh venv/clone matches (MV-system-009). Pinned below 14 — stripe>=14
+# tightens Event construction and raises AttributeError on a webhook payload
+# missing the top-level "object": "event" envelope key (verified against
+# test_gap_p6_billing.py's webhook fixtures, which predate that requirement);
+# 13.2.0 is also the newest 13.x release, so this range resolves exactly to
+# the version already running in prod.
+stripe>=13.2,<14
 # Optional/heavy: embedding-based semantic similarity for the ATS engine
 # (see requirements-ml.txt). The engine degrades gracefully to a deterministic
 # TF-IDF/token-overlap fallback when it (or its cached model) is unavailable.
