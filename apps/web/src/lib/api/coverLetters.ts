@@ -21,10 +21,16 @@ export async function fetchCoverLetters(options: RequestOptions = {}): Promise<C
 }
 
 export interface CoverLetterRunResult {
-  cover_letter_id: string;
-  cover_letter: string;
-  approval_id: string;
-  approval_status: string;
+  cover_letter_id?: string;
+  cover_letter?: string;
+  approval_id?: string;
+  approval_status?: string;
+  // NF-final-resid-002: an honest no-résumé refusal (backend
+  // apps/api/app/workers/tasks.py's `except MissingResumeError` handler)
+  // completes the BackgroundJob with THIS shape instead — no letter was
+  // generated, so none of the fields above are present.
+  missingResume?: boolean;
+  message?: string;
 }
 
 export async function runCoverLetterAgent(
