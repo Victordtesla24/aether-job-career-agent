@@ -35,6 +35,7 @@ import {
   fetchCoverLetters,
   runCoverLetterAgent,
   type CoverLetter,
+  type CoverLetterRunResult,
 } from "../../../lib/api/coverLetters";
 import type { Job } from "../../../lib/api/jobs";
 
@@ -95,6 +96,29 @@ export default function CoverLettersPage() {
     }
   }, []);
 
+  /**
+   * Apply a completed `/agents/cover-letter/run` result — either a drafted
+   * letter or an honest no-résumé REFUSAL (NF-final-resid-002). The async
+   * job completes successfully either way (never "failed"), so this can't
+   * be told apart in the try/catch's `catch` branch — it has to be checked
+   * on the resolved value. A refusal carries `missingResume: true` and no
+   * `cover_letter_id` (apps/api/app/workers/tasks.py's `except
+   * MissingResumeError` handler); treating it like a success used to call
+   * `load(undefined)` and `setError(null)`, silently swallowing the honest
+   * message. Surface it through the page's existing alert instead, and skip
+   * the pointless reload — nothing new was generated.
+   */
+  const applyCoverLetterResult = async (result: CoverLetterRunResult) => {
+    if (result.missingResume || !result.cover_letter_id) {
+      setRejection(null);
+      setError(result.message ?? "Add your resume before generating a cover letter.");
+      return;
+    }
+    await load(result.cover_letter_id);
+    setError(null);
+    setRejection(null);
+  };
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -130,9 +154,7 @@ export default function CoverLettersPage() {
     setRunning(true);
     try {
       const result = await runCoverLetterAgent(selectedJob);
-      await load(result.cover_letter_id);
-      setError(null);
-      setRejection(null);
+      await applyCoverLetterResult(result);
     } catch (e) {
       handleAgentError(e, "Cover letter run failed", () => void generate());
     } finally {
@@ -145,9 +167,7 @@ export default function CoverLettersPage() {
     setRegenerating(letter.id);
     try {
       const result = await runCoverLetterAgent(letter.jobId);
-      await load(result.cover_letter_id);
-      setError(null);
-      setRejection(null);
+      await applyCoverLetterResult(result);
     } catch (e) {
       handleAgentError(e, "Regenerate failed", () => void regenerate(letter));
     } finally {

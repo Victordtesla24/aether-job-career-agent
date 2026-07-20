@@ -58,6 +58,47 @@ _LEGIT_MIXED_CASE_TECH = (
     "OAuth2",
 )
 
+# NF-final-resid-001 (final adversarial sweep, residual of NF-final-PII-001 /
+# re-opened MV-cover-letter-studio-006): the exact 6 city+label gluings the
+# sweep found leaking into prod's JD Keyword Coverage panel as TOP chips.
+# _ARTIFACT_SPLIT_WORDS held country names but no city names, so the old
+# "EVERY segment must be a standalone boilerplate word" rule never caught a
+# real place name glued to a structural JD label.
+_CITY_LABEL_ARTIFACTS = (
+    "SydneySalary",
+    "MelbourneSalary",
+    "BrisbaneLocation",
+    "AdelaideSalary",
+    "PerthSalary",
+    "CanberraLocation",
+)
+
+# Adversarial variants of my own design (NOT enumerated by the sweep): other
+# global place names / proper nouns glued to the same JD structural labels.
+# The fix must generalize — catching these WITHOUT a city allowlist — or it
+# is just more whack-a-mole.
+_ADVERSARIAL_LABEL_ARTIFACTS = (
+    "LondonSalary",
+    "TorontoLocation",
+    "AucklandBenefits",
+    "DublinRequirements",
+    "ChicagoDepartment",
+    "BerlinCompensation",
+    "TokyoQualifications",
+    "ParisEmployer",
+    "MumbaiShare",
+)
+
+# False-positive guards: legitimate mixed-case tech/product terms whose
+# CamelCase split happens to contain a segment that is ALSO one of the JD
+# structural-label words above (Share/Location) — a "flag on ANY label
+# segment" rule must not treat these as scrape-gluing artifacts.
+_FALSE_POSITIVE_TECH_GUARDS = (
+    "SlideShare",   # Slide + Share — a real product name
+    "SharePoint",   # Share + Point — Microsoft SharePoint
+    "GeoLocation",  # Geo + Location — the browser Geolocation API
+)
+
 
 @pytest.mark.parametrize("artifact", _CONCATENATION_ARTIFACTS)
 def test_camel_concatenation_artifact_is_detected(artifact):
@@ -124,5 +165,132 @@ def test_keyword_coverage_drops_camel_concatenation_artifacts_empire_life_patter
         )
 
     # Coverage math stays internally consistent.
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10
+
+
+# ---------------------------------------------------------------------------
+# NF-final-resid-001 — final adversarial sweep, residual of NF-final-PII-001.
+# City/place-name + boilerplate-label CamelCase gluings (SydneySalary,
+# MelbourneSalary, BrisbaneLocation, AdelaideSalary, PerthSalary,
+# CanberraLocation) survived the "EVERY segment must be a standalone
+# boilerplate word" rule because _ARTIFACT_SPLIT_WORDS lists countries but no
+# city names — "Sydney"+"Salary" failed the all-segments test since "sydney"
+# is nowhere in that set, so the gluing was scored (+45 internal uppercase)
+# and ranked into the top chips. Reproduced 3x on prod (API run1, API run2
+# fresh session, real-browser Playwright).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("artifact", _CITY_LABEL_ARTIFACTS)
+def test_city_label_camel_artifact_is_detected(artifact):
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a city name to a JD structural label and must "
+        "be detected as a concatenation artifact (NF-final-resid-001)"
+    )
+
+
+@pytest.mark.parametrize("artifact", _ADVERSARIAL_LABEL_ARTIFACTS)
+def test_adversarial_place_label_camel_artifact_is_detected(artifact):
+    """Any proper noun glued to a JD structural label is an artifact — the
+    fix must generalize past the 6 sweep-named cities without a city
+    allowlist (NF-final-resid-001 adversarial variants)."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a proper noun to a JD structural label and must "
+        "be detected as a concatenation artifact (NF-final-resid-001, "
+        "adversarial variant beyond the sweep-named cities)"
+    )
+
+
+@pytest.mark.parametrize("term", _FALSE_POSITIVE_TECH_GUARDS)
+def test_label_segment_false_positive_tech_terms_are_not_flagged(term):
+    """A legitimate mixed-case tech/product term must not be collateral
+    damage from the "any segment is a JD label word" rule just because one
+    of its CamelCase segments (Share/Location) happens to match a label word
+    (NF-final-resid-001 false-positive guard)."""
+    assert not _is_camel_concatenation_artifact(term), (
+        f"{term!r} is a legitimate mixed-case tech/product term and must NOT "
+        "be flagged as a concatenation artifact merely because one segment "
+        "matches a JD label word"
+    )
+
+
+def test_keyword_coverage_drops_city_label_camel_artifacts_empire_life_pattern():
+    """Empire-Life-style scraped JD (prod pattern from the sweep): city names
+    glued to JD structural labels with no space ("Melbourne"+"Salary",
+    "Brisbane"+"Location", "Sydney"+"Salary"). None of these may surface as
+    keyword chips; the legit mixed-case tech terms the sweep also verified
+    on this exact JD (JavaScript/TypeScript/PostgreSQL/DevOps/iPhone) must
+    still surface (NF-final-resid-001)."""
+    job = {
+        "title": "Senior Platform Engineer",
+        "description": (
+            "MelbourneSalary: $180k package, negotiable. "
+            "BrisbaneLocation: hybrid, 2 days onsite per week. "
+            "SydneySalary: DOE, relocation assistance available. "
+            "Stack: JavaScript, TypeScript, PostgreSQL and DevOps tooling; "
+            "an iPhone is provided for on-call. Reliability and "
+            "microservices experience required."
+        ),
+    }
+    letter = (
+        "I bring deep JavaScript, TypeScript, PostgreSQL and DevOps "
+        "experience building reliable, iPhone-integrated microservices."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    for artifact in ("SydneySalary", "MelbourneSalary", "BrisbaneLocation"):
+        assert artifact.lower() not in words, (
+            f"City+label CamelCase artifact {artifact!r} leaked into "
+            f"keyword chips: {words!r}"
+        )
+
+    for term in ("javascript", "typescript", "postgresql", "devops", "iphone"):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10
+
+
+def test_keyword_coverage_drops_city_label_camel_artifacts_redpanda_pattern():
+    """Redpanda-style scraped JD (prod pattern from the sweep): a second
+    independent JD glues DIFFERENT cities to the SAME structural labels
+    ("Adelaide"+"Salary", "Canberra"+"Location", "Perth"+"Salary"). None may
+    surface as keyword chips; the legit mixed-case tech terms the sweep
+    verified on this JD (Golang/Terraform/GraphQL/Kubernetes) must still
+    surface (NF-final-resid-001)."""
+    job = {
+        "title": "Platform Engineer",
+        "description": (
+            "AdelaideSalary: market rate, superannuation included. "
+            "CanberraLocation: onsite, security clearance required. "
+            "PerthSalary: negotiable for the right candidate. "
+            "We run Golang microservices on Kubernetes, provisioned via "
+            "Terraform, fronted by a GraphQL gateway."
+        ),
+    }
+    letter = (
+        "I bring deep Golang, Kubernetes, Terraform and GraphQL experience "
+        "running production microservices platforms."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    for artifact in ("AdelaideSalary", "CanberraLocation", "PerthSalary"):
+        assert artifact.lower() not in words, (
+            f"City+label CamelCase artifact {artifact!r} leaked into "
+            f"keyword chips: {words!r}"
+        )
+
+    for term in ("golang", "terraform", "graphql", "kubernetes"):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
     assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
     assert 0 < kw["total"] <= 10

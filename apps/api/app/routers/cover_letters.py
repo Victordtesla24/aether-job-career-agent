@@ -143,11 +143,19 @@ _SKILL_HINTS = frozenset(
 #: their CamelCase split (e.g. "Java"+"Script", "Git"+"Hub") can look just as
 #: word-like as a genuine gluing artifact (NF-final-PII-001 / re-opened
 #: MV-cover-letter-studio-006). Case-insensitive exact-token match.
+#: Extended for NF-final-resid-001: these three legit mixed-case tech/product
+#: terms each contain a segment ("Share"/"Location") that is ALSO one of the
+#: JD structural-label words in ``_ARTIFACT_LABEL_WORDS`` below, so the
+#: any-segment-is-a-label rule would otherwise flag them — SlideShare (a
+#: real product), SharePoint (Microsoft SharePoint) and GeoLocation (the
+#: browser Geolocation API) are the plausible false positives surveyed for
+#: that rule; add further exact terms here if a real one surfaces later.
 _MIXED_CASE_TECH_ALLOWLIST = frozenset(
     """
     javascript typescript postgresql graphql mongodb nodejs node.js github
     gitlab devops oauth2 oauth javafx jquery mysql dynamodb cloudformation
     websocket elasticsearch log4j2 webassembly
+    slideshare sharepoint geolocation
     """.split()
 )
 
@@ -170,11 +178,44 @@ _ARTIFACT_SPLIT_WORDS = _KEYWORD_BOILERPLATE | frozenset(
     """.split()
 )
 
+#: Narrow "JD structural field-label" subset of ``_ARTIFACT_SPLIT_WORDS`` —
+#: nouns a scraped posting uses as a heading/field-name ("Salary:",
+#: "Location:", "Responsibilities:", "Qualifications:", "Compensation:",
+#: "Requirements:", "Benefits:", "Employer:", "Department:", a "Share this
+#: job" widget). When even ONE CamelCase segment of a token is one of these,
+#: the token is judged a scrape-gluing artifact regardless of what the OTHER
+#: segment is — a proper noun (city name, person name, another heading) glued
+#: to a single structural label is just as much a gluing artifact as two
+#: label words glued together (NF-final-resid-001 residual of
+#: NF-final-PII-001 / re-opened MV-cover-letter-studio-006: "Sydney"+"Salary"
+#: survived the old "EVERY segment must be a standalone boilerplate word"
+#: rule because no city name is in ``_ARTIFACT_SPLIT_WORDS`` — enumerating
+#: every possible city/place/person name glued to a label is unbounded
+#: whack-a-mole, so instead we only need ONE side of the gluing, the label
+#: itself, to be recognized).
+#:
+#: Deliberately much narrower than the role/title words already in
+#: ``_ARTIFACT_SPLIT_WORDS`` (manager/engineer/director/experience/build/
+#: training/...) — those pair with too many plausible real compound terms on
+#: their own (e.g. a hypothetical "XManager" product) to safely trigger
+#: artifact detection from a single match; a field-label noun like "Salary"
+#: or "Qualifications" essentially never appears as a real English/tech
+#: compound's second half, so it is a much safer single-segment signal. A
+#: handful of real mixed-case tech/product terms DO glue onto "Share" or
+#: "Location" (SlideShare, SharePoint, GeoLocation) — those are protected by
+#: the ``_MIXED_CASE_TECH_ALLOWLIST`` check, which runs first.
+_ARTIFACT_LABEL_WORDS = frozenset(
+    """
+    salary location locations responsibilities requirement requirements
+    qualifications compensation benefit benefits employer department share
+    """.split()
+)
+
 #: Matches one CamelCase "hump" — an uppercase letter starting either an
 #: acronym run (kept together: "SQL", "DB", "QL") or a Capitalized word
 #: ("Manager", "Postgre"). Used only to test whether a token's segments are
-#: ALL standalone artifact/boilerplate words; it does not need to be a
-#: perfect general-purpose camelCase tokenizer.
+#: ALL standalone artifact/boilerplate words (or contain a label word); it
+#: does not need to be a perfect general-purpose camelCase tokenizer.
 _CAMEL_HUMP_RE = re.compile(r"[A-Z](?:[A-Z]+(?=[A-Z]|$)|[a-z0-9]*)")
 
 
@@ -182,24 +223,32 @@ def _is_camel_concatenation_artifact(token: str) -> bool:
     """True when ``token`` is an HTML-scrape CamelCase concatenation artifact
     — a heading/label word glued to the next word with no space (e.g.
     "ManagerLocation", "ResponsibilitiesBuild", "EmployerShare",
-    "EngineerLocation") — rather than a legitimate mixed-case tech term
-    (NF-final-PII-001 / re-opened MV-cover-letter-studio-006).
+    "EngineerLocation", "SydneySalary", "CanberraLocation") — rather than a
+    legitimate mixed-case tech term (NF-final-PII-001 / re-opened
+    MV-cover-letter-studio-006; city+label gluings NF-final-resid-001).
 
     Known tech terms are protected first via an explicit allowlist, because a
     legit term's CamelCase split (JavaScript -> "Java"+"Script") can otherwise
     look just as word-like as a genuine artifact. Anything else is judged an
-    artifact only when its CamelCase split yields 2+ segments and EVERY
-    segment is itself a standalone common-English/JD-boilerplate word — a
-    real tech term's split usually leaves at least one segment that is not a
-    standalone word (an acronym remnant like "SQL"/"DB"/"QL", or a fragment
-    like "Postgre"/"Mongo").
+    artifact when its CamelCase split yields 2+ segments and EITHER:
+
+    * EVERY segment is itself a standalone common-English/JD-boilerplate word
+      (e.g. "Manager"+"Location") — a real tech term's split usually leaves
+      at least one segment that is not a standalone word (an acronym remnant
+      like "SQL"/"DB"/"QL", or a fragment like "Postgre"/"Mongo"); or
+    * ANY segment is one of the narrower ``_ARTIFACT_LABEL_WORDS`` — a JD
+      structural field-label ("Salary", "Location", "Responsibilities", ...)
+      glued to literally anything (most often a scraped place name) is a
+      gluing artifact regardless of what the other segment is.
     """
     if token.lower() in _MIXED_CASE_TECH_ALLOWLIST:
         return False
     segments = _CAMEL_HUMP_RE.findall(token)
     if len(segments) < 2:
         return False
-    return all(len(seg) >= 3 and seg.lower() in _ARTIFACT_SPLIT_WORDS for seg in segments)
+    if all(len(seg) >= 3 and seg.lower() in _ARTIFACT_SPLIT_WORDS for seg in segments):
+        return True
+    return any(seg.lower() in _ARTIFACT_LABEL_WORDS for seg in segments)
 
 
 def _skill_score(token: str) -> int:
