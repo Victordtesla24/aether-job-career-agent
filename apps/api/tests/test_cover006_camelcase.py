@@ -1,0 +1,128 @@
+"""MV-cover-letter-studio-006 RE-OPENED / NF-final-PII-001 — CamelCase
+concatenation artifacts in the JD Keyword Coverage panel.
+
+Live-verify on prod found the panel still surfacing HTML-scrape CamelCase
+CONCATENATION artifacts ("ManagerLocation", "EngineerLocation",
+"ResponsibilitiesBuild", "EmployerShare") as TOP chips for the Empire-Life JD
+pattern (and others). Root cause: ``_skill_score`` rewarded a token's
+internal uppercase (+45) the same whether it came from a legit mixed-case
+tech term (PostgreSQL, JavaScript) or from an HTML-scrape gluing where a
+heading/label word lost its whitespace against the next word (e.g.
+"Manager" + "Location" -> "ManagerLocation").
+
+The fix (in ``app.routers.cover_letters``):
+  - ``_is_camel_concatenation_artifact`` detects a token whose CamelCase split
+    yields 2+ segments that are ALL standalone common-English/JD-boilerplate
+    words -> judged an artifact and dropped entirely from the keyword panel
+    (and never rewarded for internal uppercase in ``_skill_score``).
+  - A known-tech allowlist (``_MIXED_CASE_TECH_ALLOWLIST``) is checked FIRST
+    so legit mixed-case tech terms (JavaScript, TypeScript, PostgreSQL,
+    GraphQL, MongoDB, GitHub, GitLab, OAuth2, log4j2, ...) are never treated
+    as artifacts, even though their own CamelCase split ("Java"+"Script")
+    can look just as word-like as a genuine gluing artifact.
+
+This file is deliberately kept SEPARATE from
+``test_mv_clstudio_j_residuals.py`` (owned by another concurrent fixer
+working the résumé-seeding residuals in that same module) to avoid a merge
+collision.
+
+Run under the shared test DB lock (schema=aether_test ONLY):
+    flock /tmp/aether-pytest.lock python3 -m pytest \
+        tests/test_cover006_camelcase.py -q
+"""
+from __future__ import annotations
+
+import pytest
+
+from app.routers.cover_letters import (
+    _is_camel_concatenation_artifact,
+    _keyword_coverage,
+)
+
+_CONCATENATION_ARTIFACTS = (
+    "ManagerLocation",
+    "EngineerLocation",
+    "ResponsibilitiesBuild",
+    "EmployerShare",
+)
+
+_LEGIT_MIXED_CASE_TECH = (
+    "JavaScript",
+    "TypeScript",
+    "PostgreSQL",
+    "GraphQL",
+    "MongoDB",
+    "Node.js",
+    "GitHub",
+    "GitLab",
+    "OAuth2",
+)
+
+
+@pytest.mark.parametrize("artifact", _CONCATENATION_ARTIFACTS)
+def test_camel_concatenation_artifact_is_detected(artifact):
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} is an HTML-scrape concatenation artifact and must be "
+        "detected"
+    )
+
+
+@pytest.mark.parametrize("term", _LEGIT_MIXED_CASE_TECH)
+def test_legit_mixed_case_tech_is_not_flagged_as_artifact(term):
+    assert not _is_camel_concatenation_artifact(term), (
+        f"{term!r} is a legitimate mixed-case tech term and must NOT be "
+        "flagged as a concatenation artifact"
+    )
+
+
+def test_keyword_coverage_drops_camel_concatenation_artifacts_empire_life_pattern():
+    """Empire-Life-style scraped JD: heading/label words glued to the next
+    word with no space ("Manager"+"Location", "Responsibilities"+"Build",
+    "Employer"+"Share", "Engineer"+"Location"). None of those artifacts may
+    surface as keyword chips; real skills and legit mixed-case tech terms
+    must still surface (NF-final-PII-001 / re-opened
+    MV-cover-letter-studio-006)."""
+    # Kept tight to the 7 non-artifact tech terms this test asserts on — the
+    # panel caps chips at 10, and each additional high-scoring tech term
+    # (MongoDB/GitHub/GitLab/OAuth2 are ALSO covered individually by
+    # test_legit_mixed_case_tech_is_not_flagged_as_artifact above) competes
+    # for those slots by score, so keeping the JD focused avoids crowding out
+    # the lower-scoring "Node.js" with unrelated extra tech mentions.
+    job = {
+        "title": "Senior Platform Team",
+        "description": (
+            "Senior Platform ManagerLocation: Toronto, Canada. "
+            "ResponsibilitiesBuild scalable services using Kubernetes and "
+            "Docker. Experience with JavaScript, TypeScript, PostgreSQL, "
+            "GraphQL and Node.js required. EmployerShare this role widely. "
+            "EngineerLocation: Sydney, Australia."
+        ),
+    }
+    letter = (
+        "I bring deep Kubernetes, Docker, JavaScript, TypeScript, "
+        "PostgreSQL, GraphQL and Node.js experience."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    # Concatenation artifacts must never surface as chips.
+    for artifact in _CONCATENATION_ARTIFACTS:
+        assert artifact.lower() not in words, (
+            f"CamelCase concatenation artifact {artifact!r} leaked into the "
+            f"keyword chips: {words!r}"
+        )
+
+    # Real skills survive.
+    assert "kubernetes" in words, f"real skill dropped: {words!r}"
+    assert "docker" in words, f"real skill dropped: {words!r}"
+
+    # Legit mixed-case tech terms still surface — NOT collateral damage.
+    for term in ("javascript", "typescript", "postgresql", "graphql", "node.js"):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
+    # Coverage math stays internally consistent.
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10

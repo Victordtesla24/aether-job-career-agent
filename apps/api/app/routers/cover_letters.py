@@ -138,18 +138,87 @@ _SKILL_HINTS = frozenset(
 )
 
 
+#: Legit mixed-case / CamelCase technology terms whose internal capitalization
+#: must NEVER be treated as an HTML-scrape concatenation artifact, even though
+#: their CamelCase split (e.g. "Java"+"Script", "Git"+"Hub") can look just as
+#: word-like as a genuine gluing artifact (NF-final-PII-001 / re-opened
+#: MV-cover-letter-studio-006). Case-insensitive exact-token match.
+_MIXED_CASE_TECH_ALLOWLIST = frozenset(
+    """
+    javascript typescript postgresql graphql mongodb nodejs node.js github
+    gitlab devops oauth2 oauth javafx jquery mysql dynamodb cloudformation
+    websocket elasticsearch log4j2 webassembly
+    """.split()
+)
+
+#: Common-English / job-posting-header words whose CamelCase concatenation
+#: (e.g. "Manager"+"Location", "Employer"+"Share") signals an HTML-scrape
+#: gluing artifact rather than a legitimate skill/term — a heading or label
+#: word that lost its whitespace against the next word when the posting was
+#: scraped (NF-final-PII-001 / re-opened MV-cover-letter-studio-006).
+#: Deliberately narrow JD-structure/role-label vocabulary, not skill
+#: vocabulary, so real multi-word skills are never affected.
+_ARTIFACT_SPLIT_WORDS = _KEYWORD_BOILERPLATE | frozenset(
+    """
+    manager engineer employer share build experience director supervisor
+    specialist coordinator administrator executive associate officer
+    consultant lead department salary compensation qualifications education
+    background duties contact reports permanent temporary internship
+    graduate growth culture values diversity inclusion training
+    certification license budget headquarters branch division strategy goal
+    australia canada zealand singapore ireland england scotland wales
+    """.split()
+)
+
+#: Matches one CamelCase "hump" — an uppercase letter starting either an
+#: acronym run (kept together: "SQL", "DB", "QL") or a Capitalized word
+#: ("Manager", "Postgre"). Used only to test whether a token's segments are
+#: ALL standalone artifact/boilerplate words; it does not need to be a
+#: perfect general-purpose camelCase tokenizer.
+_CAMEL_HUMP_RE = re.compile(r"[A-Z](?:[A-Z]+(?=[A-Z]|$)|[a-z0-9]*)")
+
+
+def _is_camel_concatenation_artifact(token: str) -> bool:
+    """True when ``token`` is an HTML-scrape CamelCase concatenation artifact
+    — a heading/label word glued to the next word with no space (e.g.
+    "ManagerLocation", "ResponsibilitiesBuild", "EmployerShare",
+    "EngineerLocation") — rather than a legitimate mixed-case tech term
+    (NF-final-PII-001 / re-opened MV-cover-letter-studio-006).
+
+    Known tech terms are protected first via an explicit allowlist, because a
+    legit term's CamelCase split (JavaScript -> "Java"+"Script") can otherwise
+    look just as word-like as a genuine artifact. Anything else is judged an
+    artifact only when its CamelCase split yields 2+ segments and EVERY
+    segment is itself a standalone common-English/JD-boilerplate word — a
+    real tech term's split usually leaves at least one segment that is not a
+    standalone word (an acronym remnant like "SQL"/"DB"/"QL", or a fragment
+    like "Postgre"/"Mongo").
+    """
+    if token.lower() in _MIXED_CASE_TECH_ALLOWLIST:
+        return False
+    segments = _CAMEL_HUMP_RE.findall(token)
+    if len(segments) < 2:
+        return False
+    return all(len(seg) >= 3 and seg.lower() in _ARTIFACT_SPLIT_WORDS for seg in segments)
+
+
 def _skill_score(token: str) -> int:
     """Skill-likeness of a JD token — higher is more skill-like. Ranks plausible
     skills ahead of surviving generic prose BEFORE the coverage cap so real
     skills (Kubernetes/Docker/Terraform/PostgreSQL) are never crowded out by raw
-    JD ordering (MV-cover-letter-studio-006)."""
+    JD ordering (MV-cover-letter-studio-006). Does NOT reward internal-uppercase
+    for an HTML-scrape CamelCase concatenation artifact (e.g. "ManagerLocation")
+    — those never reach scoring at all since ``_is_semantic_keyword`` drops them
+    first, but the guard here keeps this function honest on its own
+    (NF-final-PII-001 / re-opened MV-cover-letter-studio-006)."""
     low = token.lower()
+    is_artifact = _is_camel_concatenation_artifact(token)
     score = 0
     if low in _SKILL_HINTS:
         score += 120
     if any(ch in token for ch in "+#."):          # C++, C#, Node.js, CI/CD
         score += 40
-    if any(c.isupper() for c in token[1:]):        # PostgreSQL, JavaScript, GraphQL
+    if not is_artifact and any(c.isupper() for c in token[1:]):  # PostgreSQL, JavaScript, GraphQL
         score += 45
     if token[:1].isupper() and len(token) >= 4:    # Kubernetes, Terraform, Docker
         score += 25
@@ -161,12 +230,16 @@ def _skill_score(token: str) -> int:
 
 def _is_semantic_keyword(token: str) -> bool:
     """A JD token is a plausible skill/requirement keyword — not a URL, an
-    injected honeypot code, posting boilerplate or a tokenizer artifact
-    (MV-cover-letter-studio-006)."""
+    injected honeypot code, posting boilerplate, a tokenizer artifact
+    (MV-cover-letter-studio-006), or an HTML-scrape CamelCase concatenation
+    artifact such as "ManagerLocation"/"ResponsibilitiesBuild"/"EmployerShare"
+    (NF-final-PII-001 / re-opened MV-cover-letter-studio-006)."""
     if len(token) < 3:
         return False
     low = token.lower()
     if low in _STOPWORDS or low in _KEYWORD_BOILERPLATE:
+        return False
+    if _is_camel_concatenation_artifact(token):
         return False
     if _NON_SEMANTIC_URL.search(token):
         return False
