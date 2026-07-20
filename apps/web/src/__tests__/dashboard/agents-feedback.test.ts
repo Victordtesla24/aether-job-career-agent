@@ -142,6 +142,22 @@ describe("runErrorNotice", () => {
     expect(n.text).not.toContain("run Scout to discover jobs");
   });
 
+  it("review regression (NF-final-closure-002): preserves the href-bearing Scout-guidance notice for resolveParams()'s CLIENT-SIDE synthetic zero-jobs 422 (a plain Error, no JSON body)", () => {
+    // apps/web/src/app/dashboard/agents/page.tsx's resolveParams() throws
+    // exactly this shape for trigger('tailor')/trigger('coverLetter') when
+    // the user has zero jobs sourced — the ordinary, pre-existing
+    // "run Scout first" scenario, NOT a genuine backend-returned 422 detail.
+    // The fitScorer-detail fix above must not swallow this case: a raw,
+    // non-JSON Error.message is not a real backend `detail` and must fall
+    // through to the original href-bearing Scout guidance unchanged.
+    const err = Object.assign(new Error("No jobs discovered yet"), { status: 422 });
+    const n = runErrorNotice(err, "Tailor");
+    expect(n.text).toContain("run Scout to discover jobs");
+    expect(n.text).not.toContain("No jobs discovered yet");
+    expect(n.href).toBe("/dashboard/jobs");
+    expect(n.hrefLabel).toBe("open Jobs →");
+  });
+
   it("maps 401 to a reload prompt", () => {
     const n = runErrorNotice({ status: 401 }, "Pipeline");
     expect(n.text).toContain("session expired");

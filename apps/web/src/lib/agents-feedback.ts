@@ -212,6 +212,44 @@ function extractApiDetail(err: unknown): string | null {
 }
 
 /**
+ * Strict variant of `extractApiDetail`: returns the parsed JSON `detail`
+ * ONLY when `err.message` genuinely ends in a real backend error body
+ * (`apiRequest`'s `... failed (<status>): {"detail": "..."}` shape) —
+ * unlike `extractApiDetail`, this NEVER falls back to the raw message text.
+ *
+ * Review regression fix (NF-final-closure-002): `runErrorNotice`'s 422
+ * branch used `extractApiDetail`, whose raw-message fallback made it treat
+ * ANY `Error` with a 422 `status` property as if it carried a genuine
+ * backend detail — including `agents/page.tsx`'s `resolveParams()`, which
+ * throws a CLIENT-SIDE synthetic `Object.assign(new Error("No jobs
+ * discovered yet"), {status:422})` for Tailor/CoverLetter when the user has
+ * zero jobs sourced (the ordinary, pre-existing "run Scout first" scenario
+ * the hardcoded copy below was built for). That plain, non-JSON message is
+ * not a real backend detail, so `extractApiDetail` fell through to
+ * returning it verbatim, silently swallowing the href-bearing Scout
+ * guidance. Using this stricter helper for that one call site keeps the
+ * fitScorer/genuine-backend-422 improvement (a real `{"detail":...}` body
+ * still surfaces) while restoring the original Scout-guidance notice for
+ * any 422 whose message isn't genuinely JSON. `providerCredentialErrorNotice`
+ * still uses `extractApiDetail` (unchanged) — its raw-message fallback is
+ * correct there since every error on that path is a real backend response.
+ */
+function extractApiJsonDetail(err: unknown): string | null {
+  if (!(err instanceof Error) || !err.message.trim()) return null;
+  const match = err.message.match(/\{[\s\S]*\}$/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+  } catch {
+    // Not JSON — genuinely no real backend detail.
+  }
+  return null;
+}
+
+/**
  * Honest toast for the provider-credential save/remove/verify flow (QA
  * finding: `runErrorNotice`'s generic 503 copy — "the AI model is busy or its
  * time budget was exceeded" — is WRONG here. A 503 on this path means the
@@ -249,10 +287,15 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     // often fitScorer's honest, synchronous MissingResumeError refusal
     // ("Add your resume before scoring jobs against it."), which "run
     // Scout" both drops and misdirects (jobs already exist; the résumé is
-    // what's missing). Surface the server's own detail when present —
-    // never a guessed remediation — and fall back to the generic Scout
-    // guidance only when no detail is extractable.
-    const detail = extractApiDetail(err);
+    // what's missing). Surface the server's own detail when present — but
+    // ONLY when it was genuinely parsed from a backend JSON body
+    // (extractApiJsonDetail, not extractApiDetail): resolveParams() in
+    // agents/page.tsx throws a CLIENT-SIDE synthetic 422 ("No jobs
+    // discovered yet") for the ordinary zero-jobs case, and that plain
+    // Error's message must keep falling through to the Scout-guidance
+    // notice below, not be mistaken for a real backend detail (review
+    // regression fix).
+    const detail = extractApiJsonDetail(err);
     if (detail) {
       return { kind: "error", text: `${context} failed — ${detail}` };
     }
