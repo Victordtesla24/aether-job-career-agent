@@ -224,12 +224,79 @@ _ARTIFACT_LABEL_WORDS = frozenset(
     """.split()
 )
 
-#: Matches one CamelCase "hump" — an uppercase letter starting either an
+#: Splits a token into CamelCase "humps" — a cased letter starting either an
 #: acronym run (kept together: "SQL", "DB", "QL") or a Capitalized word
 #: ("Manager", "Postgre"). Used only to test whether a token's segments are
 #: ALL standalone artifact/boilerplate words (or contain a label word); it
 #: does not need to be a perfect general-purpose camelCase tokenizer.
-_CAMEL_HUMP_RE = re.compile(r"[A-Z](?:[A-Z]+(?=[A-Z]|$)|[a-z0-9]*)")
+#:
+#: NF-final-pass-001: this was previously an ASCII-only regex,
+#: ``re.compile(r"[A-Z](?:[A-Z]+(?=[A-Z]|$)|[a-z0-9]*)")`` — its hump-START
+#: test ``[A-Z]`` never matched a non-Latin-script capital (Cyrillic,
+#: Greek, ...) or a Latin capital outside plain ASCII (Turkish İ,
+#: U+0130), so a token like "МоскваSalary" produced only ONE hump
+#: (``['Salary']``): the `len(segments) < 2` early-return in
+#: ``_is_camel_concatenation_artifact`` fired before the label-word check
+#: ever ran, silently accepting a JD label glued to a non-Latin proper
+#: noun (while the same gluing with an ASCII proper noun, e.g.
+#: "SydneySalary", was correctly caught by NF-final-resid-001). The
+#: earlier München fix (NF-final-closure-001) widened only the ``_WORD_RE``
+#: *tokenizer* above, not this hump *segmenter*, so it never reached this
+#: class of gluing.
+#:
+#: Replaced (ORCHESTRATOR DESIGN RULING: terminate the class structurally,
+#: no regex alphabet enumeration) with ``_camel_humps``, a character walk
+#: using ``ch.isupper()``/``ch.islower()``/``ch.isdigit()`` — Unicode
+#: general-category case functions that are correct for every cased script
+#: in one shot, including Turkish İ (``'İ'.isupper() is True`` in Python).
+#: Caseless scripts (CJK, etc.) have no uppercase/lowercase distinction at
+#: all, so a caseless character can neither start nor continue a hump —
+#: it is simply skipped, exactly like punctuation — meaning the class
+#: genuinely ends here with no further per-script enumeration needed.
+#: Output contract (a list of string segments) is unchanged, so
+#: ``_is_camel_concatenation_artifact`` and every other consumer are
+#: untouched. The ASCII/acronym segmentation this produces is byte-identical
+#: to the retired regex's (see the characterization tests in
+#: ``test_cover006_camelcase.py``) — only non-ASCII/non-Latin hump-start
+#: recognition changed.
+def _camel_humps(token: str) -> list[str]:
+    n = len(token)
+    i = 0
+    segments: list[str] = []
+    while i < n:
+        ch = token[i]
+        if not ch.isupper():
+            i += 1
+            continue
+        start = i
+        run_start = i + 1
+        run_end = run_start
+        while run_end < n and token[run_end].isupper():
+            run_end += 1
+        if run_end == run_start:
+            # No cased-uppercase char immediately follows ``ch``: an
+            # ordinary word hump — ``ch`` plus the following run of
+            # lower/digit chars (mirrors the retired regex's
+            # ``[a-z0-9]*`` alternative, generalized to any script).
+            end = start + 1
+            while end < n and (token[end].islower() or token[end].isdigit()):
+                end += 1
+            segments.append(token[start:end])
+            i = end
+        elif run_end == n:
+            # The uppercase run reaches end-of-token: keep the WHOLE run
+            # together (an acronym at the end of the token, e.g. "API" in
+            # "GatewayAPI").
+            segments.append(token[start:n])
+            i = n
+        else:
+            # An acronym run followed by a new word: hand back the LAST
+            # uppercase char of the run to start the next hump (e.g.
+            # "SQLDatabase" -> "SQL" + "Database", "APIGateway" ->
+            # "API" + "Gateway").
+            segments.append(token[start:run_end - 1])
+            i = run_end - 1
+    return segments
 
 
 def _is_camel_concatenation_artifact(token: str) -> bool:
@@ -256,7 +323,7 @@ def _is_camel_concatenation_artifact(token: str) -> bool:
     """
     if token.lower() in _MIXED_CASE_TECH_ALLOWLIST:
         return False
-    segments = _CAMEL_HUMP_RE.findall(token)
+    segments = _camel_humps(token)
     if len(segments) < 2:
         return False
     if all(len(seg) >= 3 and seg.lower() in _ARTIFACT_SPLIT_WORDS for seg in segments):
