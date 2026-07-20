@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   PIPELINE_ORDER,
   agentSuccessNotice,
+  missingResumeNotice,
   pipelineCompletionNotice,
   pipelineProgressNotice,
   pipelineStartNotice,
@@ -123,10 +124,22 @@ describe("runErrorNotice", () => {
     expect(n.text).toContain("press the button again");
   });
 
-  it("maps 422 to run-Scout-first guidance with a Jobs link", () => {
+  it("falls back to run-Scout-first guidance with a Jobs link when no 422 detail is extractable", () => {
     const n = runErrorNotice({ status: 422 }, "Tailor");
     expect(n.text).toContain("run Scout to discover jobs");
     expect(n.href).toBe("/dashboard/jobs");
+  });
+
+  it("NF-final-closure-002: surfaces the real 422 detail instead of the hardcoded 'run Scout' line when one is extractable", () => {
+    const err = Object.assign(
+      new Error(
+        'POST /agents/fit-scorer/run failed (422): {"detail":"Add your resume before scoring jobs against it."}',
+      ),
+      { status: 422 },
+    );
+    const n = runErrorNotice(err, "fitScorer");
+    expect(n.text).toContain("Add your resume before scoring jobs against it.");
+    expect(n.text).not.toContain("run Scout to discover jobs");
   });
 
   it("maps 401 to a reload prompt", () => {
@@ -138,5 +151,44 @@ describe("runErrorNotice", () => {
     const n = runErrorNotice(new Error("boom"), "Scout");
     expect(n.text).toContain("(boom)");
     expect(n.text).toContain("RECENT RUNS");
+  });
+});
+
+describe("missingResumeNotice", () => {
+  it("NF-final-closure-002: returns an honest non-success notice for the shared missingResume refusal shape", () => {
+    const n = missingResumeNotice({
+      resume_id: null,
+      missingResume: true,
+      message: "Add your resume before tailoring or generating an application.",
+    });
+    expect(n).not.toBeNull();
+    expect(n?.kind).toBe("error");
+    expect(n?.text).toBe("Add your resume before tailoring or generating an application.");
+    expect(n?.href).toBe("/dashboard/resume");
+  });
+
+  it("falls back to a generic honest message when the backend omits `message`", () => {
+    const n = missingResumeNotice({ resume_id: null, missingResume: true });
+    expect(n?.text).toContain("Add your resume");
+  });
+
+  it("returns null for a real completed result (no overcorrection)", () => {
+    expect(missingResumeNotice({ changes: 4 })).toBeNull();
+    expect(missingResumeNotice({ persisted: 3 })).toBeNull();
+    expect(missingResumeNotice({})).toBeNull();
+  });
+
+  it("returns null for the unrelated NoChangesApplied no-op shape", () => {
+    // MV-adv-A-002: every proposed edit rejected by the fabrication guard is
+    // a real, honest no-op completion — NOT a missing-résumé refusal — and
+    // must keep rendering agentSuccessNotice's "0 accepted changes" text.
+    expect(
+      missingResumeNotice({
+        resume_id: null,
+        changes: 0,
+        noChangesApplied: true,
+        message: "Every proposed edit was rejected.",
+      }),
+    ).toBeNull();
   });
 });

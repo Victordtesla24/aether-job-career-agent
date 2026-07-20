@@ -153,6 +153,41 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
 }
 
 /**
+ * Detect the shared async "missing résumé" honest-refusal result shape and,
+ * when present, return an honest non-success Notice carrying the backend's
+ * own message — instead of letting `agentSuccessNotice`/
+ * `pipelineCompletionNotice` fabricate a green success from the fields a
+ * refusal never has (NF-final-closure-002).
+ *
+ * apps/api/app/workers/tasks.py's `except MissingResumeError` handler
+ * completes the BackgroundJob (never "failed") with
+ * `{resume_id: null, missingResume: true, message: "Add your resume
+ * before…"}` for BOTH the single-agent branch (tailor/coverLetter/...) and
+ * the pipeline branch — the exact shape NF-final-resid-002 already handles
+ * for Cover Letter Studio's `applyCoverLetterResult`. Before this check,
+ * `agentSuccessNotice`/`pipelineCompletionNotice` read fields the refusal
+ * shape never sets (`changes`, `steps`, `approvalRequired`, ...) and
+ * fabricated "Tailor finished — 0 accepted changes", "a draft is awaiting
+ * your sign-off", or "Pipeline complete — no jobs matched yet" — all FALSE
+ * SUCCESS, dropping the honest message entirely. Call this BEFORE
+ * agentSuccessNotice/pipelineCompletionNotice and use its result when
+ * non-null.
+ */
+export function missingResumeNotice(output: Record<string, unknown>): Notice | null {
+  if (output.missingResume !== true) return null;
+  const message =
+    typeof output.message === "string" && output.message.trim()
+      ? output.message
+      : "Add your resume before running this agent.";
+  return {
+    kind: "error",
+    text: message,
+    href: "/dashboard/resume",
+    hrefLabel: "add your resume →",
+  };
+}
+
+/**
  * Lift the real backend `detail` out of an `ApiError`'s raw message.
  * `apiRequest` embeds the raw response body in the error message (e.g.
  * `PUT /agents/providers/x/credential failed (503): {"detail":"Vault
@@ -209,6 +244,18 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     };
   }
   if (status === 422) {
+    // NF-final-closure-002: this hardcoded "run Scout to discover jobs" copy
+    // was wrong whenever the real 422 detail said something else — most
+    // often fitScorer's honest, synchronous MissingResumeError refusal
+    // ("Add your resume before scoring jobs against it."), which "run
+    // Scout" both drops and misdirects (jobs already exist; the résumé is
+    // what's missing). Surface the server's own detail when present —
+    // never a guessed remediation — and fall back to the generic Scout
+    // guidance only when no detail is extractable.
+    const detail = extractApiDetail(err);
+    if (detail) {
+      return { kind: "error", text: `${context} failed — ${detail}` };
+    }
     return {
       kind: "error",
       text: `${context} needs more data first — run Scout to discover jobs, then try again.`,
