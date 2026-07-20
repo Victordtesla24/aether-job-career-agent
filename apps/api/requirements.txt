@@ -36,13 +36,13 @@ redis>=5
 # Stripe SDK (ADR-P6-STRIPE-MOCK) — checkout, billing-portal, and webhook
 # signature verification (app/services/stripe_gateway.py, imported lazily so a
 # deploy without it degrades to an honest 503 instead of crashing at import
-# time). Historically installed out-of-band in prod at 13.2.0; declared here
-# so a fresh venv/clone matches (MV-system-009). Pinned below 14 — stripe>=14
-# tightens Event construction and raises AttributeError on a webhook payload
-# missing the top-level "object": "event" envelope key (verified against
-# test_gap_p6_billing.py's webhook fixtures, which predate that requirement);
-# 13.2.0 is also the newest 13.x release, so this range resolves exactly to
-# the version already running in prod.
+# time). 13.2.0 is prod-verified (matches what's already installed there) and
+# is also the newest 13.x release, so this range resolves to it exactly
+# (MV-system-009). The 14.x line also passes test_gap_p6_billing.py
+# (14.0.0/14.4.1 verified) but isn't prod-proven, so the ceiling stays
+# conservative at <14. stripe>=15.0.0 is a confirmed break: it raises
+# AttributeError in Webhook.construct_event on a webhook payload missing the
+# top-level "object": "event" key (verified at 15.0.0 and 15.3.1).
 stripe>=13.2,<14
 # Optional/heavy: embedding-based semantic similarity for the ATS engine
 # (see requirements-ml.txt). The engine degrades gracefully to a deterministic
