@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.routers import cover_letters as _cl_module
 from app.routers.cover_letters import (
     _is_camel_concatenation_artifact,
     _jd_keywords,
@@ -422,4 +423,236 @@ def test_accented_word_survives_tokenization_intact_no_garbage_fragments():
     assert "résumé" in words, (
         f"'résumé' should tokenize and survive as a single whole keyword: "
         f"{words!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# NF-final-pass-001 — final-pass adversarial sweep, residual of
+# NF-final-closure-001 / NF-final-resid-001 / NF-final-PII-001 /
+# MV-cover-letter-studio-006. A proper noun in a NON-Latin script (Cyrillic,
+# Greek) or one starting with a non-ASCII-uppercase letter outside the
+# accented-Latin range the München fix covers (Turkish İ = U+0130 LATIN
+# CAPITAL LETTER I WITH DOT ABOVE) still leaked as a top chip when glued to
+# a JD structural label: İstanbulSalary, КиевLocation, МоскваSalary,
+# İzmirLocation, ΑθήναLocation.
+#
+# Root cause (verified live against the retired ``_CAMEL_HUMP_RE`` regex at
+# f491170): the regex's hump-START test was ``[A-Z]`` — ASCII-only — so a
+# Cyrillic/Greek/Turkish-İ capital letter never started a hump at all.
+# Gluing one to an ASCII label word left exactly ONE hump (the label
+# itself), e.g. ``_CAMEL_HUMP_RE.findall("МоскваSalary") == ['Salary']``, so
+# the ``len(segments) < 2`` early-return in
+# ``_is_camel_concatenation_artifact`` fired BEFORE the label-word check
+# ever ran — unlike an ASCII gluing ("SydneySalary" -> ['Sydney','Salary'],
+# correctly caught since NF-final-resid-001). The München fix
+# (NF-final-closure-001) widened only the ``_WORD_RE`` *tokenizer*, not this
+# hump *segmenter*, so it never reached this class of gluing.
+#
+# Fixed at the root (ORCHESTRATOR DESIGN RULING: terminate the class
+# structurally, no regex alphabet enumeration) by replacing the ASCII regex
+# with ``_camel_humps``, a character-walk using
+# ``ch.isupper()``/``ch.islower()``/``ch.isdigit()`` — unicode-correct for
+# every cased script in one shot. Caseless scripts (CJK, etc.) have no
+# uppercase/lowercase distinction at all, so a caseless character can
+# neither start nor continue a hump — it is simply skipped, exactly like
+# punctuation — meaning the class genuinely ends here with no further
+# per-script enumeration needed.
+# ---------------------------------------------------------------------------
+
+# The exact 5 gluings the final-pass adversarial sweep reproduced 3x on prod
+# (API run1, fresh-session re-GET, fresh job + browser panel) as TOP chips.
+_NON_LATIN_LABEL_ARTIFACTS = (
+    "İstanbulSalary",  # İstanbulSalary  (Turkish İ, U+0130)
+    "КиевLocation",  # КиевLocation  (Cyrillic)
+    "МоскваSalary",  # МоскваSalary  (Cyrillic)
+    "İzmirLocation",  # İzmirLocation  (Turkish İ)
+    "ΑθήναLocation",  # ΑθήναLocation  (Greek)
+)
+
+
+@pytest.mark.parametrize("artifact", _NON_LATIN_LABEL_ARTIFACTS)
+def test_non_latin_proper_noun_label_camel_artifact_is_detected(artifact):
+    """The exact 5 non-Latin-script / non-ASCII-capital gluings the
+    final-pass adversarial sweep found leaking into prod's JD Keyword
+    Coverage panel as TOP chips (NF-final-pass-001)."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a non-Latin-script (or Turkish İ) proper noun "
+        "to a JD structural label and must be detected as a concatenation "
+        "artifact (NF-final-pass-001)"
+    )
+
+
+# Adversarial variants of my own design (NOT enumerated by the sweep): the
+# same 5 gluings with the JD structural label placed FIRST and the
+# non-Latin-script proper noun glued directly after — the reverse order
+# from the sweep-named cases. A structural, hump-membership-based fix must
+# be order-independent; a fix that only special-cased "label at the end"
+# would still be whack-a-mole.
+_NON_LATIN_LABEL_ARTIFACTS_REVERSED = (
+    "SalaryМосква",  # SalaryМосква
+    "LocationКиев",  # LocationКиев
+    "Salaryİstanbul",  # Salaryİstanbul
+    "Locationİzmir",  # Locationİzmir
+    "LocationΑθήνα",  # LocationΑθήνα
+)
+
+
+@pytest.mark.parametrize("artifact", _NON_LATIN_LABEL_ARTIFACTS_REVERSED)
+def test_non_latin_proper_noun_label_camel_artifact_reverse_order_is_detected(
+    artifact,
+):
+    """Reverse gluing order (JD structural label FIRST, non-Latin-script
+    proper noun glued directly after) must also be detected — the fix
+    operates on hump membership, not position (NF-final-pass-001
+    adversarial variant beyond the sweep-named order)."""
+    assert _is_camel_concatenation_artifact(artifact), (
+        f"{artifact!r} glues a JD structural label to a non-Latin-script "
+        "proper noun (reverse order) and must be detected as a "
+        "concatenation artifact (NF-final-pass-001)"
+    )
+
+
+_NON_LATIN_STANDALONE_PRESERVED = (
+    "Киев",  # Киев (Kiev), unglued
+    "İstanbul",  # İstanbul, unglued
+    "Zürich",  # Zürich, unglued (NF-final-closure-001 case retained)
+)
+
+
+@pytest.mark.parametrize("term", _NON_LATIN_STANDALONE_PRESERVED)
+def test_standalone_non_latin_proper_noun_not_flagged_as_artifact(term):
+    """A non-Latin-script (or accented-Latin) proper noun standing ALONE —
+    not glued to a label — is a legitimate JD term, not a concatenation
+    artifact (NF-final-pass-001 preserved case, mirrors
+    NF-final-closure-001's own unglued-Zürich/München guard)."""
+    assert not _is_camel_concatenation_artifact(term), (
+        f"{term!r} is a legitimate standalone proper noun and must NOT be "
+        "flagged as a concatenation artifact merely for containing a "
+        "non-ASCII / non-Latin-script capital letter"
+    )
+
+
+def test_keyword_coverage_drops_non_latin_label_camel_artifacts_reported_pattern():
+    """The exact reported pattern (NF-final-pass-001): a scraped JD gluing
+    non-Latin-script city names to JD structural labels with no space. None
+    of the 5 sweep-named artifacts may surface as keyword chips; legit tech
+    terms AND an UNGLUED non-Latin city name mentioned in the same JD must
+    still survive."""
+    job = {
+        "title": "Senior Backend Engineer, EMEA",
+        "description": (
+            "МоскваSalary: negotiable, relocation assistance available. "
+            "КиевLocation: hybrid, 2 days onsite per week. "
+            "İstanbulSalary: DOE, relocation assistance available. "
+            "İzmirLocation: remote-friendly. "
+            "ΑθήναLocation: onsite, EU work authorization required. "
+            "We are proud to have engineers based in Киев itself. "
+            "Stack: JavaScript, TypeScript, PostgreSQL, Kubernetes and "
+            "Docker. DevOps and microservices experience required."
+        ),
+    }
+    letter = (
+        "I bring deep JavaScript, TypeScript, PostgreSQL, Kubernetes and "
+        "Docker experience building reliable DevOps microservices."
+    )
+    kw = _keyword_coverage(letter, job)
+    words = [i["keyword"].lower() for i in kw["items"]]
+
+    for artifact in _NON_LATIN_LABEL_ARTIFACTS:
+        assert artifact.lower() not in words, (
+            f"Non-Latin-script proper-noun+label CamelCase artifact "
+            f"{artifact!r} leaked into keyword chips: {words!r}"
+        )
+
+    for term in ("javascript", "typescript", "postgresql", "kubernetes", "docker"):
+        assert term in words, (
+            f"legit mixed-case tech term {term!r} was wrongly dropped: "
+            f"{words!r}"
+        )
+
+    assert kw["covered"] == sum(1 for i in kw["items"] if i["covered"])
+    assert 0 < kw["total"] <= 10
+
+
+# ---------------------------------------------------------------------------
+# ASCII/acronym characterization — locks in the EXACT segmentation the
+# retired ``_CAMEL_HUMP_RE`` regex produced (captured live from the regex
+# at f491170, BEFORE any code change) as a regression guard for the
+# NF-final-pass-001 rewrite. ``_active_camel_humps`` resolves whichever
+# segmenter is currently wired into ``app.routers.cover_letters`` — the
+# legacy regex (pre-fix) or its replacement, ``_camel_humps`` (post-fix) —
+# so this exact test file runs unmodified both BEFORE and AFTER the fix,
+# proving the ASCII/acronym segmentation contract (including acronym-run
+# handling, e.g. "APIGateway" -> ["API", "Gateway"], "PostgreSQL" ->
+# ["Postgre", "SQL"]) stays byte-identical across the rewrite.
+# ---------------------------------------------------------------------------
+
+
+def _active_camel_humps(token: str) -> list[str]:
+    fn = getattr(_cl_module, "_camel_humps", None)
+    if fn is not None:
+        return fn(token)
+    return _cl_module._CAMEL_HUMP_RE.findall(token)
+
+
+# (token, expected_segments) — expected values captured live via
+# ``_CAMEL_HUMP_RE.findall(token)`` at f491170, before any change.
+_ASCII_HUMP_CHARACTERIZATION = (
+    ("ManagerLocation", ["Manager", "Location"]),
+    ("EngineerLocation", ["Engineer", "Location"]),
+    ("JavaScript", ["Java", "Script"]),
+    ("PostgreSQL", ["Postgre", "SQL"]),
+    ("GraphQL", ["Graph", "QL"]),
+    ("MongoDB", ["Mongo", "DB"]),
+    ("GitHub", ["Git", "Hub"]),
+    ("OAuth2", ["O", "Auth2"]),
+    ("APIGateway", ["API", "Gateway"]),
+    ("GatewayAPI", ["Gateway", "API"]),
+    ("SQLDatabase", ["SQL", "Database"]),
+    ("AB", ["AB"]),
+    ("A", ["A"]),
+    ("GatewayX", ["Gateway", "X"]),
+    ("iPhone", ["Phone"]),
+    ("NASA", ["NASA"]),
+    ("XMLHttpRequest", ["XML", "Http", "Request"]),
+    ("HTMLParser", ["HTML", "Parser"]),
+    ("IOError", ["IO", "Error"]),
+    ("IPv4Address", ["I", "Pv4", "Address"]),
+    ("Node.js", ["Node"]),
+    ("C++", ["C"]),
+    ("CI/CD", ["C", "I", "CD"]),
+    ("abcXYZ", ["XYZ"]),
+    ("abcXYZdef", ["XY", "Zdef"]),
+    ("ABC", ["ABC"]),
+    ("ABc", ["A", "Bc"]),
+    ("AaBbCc", ["Aa", "Bb", "Cc"]),
+    ("A1B2C3", ["A1", "B2", "C3"]),
+    ("Word2Vec", ["Word2", "Vec"]),
+    ("GPT4Turbo", ["GP", "T4", "Turbo"]),
+    ("iOS", ["OS"]),
+    ("macOS", ["OS"]),
+    ("eBay", ["Bay"]),
+    ("Log4j2", ["Log4j2"]),
+    ("WebAssembly", ["Web", "Assembly"]),
+    ("SydneySalary", ["Sydney", "Salary"]),
+    ("x", []),
+    ("", []),
+)
+
+
+@pytest.mark.parametrize("token,expected", _ASCII_HUMP_CHARACTERIZATION)
+def test_ascii_camel_hump_segmentation_characterization_byte_identical(
+    token, expected
+):
+    """Locks in the EXACT ASCII/acronym hump segmentation the retired
+    ``_CAMEL_HUMP_RE`` regex produced. The NF-final-pass-001 rewrite
+    (unicode case-function splitter) must reproduce every one of these
+    ASCII/acronym results byte-for-byte — the safety net against silently
+    changing acronym-handling behavior while fixing the non-Latin-script
+    gap."""
+    got = _active_camel_humps(token)
+    assert got == expected, (
+        f"{token!r} hump segmentation changed: expected {expected!r}, got "
+        f"{got!r} — ASCII/acronym behavior must stay byte-identical across "
+        "the NF-final-pass-001 rewrite"
     )
