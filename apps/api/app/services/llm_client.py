@@ -1126,32 +1126,45 @@ def list_provider_models(
     cached = _MODEL_CATALOG_CACHE.get(provider)
     if cached is not None and now - cached[0] < _MODEL_CATALOG_TTL:
         return cached[1]
-    cred = resolve_user_credential(provider, user_id, None) or resolve_credential(
-        provider
-    )
-    if cred is None:
+    # The OpenRouter /models catalog is GLOBAL (identical for any valid key), so
+    # try the user's own credential first but FALL BACK to the deployment
+    # credential when the user's key is missing/invalid — the catalog stays
+    # visible even if a user pasted a bad personal key (GAP-P7-MODEL-CHOICE-002).
+    import httpx
+
+    user_cred = resolve_user_credential(provider, user_id, None)
+    deploy_cred = resolve_credential(provider)
+    creds = [c for c in (user_cred, deploy_cred) if c is not None]
+    # de-dupe if both resolved to the same secret
+    seen: set[str] = set()
+    ordered = []
+    for c in creds:
+        if c.secret not in seen:
+            seen.add(c.secret)
+            ordered.append(c)
+    if not ordered:
         raise ModelCatalogError(
             "Add an OpenRouter API key (in the Agents panel or the server env) "
             "to browse the live model catalog."
         )
-    import httpx
-
-    base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
-    try:
-        resp = httpx.get(
-            f"{base}/models",
-            headers={"Authorization": f"Bearer {cred.secret}"},
-            timeout=timeout,
-        )
-    except Exception as exc:  # noqa: BLE001 — network/DNS/timeout, honest error
-        raise ModelCatalogError(f"Could not reach the model catalog: {exc}") from exc
-    if not (200 <= resp.status_code < 300):
-        raise ModelCatalogError(
-            f"Model catalog request failed (HTTP {resp.status_code})."
-        )
-    curated = _curate_openrouter_models(resp.json().get("data") or [])
-    _MODEL_CATALOG_CACHE[provider] = (now, curated)
-    return curated
+    last_err = ""
+    for cred in ordered:
+        base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
+        try:
+            resp = httpx.get(
+                f"{base}/models",
+                headers={"Authorization": f"Bearer {cred.secret}"},
+                timeout=timeout,
+            )
+        except Exception as exc:  # noqa: BLE001 — try the next credential
+            last_err = f"could not reach the model catalog: {exc}"
+            continue
+        if 200 <= resp.status_code < 300:
+            curated = _curate_openrouter_models(resp.json().get("data") or [])
+            _MODEL_CATALOG_CACHE[provider] = (now, curated)
+            return curated
+        last_err = f"HTTP {resp.status_code}"
+    raise ModelCatalogError(f"Model catalog request failed ({last_err}).")
 
 
 class LLMClient:

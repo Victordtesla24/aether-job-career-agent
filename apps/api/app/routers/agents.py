@@ -215,7 +215,11 @@ PROVIDER_SEED: list[dict[str, Any]] = [
     {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key",
      "models": [], "icon": "fa-a", "color": "#D97757"},
     {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key",
-     "models": ["deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct"],
+     # No hardcoded seed models: OpenRouter's model list is the LIVE catalog
+     # (GET /agents/providers/openrouter/models, 330+ models) shown by the model
+     # picker. A stale 2-item seed here made the provider-card <select> look like
+     # "only 2 OpenRouter models exist" (GAP-P7-MODEL-CHOICE-002, user report).
+     "models": [],
      "icon": "fa-route", "color": "#6467F2"},
     {"id": "openai", "name": "OpenAI", "auth": "API Key",
      "models": ["gpt-4o", "gpt-4o-mini", "text-embedding-3-large"], "icon": "fa-brain",

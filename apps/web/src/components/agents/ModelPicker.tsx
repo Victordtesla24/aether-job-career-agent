@@ -145,18 +145,23 @@ export default function ModelPicker({
 
   return (
     <section
+      id="openrouter-model-picker"
       data-testid="model-picker"
-      aria-label={`Model and budget for ${providerName}`}
-      className="glass rounded-2xl border border-white/10 p-5"
+      aria-label={`${providerName} models`}
+      className="glass rounded-2xl border border-aether-coral/30 p-5 scroll-mt-24"
     >
       <div className="mb-1 flex items-center gap-2">
-        <i className="fa-solid fa-sliders text-sm text-aether-indigo" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Model &amp; budget · {providerName}</h2>
+        <i className="fa-solid fa-robot text-sm text-aether-coral" aria-hidden="true" />
+        <h2 className="text-sm font-semibold">
+          {providerName} models — choose any model{" "}
+          {models ? <span className="text-aether-muted-dim">({models.length} available)</span> : null}
+        </h2>
       </div>
       <p className="mb-4 text-[11px] leading-relaxed text-aether-muted">
-        Pick ANY model from the live {providerName} catalog, or choose by budget. This sets the
-        default model every agent uses; a per-agent override still wins where set. Cheaper models
-        cost less to run but may lower quality.
+        Browse the full live {providerName} catalog and pick ANY model — a high-end frontier model
+        or a free/open-source one — or choose by budget. This sets the default model every agent
+        uses; a per-agent override still wins where set. Cheaper models cost less to run but may
+        lower quality.
       </p>
 
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Budget presets">

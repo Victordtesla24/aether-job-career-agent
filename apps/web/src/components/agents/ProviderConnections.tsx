@@ -122,29 +122,52 @@ export default function ProviderConnections({
                   ) : null}
                 </div>
 
-                <label className="mb-3 block">
-                  <span className="sr-only">{p.name} model</span>
-                  <select
-                    data-testid={`provider-model-${p.id}`}
-                    aria-label={`${p.name} model`}
-                    aria-disabled={modelLockReason !== null || undefined}
-                    title={modelLockReason ?? undefined}
-                    value={p.model}
-                    disabled={p.models.length === 0 || busy}
-                    onChange={(e) => onModel(p.id, e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
+                {p.id === "openrouter" ? (
+                  // OpenRouter's models are the LIVE catalog (330+), chosen in the
+                  // model picker below — NOT a fixed dropdown. Surface a clear
+                  // affordance on the card so users find them where they look
+                  // (GAP-P7-MODEL-CHOICE-002).
+                  <a
+                    href="#openrouter-model-picker"
+                    data-testid="provider-model-openrouter"
+                    className="mb-3 flex w-full items-center justify-between gap-2 rounded-lg border border-aether-coral/30 bg-aether-coral/10 px-3 py-2 text-[11px] font-medium text-aether-coral transition hover:bg-aether-coral/20"
                   >
-                    {p.models.length === 0 ? (
-                      <option value="">Select region — ap-southeast-2</option>
-                    ) : (
-                      p.models.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </label>
+                    <span className="truncate">
+                      <i className="fa-solid fa-list-ul mr-1.5" aria-hidden="true" />
+                      {p.model
+                        ? `Model: ${p.model} — change`
+                        : "Choose from all models"}
+                    </span>
+                    <i
+                      className="fa-solid fa-arrow-down text-[10px] opacity-70"
+                      aria-hidden="true"
+                    />
+                  </a>
+                ) : (
+                  <label className="mb-3 block">
+                    <span className="sr-only">{p.name} model</span>
+                    <select
+                      data-testid={`provider-model-${p.id}`}
+                      aria-label={`${p.name} model`}
+                      aria-disabled={modelLockReason !== null || undefined}
+                      title={modelLockReason ?? undefined}
+                      value={p.model}
+                      disabled={p.models.length === 0 || busy}
+                      onChange={(e) => onModel(p.id, e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
+                    >
+                      {p.models.length === 0 ? (
+                        <option value="">No preset models — configure below</option>
+                      ) : (
+                        p.models.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                )}
 
                 <button
                   type="button"

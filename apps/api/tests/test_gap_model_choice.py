@@ -152,6 +152,56 @@ def test_openrouter_no_credential_raises_not_fabricates(monkeypatch):
         llm_client.list_provider_models("openrouter", user_id="u1")
 
 
+def test_openrouter_seed_has_no_stale_models(client, auth_headers):
+    """GAP-P7-MODEL-CHOICE-002: the OpenRouter provider seed must carry NO
+    hardcoded models — its list is the live catalog. A 2-item seed made the
+    provider card look like 'only 2 OpenRouter models exist'."""
+    provs = client.get("/agents/providers", headers=auth_headers).json()
+    orr = next(p for p in provs if p["id"] == "openrouter")
+    assert orr["models"] == []
+
+
+def test_catalog_falls_back_to_deployment_key_when_user_key_fails(monkeypatch):
+    """GAP-P7-MODEL-CHOICE-002: a user with an invalid PERSONAL OpenRouter key
+    must still see the catalog — it's global, so fall back to the deployment key
+    rather than showing an error box with zero models."""
+    llm_client._MODEL_CATALOG_CACHE.pop("openrouter", None)
+
+    class _UserCred:
+        secret = "user-bad"
+        base_url = "https://openrouter.ai/api/v1"
+
+    class _DeployCred:
+        secret = "deploy-good"
+        base_url = "https://openrouter.ai/api/v1"
+
+    monkeypatch.setattr(llm_client, "resolve_user_credential", lambda *a, **k: _UserCred())
+    monkeypatch.setattr(llm_client, "resolve_credential", lambda *a, **k: _DeployCred())
+
+    calls = []
+
+    class _R401:
+        status_code = 401
+
+    class _R200:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "x/ok", "pricing": {"prompt": "0", "completion": "0"}}]}
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append(headers["Authorization"])
+        return _R401() if "user-bad" in headers["Authorization"] else _R200()
+
+    import httpx
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    models = llm_client.list_provider_models("openrouter", user_id="u1")
+    assert [m["id"] for m in models] == ["x/ok"]  # deployment key succeeded
+    assert any("user-bad" in c for c in calls)  # tried the user key first
+    assert any("deploy-good" in c for c in calls)  # fell back to deployment key
+
+
 def test_openrouter_fetches_curates_and_caches(monkeypatch):
     llm_client._MODEL_CATALOG_CACHE.pop("openrouter", None)
 
