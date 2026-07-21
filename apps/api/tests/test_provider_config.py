@@ -77,8 +77,15 @@ class TestProviderRouting:
         assert resolve_provider("claude-sonnet-5") == "anthropic"
         assert resolve_provider("claude-haiku-4-5") == "anthropic"
 
-    def test_anthropic_namespace_routes_to_anthropic(self):
-        assert resolve_provider("anthropic/claude-3.5-sonnet") == "anthropic"
+    def test_anthropic_namespace_routes_to_openrouter(self):
+        # Billing-separation fix (adversarial-review, GAP-P7-MODEL-CHOICE-001):
+        # OpenRouter namespaces every model it serves as ``vendor/model`` and
+        # bills them itself, so an ``anthropic/…`` id (an OpenRouter catalog entry)
+        # must route to OpenRouter — NOT the direct-Anthropic account. Only a bare
+        # ``claude-…`` native id (see test above) routes to direct Anthropic. The
+        # app never uses an ``anthropic/`` prefix for a direct-Anthropic model.
+        assert resolve_provider("anthropic/claude-3.5-sonnet") == "openrouter"
+        assert resolve_provider("anthropic/claude-opus-4.8") == "openrouter"
 
     def test_everything_else_routes_to_openrouter(self):
         assert resolve_provider("gpt-4o") == "openrouter"

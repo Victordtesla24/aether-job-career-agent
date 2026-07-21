@@ -63,13 +63,36 @@ def test_blank_override_is_a_noop(monkeypatch):
         assert get_model("REASONING") == "env/reasoning"
 
 
-def test_override_never_crosses_billing_boundary():
-    """The chosen id alone decides the provider (billing separation intact):
-    an anthropic pick routes to anthropic, an openrouter pick to openrouter."""
-    with user_model_context("anthropic/claude-opus-4-8"):
-        assert resolve_provider(get_model("REASONING")) == "anthropic"
-    with user_model_context("moonshotai/kimi-k2.5"):
+def test_openrouter_catalog_ids_route_to_openrouter_not_direct_anthropic():
+    """Billing-separation fix (adversarial-review FAIL): OpenRouter namespaces
+    every model as ``vendor/model`` and bills them itself — so an
+    ``anthropic/claude-…`` id picked from the OpenRouter catalog MUST route to
+    OpenRouter, NOT the direct-Anthropic account. Only a BARE ``claude-…`` native
+    id routes to direct Anthropic."""
+    # Bare native ids -> direct anthropic (unchanged).
+    assert resolve_provider("claude-opus-4-8") == "anthropic"
+    assert resolve_provider("claude-sonnet-4-6") == "anthropic"
+    # Any vendor/model (slashed) id -> openrouter, INCLUDING anthropic/* .
+    assert resolve_provider("anthropic/claude-opus-4.8") == "openrouter"
+    assert resolve_provider("anthropic/claude-sonnet-4.6") == "openrouter"
+    assert resolve_provider("openai/gpt-5.6-sol") == "openrouter"
+    assert resolve_provider("deepseek/deepseek-v4-pro") == "openrouter"
+    # End-to-end through the override context.
+    with user_model_context("anthropic/claude-opus-4.8"):
         assert resolve_provider(get_model("REASONING")) == "openrouter"
+    with user_model_context("claude-opus-4-8"):
+        assert resolve_provider(get_model("REASONING")) == "anthropic"
+
+
+def test_static_anthropic_models_are_priced_not_defaulted():
+    """Spend-cap fix (adversarial-review FAIL): a premium anthropic pick from the
+    static catalog must be priced at its REAL rate, not the flat default (which
+    was ~15-37x under → spend-cap bypass)."""
+    from app.routers.agents import _DEFAULT_PRICE, _price_for
+
+    # claude-opus-4-8 static price $15/M in, $75/M out -> $0.015/$0.075 per 1K.
+    assert _price_for("claude-opus-4-8") == pytest.approx((0.015, 0.075))
+    assert _price_for("claude-opus-4-8") != _DEFAULT_PRICE
 
 
 # ---------------------------------------------------------------------------
@@ -299,3 +322,24 @@ def test_provider_default_used_when_no_per_agent_choice(client, auth_headers):
         json={"model": "x/provider-default"}, headers=auth_headers,
     )
     assert _user_model_override(uid, "coverLetter") == "x/provider-default"
+
+
+def test_provider_default_scoped_to_openrouter_only(client, auth_headers):
+    """FIX (adversarial-review): a model saved on a NON-openrouter provider card
+    (openai/gemini/groq legacy <select>) must NOT silently become a run override —
+    only the openrouter provider default (set by the ModelPicker) counts."""
+    from app.routers.agents import _user_model_override
+
+    uid = client.get("/auth/me", headers=auth_headers).json()["id"]
+    # A historic click on the OpenAI card's model select — must be ignored.
+    client.put(
+        "/agents/providers/openai",
+        json={"model": "gpt-4o"}, headers=auth_headers,
+    )
+    assert _user_model_override(uid, "coverLetter") is None
+    # The openrouter default IS honoured.
+    client.put(
+        "/agents/providers/openrouter",
+        json={"model": "vendor/real-choice"}, headers=auth_headers,
+    )
+    assert _user_model_override(uid, "coverLetter") == "vendor/real-choice"

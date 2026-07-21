@@ -903,12 +903,16 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
                     chosen = row[0].strip()
                     if chosen != default_model:  # a real per-agent change
                         return chosen
-                # Fall through to the user's provider-level default model.
+                # Fall through to the user's provider-level default model — SCOPED
+                # to the openrouter provider only. The ModelPicker sets exactly this
+                # row; scoping stops a stale/incidental model saved on ANOTHER
+                # provider card's legacy <select> (openai/gemini/groq, which carry
+                # non-credential-gated static model lists) from silently becoming a
+                # live override for this user's runs (adversarial-review finding).
                 cur.execute(
                     'SELECT "model" FROM "AgentProvider" '
-                    'WHERE "userId" = %s AND "model" IS NOT NULL '
-                    "AND \"model\" <> '' "
-                    "ORDER BY (\"provider\" = 'openrouter') DESC LIMIT 1",
+                    "WHERE \"userId\" = %s AND \"provider\" = 'openrouter' "
+                    "AND \"model\" IS NOT NULL AND \"model\" <> ''",
                     (user_id,),
                 )
                 row = cur.fetchone()

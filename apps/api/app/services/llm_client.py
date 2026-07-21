@@ -437,12 +437,24 @@ def get_anthropic_max_tokens() -> int:
 def resolve_provider(model: str) -> str:
     """Map a model id to its billing provider: ``'anthropic'`` or ``'openrouter'``.
 
-    ``claude-*`` and ``anthropic/*`` are Anthropic-native; everything else is
-    served through OpenRouter. Pure function so the router, the verify endpoint
-    and the transport all agree on one resolution.
+    OpenRouter namespaces EVERY model it serves as ``vendor/model``
+    (``anthropic/claude-…``, ``deepseek/…``, ``openai/…``), and those are
+    OpenRouter-billed. A DIRECT-Anthropic native id is bare ``claude-…`` (no
+    slash). So the presence of a ``/`` means OpenRouter; only a bare
+    ``claude-…``/``anthropic…`` id routes to the direct Anthropic API.
+
+    Billing-separation fix (GAP-P7-MODEL-CHOICE-001, adversarial-review finding):
+    a model a user picked from the OpenRouter catalog whose id happens to start
+    ``anthropic/…`` MUST bill through OpenRouter — the credential they chose it
+    with — NOT the direct-Anthropic account. The old ``startswith('anthropic/')``
+    heuristic silently crossed that boundary for the 15 ``anthropic/*`` OpenRouter
+    catalog entries. Pure function so the router, verify endpoint and transport
+    all agree on one resolution.
     """
     m = (model or "").strip().lower()
-    if m.startswith("claude-") or m.startswith("anthropic/"):
+    if "/" in m:  # any vendor/model id is an OpenRouter-served, OpenRouter-billed model
+        return "openrouter"
+    if m.startswith("claude-") or m.startswith("anthropic"):
         return "anthropic"
     return "openrouter"
 
@@ -1021,7 +1033,16 @@ def cached_model_price(model_id: str) -> "tuple[float, float] | None":
     mid = (model_id or "").strip()
     if not mid:
         return None
-    for _ts, models in _MODEL_CATALOG_CACHE.values():
+    # Fetched (OpenRouter) catalogs first, then the always-available STATIC
+    # catalogs (anthropic, …). Without the static scan a premium anthropic pick
+    # like ``claude-opus-4-8`` fell through to the flat default and was costed
+    # ~15-37x under — a spend-cap bypass (adversarial-review finding).
+    from itertools import chain
+
+    for models in chain(
+        (m for _ts, m in _MODEL_CATALOG_CACHE.values()),
+        _STATIC_MODEL_CATALOG.values(),
+    ):
         for m in models:
             if m.get("id") == mid:
                 return (
