@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-import { apiRequest, type RequestOptions } from "../../lib/api/client";
+import { ApiError, apiRequest, type RequestOptions } from "../../lib/api/client";
 
 export const CatalogAgentSchema = z.object({
   key: z.string(),
@@ -55,6 +55,33 @@ export const ProviderSchema = z.object({
   lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
 });
 export type Provider = z.infer<typeof ProviderSchema>;
+
+/**
+ * One row of a provider's LIVE model catalog (GAP-P7-MODEL-CHOICE-001), as
+ * served by GET /agents/providers/{provider}/models. Prices are already in
+ * $/M-token (prompt + completion), `contextLength` is null when the provider
+ * doesn't publish one, and `tier` is the budget bucket the backend derived
+ * (models arrive sorted cheapest-first within tier).
+ */
+export const ProviderModelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  promptPerM: z.number(),
+  completionPerM: z.number(),
+  contextLength: z.number().nullable(),
+  tier: z.enum(["free", "budget", "standard", "premium"]),
+  reasoning: z.boolean(),
+});
+export type ProviderModel = z.infer<typeof ProviderModelSchema>;
+
+/** Budget bucket a model falls into — the picker groups the catalog by this. */
+export type ModelTier = ProviderModel["tier"];
+
+export const ProviderModelsResponseSchema = z.object({
+  provider: z.string(),
+  count: z.number(),
+  models: z.array(ProviderModelSchema),
+});
 
 /** Which credential shape a provider row carries. */
 export type ProviderAuthMode = "api_key" | "subscription_oauth" | "oauth_token";
@@ -112,6 +139,47 @@ export async function fetchCatalog(o: RequestOptions = {}): Promise<Catalog> {
 
 export async function fetchProviders(o: RequestOptions = {}): Promise<Provider[]> {
   return z.array(ProviderSchema).parse(await apiRequest<unknown>("/agents/providers", o));
+}
+
+/**
+ * Lift the backend's honest `detail` out of an `ApiError`'s raw wrapper
+ * message (`apiRequest` embeds the response body as `… failed (<status>):
+ * {"detail":"…"}`). Mirrors lib/agents-feedback's extractor so the model
+ * picker can surface the server's own no-key / catalog-unreachable message
+ * verbatim instead of the noisy wrapper.
+ */
+function liftApiDetail(message: string): string {
+  const match = message.match(/\{[\s\S]*\}$/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]) as { detail?: unknown };
+      if (typeof parsed.detail === "string" && parsed.detail.trim()) return parsed.detail;
+    } catch {
+      /* not JSON — fall through to the raw message */
+    }
+  }
+  return message;
+}
+
+/**
+ * The LIVE, curated model catalog for a provider (GAP-P7-MODEL-CHOICE-001).
+ * On the honest 400 (no credential / catalog unreachable) the backend returns
+ * `{detail: "<message>"}`; we re-throw an ApiError whose `message` IS that
+ * detail so the caller can show it directly — never a fabricated list.
+ */
+export async function fetchProviderModels(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<ProviderModel[]> {
+  try {
+    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
+    return ProviderModelsResponseSchema.parse(res).models;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
+    }
+    throw e;
+  }
 }
 
 export async function fetchAgentStats(o: RequestOptions = {}): Promise<AgentStats> {

@@ -348,8 +348,45 @@ def get_fixture_dir() -> Path:
     return Path(override) if override else _DEFAULT_FIXTURE_DIR
 
 
+#: Per-run user MODEL override — a single model id the user chose for their
+#: agents (GAP-P7-MODEL-CHOICE-001), bound exactly like ``_user_cred_context``.
+#: ``get_model`` honours it ONLY for the GENERATION tiers
+#: (:data:`_USER_OVERRIDABLE_TIERS`); STRUCTURED (JSON / entailment extraction)
+#: deliberately stays on the tuned env default so a user's free-text pick can
+#: never silently break structured output. ``None`` (background/CLI, or a user
+#: with no preference) → pure env resolution, unchanged.
+_user_model_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_llm_user_model", default=None
+)
+
+#: Tiers a user's chosen model may override. STRUCTURED is intentionally absent.
+_USER_OVERRIDABLE_TIERS = frozenset({"REASONING", "HEAVY", "FAST", "LIGHT"})
+
+
+@contextmanager
+def user_model_context(model: str | None) -> Iterator[None]:
+    """Bind the user's chosen agent model for the current run (see
+    :data:`_user_model_context`). A blank/None model is a no-op (env default)."""
+    token = _user_model_context.set((model or "").strip() or None)
+    try:
+        yield
+    finally:
+        _user_model_context.reset(token)
+
+
 def get_model(tier: str = "REASONING") -> str:
-    """Resolve the model id for a tier (REASONING/FAST/STRUCTURED/LIGHT)."""
+    """Resolve the model id for a tier (REASONING/FAST/STRUCTURED/LIGHT/HEAVY).
+
+    A per-run user override (:func:`user_model_context`) wins for the GENERATION
+    tiers only; STRUCTURED and any unset override fall through to the
+    ``AETHER_MODEL_<TIER>`` env default. Provider routing downstream is still
+    derived purely from the resolved model id (:func:`resolve_provider`), so the
+    user's choice can never cross the anthropic/openrouter billing boundary.
+    """
+    if tier.upper() in _USER_OVERRIDABLE_TIERS:
+        override = _user_model_context.get()
+        if override:
+            return override
     return os.environ.get(f"AETHER_MODEL_{tier.upper()}", FALLBACK_MODEL)
 
 
@@ -945,6 +982,155 @@ def verify_resolved_credential(
         "failed",
         f"{provider} returned HTTP {resp.status_code}: {resp.text[:150]}",
     )
+
+
+class ModelCatalogError(RuntimeError):
+    """Raised when the live model catalog can't be fetched (no credential /
+    network / provider without an open catalog). The router maps it to an honest
+    4xx/5xx — a fabricated catalog is NEVER returned (GAP-P7-MODEL-CHOICE-001)."""
+
+
+#: Curated static catalogs for providers that don't expose an OpenRouter-style
+#: open ``/models`` endpoint. Kept tiny + honest (ids the app can actually route
+#: via ``resolve_provider`` → anthropic). Prices are indicative $/M-tokens.
+_STATIC_MODEL_CATALOG: dict[str, list[dict[str, Any]]] = {
+    "anthropic": [
+        {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "promptPerM": 15.0,
+         "completionPerM": 75.0, "contextLength": 200000, "tier": "premium",
+         "reasoning": True},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "promptPerM": 3.0,
+         "completionPerM": 15.0, "contextLength": 200000, "tier": "standard",
+         "reasoning": True},
+        {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "promptPerM": 1.0,
+         "completionPerM": 5.0, "contextLength": 200000, "tier": "budget",
+         "reasoning": False},
+    ],
+}
+
+#: Cached OpenRouter catalog: provider -> (fetched_at_monotonic, curated list).
+_MODEL_CATALOG_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_MODEL_CATALOG_TTL = 3600.0  # 1 h — the catalog changes rarely.
+
+
+def cached_model_price(model_id: str) -> "tuple[float, float] | None":
+    """``(prompt, completion)`` price in $/1K-tokens for ``model_id`` from the
+    already-fetched OpenRouter catalog, or ``None`` if the catalog hasn't been
+    loaded or the model isn't in it. Lets the (network-free) cost path price a
+    USER-CHOSEN model accurately instead of a flat default — the catalog is
+    typically warm because the user browsed it before picking a model."""
+    mid = (model_id or "").strip()
+    if not mid:
+        return None
+    for _ts, models in _MODEL_CATALOG_CACHE.values():
+        for m in models:
+            if m.get("id") == mid:
+                return (
+                    float(m.get("promptPerM") or 0.0) / 1000.0,
+                    float(m.get("completionPerM") or 0.0) / 1000.0,
+                )
+    return None
+
+
+def _model_budget_tier(prompt_per_token: float) -> str:
+    """Bucket a model by its prompt price ($/token) so the UI can group by
+    budget: free / budget (≤$0.50·M) / standard (≤$3·M) / premium."""
+    if prompt_per_token <= 0:
+        return "free"
+    if prompt_per_token <= 0.0000005:
+        return "budget"
+    if prompt_per_token <= 0.000003:
+        return "standard"
+    return "premium"
+
+
+def _curate_openrouter_models(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project OpenRouter's verbose ``/models`` payload to the fields the picker
+    needs, tagged with a budget tier, sorted cheapest-first within tier."""
+    out: list[dict[str, Any]] = []
+    for m in raw:
+        mid = m.get("id")
+        if not mid:
+            continue
+        pricing = m.get("pricing") or {}
+        try:
+            prompt = float(pricing.get("prompt") or 0.0)
+        except (TypeError, ValueError):
+            prompt = 0.0
+        try:
+            completion = float(pricing.get("completion") or 0.0)
+        except (TypeError, ValueError):
+            completion = 0.0
+        if prompt < 0 or completion < 0:
+            # Sentinel/dynamic-priced rows (e.g. openrouter/auto) — skip so the
+            # UI never shows a negative or misleading price.
+            continue
+        arch = m.get("architecture") or {}
+        out.append(
+            {
+                "id": mid,
+                "name": m.get("name") or mid,
+                "promptPerM": round(prompt * 1_000_000, 4),
+                "completionPerM": round(completion * 1_000_000, 4),
+                "contextLength": m.get("context_length"),
+                "tier": _model_budget_tier(prompt),
+                "reasoning": bool(m.get("reasoning"))
+                or "reasoning" in (arch.get("modality") or ""),
+            }
+        )
+    _rank = {"free": 0, "budget": 1, "standard": 2, "premium": 3}
+    out.sort(key=lambda x: (_rank.get(x["tier"], 4), x["promptPerM"], x["id"]))
+    return out
+
+
+def list_provider_models(
+    provider: str, user_id: str | None = None, *, timeout: float = 15.0
+) -> list[dict[str, Any]]:
+    """Live, curated model catalog for ``provider`` (GAP-P7-MODEL-CHOICE-001).
+
+    OpenRouter → its full ``/models`` catalog (300+ models) fetched with the
+    user's own credential when present, else the deployment credential, curated
+    to ``{id, name, promptPerM, completionPerM, contextLength, tier, reasoning}``
+    and cached ~1 h. Providers without an open catalog (anthropic, …) return a
+    small curated static list. Raises :class:`ModelCatalogError` on a missing
+    credential or a network failure — never a fabricated catalog.
+    """
+    provider = (provider or "").strip().lower()
+    if provider in _STATIC_MODEL_CATALOG:
+        return list(_STATIC_MODEL_CATALOG[provider])
+    if provider != "openrouter":
+        raise ModelCatalogError(
+            f"No live model catalog is available for provider '{provider}'."
+        )
+    now = time.monotonic()
+    cached = _MODEL_CATALOG_CACHE.get(provider)
+    if cached is not None and now - cached[0] < _MODEL_CATALOG_TTL:
+        return cached[1]
+    cred = resolve_user_credential(provider, user_id, None) or resolve_credential(
+        provider
+    )
+    if cred is None:
+        raise ModelCatalogError(
+            "Add an OpenRouter API key (in the Agents panel or the server env) "
+            "to browse the live model catalog."
+        )
+    import httpx
+
+    base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
+    try:
+        resp = httpx.get(
+            f"{base}/models",
+            headers={"Authorization": f"Bearer {cred.secret}"},
+            timeout=timeout,
+        )
+    except Exception as exc:  # noqa: BLE001 — network/DNS/timeout, honest error
+        raise ModelCatalogError(f"Could not reach the model catalog: {exc}") from exc
+    if not (200 <= resp.status_code < 300):
+        raise ModelCatalogError(
+            f"Model catalog request failed (HTTP {resp.status_code})."
+        )
+    curated = _curate_openrouter_models(resp.json().get("data") or [])
+    _MODEL_CATALOG_CACHE[provider] = (now, curated)
+    return curated
 
 
 class LLMClient:

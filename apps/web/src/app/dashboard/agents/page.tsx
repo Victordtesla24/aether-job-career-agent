@@ -30,6 +30,7 @@ import {
 import { apiRequest } from "../../../lib/api/client";
 import Orchestration from "../../../components/agents/Orchestration";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
+import ModelPicker from "../../../components/agents/ModelPicker";
 import ProviderConfigModal from "../../../components/agents/ProviderConfigModal";
 import AgentConfigGrid from "../../../components/agents/AgentConfigGrid";
 import AgentStatsRow from "../../../components/agents/AgentStats";
@@ -263,6 +264,9 @@ export default function AgentsPage() {
 
   const agentCount = catalog?.counts.total ?? 0;
   const providerCount = providers?.length ?? 0;
+  // OpenRouter carries the live 300+ model catalog the picker browses; other
+  // providers expose only a small static list via the card select above.
+  const openrouterProvider = (providers ?? []).find((p) => p.id === "openrouter") ?? null;
 
   return (
     <div className="space-y-8">
@@ -348,6 +352,14 @@ export default function AgentsPage() {
         onConfigure={openConfig}
         onModel={(id, model) => void onProviderModel(id, model)}
       />
+
+      {openrouterProvider ? (
+        <ModelPicker
+          provider={openrouterProvider}
+          onSaved={refreshProviders}
+          onNotice={setNotice}
+        />
+      ) : null}
 
       <AgentConfigGrid
         agents={catalog?.agents ?? []}

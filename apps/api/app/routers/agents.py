@@ -48,6 +48,7 @@ from app.services.llm_client import (
     resolve_provider,
     resolve_user_credential,
     user_credential_context,
+    user_model_context,
     verify_provider_credential,
     verify_user_credential,
 )
@@ -96,7 +97,15 @@ _DEFAULT_PRICE = (0.001, 0.002)
 
 
 def _price_for(model: str) -> tuple[float, float]:
-    return MODEL_PRICING.get(model, _DEFAULT_PRICE)
+    # Static table first (curated, always-available); then the live catalog
+    # cache so a user-chosen model is costed at its REAL price (budget accuracy —
+    # GAP-P7-MODEL-CHOICE-001); finally a bounded default so spend never reads 0.
+    if model in MODEL_PRICING:
+        return MODEL_PRICING[model]
+    from app.services.llm_client import cached_model_price
+
+    cached = cached_model_price(model)
+    return cached if cached is not None else _DEFAULT_PRICE
 
 
 #: The product's full agent catalog as shown in the Agent Configuration grid.
@@ -411,7 +420,9 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
     ``metered_api`` for every supported credential (consumer subscription OAuth
     was removed for compliance — GAP-AUTH-001).
     """
-    model = _model_for_agent(agent_name)
+    # Reflect the user's chosen model so the audit names the credential/provider
+    # of the model that will ACTUALLY serve the run (GAP-P7-MODEL-CHOICE-001).
+    model = _model_for_agent(agent_name, override=_user_model_override(user_id, agent_name))
     if model is None:
         return {"quotaPath": "none"}, None
     provider = resolve_provider(model)
@@ -702,9 +713,16 @@ def _execute_reserved_run(
                 except Exception:  # noqa: BLE001
                     pass
 
+    # Resolve the user's chosen model ONCE — used to bind the run AND to cost it
+    # against the model that actually served it (GAP-P7-MODEL-CHOICE-001).
+    _override_model = _user_model_override(user_id, agent_name)
     started = time.monotonic()
     try:
-        with user_credential_context(user_id, agent_name):
+        # Bind BOTH the credential context and the user's chosen model so the
+        # deep LLM path resolves THIS user's key AND model.
+        with user_credential_context(user_id, agent_name), user_model_context(
+            _override_model
+        ):
             output = _to_output(fn())
     except HTTPException:
         runs.finish(run_id, "failed", error="http error")
@@ -777,8 +795,9 @@ def _execute_reserved_run(
     # per-token price of the model the agent ACTUALLY ran on (≈4 chars/token).
     # Deterministic agents (scout/fitScorer/matcher/supervisor) make no LLM
     # calls, so they record zero tokens and zero spend — anything else would
-    # fabricate the spend/ROI figures GET /agents/stats reports.
-    model = _model_for_agent(agent_name)
+    # fabricate the spend/ROI figures GET /agents/stats reports. The user's
+    # chosen model (if any) is what actually ran, so cost against IT.
+    model = _model_for_agent(agent_name, override=_override_model)
     if model is None:
         cost = 0.0
         output["model"] = None
@@ -819,17 +838,85 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
 }
 
 
-def _model_for_agent(agent_name: str) -> str | None:
-    """The model this backend agent ACTUALLY runs on (resolved from the same
-    ``AETHER_MODEL_<TIER>`` env vars the LLM client uses), or None for
-    deterministic agents that make no LLM calls. Costing against the model
-    that really served the run keeps spend/ROI figures genuine."""
+def _model_for_agent(agent_name: str, override: "str | None" = None) -> str | None:
+    """The model this backend agent ACTUALLY runs on, or None for deterministic
+    agents that make no LLM calls. Costing against the model that really served
+    the run keeps spend/ROI (and the USD spend cap) genuine — so when the user
+    chose a model (``override``) it MUST be reflected for the same generation
+    tiers ``get_model`` honours it on (STRUCTURED stays on the env default)."""
     tier = _LLM_TIER_BY_BACKEND.get(agent_name)
     if tier is None:
         return None
-    from app.services.llm_client import get_model
+    from app.services.llm_client import _USER_OVERRIDABLE_TIERS, get_model
 
+    if override and tier.upper() in _USER_OVERRIDABLE_TIERS:
+        return override
     return get_model(tier)
+
+
+#: backend agent name -> UI ``AgentConfig.agentKey`` (the two namespaces differ,
+#: e.g. backend ``tailor`` is stored under UI key ``resumeTailoring``).
+_UI_KEY_FOR_BACKEND: dict[str, str] = {
+    e["backend"]: e["key"] for e in AGENT_CATALOG if e.get("backend")
+}
+#: backend agent name -> its catalog ``recommended`` model. ``AgentConfig.model``
+#: is SEEDED with this recommended value (agents.py ~1624), so a stored value
+#: EQUAL to it is a phantom default, NOT a deliberate user choice — it must be
+#: ignored (else the seeded ``claude-sonnet-4`` would silently route every run
+#: to the anthropic path). Only a value that DIFFERS is a real user selection.
+_RECOMMENDED_FOR_BACKEND: dict[str, str] = {
+    e["backend"]: (e.get("recommended") or "")
+    for e in AGENT_CATALOG
+    if e.get("backend")
+}
+
+
+def _user_model_override(user_id: str, agent_name: str) -> "str | None":
+    """The model this user DELIBERATELY chose for ``agent_name``
+    (GAP-P7-MODEL-CHOICE-001), or ``None`` to use the env default.
+
+    Precedence: a per-agent ``AgentConfig.model`` that DIFFERS from the catalog
+    default (a real change) wins; else the user's default model on any
+    ``AgentProvider`` row (preferring ``openrouter``). A stored value equal to
+    the agent's seeded ``recommended`` default is treated as "no choice" so the
+    write-only seed can never take effect. Best-effort: any read error returns
+    ``None`` — a preference lookup can NEVER break a run. The chosen id still
+    flows through ``resolve_provider`` downstream (billing separation intact); a
+    deliberate pick that points at an unconfigured provider fails HONESTLY at
+    call time rather than being silently swapped.
+    """
+    # Deterministic agents make no LLM call — nothing to override.
+    if agent_name not in _LLM_TIER_BY_BACKEND:
+        return None
+    ui_key = _UI_KEY_FOR_BACKEND.get(agent_name, agent_name)
+    default_model = _RECOMMENDED_FOR_BACKEND.get(agent_name, "")
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "model" FROM "AgentConfig" '
+                    'WHERE "userId" = %s AND "agentKey" = %s',
+                    (user_id, ui_key),
+                )
+                row = cur.fetchone()
+                if row and (row[0] or "").strip():
+                    chosen = row[0].strip()
+                    if chosen != default_model:  # a real per-agent change
+                        return chosen
+                # Fall through to the user's provider-level default model.
+                cur.execute(
+                    'SELECT "model" FROM "AgentProvider" '
+                    'WHERE "userId" = %s AND "model" IS NOT NULL '
+                    "AND \"model\" <> '' "
+                    "ORDER BY (\"provider\" = 'openrouter') DESC LIMIT 1",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+                if row and (row[0] or "").strip():
+                    return row[0].strip()
+    except Exception:  # noqa: BLE001 — preference read is best-effort, never fatal
+        return None
+    return None
 
 
 def _user_search_defaults(user_id: str) -> tuple[str, str]:
@@ -2131,6 +2218,29 @@ def verify_provider(provider: str, current_user: CurrentUser) -> dict[str, Any]:
     ok, status_token, detail = verify_provider_credential(provider)
     ProviderCredentialRepository().mark_verified(provider, "ok" if ok else "failed")
     return {"ok": ok, "status": status_token, "detail": detail}
+
+
+@router.get("/providers/{provider}/models")
+def list_provider_models_endpoint(
+    provider: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """LIVE, curated model catalog for a provider (GAP-P7-MODEL-CHOICE-001).
+
+    OpenRouter → its full 300+ model catalog, each row carrying per-model
+    ``$/M-token`` prompt+completion pricing, context length and a budget tier
+    (free / budget / standard / premium), so a user can choose ANY model — a
+    high-end frontier model or a free open-source one — by budget. Uses the
+    signed-in user's OWN provider key when configured, else the deployment key.
+    Returns an HONEST 400 with an actionable message (never a fabricated
+    catalog) when no credential is available or the catalog can't be reached.
+    """
+    from app.services.llm_client import ModelCatalogError, list_provider_models
+
+    try:
+        models = list_provider_models(provider, current_user["id"])
+    except ModelCatalogError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"provider": provider.strip().lower(), "models": models, "count": len(models)}
 
 
 # ---------------------------------------------------------------------------
