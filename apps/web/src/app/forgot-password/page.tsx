@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 export default function ForgotPasswordPage() {
-  const { supportEmail } = getOperatorLegalConfig();
+  const { supportEmail, supportPhone } = getOperatorLegalConfig();
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-aether-bg px-4">
@@ -51,6 +51,18 @@ export default function ForgotPasswordPage() {
                 {supportEmail}
               </a>{" "}
               from the address you registered with and we&apos;ll help you reset it.
+              {supportPhone ? (
+                <>
+                  {" "}You can also call{" "}
+                  <a
+                    href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                    className="text-aether-indigo hover:underline"
+                  >
+                    {supportPhone}
+                  </a>
+                  .
+                </>
+              ) : null}
             </p>
           ) : (
             <p className="text-sm text-aether-muted leading-relaxed">
@@ -61,6 +73,18 @@ export default function ForgotPasswordPage() {
                 Terms
               </Link>{" "}
               page.
+              {supportPhone ? (
+                <>
+                  {" "}You can also call{" "}
+                  <a
+                    href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                    className="text-aether-indigo hover:underline"
+                  >
+                    {supportPhone}
+                  </a>
+                  .
+                </>
+              ) : null}
             </p>
           )}
 

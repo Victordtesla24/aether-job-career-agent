@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * configuration and the privacy policy page.
  */
 export default function TermsPage() {
-  const { businessName, abn, supportEmail } = getOperatorLegalConfig();
+  const { businessName, abn, supportEmail, supportPhone } = getOperatorLegalConfig();
 
   return (
     <div className="min-h-screen bg-aether-bg text-aether-text">
@@ -341,6 +341,17 @@ export default function TermsPage() {
                   >
                     {supportEmail}
                   </a>
+                  {supportPhone ? (
+                    <>
+                      {" "}or call{" "}
+                      <a
+                        href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                        className="text-aether-coral hover:underline"
+                      >
+                        {supportPhone}
+                      </a>
+                    </>
+                  ) : null}
                   .
                 </>
               ) : (
@@ -349,6 +360,18 @@ export default function TermsPage() {
                   the operator configures one, it will be shown here and used to process
                   questions about these Terms, refund requests, account closures, and GST tax
                   invoice details.
+                  {supportPhone ? (
+                    <>
+                      {" "}In the meantime, you can call{" "}
+                      <a
+                        href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                        className="text-aether-coral hover:underline"
+                      >
+                        {supportPhone}
+                      </a>
+                      .
+                    </>
+                  ) : null}
                 </>
               )}
             </p>

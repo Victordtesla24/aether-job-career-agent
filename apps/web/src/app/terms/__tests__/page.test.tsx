@@ -115,6 +115,14 @@ describe("TermsPage", () => {
     expect(bodyText).not.toMatch(/Australian Business Number has not yet been published/i);
   });
 
+  it("formats a raw 11-digit ABN into the standard 2-3-3-3 grouped display", () => {
+    vi.stubEnv("AETHER_OPERATOR_ABN", "73941747350");
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toContain("73 941 747 350");
+    expect(bodyText).not.toContain("73941747350");
+  });
+
   it("MV-terms-002: states an honest, non-fabricated refund process instead of a placeholder policy", () => {
     render(<TermsPage />);
     const bodyText = document.body.textContent ?? "";
@@ -146,5 +154,24 @@ describe("TermsPage", () => {
     render(<TermsPage />);
     const mailLink = screen.getByRole("link", { name: /support@example-operator\.com/i });
     expect(mailLink.getAttribute("href")).toBe("mailto:support@example-operator.com");
+  });
+
+  it("renders the operator support phone once AETHER_SUPPORT_PHONE is configured", () => {
+    vi.stubEnv("AETHER_SUPPORT_EMAIL", "support@example-operator.com");
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "+61 433 224 556");
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toContain("+61 433 224 556");
+    const telLink = screen.getByRole("link", { name: /\+61 433 224 556/ });
+    expect(telLink.getAttribute("href")).toBe("tel:+61433224556");
+  });
+
+  it("renders no phone number at all when AETHER_SUPPORT_PHONE is unset", () => {
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "");
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).not.toMatch(/\+61 433 224 556/);
+    expect(bodyText).not.toMatch(/or call/i);
+    expect(bodyText).not.toMatch(/you can call/i);
   });
 });

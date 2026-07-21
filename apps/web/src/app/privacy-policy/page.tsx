@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * "Aether Career Agent" to match the OAuth consent configuration.
  */
 export default function PrivacyPolicyPage() {
-  const { supportEmail } = getOperatorLegalConfig();
+  const { supportEmail, supportPhone } = getOperatorLegalConfig();
 
   return (
     <div className="min-h-screen bg-aether-bg text-aether-text">
@@ -256,6 +256,17 @@ export default function PrivacyPolicyPage() {
                   >
                     {supportEmail}
                   </a>
+                  {supportPhone ? (
+                    <>
+                      {" "}or call{" "}
+                      <a
+                        href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                        className="text-aether-coral hover:underline"
+                      >
+                        {supportPhone}
+                      </a>
+                    </>
+                  ) : null}
                   .
                 </>
               ) : (
@@ -264,6 +275,18 @@ export default function PrivacyPolicyPage() {
                   Once the operator configures one, it will be shown here and used to
                   process questions about this Privacy Policy and data export/deletion
                   requests.
+                  {supportPhone ? (
+                    <>
+                      {" "}In the meantime, you can call{" "}
+                      <a
+                        href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+                        className="text-aether-coral hover:underline"
+                      >
+                        {supportPhone}
+                      </a>
+                      .
+                    </>
+                  ) : null}
                 </>
               )}
             </p>

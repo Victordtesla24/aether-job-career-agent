@@ -97,8 +97,9 @@ def create_checkout_session(
         customer=customer_id,
         client_reference_id=user_id,
         line_items=[{"price": price_id, "quantity": 1}],
-        payment_method_types=["card", "au_becs_debit"],
-        automatic_tax={"enabled": automatic_tax_enabled()},
+        # Managed Payments (enabled by default on this account) selects the
+        # payment methods AND handles taxes automatically — Stripe rejects
+        # payment_method_types and automatic_tax when it's on, so we omit both.
         metadata={"user_id": user_id, "plan_id": plan_id, "interval": interval},
         subscription_data={"metadata": {"user_id": user_id, "plan_id": plan_id}},
         success_url=f"{app_base_url()}/dashboard/settings?checkout=success",

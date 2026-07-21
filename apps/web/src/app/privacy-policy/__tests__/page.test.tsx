@@ -100,4 +100,23 @@ describe("PrivacyPolicyPage", () => {
     const mailLink = screen.getByRole("link", { name: /privacy@example-operator\.com/i });
     expect(mailLink.getAttribute("href")).toBe("mailto:privacy@example-operator.com");
   });
+
+  it("renders the operator support phone once AETHER_SUPPORT_PHONE is configured", () => {
+    vi.stubEnv("AETHER_SUPPORT_EMAIL", "privacy@example-operator.com");
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "+61 433 224 556");
+    render(<PrivacyPolicyPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toContain("+61 433 224 556");
+    const telLink = screen.getByRole("link", { name: /\+61 433 224 556/ });
+    expect(telLink.getAttribute("href")).toBe("tel:+61433224556");
+  });
+
+  it("renders no phone number at all when AETHER_SUPPORT_PHONE is unset", () => {
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "");
+    render(<PrivacyPolicyPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).not.toMatch(/\+61 433 224 556/);
+    expect(bodyText).not.toMatch(/or call/i);
+    expect(bodyText).not.toMatch(/you can call/i);
+  });
 });

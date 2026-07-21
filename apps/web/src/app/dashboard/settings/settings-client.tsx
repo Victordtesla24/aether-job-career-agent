@@ -53,7 +53,13 @@ const STATUS_STYLE: Record<string, string> = {
   disconnected: "bg-red-500/10 text-red-300 border-red-500/25",
 };
 
-export default function SettingsClient({ supportEmail }: { supportEmail: string | null }) {
+export default function SettingsClient({
+  supportEmail,
+  supportPhone,
+}: {
+  supportEmail: string | null;
+  supportPhone: string | null;
+}) {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<string>("profile");
@@ -94,6 +100,19 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalMessage, setPortalMessage] = useState<string | null>(null);
 
+  // Composed once so both fallback messages below (409, 503) share the same
+  // "Email X" / "Email X or call Y" / "Call Y" phrasing — honest about
+  // whichever contact channel(s) are actually configured for this
+  // deployment, never a placeholder.
+  const contactLine =
+    supportEmail && supportPhone
+      ? `Email ${supportEmail} or call ${supportPhone}`
+      : supportEmail
+        ? `Email ${supportEmail}`
+        : supportPhone
+          ? `Call ${supportPhone}`
+          : null;
+
   const manageSubscription = async () => {
     setPortalLoading(true);
     setPortalMessage(null);
@@ -108,14 +127,14 @@ export default function SettingsClient({ supportEmail }: { supportEmail: string 
           // operator-granted entitlement bypassing real checkout) — the
           // portal has nothing to manage. Honest fallback, no fake success.
           setPortalMessage(
-            supportEmail
-              ? `Your account isn't linked to a Stripe billing profile yet, so the self-service portal isn't available. Email ${supportEmail} to manage or cancel your subscription.`
+            contactLine
+              ? `Your account isn't linked to a Stripe billing profile yet, so the self-service portal isn't available. ${contactLine} to manage or cancel your subscription.`
               : "Your account isn't linked to a Stripe billing profile yet, so the self-service portal isn't available. A support contact hasn't been published for this deployment yet.",
           );
         } else if (e.status === 503) {
           setPortalMessage(
-            supportEmail
-              ? `Billing management isn't configured on this deployment yet. Email ${supportEmail} for help with your subscription.`
+            contactLine
+              ? `Billing management isn't configured on this deployment yet. ${contactLine} for help with your subscription.`
               : "Billing management isn't configured on this deployment yet, and no support contact has been published.",
           );
         } else if (e.status === 429) {

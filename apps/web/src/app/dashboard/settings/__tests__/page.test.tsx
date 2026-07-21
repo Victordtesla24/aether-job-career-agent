@@ -83,6 +83,7 @@ afterEach(() => {
   openBillingPortalMock.mockReset();
   fetchEntitlementMock.mockReset();
   usePathnameMock.mockReturnValue("/dashboard/settings");
+  vi.unstubAllEnvs();
 });
 
 const FREE_SUBSCRIPTION = {
@@ -187,6 +188,43 @@ describe("SettingsPage — Billing & Subscription (MV-settings-003, MV-pricing-0
     const msg = screen.getByTestId("manage-subscription-message").textContent ?? "";
     expect(msg).not.toMatch(/success/i);
     expect(msg.toLowerCase()).toMatch(/billing profile|contact|support/);
+  });
+
+  it("includes the support phone in the contact-fallback message when AETHER_SUPPORT_PHONE is configured (409)", async () => {
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "+61 433 224 556");
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    openBillingPortalMock.mockRejectedValue(
+      new ApiError("POST /billing/portal failed (409): No billing account yet", 409),
+    );
+
+    render(<SettingsPage />);
+    await waitFor(() => screen.getByTestId("manage-subscription-btn"));
+    fireEvent.click(screen.getByTestId("manage-subscription-btn"));
+
+    await waitFor(() => screen.getByTestId("manage-subscription-message"));
+    const msg = screen.getByTestId("manage-subscription-message").textContent ?? "";
+    expect(msg).toContain("+61 433 224 556");
+  });
+
+  it("does not mention a phone number in the contact-fallback message when AETHER_SUPPORT_PHONE is unset (409)", async () => {
+    vi.stubEnv("AETHER_SUPPORT_PHONE", "");
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    openBillingPortalMock.mockRejectedValue(
+      new ApiError("POST /billing/portal failed (409): No billing account yet", 409),
+    );
+
+    render(<SettingsPage />);
+    await waitFor(() => screen.getByTestId("manage-subscription-btn"));
+    fireEvent.click(screen.getByTestId("manage-subscription-btn"));
+
+    await waitFor(() => screen.getByTestId("manage-subscription-message"));
+    const msg = screen.getByTestId("manage-subscription-message").textContent ?? "";
+    expect(msg).not.toMatch(/\+61 433 224 556/);
+    expect(msg).not.toMatch(/or call/i);
   });
 });
 
