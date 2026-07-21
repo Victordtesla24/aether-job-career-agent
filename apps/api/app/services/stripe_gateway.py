@@ -101,7 +101,16 @@ def create_checkout_session(
         # payment methods AND handles taxes automatically — Stripe rejects
         # payment_method_types and automatic_tax when it's on, so we omit both.
         metadata={"user_id": user_id, "plan_id": plan_id, "interval": interval},
-        subscription_data={"metadata": {"user_id": user_id, "plan_id": plan_id}},
+        # Stamp plan_id + interval onto the SUBSCRIPTION metadata too (not just the
+        # Checkout Session) so later customer.subscription.* events can resolve the
+        # plan even if the price-id reverse lookup ever comes up empty (PAY-R1-01).
+        subscription_data={
+            "metadata": {
+                "user_id": user_id,
+                "plan_id": plan_id,
+                "interval": interval,
+            }
+        },
         success_url=f"{app_base_url()}/dashboard/settings?checkout=success",
         cancel_url=f"{app_base_url()}/pricing?checkout=cancel",
         **kwargs,
@@ -135,3 +144,82 @@ def construct_event(payload: bytes, sig_header: str) -> Any:
     except ImportError as exc:  # pragma: no cover
         raise StripeNotConfiguredError("stripe SDK is not installed") from exc
     return stripe.Webhook.construct_event(payload, sig_header, secret)
+
+
+def _subscription_item_id(subscription: Any) -> str | None:
+    """First line-item id of a retrieved Subscription (``items.data[0].id``)."""
+    items = _field(subscription, "items")
+    data = items.get("data") if isinstance(items, dict) else _field(items, "data")
+    if not data:
+        return None
+    return _field(data[0], "id")
+
+
+def switch_subscription_price(
+    *,
+    subscription_id: str,
+    new_price_id: str,
+    user_id: str,
+    plan_id: str,
+    interval: str,
+) -> dict[str, str]:
+    """Switch an EXISTING subscription to ``new_price_id`` IN PLACE, with
+    proration (PAY-R1-02 / PAY-R3-01). This avoids creating a second live
+    subscription (double-billing) when a subscriber changes plan.
+
+    Retrieves the subscription to find its current line-item id, then
+    ``Subscription.modify`` swaps that item's price and re-stamps the plan
+    metadata so future ``customer.subscription.*`` events keep resolving.
+    """
+    stripe = _stripe()
+    current = stripe.Subscription.retrieve(subscription_id)
+    item_id = _subscription_item_id(current)
+    if not item_id:
+        raise StripeNotConfiguredError(
+            f"subscription {subscription_id} has no line item to switch"
+        )
+    updated = stripe.Subscription.modify(
+        subscription_id,
+        items=[{"id": item_id, "price": new_price_id}],
+        proration_behavior="create_prorations",
+        metadata={"user_id": user_id, "plan_id": plan_id, "interval": interval},
+    )
+    return {"id": _field(updated, "id") or subscription_id}
+
+
+def cancel_subscription(subscription_id: str) -> None:
+    """Cancel a Stripe subscription immediately so no further invoices are
+    raised (used on refund/dispute revoke and admin refund)."""
+    stripe = _stripe()
+    stripe.Subscription.cancel(subscription_id)
+
+
+def get_charge_customer(charge_id: str) -> str | None:
+    """Resolve the customer id behind a charge (dispute payloads carry a charge
+    id but not always a customer id)."""
+    stripe = _stripe()
+    charge = stripe.Charge.retrieve(charge_id)
+    return _field(charge, "customer")
+
+
+def latest_paid_charge(customer_id: str) -> str | None:
+    """Id of the customer's most recent PAID, un-refunded, succeeded charge, or
+    ``None`` when there is nothing refundable."""
+    stripe = _stripe()
+    charges = stripe.Charge.list(customer=customer_id, limit=10)
+    data = _field(charges, "data") or []
+    for charge in data:
+        if (
+            _field(charge, "paid")
+            and not _field(charge, "refunded")
+            and _field(charge, "status") == "succeeded"
+        ):
+            return _field(charge, "id")
+    return None
+
+
+def create_refund(charge_id: str) -> dict[str, str]:
+    """Issue a full refund for ``charge_id``; return ``{id, status}``."""
+    stripe = _stripe()
+    refund = stripe.Refund.create(charge=charge_id)
+    return {"id": _field(refund, "id"), "status": _field(refund, "status")}

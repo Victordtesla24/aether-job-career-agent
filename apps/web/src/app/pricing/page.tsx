@@ -18,6 +18,24 @@
  * every plan. This page does not render the `modelTier` label or any
  * feature bullet that claims per-plan model differentiation, and states the
  * real differentiator (monthly run quota) plainly instead.
+ *
+ * PAY-R3-01/PAY-R3-03 fix — plan switching: an authenticated visitor who
+ * already holds an active PAID subscription sees a "Current plan" badge on
+ * their plan and "Switch to this plan" (not "Subscribe") on every other paid
+ * tier. POST /billing/checkout now returns EITHER the usual
+ * `{checkoutUrl}` (redirect to Stripe Checkout — a brand-new subscriber) OR
+ * `{switched: true, planId, message}` when the backend switched the caller's
+ * EXISTING Stripe subscription to the new plan server-side instead of
+ * starting a second, independently-billing one. On `switched` we show
+ * `message` in place of a redirect and re-fetch subscription state so the
+ * badges/labels reflect the new plan immediately — no reload required.
+ *
+ * PAY-R3-05 — a Checkout Session that the shopper backed out of returns here
+ * via `cancel_url=/pricing?checkout=cancel` (see stripe_gateway.py); we show
+ * a dismissible "no charge was made" notice and strip the query param so a
+ * refresh doesn't re-show it (same convention as the Gmail-connect callback
+ * on /dashboard/email — read `window.location.search` directly, no
+ * `useSearchParams`, so no Suspense boundary is required).
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -25,7 +43,14 @@ import { useCallback, useEffect, useState } from "react";
 import MetricTooltip from "../../components/MetricTooltip";
 import PublicFooter from "../../components/PublicFooter";
 import { ApiError, formatRetryAfter } from "../../lib/api/client";
-import { fetchPlans, startCheckout, type Plan } from "../../lib/api/billing";
+import {
+  fetchPlans,
+  fetchSubscription,
+  isCheckoutSwitchedResult,
+  startCheckout,
+  type Plan,
+  type SubscriptionState,
+} from "../../lib/api/billing";
 
 type Interval = "month" | "year";
 
@@ -35,6 +60,13 @@ const TOKEN_STORAGE_KEY = "aether_token";
 // (there is none — MV-pricing-002). Filtered from display; the honest
 // differentiator (run quota) is stated separately in the page header.
 const MODEL_TIER_CLAIM_RE = /model tier|model access/i;
+
+// Subscription statuses the backend treats as "entitled paid" (mirrors
+// SubscriptionRepository.has_active_paid_subscription in
+// apps/api/app/repositories/billing.py) — the Free tier's own row is ALSO
+// `status: "active"`, so status alone never implies a paid plan; `planId`
+// must additionally be non-free.
+const ENTITLED_STATUSES = new Set(["active", "trialing", "past_due"]);
 
 function formatAud(amount: number): string {
   return new Intl.NumberFormat("en-AU", {
@@ -54,6 +86,20 @@ export default function PricingPage() {
   // never `getToken()`, which force-redirects an unauthenticated visitor to
   // /login and would break this public page.
   const [isAuthed, setIsAuthed] = useState(false);
+  // PAY-R3-01/03: the caller's OWN subscription (undefined = not fetched yet,
+  // null = fetch failed/inapplicable) — drives the "Current plan" badge and
+  // the Subscribe -> "Switch to this plan" relabel for an existing paid
+  // subscriber. Best-effort only: this page must still work for a logged-out
+  // visitor or if this fetch fails, so a failure never blocks the page.
+  const [mySubscription, setMySubscription] = useState<SubscriptionState | null | undefined>(
+    undefined,
+  );
+  // PAY-R3-01: confirmation shown after POST /billing/checkout switches an
+  // existing subscription in place instead of redirecting to Stripe.
+  const [switchNotice, setSwitchNotice] = useState<string | null>(null);
+  // PAY-R3-05: dismissible notice for a shopper who backed out of Checkout
+  // (cancel_url=/pricing?checkout=cancel).
+  const [cancelNotice, setCancelNotice] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,15 +116,72 @@ export default function PricingPage() {
   }, []);
 
   useEffect(() => {
-    setIsAuthed(Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY)));
+    const authed = Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY));
+    setIsAuthed(authed);
+    if (!authed) {
+      setMySubscription(null);
+      return;
+    }
+    fetchSubscription()
+      .then((s) => setMySubscription(s))
+      .catch((err: unknown) => {
+        // A 401 already redirected the visitor to /login via the shared
+        // client. Any other failure (network hiccup) just means we cannot
+        // show current-plan badges — the page still renders and Subscribe
+        // still works, so degrade silently rather than blocking the page.
+        if (err instanceof ApiError && err.status === 401) return;
+        setMySubscription(null);
+      });
   }, []);
+
+  // PAY-R3-05: read ?checkout=cancel directly off the query string (no
+  // useSearchParams -> no Suspense boundary needed), then strip it so a
+  // refresh doesn't re-show the notice.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "cancel") {
+      setCancelNotice(true);
+      window.history.replaceState(null, "", "/pricing");
+    }
+  }, []);
+
+  // The plan id of the caller's own PAID subscription, or null if they have
+  // none (logged out, Free, or no subscription on record). Mirrors the
+  // backend's own definition of "entitled paid" (SubscriptionRepository
+  // .has_active_paid_subscription): status in (active, trialing, past_due)
+  // AND planId != 'free' — the Free tier's own row is also `status: "active"`,
+  // so `status === "active"` alone is NOT enough to mean "has a paid plan".
+  const currentPaidPlanId =
+    mySubscription?.plan &&
+    mySubscription.plan.id !== "free" &&
+    mySubscription.status !== null &&
+    ENTITLED_STATUSES.has(mySubscription.status)
+      ? mySubscription.plan.id
+      : null;
 
   const handleSubscribe = useCallback(
     async (plan: Plan) => {
       setCheckoutError(null);
+      setSwitchNotice(null);
       setSubmitting(plan.id);
       try {
         const result = await startCheckout(plan.id, interval);
+        if (isCheckoutSwitchedResult(result)) {
+          // PAY-R3-01: the backend switched the existing subscription's
+          // price in place — no Stripe redirect. Refresh subscription state
+          // so the "Current plan" badge moves to the new plan immediately.
+          setSwitchNotice(result.message);
+          setSubmitting(null);
+          try {
+            setMySubscription(await fetchSubscription());
+          } catch {
+            // Best-effort refresh only — the switch itself already
+            // succeeded server-side; a stale badge until next load is not
+            // worth surfacing as an error here.
+          }
+          return;
+        }
         window.location.href = result.checkoutUrl;
       } catch (err) {
         // A 401 already redirected the visitor to /login via the shared client.
@@ -169,6 +272,44 @@ export default function PricingPage() {
           </p>
         ) : null}
 
+        {cancelNotice ? (
+          <div
+            role="status"
+            data-testid="checkout-cancel-notice"
+            className="mb-6 flex items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-center text-sm text-aether-muted"
+          >
+            <span>Checkout canceled — you have not been charged.</span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-testid="checkout-cancel-notice-dismiss"
+              onClick={() => setCancelNotice(false)}
+              className="text-aether-muted-dim hover:text-white"
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+
+        {switchNotice ? (
+          <div
+            role="status"
+            data-testid="plan-switch-notice"
+            className="mb-6 flex items-center justify-center gap-3 rounded-xl border border-aether-green/25 bg-aether-green/10 px-4 py-2.5 text-center text-sm text-aether-green"
+          >
+            <span>{switchNotice}</span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-testid="plan-switch-notice-dismiss"
+              onClick={() => setSwitchNotice(null)}
+              className="text-aether-green/70 hover:text-aether-green"
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+
         {plans === null && !loadError ? (
           <p data-testid="pricing-loading" className="text-center text-sm text-aether-muted">
             Loading plans…
@@ -183,13 +324,36 @@ export default function PricingPage() {
               const perLabel =
                 interval === "year" && plan.annual ? "/ year" : "/ month";
               const isFree = !plan.purchasable;
+              // PAY-R3-01/03: this tile is the subscriber's own paid plan AT
+              // THEIR CURRENT BILLING INTERVAL, or (for the Free tile) their
+              // subscription record is on Free. Matching on plan id alone
+              // would also disable a legitimate action — the backend's
+              // switch-in-place path (POST /billing/checkout) supports
+              // switching JUST the interval on the same plan (e.g. monthly
+              // Pro -> annual Pro), so that combination must still show an
+              // enabled "Switch to this plan", not a disabled "Current plan".
+              const isCurrentPlan =
+                (currentPaidPlanId === plan.id && mySubscription?.interval === interval) ||
+                (isFree && currentPaidPlanId === null && mySubscription?.plan?.id === "free");
               return (
                 <div
                   key={plan.id}
                   data-testid={`pricing-tier-${plan.id}`}
-                  className="glass flex flex-col rounded-2xl border border-white/10 p-6"
+                  className={`glass flex flex-col rounded-2xl border p-6 ${
+                    isCurrentPlan ? "border-aether-green/40" : "border-white/10"
+                  }`}
                 >
-                  <h2 className="text-lg font-semibold">{plan.name}</h2>
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-lg font-semibold">{plan.name}</h2>
+                    {isCurrentPlan ? (
+                      <span
+                        data-testid={`current-plan-badge-${plan.id}`}
+                        className="rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-aether-green"
+                      >
+                        Current plan
+                      </span>
+                    ) : null}
+                  </div>
 
                   <div className="mt-4 flex items-baseline gap-1">
                     <span
@@ -241,6 +405,15 @@ export default function PricingPage() {
                     >
                       {isAuthed ? "Go to dashboard" : "Get started free"}
                     </Link>
+                  ) : isCurrentPlan ? (
+                    <button
+                      type="button"
+                      data-testid={`subscribe-${plan.id}`}
+                      disabled
+                      className="mt-6 cursor-default rounded-xl border border-aether-green/25 bg-aether-green/10 py-2.5 text-sm font-semibold text-aether-green opacity-100"
+                    >
+                      Current plan
+                    </button>
                   ) : (
                     <button
                       type="button"
@@ -249,7 +422,11 @@ export default function PricingPage() {
                       disabled={submitting === plan.id}
                       className="mt-6 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
                     >
-                      {submitting === plan.id ? "Starting checkout…" : `Subscribe to ${plan.name}`}
+                      {submitting === plan.id
+                        ? "Starting checkout…"
+                        : currentPaidPlanId !== null
+                          ? "Switch to this plan"
+                          : `Subscribe to ${plan.name}`}
                     </button>
                   )}
                 </div>

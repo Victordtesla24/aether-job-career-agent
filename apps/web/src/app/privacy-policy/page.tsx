@@ -86,7 +86,7 @@ export default function PrivacyPolicyPage() {
                 <strong className="text-aether-text">Subscription &amp; billing metadata</strong>{" "}
                 — your selected plan (Free, Starter, Pro, or Power), billing interval,
                 subscription status, and monthly agent-run usage, used to enforce plan
-                limits and, once payment processing is active, to bill you.
+                limits and to bill you for paid plans.
               </li>
               <li>
                 <strong className="text-aether-text">Gmail messages</strong> — if you
@@ -146,10 +146,10 @@ export default function PrivacyPolicyPage() {
                 OAuth tokens are encrypted at rest, and access can be revoked at any time.
               </li>
               <li>
-                <strong className="text-aether-text">Stripe</strong> — processes payment
-                for paid subscription plans. Live payment processing is not yet active in
-                production; it goes live once we finish our Stripe account setup. Until
-                then, no payment data is transmitted to Stripe. See our{" "}
+                <strong className="text-aether-text">Stripe</strong> — securely processes
+                card payments for paid subscription plans. Card details are entered directly
+                with Stripe (a PCI DSS Level 1 provider) and are never stored on our servers;
+                we retain only your subscription status and billing metadata. See our{" "}
                 <Link href="/terms" className="text-aether-coral hover:underline">
                   Terms &amp; Conditions
                 </Link>{" "}

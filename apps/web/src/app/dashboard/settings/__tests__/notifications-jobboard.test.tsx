@@ -35,6 +35,7 @@ vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
 const fetchSubscriptionMock = vi.fn();
 const openBillingPortalMock = vi.fn();
 const fetchEntitlementMock = vi.fn();
+const fetchPlansMock = vi.fn();
 vi.mock("../../../../lib/api/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../lib/api/billing")>();
   return {
@@ -42,6 +43,7 @@ vi.mock("../../../../lib/api/billing", async (importOriginal) => {
     fetchSubscription: (...args: unknown[]) => fetchSubscriptionMock(...args),
     openBillingPortal: (...args: unknown[]) => openBillingPortalMock(...args),
     fetchEntitlement: (...args: unknown[]) => fetchEntitlementMock(...args),
+    fetchPlans: (...args: unknown[]) => fetchPlansMock(...args),
   };
 });
 
@@ -105,6 +107,7 @@ afterEach(() => {
   fetchSubscriptionMock.mockReset();
   openBillingPortalMock.mockReset();
   fetchEntitlementMock.mockReset();
+  fetchPlansMock.mockReset();
   runScoutAgentMock.mockReset();
   usePathnameMock.mockReturnValue("/dashboard/settings");
   window.localStorage.clear();

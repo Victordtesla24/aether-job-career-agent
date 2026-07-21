@@ -119,6 +119,64 @@ this runbook's implicit deploy discipline that are now made explicit:
    its own "done" marker/output file) over process-liveness polling
    entirely when practical.
 
+### 0.3 ADDENDUM (2026-07-21, full incident: `docs/delivery/INCIDENT-2026-07-21-web-build-clobber.md`) — `pnpm build` in `apps/web` MUST be immediately followed by a web restart when working in the live-serving tree
+
+**Symptom:** every screen in production began throwing the browser's
+`Application error: a client-side exception has occurred` — site-wide, not
+one screen.
+
+**Root cause:** a fixer agent, following its own task's instruction to "run
+`pnpm build`; must pass at the end" as a verification step, ran `pnpm build`
+directly inside `/home/ubuntu/github_repos/aether-job-career-agent/apps/web`
+— which is simultaneously the exact directory `aether-web.service`'s
+already-running `next-server` process serves from (§2 above: there is no
+separate build/worktree/staging copy on this VM; the fixer's own task
+explicitly said to work "DIRECTLY in the main working tree… NO worktree").
+`next build` **deletes and regenerates** `.next/static/` with brand-new
+content-hashed chunk/CSS filenames on every run. The already-running
+`next-server` process had the OLD build's HTML/manifests already loaded and
+kept telling every browser to fetch the OLD (now on-disk-deleted) chunk
+filenames — a guaranteed client-side chunk-load/hydration failure on
+literally every route, because every route shares the same JS runtime
+bootstrap. The fixer's task explicitly said "do not restart services —
+orchestrator handles that," so the build ran, verified itself green
+(vitest + `pnpm build` both passed), and stopped there — leaving the
+already-running server pointed at assets that no longer existed on disk
+until some later, unscheduled restart happened. In this incident a SECOND,
+independent `pnpm build` (from a concurrent parallel agent/session working
+the same shared tree) raced in immediately after the first restart and
+would have reproduced the exact same outage again within seconds had it not
+also been followed by its own restart.
+
+**Fix applied:** `sudo systemctl restart aether-web.service` (marked `[SAFE]`
+in §3) — twice, once per each of the two builds that landed. Verified via
+curl against the real public HTTPS URL (never `localhost` with a fake
+`Host:` header — that only exercises envoy's real ingress path) that (a)
+every key page returns HTTP 200 with real body content and zero occurrences
+of "Application error"/"client-side exception" in the rendered HTML, and
+(b) every `_next/static/*` asset REFERENCED in that HTML also independently
+resolves HTTP 200 (not 400/404) — the second check is the one that actually
+catches this failure mode; the first alone would not, since Next's
+server-rendered HTML looks completely normal even when its own linked
+assets 404 a moment later.
+
+**Rule — binding on every fixer/deployer/orchestrator process, not just this
+one:** `pnpm build` must **never** be run inside this VM's live
+`apps/web` directory without an `aether-web.service` restart immediately
+following it in the SAME task/session, before that task is considered done
+— regardless of whether the individual task's own instructions say "don't
+restart, orchestrator handles that." A fixer task that runs `pnpm build`
+directly in the shared production tree (as opposed to an isolated worktree)
+has, by that action alone, already put a stale-vs-disk mismatch one restart
+away from going live; "the orchestrator restarts later" is not safe unless
+the restart is guaranteed to happen before ANY other process (including a
+concurrent fixer) reads or serves from that same `.next` directory in the
+interim. If a task's own charter forbids restarting, it must instead forbid
+running `pnpm build` in the shared tree at all (verify via `tsc --noEmit` +
+`next lint` + vitest only, and defer the actual `pnpm build` + restart to
+whichever agent owns the deploy step, back-to-back, with no other build in
+between).
+
 Neither of these changes the deploy recipe's commands in §5 — they are
 process rules for *when* those commands are run, not new commands.
 

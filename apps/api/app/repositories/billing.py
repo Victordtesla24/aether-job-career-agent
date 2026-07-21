@@ -397,24 +397,35 @@ class SubscriptionRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
+    #: Subscription statuses that count as an ENTITLED paid subscription.
+    #: ``active`` is the steady state; ``trialing`` is entitled during a Stripe
+    #: trial (PAY-R1-05); ``past_due`` stays entitled during Stripe's dunning /
+    #: smart-retry window (PAY-R1-04 / PAY-R2-01) — access is only hard-revoked on
+    #: the terminal ``customer.subscription.deleted`` (or an ``unpaid`` /
+    #: ``canceled`` status), which the webhook downgrades to Free.
+    _ENTITLED_STATUSES: tuple[str, ...] = ("active", "trialing", "past_due")
+
     def has_active_paid_subscription(self, user_id: str) -> bool:
-        """True IFF the user holds an ACTIVE PAID subscription — ``status='active'``
-        AND ``planId != 'free'``.
+        """True IFF the user holds an ENTITLED PAID subscription — ``status`` in
+        (``active``, ``trialing``, ``past_due``) AND ``planId != 'free'``.
 
         This is the sole definition of "entitled to use Aether" behind the
         subscription gate (``agents._record_run``). A missing row, a Free row, or
-        any non-``active`` status (``past_due`` / ``canceled`` / ``trialing`` /
-        ``paused`` / ...) all read as NOT entitled. Purely additive read against
-        the existing ``Subscription`` table — no new schema.
+        a terminal status (``canceled`` / ``unpaid`` / ``incomplete`` /
+        ``paused`` / ...) all read as NOT entitled. ``past_due`` is deliberately
+        entitled so a single failed renewal charge does not instantly wall a
+        paying customer out mid-cycle while Stripe retries (dunning grace);
+        ``trialing`` is entitled so a Stripe-side trial is not blocked from the
+        very features it trials. Purely additive read — no new schema.
         """
         _ensure_billing_tables()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     'SELECT 1 FROM "Subscription" '
-                    "WHERE \"userId\" = %s AND \"status\" = 'active' "
+                    'WHERE "userId" = %s AND "status" = ANY(%s) '
                     "AND \"planId\" <> 'free' LIMIT 1",
-                    (user_id,),
+                    (user_id, list(self._ENTITLED_STATUSES)),
                 )
                 return cur.fetchone() is not None
 

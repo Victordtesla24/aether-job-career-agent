@@ -28,6 +28,7 @@ vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
 const fetchSubscriptionMock = vi.fn();
 const openBillingPortalMock = vi.fn();
 const fetchEntitlementMock = vi.fn();
+const fetchPlansMock = vi.fn();
 vi.mock("../../../../lib/api/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../lib/api/billing")>();
   return {
@@ -35,8 +36,27 @@ vi.mock("../../../../lib/api/billing", async (importOriginal) => {
     fetchSubscription: (...args: unknown[]) => fetchSubscriptionMock(...args),
     openBillingPortal: (...args: unknown[]) => openBillingPortalMock(...args),
     fetchEntitlement: (...args: unknown[]) => fetchEntitlementMock(...args),
+    fetchPlans: (...args: unknown[]) => fetchPlansMock(...args),
   };
 });
+
+const PLANS_RESPONSE = {
+  currency: "AUD",
+  gstIncluded: true,
+  plans: [
+    {
+      id: "free", name: "Free", modelTier: "light", runsPerMonth: 5,
+      monthly: { total: 0, gst: 0, net: 0 }, annual: null,
+      features: [], purchasable: false,
+    },
+    {
+      id: "pro", name: "Pro", modelTier: "advanced", runsPerMonth: 100,
+      monthly: { total: 39, gst: 3.55, net: 35.45 },
+      annual: { total: 359, gst: 32.64, net: 326.36 },
+      features: [], purchasable: true,
+    },
+  ],
+};
 
 // The SubscriptionGate reads the live pathname to allowlist /dashboard/settings.
 const usePathnameMock = vi.fn(() => "/dashboard/settings" as string | null);
@@ -75,6 +95,14 @@ const SUBSCRIPTION = {
   },
 };
 
+// Some tests below replace `window.location` with a plain href-capturing stub
+// (to observe a redirect to the billing portal) via Object.defineProperty —
+// jsdom's `window` persists across `it()`s within this file, so without
+// restoring the real descriptor afterward, every later test would inherit a
+// `window.location` with no working `search` (breaking the
+// ?checkout=success tests below, which read the real URL).
+const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+
 afterEach(() => {
   cleanup();
   fetchSettingsMock.mockReset();
@@ -82,8 +110,13 @@ afterEach(() => {
   fetchSubscriptionMock.mockReset();
   openBillingPortalMock.mockReset();
   fetchEntitlementMock.mockReset();
+  fetchPlansMock.mockReset();
   usePathnameMock.mockReturnValue("/dashboard/settings");
   vi.unstubAllEnvs();
+  if (originalLocationDescriptor) {
+    Object.defineProperty(window, "location", originalLocationDescriptor);
+  }
+  window.history.replaceState(null, "", "/dashboard/settings");
 });
 
 const FREE_SUBSCRIPTION = {
@@ -136,6 +169,7 @@ describe("SettingsPage — Billing & Subscription (MV-settings-003, MV-pricing-0
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
     render(<SettingsPage />);
 
     await waitFor(() => {
@@ -147,6 +181,39 @@ describe("SettingsPage — Billing & Subscription (MV-settings-003, MV-pricing-0
     expect(screen.getByTestId("billing-plan-status").textContent).toContain("active");
     expect(screen.getByTestId("billing-quota-runs").textContent).toContain("15");
     expect(screen.getByTestId("billing-quota-runs").textContent).toContain("100");
+  });
+
+  it("PAY-R3-06: renders the plan's price and the real next-billing (Stripe renewal) date, not just the usage-quota reset date", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("billing-plan-price"));
+    expect(screen.getByTestId("billing-plan-price").textContent).toMatch(/\$39.*\/\s*month/i);
+
+    await waitFor(() => screen.getByTestId("billing-next-date"));
+    // SUBSCRIPTION.currentPeriodEnd = "2026-08-01T00:00:00Z"
+    expect(screen.getByTestId("billing-next-date").textContent).toMatch(
+      new Date("2026-08-01T00:00:00Z").toLocaleDateString(),
+    );
+
+    // Distinct from the usage-quota reset date — both are shown, not conflated.
+    const section = screen.getByTestId("settings-billing");
+    expect(section.textContent ?? "").toMatch(/usage quota resets/i);
+  });
+
+  it("PAY-R3-06: falls back to an honest 'Price unavailable' / 'No upcoming charge' — never a fabricated $0 or placeholder — when data is missing", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(FREE_SUBSCRIPTION);
+    fetchPlansMock.mockRejectedValue(new Error("plans catalog unavailable"));
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("billing-plan-price"));
+    expect(screen.getByTestId("billing-plan-price").textContent).toContain("Price unavailable");
+    expect(screen.getByTestId("billing-next-date").textContent).toContain("No upcoming charge");
   });
 
   it("wires 'Manage subscription' to the real POST /billing/portal endpoint and follows the returned URL", async () => {
@@ -257,5 +324,76 @@ describe("Settings billing reachable through the SubscriptionGate for a FREE acc
     // …and the paywall never replaces it.
     expect(screen.queryByTestId("subscription-paywall")).toBeNull();
     expect(screen.queryByText(/Subscribe to unlock/i)).toBeNull();
+  });
+});
+
+describe("SettingsPage — post-checkout success banner (PAY-R3-05)", () => {
+  it("shows an 'activating' banner (never a fabricated success) when the subscription hasn't confirmed the upgrade yet, then flips to a real success message once it does", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?checkout=success");
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    // First resolve still shows the OLD (free) plan — webhook hasn't landed —
+    // then a manual "Refresh now" click confirms the real upgrade.
+    fetchSubscriptionMock
+      .mockResolvedValueOnce(FREE_SUBSCRIPTION)
+      .mockResolvedValueOnce(SUBSCRIPTION);
+
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("checkout-success-banner"));
+    expect(screen.getByTestId("checkout-success-banner").textContent ?? "").toMatch(
+      /being activated/i,
+    );
+    // The URL is stripped so a refresh doesn't re-show the banner.
+    expect(window.location.search).toBe("");
+
+    fireEvent.click(screen.getByTestId("checkout-banner-refresh"));
+
+    await waitFor(() => {
+      const banner = screen.getByTestId("checkout-success-banner");
+      expect(banner.textContent ?? "").toMatch(/subscription active/i);
+    });
+    expect(screen.getByTestId("checkout-success-banner").textContent ?? "").toContain("Pro");
+  });
+
+  it("shows the success banner immediately (no 'activating' delay) when the subscription already confirms an active paid plan on first load", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?checkout=success");
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("checkout-success-banner").textContent ?? "").toMatch(
+        /subscription active.*welcome to pro/i,
+      );
+    });
+  });
+
+  it("shows no banner at all on a plain visit with no ?checkout param", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    render(<SettingsPage />);
+    await waitFor(() => screen.getByTestId("billing-plan-name"));
+    expect(screen.queryByTestId("checkout-success-banner")).toBeNull();
+  });
+
+  it("is dismissible", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?checkout=success");
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    render(<SettingsPage />);
+    await waitFor(() => screen.getByTestId("checkout-success-banner"));
+    fireEvent.click(screen.getByTestId("checkout-banner-dismiss"));
+    expect(screen.queryByTestId("checkout-success-banner")).toBeNull();
   });
 });

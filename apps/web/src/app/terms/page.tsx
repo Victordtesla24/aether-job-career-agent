@@ -166,13 +166,10 @@ export default function TermsPage() {
                 managed by Stripe and kept in sync with your Aether account automatically.
               </li>
               <li>
-                <strong className="text-aether-text">
-                  Live payment processing is not yet active
-                </strong>{" "}
-                in production. Going live requires the operator to complete Stripe account
-                setup (secret key, product/price configuration, and webhook registration).
-                Until then, starting checkout or opening the billing portal returns an honest
-                error rather than pretending to process a payment.
+                <strong className="text-aether-text">Live payment processing is active.</strong>{" "}
+                Starting checkout charges your card immediately through Stripe, and your
+                subscription then renews automatically — monthly or annually, matching the
+                billing interval you chose — until you cancel.
               </li>
             </ul>
           </Section>
@@ -204,8 +201,14 @@ export default function TermsPage() {
             <p>
               You can manage or cancel a paid subscription at any time through the{" "}
               <strong className="text-aether-text">Stripe Billing Portal</strong> (&ldquo;Manage
-              billing&rdquo; from your dashboard). From the portal you can change plan, update
-              your payment method, or cancel.
+              subscription&rdquo; from your Settings page). From the portal you can cancel your
+              subscription, update your payment method, and view your invoice/payment history.
+            </p>
+            <p className="mt-3">
+              To change plans (upgrade or downgrade), use the{" "}
+              <strong className="text-aether-text">Pricing</strong> page — selecting a
+              different plan there switches your existing subscription to the new plan; it does
+              not start a second, separate subscription.
             </p>
             <p className="mt-3">
               Cancellation takes effect at the end of your current billing period — you keep

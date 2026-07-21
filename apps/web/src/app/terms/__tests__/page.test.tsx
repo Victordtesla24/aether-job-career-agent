@@ -80,10 +80,25 @@ describe("TermsPage", () => {
     expect(bodyText).toMatch(/end of your current billing period/i);
   });
 
-  it("states live payment processing is pending operator Stripe setup, not already active", () => {
+  it("PAY-R3-03: states live payment processing IS active — never the stale 'not yet active' claim", () => {
     render(<TermsPage />);
     const bodyText = document.body.textContent ?? "";
-    expect(bodyText).toMatch(/not yet active/i);
+    expect(bodyText).toMatch(/live payment processing is active/i);
+    expect(bodyText).not.toMatch(/not yet active/i);
+    expect(bodyText).not.toMatch(/pretending to process a payment/i);
+  });
+
+  it("PAY-R3-03: describes changing plans via the Pricing page (switches the existing subscription), not a false portal plan-change claim", () => {
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    // The Stripe Billing Portal cannot switch plans — only cancellation and
+    // payment-method update. The old copy falsely claimed "From the portal
+    // you can change plan" (PAY-R3-03); it must never render again.
+    expect(bodyText).not.toMatch(/from the portal you can change plan/i);
+    expect(bodyText).toMatch(/to change plans.*use the\s*Pricing\s*page/i);
+    expect(bodyText).toMatch(/switches your existing subscription/i);
+    expect(bodyText).toMatch(/update your payment method/i);
+    expect(bodyText).toMatch(/invoice\/payment history/i);
   });
 
   it("MV-terms-002: never renders a raw bracket placeholder anywhere on the page", () => {

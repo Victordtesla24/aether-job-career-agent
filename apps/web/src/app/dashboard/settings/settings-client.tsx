@@ -15,13 +15,37 @@
  * status and quota, plus a "Manage subscription" action wired to the real
  * POST /billing/portal endpoint (falls back to an honest contact-support
  * message when the account has no Stripe billing profile to manage yet).
+ *
+ * PAY-R3-05 (post-checkout success UX): Stripe's `success_url` sends a
+ * completed checkout back to `/dashboard/settings?checkout=success`
+ * (apps/api/app/services/stripe_gateway.py) — this was previously silently
+ * dropped, so a paying customer saw no acknowledgment at all. We read the
+ * query param directly off `window.location.search` (no `useSearchParams` ->
+ * no Suspense boundary needed, same convention as the Gmail-connect callback
+ * on /dashboard/email) and show a banner. Because the plan upgrade only
+ * lands once the `checkout.session.completed` webhook processes (async, not
+ * guaranteed to beat the browser redirect here), the banner starts in an
+ * honest "activating" state and only claims success once GET
+ * /billing/subscription actually confirms an active paid plan — it never
+ * fabricates a success message ahead of the real data.
+ *
+ * PAY-R3-06 (billing display completeness): `subscription.currentPeriodEnd`
+ * (the real Stripe renewal/next-charge date) and the plan's price were
+ * fetched-but-never-rendered before this fix. The price isn't on
+ * `GET /billing/subscription` itself, so we cross-reference the plan
+ * catalog from the PUBLIC `GET /billing/plans` (fetchPlans) by
+ * `subscription.plan.id` + `subscription.interval` to show the actual
+ * amount being charged, alongside an explicit "Next billing date" (distinct
+ * from the agent-run quota's own reset date, a different underlying field).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, ApiError, formatRetryAfter, getToken } from "../../../lib/api/client";
 import {
+  fetchPlans,
   fetchSubscription,
   openBillingPortal,
+  type Plan,
   type SubscriptionState,
 } from "../../../lib/api/billing";
 import {
@@ -45,6 +69,16 @@ import {
 import { SECTIONS } from "./sections";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Matches the AUD formatter on /pricing (apps/web/src/app/pricing/page.tsx)
+ * so the same plan price reads identically everywhere it's shown. */
+function formatAud(amount: number): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  }).format(amount);
+}
 
 const STATUS_STYLE: Record<string, string> = {
   connected: "bg-aether-green/15 text-aether-green border-aether-green/25",
@@ -99,6 +133,21 @@ export default function SettingsClient({
   const [billingError, setBillingError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalMessage, setPortalMessage] = useState<string | null>(null);
+  // PAY-R3-06: the public plan catalog, cross-referenced against
+  // subscription.plan.id + subscription.interval to show the actual price
+  // being charged (GET /billing/subscription itself has no price field).
+  // Optional enrichment only — a failure here must never block the rest of
+  // the billing section from rendering.
+  const [plans, setPlans] = useState<Plan[] | null>(null);
+
+  // PAY-R3-05: post-checkout success acknowledgment. "idle" = no checkout
+  // just happened; "activating" = ?checkout=success was present but the
+  // webhook-driven plan upgrade hasn't been confirmed by GET
+  // /billing/subscription yet; "active" = confirmed. Never claims success
+  // ahead of what the real subscription data shows.
+  const [checkoutBanner, setCheckoutBanner] = useState<"idle" | "activating" | "active">("idle");
+  const [checkoutBannerDismissed, setCheckoutBannerDismissed] = useState(false);
+  const [checkoutRefreshing, setCheckoutRefreshing] = useState(false);
 
   // Composed once so both fallback messages below (409, 503) share the same
   // "Email X" / "Email X or call Y" / "Call Y" phrasing — honest about
@@ -231,6 +280,61 @@ export default function SettingsClient({
       );
   }, []);
 
+  // PAY-R3-06: the public plan catalog, purely for its price breakdown —
+  // optional display enrichment, so a failure here is silently swallowed
+  // (the billing section still renders plan/status/quota either way).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchPlans();
+        if (!cancelled) setPlans(res.plans);
+      } catch {
+        // Price display falls back to an honest "—" below; never blocks.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // PAY-R3-05: read ?checkout=success directly off the query string (no
+  // useSearchParams -> no Suspense boundary needed, mirrors the Gmail-connect
+  // callback convention on /dashboard/email), then strip it so a refresh
+  // doesn't re-show the banner.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      setCheckoutBanner("activating");
+      window.history.replaceState(null, "", "/dashboard/settings");
+    }
+  }, []);
+
+  // Once a checkout just completed, flip the banner from "activating" to
+  // "active" the moment GET /billing/subscription actually confirms an
+  // active paid plan (webhook already processed) — never before, since the
+  // upgrade is applied asynchronously by checkout.session.completed and may
+  // not have landed yet when the browser redirects back here.
+  useEffect(() => {
+    if (checkoutBanner !== "activating" || subscription === null) return;
+    const isPaidActive =
+      subscription.status === "active" && subscription.plan !== null && subscription.plan.id !== "free";
+    if (isPaidActive) setCheckoutBanner("active");
+  }, [checkoutBanner, subscription]);
+
+  const refreshBillingAfterCheckout = async () => {
+    setCheckoutRefreshing(true);
+    try {
+      setSubscription(await fetchSubscription());
+    } catch {
+      // Best-effort manual refresh only — leave the "activating" banner up
+      // so the user can try again rather than surfacing a new error state.
+    } finally {
+      setCheckoutRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchCareerData()
       .then((c) => {
@@ -276,6 +380,18 @@ export default function SettingsClient({
   // (app/routers/agents.py `_user_search_defaults`). Gate the button rather
   // than firing a call we know the honest fallback would have to guess at.
   const jobBoardSyncReady = profile.targetRole.trim().length > 0 && profile.location.trim().length > 0;
+
+  // PAY-R3-06: the current plan's price, cross-referenced from the public
+  // plan catalog by id + billing interval. `null` when the catalog hasn't
+  // loaded (or failed to), or when the current plan/interval isn't found
+  // there — the render falls back to an honest "Price unavailable" rather
+  // than a fabricated $0.
+  const currentPlanDef = plans?.find((p) => p.id === subscription?.plan?.id) ?? null;
+  const currentPriceBreakdown = currentPlanDef
+    ? subscription?.interval === "year" && currentPlanDef.annual
+      ? currentPlanDef.annual
+      : currentPlanDef.monthly
+    : null;
 
   const syncAllJobBoards = async () => {
     if (!jobBoardSyncReady || jobBoardSyncing) return;
@@ -340,6 +456,46 @@ export default function SettingsClient({
           </button>
         </div>
       </header>
+
+      {checkoutBanner !== "idle" && !checkoutBannerDismissed ? (
+        <div
+          role="status"
+          data-testid="checkout-success-banner"
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-sm ${
+            checkoutBanner === "active"
+              ? "border-aether-green/30 bg-aether-green/10 text-aether-green"
+              : "border-white/10 bg-white/5 text-aether-muted"
+          }`}
+        >
+          <span>
+            {checkoutBanner === "active"
+              ? `Subscription active — welcome to ${subscription?.plan?.name ?? "your new plan"}!`
+              : "Payment received — your subscription is being activated. This can take a few seconds."}
+          </span>
+          <div className="flex items-center gap-3">
+            {checkoutBanner === "activating" ? (
+              <button
+                type="button"
+                data-testid="checkout-banner-refresh"
+                onClick={() => void refreshBillingAfterCheckout()}
+                disabled={checkoutRefreshing}
+                className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
+              >
+                {checkoutRefreshing ? "Checking…" : "Refresh now"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-testid="checkout-banner-dismiss"
+              onClick={() => setCheckoutBannerDismissed(true)}
+              className="text-aether-muted-dim hover:text-white"
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>
@@ -739,6 +895,27 @@ export default function SettingsClient({
                     </span>
                   </div>
 
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <span className="text-aether-muted" data-testid="billing-plan-price">
+                      Price:{" "}
+                      <span className="mono font-semibold text-aether-text">
+                        {currentPriceBreakdown
+                          ? `${formatAud(currentPriceBreakdown.total)} / ${
+                              subscription.interval === "year" ? "year" : "month"
+                            }`
+                          : "Price unavailable"}
+                      </span>
+                    </span>
+                    <span className="text-aether-muted" data-testid="billing-next-date">
+                      Next billing date:{" "}
+                      <span className="mono font-semibold text-aether-text">
+                        {subscription.currentPeriodEnd
+                          ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                          : "No upcoming charge"}
+                      </span>
+                    </span>
+                  </div>
+
                   {subscription.quota ? (
                     <div className="mt-4 space-y-2" data-testid="billing-quota">
                       <div className="flex justify-between text-xs">
@@ -769,7 +946,12 @@ export default function SettingsClient({
                       </div>
                       {subscription.quota.periodEnd ? (
                         <p className="text-[11px] text-aether-muted-dim">
-                          Resets {new Date(subscription.quota.periodEnd).toLocaleDateString()}
+                          {/* Distinct from "Next billing date" above (PAY-R3-06)
+                             — this is the agent-run usage quota's own reset
+                             date, not necessarily the Stripe renewal date
+                             (e.g. an annual plan still resets its run quota
+                             monthly). */}
+                          Usage quota resets {new Date(subscription.quota.periodEnd).toLocaleDateString()}
                         </p>
                       ) : null}
                     </div>

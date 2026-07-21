@@ -48,9 +48,33 @@ export async function fetchPlans(baseUrl: string = apiBaseUrl()): Promise<PlansR
   return PlansResponseSchema.parse(await res.json());
 }
 
-export interface CheckoutResult {
+/** The default outcome — redirect the browser to Stripe Checkout. */
+export interface CheckoutRedirectResult {
   checkoutUrl: string;
   sessionId: string;
+}
+
+/**
+ * The alternative outcome for an existing paid subscriber who chose a
+ * DIFFERENT plan (PAY-R3-01 fix): the backend switches the existing Stripe
+ * subscription's price server-side instead of starting a second, independent
+ * subscription (which previously double-billed the customer). No redirect —
+ * the caller re-fetches subscription state and shows `message` in place of
+ * a Checkout redirect.
+ */
+export interface CheckoutSwitchedResult {
+  switched: true;
+  planId: string;
+  message: string;
+}
+
+export type CheckoutResult = CheckoutRedirectResult | CheckoutSwitchedResult;
+
+/** Narrows a `CheckoutResult` to the "switched in place" branch. */
+export function isCheckoutSwitchedResult(
+  result: CheckoutResult,
+): result is CheckoutSwitchedResult {
+  return (result as CheckoutSwitchedResult).switched === true;
 }
 
 export async function startCheckout(

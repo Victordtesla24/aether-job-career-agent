@@ -21,7 +21,8 @@ Covers:
 - (c) ``AETHER_REQUIRE_PAID_SUBSCRIPTION='false'`` restores freemium (Free tier
   allowed);
 - helper ``SubscriptionRepository.has_active_paid_subscription`` semantics
-  (free -> False, pro/active -> True, pro/past_due -> False);
+  (free -> False, pro/active -> True, pro/trialing -> True, pro/past_due -> True
+  during dunning grace, pro/canceled -> False);
 - the gate also blocks UNMETERED agents (scout) — the whole actionable pipeline
   is walled, not just the metered LLM agents;
 - the HTTP surface: POST /agents/tailor/run returns 402 with the honest body;
@@ -170,10 +171,21 @@ def test_has_active_paid_subscription_semantics(
     _set_plan(test_user_id, "pro", "active")
     assert repo.has_active_paid_subscription(test_user_id) is True
 
-    _set_plan(test_user_id, "pro", "past_due")
-    assert repo.has_active_paid_subscription(test_user_id) is False  # not active
+    # PAY-R1-05: a Stripe-side trial is entitled to the features it trials.
+    _set_plan(test_user_id, "pro", "trialing")
+    assert repo.has_active_paid_subscription(test_user_id) is True
 
+    # PAY-R1-04 / PAY-R2-01: past_due stays entitled during Stripe's dunning /
+    # smart-retry window — a single failed renewal charge must not instantly wall
+    # a paying customer out mid-cycle.
+    _set_plan(test_user_id, "pro", "past_due")
+    assert repo.has_active_paid_subscription(test_user_id) is True
+
+    # Terminal states remain NOT entitled (hard revoke).
     _set_plan(test_user_id, "pro", "canceled")
+    assert repo.has_active_paid_subscription(test_user_id) is False
+
+    _set_plan(test_user_id, "pro", "unpaid")
     assert repo.has_active_paid_subscription(test_user_id) is False
 
 
