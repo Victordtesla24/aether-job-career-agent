@@ -74,13 +74,34 @@ export function pipelineCompletionNotice(response: Record<string, unknown>): Not
   const changes = Number(byAgent.get("tailor")?.changes ?? 0);
   const hasLetter = byAgent.has("coverLetter");
 
+  const topTitle = byAgent.get("matcher")?.top_job_title;
+  const topCompany = byAgent.get("matcher")?.top_company;
+  const target =
+    typeof topTitle === "string" && typeof topCompany === "string"
+      ? ` for ${topTitle} @ ${topCompany}`
+      : "";
+
+  // GAP-P7-COV-PIPE-001: the résumé was tailored but the cover letter was
+  // withheld because its fabrication/format guard rejected every draft. This is
+  // a graceful degradation (not a failure) — surface the real progress and point
+  // the user at the Cover Letter studio rather than the (empty) Approvals queue.
+  if (response.coverLetterUnavailable) {
+    // Honest lead: only claim the résumé was tailored when changes were actually
+    // applied (mirrors the backend's honest message; the compound tailor-no-op +
+    // cover-rejected case must not overclaim).
+    const tailorClause =
+      changes > 0
+        ? `and your resume was tailored (${changes} changes)`
+        : "and no verifiable resume changes were applied";
+    return {
+      kind: "info",
+      text: `Pipeline complete — ${matched} jobs matched (${scored} newly scored) ${tailorClause}${target}. The cover letter couldn't be auto-generated without unverifiable wording, so it was withheld — generate or write one yourself:`,
+      href: "/dashboard/cover-letters",
+      hrefLabel: "open the Cover Letter studio →",
+    };
+  }
+
   if (response.approvalRequired) {
-    const topTitle = byAgent.get("matcher")?.top_job_title;
-    const topCompany = byAgent.get("matcher")?.top_company;
-    const target =
-      typeof topTitle === "string" && typeof topCompany === "string"
-        ? ` for ${topTitle} @ ${topCompany}`
-        : "";
     return {
       kind: "success",
       text: `Pipeline complete — ${matched} jobs matched (${scored} newly scored), resume tailored (${changes} changes)${hasLetter ? " and cover letter drafted" : ""}${target}. Nothing is sent without you:`,

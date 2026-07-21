@@ -71,6 +71,50 @@ describe("pipelineCompletionNotice", () => {
     expect(n.href).toBe("/dashboard/approvals");
   });
 
+  it("degrades gracefully when the cover letter was withheld (GAP-P7-COV-PIPE-001)", () => {
+    const n = pipelineCompletionNotice({
+      status: "completed",
+      approvalRequired: false,
+      coverLetterUnavailable: true,
+      steps: [
+        { agent: "scout", output: { persisted: 2 } },
+        { agent: "fitScorer", output: { scored: 3 } },
+        {
+          agent: "matcher",
+          output: { matched: 4, top_job_title: "Senior PM", top_company: "Deputy" },
+        },
+        { agent: "tailor", output: { changes: 7 } },
+        { agent: "coverLetter", output: { coverLetterUnavailable: true, reason: "['origination']" } },
+      ],
+    });
+    // Not a hard failure and not the empty "no jobs matched" branch: it reports
+    // the real tailoring progress and points at the Cover Letter studio.
+    expect(n.kind).toBe("info");
+    expect(n.text).toContain("4 jobs matched");
+    expect(n.text).toContain("7 changes");
+    expect(n.text).toContain("Senior PM @ Deputy");
+    expect(n.text).toContain("withheld");
+    expect(n.text).not.toContain("no jobs matched yet");
+    expect(n.href).toBe("/dashboard/cover-letters");
+  });
+
+  it("does not overclaim tailoring when cover withheld AND no résumé changes applied", () => {
+    const n = pipelineCompletionNotice({
+      status: "completed",
+      approvalRequired: false,
+      coverLetterUnavailable: true,
+      steps: [
+        { agent: "scout", output: { persisted: 1 } },
+        { agent: "matcher", output: { matched: 2 } },
+        { agent: "tailor", output: { noChangesApplied: true, changes: 0 } },
+        { agent: "coverLetter", output: { coverLetterUnavailable: true } },
+      ],
+    });
+    expect(n.text).not.toContain("resume was tailored");
+    expect(n.text).toContain("no verifiable resume changes were applied");
+    expect(n.href).toBe("/dashboard/cover-letters");
+  });
+
   it("guides the user to Jobs when no jobs matched", () => {
     const n = pipelineCompletionNotice({
       status: "completed",

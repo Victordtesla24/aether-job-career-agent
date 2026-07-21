@@ -1441,6 +1441,7 @@ def _pipeline_core(
     # One shared wall-clock budget across BOTH LLM-backed steps: without it
     # tailor and coverLetter each armed their own 60 s budget, so the pipeline
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
+    from app.agents.cover_letter_agent import FabricationError, StructuralError
     from app.agents.tailor_agent import NoChangesApplied
     from app.services.llm_client import shared_budget
 
@@ -1456,7 +1457,53 @@ def _pipeline_core(
             # base résumé regardless — so record the honest no-op and continue.
             tailor_out = {"noChangesApplied": True, "changes": 0, "message": str(exc)}
         steps.append({"agent": "tailor", "output": tailor_out})
-        letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
+        try:
+            letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
+        except (FabricationError, StructuralError) as exc:
+            # GAP-P7-COV-PIPE-001: the cover step's own fabrication/structural
+            # guard rejected the draft — an ungrounded term or §10.2 format
+            # violation survived every corrective retry. That is the guard
+            # WORKING (Aether never ships a fabricated cover letter), but it must
+            # NOT discard the SUCCESSFUL tailoring that precedes it. The
+            # coverLetter AgentRun is already recorded failed and its reserved
+            # quota refunded inside _dispatch/_record_run, so here we ONLY degrade
+            # gracefully: keep the tailored résumé and complete the pipeline with
+            # the cover marked unavailable + an honest, actionable message —
+            # instead of failing the whole job with a raw guard exception.
+            reason = getattr(exc, "flagged", None) or getattr(exc, "issues", None)
+            steps.append(
+                {
+                    "agent": "coverLetter",
+                    "output": {"coverLetterUnavailable": True, "reason": str(reason)},
+                }
+            )
+            # Honest message (adversarial-review fix): the lead must reflect what
+            # the tailor step ACTUALLY did. If tailoring ALSO no-op'd
+            # (NoChangesApplied -> 0 changes, no new résumé version persisted),
+            # never claim "your résumé was tailored" — that would be a false
+            # success claim in the compound (tailor no-op + cover rejected) case.
+            tailored = not tailor_out.get("noChangesApplied") and int(
+                tailor_out.get("changes") or 0
+            ) > 0
+            lead = (
+                "Your résumé was tailored for this role, but an auto-generated "
+                "cover letter"
+                if tailored
+                else "No verifiable résumé changes could be applied for this "
+                "role, and an auto-generated cover letter"
+            )
+            return {
+                "status": "completed",
+                "steps": steps,
+                "top_job_id": top_job_id,
+                "approvalRequired": False,
+                "coverLetterUnavailable": True,
+                "message": (
+                    f"{lead} couldn't be produced without unverifiable wording, "
+                    "so it was withheld — open the Cover Letter studio to generate "
+                    "or write one manually."
+                ),
+            }
         steps.append({"agent": "coverLetter", "output": letter_out})
 
     return {

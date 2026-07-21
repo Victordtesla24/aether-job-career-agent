@@ -752,7 +752,7 @@ def refine_cover_letter(
         # entailment step), so give its drafting (default + one retry) the
         # dedicated cover-budget window rather than the tailoring-tuned global
         # budget that chronically 503'd it. One window covers both drafts.
-        with shared_budget(get_cover_budget_seconds()):
+        with shared_budget(get_cover_budget_seconds(), not_below_active=True):
             revised, flagged = _draft(base_prompt, "default")
             if flagged:
                 retry_prompt = (

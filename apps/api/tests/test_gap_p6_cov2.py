@@ -124,6 +124,91 @@ def test_cover_generation_budget_decoupled_from_tailoring_65(monkeypatch) -> Non
     assert probe.observed["cover_letter"] > 65.0
 
 
+# ===========================================================================
+# GAP-P7-COV-WORKER-001 — inside the edge-free ASYNC WORKER the cover step must
+# INHERIT the generous worker budget (300s single / 480s pipeline), NOT shrink
+# to the ~88s HTTP-edge cover window. The ~88s override starved the slow
+# reasoning primary and left the fast fallback ~21s -> chronic 503 "AI service
+# temporarily unavailable" on healthy models (live prod evidence 2026-07-21).
+# ===========================================================================
+
+
+def _run_cover_probe_under(monkeypatch, outer_seconds: float) -> float:
+    """Run the cover agent inside an outer ``shared_budget(outer_seconds)`` and
+    return the wall-clock budget the cover generation actually observed."""
+    monkeypatch.setenv("AETHER_LLM_MODE", "auto")
+    monkeypatch.delenv("AETHER_LLM_COVER_BUDGET_SECONDS", raising=False)  # default 88
+    _stub_evidence(monkeypatch)
+    monkeypatch.setattr(
+        "app.agents.cover_letter_agent.require_user_resume_text",
+        lambda user_id, message: "Senior engineer with Python and distributed systems experience.",
+    )
+    clock = {"t": 5000.0}
+    monkeypatch.setattr(llm_client.time, "monotonic", lambda: clock["t"])
+    probe = _CoverBudgetProbeLLM()
+    agent = CoverLetterAgent(
+        llm=probe, jobs=_FakeJobs(), users=_FakeUsers(), stories=_FakeStories()
+    )
+    with llm_client.shared_budget(outer_seconds):
+        with pytest.raises(_StopProbe):
+            agent.run("user-1", "job-1")
+    return probe.observed["cover_letter"]
+
+
+def test_worker_single_cover_inherits_300s_budget(monkeypatch) -> None:
+    """A worker single-agent cover runs under ``get_worker_cover_budget_seconds``
+    (300s). The cover agent's own ~88s window must NOT shrink it — the fix floors
+    the dedicated window to the more-generous active worker deadline."""
+    observed = _run_cover_probe_under(monkeypatch, 300.0)
+    # BEFORE the fix this was 88.0 (the edge cover budget clobbered the 300s
+    # worker budget). AFTER: the cover inherits the full 300s.
+    assert observed == pytest.approx(300.0), observed
+    assert observed > 88.0
+
+
+def test_worker_pipeline_cover_inherits_480s_budget(monkeypatch) -> None:
+    """The async pipeline runs both LLM steps under the 480s worker pipeline
+    budget; the cover step must inherit it, not shrink to ~88s."""
+    observed = _run_cover_probe_under(monkeypatch, 480.0)
+    assert observed == pytest.approx(480.0), observed
+
+
+def test_sync_edge_cover_still_capped_at_88(monkeypatch) -> None:
+    """Regression guard: in the SYNC/edge path the outer budget is the (partly
+    drained) 65s tailoring window, always <= 88s at cover time, so the cover
+    still gets exactly its edge-safe 88s — the fix must NOT enlarge it there."""
+    observed = _run_cover_probe_under(monkeypatch, 65.0)
+    assert observed == pytest.approx(88.0), observed
+
+
+def test_shared_budget_not_below_active_semantics(monkeypatch) -> None:
+    """Unit-level contract for the floor: with a larger outer active budget the
+    inner window keeps the outer deadline; with a smaller/absent one it uses its
+    own; and WITHOUT ``not_below_active`` the inner always overrides (unchanged)."""
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(llm_client.time, "monotonic", lambda: clock["t"])
+
+    def remaining() -> float:
+        dl = llm_client._shared_deadline.get()
+        return (dl - clock["t"]) if dl is not None else float("nan")
+
+    # larger outer (300) + floored inner (88) -> keeps 300
+    with llm_client.shared_budget(300.0):
+        with llm_client.shared_budget(88.0, not_below_active=True):
+            assert remaining() == pytest.approx(300.0)
+    # smaller outer (30) + floored inner (88) -> inner wins (88)
+    with llm_client.shared_budget(30.0):
+        with llm_client.shared_budget(88.0, not_below_active=True):
+            assert remaining() == pytest.approx(88.0)
+    # no outer + floored inner (88) -> 88
+    with llm_client.shared_budget(88.0, not_below_active=True):
+        assert remaining() == pytest.approx(88.0)
+    # WITHOUT the flag the inner always overrides (legacy behaviour unchanged)
+    with llm_client.shared_budget(300.0):
+        with llm_client.shared_budget(88.0):
+            assert remaining() == pytest.approx(88.0)
+
+
 def test_cover_budget_env_default_and_floor(monkeypatch) -> None:
     monkeypatch.delenv("AETHER_LLM_COVER_BUDGET_SECONDS", raising=False)
     assert llm_client.get_cover_budget_seconds() == 88.0

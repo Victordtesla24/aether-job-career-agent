@@ -86,9 +86,34 @@ _shared_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
 
 
 @contextmanager
-def shared_budget(seconds: float | None = None) -> Iterator[None]:
-    """Bound ALL live LLM calls made inside the block by one wall-clock budget."""
+def shared_budget(
+    seconds: float | None = None, *, not_below_active: bool = False
+) -> Iterator[None]:
+    """Bound ALL live LLM calls made inside the block by one wall-clock budget.
+
+    ``not_below_active``: when an OUTER shared budget is already active whose
+    deadline is FURTHER OUT than this window would set, keep the outer (larger)
+    deadline instead of shrinking to it. This lets a step (e.g. the cover-letter
+    drafting window) claim its OWN dedicated budget when it would otherwise
+    inherit a *drained* one, WITHOUT clawing back a MORE-generous budget the
+    caller already granted. Concretely (GAP-P7-COV-WORKER-001): the edge-free
+    async WORKER runs the cover step under the 480 s pipeline / 300 s single
+    budget, but the cover agent opens its own ``get_cover_budget_seconds()``
+    (~88 s, tuned for the ~100 s HTTP edge) window, which previously OVERRODE the
+    generous worker budget down to 88 s — starving the slow reasoning primary
+    (deepseek-v4-pro ~110-120 s) AND leaving the fast fallback only ~21 s, so the
+    worker cover/pipeline chronically 503'd ("AI service temporarily
+    unavailable") even though the models were healthy. Flooring to the active
+    deadline gives the worker cover its full 300/480 s. In the sync/edge path the
+    active outer budget (the 65 s tailoring window, already partly drained) is
+    always <= 88 s at cover time, so the behaviour is unchanged (cover still gets
+    its edge-safe 88 s).
+    """
     deadline = time.monotonic() + (seconds if seconds is not None else get_budget_seconds())
+    if not_below_active:
+        current = _shared_deadline.get()
+        if current is not None and current > deadline:
+            deadline = current
     token = _shared_deadline.set(deadline)
     try:
         yield

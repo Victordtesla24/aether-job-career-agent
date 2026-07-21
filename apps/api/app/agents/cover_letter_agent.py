@@ -1286,7 +1286,7 @@ class CoverLetterAgent:
         # gets the full ~88s, and in the pipeline the cover no longer inherits the
         # already-drained tailoring budget. Tailoring is untouched. One window for
         # all retries keeps the whole request under the single-request HTTP edge.
-        with shared_budget(get_cover_budget_seconds()):
+        with shared_budget(get_cover_budget_seconds(), not_below_active=True):
             letter, body, flagged, claim_flags, issues, meta = self._draft(
                 base_prompt, job, corpus, signer, position, fixture_key="default",
                 claim_evidence=claim_evidence, jd_risk=jd_risk,
