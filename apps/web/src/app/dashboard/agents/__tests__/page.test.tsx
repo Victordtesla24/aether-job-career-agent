@@ -40,9 +40,17 @@ const fetchProviders = vi.fn();
 const updateAgentConfig = vi.fn();
 const updateProvider = vi.fn();
 
-vi.mock("../../../../lib/api/client", () => ({
-  apiRequest: (...args: unknown[]) => apiRequest(...args),
-}));
+vi.mock("../../../../lib/api/client", async () => {
+  // ML-test-001: keep the REAL ApiError class alive through the mock —
+  // page.tsx's catalogErrorText() does `e instanceof ApiError` in a catch
+  // block, and a full-replacement mock that omits it makes that access throw
+  // (vitest's mock guard), which escapes the catch as an unhandled rejection.
+  const actual =
+    await vi.importActual<typeof import("../../../../lib/api/client")>(
+      "../../../../lib/api/client",
+    );
+  return { ...actual, apiRequest: (...args: unknown[]) => apiRequest(...args) };
+});
 
 vi.mock("../../../../lib/api/agents", () => ({
   fetchAgentRuns: (...args: unknown[]) => fetchAgentRuns(...args),
