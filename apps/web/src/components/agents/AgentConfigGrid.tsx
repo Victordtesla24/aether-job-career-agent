@@ -11,9 +11,22 @@
  */
 import { useId, useState } from "react";
 
+import AgentModelPicker from "./AgentModelPicker";
 import AgentSettingsPanel from "./AgentSettingsPanel";
-import type { CatalogAgent } from "./api";
+import type { CatalogAgent, ProviderModel } from "./api";
 import { agentRunDisabledReason } from "./logic";
+
+/** Human "catalog last refreshed …" text (ML-catalog-002). Honest when the
+ *  backend timestamp is not yet known (shown until the first refresh/envelope
+ *  load) and calls out a stale (last-good) copy explicitly. */
+function refreshedLabel(iso: string | null, stale: boolean): string {
+  if (!iso) return "Catalog not yet refreshed — showing the latest loaded list.";
+  const when = new Date(iso);
+  const ts = Number.isNaN(when.getTime()) ? iso : when.toLocaleString();
+  return stale
+    ? `Catalog last refreshed ${ts} · stale — showing cached data`
+    : `Catalog last refreshed ${ts}`;
+}
 
 const ACCENT_BG: Record<string, string> = {
   indigo: "bg-aether-indigo/15 text-aether-indigo",
@@ -55,11 +68,21 @@ function AgentCard({
   busy,
   onToggle,
   onRun,
+  catalogModels,
+  catalogLoading,
+  catalogError,
+  savingModel,
+  onSelectModel,
 }: {
   agent: CatalogAgent;
   busy: boolean;
   onToggle: (key: string, enabled: boolean) => void;
   onRun: (key: string) => void;
+  catalogModels: ProviderModel[] | null;
+  catalogLoading: boolean;
+  catalogError: string | null;
+  savingModel: boolean;
+  onSelectModel: (key: string, model: string) => void;
 }) {
   const tipId = useId();
   const runLockReason = agentRunDisabledReason(agent);
@@ -159,6 +182,18 @@ function AgentCard({
         )}
       </div>
 
+      {agent.status !== "planned" ? (
+        <AgentModelPicker
+          agentKey={agent.key}
+          currentModel={agent.model}
+          models={catalogModels}
+          loading={catalogLoading}
+          error={catalogError}
+          saving={savingModel}
+          onSelect={(model) => onSelectModel(agent.key, model)}
+        />
+      ) : null}
+
       {agent.status !== "planned" && showSettings ? (
         <AgentSettingsPanel agent={agent} />
       ) : null}
@@ -173,6 +208,15 @@ export default function AgentConfigGrid({
   busyKey,
   onToggle,
   onRun,
+  catalogModels,
+  catalogLoading,
+  catalogError,
+  catalogRefreshedAt,
+  catalogStale,
+  catalogRefreshing,
+  onRefreshCatalog,
+  savingModelKey,
+  onSelectModel,
 }: {
   agents: CatalogAgent[];
   counts: {
@@ -186,6 +230,15 @@ export default function AgentConfigGrid({
   busyKey: string | null;
   onToggle: (key: string, enabled: boolean) => void;
   onRun: (key: string) => void;
+  catalogModels: ProviderModel[] | null;
+  catalogLoading: boolean;
+  catalogError: string | null;
+  catalogRefreshedAt: string | null;
+  catalogStale: boolean;
+  catalogRefreshing: boolean;
+  onRefreshCatalog: () => void;
+  savingModelKey: string | null;
+  onSelectModel: (key: string, model: string) => void;
 }) {
   return (
     <section data-testid="agent-configuration">
@@ -217,6 +270,32 @@ export default function AgentConfigGrid({
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+        <p
+          data-testid="catalog-last-refreshed"
+          className={`text-[11px] ${catalogStale ? "text-aether-amber" : "text-aether-muted-dim"}`}
+        >
+          <i
+            className={`fa-solid ${catalogStale ? "fa-triangle-exclamation" : "fa-clock-rotate-left"} mr-1.5 text-[10px]`}
+            aria-hidden="true"
+          />
+          {refreshedLabel(catalogRefreshedAt, catalogStale)}
+        </p>
+        <button
+          type="button"
+          data-testid="catalog-refresh-btn"
+          onClick={onRefreshCatalog}
+          disabled={catalogRefreshing}
+          className="flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <i
+            className={`fa-solid fa-rotate-right text-[10px] ${catalogRefreshing ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          {catalogRefreshing ? "Refreshing…" : "Refresh catalog"}
+        </button>
+      </div>
+
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" aria-busy="true">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -232,6 +311,11 @@ export default function AgentConfigGrid({
               busy={busyKey === a.key}
               onToggle={onToggle}
               onRun={onRun}
+              catalogModels={catalogModels}
+              catalogLoading={catalogLoading}
+              catalogError={catalogError}
+              savingModel={savingModelKey === a.key}
+              onSelectModel={onSelectModel}
             />
           ))}
         </div>

@@ -301,6 +301,27 @@ def _truncate_tables() -> None:
         conn.close()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_model_catalog_cache() -> Iterator[None]:
+    """Per-test isolation of the process-global OpenRouter model-catalog cache.
+
+    ``llm_client._MODEL_CATALOG_CACHE`` is module state shared across the whole
+    session. Several tests warm it via a mocked ``httpx`` fetch (e.g.
+    ``test_openrouter_fetches_curates_and_caches``); without cleanup that warm
+    entry leaks into unrelated later tests. That was harmless until save-time
+    model validation (ML-catalog-004) began consulting the cache — a leaked
+    2-item stub catalog would then wrongly reject a placeholder model id another
+    test PUTs. Clearing before and after each test restores isolation (mirrors
+    the explicit fixture in ``test_ml_catalog_fix1.py``); within-test caching
+    behaviour is unaffected.
+    """
+    from app.services import llm_client
+
+    llm_client._MODEL_CATALOG_CACHE.clear()
+    yield
+    llm_client._MODEL_CATALOG_CACHE.clear()
+
+
 @pytest.fixture()
 def db_session() -> Iterator:
     """A raw psycopg2 connection to the TEST database.

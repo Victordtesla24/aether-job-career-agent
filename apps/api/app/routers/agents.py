@@ -1778,6 +1778,57 @@ _DETERMINISTIC_BACKENDS = frozenset(
     {"scout", "fitScorer", "matcher", "supervisor"}
 )
 
+#: Non-catalog ``model`` values that must always remain valid: the literal
+#: sentinel a deterministic (non-LLM) agent stores instead of a model id.
+_MODEL_VALIDATION_SENTINELS = frozenset({"deterministic"})
+
+#: Providers whose model catalog is a genuine LIVE, exhaustive list that a
+#: chosen id can be validated against (ML-catalog-004 / §3.1.3). The static
+#: curated catalogs (anthropic, …) are indicative shortlists — NOT an
+#: exhaustive allowlist — so they must never be used to REJECT a model, which
+#: would be exactly the hardcoded-allowlist antipattern §3.1.3 forbids.
+_LIVE_CATALOG_PROVIDERS = frozenset({"openrouter"})
+
+
+def _validate_agent_model(model: str, user_id: str) -> None:
+    """Reject a ``model`` id that is not offered by the live catalog of the
+    provider it would bill through (ML-catalog-004 / §3.1.3).
+
+    Accepts the ``deterministic`` sentinel, any id present in that provider's
+    live catalog, and any direct-Anthropic (bare ``claude-…``) id — those route
+    to a curated static shortlist that is deliberately NOT treated as an
+    exhaustive allowlist. When the live catalog cannot be consulted right now
+    (cold cache — validation never opens a network connection, ``allow_fetch``
+    is False) the id is accepted rather than rejected on a transient gap; a
+    genuinely wrong id then fails honestly at call time (matching the
+    ``_user_model_override`` "no silent substitution" contract). Never applies a
+    hardcoded model allowlist.
+    """
+    m = (model or "").strip()
+    if not m or m in _MODEL_VALIDATION_SENTINELS:
+        return
+    from app.services.llm_client import (
+        ModelCatalogError,
+        list_provider_models,
+        resolve_provider,
+    )
+
+    provider = resolve_provider(m)
+    if provider not in _LIVE_CATALOG_PROVIDERS:
+        return
+    try:
+        catalog = list_provider_models(provider, user_id, allow_fetch=False)
+    except ModelCatalogError:
+        # Live catalog not warm — can't disprove the id without blocking on a
+        # slow upstream fetch, so accept (fails honestly at run time if wrong).
+        return
+    if any((row.get("id") == m) for row in catalog):
+        return
+    raise HTTPException(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        f"model '{m}' is not in the live {provider} catalog — choose one from the catalog.",
+    )
+
 
 @router.get("/config")
 def list_agent_config(current_user: CurrentUser) -> list[dict[str, Any]]:
@@ -1811,6 +1862,13 @@ def update_agent_config(
     entry = _CATALOG_BY_KEY[agent_key]
     user_id = current_user["id"]
     _ensure_agent_config_schema()
+
+    # Validate a chosen model against the live catalog (ML-catalog-004): an id
+    # no provider offers is rejected 422 rather than silently persisted and then
+    # failing opaquely at run time. Only runs when the caller is actually
+    # setting `model` (a partial update that omits it must not be gated).
+    if body.model is not None:
+        _validate_agent_model(body.model, user_id)
 
     # Validate a non-empty credentialRef belongs to THIS user (never cross-user).
     cred_ref_update = body.credentialRef
@@ -2331,13 +2389,57 @@ def list_provider_models_endpoint(
     Returns an HONEST 400 with an actionable message (never a fabricated
     catalog) when no credential is available or the catalog can't be reached.
     """
-    from app.services.llm_client import ModelCatalogError, list_provider_models
+    from app.services.llm_client import (
+        ModelCatalogError,
+        catalog_freshness,
+        list_provider_models,
+    )
 
+    prov = provider.strip().lower()
     try:
         models = list_provider_models(provider, current_user["id"])
     except ModelCatalogError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return {"provider": provider.strip().lower(), "models": models, "count": len(models)}
+    last_refreshed, stale = catalog_freshness(prov)
+    return {
+        "provider": prov,
+        "models": models,
+        "count": len(models),
+        "lastRefreshedAt": last_refreshed,
+        "stale": stale,
+    }
+
+
+@router.post("/providers/{provider}/models/refresh")
+def refresh_provider_models_endpoint(
+    provider: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Force a fresh upstream fetch of a provider's live model catalog, bypassing
+    the ~1 h TTL cache (ML-catalog-003). Same envelope as GET .../models. On an
+    upstream failure with a warm cache it still serves last-good data
+    (``stale: true``) rather than blocking — never a fabricated list. A provider
+    without a live catalog (groq, bedrock, …) is rejected with an honest 400,
+    matching the GET endpoint.
+    """
+    from app.services.llm_client import (
+        ModelCatalogError,
+        catalog_freshness,
+        list_provider_models,
+    )
+
+    prov = provider.strip().lower()
+    try:
+        models = list_provider_models(provider, current_user["id"], force_refresh=True)
+    except ModelCatalogError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    last_refreshed, stale = catalog_freshness(prov)
+    return {
+        "provider": prov,
+        "models": models,
+        "count": len(models),
+        "lastRefreshedAt": last_refreshed,
+        "stale": stale,
+    }
 
 
 # ---------------------------------------------------------------------------
