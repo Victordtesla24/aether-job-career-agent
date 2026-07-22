@@ -1343,6 +1343,10 @@ class LLMClient:
     ) -> str:
         """Live-first with one model-fallback retry, then an HONEST error.
 
+        The one-retry fallback is suppressed for a user-CHOSEN model
+        (:meth:`_model_chain`, ADR-ML-3) so a deliberate pick that fails raises
+        honestly instead of being silently substituted by a different model.
+
         Every live attempt is bounded by per-call HTTP timeouts AND the
         client-wide wall-clock budget. When the real retry chain is exhausted
         (all attempts failed, or the budget ran out before an attempt could
@@ -1412,7 +1416,21 @@ class LLMClient:
 
     @staticmethod
     def _model_chain(primary: str) -> list[str]:
-        """Primary model, then one retry with the fallback model."""
+        """Primary model, then one retry with the fallback model — EXCEPT when
+        the primary IS the user's deliberately chosen model.
+
+        ADR-ML-3 (§3.4.4 BLOCKER): a run bound to a USER-SELECTED model (the
+        active :func:`user_model_context` resolved to exactly this ``primary``)
+        must NEVER be silently served by a DIFFERENT model on failure — that is
+        silent model substitution. In that case the chain is the chosen model
+        ALONE, so a failure surfaces honestly (``LLMUnavailableError`` -> 503,
+        reserved quota refunded by the router) instead of a fake success built
+        from the hardcoded fallback the user never picked. The un-chosen
+        SYSTEM-DEFAULT path keeps its existing one-retry resilience.
+        """
+        user_chosen = _user_model_context.get()
+        if user_chosen is not None and primary == user_chosen:
+            return [primary]
         fallback = get_fallback_model()
         return [primary] if primary == fallback else [primary, fallback]
 

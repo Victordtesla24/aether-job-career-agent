@@ -217,6 +217,29 @@ export async function fetchProviderModels(
 }
 
 /**
+ * The LIVE model catalog for a provider WITH its freshness envelope
+ * (ML-catalog-008/N1): the SAME GET .../models call as {@link fetchProviderModels}
+ * but returning the full `{models, lastRefreshedAt, stale}` envelope instead of
+ * discarding the freshness — so the page can show the REAL backend timestamp on
+ * initial load, not a "not yet refreshed" placeholder. Same honest-error
+ * contract (the backend serves last-good stale data on upstream failure).
+ */
+export async function fetchProviderCatalog(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<ProviderCatalog> {
+  try {
+    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
+    return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
+  } catch (e) {
+    if (e instanceof ApiError) {
+      throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
+    }
+    throw e;
+  }
+}
+
+/**
  * Force a fresh upstream refresh of a provider's live catalog (ML-catalog-003):
  * POST .../providers/{provider}/models/refresh. Bypasses the ~1 h TTL cache and
  * returns the updated catalog + freshness. Same honest-error contract as the

@@ -190,6 +190,11 @@ function AgentCard({
           loading={catalogLoading}
           error={catalogError}
           saving={savingModel}
+          // ML-catalog-008/N2: deterministic backends (recommended sentinel
+          // "deterministic" — scout/fitScorer/matcher/supervisor) never read a
+          // stored model at run time, so they get an honest fixed-model
+          // indicator instead of a no-op search+select surface.
+          deterministic={agent.recommended === "deterministic"}
           onSelect={(model) => onSelectModel(agent.key, model)}
         />
       ) : null}

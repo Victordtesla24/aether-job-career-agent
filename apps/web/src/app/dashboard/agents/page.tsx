@@ -38,6 +38,7 @@ import TestRunModal from "../../../components/agents/TestRunModal";
 import {
   fetchAgentStats,
   fetchCatalog,
+  fetchProviderCatalog,
   fetchProviderModels,
   fetchProviders,
   refreshProviderModels,
@@ -141,15 +142,26 @@ export default function AgentsPage() {
     void load();
   }, [load]);
 
-  // Load the live model catalog once for the per-agent pickers. Freshness
-  // (lastRefreshedAt / stale) is surfaced through the manual Refresh control
-  // (refreshProviderModels) — until then the note honestly reads "not yet
-  // refreshed". Never blocks the page: its own loading/error state is local.
+  // Load the live model catalog once for the per-agent pickers, WITH its
+  // freshness envelope (ML-catalog-008/N1): the GET .../models response already
+  // carries lastRefreshedAt/stale on every call, so surface the REAL backend
+  // timestamp on initial load instead of a "not yet refreshed" placeholder.
+  // fetchProviderCatalog returns that full envelope; if it yields no usable
+  // payload we degrade to the narrower fetchProviderModels (models only, no
+  // freshness) so the picker still populates. Never blocks the page: its own
+  // loading/error state is local.
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setCatalogError(null);
     try {
-      setCatalogModels(await fetchProviderModels(CATALOG_PROVIDER));
+      const cat = await fetchProviderCatalog(CATALOG_PROVIDER);
+      if (cat && Array.isArray(cat.models)) {
+        setCatalogModels(cat.models);
+        setCatalogRefreshedAt(cat.lastRefreshedAt);
+        setCatalogStale(cat.stale);
+      } else {
+        setCatalogModels(await fetchProviderModels(CATALOG_PROVIDER));
+      }
     } catch (e) {
       setCatalogError(catalogErrorText(e));
     } finally {
