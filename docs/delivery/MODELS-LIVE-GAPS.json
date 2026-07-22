@@ -547,14 +547,14 @@
         "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
         "screens/public-auth/network/"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-hard (billing race)",
       "fixCommits": [
         "54f5aa4(tests)",
         "913b8fe(fix)",
         "merge f8835fe (LIVE)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "evidence(haiku) LIVE prod @fb8361e: 6/6 fresh signups entitlement 200 (0\u00d7500), concurrent stress all-200 + exactly 1 sub/quota each, logs clean, users cleaned. adversarial/ML-signup-001-prodverify.md.",
       "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
       "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60.",
       "deployNote": "Batch-1 live @fb8361e: entitlement 200 (deployer-verified). qa prod-verify (6 fresh signups + concurrent) in flight."
