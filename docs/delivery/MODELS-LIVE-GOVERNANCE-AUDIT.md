@@ -61,6 +61,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 40 | 2026-07-22 (resumed) | model-prober | sonnet | §3.4 selection sweep ALL 337 | ✅ SELECTION 337/337 PASS (0 exc, unknown→422, restored); stranded before run-sweep |
 | 41 | 2026-07-22 (resumed) | model-prober (resume a5a885c1) | sonnet | §3.4 RUN sweep + NO-SUBSTITUTION live proof | ✅ 82 runs (58 families+30 topN), 62 pass/20 upstream-fail, 0 app defects; NO-SILENT-SUBSTITUTION PROVEN LIVE (20/20 honest+refund, 0 substitution); found ML-model-001/002/003 (curation) |
 
+| 42 | 2026-07-22 (resumed) | scout | haiku | OpenRouter /models schema investigation (availability signal for ML-model-001/002 curation) + §3.1.1 schema doc | dispatched |
+| 43 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens (login/signup/pricing/legal) + ML-browser-001 verdict | dispatched |
+
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
 **RCA outcome (dispatch #3):** ✅ agents.py:2110-2121 prefix-only validation (sk-ant-api / sk-ant-oat01- exact), no whitespace strip, hardcoded oat01 in 422 text; 2×422 today 02:53Z then operator DELETE; operator on-disk token sk-ant-oat01- but EXPIRED 2026-07-21; no regression since d2df452. Fix plan authored (validation hardening only; OAuth flow = cred-002) → dispatch #8 reviews.
