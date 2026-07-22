@@ -33,10 +33,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/governance/RUNBOOK-VERIFICATION.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "doc-updater (G-09 stage)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "G-09 doc-updater @dc1c19d (G-09-DOC-UPDATE-VERIFICATION.md): DEPLOYMENT-RUNBOOK.md + start-web.sh pnpm path corrected to /usr/bin/pnpm (corepack)."
     },
     {
       "id": "ML-agents-cred-001",
@@ -1083,10 +1083,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "doc-updater (G-09 SCREEN-MATRIX correction)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "G-09 doc-updater @dc1c19d (G-09-DOC-UPDATE-VERIFICATION.md): SCREEN-MATRIX admin-user-detail row corrected (no PUT/impersonate; real surface spend-cap/suspend/unsuspend)."
     },
     {
       "id": "ML-forgotpw-001",
@@ -1102,10 +1102,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/forgot-password/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "doc-updater (G-09 SCREEN-MATRIX correction)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "G-09 doc-updater @dc1c19d (G-09-DOC-UPDATE-VERIFICATION.md): SCREEN-MATRIX forgot-password row corrected (static honest-notice, no form/endpoints)."
     }
   ]
 }
