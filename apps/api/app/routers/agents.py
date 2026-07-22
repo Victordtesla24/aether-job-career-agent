@@ -798,6 +798,24 @@ def _execute_reserved_run(
     output["duration_ms"] = duration_ms
     output["approvalRequired"] = agent_name in _APPROVAL_GATED
     output["billingAudit"] = audit
+    # An honest "no letter produced" degrade: the cover-letter agent hit an
+    # LLMUnavailableError on its FIRST draft and returned a coverLetterUnavailable
+    # result rather than raising (cover _draft() resilience, coordinated with the
+    # guard-rejection degrade — ML-cover-002). Normalize to the pipeline path's
+    # camelCase flag so the worker + FE recognize the SAME shape, and never bill
+    # it (no letter was produced), exactly like the guard-rejection degrade.
+    cover_degraded = bool(
+        output.get("cover_letter_unavailable") or output.get("coverLetterUnavailable")
+    )
+    if cover_degraded:
+        output["coverLetterUnavailable"] = True
+    # A metered agent that HONESTLY reports it made no LLM call this run (an
+    # early-return no-op — e.g. EmailAgent._triage with nothing to classify sets
+    # ``llm_called=False``) must record ZERO cost/tokens and no model stamp:
+    # charging off the tiny request/response payload size would bill for work
+    # that never happened (ML-email-001). Agents that do not report the flag
+    # (``None``) are metered exactly as before, so no existing costing changes.
+    no_llm_call = output.pop("llm_called", None) is False
     # Real cost estimate from the run's *measured* I/O size × the published
     # per-token price of the model the agent ACTUALLY ran on (≈4 chars/token).
     # Deterministic agents (scout/fitScorer/matcher/supervisor) make no LLM
@@ -805,7 +823,7 @@ def _execute_reserved_run(
     # fabricate the spend/ROI figures GET /agents/stats reports. The user's
     # chosen model (if any) is what actually ran, so cost against IT.
     model = _model_for_agent(agent_name, override=_override_model)
-    if model is None:
+    if model is None or no_llm_call or cover_degraded:
         cost = 0.0
         output["model"] = None
         output["tokensIn"] = 0
@@ -821,13 +839,20 @@ def _execute_reserved_run(
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
     finished = runs.finish(run_id, "completed", output=output, cost_usd=cost)
-    # Record realized USD spend against the reserved run (metered agents only).
-    # The reserved run-count already stands; here we only accumulate spend so the
-    # USD cap halts the NEXT run once this period's spend passes the ceiling.
-    # ``manage_quota=False`` (async single-agent worker) defers this so spend is
-    # recorded only after the worker wins the atomic mark_completed (reviewer
-    # BLOCKING-2): a job the watchdog already failed must not accrue spend.
-    if manage_quota and quota_repo is not None:
+    if cover_degraded:
+        # No letter produced — refund the reserved run (sync path). The async
+        # worker refunds via its own atomic first-terminal-wins transition
+        # (manage_quota=False makes _refund_once a no-op here), mirroring the
+        # guard-rejection degrade so a degraded run is NEVER billed.
+        _refund_once()
+    elif manage_quota and quota_repo is not None:
+        # Record realized USD spend against the reserved run (metered agents
+        # only). The reserved run-count already stands; here we only accumulate
+        # spend so the USD cap halts the NEXT run once this period's spend passes
+        # the ceiling. ``manage_quota=False`` (async single-agent worker) defers
+        # this so spend is recorded only after the worker wins the atomic
+        # mark_completed (reviewer BLOCKING-2): a job the watchdog already failed
+        # must not accrue spend.
         quota_repo.record_spend(user_id, cost)
     output["run_id"] = (finished or {"id": run_id})["id"]
     return output
@@ -1463,6 +1488,18 @@ def run_cover_letter(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Cover letter rejected — §10.2 format contract not met: {exc.issues}",
         ) from exc
+    if output.get("coverLetterUnavailable"):
+        # cover _draft() resilience (ML-cover-002/003): the writing model was
+        # unavailable on the FIRST draft, so the agent degraded honestly rather
+        # than raising — the reserved run was already refunded (never billed).
+        # Surface the SAME honest coverLetterUnavailable shape the async job
+        # completes with, so the studio renders "temporarily unavailable — try
+        # again" instead of a raw error or a fabricated empty letter.
+        return {
+            "cover_letter_id": None,
+            "coverLetterUnavailable": True,
+            "message": output.get("message"),
+        }
     return {
         "cover_letter_id": output["cover_letter_id"],
         "cover_letter": output["cover_letter"],

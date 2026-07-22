@@ -70,6 +70,12 @@ class EmailAgentResult:
     mode: str
     connected: bool
     degraded: bool = False
+    #: Whether this run actually invoked the LLM. Defaults True (the metered
+    #: modes — triage-classify / draft / insights — all reach the model), and is
+    #: set False ONLY by a genuine zero-LLM-call no-op (an early-return triage
+    #: with nothing to classify) so the router prices it at zero rather than off
+    #: request payload size (ML-email-001). The router reads + strips this flag.
+    llm_called: bool = True
     message: str = ""
     synced: int = 0
     triaged: int = 0
@@ -196,18 +202,24 @@ class EmailAgent:
                 synced = self._gmail_for(user_id).sync_threads_to_db(user_id)
             except Exception as exc:  # noqa: BLE001 — degrade, never crash triage
                 connected = False
+                # Zero-LLM-call no-op: sync failed before any classification.
                 return EmailAgentResult(
                     mode="triage",
                     connected=False,
                     degraded=True,
+                    llm_called=False,
                     message=f"Gmail sync failed — reconnect your account. ({exc})",
                 )
         threads = self._threads(user_id)
         if not threads:
+            # Zero-LLM-call no-op: nothing to classify (Gmail not connected, or
+            # connected with an empty inbox), so the triage prompt is never sent —
+            # this run must be priced at zero, not off payload size (ML-email-001).
             return EmailAgentResult(
                 mode="triage",
                 connected=connected,
                 degraded=not connected,
+                llm_called=False,
                 synced=synced,
                 message=(
                     "No emails to triage yet."

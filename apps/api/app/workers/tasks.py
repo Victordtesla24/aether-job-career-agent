@@ -150,6 +150,7 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     Terminal transitions are atomic first-terminal-wins (reviewer BLOCKING-2): the
     winner of mark_failed/mark_completed performs the associated billing side
     effect exactly once (refund on fail via the atomic claim; spend on complete)."""
+    from app.agents.cover_letter_agent import FabricationError, StructuralError
     from app.agents.tailor_agent import NoChangesApplied
     from app.routers.agents import _pipeline_job_ctx
     from app.services.resume_grounding import MissingResumeError
@@ -259,6 +260,36 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
             "job %s refused (MissingResumeError): no resume on file, refunded", job_id
         )
         return
+    except (FabricationError, StructuralError) as exc:
+        # GAP-P7-COV-PIPE-001 / ML-cover-002(a): the cover step's own
+        # fabrication/structural guard rejected the draft after every corrective
+        # retry (an ungrounded term or a §10.2 format violation that survived).
+        # The guard WORKING is not a failure. Mirror the SYNCHRONOUS pipeline's
+        # graceful-degrade (agents.py:1558-1600), NOT the generic
+        # ``except Exception`` below: complete the async single-agent cover job
+        # with an honest ``coverLetterUnavailable`` result instead of a raw
+        # "FabricationError: ..."/"StructuralError: ..." class-prefixed failure
+        # the FE has no dedicated UI for. Complete (never "failed"), refund THIS
+        # job's reservation exactly once (mirroring the NoChangesApplied /
+        # MissingResumeError blocks above), and never leak the class prefix.
+        reason = getattr(exc, "flagged", None) or getattr(exc, "issues", None)
+        honest_result = {
+            "cover_letter_id": None,
+            "coverLetterUnavailable": True,
+            "reason": str(reason),
+            "message": (
+                "An auto-generated cover letter couldn't be produced without "
+                "unverifiable wording, so it was withheld — open the Cover "
+                "Letter studio to generate or write one manually."
+            ),
+        }
+        if repo.mark_completed(job_id, honest_result):
+            repo.refund_single_reservation(job_id)
+        logger.info(
+            "job %s cover degraded (%s): guard rejected the draft, refunded",
+            job_id, type(exc).__name__,
+        )
+        return
     except Exception as exc:  # noqa: BLE001
         # First-terminal-wins: only the winner refunds (atomic + idempotent claim),
         # so a watchdog that already failed+refunded this job is not double-counted.
@@ -270,7 +301,14 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     # watchdog already failed+refunded this job, mark_completed is a no-op and we
     # skip spend — the job stays failed and the user is not billed (no free run).
     if repo.mark_completed(job_id, result):
-        if job.get("quotaReserved"):
+        if isinstance(result, dict) and result.get("coverLetterUnavailable"):
+            # The cover agent degraded honestly (LLM unavailable on the FIRST
+            # draft — cover _draft() resilience; returned coverLetterUnavailable
+            # rather than raising). No letter was produced, so refund the
+            # reservation exactly once and accrue NO spend — the same "never bill
+            # a degrade" discipline as the guard-rejection except block above.
+            repo.refund_single_reservation(job_id)
+        elif job.get("quotaReserved"):
             try:
                 UsageQuotaRepository().record_spend(
                     user_id, float(result.get("costUsd", 0) or 0)

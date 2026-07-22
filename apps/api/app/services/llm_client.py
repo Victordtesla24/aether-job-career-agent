@@ -36,7 +36,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,15 @@ def _extra_headers() -> dict[str, str]:
 _shared_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
     "aether_llm_shared_deadline", default=None
 )
+
+#: How many EXTRA times a single model is re-tried when its live response is
+#: well-formed HTTP-wise but the caller's validator rejects it (malformed /
+#: truncated JSON). Bounded so a persistently-garbled backend is never hammered
+#: (ML-pipeline-001). A same-model re-draft on malformed content is NOT model
+#: substitution (ADR-ML-3), so it is allowed even for a user-chosen single-model
+#: chain; a genuine call EXCEPTION still falls straight through to the next model
+#: with no same-model retry (the honest-failure contract is unchanged).
+_MALFORMED_JSON_RETRIES = 1
 
 
 @contextmanager
@@ -1325,14 +1334,22 @@ class LLMClient:
         model: str | None = None,
         temperature: float = 0.0,
         fixture_key: str = "default",
+        validate: "Callable[[str], Any] | None" = None,
     ) -> str:
-        """Return the assistant's text for a system+user prompt pair."""
+        """Return the assistant's text for a system+user prompt pair.
+
+        ``validate`` (auto mode only): a callable that RAISES if the returned
+        content is unusable (e.g. malformed JSON). A validation failure is then
+        treated as a retryable live failure inside :meth:`_auto` (ML-pipeline-001)
+        so a single garbled response no longer hard-fails the call.
+        """
         if self.mode == "replay":
             return self._replay(prompt_name, fixture_key)
         if self.mode == "auto":
             return self._auto(
                 prompt_name, system, user,
                 model=model, temperature=temperature, fixture_key=fixture_key,
+                validate=validate,
             )
         # live / record modes: propagate live errors unchanged (developer modes).
         content = self._call_live(system, user, model=model, temperature=temperature)
@@ -1349,12 +1366,26 @@ class LLMClient:
         answered with a recorded fixture masqueraded as live output
         (GAP-P6-AUTH-002); fixtures serve only in ``replay`` mode.
         """
-        raw = self.complete(prompt_name, system, user, **kwargs)
+        # In auto mode, hand ``_auto`` a validator so a malformed/truncated
+        # response is treated as a RETRYABLE live failure (bounded same-model
+        # re-draft, then the fallback model) rather than hard-failing the whole
+        # call on the first garbled response (ML-pipeline-001). ``_auto`` raises
+        # an honest ``LLMUnavailableError`` only once every bounded attempt is
+        # still malformed — never a raw ``JSONDecodeError`` to the caller.
+        validate = None
+        if self.mode == "auto":
+            def validate(content: str) -> None:  # noqa: E306 — local validator
+                json.loads(self._strip_fences(content))
+
+        raw = self.complete(prompt_name, system, user, validate=validate, **kwargs)
         try:
             return json.loads(self._strip_fences(raw))
         except json.JSONDecodeError as exc:
             if self.mode != "auto":
                 raise
+            # Auto mode: ``_auto`` already validated + retried and would have
+            # raised ``LLMUnavailableError`` on all-malformed, so a parse error
+            # here is not expected — still surface it honestly, never raw.
             logger.warning(
                 "LLM returned malformed JSON for prompt '%s' in auto mode; "
                 "raising honest error (no fixture fallback on failure)",
@@ -1384,12 +1415,23 @@ class LLMClient:
         model: str | None,
         temperature: float,
         fixture_key: str,
+        validate: "Callable[[str], Any] | None" = None,
     ) -> str:
         """Live-first with one model-fallback retry, then an HONEST error.
 
         The one-retry fallback is suppressed for a user-CHOSEN model
         (:meth:`_model_chain`, ADR-ML-3) so a deliberate pick that fails raises
         honestly instead of being silently substituted by a different model.
+
+        ``validate`` (optional): a callable that RAISES when the live content is
+        unusable (e.g. malformed/truncated JSON — ML-pipeline-001). A validation
+        failure is RETRYABLE: the SAME model is re-drafted a bounded number of
+        times (``_MALFORMED_JSON_RETRIES``; a same-model re-draft is NOT model
+        substitution, so it is allowed even for a user-chosen single-model chain)
+        and, if still unusable, the chain falls through to the fallback model
+        exactly like a raised call error. A genuine call EXCEPTION, by contrast,
+        is NOT re-tried on the same model — it falls straight to the next model,
+        preserving the honest-failure contract.
 
         Every live attempt is bounded by per-call HTTP timeouts AND the
         client-wide wall-clock budget. When the real retry chain is exhausted
@@ -1407,47 +1449,66 @@ class LLMClient:
         last_error: Exception | None = None
         budget_exhausted = False
         for idx, attempt_model in enumerate(chain):
-            remaining = self._remaining_budget()
-            if remaining < _MIN_ATTEMPT_SECONDS:
-                logger.warning(
-                    "LLM budget exhausted before model %s (prompt=%s); "
-                    "raising honest error (no fixture fallback on failure)",
-                    attempt_model, prompt_name,
-                )
-                budget_exhausted = True
+            # A validation (malformed-content) failure re-drafts the SAME model a
+            # bounded number of times before the outer loop falls through to the
+            # next model; a raised call error breaks straight to the next model
+            # (no same-model retry) — see the docstring.
+            for _draft_attempt in range(_MALFORMED_JSON_RETRIES + 1):
+                remaining = self._remaining_budget()
+                if remaining < _MIN_ATTEMPT_SECONDS:
+                    logger.warning(
+                        "LLM budget exhausted before model %s (prompt=%s); "
+                        "raising honest error (no fixture fallback on failure)",
+                        attempt_model, prompt_name,
+                    )
+                    budget_exhausted = True
+                    break
+                attempt_seconds = remaining
+                if idx == 0 and has_fallback:
+                    # GAP-P6-TAIL-003: cap the PRIMARY attempt so a slow reasoning
+                    # model can't eat the whole budget and starve the faster
+                    # fallback. remaining at the first attempt is the full
+                    # (possibly shared) budget, so this is a fraction of the
+                    # total; the fallback (last attempt) keeps the entire
+                    # remaining budget.
+                    attempt_seconds = max(
+                        _MIN_ATTEMPT_SECONDS, remaining * get_primary_budget_fraction()
+                    )
+                try:
+                    content = self._call_live(
+                        system, user, model=attempt_model, temperature=temperature,
+                        max_seconds=attempt_seconds,
+                    )
+                except QuotaExhaustedError:
+                    # Subscription quota is exhausted — NEVER fall back to a
+                    # fixture or another model/credential (that would fake
+                    # success or shift the bill). Propagate so the router
+                    # returns an honest 429.
+                    raise
+                except Exception as exc:  # 404/429/5xx/network/timeout — next model
+                    last_error = exc
+                    logger.warning(
+                        "LLM live call failed (model=%s, prompt=%s): %s",
+                        attempt_model, prompt_name, exc,
+                    )
+                    break  # genuine call error → next model (no same-model retry)
+                if validate is not None:
+                    try:
+                        validate(content)
+                    except Exception as exc:  # malformed/unusable — retryable
+                        last_error = exc
+                        logger.warning(
+                            "LLM returned unusable content (model=%s, prompt=%s): "
+                            "%s — retrying", attempt_model, prompt_name, exc,
+                        )
+                        continue  # bounded same-model re-draft, then next model
+                # Record only if missing so curated replay fixtures are
+                # never clobbered by variable live output.
+                if not self._fixture_path(prompt_name, fixture_key).is_file():
+                    self._record(prompt_name, fixture_key, content)
+                return content
+            if budget_exhausted:
                 break
-            attempt_seconds = remaining
-            if idx == 0 and has_fallback:
-                # GAP-P6-TAIL-003: cap the PRIMARY attempt so a slow reasoning
-                # model can't eat the whole budget and starve the faster
-                # fallback. remaining at the first attempt is the full (possibly
-                # shared) budget, so this is a fraction of the total; the
-                # fallback (last attempt) keeps the entire remaining budget.
-                attempt_seconds = max(
-                    _MIN_ATTEMPT_SECONDS, remaining * get_primary_budget_fraction()
-                )
-            try:
-                content = self._call_live(
-                    system, user, model=attempt_model, temperature=temperature,
-                    max_seconds=attempt_seconds,
-                )
-            except QuotaExhaustedError:
-                # Subscription quota is exhausted — NEVER fall back to a fixture
-                # or another model/credential (that would fake success or shift
-                # the bill). Propagate so the router returns an honest 429.
-                raise
-            except Exception as exc:  # 404/429/5xx/network/timeout/parse — try next
-                last_error = exc
-                logger.warning(
-                    "LLM live call failed (model=%s, prompt=%s): %s",
-                    attempt_model, prompt_name, exc,
-                )
-                continue
-            # Record only if missing so curated replay fixtures are
-            # never clobbered by variable live output.
-            if not self._fixture_path(prompt_name, fixture_key).is_file():
-                self._record(prompt_name, fixture_key, content)
-            return content
         # Live retry chain exhausted — surface an HONEST failure, never a fixture.
         detail = (
             "budget exhausted before any live attempt could complete"
