@@ -326,7 +326,7 @@
       "evidence": [
         "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [
         "5455d80(tests)",
@@ -372,7 +372,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [
         "5455d80(tests)",
@@ -783,13 +783,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (batch w/ mobile fixes)",
       "fixCommits": [
         "5bceb2e(tests)",
         "4af0c91(fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-jobs-001",
@@ -897,13 +898,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5bceb2e(tests)",
         "4af0c91(fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-settings-001",
@@ -919,13 +921,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5bceb2e(tests)",
         "4af0c91(fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-agents-006",
@@ -942,12 +945,33 @@
         "uat/reports/evidence/models-live/adversarial/batch2-prodverify.md",
         "batch2-prodverify-assets/"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-medium (FE batch-4)",
       "fixCommits": [
         "5bceb2e(tests)",
         "4af0c91(fix)"
       ],
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
+    },
+    {
+      "id": "ML-test-001",
+      "screen": "n/a (test infra)",
+      "severity": "LOW",
+      "category": "test-coverage",
+      "summary": "PRE-EXISTING (not introduced this run; identical at 5bceb2e + 4af0c91): apps/web/src/app/dashboard/agents/__tests__/page.test.tsx uses a full-replacement vi.mock missing the ApiError export \u2192 6 unhandled-rejection warnings \u2192 `pnpm test` exits 1 DESPITE 551/551 tests passing. For a clean G-07 exit-0, add the missing ApiError to the mock (or handle the rejections).",
+      "reproduction": [
+        "cd apps/web && pnpm test \u2192 551/551 pass but exit code 1 (unhandled rejections in agents/page.test.tsx)"
+      ],
+      "expected": "Full vitest suite exits 0 with all tests green",
+      "observed": "551/551 pass but process exit 1 (pre-existing mock gap)",
+      "evidence": [
+        "/tmp .../vitest-full-4af0c91.log + -5bceb2e.log (identical)",
+        "ML-fe-polish-diff-review.md non-blocking note"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (G-07 prep \u2014 tiny mock fix)",
+      "fixCommits": [],
       "verifiedBy": ""
     }
   ]

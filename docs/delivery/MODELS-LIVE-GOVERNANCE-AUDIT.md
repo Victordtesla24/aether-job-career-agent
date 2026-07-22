@@ -88,7 +88,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 77 | 2026-07-22 (resumed) | evidence | haiku | batch-3 functional smoke | ✅ 5/5 PASS (email no-op zero-cost, cover honest-degrade+refund no-leak, real generation, logs clean, agents ok) → 6 findings CLOSED |
 | 74 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-4 FE-polish tests | ✅ @5bceb2e; 8 tests fail-before, RCA per finding (settings 49824px raw-Pydantic, agents-006 Orchestration grid ≠ agents-005) |
 | 79 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a06836c2) | batch-4 FE-polish implement | ✅ @4af0c91; approvals excerpt + settings describeApiError+2nd-overflow-source + resume/orchestration min-w-0; 551/551 vitest, Playwright 5/5, build clean |
-| 82 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-4 FE-polish diff review (settings scope-creep adjudication + agents-005-not-reverted) | dispatched |
+| 82 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-4 FE-polish diff review | ✅ PASS (settings scope-creep JUSTIFIED, agents-005 not reverted, 551/551 vitest+Playwright 5/5; note: pre-existing vitest exit-1 → ML-test-001 LOW) |
+| — | 2026-07-22 (resumed) | — orchestrator git | — | rebase fix/ml-fe-polish onto current main → fd8f493 (FE-only, disjoint, clean) | ✅ |
+| 83 | 2026-07-22 (resumed) | deployer | haiku | BATCH-4+5 combined deploy (FINAL code) + all-batch preservation check | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
 | 80 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a6e3b71a) | batch-5 implement | ✅ @2c144c9 (stranded on bg-waiter → resumed→committed); upstream_status 422-vs-502, needs_reauth gated on source!=none; 95/95, 0 regr, cred-002 45 green |
 | 81 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-5 diff review | ✅ PASS (revert-verified; 422/502 honest, refresh untouched, delete→unconfigured, live-cred warning, 48/48; 2 non-blocking) |
