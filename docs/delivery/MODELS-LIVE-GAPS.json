@@ -55,12 +55,16 @@
         "uat/reports/evidence/models-live/catalog/ML-agents-cred-001-RCA.md",
         "api.log 422s 2026-07-22T02:53:18Z + 02:53:24Z (operator then DELETEd credential)"
       ],
-      "status": "IN-FIX",
-      "owner": "test-author \u2192 fixer-medium",
-      "fixCommits": [],
+      "status": "FIXED-AWAITING-QA",
+      "owner": "deployer \u2192 qa (prod verify)",
+      "fixCommits": [
+        "9396bae (tests)",
+        "ddd0a66 (fix)"
+      ],
       "verifiedBy": "",
       "rca": "agents.py:2110-2121 accepts only sk-ant-api / sk-ant-oat01- prefixes, no whitespace strip, 422 text hardcodes oat01. Operator on-disk token sk-ant-oat01- (128ch) but EXPIRED 2026-07-21; pasted value evidently matched neither prefix (newer-prefix or unicode-whitespace hypothesis). No regression since d2df452.",
-      "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat \u2014 would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422."
+      "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat \u2014 would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422.",
+      "reviewVerdict": "PASS (diff review /tmp .../ML-cred-001-diff-review.md): compliance hole closed (^sk-ant-oat\\d+- both files), secret hygiene clean, scope tight, tests load-bearing, 14/14+5/5 re-run green independently."
     },
     {
       "id": "ML-agents-cred-002",
@@ -77,10 +81,11 @@
       "evidence": [
         "operator directive 2026-07-22 (this run)"
       ],
-      "status": "OPEN",
-      "owner": "orchestrator-triage \u2192 arch probe \u2192 fixer-hard",
+      "status": "IN-FIX",
+      "owner": "(blueprint APPROVED ADR-ML-2) \u2192 test-author \u2192 fixer-hard (after cred-001 merges)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click."
     },
     {
       "id": "ML-browser-001",
