@@ -90,7 +90,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 79 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a06836c2) | batch-4 FE-polish implement | ✅ @4af0c91; approvals excerpt + settings describeApiError+2nd-overflow-source + resume/orchestration min-w-0; 551/551 vitest, Playwright 5/5, build clean |
 | 82 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-4 FE-polish diff review | ✅ PASS (settings scope-creep JUSTIFIED, agents-005 not reverted, 551/551 vitest+Playwright 5/5; note: pre-existing vitest exit-1 → ML-test-001 LOW) |
 | — | 2026-07-22 (resumed) | — orchestrator git | — | rebase fix/ml-fe-polish onto current main → fd8f493 (FE-only, disjoint, clean) | ✅ |
-| 83 | 2026-07-22 (resumed) | deployer | haiku | BATCH-4+5 combined deploy (FINAL code) + all-batch preservation check | dispatched |
+| 83 | 2026-07-22 (resumed) | deployer | haiku | BATCH-4+5 combined deploy (FINAL code) | ✅ LIVE @f28eb82 (all 6 batch-markers preserved, health ok, 3 units, 0 log errs, remote=main+0 PRs, pushed) — ALL CODE FIXES DEPLOYED |
+| 84 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-test-001 vitest exit-0 mock fix (G-07 prep) | dispatched |
+| 85 | 2026-07-22 (resumed) | qa-adversary | opus | §8 STAGE-3 adversarial (batch-4+5 re-verify + closed-sample re-trigger + jobs-001 + screen-coverage audit) | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
 | 80 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a6e3b71a) | batch-5 implement | ✅ @2c144c9 (stranded on bg-waiter → resumed→committed); upstream_status 422-vs-502, needs_reauth gated on source!=none; 95/95, 0 regr, cred-002 45 green |
 | 81 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-5 diff review | ✅ PASS (revert-verified; 422/502 honest, refresh untouched, delete→unconfigured, live-cred warning, 48/48; 2 non-blocking) |
