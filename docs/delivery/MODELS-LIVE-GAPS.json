@@ -754,7 +754,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (batch w/ mobile fixes)",
       "fixCommits": [],
       "verifiedBy": ""
@@ -855,7 +855,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [],
       "verifiedBy": ""
@@ -874,7 +874,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [],
       "verifiedBy": ""
@@ -894,7 +894,7 @@
         "uat/reports/evidence/models-live/adversarial/batch2-prodverify.md",
         "batch2-prodverify-assets/"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (FE batch-4)",
       "fixCommits": [],
       "verifiedBy": ""
