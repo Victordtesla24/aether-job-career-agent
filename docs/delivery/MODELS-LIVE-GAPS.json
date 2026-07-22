@@ -543,10 +543,13 @@
         "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
         "screens/public-auth/network/"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "test-author \u2192 fixer-hard (billing race)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "54f5aa4(tests)"
+      ],
+      "verifiedBy": "",
+      "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING."
     }
   ]
 }
