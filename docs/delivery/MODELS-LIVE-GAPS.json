@@ -301,7 +301,8 @@
       ],
       "verifiedBy": "",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
-      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening).",
+      "selectionSweep": "\u00a73.4.2 CATALOG-SWEEP.md: 337/337 selectable+persisted (100%, 0 exceptions), unknown-id\u2192422 works, config restored byte-identical, lastRefreshedAt+stale present. G-02 selection leg PASS."
     },
     {
       "id": "ML-agents-cred-005",

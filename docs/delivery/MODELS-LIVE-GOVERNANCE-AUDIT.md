@@ -58,7 +58,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 37 | 2026-07-22 (resumed) | fixer-hard | opus (wt agent-a42852c3) | FIX-1 re-fix implement | ✅ @20838de; 155/155 backend +85/85 FE, 0 regr; keystone _model_chain user-model gate → LLMUnavailableError→503+refund |
 | 38 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | FIX-1 re-fix diff review | ✅ PASS (all 4 FAIL findings closed, B1 traced end-to-end, 155+85 green, cred-002 intact) |
 | 39 | 2026-07-22 (resumed) | deployer | haiku | merge fix/ml-catalog-fix1 + deploy FIX-1 | ✅ LIVE @654808a (health ok, 3 units, refresh 200, catalog lastRefreshedAt+stale present, 337 models, 0 log errs, pushed, branch+wt cleaned) |
-| 40 | 2026-07-22 (resumed) | model-prober | sonnet | §3.4 selection sweep (ALL 337) + run sweep (families+topN) + no-silent-substitution LIVE proof | dispatched |
+| 40 | 2026-07-22 (resumed) | model-prober | sonnet | §3.4 selection sweep ALL 337 | ✅ SELECTION 337/337 PASS (0 exc, unknown→422, restored); stranded before run-sweep |
+| 41 | 2026-07-22 (resumed) | model-prober (resume a5a885c1) | sonnet | §3.4 RUN sweep + NO-SUBSTITUTION live proof | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
