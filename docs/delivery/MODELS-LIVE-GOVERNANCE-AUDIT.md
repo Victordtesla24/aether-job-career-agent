@@ -159,3 +159,16 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 ## Violations
 
 (none yet)
+
+## G-10 GOVERNANCE AUDIT — CONCLUSION (2026-07-22, orchestrator with evidence)
+
+**VERDICT: CLEAN.** All §0 governance invariants held across the entire run.
+
+- **Zero orchestrator-tier (fable) sub-agent spawns.** All 98 dispatch rows forced a model tier: 27 haiku + 56 sonnet + 15 opus (0 fable). The single dispatch row textually mentioning "fable" (#9) is "awaits fable-5 approval" on the arch blueprint (itself forced `opus`) — a reference to orchestrator adjudication, not a spawn. `model: fable` appears in ZERO roster files or dispatches.
+- **Roster integrity (R-1).** 14 roster files, exact §0.2 models (5×claude-haiku-4-5, 6×claude-sonnet-4, 3×claude-opus-4), 0 `inherit`. Mirrored repo `.claude/agents/` + `~/.claude/agents/`. The 4 roster files textually mentioning "fable" do so in descriptions / the Co-Authored-By commit trailer — never a model assignment.
+- **Zero self-approvals.** The orchestrator (fable-5) wrote NO fix code and approved NO gate on its own authority; every code fix was reviewed by a DIFFERENT-instance reviewer (author ≠ reviewer) and closed on production by qa-adversary / qa / screen-tester / evidence agents distinct from the fixer (verifier ≠ author ≠ reviewer), per finding. Deploys were authorized by the orchestrator but executed + health-verified by the deployer; preservation checks guarded every merge.
+- **Separation of duties (§0.3).** Held per finding — distinct agent IDs for test-author, fixer, reviewer, and prod-verifier throughout (e.g. cred-001: RCA scout → plan-reviewer → test-author → fixer-medium → diff-reviewer → deployer → qa-adversary, all different instances).
+- **Escalation ladder (§0.4).** No runaway. The review-FAILs (FIX-1 B1 silent-substitution BLOCKER, cred-002 needs_reauth gap, settings-001 prod-overflow reopen) each took ONE bounded re-fix cycle to PASS — the adversarial process working as designed, not an escalation failure.
+- **R-2 registry-fallback** used cleanly for the `arch` specialist (forced opus, blueprint-only, orchestrator-approved before implementation). **R-3 monitors-as-processes**: continuous capture ran as a persistent background process (ML-adv-001 fixed a broken regex mid-run; retro-triage confirmed 0 missed).
+
+Evidence: this dispatch log (98 rows) + docs/delivery/MODELS-LIVE-GAPS.json (per-finding owner/reviewer/verifier trail).
