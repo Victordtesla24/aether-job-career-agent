@@ -276,7 +276,8 @@
       ],
       "status": "OPEN",
       "owner": "G-07 stage: clean stale worktrees + serialized fresh full run",
-      "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding."
+      "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding.",
+      "gatePlan": "G-07 PREREQ (gate-prep 2026-07-22): 33 stale worktree-agent-* worktrees + 83 stale local branches (fix/mv-*, fix/nf-*, prior runs) cause the shared aether_test contention. CLEANUP at G-07 (AFTER all fix agents finish): git worktree prune + remove all non-main worktrees; git branch -D the merged/abandoned locals; then run full pytest+vitest+Playwright fresh (serialized, no concurrent pytest) + log counts. G-08 ALREADY MET: git ls-remote origin = refs/heads/main only; gh pr list = 0 open PRs."
     },
     {
       "id": "ML-catalog-004",
