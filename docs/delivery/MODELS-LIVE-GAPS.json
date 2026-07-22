@@ -193,12 +193,14 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+        "9781d55 (tests)",
+        "5db6f43 (fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
     },
     {
       "id": "ML-catalog-002",
@@ -214,12 +216,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+        "9781d55 (tests)",
+        "5db6f43 (fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
     },
     {
       "id": "ML-catalog-003",
@@ -235,12 +239,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+        "9781d55 (tests)",
+        "5db6f43 (fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
     },
     {
       "id": "ML-env-001",
@@ -276,10 +282,14 @@
         "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
         "branch fix/ml-catalog-fix1 test_ml_catalog_fix1.py"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "catalog-engineer (FIX-1)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "9781d55 (tests)",
+        "5db6f43 (fix)"
+      ],
+      "verifiedBy": "",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
     },
     {
       "id": "ML-agents-cred-005",
