@@ -1056,10 +1056,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-medium (validation)",
       "fixCommits": [
-        "0afe860(tests)"
+        "0afe860(tests)",
+        "a975473(fix)"
       ],
       "verifiedBy": "",
       "rca": "FE-only page.tsx:59-63 onSaveCap Number('')===0 passes >=0 guard. Backend already correct (Field(ge=0) 422s empty). Fix: capInput.trim()==='' reject before Number(). Preserve deliberate 0."
