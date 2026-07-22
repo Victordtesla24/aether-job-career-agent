@@ -193,14 +193,15 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55 (tests)",
         "5db6f43 (fix)"
       ],
       "verifiedBy": "",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
     },
     {
       "id": "ML-catalog-002",
@@ -216,14 +217,15 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55 (tests)",
         "5db6f43 (fix)"
       ],
       "verifiedBy": "",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
     },
     {
       "id": "ML-catalog-003",
@@ -239,14 +241,15 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55 (tests)",
         "5db6f43 (fix)"
       ],
       "verifiedBy": "",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
     },
     {
       "id": "ML-env-001",
@@ -282,14 +285,15 @@
         "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
         "branch fix/ml-catalog-fix1 test_ml_catalog_fix1.py"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55 (tests)",
         "5db6f43 (fix)"
       ],
       "verifiedBy": "",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication)."
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
     },
     {
       "id": "ML-agents-cred-005",
@@ -349,6 +353,65 @@
       ],
       "status": "OPEN",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-006",
+      "screen": "Agents / all agent runs",
+      "severity": "BLOCKER",
+      "category": "agent-integration",
+      "summary": "\u00a73.4.4 SILENT MODEL SUBSTITUTION: llm_client _auto/_model_chain catches ANY live failure (incl. 404 stale/unavailable model id) and silently retries a hardcoded FALLBACK_MODEL (openai/gpt-oss-20b:free \u2014 different model/provider), returning SUCCESS with no error surfaced. A user's chosen model that fails at run time is silently swapped. Pre-existing; surfaced by FIX-1's honesty claim.",
+      "reproduction": [
+        "Set a user-chosen model on an agent that 404s at run time",
+        "Run the agent \u2192 observe success on gpt-oss-20b:free, no honest error, no refund"
+      ],
+      "expected": "\u00a73.4.4: a USER-CHOSEN model that errors at run time surfaces an honest user-readable error + refunds quota; NEVER a silent fallback to a different model",
+      "observed": "Silent substitution to FALLBACK_MODEL with fake success",
+      "evidence": [
+        "/tmp .../ML-catalog-fix1-diff-review.md B1; llm_client.py:8-10 docstring, get_model\u2192_auto\u2192_model_chain\u2192_call_live"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-hard (ADR-ML-3)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-007",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "visual",
+      "summary": "\u00a73.1.3/\u00a73.3: model picker never shows a USER-VISIBLE provider/billing implication ('billing' only in a code comment). Choosing an OpenRouter model for an Anthropic-direct agent routes billing to OpenRouter \u2014 must be explicit in UI (pattern exists at design/screens/agents.html:490,519,522).",
+      "reproduction": [
+        "Open per-agent picker for a claude-default agent \u2192 no user-visible billing note when picking an OpenRouter model"
+      ],
+      "expected": "Explicit user-visible provider/billing implication in the picker",
+      "observed": "Not shown (code comment only)",
+      "evidence": [
+        "/tmp .../ML-catalog-fix1-diff-review.md B2"
+      ],
+      "status": "IN-FIX",
+      "owner": "fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-008",
+      "screen": "Agents",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "N1: freshness note discards backend lastRefreshedAt/stale on initial load (shows 'not yet refreshed' until manual click though backend knows). N2: picker renders for deterministic-backend agents (scout/fitScorer/matcher) whose AgentConfig.model is never read at run time \u2014 a pick is a misleading no-op that reverts on reload.",
+      "reproduction": [
+        "Load Agents screen \u2192 freshness reads 'not yet refreshed'",
+        "Pick a model on scout \u2192 reload \u2192 reverts (never used at run time)"
+      ],
+      "expected": "Freshness shows real backend ts on load; deterministic agents either honor the pick or honestly indicate a fixed model (no misleading picker)",
+      "observed": "'not yet refreshed' on load; no-op picker on deterministic agents",
+      "evidence": [
+        "/tmp .../ML-catalog-fix1-diff-review.md N1+N2"
+      ],
+      "status": "IN-FIX",
+      "owner": "fixer-hard",
       "fixCommits": [],
       "verifiedBy": ""
     }
