@@ -74,7 +74,7 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 56 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-admin-001/002 failing tests, fix/ml-admin | ✅ @727f467; 4 backend (admin-001) + 2 Playwright (admin-002), RCA confirmed admin.py:264 |
 | 59 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ad6d09f3) | ML-admin-001/002 implement | ✅ @f98461e; shared from_sql JOIN + off-canvas responsive shell, 4/4+18/18, Playwright pass, build clean |
 | 60 | 2026-07-22 (resumed) | screen-tester | sonnet | §4.5 AGENTS deep pass | ✅ core verified (332 curated, freshness, refresh, deterministic-locked, real gen); 5 findings: ML-agents-001 BLOCKER (STRUCTURED no-op picker), 002 HIGH (selection not displayed), 003 HIGH (OAuth URL — probing), 004 BLOCKER (placeholder cost), 005 MED (mobile) |
-| 61 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admin-001/002 diff review | dispatched |
+| 61 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admin-001/002 diff review | ✅ PASS (mutation-tested; count-safe LEFT JOIN, 0 overflow 6 routes, desktop unchanged, 22/22); batch-2 |
 | 62 | 2026-07-22 (resumed) | evidence | haiku | ML-agents-003 OAuth-URL adjudication probe | ✅ claude.com/cai=SUBSCRIPTION (correct); platform.claude.com=API-key (would break billing); CF=Anthropic's, passable → KEEP URL + add hint (ADR-ML-5) |
 | 63 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-agents-001/002/004/005 re-fix tests, branch fix/ml-agents-refix | dispatched |
 | 55 | 2026-07-22 (resumed) | deployer | haiku | BATCH-1 deploy (curation+signup-race) | ✅ LIVE @fb8361e (merges 27dcfb0+f8835fe, 332 models curated, olmo absent, entitlement 200, 0 log errs, pushed, wt cleaned) |
