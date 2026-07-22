@@ -45,7 +45,10 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 25 | 2026-07-22T07:20Z | reviewer | sonnet (fresh) | ML-agents-cred-002 adversarial diff review | ✅ PASS 0-blocking; 1 non-blocking (needs_reauth UI missing — ADR-ML-2a mandated) + dead code |
 | 26 | 2026-07-22T07:55Z | fixer-hard (resume adc0607) | opus | cred-002 bounded re-fix: honest needs_reauth status + Reconnect UI + drop dead constants (TDD) | ✅ @2b5fefa; 116 backend +76 FE, +3 tests, 0 regressions |
 | 27 | 2026-07-22T08:20Z | reviewer | sonnet (fresh) | cred-002 re-fix DELTA review | ✅ PASS (honest status, no mislabel, reconnect wired; 80 backend +18 FE; 2 non-blocking cosmetic) |
-| 28 | 2026-07-22T08:35Z | deployer | haiku | merge fix/ml-cred-002 → main, build, restart, health, oauth/start route check, push | dispatched |
+| 28 | 2026-07-22T08:35Z | deployer | haiku | merge fix/ml-cred-002 → main, deploy | ✅ LIVE @61fa6bf (health ok, 3 units, oauth/start 200, 0 log errs, pushed, branch+wt cleaned) |
+| — | 2026-07-22T08:50Z | — orchestrator git | — | rebase fix/ml-catalog-fix1 onto post-cred-002 main → 9781d55 (test-only, clean) | ✅ |
+| 29 | 2026-07-22T08:55Z | qa-adversary | opus | ML-agents-cred-002 LIVE prod verify (OAuth surface; consent HUMAN-GATED) | dispatched |
+| 30 | 2026-07-22T08:55Z | catalog-engineer | opus (wt agent-a42852c3) | FIX-1 implement (per-agent picker + freshness + refresh + config validation) | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 

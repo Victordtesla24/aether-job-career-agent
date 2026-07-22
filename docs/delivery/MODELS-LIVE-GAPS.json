@@ -81,12 +81,13 @@
       "evidence": [
         "operator directive 2026-07-22 (this run)"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-PRODQA",
       "owner": "reviewer (diff review) \u2192 deploy \u2192 qa-adversary prod verify",
       "fixCommits": [
-        "afee5d5 (tests)",
-        "7dd17a9 (core)",
-        "2b5fefa (needs_reauth+reconnect+dead-code)"
+        "afee5d5",
+        "7dd17a9",
+        "2b5fefa",
+        "merge 61fa6bf (LIVE)"
       ],
       "verifiedBy": "",
       "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click.",
