@@ -228,6 +228,25 @@
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [],
       "verifiedBy": ""
+    },
+    {
+      "id": "ML-env-001",
+      "screen": "n/a (test infra)",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "KNOWN-ENVIRONMENTAL (not a code defect): full-repo pytest shows ~50 non-deterministic failures due to ~35 stale prior-run worktrees sharing the single aether_test Postgres schema (concurrent TRUNCATE races \u2014 documented flakiness pattern). Proven NOT caused by cred-001: same failing tests pass in isolation against BOTH pre-fix 9396bae and post-fix code; 0 of the 50 files reference the touched functions.",
+      "reproduction": [
+        "Run full backend pytest while other worktrees/sessions run pytest \u2192 non-deterministic failures",
+        "Re-run the same failing tests in isolation \u2192 pass"
+      ],
+      "expected": "G-07: a fresh full-suite run is green with counts logged",
+      "observed": "50/1025 fail under concurrent shared-schema load; 0 fail in isolation",
+      "evidence": [
+        "/tmp .../ML-cred-001-pass-after.txt (isolation diagnostic appended by fixer)"
+      ],
+      "status": "OPEN",
+      "owner": "G-07 stage: clean stale worktrees + serialized fresh full run",
+      "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding."
     }
   ]
 }
