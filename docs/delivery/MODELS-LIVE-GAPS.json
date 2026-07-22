@@ -975,10 +975,12 @@
         "/tmp .../vitest-full-4af0c91.log + -5bceb2e.log (identical)",
         "ML-fe-polish-diff-review.md non-blocking note"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer-medium (G-07 prep \u2014 tiny mock fix)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "70eb76f (merged main, test-only)"
+      ],
+      "verifiedBy": "fixer exit-0 proof + merged: vi.importActual+spread restores real ApiError export; `pnpm test` now exit 0, 553/553 pass. G-07 vitest clean-exit prerequisite met. (test-only change, no deploy.)"
     }
   ]
 }
