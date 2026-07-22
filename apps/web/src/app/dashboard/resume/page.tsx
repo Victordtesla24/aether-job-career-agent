@@ -250,17 +250,17 @@ export default function ResumePage() {
       ) : null}
 
       <section className="grid gap-4 lg:grid-cols-2" data-design-id="panes-rs0405">
-        <div className="glass rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
+        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-aether-muted-dim" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Original — Base Resume</h2>
           </div>
           {originalIdentity ? (
             <>
-              <p className="mt-3 text-lg font-bold tracking-wide" data-testid="hero-original-name">
+              <p className="mt-3 break-words text-lg font-bold tracking-wide" data-testid="hero-original-name">
                 {originalIdentity.name}
               </p>
-              <p className="text-xs text-aether-muted-dim" data-testid="hero-original-title">
+              <p className="break-words text-xs text-aether-muted-dim" data-testid="hero-original-title">
                 {originalIdentity.title}
               </p>
             </>
@@ -273,14 +273,14 @@ export default function ResumePage() {
             Base resume is immutable — every tailored version derives from this source of truth.
           </p>
         </div>
-        <div className="glass rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
+        <div className="glass min-w-0 rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Tailored — Latest Version</h2>
           </div>
           {tailoredIdentity ? (
             <>
-              <p className="mt-3 text-lg font-bold tracking-wide" data-testid="hero-tailored-name">
+              <p className="mt-3 break-words text-lg font-bold tracking-wide" data-testid="hero-tailored-name">
                 {tailoredIdentity.name}
               </p>
               <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
@@ -290,9 +290,9 @@ export default function ResumePage() {
               No tailored version yet.
             </p>
           )}
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs">
             {tailoredResume ? (
-              <span className="rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
+              <span className="min-w-0 max-w-full break-words rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
                 {tailoredResume.label}
               </span>
             ) : (
@@ -582,7 +582,7 @@ export default function ResumePage() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">
-        <section className="glass rounded-2xl border border-white/10 p-5">
+        <section className="glass min-w-0 rounded-2xl border border-white/10 p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Evidence Trace</h2>
           <p className="mt-1 text-xs text-aether-muted-dim">
             Every rewritten line links back to evidence in the base resume.
@@ -611,7 +611,10 @@ export default function ResumePage() {
             </p>
           )}
         </section>
-        <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="version-compare-rs18">
+        <section
+          className="glass min-w-0 rounded-2xl border border-white/10 p-5"
+          data-design-id="version-compare-rs18"
+        >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Version History</h2>
           {resumes && resumes.length > 0 ? (
             <ul className="mt-3 space-y-2 text-sm text-aether-muted">

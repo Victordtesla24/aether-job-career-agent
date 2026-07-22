@@ -43,6 +43,110 @@ export function formatRetryAfter(seconds: number): string {
   return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
+/** Field-name labels for the human-readable validation messages below, keyed
+ * by the last segment of a Pydantic error's `loc` (ML-settings-001). Unlisted
+ * fields fall back to a camelCase/snake_case → "Title case" conversion. */
+const FIELD_LABELS: Record<string, string> = {
+  fullName: "Full name",
+  email: "Email",
+  targetRole: "Target role",
+  location: "Location",
+};
+
+function humanizeFieldName(loc: unknown): string {
+  if (!Array.isArray(loc) || loc.length === 0) return "This field";
+  const key = String(loc[loc.length - 1]);
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .trim()
+    .toLowerCase();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : "This field";
+}
+
+interface PydanticValidationError {
+  type?: unknown;
+  loc?: unknown;
+  msg?: unknown;
+  ctx?: Record<string, unknown>;
+}
+
+/** One field's validation failure -> a short, human sentence. Never echoes
+ * the invalid `input` the server sent back (that's exactly the raw payload
+ * ML-settings-001 was blowing page layout out with). */
+function friendlyValidationMessage(err: PydanticValidationError): string {
+  const field = humanizeFieldName(err.loc);
+  const ctx = err.ctx ?? {};
+  switch (err.type) {
+    case "string_too_long":
+      return typeof ctx.max_length === "number"
+        ? `${field} must be ${ctx.max_length} characters or fewer.`
+        : `${field} is too long.`;
+    case "string_too_short":
+      return typeof ctx.min_length === "number"
+        ? `${field} must be at least ${ctx.min_length} characters.`
+        : `${field} is too short.`;
+    case "missing":
+      return `${field} is required.`;
+    default:
+      return `${field}: ${typeof err.msg === "string" && err.msg ? err.msg : "invalid value"}`;
+  }
+}
+
+/**
+ * Extract a FastAPI/Pydantic validation error list from an ApiError.message
+ * built by apiRequest() as `` `${method} ${path} failed (${status}): ${raw
+ * body}` ``. Returns null when the body isn't that shape (nothing to parse,
+ * or a 422 that isn't a Pydantic validation error).
+ */
+function parsePydanticDetail(message: string): PydanticValidationError[] | null {
+  const marker = "): ";
+  const idx = message.indexOf(marker);
+  if (idx === -1) return null;
+  const rawBody = message.slice(idx + marker.length);
+  try {
+    const parsed = JSON.parse(rawBody) as { detail?: unknown };
+    if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+      return parsed.detail as PydanticValidationError[];
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Hard cap on any rendered API error message — a defensive backstop so no
+ * error text (structured or not) can ever balloon page layout again. */
+const ERROR_MESSAGE_MAX_CHARS = 300;
+
+function bound(text: string): string {
+  return text.length <= ERROR_MESSAGE_MAX_CHARS
+    ? text
+    : `${text.slice(0, ERROR_MESSAGE_MAX_CHARS - 1)}…`;
+}
+
+/**
+ * Bounded, human-readable message for an error caught from an API call. A
+ * 422 field-validation error from FastAPI/Pydantic echoes the entire raw
+ * request body — including any oversized invalid input — into
+ * `ApiError.message`; this must never be shown to the user verbatim
+ * (ML-settings-001: a 5000-char invalid `fullName` blew
+ * `document.scrollWidth` out by ~49,800px). Structured validation failures
+ * get a short, field-specific sentence instead; anything else falls back to
+ * the original message, still defensively bounded.
+ */
+export function describeApiError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status === 422) {
+    const details = parsePydanticDetail(error.message);
+    if (details) {
+      return bound(details.slice(0, 3).map(friendlyValidationMessage).join(" "));
+    }
+  }
+  if (error instanceof Error) return bound(error.message);
+  return bound(fallback);
+}
+
 let inMemoryToken: string | null = null;
 
 /**

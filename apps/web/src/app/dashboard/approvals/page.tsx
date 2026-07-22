@@ -17,7 +17,12 @@ import {
   fetchApproval,
   type DecisionContext,
 } from "../../../components/approvals/api";
-import { isExpired, parseApprovalPayload, summarize } from "../../../components/approvals/lib";
+import {
+  isExpired,
+  parseApprovalPayload,
+  substantiveExcerpt,
+  summarize,
+} from "../../../components/approvals/lib";
 import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
@@ -290,7 +295,7 @@ export default function ApprovalsPage() {
                     </p>
                     {details.preview ? (
                       <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-aether-muted">
-                        {details.preview}
+                        {substantiveExcerpt(details.preview)}
                       </p>
                     ) : null}
                   </div>

@@ -188,7 +188,7 @@ export default function Orchestration({
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Task queue */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="task-queue">
+        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="task-queue">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Task Queue</h3>
           {tasks.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">Queue is empty — trigger a run above.</p>
@@ -222,7 +222,7 @@ export default function Orchestration({
         </div>
 
         {/* Performance */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="performance-metrics">
+        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="performance-metrics">
           {/*
             MV-agent-monitor-003: this card's success rate is computed
             client-side from the `runs` prop, which the Agents page fetches
@@ -256,7 +256,7 @@ export default function Orchestration({
         </div>
 
         {/* Error log */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="error-log">
+        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="error-log">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Error Log</h3>
           {runs.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">No log entries yet.</p>
