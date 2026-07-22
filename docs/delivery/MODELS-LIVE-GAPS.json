@@ -81,16 +81,17 @@
       "evidence": [
         "operator directive 2026-07-22 (this run)"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "reviewer (diff review) \u2192 deploy \u2192 qa-adversary prod verify",
       "fixCommits": [
-        "afee5d5 (31 tests)",
-        "7dd17a9 (fix)"
+        "afee5d5 (tests)",
+        "7dd17a9 (core)",
+        "2b5fefa (needs_reauth+reconnect+dead-code)"
       ],
       "verifiedBy": "",
       "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click.",
       "implNote": "7dd17a9: new anthropic_oauth.py + /oauth/{start,exchange,refresh} + refresh hook (llm_client resolve_user_credential) + Connect-with-Anthropic UI. 26/26+5/5, 114 regression slice green. Authorize smoke: default claude.com/cai/oauth/authorize scope user:inference \u2192 200 Pro/Max subscription login (correct). resolve_provider byte-for-byte unchanged. Token store: used\u2192ProviderCredential(deployment-wide), refresh\u2192AnthropicOAuthToken. Operator live consent HUMAN-GATED.",
-      "reviewVerdict": "PASS (0 blocking; PKCE/state-single-use/secret-hygiene/no-split-brain/refresh-honest/exchange-honest/resolve_provider-unchanged all verified). NON-BLOCKING gap \u2192 bounded re-fix cycle IN FLIGHT: ADR-ML-2a DECISION-1b part 2 (needs_reauth honest status + Reconnect affordance) not implemented (badge falsely 'Connected' after refresh failure) + dead-code constants. Fixer completing on fix/ml-cred-002 before deploy."
+      "reviewVerdict": "core PASS + delta PASS (both fresh reviewers). PKCE/state-single-use/secret-hygiene/no-split-brain/refresh-honest/exchange-honest/resolve_provider-unchanged/authorize=subscription/needs_reauth-honest/reconnect-wired all verified. 116 backend + 76 FE green."
     },
     {
       "id": "ML-browser-001",
@@ -276,6 +277,25 @@
       ],
       "status": "OPEN",
       "owner": "catalog-engineer (FIX-1)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-cred-005",
+      "screen": "Agents",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "Non-blocking (reviewer note): after deleting the anthropic credential, a stale AnthropicOAuthToken row with needs_reauth can make the provider show 'warning' instead of 'unconfigured' in a narrow self-inflicted delete-then-reread sequence (pre-existing DELETE behavior \u2014 the delete path does not also clear the oauth token row).",
+      "reproduction": [
+        "Connect anthropic OAuth \u2192 force needs_reauth \u2192 DELETE credential \u2192 re-read provider shows 'warning' not 'unconfigured'"
+      ],
+      "expected": "After credential delete, provider status returns to 'unconfigured' (oauth token row cleared/ignored)",
+      "observed": "Shows 'warning' (stale needs_reauth row) in the narrow sequence",
+      "evidence": [
+        "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [],
       "verifiedBy": ""
     }
