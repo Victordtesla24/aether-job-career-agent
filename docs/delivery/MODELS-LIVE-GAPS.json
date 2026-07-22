@@ -928,9 +928,7 @@
       "status": "IN-FIX",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
-        "5bceb2e(tests)",
-        "4af0c91(fix)",
-        "merge f28eb82 (LIVE batch-4+5)"
+        "5a45937(re-fix)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy.",
@@ -1000,7 +998,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (break-all + min-w-0 :533) \u2192 PROD re-verify",
-      "fixCommits": [],
+      "fixCommits": [
+        "5a45937(re-fix)"
+      ],
       "verifiedBy": ""
     },
     {

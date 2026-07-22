@@ -94,7 +94,11 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 84 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-test-001 vitest exit-0 mock fix (G-07 prep) | dispatched |
 | 85 | 2026-07-22 (resumed) | qa-adversary | opus | §8 STAGE-3 adversarial | ✅ CAUGHT: settings-001 390px overflow HOLDS on prod (49740px unbroken-token; local-Playwright-passed-but-prod-failed) → REOPEN ML-adv-003. Others HELD (approvals/resume/agents006/adv002/cred005 PASS, jobs-001 flaky-resolved, 6/6 closed-sample held). Coverage gaps → ML-adv-004(/admin/users/[id]), ML-adv-005(/forgot-password) |
 | 86 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-adv-003 settings re-fix (break-all + min-w-0 :533/:513) | dispatched |
-| 87 | 2026-07-22 (resumed) | screen-tester | sonnet | ML-adv-004/005 coverage passes (/admin/users/[id] + /forgot-password) | dispatched |
+| 87 | 2026-07-22 (resumed) | screen-tester | sonnet | ML-adv-004/005 coverage passes | ✅ both reports written → adv-004/005 CLOSED; corrected stale matrix (no PUT/impersonate; forgot-pw static); found ML-admindetail-001 MED (empty spend-cap→$0.00 silent); catch-all honest |
+| 88 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-adv-003 settings re-fix | ✅ @5a45937 (min-w-0 both grid ancestors + break-all preview; 553/553, build clean; local-Playwright unreliable → PROD-verify pending) |
+| 89 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-admindetail-001 spend-cap validation failing test | dispatched |
+| 90 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-adv-003 CSS-correctness review | dispatched |
+| 91 | 2026-07-22 (resumed) | model-prober | sonnet | §8 STAGE-3 catalog re-sample (fresh pull + ≥20% selection + ≥5 run probes + no-substitution) | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
 | 80 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a6e3b71a) | batch-5 implement | ✅ @2c144c9 (stranded on bg-waiter → resumed→committed); upstream_status 422-vs-502, needs_reauth gated on source!=none; 95/95, 0 regr, cred-002 45 green |
 | 81 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-5 diff review | ✅ PASS (revert-verified; 422/502 honest, refresh untouched, delete→unconfigured, live-cred warning, 48/48; 2 non-blocking) |
