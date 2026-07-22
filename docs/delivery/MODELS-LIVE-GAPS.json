@@ -81,7 +81,7 @@
       "evidence": [
         "operator directive 2026-07-22 (this run)"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-PRODQA",
+      "status": "VERIFIED-CLOSED",
       "owner": "reviewer (diff review) \u2192 deploy \u2192 qa-adversary prod verify",
       "fixCommits": [
         "afee5d5",
@@ -89,7 +89,7 @@
         "2b5fefa",
         "merge 61fa6bf (LIVE)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "qa-adversary(opus) LIVE prod @61fa6bf: start issues valid PKCE authorize URL (distinct challenge+state, DB state row), authorize\u2192claude.ai Pro/Max subscription login 200, exchange rejects 9 bogus inputs (no fake 200, single-use blocked, 0 stored), Connect UI works, regression OpenRouter 337+fit-scorer 200. adversarial/ML-agents-cred-002-prodverify.md. HUMAN-GATED residual: operator consent+real code exchange+real subscription-billed run; needs_reauth reconnect (code-verified, live-unreachable w/o revoked token).",
       "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click.",
       "implNote": "7dd17a9: new anthropic_oauth.py + /oauth/{start,exchange,refresh} + refresh hook (llm_client resolve_user_credential) + Connect-with-Anthropic UI. 26/26+5/5, 114 regression slice green. Authorize smoke: default claude.com/cai/oauth/authorize scope user:inference \u2192 200 Pro/Max subscription login (correct). resolve_provider byte-for-byte unchanged. Token store: used\u2192ProviderCredential(deployment-wide), refresh\u2192AnthropicOAuthToken. Operator live consent HUMAN-GATED.",
       "reviewVerdict": "core PASS + delta PASS (both fresh reviewers). PKCE/state-single-use/secret-hygiene/no-split-brain/refresh-honest/exchange-honest/resolve_provider-unchanged/authorize=subscription/needs_reauth-honest/reconnect-wired all verified. 116 backend + 76 FE green."
@@ -297,6 +297,45 @@
       ],
       "status": "OPEN",
       "owner": "fixer-medium (polish, before gates)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-adv-001",
+      "screen": "n/a (run instrumentation)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "EVIDENCE-INTEGRITY: runtime monitor-tail.sh perl regex broken \u2014 unescaped '/' in HTTP/1\\.1 closes the perl /.../ match delimiter, perl exits rc=255 per line, live-matches.log can never capture. Prior continuous-capture 'monitor clean' claims rest on a broken instrument. (System IS clean \u2014 independently confirmed by direct log-greps + 17/17 route-sweeps, a SEPARATE working mechanism \u2014 but the capture leg must be fixed for G-06.)",
+      "reproduction": [
+        "Run matches_error() from monitor-tail.sh on a line containing 'ERROR' \u2192 NO-MATCH + rc=255",
+        "Control m{} delimiter \u2192 matches"
+      ],
+      "expected": "Continuous capture appends matching ERROR/5xx/Traceback lines to live-matches.log",
+      "observed": "perl rc=255 every line (delimiter broken); live-matches.log always 0 lines",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
+      ],
+      "status": "OPEN",
+      "owner": "runtime-monitor (fix own script + prove capture)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-adv-002",
+      "screen": "Agents (OAuth exchange)",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "Cloudflare edge replaces the app's honest JSON 502 body ({detail: 'Anthropic rejected the authorization code \u2014 restart Connect with Anthropic.'}) with a generic 'error code: 502' page on the OAuth exchange-failure path, so the operator loses the actionable retry message (400/422 JSON pass through fine). Honesty intact (502 pinned, nothing stored). Fix: map the upstream-rejection to a 4xx so the JSON detail survives the edge.",
+      "reproduction": [
+        "POST /oauth/exchange with real state + fake code \u2192 app POSTs token endpoint, gets 400 \u2192 returns 502 \u2192 Cloudflare masks detail"
+      ],
+      "expected": "Operator sees the actionable JSON detail (map to 4xx e.g. 422)",
+      "observed": "Generic 'error code: 502' text page from Cloudflare",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [],
       "verifiedBy": ""
     }

@@ -49,6 +49,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | — | 2026-07-22T08:50Z | — orchestrator git | — | rebase fix/ml-catalog-fix1 onto post-cred-002 main → 9781d55 (test-only, clean) | ✅ |
 | 29 | 2026-07-22T08:55Z | qa-adversary | opus | ML-agents-cred-002 LIVE prod verify (OAuth surface; consent HUMAN-GATED) | dispatched |
 | 30 | 2026-07-22T08:55Z | catalog-engineer | opus (wt agent-a42852c3) | FIX-1 implement (per-agent picker + freshness + refresh + config validation) | dispatched |
+| 31 | 2026-07-22T09:30Z | qa-adversary | opus | ML-agents-cred-002 LIVE prod verify | ✅ VERIFIED-CLOSED (7 cases; found ML-adv-001 broken-monitor + ML-adv-002 cf-502-mask) |
+| 32 | 2026-07-22T09:35Z | runtime-monitor | haiku | FIX ML-adv-001 (broken capture regex) + re-establish capture + retro-triage | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
