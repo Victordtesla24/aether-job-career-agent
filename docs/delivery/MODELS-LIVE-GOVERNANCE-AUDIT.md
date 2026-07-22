@@ -72,6 +72,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 49 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 admin screens + ML-browser-002/003 | ✅ 2 findings (ML-admin-001 HIGH plan-filter 500, ML-admin-002 MED mobile-overflow); browser-002/003 BENIGN-closed; security clean, no placeholder |
 | 55 | 2026-07-22 (resumed) | deployer | haiku | BATCH-1 deploy: merge curation + signup-race, restart, verify curated-count + entitlement-200 | dispatched |
 | 56 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-admin-001/002 failing tests, branch fix/ml-admin | dispatched |
+| 55 | 2026-07-22 (resumed) | deployer | haiku | BATCH-1 deploy (curation+signup-race) | ✅ LIVE @fb8361e (merges 27dcfb0+f8835fe, 332 models curated, olmo absent, entitlement 200, 0 log errs, pushed, wt cleaned) |
+| 57 | 2026-07-22 (resumed) | screen-tester | sonnet | §4.5 AGENTS screen DEEP pass (FIX-1 picker+curation+cred-002 UI + agent run) | dispatched |
+| 58 | 2026-07-22 (resumed) | evidence | haiku | ML-signup-001 prod-verify (6 fresh signups + concurrent entitlement) | dispatched |
 | 50 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens | ✅ mostly clean (login/pricing/legal); ML-browser-001 BENIGN-closed; NEW ML-signup-001 HIGH (entitlement 500 race on fresh signup) |
 | 51 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-signup-001 failing test, branch fix/ml-signup-001 | ✅ @54f5aa4; 3 tests (2 fail-before+1 guard), RCA deterministic (UniqueViolation) |
 | 53 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a279974c) | ML-signup-001 implement | ✅ @913b8fe; ON CONFLICT DO NOTHING both inserts, 3/3+57 slice green, no suppression, billing amounts untouched |

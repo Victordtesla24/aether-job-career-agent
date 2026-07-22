@@ -457,14 +457,16 @@
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md",
         "models/NO-SUBSTITUTION-PROOF.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
-        "0b08dfd(fix)"
+        "0b08dfd(fix)",
+        "merge 27dcfb0 (LIVE)"
       ],
       "verifiedBy": "",
-      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing."
+      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing.",
+      "deployNote": "Batch-1 live @fb8361e: curated catalog 332 (=337-5), olmo absent (deployer-verified). Agents-screen tester confirms UI-side."
     },
     {
       "id": "ML-model-002",
@@ -480,14 +482,16 @@
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
-        "0b08dfd(fix)"
+        "0b08dfd(fix)",
+        "merge 27dcfb0 (LIVE)"
       ],
       "verifiedBy": "",
-      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing."
+      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing.",
+      "deployNote": "Batch-1 live @fb8361e: curated catalog 332 (=337-5), olmo absent (deployer-verified). Agents-screen tester confirms UI-side."
     },
     {
       "id": "ML-model-003",
@@ -543,15 +547,17 @@
         "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
         "screens/public-auth/network/"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (billing race)",
       "fixCommits": [
         "54f5aa4(tests)",
-        "913b8fe(fix)"
+        "913b8fe(fix)",
+        "merge f8835fe (LIVE)"
       ],
       "verifiedBy": "",
       "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
-      "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60."
+      "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60.",
+      "deployNote": "Batch-1 live @fb8361e: entitlement 200 (deployer-verified). qa prod-verify (6 fresh signups + concurrent) in flight."
     }
   ]
 }
