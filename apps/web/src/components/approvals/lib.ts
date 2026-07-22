@@ -150,3 +150,49 @@ export function metaLine(details: ApprovalDetails): string {
   if (details.source) parts.push(`via ${details.source}`);
   return parts.join(" · ");
 }
+
+/** Matches a salutation opener, e.g. "Dear Hiring Team at Acme," (ML-approvals-001). */
+const SALUTATION_RE = /^dear\b/i;
+
+/**
+ * True for a business-letter "letterhead" line — a date, blank spacer,
+ * "Re: <subject>" line, or a short address-block line (recipient / company
+ * name) with no terminal sentence punctuation. Real body paragraphs are
+ * longer and end in `.`/`!`/`?` (ML-approvals-001).
+ */
+function isLetterheadLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed === "") return true;
+  // "22 July 2026" / "July 22, 2026" / "2026-07-22"
+  if (/^\d{1,2}\s+[A-Za-z]+\s+\d{4}$/.test(trimmed)) return true;
+  if (/^[A-Za-z]+\s+\d{1,2},?\s+\d{4}$/.test(trimmed)) return true;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return true;
+  if (/^re:/i.test(trimmed)) return true;
+  // Short address-block lines (company/recipient name, "Hiring Team") — no
+  // sentence-ending punctuation and few enough words that it reads as a
+  // label, not a sentence.
+  if (trimmed.length <= 40 && !/[.!?]$/.test(trimmed) && trimmed.split(/\s+/).length <= 6) return true;
+  return false;
+}
+
+/**
+ * Skip past a generated letter's letterhead (date / addressee block / "Re:"
+ * line / salutation) and return the substantive body that follows, so a
+ * `line-clamp-3` card preview surfaces real content instead of being
+ * exhausted by letterhead alone (ML-approvals-001). Falls back to the
+ * original text untouched when nothing looks like letterhead, or when the
+ * whole text turns out to be letterhead (never returns emptiness).
+ */
+export function substantiveExcerpt(preview: string): string {
+  const lines = preview.split("\n");
+  let start = 0;
+  const salutationIndex = lines.findIndex((line) => SALUTATION_RE.test(line.trim()));
+  if (salutationIndex !== -1) {
+    start = salutationIndex + 1;
+  } else {
+    while (start < lines.length && isLetterheadLine(lines[start])) start++;
+  }
+  while (start < lines.length && lines[start].trim() === "") start++;
+  const excerpt = lines.slice(start).join("\n").trim();
+  return excerpt || preview.trim();
+}

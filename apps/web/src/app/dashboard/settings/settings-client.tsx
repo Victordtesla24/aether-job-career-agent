@@ -40,7 +40,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { apiBaseUrl, ApiError, formatRetryAfter, getToken } from "../../../lib/api/client";
+import { apiBaseUrl, ApiError, describeApiError, formatRetryAfter, getToken } from "../../../lib/api/client";
 import {
   fetchPlans,
   fetchSubscription,
@@ -369,7 +369,10 @@ export default function SettingsClient({
       setSavedNotice("Settings saved ✓");
       setTimeout(() => setSavedNotice(null), 4000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      // ML-settings-001: a raw 422 from FastAPI/Pydantic echoes the ENTIRE
+      // invalid input back in ApiError.message — describeApiError() renders
+      // a bounded, field-specific sentence instead of that raw payload.
+      setError(describeApiError(e, "Save failed"));
     } finally {
       setSaving(false);
     }
@@ -498,7 +501,13 @@ export default function SettingsClient({
       ) : null}
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>
+        // break-words (defense-in-depth, ML-settings-001): even a bounded
+        // message could in principle contain one long unbroken token — this
+        // guarantees it wraps inside the banner instead of ever forcing page
+        // width, regardless of what produced the message.
+        <p className="break-words rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {error}
+        </p>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-4">
@@ -526,12 +535,17 @@ export default function SettingsClient({
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-profile">
               <h2 className="mb-4 text-[15px] font-semibold">Profile</h2>
               <div className="mb-5 flex items-center gap-4">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-aether-violet/20 text-lg font-bold text-aether-violet">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-aether-violet/20 text-lg font-bold text-aether-violet">
                   {avatarInitials || "?"}
                 </span>
-                <div>
-                  <p className="text-sm font-semibold">{profile.fullName || "Your name"}</p>
-                  <p className="text-xs text-aether-muted-dim">{profile.targetRole || "Target role"}</p>
+                {/* min-w-0 (ML-settings-001): this live preview echoes whatever
+                    is currently typed into the Full name field, unvalidated —
+                    an in-progress oversized value must wrap here too, not just
+                    in the post-save error banner, or it blows the page width
+                    out on its own regardless of what the server says. */}
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold">{profile.fullName || "Your name"}</p>
+                  <p className="break-words text-xs text-aether-muted-dim">{profile.targetRole || "Target role"}</p>
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
