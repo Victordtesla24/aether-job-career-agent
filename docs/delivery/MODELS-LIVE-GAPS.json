@@ -575,11 +575,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
@@ -598,11 +599,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
@@ -621,11 +623,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer (fold hint into Agents re-fix cluster)",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
@@ -644,11 +647,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-medium (real estimate or remove)",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
@@ -667,11 +671,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-medium",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
@@ -787,11 +792,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "covered by ML-agents-001 fix (fix/ml-agents-refix)",
       "fixCommits": [
         "06c57dd(tests)",
-        "b3f20f3(fix)"
+        "b3f20f3(fix)",
+        "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
