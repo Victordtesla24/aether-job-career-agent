@@ -200,7 +200,7 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "FIXED-DEPLOYED-PARTIAL",
+      "status": "VERIFIED-CLOSED",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -208,7 +208,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "Agents deep-test: per-agent pickers render for all agents + deterministic locked; BUT ML-agents-001 (STRUCTURED no-op) + ML-agents-002 (selection not displayed) are residual live gaps \u2192 re-fix.",
+      "verifiedBy": "Agents deep-test + batch-2 prod-verify @5eb8a36: per-agent picker renders for ALL agents (functional for overridable REASONING/HEAVY/FAST/LIGHT, honest lock for non-overridable STRUCTURED+deterministic), selection persists + displays saved model, config 422. \u00a73.2 fully met (residuals ML-agents-001/002 VERIFIED-CLOSED).",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
@@ -326,7 +326,7 @@
       "evidence": [
         "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [],
       "verifiedBy": ""
@@ -368,7 +368,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [],
       "verifiedBy": ""
