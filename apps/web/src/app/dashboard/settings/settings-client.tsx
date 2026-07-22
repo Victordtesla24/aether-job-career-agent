@@ -510,7 +510,18 @@ export default function SettingsClient({
         </p>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-4">
+      {/* min-w-0 (ML-adv-003, reopen of ML-settings-001): this grid is
+          display:grid at every breakpoint (a single implicit auto column
+          below xl, 4 explicit columns at xl+). Grid ITEMS get a
+          content-based automatic minimum size on BOTH axes by default (the
+          CSS Grid analogue of the flexbox min-width:auto trap) — an
+          unbroken-token descendant's huge min-content width becomes this
+          container's effective column-track floor, which visually overflows
+          the container's own (correctly viewport-bounded) box instead of
+          shrinking to it. min-w-0 here is defense-in-depth alongside the
+          grid-item min-w-0 below, which is where that automatic minimum
+          actually needs neutralising. */}
+      <div className="grid min-w-0 gap-6 xl:grid-cols-4">
         {/* Subnav */}
         <nav className="glass h-fit rounded-2xl border border-white/10 p-2 xl:col-span-1" aria-label="Settings sections">
           {SECTIONS.map((s) => (
@@ -530,7 +541,16 @@ export default function SettingsClient({
         </nav>
 
         {/* Sections */}
-        <div className="space-y-6 xl:col-span-3">
+        {/* min-w-0 (ML-adv-003): this is the grid ITEM that actually carries
+            the automatic-minimum-size trap — without it, this div's resolved
+            min-width defaults to its content's min-content (which, for an
+            unbroken 5000-char token nested inside, is ~tens of thousands of
+            px), forcing the single mobile column track that wide and
+            overflowing the page regardless of what the container above is
+            sized to. min-w-0 drops that floor to 0 so the track can shrink
+            to the viewport, letting the break-all fix below actually wrap
+            the text instead of merely being ready to. */}
+        <div className="min-w-0 space-y-6 xl:col-span-3">
           {(active === "profile" || active === "privacy") && (
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-profile">
               <h2 className="mb-4 text-[15px] font-semibold">Profile</h2>
@@ -538,14 +558,42 @@ export default function SettingsClient({
                 <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-aether-violet/20 text-lg font-bold text-aether-violet">
                   {avatarInitials || "?"}
                 </span>
-                {/* min-w-0 (ML-settings-001): this live preview echoes whatever
-                    is currently typed into the Full name field, unvalidated —
-                    an in-progress oversized value must wrap here too, not just
+                {/* min-w-0 + overflow-hidden (ML-settings-001 / ML-adv-003):
+                    this live preview echoes whatever is currently typed into
+                    the Full name / Target role fields, unvalidated — an
+                    in-progress oversized value must wrap here too, not just
                     in the post-save error banner, or it blows the page width
-                    out on its own regardless of what the server says. */}
-                <div className="min-w-0">
-                  <p className="break-words text-sm font-semibold">{profile.fullName || "Your name"}</p>
-                  <p className="break-words text-xs text-aether-muted-dim">{profile.targetRole || "Target role"}</p>
+                    out on its own regardless of what the server says.
+                    overflow-hidden is belt-and-suspenders: even if some future
+                    edit reintroduces an unbreakable descendant here, this box
+                    clips rather than leaking scrollable overflow up the page.
+                    See the two grid-ancestor min-w-0s below (ML-adv-003) for
+                    why min-w-0 alone here was insufficient for an UNBROKEN
+                    token — this div's own min-w-0 only stops IT from being
+                    the automatic-minimum-size floor; its ancestors need the
+                    same treatment, and the text itself needs a wrap mode that
+                    actually reduces min-content (see break-all below). */}
+                <div className="min-w-0 overflow-hidden">
+                  {/* break-all, not break-words (ML-adv-003): overflow-wrap:
+                      break-word (Tailwind's break-words) only inserts a break
+                      opportunity when normal line-breaking would otherwise
+                      overflow an ALREADY width-constrained box — it does not
+                      reduce the element's min-content contribution used by
+                      flex/grid ancestors' automatic-minimum-size sizing. A
+                      single unbroken token (e.g. 5000 'X's, no spaces) has
+                      no normal break opportunities, so with break-words its
+                      min-content is still the full unbroken run (~tens of
+                      thousands of px), which is exactly what propagated
+                      through the un-neutralised grid ancestors and blew out
+                      document.scrollWidth on prod. word-break: break-all
+                      (Tailwind: break-all) permits a break between ANY two
+                      characters, which collapses the min-content contribution
+                      down to a single character — combined with min-w-0 on
+                      every grid ancestor above, the browser now has both a
+                      track that's free to shrink to the viewport AND a text
+                      node that's willing to wrap into it. */}
+                  <p className="break-all text-sm font-semibold">{profile.fullName || "Your name"}</p>
+                  <p className="break-all text-xs text-aether-muted-dim">{profile.targetRole || "Target role"}</p>
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
