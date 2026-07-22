@@ -328,7 +328,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (polish, before gates)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5455d80(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -370,7 +372,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5455d80(tests)"
+      ],
       "verifiedBy": ""
     },
     {
