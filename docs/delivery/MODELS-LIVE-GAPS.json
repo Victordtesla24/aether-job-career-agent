@@ -193,7 +193,7 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-PARTIAL",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -201,7 +201,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test: per-agent pickers render for all agents + deterministic locked; BUT ML-agents-001 (STRUCTURED no-op) + ML-agents-002 (selection not displayed) are residual live gaps \u2192 re-fix.",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
@@ -219,7 +219,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -227,7 +227,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
@@ -245,7 +245,7 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -253,7 +253,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
@@ -291,7 +291,7 @@
         "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
         "branch fix/ml-catalog-fix1 test_ml_catalog_fix1.py"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -299,7 +299,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening).",
       "selectionSweep": "\u00a73.4.2 CATALOG-SWEEP.md: 337/337 selectable+persisted (100%, 0 exceptions), unknown-id\u2192422 works, config restored byte-identical, lastRefreshedAt+stale present. G-02 selection leg PASS."
@@ -558,6 +558,101 @@
       "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
       "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60.",
       "deployNote": "Batch-1 live @fb8361e: entitlement 200 (deployer-verified). qa prod-verify (6 fresh signups + concurrent) in flight."
+    },
+    {
+      "id": "ML-agents-001",
+      "screen": "/dashboard/agents",
+      "severity": "BLOCKER",
+      "category": "agent-integration",
+      "summary": "storyExtraction shows a FUNCTIONAL model picker but the pick is a silent no-op \u2014 saves 200 yet the run always uses the fixed qwen/qwen3-coder-next (STRUCTURED tier is deliberately non-overridable per design, to protect JSON). Dishonest UI: implies the pick takes effect. The ML-catalog-008 N2 lock covered only DETERMINISTIC backends; non-overridable LLM tiers (STRUCTURED) were missed. Control (emailAgent, REASONING) correctly honors overrides.",
+      "reproduction": [
+        "/dashboard/agents \u2192 storyExtraction \u2192 pick a model \u2192 save 200 \u2192 run \u2192 served model = qwen/qwen3-coder-next regardless (repro'd twice)"
+      ],
+      "expected": "Non-overridable agents (deterministic OR STRUCTURED-tier) show the honest 'fixed model / not user-selectable' lock \u2014 no functional picker that silently no-ops",
+      "observed": "storyExtraction shows a functional picker; pick ignored at run time",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-002",
+      "screen": "/dashboard/agents",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "'Model for this agent' display never updates after save+reload for any LLM agent \u2014 the config layer PERSISTS correctly (API verified) but the UI doesn't reflect the saved selection on reload (\u00a73.2.2 'current selection always visible' violated). Mocked FE unit tests missed this (they mock reload).",
+      "reproduction": [
+        "Pick+save a model on an LLM agent \u2192 reload \u2192 picker/display shows default, not the saved model (though GET config returns it)"
+      ],
+      "expected": "Current saved model is displayed as the selection after reload",
+      "observed": "Display doesn't update; config persisted underneath",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-003",
+      "screen": "/dashboard/agents",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "NEEDS ADJUDICATION (probe first): 'Connect with Anthropic' opens claude.com/cai (\u2192claude.ai/login, Cloudflare-challenged) vs the clean platform.claude.com/oauth/authorize. BUT per ADR-ML-2a claude.com/cai IS the SUBSCRIPTION (setup-token, scope user:inference) flow; platform.claude.com/oauth/authorize may be the API-KEY (org:create_api_key) flow which would break subscription billing. Probe whether platform.claude.com can do subscription-user:inference cleanly before changing. CF challenge on claude.ai/login is Anthropic's own bot-protection (real-operator-passable).",
+      "reproduction": [
+        "Agents \u2192 Anthropic \u2192 Connect with Anthropic \u2192 opens claude.com/cai/oauth/authorize \u2192 claude.ai/login shows Cloudflare challenge"
+      ],
+      "expected": "Subscription authorize flow that a real operator can complete (correct billing); ideally minimal friction",
+      "observed": "CF-challenged claude.ai login (subscription flow); platform.claude.com is cleaner but may be wrong billing flow",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "probe \u2192 orchestrator adjudication (env-overridable URL; possible config-only change)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-004",
+      "screen": "/dashboard/agents",
+      "severity": "BLOCKER",
+      "category": "placeholder-code",
+      "summary": "\u00a70.5/\u00a75 PLACEHOLDER: the Test Run modal's pre-run cost/token estimate is a STATIC PLACEHOLDER identical across all 22 agents (doesn't reflect the selected model's pricing). Placeholder data on a user-reachable path = automatic BLOCKER.",
+      "reproduction": [
+        "Open Test Run modal on any agent \u2192 cost/token estimate is the same static value for all 22 agents"
+      ],
+      "expected": "Real per-model estimate (from catalog promptPerM/completionPerM \u00d7 typical tokens) OR honest 'estimate unavailable' \u2014 never a fixed fake number",
+      "observed": "Identical static placeholder for all agents",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-medium (real estimate or remove)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-005",
+      "screen": "/dashboard/agents",
+      "severity": "MEDIUM",
+      "category": "visual",
+      "summary": "Mobile (390px) horizontal overflow from unwrapped price badges in the model picker (repro'd twice).",
+      "reproduction": [
+        "/dashboard/agents at 390px \u2192 horizontal scroll from price badges"
+      ],
+      "expected": "No horizontal overflow at 390px (wrap/truncate price badges)",
+      "observed": "Overflow from unwrapped badges",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
