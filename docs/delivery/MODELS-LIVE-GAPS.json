@@ -326,10 +326,11 @@
       "evidence": [
         "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [
-        "5455d80(tests)"
+        "5455d80(tests)",
+        "2c144c9(fix)"
       ],
       "verifiedBy": ""
     },
@@ -370,10 +371,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [
-        "5455d80(tests)"
+        "5455d80(tests)",
+        "2c144c9(fix)"
       ],
       "verifiedBy": ""
     },
