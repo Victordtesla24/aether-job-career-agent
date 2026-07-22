@@ -193,15 +193,17 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "9781d55 (tests)",
-        "5db6f43 (fix)"
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
       ],
       "verifiedBy": "",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
-      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-catalog-002",
@@ -217,15 +219,17 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "9781d55 (tests)",
-        "5db6f43 (fix)"
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
       ],
       "verifiedBy": "",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
-      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-catalog-003",
@@ -241,15 +245,17 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "9781d55 (tests)",
-        "5db6f43 (fix)"
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
       ],
       "verifiedBy": "",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
-      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-env-001",
@@ -285,15 +291,17 @@
         "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
         "branch fix/ml-catalog-fix1 test_ml_catalog_fix1.py"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "catalog-engineer (FIX-1)",
       "fixCommits": [
-        "9781d55 (tests)",
-        "5db6f43 (fix)"
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
       ],
       "verifiedBy": "",
       "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
-      "reviewVerdict": "FAIL (ML-catalog-fix1-diff-review.md): B1 silent model substitution (BLOCKER \u00a73.4.4), B2 billing implication not user-visible (\u00a73.1.3/\u00a73.3), N1 freshness-on-load discards real ts, N2 deterministic-agent picker no-ops. conftest fixture legit, resolve_provider unchanged, cred-002 green. Re-fix required."
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-agents-cred-005",
@@ -371,10 +379,16 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md B1; llm_client.py:8-10 docstring, get_model\u2192_auto\u2192_model_chain\u2192_call_live"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (ADR-ML-3)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
+      ],
+      "verifiedBy": "",
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-catalog-007",
@@ -390,10 +404,16 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md B2"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-hard",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
+      ],
+      "verifiedBy": "",
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
       "id": "ML-catalog-008",
@@ -410,10 +430,16 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md N1+N2"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-QA",
       "owner": "fixer-hard",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "9781d55/da0e558(tests)",
+        "5db6f43(impl)",
+        "7a7d3a0(refix-tests)",
+        "20838de(refix)"
+      ],
+      "verifiedBy": "",
+      "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     }
   ]
 }
