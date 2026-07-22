@@ -55,13 +55,13 @@
         "uat/reports/evidence/models-live/catalog/ML-agents-cred-001-RCA.md",
         "api.log 422s 2026-07-22T02:53:18Z + 02:53:24Z (operator then DELETEd credential)"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "deployer \u2192 qa (prod verify)",
       "fixCommits": [
         "9396bae (tests)",
         "ddd0a66 (fix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "qa-adversary (opus) LIVE prod @d105031, 2026-07-22T04:13-04:15Z; adversarial/ML-agents-cred-001-prodverify.md; server-log corroborated; state restored",
       "rca": "agents.py:2110-2121 accepts only sk-ant-api / sk-ant-oat01- prefixes, no whitespace strip, 422 text hardcodes oat01. Operator on-disk token sk-ant-oat01- (128ch) but EXPIRED 2026-07-21; pasted value evidently matched neither prefix (newer-prefix or unicode-whitespace hypothesis). No regression since d2df452.",
       "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat \u2014 would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422.",
       "reviewVerdict": "PASS (diff review /tmp .../ML-cred-001-diff-review.md): compliance hole closed (^sk-ant-oat\\d+- both files), secret hygiene clean, scope tight, tests load-bearing, 14/14+5/5 re-run green independently."
