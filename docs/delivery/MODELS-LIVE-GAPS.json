@@ -173,9 +173,12 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md",
         "AgentRun/BackgroundJob DB rows"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": "",
       "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only."
     },
@@ -696,9 +699,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard (cluster)",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": "",
       "rca": "Pipeline path degrades gracefully agents.py:1558-1600; async single-agent path workers/tasks.py:262 does NOT; FE hardcodes failed async\u2192502 api/agents.ts:92-97 while rejection matcher requires 422 rejection.ts:74 \u2192 structurally unreachable. Fix: async path graceful-degrade + align FE matcher to the async failure shape."
     },
@@ -716,9 +722,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -735,9 +744,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": "",
       "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only."
     },
@@ -817,9 +829,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (batch w/ pipeline)",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": "",
       "rca": "_execute_reserved_run agents.py:801-822 meters cost/tokens generically from payload size + stamps get_model('REASONING') for any _LLM_TIER_BY_BACKEND agent, blind to EmailAgent._triage() no-op/early-return (zero LLM calls). Fix: don't meter/charge or stamp a model when no LLM call was made."
     },
@@ -837,9 +852,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/PIPELINE-RCA.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard",
-      "fixCommits": [],
+      "fixCommits": [
+        "86f37f8(tests)",
+        "93bfc8c(fix, rebased)"
+      ],
       "verifiedBy": ""
     },
     {
