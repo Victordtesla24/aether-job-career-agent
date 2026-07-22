@@ -186,3 +186,31 @@ export function deriveBudgetPresetModel(
   if (known) return known.id;
   return pool.reduce((a, b) => (b.promptPerM > a.promptPerM ? b : a)).id;
 }
+
+/** Unicode whitespace/invisible characters plain `.trim()` does not fully
+ * strip from a pasted credential (ML-agents-cred-001): NBSP (U+00A0) and
+ * BOM/ZWNBSP (U+FEFF) ARE already covered by JS's `WhiteSpace` production,
+ * but the zero-width space (U+200B, category Cf — a *format* character, not
+ * whitespace) and the U+2000-U+200A general-punctuation spaces are not.
+ * Listed explicitly (rather than relying on `.trim()` alone) so this is the
+ * single, complete source of truth mirroring the backend's
+ * `_normalize_credential_secret` (apps/api/app/routers/agents.py). */
+const INVISIBLE_CREDENTIAL_CHARS_RE = /[\u00A0\u200B\uFEFF\u2000-\u200A]/g;
+
+/** Strip ASCII + Unicode whitespace/invisible chars and ONE pair of matching
+ * surrounding quotes from a pasted provider credential (ML-agents-cred-001).
+ * Cleans up common "smart paste" artifacts (NBSP, ZWSP, BOM, a general-
+ * punctuation space) and a value copied out of a JSON/YAML snippet — quotes
+ * and all, including ASCII whitespace nested INSIDE that quote pair — so a
+ * paste artifact never causes a false-negative credential rejection. */
+export function normalizeCredentialSecret(secret: string): string {
+  let value = secret.replace(INVISIBLE_CREDENTIAL_CHARS_RE, "").trim();
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+      value = value.slice(1, -1).replace(INVISIBLE_CREDENTIAL_CHARS_RE, "").trim();
+    }
+  }
+  return value;
+}

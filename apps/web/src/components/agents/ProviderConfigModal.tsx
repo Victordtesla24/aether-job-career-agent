@@ -25,7 +25,7 @@ import {
   type Provider,
   type ProviderAuthMode,
 } from "./api";
-import { providerSourceBadge, type ProviderSourceBadge } from "./logic";
+import { normalizeCredentialSecret, providerSourceBadge, type ProviderSourceBadge } from "./logic";
 import { providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
 
 interface AuthModeOption {
@@ -180,7 +180,7 @@ export default function ProviderConfigModal({
     view.source === "database" || view.source === "environment" || view.status === "connected";
 
   const save = async () => {
-    const trimmed = secret.trim();
+    const trimmed = normalizeCredentialSecret(secret);
     if (!trimmed || busy) return;
     setBusy("saving");
     setError(null);

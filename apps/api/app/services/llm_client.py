@@ -30,6 +30,7 @@ import contextvars
 import json
 import logging
 import os
+import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -459,15 +460,26 @@ def resolve_provider(model: str) -> str:
     return "openrouter"
 
 
+#: Digit-anchored Claude-Code OAuth token prefix (ML-agents-cred-001, mirrors
+#: ``app.routers.agents._ANTHROPIC_OAT_TOKEN_RE``): accepts any version
+#: generation (oat01, oat02, oat03, …) but REQUIRES at least one digit
+#: between "oat" and the trailing hyphen. A bare ``sk-ant-oat-`` (no digit)
+#: must NOT match — it stays classified as ``subscription_oauth`` below.
+_ANTHROPIC_OAT_TOKEN_RE = re.compile(r"^sk-ant-oat\d+-")
+
+
 def _infer_anthropic_auth_mode(secret: str) -> str:
     """Anthropic authMode from the key prefix (single source of truth = prefix).
 
-    ``sk-ant-oat01-…`` is a pasted Claude Code OAuth token → ``oauth_token``
-    (supported, GAP-P7-DEF-A). Any other ``sk-ant-oat…`` is a legacy in-app
-    subscription-OAuth token → ``subscription_oauth`` (still blocked; ADR-P7-01
-    NON-goal). Everything else → ``api_key``.
+    A digit-versioned ``sk-ant-oat<N>-…`` token (oat01, oat02, …) is a pasted
+    Claude Code OAuth token → ``oauth_token`` (supported, GAP-P7-DEF-A /
+    ML-agents-cred-001 — Anthropic's CLI increments this version digit over
+    time, so the match is not pinned to oat01 alone). Any other
+    ``sk-ant-oat…`` (e.g. the legacy bare, non-versioned ``sk-ant-oat-``) is a
+    legacy in-app subscription-OAuth token → ``subscription_oauth`` (still
+    blocked; ADR-P7-01 NON-goal). Everything else → ``api_key``.
     """
-    if secret.startswith("sk-ant-oat01-"):
+    if _ANTHROPIC_OAT_TOKEN_RE.match(secret):
         return "oauth_token"
     if secret.startswith("sk-ant-oat"):
         return "subscription_oauth"
