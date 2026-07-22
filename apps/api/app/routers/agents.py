@@ -35,6 +35,7 @@ from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,
     AnthropicOAuthStateRepository,
+    AnthropicOAuthTokenRepository,
     UserProviderCredentialRepository,
     _ensure_user_agent_tables,
 )
@@ -1917,8 +1918,25 @@ def _iso_or_none(value: Any) -> str | None:
     return value.isoformat() if hasattr(value, "isoformat") else (value or None)
 
 
+def _anthropic_oauth_needs_reauth(user_id: str | None) -> bool:
+    """True when this user's Anthropic subscription OAuth session is marked
+    needs_reauth (auto-refresh failed / token revoked — ADR-ML-2a DECISION-1b).
+
+    Degrades to False on ANY read error so the providers panel never fails
+    because the token store is unavailable. Reads the REAL stored row — it never
+    fabricates a status.
+    """
+    if not user_id:
+        return False
+    try:
+        row = AnthropicOAuthTokenRepository().get(user_id)
+    except Exception:  # noqa: BLE001 — providers panel must stay up
+        return False
+    return bool(row and row.get("scopes") == "needs_reauth")
+
+
 def _build_provider_entry(
-    seed: dict[str, Any], override: dict[str, Any]
+    seed: dict[str, Any], override: dict[str, Any], user_id: str | None = None
 ) -> dict[str, Any]:
     """One provider's honest status: DB credential FIRST, then env, then none.
 
@@ -1980,6 +1998,20 @@ def _build_provider_entry(
         "warning",
     ):
         status = override["status"]
+    # Honest needs_reauth surfacing (ML-agents-cred-002, ADR-ML-2a DECISION-1b):
+    # a subscription OAuth session whose auto-refresh failed / token was revoked
+    # is marked needs_reauth. The (now-stale) deployment ProviderCredential row
+    # would otherwise still render "connected" — a false-optimistic badge. Demote
+    # to "warning" (the status the FE already renders as re-authenticate) and
+    # emit an explicit ``needsReauth`` flag so the modal shows the Reconnect /
+    # Renew affordance. Reads the REAL token row; never fabricated.
+    needs_reauth = _anthropic_oauth_needs_reauth(user_id) if provider_id == "anthropic" else False
+    if needs_reauth:
+        status = "warning"
+        detail = (
+            "Anthropic subscription session expired — reconnect required "
+            "(Connect with Anthropic, or Renew)."
+        )
     model = override.get("model") or env_model
     return {
         "id": provider_id,
@@ -1996,6 +2028,7 @@ def _build_provider_entry(
         "baseUrl": base_url,
         "lastVerifiedAt": last_verified_at,
         "lastVerifyStatus": last_verify_status,
+        "needsReauth": needs_reauth,
         "model": model if status == "connected" else "",
         "detail": detail,
     }
@@ -2016,7 +2049,7 @@ def _user_provider_overrides(user_id: str) -> dict[str, dict[str, Any]]:
 def _provider_status_object(provider_id: str, user_id: str) -> dict[str, Any]:
     """Full masked status object for a single provider (PUT/DELETE responses)."""
     override = _user_provider_overrides(user_id).get(provider_id, {})
-    return _build_provider_entry(_PROVIDER_SEED_BY_ID[provider_id], override)
+    return _build_provider_entry(_PROVIDER_SEED_BY_ID[provider_id], override, user_id)
 
 
 @router.get("/providers")
@@ -2032,7 +2065,7 @@ def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
     """
     overrides = _user_provider_overrides(current_user["id"])
     return [
-        _build_provider_entry(seed, overrides.get(seed["id"], {}))
+        _build_provider_entry(seed, overrides.get(seed["id"], {}), current_user["id"])
         for seed in PROVIDER_SEED
     ]
 

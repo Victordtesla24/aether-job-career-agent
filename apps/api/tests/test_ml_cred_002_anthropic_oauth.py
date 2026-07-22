@@ -772,3 +772,66 @@ def test_refresh_if_needed_does_not_refresh_a_fresh_token(
 
     pc = ProviderCredentialRepository().get_secret("anthropic")
     assert pc["secret"] == FAKE_ACCESS_1, "a fresh token must be left completely untouched"
+
+
+# ===========================================================================
+# 12. needs_reauth STATUS honesty (ADR-ML-2a DECISION-1b): after a refresh
+#     failure the anthropic provider status must NOT show "connected" — the
+#     provider entry reports an honest reconnect-required state read from the
+#     REAL AnthropicOAuthToken row.
+# FAIL-BEFORE (WHY): ``_build_provider_entry`` never reads AnthropicOAuthToken,
+# so the still-present (now-stale) ProviderCredential row renders "connected"
+# over a needs_reauth session — a false-optimistic badge — and no ``needsReauth``
+# signal is surfaced to the FE.
+# ===========================================================================
+
+
+def test_provider_status_reports_needs_reauth_not_connected(
+    client, auth_headers, test_user_id, _clean_anthropic_oauth_state
+):
+    from app.repositories.user_provider_credential import AnthropicOAuthTokenRepository
+
+    # The deployment credential still holds the (now-stale) access token …
+    _seed_deployment_anthropic_credential(FAKE_ACCESS_1)
+    repo = AnthropicOAuthTokenRepository()
+    repo.upsert(
+        test_user_id,
+        access_ciphertext=vault.encrypt(FAKE_ACCESS_1),
+        refresh_ciphertext=vault.encrypt(FAKE_REFRESH_1),
+        secret_hint=vault.secret_hint(FAKE_ACCESS_1),
+        expires_at="2020-01-01T00:00:00Z",
+        scopes="user:inference",
+    )
+    # … but the OAuth session has been marked needs_reauth (refresh failed).
+    repo.mark_needs_reauth(test_user_id)
+
+    resp = client.get("/agents/providers", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    anthropic = next(p for p in resp.json() if p["id"] == "anthropic")
+    assert anthropic["status"] != "connected", anthropic
+    assert anthropic.get("needsReauth") is True, anthropic
+    # The honest hint must never leak the token.
+    assert FAKE_ACCESS_1 not in resp.text
+
+
+def test_provider_status_healthy_oauth_session_still_connected(
+    client, auth_headers, test_user_id, _clean_anthropic_oauth_state
+):
+    """Guard against over-demotion: a healthy (non-needs_reauth) OAuth session
+    with a stored deployment credential still reports ``connected``."""
+    from app.repositories.user_provider_credential import AnthropicOAuthTokenRepository
+
+    _seed_deployment_anthropic_credential(FAKE_ACCESS_1)
+    AnthropicOAuthTokenRepository().upsert(
+        test_user_id,
+        access_ciphertext=vault.encrypt(FAKE_ACCESS_1),
+        refresh_ciphertext=vault.encrypt(FAKE_REFRESH_1),
+        secret_hint=vault.secret_hint(FAKE_ACCESS_1),
+        expires_at="2099-01-01T00:00:00Z",
+        scopes="user:inference",
+    )
+    resp = client.get("/agents/providers", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    anthropic = next(p for p in resp.json() if p["id"] == "anthropic")
+    assert anthropic["status"] == "connected", anthropic
+    assert not anthropic.get("needsReauth"), anthropic

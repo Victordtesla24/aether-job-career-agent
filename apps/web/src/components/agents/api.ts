@@ -53,6 +53,11 @@ export const ProviderSchema = z.object({
   secretHint: z.string().nullish(),
   lastVerifiedAt: z.string().nullish(),
   lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
+  // ML-agents-cred-002 (ADR-ML-2a DECISION-1b): true when the Anthropic
+  // subscription OAuth session was marked needs_reauth (auto-refresh failed /
+  // token revoked). Drives the modal's Reconnect / Renew affordance. Its
+  // `status` is demoted server-side to "warning" (never "connected").
+  needsReauth: z.boolean().nullish(),
 });
 export type Provider = z.infer<typeof ProviderSchema>;
 
@@ -407,6 +412,24 @@ export async function exchangeAnthropicOAuth(
         ...o,
         method: "POST",
         body: { pastedCode },
+      }),
+    ) as Provider;
+}
+
+/**
+ * Renew the stored Anthropic subscription session: POST
+ * /agents/providers/anthropic/oauth/refresh. Rotates the access + refresh token
+ * server-side and returns the masked provider row. On an honest refresh failure
+ * the server responds 502 and the token is marked needs_reauth (never a stale
+ * token, never a cross-provider fallback) — surfaced here as a thrown ApiError.
+ */
+export async function refreshAnthropicOAuth(o: RequestOptions = {}): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>("/agents/providers/anthropic/oauth/refresh", {
+        ...o,
+        method: "POST",
       }),
     ) as Provider;
 }

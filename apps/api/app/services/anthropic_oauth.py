@@ -107,15 +107,6 @@ def _refresh_skew_seconds() -> int:
         return _DEFAULT_REFRESH_SKEW_SECONDS
 
 
-#: Module-level "constants" (surface required by the test contract). The
-#: authorize-URL builder uses the lazy helpers above, so a test that
-#: ``monkeypatch.setenv`` (without reload) OR ``importlib.reload`` both pick up
-#: the override.
-AUTHORIZE_URL = _authorize_url()
-CLIENT_ID = _client_id()
-SCOPE = _scope()
-
-
 class OAuthExchangeError(RuntimeError):
     """An Anthropic token-endpoint call failed honestly (bad grant, unexpected
     response shape, network error). The message NEVER contains a token."""

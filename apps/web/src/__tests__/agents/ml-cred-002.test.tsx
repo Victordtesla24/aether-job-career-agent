@@ -44,6 +44,7 @@ const deleteCredentialMock = vi.fn();
 const verifyMock = vi.fn();
 const startAnthropicOAuthMock = vi.fn();
 const exchangeAnthropicOAuthMock = vi.fn();
+const refreshAnthropicOAuthMock = vi.fn();
 
 vi.mock("../../components/agents/api", () => ({
   putProviderCredential: (...args: unknown[]) => putCredentialMock(...args),
@@ -54,6 +55,7 @@ vi.mock("../../components/agents/api", () => ({
   // isolated to the missing UI control, not a module-resolution error.
   startAnthropicOAuth: (...args: unknown[]) => startAnthropicOAuthMock(...args),
   exchangeAnthropicOAuth: (...args: unknown[]) => exchangeAnthropicOAuthMock(...args),
+  refreshAnthropicOAuth: (...args: unknown[]) => refreshAnthropicOAuthMock(...args),
 }));
 
 // eslint-disable-next-line import/first
@@ -81,6 +83,7 @@ afterEach(() => {
   verifyMock.mockReset();
   startAnthropicOAuthMock.mockReset();
   exchangeAnthropicOAuthMock.mockReset();
+  refreshAnthropicOAuthMock.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -207,5 +210,46 @@ describe("ProviderConfigModal — Connect with Anthropic (ML-agents-cred-002, AD
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     // The raw pasted code must not remain visible in the DOM once submitted.
     expect(screen.queryByDisplayValue("FAKEONETIMECODE#FAKESTATE")).toBeNull();
+  });
+
+  it("renders a Reconnect/Renew affordance for a needs_reauth anthropic provider and calls refresh (ADR-ML-2a DECISION-1b)", async () => {
+    refreshAnthropicOAuthMock.mockResolvedValue({
+      ...anthropic,
+      status: "connected",
+      source: "database",
+      authMode: "oauth_token",
+      secretHint: "…f00d",
+      detail: "Subscription session active",
+      needsReauth: false,
+    });
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ProviderConfigModal
+        provider={{
+          ...anthropic,
+          status: "warning",
+          authMode: "oauth_token",
+          detail: "Subscription session expired",
+          needsReauth: true,
+        }}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    // FAIL-BEFORE (WHY): there is no needs_reauth affordance today — the modal
+    // never calls the working /oauth/refresh endpoint, so no reconnect control
+    // renders for a needs_reauth session.
+    const reconnect = screen.getByTestId("anthropic-oauth-reconnect");
+    expect(reconnect).toBeTruthy();
+    // The Connect-with-Anthropic control stays available (re-initiate OAuth).
+    expect(screen.getByTestId("anthropic-oauth-connect")).toBeTruthy();
+
+    fireEvent.click(reconnect);
+
+    await waitFor(() => expect(refreshAnthropicOAuthMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });
 });

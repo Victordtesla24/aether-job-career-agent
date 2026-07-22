@@ -22,6 +22,7 @@ import {
   deleteProviderCredential,
   exchangeAnthropicOAuth,
   putProviderCredential,
+  refreshAnthropicOAuth,
   startAnthropicOAuth,
   verifyProvider,
   type Provider,
@@ -188,6 +189,14 @@ export default function ProviderConfigModal({
   const active = options.find((o) => o.value === mode) ?? options[0];
   const badge = providerSourceBadge(view);
   const hasStoredCredential = view.source === "database";
+  // ML-agents-cred-002 (ADR-ML-2a DECISION-1b): the Anthropic subscription OAuth
+  // session was marked needs_reauth (auto-refresh failed / token revoked) — show
+  // the Reconnect / Renew affordance. The server demotes status to "warning", so
+  // treat an oauth_token credential in "warning" as needs_reauth too.
+  const anthropicNeedsReauth =
+    view.id === "anthropic" &&
+    (view.needsReauth === true ||
+      (view.status === "warning" && view.authMode === "oauth_token"));
   const canVerify =
     view.source === "database" || view.source === "environment" || view.status === "connected";
 
@@ -279,6 +288,27 @@ export default function ProviderConfigModal({
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
       setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Connect-with-Anthropic renew: rotate the stored subscription session via the
+  // /oauth/refresh endpoint (ADR-ML-2a DECISION-1b — needs_reauth recovery). An
+  // honest failure surfaces the server's message; it never fakes a green badge.
+  const renewAnthropic = async () => {
+    if (busy) return;
+    setBusy("connecting");
+    setError(null);
+    onNotice({ kind: "info", text: `Renewing ${view.name} session…` });
+    try {
+      const updated = await refreshAnthropicOAuth();
+      setView((v) => (v ? { ...v, ...updated } : updated));
+      onNotice({ kind: "success", text: `${view.name} subscription session renewed.` });
+      await onSaved();
+    } catch (e) {
+      onNotice(providerCredentialErrorNotice(e, `Renewing ${view.name} session`));
+      setError(e instanceof Error ? e.message.slice(0, 160) : "Renew failed");
     } finally {
       setBusy(null);
     }
@@ -383,6 +413,28 @@ export default function ProviderConfigModal({
 
         {view.id === "anthropic" ? (
           <div className="mb-4 rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-3">
+            {anthropicNeedsReauth ? (
+              <div
+                data-testid="anthropic-oauth-needs-reauth"
+                role="alert"
+                className="mb-3 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2.5"
+              >
+                <p className="text-[11px] leading-relaxed text-aether-amber">
+                  <i className="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true" />
+                  Your Anthropic subscription session expired. Renew it now, or click
+                  Connect with Anthropic to sign in again.
+                </p>
+                <button
+                  type="button"
+                  data-testid="anthropic-oauth-reconnect"
+                  onClick={() => void renewAnthropic()}
+                  disabled={busy !== null}
+                  className="mt-2 rounded-lg border border-aether-amber/30 bg-aether-amber/15 px-3 py-1.5 text-[11px] font-semibold text-aether-amber transition hover:bg-aether-amber/25 disabled:opacity-50"
+                >
+                  {busy === "connecting" ? "Renewing…" : "Renew now"}
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               data-testid="anthropic-oauth-connect"
