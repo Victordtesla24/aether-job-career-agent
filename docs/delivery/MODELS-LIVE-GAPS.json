@@ -575,7 +575,9 @@
       ],
       "status": "IN-FIX",
       "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
-      "fixCommits": [],
+      "fixCommits": [
+        "06c57dd(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -594,7 +596,9 @@
       ],
       "status": "IN-FIX",
       "owner": "test-author \u2192 fixer-hard",
-      "fixCommits": [],
+      "fixCommits": [
+        "06c57dd(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -619,9 +623,9 @@
     {
       "id": "ML-agents-004",
       "screen": "/dashboard/agents",
-      "severity": "BLOCKER",
-      "category": "placeholder-code",
-      "summary": "\u00a70.5/\u00a75 PLACEHOLDER: the Test Run modal's pre-run cost/token estimate is a STATIC PLACEHOLDER identical across all 22 agents (doesn't reflect the selected model's pricing). Placeholder data on a user-reachable path = automatic BLOCKER.",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "\u00a7 correctness (RCA-refined, NOT placeholder): the Test Run cost/token estimate + the catalog DISPLAY model both call _model_for_agent(backend) WITHOUT override=_user_model_override(...) (agents.py agent_catalog ~1725 + test_run ~2764), so they reflect the TIER DEFAULT model, not the user's saved per-agent selection \u2014 estimate is a real number for the WRONG model, appearing static across same-tier agents. (Downgraded BLOCKER\u2192HIGH: real math on wrong model, not fabricated data.) Shares root cause with ML-agents-002.",
       "reproduction": [
         "Open Test Run modal on any agent \u2192 cost/token estimate is the same static value for all 22 agents"
       ],
@@ -651,7 +655,9 @@
       ],
       "status": "IN-FIX",
       "owner": "test-author \u2192 fixer-medium",
-      "fixCommits": [],
+      "fixCommits": [
+        "06c57dd(tests)"
+      ],
       "verifiedBy": ""
     }
   ]

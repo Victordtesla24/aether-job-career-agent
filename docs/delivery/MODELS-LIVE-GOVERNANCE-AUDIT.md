@@ -76,7 +76,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 60 | 2026-07-22 (resumed) | screen-tester | sonnet | §4.5 AGENTS deep pass | ✅ core verified (332 curated, freshness, refresh, deterministic-locked, real gen); 5 findings: ML-agents-001 BLOCKER (STRUCTURED no-op picker), 002 HIGH (selection not displayed), 003 HIGH (OAuth URL — probing), 004 BLOCKER (placeholder cost), 005 MED (mobile) |
 | 61 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admin-001/002 diff review | ✅ PASS (mutation-tested; count-safe LEFT JOIN, 0 overflow 6 routes, desktop unchanged, 22/22); batch-2 |
 | 62 | 2026-07-22 (resumed) | evidence | haiku | ML-agents-003 OAuth-URL adjudication probe | ✅ claude.com/cai=SUBSCRIPTION (correct); platform.claude.com=API-key (would break billing); CF=Anthropic's, passable → KEEP URL + add hint (ADR-ML-5) |
-| 63 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-agents-001/002/004/005 re-fix tests, branch fix/ml-agents-refix | dispatched |
+| 63 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-agents-001/002/004/005 re-fix tests | ✅ @06c57dd; 14 pytest+2 vitest+2 Playwright fail-before; RCA: 002+004 share missing override thread, 001 needs modelOverridable |
+| 64 | 2026-07-22 (resumed) | fixer-hard | opus (wt agent-a30eb7f3) | Agents re-fix cluster (override thread + modelOverridable lock + badge wrap + CF hint) | dispatched |
 | 55 | 2026-07-22 (resumed) | deployer | haiku | BATCH-1 deploy (curation+signup-race) | ✅ LIVE @fb8361e (merges 27dcfb0+f8835fe, 332 models curated, olmo absent, entitlement 200, 0 log errs, pushed, wt cleaned) |
 | 57 | 2026-07-22 (resumed) | screen-tester | sonnet | §4.5 AGENTS screen DEEP pass (FIX-1 picker+curation+cred-002 UI + agent run) | dispatched |
 | 58 | 2026-07-22 (resumed) | evidence | haiku | ML-signup-001 prod-verify | ✅ VERIFIED-CLOSED (6/6 entitlement 200, concurrent all-200 + 1 sub/quota, logs clean, cleaned) |
