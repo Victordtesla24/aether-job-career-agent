@@ -186,9 +186,11 @@
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
         "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
-      "fixCommits": [],
+      "fixCommits": [
+        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -205,9 +207,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
-      "fixCommits": [],
+      "fixCommits": [
+        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -224,9 +228,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
       ],
-      "status": "OPEN",
+      "status": "IN-FIX",
       "owner": "catalog-engineer (FIX-1)",
-      "fixCommits": [],
+      "fixCommits": [
+        "da0e558 (failing tests, branch fix/ml-catalog-fix1)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -247,6 +253,26 @@
       "status": "OPEN",
       "owner": "G-07 stage: clean stale worktrees + serialized fresh full run",
       "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding."
+    },
+    {
+      "id": "ML-catalog-004",
+      "screen": "Agents",
+      "severity": "HIGH",
+      "category": "validation",
+      "summary": "\u00a73.1.3 GAP: PUT /agents/config/{agent_key} accepts ANY string as model with ZERO catalog validation. \u00a73 requires accepting any id present in the live catalog and rejecting unknown ids with an honest 422 naming the problem.",
+      "reproduction": [
+        "PUT /api/agents/config/{agent_key} body {model:'totally-made-up/nonexistent'} \u2192 currently 200 (should be 422)"
+      ],
+      "expected": "Valid catalog id \u2192 200; unknown id \u2192 422 naming the problem; no hardcoded allowlist rejecting valid OpenRouter models",
+      "observed": "Any string accepted (no validation against live catalog)",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
+        "branch fix/ml-catalog-fix1 test_ml_catalog_fix1.py"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer (FIX-1)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
