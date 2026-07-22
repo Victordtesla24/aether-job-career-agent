@@ -575,10 +575,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
       "fixCommits": [
-        "06c57dd(tests)"
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
       ],
       "verifiedBy": ""
     },
@@ -596,10 +597,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [
-        "06c57dd(tests)"
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
       ],
       "verifiedBy": ""
     },
@@ -617,9 +619,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer (fold hint into Agents re-fix cluster)",
-      "fixCommits": [],
+      "fixCommits": [
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -636,9 +641,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-medium (real estimate or remove)",
-      "fixCommits": [],
+      "fixCommits": [
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -655,10 +663,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-medium",
       "fixCommits": [
-        "06c57dd(tests)"
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
       ],
       "verifiedBy": ""
     },
@@ -773,10 +782,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "covered by ML-agents-001 fix (fix/ml-agents-refix)",
       "fixCommits": [
-        "06c57dd(tests)"
+        "06c57dd(tests)",
+        "b3f20f3(fix)"
       ],
       "verifiedBy": ""
     },
