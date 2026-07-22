@@ -101,7 +101,10 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 93 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admindetail-001 diff review | ✅ PASS (revert-verified; blank rejected, deliberate-0 preserved, backend untouched, 556/556 exit-0; 1 non-blocking stash-desync disclosed+recovered) |
 | 90 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-adv-003 CSS-correctness review | ✅ PASS (min-w-0 grid-item load-bearing + break-all min-content-correct, desktop unchanged, 553/553; PROD-verify pending) |
 | 91 | 2026-07-22 (resumed) | model-prober | sonnet | §8 STAGE-3 catalog re-sample | ✅ ALL PASS (335 models, 5 denylisted absent, 70/335 selection persist+restore, unknown 422, 10 run-probes no-fixture, no-substitution re-confirmed 429→honest+net-zero+no-fallback, state restored) — G-02/G-03 re-verified |
-| 94 | 2026-07-22 (resumed) | deployer | haiku | FINAL deploy (ML-adv-003 + ML-admindetail-001) + all-batch preservation | dispatched |
+| 94 | 2026-07-22 (resumed) | deployer | haiku | FINAL deploy (ML-adv-003 + ML-admindetail-001) | ✅ LIVE @51f1ec8 (all 5 batches preserved, health ok, 3 units, 0 log errs, remote=main only+0 PRs, pushed) — 🏁 ALL CODE FIXES DEPLOYED |
+| 95 | 2026-07-22 (resumed) | screen-tester | sonnet | FINAL-fixes PROD-verify (settings 5000-char-token overflow authoritative + spend-cap blank-reject) | dispatched |
+| 96 | 2026-07-22 (resumed) | runtime-monitor | haiku | G-06 60-min clean observation window (final build @51f1ec8) | dispatched |
+| 97 | 2026-07-22 (resumed) | deployer | haiku | G-07 prune stale worktrees/branches + fresh full suites (counts logged) | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
 | 80 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a6e3b71a) | batch-5 implement | ✅ @2c144c9 (stranded on bg-waiter → resumed→committed); upstream_status 422-vs-502, needs_reauth gated on source!=none; 95/95, 0 regr, cred-002 45 green |
 | 81 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-5 diff review | ✅ PASS (revert-verified; 422/502 honest, refresh untouched, delete→unconfigured, live-cred warning, 48/48; 2 non-blocking) |
