@@ -925,13 +925,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5a45937(re-fix)",
         "merge 35f34f0/51f1ec8 (LIVE final)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "final-fixes prod-verify LIVE @51f1ec8 (final-fixes-prodverify.md), verified twice, AUTHORITATIVE: /dashboard/settings 390px = 390/390 (0px overflow) across all steps incl. 5000-char unbroken name (was 49740px); desktop 1440/1440; bounded honest error no raw-echo; state restored.",
       "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes.",
       "reopenNote": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: bounded-error+1440px HELD, but 390px no-overflow FAILED \u2014 a 5000-char UNBROKEN-token name still blows the page to 49740px. Root: break-words (overflow-wrap:break-word) doesn't reduce min-content for an unbroken token; grid item .space-y-6 xl:col-span-3 (:533) + grid container (:513) lack min-w-0. Batch-4 fixed the inner div + banner but MISSED this. LESSON: the fixer's LOCAL Playwright passed but PROD fails \u2014 local e2e env not prod-faithful for CSS overflow. Re-fix via ML-adv-003."
     },
@@ -997,13 +997,13 @@
         "uat/reports/evidence/models-live/adversarial/STAGE3-screens-findings.md",
         "stage3-assets/"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer-medium (break-all + min-w-0 :533) \u2192 PROD re-verify",
       "fixCommits": [
         "5a45937(re-fix)",
         "merge 35f34f0/51f1ec8 (LIVE final)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "final-fixes prod-verify LIVE @51f1ec8 (final-fixes-prodverify.md), verified twice, AUTHORITATIVE: /dashboard/settings 390px = 390/390 (0px overflow) across all steps incl. 5000-char unbroken name (was 49740px); desktop 1440/1440; bounded honest error no raw-echo; state restored.",
       "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes."
     },
     {
@@ -1058,14 +1058,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-medium (validation)",
       "fixCommits": [
         "0afe860(tests)",
         "a975473(fix)",
         "merge 35f34f0/51f1ec8 (LIVE final)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "final-fixes prod-verify LIVE @51f1ec8 (final-fixes-prodverify.md), verified twice, AUTHORITATIVE: blank spend-cap rejected client-side (no API call, AdminAuditLog 0 rows); deliberate-0 + positive save (2 audit rows each); corroborated UI+DB+audit; throwaway users cleaned.",
       "rca": "FE-only page.tsx:59-63 onSaveCap Number('')===0 passes >=0 guard. Backend already correct (Field(ge=0) 422s empty). Fix: capInput.trim()==='' reject before Number(). Preserve deliberate 0.",
       "reviewVerdict": "PASS (ML-admindetail-001-diff-review.md, revert-verified): trim()==='' guard before Number() (blank rejected, deliberate-0 preserved), backend untouched, 3/3+556/556 exit-0. Final deploy w/ ML-adv-003."
     },
