@@ -173,11 +173,12 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md",
         "AgentRun/BackgroundJob DB rows"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
@@ -700,11 +701,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (cluster)",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "rca": "Pipeline path degrades gracefully agents.py:1558-1600; async single-agent path workers/tasks.py:262 does NOT; FE hardcodes failed async\u2192502 api/agents.ts:92-97 while rejection matcher requires 422 rejection.ts:74 \u2192 structurally unreachable. Fix: async path graceful-degrade + align FE matcher to the async failure shape.",
@@ -724,11 +726,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
@@ -747,11 +750,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
@@ -833,11 +837,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (batch w/ pipeline)",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "rca": "_execute_reserved_run agents.py:801-822 meters cost/tokens generically from payload size + stamps get_model('REASONING') for any _LLM_TIER_BY_BACKEND agent, blind to EmailAgent._triage() no-op/early-return (zero LLM calls). Fix: don't meter/charge or stamp a model when no LLM call was made.",
@@ -857,11 +862,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/catalog/PIPELINE-RCA.md"
       ],
-      "status": "FIXED-AWAITING-DEPLOY",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [
         "86f37f8(tests)",
-        "93bfc8c(fix, rebased)"
+        "93bfc8c(fix, rebased)",
+        "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
