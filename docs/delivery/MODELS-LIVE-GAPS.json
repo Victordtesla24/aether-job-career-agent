@@ -1017,10 +1017,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/STAGE3-screens-findings.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "screen-tester",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "coverage screen-tester LIVE prod @f28eb82 (schema-complete report), verified twice: /admin/users/[id] now has schema-complete report (screens/admin-user-detail/). Surfaced ML-admindetail-001/002; corrected stale matrix (no PUT/impersonate)."
     },
     {
       "id": "ML-adv-005",
@@ -1036,8 +1036,65 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/STAGE3-screens-findings.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "screen-tester",
+      "fixCommits": [],
+      "verifiedBy": "coverage screen-tester LIVE prod @f28eb82 (schema-complete report), verified twice: /forgot-password now has schema-complete report (screens/forgot-password/) \u2014 intentional static honest-notice page (no form/endpoints; correct). Doc-accuracy \u2192 ML-forgotpw-001."
+    },
+    {
+      "id": "ML-admindetail-001",
+      "screen": "/admin/users/[id]",
+      "severity": "MEDIUM",
+      "category": "validation",
+      "summary": "Empty spend-cap input SILENTLY saves as $0.00 with a SUCCESS notice (frontend Number('')===0 bypasses the >=0 validation guard); persisted (confirmed via AdminAuditLog rows). An admin clearing the field + saving unintentionally sets a $0 cap, told it succeeded.",
+      "reproduction": [
+        "/admin/users/[id] \u2192 clear the spend-cap field \u2192 save \u2192 SUCCESS notice, cap persisted as $0.00 (not rejected as empty)"
+      ],
+      "expected": "Empty/invalid spend-cap \u2192 honest validation error (not a silent $0.00 save); require a valid number",
+      "observed": "Empty saves as $0.00 with success",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "test-author \u2192 fixer-medium (validation)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-admindetail-002",
+      "screen": "n/a (SCREEN-MATRIX doc)",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "SCREEN-MATRIX admin-user-detail row lists stale endpoints (PUT /admin/users/{id} \u2192 actually 405; POST impersonate \u2192 doesn't exist, 404). Real mutating surface is spend-cap/suspend/unsuspend. Fix the matrix at G-09.",
+      "reproduction": [
+        "Compare SCREEN-MATRIX.md admin-user-detail row vs live (405 on PUT, 404 on impersonate)"
+      ],
+      "expected": "SCREEN-MATRIX reflects real endpoints",
+      "observed": "stale PUT/impersonate claims",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "doc-updater (G-09 SCREEN-MATRIX correction)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-forgotpw-001",
+      "screen": "n/a (SCREEN-MATRIX doc)",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "SCREEN-MATRIX forgot-password row lists endpoints (POST /auth/forgot-password, /auth/reset-password) that DON'T EXIST (404). The screen is an intentional static honest-notice page (no form). Correct the matrix at G-09.",
+      "reproduction": [
+        "/forgot-password has 0 inputs/buttons; the listed endpoints 404"
+      ],
+      "expected": "SCREEN-MATRIX reflects the static-notice reality",
+      "observed": "stale endpoint claims",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/forgot-password/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "doc-updater (G-09 SCREEN-MATRIX correction)",
       "fixCommits": [],
       "verifiedBy": ""
     }
