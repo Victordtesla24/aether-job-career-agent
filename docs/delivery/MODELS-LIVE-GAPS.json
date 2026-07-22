@@ -326,11 +326,12 @@
       "evidence": [
         "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [
         "5455d80(tests)",
-        "2c144c9(fix)"
+        "2c144c9(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
@@ -372,11 +373,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [
         "5455d80(tests)",
-        "2c144c9(fix)"
+        "2c144c9(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
@@ -783,11 +785,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (batch w/ mobile fixes)",
       "fixCommits": [
         "5bceb2e(tests)",
-        "4af0c91(fix)"
+        "4af0c91(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
@@ -898,11 +901,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5bceb2e(tests)",
-        "4af0c91(fix)"
+        "4af0c91(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
@@ -921,11 +925,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5bceb2e(tests)",
-        "4af0c91(fix)"
+        "4af0c91(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
@@ -945,11 +950,12 @@
         "uat/reports/evidence/models-live/adversarial/batch2-prodverify.md",
         "batch2-prodverify-assets/"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "FIXED-DEPLOYED-AWAITING-QA",
       "owner": "fixer-medium (FE batch-4)",
       "fixCommits": [
         "5bceb2e(tests)",
-        "4af0c91(fix)"
+        "4af0c91(fix)",
+        "merge f28eb82 (LIVE batch-4+5)"
       ],
       "verifiedBy": "",
       "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy."
