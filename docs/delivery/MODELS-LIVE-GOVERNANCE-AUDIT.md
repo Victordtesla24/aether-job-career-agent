@@ -36,7 +36,10 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 16 | 2026-07-22T04:45Z | reviewer | sonnet (fresh, ≠author ≠plan-reviewer) | ML-agents-cred-001 diff review ddd0a66 | ✅ PASS (0 blocking; compliance hole closed; tests re-run 14/14+17 FE) |
 | 17 | 2026-07-22T05:05Z | deployer | haiku | merge fix/ml-cred-001 → main, build, restart, health, push | ✅ LIVE @d105031 (health ok v0.2.0, 3 units up, 0 new log errs, branch+wt cleaned, pushed origin) |
 | 18 | 2026-07-22T05:25Z | qa-adversary | opus | ML-agents-cred-001 LIVE prod verify (save path + variants + restore state) | dispatched |
-| 19 | 2026-07-22T05:25Z | test-author | sonnet (worktree) | ML-agents-cred-002 failing tests, branch fix/ml-cred-002 | dispatched |
+| 19 | 2026-07-22T05:25Z | test-author | sonnet (worktree) | ML-agents-cred-002 failing tests, branch fix/ml-cred-002 | ✅ 31 tests (24 fail-before+7 guard) @afee5d5; token-store→deployment-wide ProviderCredential (cron-safe) |
+| 20 | 2026-07-22T06:00Z | qa-adversary | opus | ML-agents-cred-001 LIVE prod verify | ✅ VERIFIED-CLOSED (4 cases + 2 adversarial, state restored, log-corroborated) |
+| 21 | 2026-07-22T06:05Z | fixer-hard | opus (reuse wt agent-ae79a65) | ML-agents-cred-002 implement on fix/ml-cred-002 (+authorize browser-smoke) | dispatched |
+| 22 | 2026-07-22T06:10Z | test-author | sonnet (worktree) | FIX-1 catalog failing tests (ML-catalog-001/002/003), branch fix/ml-catalog-fix1 | dispatched (parallel; FE files disjoint from cred-002) |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
