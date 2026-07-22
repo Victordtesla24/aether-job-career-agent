@@ -69,6 +69,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 47 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ac0e2d) | ML-model curation implement (exact-id denylist) | dispatched |
 | 48 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 dashboard display screens | ✅ PASS 0 findings (real data, honest states, no overflow, CRUD clean); 1 LOW UNSURE ML-networking-001 |
 | 49 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 admin screens (admin/health/audit-log/settings/spend/users) + ML-browser-002/003 verdict | dispatched |
+| 50 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens | ✅ mostly clean (login/pricing/legal); ML-browser-001 BENIGN-closed; NEW ML-signup-001 HIGH (entitlement 500 race on fresh signup) |
+| 51 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-signup-001 failing test (billing provisioning race), branch fix/ml-signup-001 | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 

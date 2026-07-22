@@ -109,10 +109,10 @@
         "uat/reports/evidence/models-live/runtime/browser-captures/pricing.json",
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
       "fixCommits": [],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester public-auth: reproduced 6/8 by nav-away timing; empty console/pageerror; real click always 200 = benign Next.js Link prefetch abort. Not a defect.",
       "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
     },
     {
@@ -516,6 +516,27 @@
       ],
       "status": "OPEN",
       "owner": "qa-adversary adjudication (LOW; likely accept-as-design)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-signup-001",
+      "screen": "/signup \u2192 /dashboard",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "GET /api/billing/entitlement intermittently 500s (2/4 fresh signups) on a BRAND-NEW user's first dashboard load right after /signup \u2192 frontend fails-closed showing 'We could not verify your subscription' instead of the paywall. Isolated to first-ever entitlement checks (0/5 for existing admin). Likely non-atomic INSERT...WHERE NOT EXISTS race in ensure_user_billing() billing.py:~256 vs Subscription/UsageQuota unique indexes on userId.",
+      "reproduction": [
+        "POST /signup new user",
+        "Immediately load /dashboard \u2192 GET /api/billing/entitlement occasionally 500 \u2192 'could not verify subscription'"
+      ],
+      "expected": "First entitlement check ALWAYS succeeds \u2014 provisioning is atomic/idempotent (ON CONFLICT / IntegrityError-safe); new user sees paywall (or entitlement) honestly, never a 500",
+      "observed": "Intermittent 500 on first-ever entitlement check for new users",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
+        "screens/public-auth/network/"
+      ],
+      "status": "OPEN",
+      "owner": "test-author \u2192 fixer-hard (billing race)",
       "fixCommits": [],
       "verifiedBy": ""
     }
