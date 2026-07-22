@@ -29,7 +29,7 @@ function Toggle({
 }) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-medium text-aether-text">{label}</p>
         <p className="mt-1 text-xs text-aether-muted">{hint}</p>
       </div>

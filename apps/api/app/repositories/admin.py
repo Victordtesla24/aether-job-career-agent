@@ -247,13 +247,21 @@ def list_users(
         params.append(suspended)
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
 
+    # Shared FROM+JOIN so the COUNT and row-fetch queries can never drift out
+    # of sync (ML-admin-001): the `plan` filter references the joined alias
+    # `s."planId"` in where_sql, so both queries need the same "Subscription"
+    # JOIN in scope regardless of which filters are active.
+    from_sql = (
+        ' FROM "User" u'
+        ' LEFT JOIN "Subscription" s ON s."userId" = u."id"'
+    )
+
     sql = f'''
         SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",
                u."createdAt", u."lastLoginAt",
                COALESCE(s."planId", 'free') AS plan, s."status" AS "subStatus",
                COALESCE(sp.spend, 0) AS spend, COALESCE(sp.runs, 0) AS runs
-        FROM "User" u
-        LEFT JOIN "Subscription" s ON s."userId" = u."id"
+        {from_sql}
         LEFT JOIN ({_SPEND_SUBQUERY}) sp ON sp."userId" = u."id"
         {where_sql}
         ORDER BY u."createdAt" DESC
@@ -261,7 +269,7 @@ def list_users(
     '''
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(f'SELECT count(*) FROM "User" u{where_sql}', params)
+            cur.execute(f'SELECT count(*) {from_sql}{where_sql}', params)
             total = int(cur.fetchone()[0])
             cur.execute(sql, [*params, limit, offset])
             rows = rows_to_dicts(cur)
