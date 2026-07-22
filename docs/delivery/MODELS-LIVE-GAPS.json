@@ -326,13 +326,14 @@
       "evidence": [
         "/tmp .../ML-cred-002b-delta-review.md (non-blocking note 1)"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "fixer-medium (polish, before gates)",
       "fixCommits": [
         "5455d80(tests)",
         "2c144c9(fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-adv-001",
@@ -371,13 +372,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "fixer-medium (batch with post-FIX-1, same anthropic_oauth.py file)",
       "fixCommits": [
         "5455d80(tests)",
         "2c144c9(fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-catalog-006",
