@@ -1091,13 +1091,57 @@ def _model_budget_tier(prompt_per_token: float) -> str:
     return "premium"
 
 
+# ADR-ML-4 (docs/delivery/MODELS-LIVE-GOVERNANCE-AUDIT.md, 2026-07-22, binding) —
+# catalog curation for ML-model-001/002 (§3.4.3c). OpenRouter's /models payload
+# carries NO availability signal — a permanently-dead model has the exact same
+# full schema entry as a working one — so a heuristic chat-compat filter (e.g.
+# "no 'temperature' in supported_parameters") is DISHONEST: it would also hide
+# 50+ functional Anthropic-via-OpenRouter models that use native params instead
+# of 'temperature'. Instead this is a maintained EXACT-ID denylist seeded from
+# the §3.4 live run-sweep evidence (uat/reports/evidence/models-live/models/
+# RUN-SWEEP.md), which PROVED each of the 5 ids below permanently unable to
+# serve a chat completion for this key:
+#   no-endpoint 404 (every attempt):  allenai/olmo-3-32b-think
+#                                      inflection/inflection-3-pi
+#   structurally non-chat (apply/diff/background-tool endpoints, not chat):
+#                                      relace/relace-apply-3
+#                                      morph/morph-v3-fast
+#                                      openai/o3-deep-research
+# ONLY permanent-failure classes (404 no-endpoints, structural 400 incompatible)
+# belong here. TRANSIENT failures (rate-limit, timeout, transient-malformed —
+# e.g. a deepseek/deepseek-v4-pro or moonshotai/kimi-k3 blip during a sweep)
+# MUST NOT be added — the catalog must stay honest about what's live rather
+# than degrade UX for a model that merely had a bad moment. Membership is exact
+# string equality only, never substring/prefix, so a real future model (e.g. a
+# hypothetical morph/morph-v3-fast-turbo) can never become collateral damage.
+# To extend: add a new id here ONLY after run-sweep evidence proves it
+# permanently broken (not merely flaky), with a one-line citation of that
+# evidence, following the same format as the entries above.
+_OPENROUTER_PROVEN_BROKEN_IDS: frozenset[str] = frozenset(
+    {
+        "allenai/olmo-3-32b-think",
+        "inflection/inflection-3-pi",
+        "relace/relace-apply-3",
+        "morph/morph-v3-fast",
+        "openai/o3-deep-research",
+    }
+)
+
+
 def _curate_openrouter_models(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Project OpenRouter's verbose ``/models`` payload to the fields the picker
-    needs, tagged with a budget tier, sorted cheapest-first within tier."""
+    needs, tagged with a budget tier, sorted cheapest-first within tier.
+
+    Excludes the small set of ids in ``_OPENROUTER_PROVEN_BROKEN_IDS`` (ADR-ML-4)
+    — models proven permanently unable to serve a chat completion for this key —
+    by exact id match only.
+    """
     out: list[dict[str, Any]] = []
     for m in raw:
         mid = m.get("id")
         if not mid:
+            continue
+        if mid in _OPENROUTER_PROVEN_BROKEN_IDS:
             continue
         pricing = m.get("pricing") or {}
         try:
