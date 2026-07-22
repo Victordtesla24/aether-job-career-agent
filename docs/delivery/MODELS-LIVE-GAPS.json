@@ -457,10 +457,14 @@
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md",
         "models/NO-SUBSTITUTION-PROOF.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "70d987f(tests)",
+        "0b08dfd(fix)"
+      ],
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing."
     },
     {
       "id": "ML-model-002",
@@ -476,10 +480,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "70d987f(tests)",
+        "0b08dfd(fix)"
+      ],
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing."
     },
     {
       "id": "ML-model-003",
