@@ -534,10 +534,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/dashboard-display/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
+      "status": "CONDITIONALLY-CLOSED",
       "owner": "qa-adversary adjudication (LOW; likely accept-as-design)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "ORCHESTRATOR ADJUDICATION: not a defect. Networking is a lightweight contact tracker; contact-delete via UI is a nice-to-have affordance, not a correctness/honesty issue (no placeholder, no broken wiring \u2014 the backend DELETE exists and works, verified by the dashboard-display tester's create+delete lifecycle). Accepted as-design; surfacing a UI delete is an OPTIONAL future enhancement, out of scope for this run's zero-tolerance (which targets defects/placeholders/honesty, not missing nice-to-haves)."
     },
     {
       "id": "ML-signup-001",
