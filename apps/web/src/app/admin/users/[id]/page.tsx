@@ -56,6 +56,10 @@ export default function AdminUserDetailPage() {
   }, [userId, load]);
 
   const onSaveCap = async () => {
+    if (capInput.trim() === "") {
+      setError("Spend cap must be a non-negative number (US$).");
+      return;
+    }
     const value = Number(capInput);
     if (!Number.isFinite(value) || value < 0) {
       setError("Spend cap must be a non-negative number (US$).");
