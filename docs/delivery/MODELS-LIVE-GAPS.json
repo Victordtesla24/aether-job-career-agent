@@ -600,19 +600,19 @@
     {
       "id": "ML-agents-003",
       "screen": "/dashboard/agents",
-      "severity": "HIGH",
-      "category": "defect",
-      "summary": "NEEDS ADJUDICATION (probe first): 'Connect with Anthropic' opens claude.com/cai (\u2192claude.ai/login, Cloudflare-challenged) vs the clean platform.claude.com/oauth/authorize. BUT per ADR-ML-2a claude.com/cai IS the SUBSCRIPTION (setup-token, scope user:inference) flow; platform.claude.com/oauth/authorize may be the API-KEY (org:create_api_key) flow which would break subscription billing. Probe whether platform.claude.com can do subscription-user:inference cleanly before changing. CF challenge on claude.ai/login is Anthropic's own bot-protection (real-operator-passable).",
+      "severity": "LOW",
+      "category": "visual",
+      "summary": "ADJUDICATED (probe ML-agents-003-oauth-url-probe.md): the current claude.com/cai/oauth/authorize (scope user:inference) is the CORRECT SUBSCRIPTION flow (mints sk-ant-oat01- billed to Max). platform.claude.com/oauth/authorize is the API-KEY-creation flow \u2014 switching would BREAK subscription billing. CF challenge on claude.ai is Anthropic's own bot-protection (real-operator-passable), NOT an app defect. Downgraded HIGH\u2192LOW: resolution = KEEP URL + add an honest UI hint ('you may see a security check \u2014 that's Anthropic's login') to reduce operator confusion.",
       "reproduction": [
         "Agents \u2192 Anthropic \u2192 Connect with Anthropic \u2192 opens claude.com/cai/oauth/authorize \u2192 claude.ai/login shows Cloudflare challenge"
       ],
-      "expected": "Subscription authorize flow that a real operator can complete (correct billing); ideally minimal friction",
+      "expected": "Correct subscription authorize flow (kept) + optional honest CF-expectation hint",
       "observed": "CF-challenged claude.ai login (subscription flow); platform.claude.com is cleaner but may be wrong billing flow",
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "OPEN",
-      "owner": "probe \u2192 orchestrator adjudication (env-overridable URL; possible config-only change)",
+      "status": "IN-FIX",
+      "owner": "fixer (fold hint into Agents re-fix cluster)",
       "fixCommits": [],
       "verifiedBy": ""
     },
