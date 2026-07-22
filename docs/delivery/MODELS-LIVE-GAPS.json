@@ -499,6 +499,25 @@
       "owner": "ops-monitoring (no code fix)",
       "fixCommits": [],
       "verifiedBy": ""
+    },
+    {
+      "id": "ML-networking-001",
+      "screen": "/dashboard/networking",
+      "severity": "LOW",
+      "category": "wiring",
+      "summary": "UNSURE (dashboard-display tester): Networking has a working backend DELETE endpoint for contacts but NO UI delete control. Could be intentional (contacts not user-deletable via UI) or a minor affordance gap. Adjudicate at Stage-3.",
+      "reproduction": [
+        "/dashboard/networking \u2192 add a contact \u2192 no visible delete/remove control though backend DELETE works"
+      ],
+      "expected": "Either a UI delete affordance, or intentional-by-design (documented)",
+      "observed": "No UI delete; backend endpoint exists",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/dashboard-display/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "qa-adversary adjudication (LOW; likely accept-as-design)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
