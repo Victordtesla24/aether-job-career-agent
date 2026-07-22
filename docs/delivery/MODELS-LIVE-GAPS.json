@@ -357,7 +357,7 @@
         "monitor-tail.sh line32 /.../ \u2192 m{...} (evidence-dir, gitignored)"
       ],
       "verifiedBy": "",
-      "note": "Fail-before rc=255 proven; pass-after 11/21 correct matches; capture restarted (new PID); retro-triage last 3h direct-grep = 0 missed real signatures (system genuinely clean, only instrument broken). FINAL verification = G-06 live observation window must show the working monitor capturing a clean window. Independent capture re-check before G-06."
+      "note": "Fail-before rc=255 proven; pass-after 11/21 correct matches; capture restarted (new PID); retro-triage last 3h direct-grep = 0 missed real signatures (system genuinely clean, only instrument broken). FINAL verification = G-06 live observation window must show the working monitor capturing a clean window. Independent capture re-check before G-06. [G-06 window INTERRUPTED 2026-07-22 by operator-reported ML-agents-err-001 \u2014 window restarts clean after that finding resolves.]"
     },
     {
       "id": "ML-adv-002",
@@ -1106,6 +1106,25 @@
       "owner": "doc-updater (G-09 SCREEN-MATRIX correction)",
       "fixCommits": [],
       "verifiedBy": "G-09 doc-updater @dc1c19d (G-09-DOC-UPDATE-VERIFICATION.md): SCREEN-MATRIX forgot-password row corrected (static honest-notice, no form/endpoints)."
+    },
+    {
+      "id": "ML-agents-err-001",
+      "screen": "/dashboard/agents",
+      "severity": "HIGH",
+      "category": "agent-integration",
+      "summary": "OPERATOR-REPORTED (2026-07-22, mid-endgame): 'some agents in the Agents screen are erroring out' on live prod @51f1ec8. Under RCA \u2014 classify per agent: real defect (500/Traceback) vs honest-degrade (FabricationError/paywall/Gmail-gate) vs upstream-model-failure vs stuck-bad-config. Fix any real defect in the \u00a77 loop.",
+      "reproduction": [
+        "Load /dashboard/agents on prod \u2192 some agents show error state / erroring runs (operator report)"
+      ],
+      "expected": "Agents run cleanly OR degrade honestly (no unhandled 500/Traceback)",
+      "observed": "Operator sees agents 'erroring out' (specifics under RCA)",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
+      ],
+      "status": "OPEN",
+      "owner": "RCA (general-purpose a01d98cb) \u2192 fix loop",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
