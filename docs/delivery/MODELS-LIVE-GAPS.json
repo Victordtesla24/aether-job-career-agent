@@ -176,7 +176,8 @@
       "status": "OPEN",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only."
     },
     {
       "id": "ML-catalog-001",
@@ -717,7 +718,8 @@
       "status": "OPEN",
       "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only."
     },
     {
       "id": "ML-resume-002",
