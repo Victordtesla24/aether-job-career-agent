@@ -452,6 +452,23 @@ export default function ProviderConfigModal({
               Claude Pro/Max account, then paste the one-time code Anthropic shows you.
               Your token is created on the server — you never copy the token yourself.
             </p>
+            {/* ML-agents-003 (ADR-ML-5): the authorize URL is the correct
+                subscription flow — Anthropic may interpose a brief security
+                check on the sign-in page. Set the expectation so an operator
+                doesn't read it as a broken/wrong link. */}
+            <p
+              data-testid="anthropic-oauth-security-hint"
+              className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-aether-muted-dim"
+            >
+              <i
+                className="fa-solid fa-shield-halved mt-0.5 shrink-0 text-[10px]"
+                aria-hidden="true"
+              />
+              <span>
+                You may see a brief Anthropic security check — that&apos;s
+                expected; complete it to continue.
+              </span>
+            </p>
             {oauthStep === "await_code" ? (
               <div className="mt-3">
                 <label

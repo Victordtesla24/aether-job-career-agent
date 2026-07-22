@@ -130,7 +130,13 @@ function AgentCard({
         {agent.status === "error" ? " · error" : ""}
       </p>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
+      {/* ML-agents-005: the 44px min tap targets (gear/run/toggle) plus the
+          status label exceed a 2-column card's width at 390px, pushing the
+          toggle past the viewport (14px horizontal overflow). Wrap the row so
+          the action cluster drops to its own line on a narrow card while the
+          accessible 44px tap targets are preserved; on ≥sm the shrunk controls
+          fit on one line so the wrap never triggers. */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className={`text-[10px] ${STATUS_TEXT[agent.status]}`}>
           {STATUS_LABEL[agent.status]}
         </span>
@@ -190,11 +196,15 @@ function AgentCard({
           loading={catalogLoading}
           error={catalogError}
           saving={savingModel}
-          // ML-catalog-008/N2: deterministic backends (recommended sentinel
-          // "deterministic" — scout/fitScorer/matcher/supervisor) never read a
-          // stored model at run time, so they get an honest fixed-model
-          // indicator instead of a no-op search+select surface.
-          deterministic={agent.recommended === "deterministic"}
+          // ML-agents-001: lock the picker whenever a picked model is NOT
+          // honoured at run time — the authoritative server-computed
+          // `modelOverridable` flag covers BOTH deterministic (no-LLM) backends
+          // AND fixed-tier LLM agents (STRUCTURED, e.g. storyExtraction), whose
+          // `recommended` is a real model id so the old
+          // `recommended === "deterministic"` sentinel (ML-catalog-008/N2)
+          // missed them. Fall back to that sentinel for a response predating
+          // the flag so deterministic agents still lock.
+          overridable={agent.modelOverridable ?? agent.recommended !== "deterministic"}
           onSelect={(model) => onSelectModel(agent.key, model)}
         />
       ) : null}

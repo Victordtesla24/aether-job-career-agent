@@ -861,6 +861,29 @@ def _model_for_agent(agent_name: str, override: "str | None" = None) -> str | No
     return get_model(tier)
 
 
+def _model_overridable(agent_name: "str | None") -> bool:
+    """Whether a user-picked per-agent model is actually HONOURED at run time
+    for this backend (ML-agents-001) — the authoritative signal the FE picker
+    locks on, so it never renders a functional model picker that silently
+    no-ops.
+
+    False for planned agents (no backend) and deterministic backends
+    (scout/fitScorer/matcher/supervisor — no LLM call); otherwise True only
+    when the backend's LLM tier is one ``get_model`` honours an override for
+    (:data:`_USER_OVERRIDABLE_TIERS`). STRUCTURED (storyExtractor) is a real
+    LLM tier but is deliberately EXCLUDED from user override, so it resolves
+    to False — an honest "fixed model, not user-selectable" lock rather than a
+    picker whose selection is never read."""
+    if agent_name is None or agent_name in _DETERMINISTIC_BACKENDS:
+        return False
+    tier = _LLM_TIER_BY_BACKEND.get(agent_name)
+    if tier is None:
+        return False
+    from app.services.llm_client import _USER_OVERRIDABLE_TIERS
+
+    return tier.upper() in _USER_OVERRIDABLE_TIERS
+
+
 #: backend agent name -> UI ``AgentConfig.agentKey`` (the two namespaces differ,
 #: e.g. backend ``tailor`` is stored under UI key ``resumeTailoring``).
 _UI_KEY_FOR_BACKEND: dict[str, str] = {
@@ -1722,7 +1745,12 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
             planned += 1
             model = "—"
         else:
-            model = _model_for_agent(backend) or "deterministic"
+            model = (
+                _model_for_agent(
+                    backend, override=_user_model_override(user_id, backend)
+                )
+                or "deterministic"
+            )
             if not enabled:
                 state = "paused"
                 paused += 1
@@ -1746,6 +1774,10 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "backend": backend,
                 "enabled": enabled,
                 "status": state,
+                # Authoritative per-agent signal for the FE picker lock
+                # (ML-agents-001): True only when a user-picked model is
+                # actually honoured at run time for this backend's tier.
+                "modelOverridable": _model_overridable(backend),
                 "last_run": run["createdAt"].isoformat() if run else None,
             }
         )
@@ -2761,7 +2793,18 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{body.agent_key}'")
     entry = _CATALOG_BY_KEY[body.agent_key]
     backend = entry["backend"]
-    llm_model = _model_for_agent(backend) if backend else None
+    # Cost the preview against the model this agent will ACTUALLY run on —
+    # threading the user's saved per-agent override, exactly as the real run
+    # path (`_execute_reserved_run`) and billing audit do (ML-agents-004).
+    # Two agents with differently-priced saved models must estimate different
+    # cost, never a constant tier-default placeholder.
+    llm_model = (
+        _model_for_agent(
+            backend, override=_user_model_override(current_user["id"], backend)
+        )
+        if backend
+        else None
+    )
     model = llm_model or "deterministic"
     est_cost = None
     est_tokens: int | None = None

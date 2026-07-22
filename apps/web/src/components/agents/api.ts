@@ -19,6 +19,13 @@ export const CatalogAgentSchema = z.object({
   backend: z.string().nullish(),
   enabled: z.boolean(),
   status: z.enum(["active", "paused", "error", "planned"]),
+  // ML-agents-001: authoritative per-agent signal — true only when a
+  // user-picked model is actually HONOURED at run time for this agent's
+  // backend tier. False for deterministic (no-LLM) AND fixed-tier (STRUCTURED)
+  // agents, whose picker must lock instead of silently no-opping a selection.
+  // `.nullish()` so a legacy/mocked response predating the field still parses;
+  // the FE falls back to the old `recommended === "deterministic"` sentinel.
+  modelOverridable: z.boolean().nullish(),
   last_run: z.string().nullish(),
 });
 export type CatalogAgent = z.infer<typeof CatalogAgentSchema>;

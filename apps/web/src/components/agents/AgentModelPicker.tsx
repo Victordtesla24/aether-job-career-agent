@@ -45,7 +45,7 @@ export default function AgentModelPicker({
   loading,
   error,
   saving,
-  deterministic = false,
+  overridable = true,
   onSelect,
 }: {
   agentKey: string;
@@ -54,7 +54,10 @@ export default function AgentModelPicker({
   loading: boolean;
   error: string | null;
   saving: boolean;
-  deterministic?: boolean;
+  // ML-agents-001: whether a user-picked model is actually HONOURED at run
+  // time for this agent. When false the picker renders an honest locked
+  // indicator instead of a functional search+select surface that no-ops.
+  overridable?: boolean;
   onSelect: (model: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -68,12 +71,17 @@ export default function AgentModelPicker({
   const hidden = filtered.length - capped.length;
   const groups = useMemo(() => groupModelsByTier(capped), [capped]);
 
-  // ML-catalog-008/N2: deterministic backends (scout/fitScorer/matcher/
-  // supervisor) never read a stored model at run time, so a functional
-  // search+select surface here would silently no-op. Render an HONEST
-  // "not user-selectable" indicator instead — no search box, no model rows.
-  // (Placed after the hooks above so hook order stays stable — rules-of-hooks.)
-  if (deterministic) {
+  // ML-agents-001 / ML-catalog-008/N2: a picked model is honoured at run time
+  // ONLY for user-overridable LLM tiers. When it is not — a deterministic
+  // (no-LLM) backend OR a fixed LLM tier (STRUCTURED, e.g. storyExtraction) —
+  // a functional search+select surface here would silently no-op, so render an
+  // HONEST locked indicator instead (no search box, no model rows). The two
+  // cases get distinct, truthful copy: the deterministic case is flagged by
+  // the "deterministic" model sentinel; a fixed-tier LLM agent shows its real,
+  // non-selectable model id. (Placed after the hooks above so hook order stays
+  // stable — rules-of-hooks.)
+  if (!overridable) {
+    const isDeterministic = !currentModel || currentModel === "deterministic";
     return (
       <div
         data-testid={`agent-model-picker-${agentKey}`}
@@ -84,9 +92,22 @@ export default function AgentModelPicker({
             className="fa-solid fa-lock mt-0.5 shrink-0 text-[10px] text-aether-muted-dim"
             aria-hidden="true"
           />
-          <span>
-            Fixed model — not user-selectable. This agent runs deterministically
-            (no LLM), so there is no model to choose.
+          <span className="min-w-0">
+            {isDeterministic ? (
+              <>
+                Fixed model — not user-selectable. This agent runs
+                deterministically (no LLM), so there is no model to choose.
+              </>
+            ) : (
+              <>
+                Fixed model — not user-selectable. This agent runs on a tuned
+                model for reliable structured output:{" "}
+                <span className="break-all font-mono text-aether-indigo">
+                  {currentModel}
+                </span>
+                .
+              </>
+            )}
           </span>
         </p>
       </div>
@@ -98,10 +119,10 @@ export default function AgentModelPicker({
       data-testid={`agent-model-picker-${agentKey}`}
       className="mt-3 rounded-lg border border-white/10 bg-white/5 p-2.5"
     >
-      <p className="mb-1.5 text-[10px] text-aether-muted-dim">
+      <p className="mb-1.5 break-all text-[10px] text-aether-muted-dim">
         Model for this agent:{" "}
-        <span className="font-mono text-aether-indigo">{currentModel || "—"}</span>
-        {saving ? <span className="ml-1 text-aether-amber">· saving…</span> : null}
+        <span className="break-all font-mono text-aether-indigo">{currentModel || "—"}</span>
+        {saving ? <span className="ml-1 break-normal text-aether-amber">· saving…</span> : null}
       </p>
 
       {/* ML-catalog-007 (§3.1.3): the billing/provider implication must be
@@ -202,8 +223,8 @@ export default function AgentModelPicker({
                                 : "border-white/10 bg-white/5 hover:bg-white/10"
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-1.5">
-                              <span className="truncate text-[11px] font-medium text-white">
+                            <div className="flex min-w-0 items-center justify-between gap-1.5">
+                              <span className="min-w-0 truncate text-[11px] font-medium text-white">
                                 {m.name}
                               </span>
                               {selected ? (
@@ -213,9 +234,11 @@ export default function AgentModelPicker({
                                 />
                               ) : null}
                             </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[9px] text-aether-muted">
-                              <span>{formatModelPrice(m.promptPerM, m.completionPerM)}</span>
-                              {ctx ? <span>{ctx}</span> : null}
+                            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-aether-muted">
+                              <span className="break-words">
+                                {formatModelPrice(m.promptPerM, m.completionPerM)}
+                              </span>
+                              {ctx ? <span className="break-words">{ctx}</span> : null}
                             </div>
                           </button>
                         </li>
