@@ -172,3 +172,6 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 - **R-2 registry-fallback** used cleanly for the `arch` specialist (forced opus, blueprint-only, orchestrator-approved before implementation). **R-3 monitors-as-processes**: continuous capture ran as a persistent background process (ML-adv-001 fixed a broken regex mid-run; retro-triage confirmed 0 missed).
 
 Evidence: this dispatch log (98 rows) + docs/delivery/MODELS-LIVE-GAPS.json (per-finding owner/reviewer/verifier trail).
+
+## G-09 DOCS — COMPLETE (2026-07-22)
+README refreshed to shipped truth (per-agent live catalog picker + curation + no-substitution + Connect-with-Anthropic OAuth); new docs/subscription/model-catalog.md; billing-architecture.md corrected AS-BUILT (in-app OAuth now shipped per ADR-ML-1, reversing the Phase-6 removal); DEPLOYMENT-RUNBOOK.md + start-web.sh pnpm path fixed (/usr/bin/pnpm); SCREEN-MATRIX corrected (admin-user-detail no PUT/impersonate; forgot-password static-notice; counts 17 wireframes/28 routes). Commits dc1c19d + 33f25c9. Closed ML-runbook-001, ML-admindetail-002, ML-forgotpw-001. 0 deletions (none warranted). doc-updater source-verified every claim.
