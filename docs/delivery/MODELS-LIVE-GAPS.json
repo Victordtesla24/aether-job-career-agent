@@ -130,10 +130,10 @@
         "uat/reports/evidence/models-live/runtime/browser-captures/admin-spend.json",
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
       "fixCommits": [],
-      "verifiedBy": "",
+      "verifiedBy": "admin screen-tester re-verified benign: standard Next.js Link-prefetch cancellation, 0 console/pageerror/UI impact (2 independent passes).",
       "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
     },
     {
@@ -151,10 +151,10 @@
         "uat/reports/evidence/models-live/runtime/browser-captures/admin-users.json",
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
       "fixCommits": [],
-      "verifiedBy": "",
+      "verifiedBy": "admin screen-tester re-verified benign: standard Next.js Link-prefetch cancellation, 0 console/pageerror/UI impact (2 independent passes).",
       "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
     },
     {
@@ -380,7 +380,7 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md B1; llm_client.py:8-10 docstring, get_model\u2192_auto\u2192_model_chain\u2192_call_live"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-hard (ADR-ML-3)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -388,7 +388,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "\u00a73.4 NO-SUBSTITUTION-PROOF.md (20/20 real failures honest+refund, 0 substitution) + Agents deep-test (REASONING-tier emailAgent honors override). No-silent-substitution BLOCKER PROVEN live for overridable agents.",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -405,7 +405,7 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md B2"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer-hard",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -413,7 +413,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: billing_visible=true (provider/billing implication shown in picker).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -431,7 +431,7 @@
       "evidence": [
         "/tmp .../ML-catalog-fix1-diff-review.md N1+N2"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer-hard",
       "fixCommits": [
         "9781d55/da0e558(tests)",
@@ -439,7 +439,7 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live: freshness_on_load=true (real ts shown), deterministic_honest=true (6 deterministic agents locked). (STRUCTURED-tier storyExtraction gap = separate ML-agents-001.)",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -457,14 +457,14 @@
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md",
         "models/NO-SUBSTITUTION-PROOF.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
         "0b08dfd(fix)",
         "merge 27dcfb0 (LIVE)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: curation_denylisted_absent=true, catalog_count_ui=332 (API+UI search confirmed 5 denylisted ids absent, normal models present). Deployer in-deploy also confirmed 332/olmo-absent.",
       "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing.",
       "deployNote": "Batch-1 live @fb8361e: curated catalog 332 (=337-5), olmo absent (deployer-verified). Agents-screen tester confirms UI-side."
     },
@@ -482,14 +482,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
         "0b08dfd(fix)",
         "merge 27dcfb0 (LIVE)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "Agents deep-test live @fb8361e: curation_denylisted_absent=true, catalog_count_ui=332 (API+UI search confirmed 5 denylisted ids absent, normal models present). Deployer in-deploy also confirmed 332/olmo-absent.",
       "reviewVerdict": "PASS (ML-model-curation-diff-review.md): exact-id-only frozenset, no dishonest heuristic (temperature-less Anthropic + transient deepseek/kimi survive), scope clean, honest (cites RUN-SWEEP), 89/89, tests load-bearing.",
       "deployNote": "Batch-1 live @fb8361e: curated catalog 332 (=337-5), olmo absent (deployer-verified). Agents-screen tester confirms UI-side."
     },
@@ -507,10 +507,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
-      "status": "OPEN",
+      "status": "CONDITIONALLY-CLOSED",
       "owner": "ops-monitoring (no code fix)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "INFORMATIONAL \u2014 not a defect. The 1/82 transient malformed response on the default deepseek-v4-pro was handled correctly (honest 503 + refund + no silent fallback, per \u00a73.4). Ops-monitoring note only; no code fix. Accepted."
     },
     {
       "id": "ML-networking-001",
