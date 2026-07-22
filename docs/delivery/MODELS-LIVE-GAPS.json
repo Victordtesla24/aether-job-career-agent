@@ -162,7 +162,7 @@
       "screen": "Agents / Cover Letters",
       "severity": "HIGH",
       "category": "agent-integration",
-      "summary": "WATCH-ITEM (inventory delta 2026-07-22): coverLetter agent reported in ERROR state, last run failed 2026-07-22T02:49:45Z (near probe time). Must be verified live \u2014 could be the known PROBABILISTIC FabricationError graceful-degradation (aether-agent-pipeline-runtime-fixes) OR a real regression. Not to be dismissed by inference.",
+      "summary": "LIVE VERDICT (agent-running tester): coverLetter REAL REGRESSION \u2014 71% all-time failure (10/14 DB rows), 3/3 live this session. Shared root cause with tailor: malformed JSON from claude-sonnet-4. Failures ARE honest+refunded (no fixture/BLOCKER) but 71% is unacceptable for a paid product. NOT the acceptable probabilistic graceful-degrade.",
       "reproduction": [
         "GET /agents/catalog on production; observe coverLetter status/last_run",
         "Run cover-letter pipeline live from UI with seeded story+JD; classify outcome (full success / graceful degrade / hard error)"
@@ -170,10 +170,11 @@
       "expected": "Cover-letter agent EITHER produces a real business letter OR degrades gracefully (coverLetterUnavailable) \u2014 never a hard error state; honest UI",
       "observed": "catalog shows coverLetter ERROR state / last run failed 02:49:45Z",
       "evidence": [
-        "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md",
+        "AgentRun/BackgroundJob DB rows"
       ],
       "status": "OPEN",
-      "owner": "screen-tester (Agents + Cover Letters) \u2192 fix loop if real",
+      "owner": "RCA \u2192 fixer-hard (pipeline reliability)",
       "fixCommits": [],
       "verifiedBy": ""
     },
@@ -658,6 +659,141 @@
       "fixCommits": [
         "06c57dd(tests)"
       ],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-cover-002",
+      "screen": "/dashboard/cover-letters",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "The FabricationError graceful-degrade path exists only in the pipeline runner, NOT the single-agent ASYNC path the Cover Letter Studio actually uses \u2192 raw exception text leaks to the user, and the frontend's dedicated rejection panel can structurally never fire (it matches 422 only, but the async failures are always 502).",
+      "reproduction": [
+        "Cover Letter Studio \u2192 generate \u2192 on FabricationError, async path returns 502 with raw exception; FE rejection panel (422-matcher) never shows"
+      ],
+      "expected": "The async single-agent cover path degrades gracefully like the pipeline runner (honest coverLetterUnavailable / rejection panel), no raw exception leak",
+      "observed": "Raw exception, 502, rejection panel never fires",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "RCA \u2192 fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-cover-003",
+      "screen": "/dashboard/cover-letters",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "'Drafting...' button stays stuck ~15-20s with NO error shown after a backend failure is already recorded, before eventually self-correcting (delayed/absent error surfacing).",
+      "reproduction": [
+        "Cover Letter generate \u2192 backend fails+records \u2192 button stuck 'Drafting...' 15-20s \u2192 self-corrects"
+      ],
+      "expected": "Prompt honest error surfacing when the backend failure is recorded",
+      "observed": "~15-20s stuck with no error",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-resume-001",
+      "screen": "/dashboard/resume",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "tailor 24% all-time failure (2/2 live), SAME root cause as coverLetter (malformed JSON from claude-sonnet-4). UI handling here is honest/prompt (unlike cover-letters). Core pipeline reliability.",
+      "reproduction": [
+        "/dashboard/resume \u2192 tailor \u2192 ~24% fail with malformed-JSON error"
+      ],
+      "expected": "High tailor success rate; malformed-JSON handled/retried",
+      "observed": "24% failure",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "RCA \u2192 fixer-hard (shared w/ cover-001)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-resume-002",
+      "screen": "/dashboard/resume",
+      "severity": "LOW",
+      "category": "visual",
+      "summary": "16px horizontal overflow at 390px mobile on /dashboard/resume.",
+      "reproduction": [
+        "/dashboard/resume at 390px \u2192 16px overflow"
+      ],
+      "expected": "No overflow @390px",
+      "observed": "16px overflow",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (batch w/ mobile fixes)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-jobs-001",
+      "screen": "/dashboard/jobs",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "UNSURE: scout POST aborted client-side in session 1, did NOT reproduce in session 2. Filed with both interpretations \u2014 likely transient/flaky, needs re-verify.",
+      "reproduction": [
+        "/dashboard/jobs \u2192 scout run \u2192 session1 client-abort; session2 clean"
+      ],
+      "expected": "Deterministic scout run",
+      "observed": "1 abort not reproduced",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "qa-adversary re-verify",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-stories-001",
+      "screen": "/dashboard/stories",
+      "severity": "MEDIUM",
+      "category": "agent-integration",
+      "summary": "storyExtractor configured model (claude-haiku-4-5) \u2260 model recorded on the run (qwen/qwen3-coder-next) \u2014 CORROBORATES ML-agents-001 (STRUCTURED tier non-overridable; the picker/config shows a model that isn't used). Resolved by the ML-agents-001 fix (lock non-overridable pickers).",
+      "reproduction": [
+        "/dashboard/stories \u2192 storyExtractor run \u2192 recorded model qwen \u2260 configured claude-haiku-4-5"
+      ],
+      "expected": "Configured model used OR honestly locked (ML-agents-001 fix)",
+      "observed": "Config ignored (STRUCTURED tuned model used)",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "IN-FIX",
+      "owner": "covered by ML-agents-001 fix (fix/ml-agents-refix)",
+      "fixCommits": [
+        "06c57dd(tests)"
+      ],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-email-001",
+      "screen": "/dashboard/email",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "UNSURE: degraded/no-op emailAgent triage response still carries non-zero cost/tokens + a model that doesn't match config. Needs triage \u2014 may be a metering artifact on the degraded path.",
+      "reproduction": [
+        "/dashboard/email \u2192 emailAgent (Gmail disconnected) \u2192 degraded response has nonzero cost/tokens + mismatched model"
+      ],
+      "expected": "Degraded/no-op path meters honestly (0 cost, or correct model)",
+      "observed": "Nonzero cost/tokens + mismatched model on no-op",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "RCA (triage w/ pipeline RCA)",
+      "fixCommits": [],
       "verifiedBy": ""
     }
   ]
