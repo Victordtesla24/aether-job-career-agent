@@ -160,9 +160,9 @@
     {
       "id": "ML-agent-cover-001",
       "screen": "Agents / Cover Letters",
-      "severity": "HIGH",
+      "severity": "MEDIUM",
       "category": "agent-integration",
-      "summary": "LIVE VERDICT (agent-running tester): coverLetter REAL REGRESSION \u2014 71% all-time failure (10/14 DB rows), 3/3 live this session. Shared root cause with tailor: malformed JSON from claude-sonnet-4. Failures ARE honest+refunded (no fixture/BLOCKER) but 71% is unacceptable for a paid product. NOT the acceptable probabilistic graceful-degrade.",
+      "summary": "ADJUDICATED (PIPELINE-RCA.md): the '71% failure' is LARGELY a \u00a73.4-SWEEP ARTIFACT \u2014 the DB has 1 real user (operator) whose OpenRouter override was churned through ~13 models today incl. deliberately-broken ones by my own no-substitution sweep; 3/11 cover failures fall in that window. NOT a regression; claude-sonnet-4/direct-Anthropic NEVER invoked (phantom-ignore works, 100% via OpenRouter). Downgraded HIGH\u2192MED. GENUINE underlying bug = cover _draft() (cover_letter_agent.py:1290) has no LLMUnavailableError resilience + complete_json no-retry (see ML-pipeline-001). Fix those.",
       "reproduction": [
         "GET /agents/catalog on production; observe coverLetter status/last_run",
         "Run cover-letter pipeline live from UI with seeded story+JD; classify outcome (full success / graceful degrade / hard error)"
@@ -174,7 +174,7 @@
         "AgentRun/BackgroundJob DB rows"
       ],
       "status": "OPEN",
-      "owner": "RCA \u2192 fixer-hard (pipeline reliability)",
+      "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [],
       "verifiedBy": ""
     },
@@ -676,9 +676,10 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "OPEN",
-      "owner": "RCA \u2192 fixer-hard",
+      "owner": "test-author \u2192 fixer-hard (cluster)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "rca": "Pipeline path degrades gracefully agents.py:1558-1600; async single-agent path workers/tasks.py:262 does NOT; FE hardcodes failed async\u2192502 api/agents.ts:92-97 while rejection matcher requires 422 rejection.ts:74 \u2192 structurally unreachable. Fix: async path graceful-degrade + align FE matcher to the async failure shape."
     },
     {
       "id": "ML-cover-003",
@@ -702,9 +703,9 @@
     {
       "id": "ML-resume-001",
       "screen": "/dashboard/resume",
-      "severity": "HIGH",
+      "severity": "MEDIUM",
       "category": "defect",
-      "summary": "tailor 24% all-time failure (2/2 live), SAME root cause as coverLetter (malformed JSON from claude-sonnet-4). UI handling here is honest/prompt (unlike cover-letters). Core pipeline reliability.",
+      "summary": "ADJUDICATED (PIPELINE-RCA.md): tailor '24% failure' = \u00a73.4-SWEEP ARTIFACT (23/23 visible tailor failures inside my sweep's broken-model window), NOT a regression. GENUINE bug = complete_json() (llm_client.py:1343-1366) never retries malformed JSON (parse outside _auto retry loop). Downgraded HIGH\u2192MED. Fix via ML-pipeline-001.",
       "reproduction": [
         "/dashboard/resume \u2192 tailor \u2192 ~24% fail with malformed-JSON error"
       ],
@@ -714,7 +715,7 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "OPEN",
-      "owner": "RCA \u2192 fixer-hard (shared w/ cover-001)",
+      "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
       "fixCommits": [],
       "verifiedBy": ""
     },
@@ -792,7 +793,27 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "OPEN",
-      "owner": "RCA (triage w/ pipeline RCA)",
+      "owner": "fixer-medium (batch w/ pipeline)",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "rca": "_execute_reserved_run agents.py:801-822 meters cost/tokens generically from payload size + stamps get_model('REASONING') for any _LLM_TIER_BY_BACKEND agent, blind to EmailAgent._triage() no-op/early-return (zero LLM calls). Fix: don't meter/charge or stamp a model when no LLM call was made."
+    },
+    {
+      "id": "ML-pipeline-001",
+      "screen": "agent pipelines (tailor/cover/all structured)",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "GENUINE (RCA): complete_json() (llm_client.py:1343-1366) never retries a malformed-JSON response \u2014 the JSON parse happens OUTSIDE _auto()'s retry loop, so even the default model chain hard-fails on one malformed response instead of retrying. A bounded malformed-JSON retry would materially improve tailor/cover/structured reliability (all agents benefit).",
+      "reproduction": [
+        "A structured LLM call returns malformed JSON \u2192 complete_json raises immediately, no retry \u2192 run fails"
+      ],
+      "expected": "Bounded retry (e.g. 1-2x) on malformed JSON before failing honestly",
+      "observed": "No retry; immediate hard fail on one malformed response",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/PIPELINE-RCA.md"
+      ],
+      "status": "OPEN",
+      "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [],
       "verifiedBy": ""
     }
