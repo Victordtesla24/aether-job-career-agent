@@ -1131,7 +1131,12 @@ def _curate_openrouter_models(raw: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def list_provider_models(
-    provider: str, user_id: str | None = None, *, timeout: float = 15.0
+    provider: str,
+    user_id: str | None = None,
+    *,
+    timeout: float = 15.0,
+    force_refresh: bool = False,
+    allow_fetch: bool = True,
 ) -> list[dict[str, Any]]:
     """Live, curated model catalog for ``provider`` (GAP-P7-MODEL-CHOICE-001).
 
@@ -1139,8 +1144,19 @@ def list_provider_models(
     user's own credential when present, else the deployment credential, curated
     to ``{id, name, promptPerM, completionPerM, contextLength, tier, reasoning}``
     and cached ~1 h. Providers without an open catalog (anthropic, …) return a
-    small curated static list. Raises :class:`ModelCatalogError` on a missing
-    credential or a network failure — never a fabricated catalog.
+    small curated static list.
+
+    ``force_refresh`` bypasses the TTL cache (manual refresh, ML-catalog-003).
+    ``allow_fetch=False`` never makes a network call — it serves a warm cache if
+    present and otherwise raises :class:`ModelCatalogError`; used by non-blocking
+    callers (e.g. config-save validation) so a request never stalls on a slow
+    upstream.
+
+    Honest degradation (ML-catalog-002): when the TTL has lapsed (or a manual
+    refresh is forced) and every upstream fetch attempt fails, the last-good
+    cached list is served rather than raised — the UI is never left empty and a
+    catalog is NEVER fabricated. :class:`ModelCatalogError` is raised only when
+    there is genuinely nothing to serve (no cache AND no working upstream).
     """
     provider = (provider or "").strip().lower()
     if provider in _STATIC_MODEL_CATALOG:
@@ -1151,8 +1167,16 @@ def list_provider_models(
         )
     now = time.monotonic()
     cached = _MODEL_CATALOG_CACHE.get(provider)
-    if cached is not None and now - cached[0] < _MODEL_CATALOG_TTL:
+    if not force_refresh and cached is not None and now - cached[0] < _MODEL_CATALOG_TTL:
         return cached[1]
+    if not allow_fetch:
+        # Non-blocking caller: serve the warm cache if we have one, else signal
+        # "not known" — never open a network connection on this path.
+        if cached is not None:
+            return cached[1]
+        raise ModelCatalogError(
+            "The OpenRouter model catalog is not cached yet — browse it once to load it."
+        )
     # The OpenRouter /models catalog is GLOBAL (identical for any valid key), so
     # try the user's own credential first but FALL BACK to the deployment
     # credential when the user's key is missing/invalid — the catalog stays
@@ -1170,6 +1194,10 @@ def list_provider_models(
             seen.add(c.secret)
             ordered.append(c)
     if not ordered:
+        # No credential to refresh with — serve last-good stale data if present
+        # (never block the UI), else an honest, actionable error.
+        if cached is not None:
+            return cached[1]
         raise ModelCatalogError(
             "Add an OpenRouter API key (in the Agents panel or the server env) "
             "to browse the live model catalog."
@@ -1191,7 +1219,34 @@ def list_provider_models(
             _MODEL_CATALOG_CACHE[provider] = (now, curated)
             return curated
         last_err = f"HTTP {resp.status_code}"
+    # Every refresh attempt failed. Serve the last-good cache (flagged stale by
+    # the router via catalog_freshness) rather than block the UI or fabricate.
+    if cached is not None:
+        return cached[1]
     raise ModelCatalogError(f"Model catalog request failed ({last_err}).")
+
+
+def catalog_freshness(provider: str) -> tuple[str, bool]:
+    """``(lastRefreshedAt, stale)`` for ``provider``'s model catalog (ML-catalog-002).
+
+    ``lastRefreshedAt`` is an ISO-8601 UTC timestamp of the wall-clock moment the
+    currently-served catalog was actually fetched from upstream (derived from the
+    stored monotonic fetch time), NOT the moment of this call. ``stale`` is True
+    only when a cached OpenRouter catalog is past its TTL — i.e. the last refresh
+    attempt failed and we are serving last-good data. Providers with no cache
+    entry (the static anthropic catalog, or a never-fetched openrouter) report
+    "now" and ``stale=False``: they are computed fresh each call, never stale.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    prov = (provider or "").strip().lower()
+    now_dt = datetime.now(timezone.utc)
+    cached = _MODEL_CATALOG_CACHE.get(prov)
+    if cached is None:
+        return now_dt.isoformat(), False
+    elapsed = max(0.0, time.monotonic() - cached[0])
+    fetched_at = now_dt - timedelta(seconds=elapsed)
+    return fetched_at.isoformat(), elapsed >= _MODEL_CATALOG_TTL
 
 
 class LLMClient:
@@ -1288,6 +1343,10 @@ class LLMClient:
     ) -> str:
         """Live-first with one model-fallback retry, then an HONEST error.
 
+        The one-retry fallback is suppressed for a user-CHOSEN model
+        (:meth:`_model_chain`, ADR-ML-3) so a deliberate pick that fails raises
+        honestly instead of being silently substituted by a different model.
+
         Every live attempt is bounded by per-call HTTP timeouts AND the
         client-wide wall-clock budget. When the real retry chain is exhausted
         (all attempts failed, or the budget ran out before an attempt could
@@ -1357,7 +1416,21 @@ class LLMClient:
 
     @staticmethod
     def _model_chain(primary: str) -> list[str]:
-        """Primary model, then one retry with the fallback model."""
+        """Primary model, then one retry with the fallback model — EXCEPT when
+        the primary IS the user's deliberately chosen model.
+
+        ADR-ML-3 (§3.4.4 BLOCKER): a run bound to a USER-SELECTED model (the
+        active :func:`user_model_context` resolved to exactly this ``primary``)
+        must NEVER be silently served by a DIFFERENT model on failure — that is
+        silent model substitution. In that case the chain is the chosen model
+        ALONE, so a failure surfaces honestly (``LLMUnavailableError`` -> 503,
+        reserved quota refunded by the router) instead of a fake success built
+        from the hardcoded fallback the user never picked. The un-chosen
+        SYSTEM-DEFAULT path keeps its existing one-retry resilience.
+        """
+        user_chosen = _user_model_context.get()
+        if user_chosen is not None and primary == user_chosen:
+            return [primary]
         fallback = get_fallback_model()
         return [primary] if primary == fallback else [primary, fallback]
 

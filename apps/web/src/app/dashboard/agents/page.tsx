@@ -38,13 +38,18 @@ import TestRunModal from "../../../components/agents/TestRunModal";
 import {
   fetchAgentStats,
   fetchCatalog,
+  fetchProviderCatalog,
+  fetchProviderModels,
   fetchProviders,
+  refreshProviderModels,
   updateAgentConfig,
   updateProvider,
   type AgentStats,
   type Catalog,
   type Provider,
+  type ProviderModel,
 } from "../../../components/agents/api";
+import { ApiError } from "../../../lib/api/client";
 import {
   agentSuccessNotice,
   missingResumeNotice,
@@ -73,6 +78,21 @@ const AGENT_ROUTE: Record<string, string> = {
 
 const POLL_MS = 3000;
 
+//: The provider whose LIVE catalog backs the per-agent pickers. OpenRouter is
+//: the only provider exposing an open /models catalog (the direct-Anthropic
+//: list is static); a per-agent pick of an OpenRouter model routes THAT agent
+//: through OpenRouter (billing implication is explicit — resolve_provider on
+//: the backend keys off the id, unchanged).
+const CATALOG_PROVIDER = "openrouter";
+
+/** Surface the backend's honest `detail` from an ApiError (already lifted by
+ *  fetchProviderCatalog), else a safe generic message. */
+function catalogErrorText(e: unknown): string {
+  if (e instanceof ApiError) return e.message;
+  if (e instanceof Error && e.message.trim()) return e.message;
+  return "Couldn't load the model catalog — try again in a moment.";
+}
+
 export default function AgentsPage() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [providers, setProviders] = useState<Provider[] | null>(null);
@@ -85,6 +105,15 @@ export default function AgentsPage() {
   const [testOpen, setTestOpen] = useState(false);
   const [configProvider, setConfigProvider] = useState<Provider | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Per-agent live model catalog (ML-catalog-001/002/003): one shared fetch of
+  // the OpenRouter catalog + its freshness, fed to every per-agent picker.
+  const [catalogModels, setCatalogModels] = useState<ProviderModel[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogRefreshedAt, setCatalogRefreshedAt] = useState<string | null>(null);
+  const [catalogStale, setCatalogStale] = useState(false);
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const [savingModelKey, setSavingModelKey] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
 
@@ -112,6 +141,75 @@ export default function AgentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Load the live model catalog once for the per-agent pickers, WITH its
+  // freshness envelope (ML-catalog-008/N1): the GET .../models response already
+  // carries lastRefreshedAt/stale on every call, so surface the REAL backend
+  // timestamp on initial load instead of a "not yet refreshed" placeholder.
+  // fetchProviderCatalog returns that full envelope; if it yields no usable
+  // payload we degrade to the narrower fetchProviderModels (models only, no
+  // freshness) so the picker still populates. Never blocks the page: its own
+  // loading/error state is local.
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      const cat = await fetchProviderCatalog(CATALOG_PROVIDER);
+      if (cat && Array.isArray(cat.models)) {
+        setCatalogModels(cat.models);
+        setCatalogRefreshedAt(cat.lastRefreshedAt);
+        setCatalogStale(cat.stale);
+      } else {
+        setCatalogModels(await fetchProviderModels(CATALOG_PROVIDER));
+      }
+    } catch (e) {
+      setCatalogError(catalogErrorText(e));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  // Force a fresh upstream refresh of the catalog (ML-catalog-003). Never blocks
+  // the UI: the button shows its own spinner; the cache keeps serving meanwhile.
+  const onRefreshCatalog = useCallback(async () => {
+    setCatalogRefreshing(true);
+    try {
+      const cat = await refreshProviderModels(CATALOG_PROVIDER);
+      if (cat) {
+        setCatalogModels(cat.models);
+        setCatalogRefreshedAt(cat.lastRefreshedAt);
+        setCatalogStale(cat.stale);
+        setCatalogError(null);
+        setNotice({ kind: "success", text: "Model catalog refreshed from OpenRouter." });
+      }
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Refreshing the model catalog"));
+    } finally {
+      setCatalogRefreshing(false);
+    }
+  }, []);
+
+  // Persist a per-agent model choice to THAT agent's config (ML-catalog-001):
+  // PUT /agents/config/{key} → AgentConfig.model, never the provider-global row.
+  const onSelectModel = useCallback(
+    async (agentKey: string, model: string) => {
+      setSavingModelKey(agentKey);
+      try {
+        await updateAgentConfig(agentKey, { model });
+        setNotice({ kind: "success", text: `Model updated for ${agentKey} → ${model}.` });
+        setCatalog(await fetchCatalog());
+      } catch (e) {
+        setNotice(runErrorNotice(e, "Updating the agent model"));
+      } finally {
+        setSavingModelKey(null);
+      }
+    },
+    [],
+  );
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
@@ -368,6 +466,15 @@ export default function AgentsPage() {
         busyKey={toggleBusy ?? busy}
         onToggle={(key, enabled) => void onToggleAgent(key, enabled)}
         onRun={onRunAgent}
+        catalogModels={catalogModels}
+        catalogLoading={catalogLoading}
+        catalogError={catalogError}
+        catalogRefreshedAt={catalogRefreshedAt}
+        catalogStale={catalogStale}
+        catalogRefreshing={catalogRefreshing}
+        onRefreshCatalog={() => void onRefreshCatalog()}
+        savingModelKey={savingModelKey}
+        onSelectModel={(key, model) => void onSelectModel(key, model)}
       />
 
       <AgentStatsRow stats={stats} loading={stats === null} />

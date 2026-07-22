@@ -86,7 +86,36 @@ export const ProviderModelsResponseSchema = z.object({
   provider: z.string(),
   count: z.number(),
   models: z.array(ProviderModelSchema),
+  // Catalog freshness (ML-catalog-002). `.nullish()` so a legacy response (or a
+  // test fixture) that predates the freshness contract still parses cleanly.
+  lastRefreshedAt: z.string().nullish(),
+  stale: z.boolean().nullish(),
 });
+
+/**
+ * A provider's live model catalog WITH freshness metadata (ML-catalog-002):
+ * the models plus when they were last actually fetched from upstream and
+ * whether we're serving a stale (last-good) copy because a refresh failed.
+ */
+export interface ProviderCatalog {
+  provider: string;
+  count: number;
+  models: ProviderModel[];
+  lastRefreshedAt: string | null;
+  stale: boolean;
+}
+
+function toProviderCatalog(
+  res: z.infer<typeof ProviderModelsResponseSchema>,
+): ProviderCatalog {
+  return {
+    provider: res.provider,
+    count: res.count,
+    models: res.models,
+    lastRefreshedAt: res.lastRefreshedAt ?? null,
+    stale: res.stale ?? false,
+  };
+}
 
 /** Which credential shape a provider row carries. */
 export type ProviderAuthMode = "api_key" | "subscription_oauth" | "oauth_token";
@@ -179,6 +208,53 @@ export async function fetchProviderModels(
   try {
     const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
     return ProviderModelsResponseSchema.parse(res).models;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
+    }
+    throw e;
+  }
+}
+
+/**
+ * The LIVE model catalog for a provider WITH its freshness envelope
+ * (ML-catalog-008/N1): the SAME GET .../models call as {@link fetchProviderModels}
+ * but returning the full `{models, lastRefreshedAt, stale}` envelope instead of
+ * discarding the freshness — so the page can show the REAL backend timestamp on
+ * initial load, not a "not yet refreshed" placeholder. Same honest-error
+ * contract (the backend serves last-good stale data on upstream failure).
+ */
+export async function fetchProviderCatalog(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<ProviderCatalog> {
+  try {
+    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
+    return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
+  } catch (e) {
+    if (e instanceof ApiError) {
+      throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
+    }
+    throw e;
+  }
+}
+
+/**
+ * Force a fresh upstream refresh of a provider's live catalog (ML-catalog-003):
+ * POST .../providers/{provider}/models/refresh. Bypasses the ~1 h TTL cache and
+ * returns the updated catalog + freshness. Same honest-error contract as the
+ * GET path (last-good stale data on upstream failure, never a fabricated list).
+ */
+export async function refreshProviderModels(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<ProviderCatalog> {
+  try {
+    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models/refresh`, {
+      ...o,
+      method: "POST",
+    });
+    return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
   } catch (e) {
     if (e instanceof ApiError) {
       throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
