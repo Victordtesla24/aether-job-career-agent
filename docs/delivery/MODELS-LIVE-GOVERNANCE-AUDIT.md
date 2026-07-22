@@ -69,7 +69,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 47 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ac0e2d) | ML-model curation implement | ✅ @0b08dfd; 5-id frozenset denylist, 89/89, 0 regr, exact-id-only, validate/resolve_provider untouched |
 | 52 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-model curation diff review | ✅ PASS (exact-id-only, no over-filter, honest, 89/89); batch-deploy w/ signup-race |
 | 48 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 dashboard display screens | ✅ PASS 0 findings (real data, honest states, no overflow, CRUD clean); 1 LOW UNSURE ML-networking-001 |
-| 49 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 admin screens (admin/health/audit-log/settings/spend/users) + ML-browser-002/003 verdict | dispatched |
+| 49 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 admin screens + ML-browser-002/003 | ✅ 2 findings (ML-admin-001 HIGH plan-filter 500, ML-admin-002 MED mobile-overflow); browser-002/003 BENIGN-closed; security clean, no placeholder |
+| 55 | 2026-07-22 (resumed) | deployer | haiku | BATCH-1 deploy: merge curation + signup-race, restart, verify curated-count + entitlement-200 | dispatched |
+| 56 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-admin-001/002 failing tests, branch fix/ml-admin | dispatched |
 | 50 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens | ✅ mostly clean (login/pricing/legal); ML-browser-001 BENIGN-closed; NEW ML-signup-001 HIGH (entitlement 500 race on fresh signup) |
 | 51 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-signup-001 failing test, branch fix/ml-signup-001 | ✅ @54f5aa4; 3 tests (2 fail-before+1 guard), RCA deterministic (UniqueViolation) |
 | 53 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a279974c) | ML-signup-001 implement | ✅ @913b8fe; ON CONFLICT DO NOTHING both inserts, 3/3+57 slice green, no suppression, billing amounts untouched |
