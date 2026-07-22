@@ -834,6 +834,44 @@
       "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [],
       "verifiedBy": ""
+    },
+    {
+      "id": "ML-approvals-001",
+      "screen": "/dashboard/approvals",
+      "severity": "MEDIUM",
+      "category": "visual",
+      "summary": "Approvals queue card preview (whitespace-pre-line + line-clamp-3) truncates to just the letterhead lines, never showing substantive content \u2014 the full Review modal is correct. Poor preview UX.",
+      "reproduction": [
+        "/dashboard/approvals \u2192 a cover-letter/offer-response approval card \u2192 preview shows only letterhead, not the body"
+      ],
+      "expected": "Card preview shows substantive content (skip letterhead / show body excerpt)",
+      "observed": "Only letterhead lines shown",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (FE batch)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-settings-001",
+      "screen": "/dashboard/settings",
+      "severity": "MEDIUM",
+      "category": "validation",
+      "summary": "An oversized adversarial field value is correctly rejected server-side (422) but the FE renders the RAW unwrapped Pydantic error (echoing the full invalid input back), blowing the page to ~50,600px horizontal overflow. Error rendering should be honest+bounded, not raw-echo.",
+      "reproduction": [
+        "/dashboard/settings \u2192 paste an oversized value in a field \u2192 save \u2192 422 \u2192 FE renders raw Pydantic error + full input \u2192 ~50,600px overflow"
+      ],
+      "expected": "Honest, bounded, user-friendly validation error (no raw Pydantic echo, no page overflow)",
+      "observed": "Raw Pydantic error echoed + 50,600px overflow",
+      "evidence": [
+        "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (FE batch)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
