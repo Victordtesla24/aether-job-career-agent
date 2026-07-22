@@ -2132,7 +2132,15 @@ def _build_provider_entry(
     # to "warning" (the status the FE already renders as re-authenticate) and
     # emit an explicit ``needsReauth`` flag so the modal shows the Reconnect /
     # Renew affordance. Reads the REAL token row; never fabricated.
-    needs_reauth = _anthropic_oauth_needs_reauth(user_id) if provider_id == "anthropic" else False
+    # ML-agents-cred-005: only applies when a credential ACTUALLY exists
+    # (source != "none") — once the credential has been deleted, an orphaned
+    # per-user needs_reauth token row is meaningless and must not demote an
+    # already-honest "unconfigured" provider to a leftover "warning" badge.
+    needs_reauth = (
+        _anthropic_oauth_needs_reauth(user_id)
+        if provider_id == "anthropic" and source != "none"
+        else False
+    )
     if needs_reauth:
         status = "warning"
         detail = (
@@ -2692,11 +2700,17 @@ def anthropic_oauth_exchange(
 ) -> dict[str, Any]:
     """Exchange the pasted one-time ``code#state`` for a subscription token.
 
-    422 malformed paste; 400 unknown/expired/replayed state; 403 state started
-    by a different user; 502 honest token-endpoint error (incl. an unexpected
-    response shape — defensive parse, never a fake success). On success the
-    access token is stored deployment-wide (oauth_token) and the refresh
-    material per-user; the masked provider status object is returned (no token).
+    422 malformed paste, or an honest upstream CODE-REJECTION — a real HTTP
+    response reached us with a non-2xx status (e.g. Anthropic 400 invalid_grant
+    for a stale/mistyped/expired pasted code); 400 unknown/expired/replayed
+    state; 403 state started by a different user; 502 a genuine network/gateway
+    failure — NO response reached us at all (incl. an unexpected 2xx response
+    shape — defensive parse, never a fake success). ML-adv-002: a rejection is
+    surfaced as 422 (not 502) because Cloudflare replaces 502 bodies with a
+    generic page, hiding the app's actionable detail; 4xx bodies pass through
+    untouched. On success the access token is stored deployment-wide
+    (oauth_token) and the refresh material per-user; the masked provider status
+    object is returned (no token).
     """
     from app.services import anthropic_oauth
 
@@ -2717,6 +2731,16 @@ def anthropic_oauth_exchange(
     try:
         tok = anthropic_oauth.exchange_code(code, row["codeVerifier"], state)
     except anthropic_oauth.OAuthExchangeError as exc:
+        # A real HTTP response reached us with a non-2xx status: Anthropic
+        # honestly REJECTED the code/grant (bad, expired, or replayed) — this
+        # is a client-side mistake (the operator's pasted code), not a gateway
+        # failure, so it must be a 4xx that Cloudflare passes through intact.
+        if exc.upstream_status is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Anthropic rejected the authorization code — restart Connect with "
+                "Anthropic.",
+            ) from exc
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             "Anthropic rejected the authorization code — restart Connect with "
