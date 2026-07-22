@@ -104,6 +104,20 @@ describe("ProviderConfigModal — Connect with Anthropic (ML-agents-cred-002, AD
     expect(connectButton.textContent ?? "").toMatch(/connect.*anthropic/i);
   });
 
+  it("shows an honest 'brief Anthropic security check' hint near the Connect control (ML-agents-003, ADR-ML-5)", () => {
+    render(
+      <ProviderConfigModal
+        provider={anthropic}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+    const hint = screen.getByTestId("anthropic-oauth-security-hint");
+    expect(hint.textContent ?? "").toMatch(/security check/i);
+    expect(hint.textContent ?? "").toMatch(/expected/i);
+  });
+
   it("does NOT show a Connect action for a non-Anthropic provider (OpenRouter)", () => {
     const openrouter: Provider = {
       ...anthropic,

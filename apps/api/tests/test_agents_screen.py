@@ -128,14 +128,17 @@ def test_reassign_agent_model_persists(client, auth_headers):
     )
     assert res.status_code == 200
     assert res.json()["model"] == "gpt-4o"
-    # The catalog card shows the model the agent ACTUALLY runs on (the LLM
-    # tier resolved from env), not the stored preference — no dishonest
-    # "assigned model" display while the runtime is pinned to its tier.
-    from app.services.llm_client import get_model
-
+    # ML-agents-002: the catalog card shows the model the agent ACTUALLY runs
+    # on — and the runtime now HONOURS a deliberate per-agent override
+    # (GAP-P7-MODEL-CHOICE-001, threaded through _execute_reserved_run /
+    # _billing_audit), so the honest display is the saved "gpt-4o", not the
+    # tier's env default. (Before ML-agents-002 the catalog ignored the saved
+    # override and reverted to the env default on reload — the display bug this
+    # asserts is fixed; see test_ml_agents_refix.test_catalog_model_field_
+    # reflects_saved_override for the pinned contract.)
     cat = client.get("/agents/catalog", headers=auth_headers).json()
     entry = next(a for a in cat["agents"] if a["key"] == "resumeTailoring")
-    assert entry["model"] == get_model("REASONING")
+    assert entry["model"] == "gpt-4o"
 
 
 def test_config_unknown_agent_404(client, auth_headers):
