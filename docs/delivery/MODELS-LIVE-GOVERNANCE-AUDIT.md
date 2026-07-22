@@ -66,7 +66,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 44 | 2026-07-22 (resumed) | scout | haiku | OpenRouter schema investigation | ✅ NO upstream availability signal; heuristic-filter dishonest (Anthropic-via-OR lacks temperature); → ADR-ML-4 seeded denylist |
 | 45 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 dashboard display screens (home/analytics/applications/offers/networking) | dispatched |
 | 46 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-model curation failing tests, branch fix/ml-model-curation | ✅ @70d987f; 5 tests (3 fail-before+2 guards), 21 prior green |
-| 47 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ac0e2d) | ML-model curation implement (exact-id denylist) | dispatched |
+| 47 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ac0e2d) | ML-model curation implement | ✅ @0b08dfd; 5-id frozenset denylist, 89/89, 0 regr, exact-id-only, validate/resolve_provider untouched |
+| 52 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-model curation diff review | dispatched |
 | 48 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 dashboard display screens | ✅ PASS 0 findings (real data, honest states, no overflow, CRUD clean); 1 LOW UNSURE ML-networking-001 |
 | 49 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 admin screens (admin/health/audit-log/settings/spend/users) + ML-browser-002/003 verdict | dispatched |
 | 50 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens | ✅ mostly clean (login/pricing/legal); ML-browser-001 BENIGN-closed; NEW ML-signup-001 HIGH (entitlement 500 race on fresh signup) |
