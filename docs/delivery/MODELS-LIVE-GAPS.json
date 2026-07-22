@@ -441,6 +441,64 @@
       ],
       "verifiedBy": "",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
+    },
+    {
+      "id": "ML-model-001",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "model-catalog",
+      "summary": "\u00a73.4.3(c): catalog offers OpenRouter models with NO live endpoint for this key (genuine upstream 404 at run time) as equally-selectable, not flagged/filtered 'unavailable'. Run-time error IS honest+refunded (no billing harm) but \u00a73.4 requires unavailable ids be filtered from the catalog OR flagged 'unavailable' in UI. Observed: allenai/olmo-3-32b-think, inflection/inflection-3-pi.",
+      "reproduction": [
+        "Select allenai/olmo-3-32b-think (valid catalog id) \u2192 run \u2192 upstream 404 'No endpoints found' \u2192 opaque 'AI service unavailable' after a (refunded) reservation"
+      ],
+      "expected": "Picker/catalog honestly flags or filters ids with no live endpoint for this key",
+      "observed": "Shown as freely selectable; failure only discovered at run time",
+      "evidence": [
+        "uat/reports/evidence/models-live/models/RUN-SWEEP.md",
+        "models/NO-SUBSTITUTION-PROOF.md"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-model-002",
+      "screen": "Agents",
+      "severity": "LOW",
+      "category": "model-catalog",
+      "summary": "\u00a73.4.3(c) curation: catalog includes structurally incompatible non-chat models (morph/morph-v3-fast, relace/relace-apply-3 \u2192 400 'Multi-turn not supported'; openai/o3-deep-research \u2192 400 unsupported temperature) that fail for EVERY chat agent. Exclude non-chat-completion model classes from the catalog offered to chat agents.",
+      "reproduction": [
+        "Select morph/morph-v3-fast \u2192 run \u2192 400 'Multi-turn conversations are not supported'"
+      ],
+      "expected": "Non-chat model classes excluded/flagged",
+      "observed": "Offered as normal chat models",
+      "evidence": [
+        "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-model-003",
+      "screen": "n/a (ops)",
+      "severity": "LOW",
+      "category": "model-catalog",
+      "summary": "INFORMATIONAL (not a defect): the production DEFAULT reasoning model deepseek/deepseek-v4-pro hit 1 transient malformed-response in 82 probes \u2014 handled correctly (honest 503 + refund + no silent fallback). Operational-monitoring note only.",
+      "reproduction": [
+        "82-probe run sweep; 1 transient malformed response on deepseek-v4-pro"
+      ],
+      "expected": "n/a \u2014 handled correctly",
+      "observed": "Honest 503+refund (correct behavior)",
+      "evidence": [
+        "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
+      ],
+      "status": "OPEN",
+      "owner": "ops-monitoring (no code fix)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
