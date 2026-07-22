@@ -457,8 +457,8 @@
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md",
         "models/NO-SUBSTITUTION-PROOF.md"
       ],
-      "status": "OPEN",
-      "owner": "catalog-engineer",
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [],
       "verifiedBy": ""
     },
@@ -476,8 +476,8 @@
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
-      "status": "OPEN",
-      "owner": "catalog-engineer",
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [],
       "verifiedBy": ""
     },
