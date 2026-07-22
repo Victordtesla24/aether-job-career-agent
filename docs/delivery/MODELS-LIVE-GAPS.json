@@ -1056,14 +1056,15 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-AWAITING-REVIEW",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "test-author \u2192 fixer-medium (validation)",
       "fixCommits": [
         "0afe860(tests)",
         "a975473(fix)"
       ],
       "verifiedBy": "",
-      "rca": "FE-only page.tsx:59-63 onSaveCap Number('')===0 passes >=0 guard. Backend already correct (Field(ge=0) 422s empty). Fix: capInput.trim()==='' reject before Number(). Preserve deliberate 0."
+      "rca": "FE-only page.tsx:59-63 onSaveCap Number('')===0 passes >=0 guard. Backend already correct (Field(ge=0) 422s empty). Fix: capInput.trim()==='' reject before Number(). Preserve deliberate 0.",
+      "reviewVerdict": "PASS (ML-admindetail-001-diff-review.md, revert-verified): trim()==='' guard before Number() (blank rejected, deliberate-0 preserved), backend untouched, 3/3+556/556 exit-0. Final deploy w/ ML-adv-003."
     },
     {
       "id": "ML-admindetail-002",

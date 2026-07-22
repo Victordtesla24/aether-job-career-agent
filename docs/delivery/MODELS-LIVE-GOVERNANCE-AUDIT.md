@@ -98,7 +98,7 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 88 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-adv-003 settings re-fix | ✅ @5a45937 (min-w-0 both grid ancestors + break-all preview; 553/553, build clean; local-Playwright unreliable → PROD-verify pending) |
 | 89 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-admindetail-001 spend-cap failing test | ✅ @0afe860; 3 tests (2 fail-before+1 guard); FE-only (Number('')===0), backend already-correct |
 | 92 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a2c3bbb8) | ML-admindetail-001 implement | ✅ @a975473 (4-line trim()==='' guard, deliberate-0 preserved, backend untouched; 556/556 exit-0) |
-| 93 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admindetail-001 diff review | dispatched |
+| 93 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-admindetail-001 diff review | ✅ PASS (revert-verified; blank rejected, deliberate-0 preserved, backend untouched, 556/556 exit-0; 1 non-blocking stash-desync disclosed+recovered) |
 | 90 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-adv-003 CSS-correctness review | ✅ PASS (min-w-0 grid-item load-bearing + break-all min-content-correct, desktop unchanged, 553/553; PROD-verify pending) |
 | 91 | 2026-07-22 (resumed) | model-prober | sonnet | §8 STAGE-3 catalog re-sample (fresh pull + ≥20% selection + ≥5 run probes + no-substitution) | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
