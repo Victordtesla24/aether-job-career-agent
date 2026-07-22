@@ -315,10 +315,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-QA",
       "owner": "runtime-monitor (fix own script + prove capture)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "monitor-tail.sh line32 /.../ \u2192 m{...} (evidence-dir, gitignored)"
+      ],
+      "verifiedBy": "",
+      "note": "Fail-before rc=255 proven; pass-after 11/21 correct matches; capture restarted (new PID); retro-triage last 3h direct-grep = 0 missed real signatures (system genuinely clean, only instrument broken). FINAL verification = G-06 live observation window must show the working monitor capturing a clean window. Independent capture re-check before G-06."
     },
     {
       "id": "ML-adv-002",
