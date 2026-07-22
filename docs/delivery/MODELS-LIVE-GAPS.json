@@ -282,7 +282,8 @@
       "status": "OPEN",
       "owner": "G-07 stage: clean stale worktrees + serialized fresh full run",
       "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding.",
-      "gatePlan": "G-07 PREREQ (gate-prep 2026-07-22): 33 stale worktree-agent-* worktrees + 83 stale local branches (fix/mv-*, fix/nf-*, prior runs) cause the shared aether_test contention. CLEANUP at G-07 (AFTER all fix agents finish): git worktree prune + remove all non-main worktrees; git branch -D the merged/abandoned locals; then run full pytest+vitest+Playwright fresh (serialized, no concurrent pytest) + log counts. G-08 ALREADY MET: git ls-remote origin = refs/heads/main only; gh pr list = 0 open PRs."
+      "gatePlan": "G-07 PREREQ (gate-prep 2026-07-22): 33 stale worktree-agent-* worktrees + 83 stale local branches (fix/mv-*, fix/nf-*, prior runs) cause the shared aether_test contention. CLEANUP at G-07 (AFTER all fix agents finish): git worktree prune + remove all non-main worktrees; git branch -D the merged/abandoned locals; then run full pytest+vitest+Playwright fresh (serialized, no concurrent pytest) + log counts. G-08 ALREADY MET: git ls-remote origin = refs/heads/main only; gh pr list = 0 open PRs.",
+      "gateResult": "G-07 PARTIAL @b34b1ca: PRUNE \u2705 (worktrees 38\u21927, 87 stale branches deleted, G-08 confirmed remote=main+0PR). Frontend \u2705 556/556 exit-0 + build clean. Backend pytest HUNG @39% (453P/15F unclassified) \u2014 shared-schema contention worsened by concurrent agents (incl. live RCA). NEEDS isolated re-run on a QUIET system (no other pytest/agents) to classify the 15 + confirm green. Deferred until after ML-agents-err-001 resolves + system quiets."
     },
     {
       "id": "ML-catalog-004",
