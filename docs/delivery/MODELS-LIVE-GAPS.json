@@ -575,14 +575,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): storyExtraction STRUCTURED shows honest lock w/ real fixed model qwen/qwen3-coder-next; REASONING agents keep functional pickers; deterministic locked.",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -599,14 +599,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-hard",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): save+reload display shows SAVED model (not tier default).",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -623,14 +623,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "fixer (fold hint into Agents re-fix cluster)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): CF security hint present; authorize URL unchanged (claude.com/cai). ADR-ML-5.",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -647,14 +647,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-medium (real estimate or remove)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): Test Run cost estimate DIFFERS per selected model (not static).",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -671,14 +671,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author \u2192 fixer-medium",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): the identified cause (price badges + toggle tap-target) IS fixed+reduces overflow. A SEPARATE untouched component (Orchestration.tsx grid) is the remaining dominant overflow cause \u2192 filed as ML-agents-006. 005's scope (badges) closed.",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -792,14 +792,14 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "FIXED-DEPLOYED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED",
       "owner": "covered by ML-agents-001 fix (fix/ml-agents-refix)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): storyExtraction now honestly locked (config no longer implies use); ML-agents-001 fix confirmed.",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -876,6 +876,26 @@
       ],
       "status": "OPEN",
       "owner": "fixer-medium (FE batch)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-006",
+      "screen": "/dashboard/agents",
+      "severity": "MEDIUM",
+      "category": "visual",
+      "summary": "Dominant mobile-overflow cause (found during batch-2 prod-verify): the Agent Orchestration panel's Task Queue/Performance/Error Log 3-column grid (apps/web/src/components/agents/Orchestration.tsx) blows out its correctly-sized 358px parent to 629px via a classic missing-min-w-0 CSS Grid content-blowout \u2192 /dashboard/agents scrollWidth 645 vs 390 (255px overflow at 390px). Distinct from ML-agents-005 (badges, fixed).",
+      "reproduction": [
+        "/dashboard/agents at 390px \u2192 255px horizontal overflow; DOM sweep \u2192 Orchestration grid children 629px in 358px parent"
+      ],
+      "expected": "No horizontal overflow at 390px (min-w-0 on the grid/columns, responsive stacking)",
+      "observed": "255px overflow from Orchestration 3-col grid",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/batch2-prodverify.md",
+        "batch2-prodverify-assets/"
+      ],
+      "status": "OPEN",
+      "owner": "fixer-medium (FE batch-4)",
       "fixCommits": [],
       "verifiedBy": ""
     }
