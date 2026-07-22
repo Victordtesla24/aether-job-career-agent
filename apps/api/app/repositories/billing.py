@@ -260,7 +260,15 @@ def ensure_user_billing(user_id: str, cur: Any = None) -> None:
     ``_ensure_billing_tables()`` first ran; a user registered later (very common
     in tests, and possible in prod between worker restarts) would have no quota
     row. This per-user, on-demand backfill closes that gap before any reserve.
-    Additive ``WHERE NOT EXISTS`` inserts — never resets an existing row.
+
+    Additive ``INSERT ... ON CONFLICT ("userId") DO NOTHING`` — never resets an
+    existing row. (ML-signup-001: a plain ``INSERT ... WHERE NOT EXISTS``
+    check-then-insert is NOT atomic under READ COMMITTED — a second,
+    concurrent/duplicate provisioning attempt for the same fresh user can
+    both see "not exists" and race the ``Subscription_userId_key`` /
+    ``UsageQuota_userId_key`` unique indexes, raising ``IntegrityError``
+    instead of no-op'ing. ``ON CONFLICT DO NOTHING`` closes the TOCTOU window
+    in a single atomic statement — no catch-and-retry needed.)
     """
     _ensure_billing_tables()
     _free_runs, _free_cap = _free_plan_limits()
@@ -270,23 +278,23 @@ def ensure_user_billing(user_id: str, cur: Any = None) -> None:
             '''
             INSERT INTO "Subscription" ("userId","planId","status","billingInterval",
                                         "createdAt","updatedAt")
-            SELECT %s, 'free', 'active', NULL, now(), now()
-            WHERE NOT EXISTS (SELECT 1 FROM "Subscription" WHERE "userId" = %s)
+            VALUES (%s, 'free', 'active', NULL, now(), now())
+            ON CONFLICT ("userId") DO NOTHING
             ''',
-            (user_id, user_id),
+            (user_id,),
         )
         c.execute(
             '''
             INSERT INTO "UsageQuota" ("userId","planId","periodStart","periodEnd",
                                      "runsAllowed","runsUsed","spendCapUsd",
                                      "spendUsedUsd","createdAt","updatedAt")
-            SELECT %s, 'free',
+            VALUES (%s, 'free',
                    date_trunc('month', now()),
                    date_trunc('month', now()) + interval '1 month',
-                   %s, 0, %s, 0, now(), now()
-            WHERE NOT EXISTS (SELECT 1 FROM "UsageQuota" WHERE "userId" = %s)
+                   %s, 0, %s, 0, now(), now())
+            ON CONFLICT ("userId") DO NOTHING
             ''',
-            (user_id, _free_runs, _free_cap, user_id),
+            (user_id, _free_runs, _free_cap),
         )
 
     if cur is not None:
