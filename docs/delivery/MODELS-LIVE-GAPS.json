@@ -781,10 +781,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (batch w/ mobile fixes)",
       "fixCommits": [
-        "5bceb2e(tests)"
+        "5bceb2e(tests)",
+        "4af0c91(fix)"
       ],
       "verifiedBy": ""
     },
@@ -894,10 +895,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
-        "5bceb2e(tests)"
+        "5bceb2e(tests)",
+        "4af0c91(fix)"
       ],
       "verifiedBy": ""
     },
@@ -915,10 +917,11 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
-        "5bceb2e(tests)"
+        "5bceb2e(tests)",
+        "4af0c91(fix)"
       ],
       "verifiedBy": ""
     },
@@ -937,10 +940,11 @@
         "uat/reports/evidence/models-live/adversarial/batch2-prodverify.md",
         "batch2-prodverify-assets/"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "fixer-medium (FE batch-4)",
       "fixCommits": [
-        "5bceb2e(tests)"
+        "5bceb2e(tests)",
+        "4af0c91(fix)"
       ],
       "verifiedBy": ""
     }
