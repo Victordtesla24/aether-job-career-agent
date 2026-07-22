@@ -65,7 +65,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 43 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens (login/signup/pricing/legal) + ML-browser-001 verdict | dispatched |
 | 44 | 2026-07-22 (resumed) | scout | haiku | OpenRouter schema investigation | ✅ NO upstream availability signal; heuristic-filter dishonest (Anthropic-via-OR lacks temperature); → ADR-ML-4 seeded denylist |
 | 45 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 dashboard display screens (home/analytics/applications/offers/networking) | dispatched |
-| 46 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-model curation failing tests, branch fix/ml-model-curation | dispatched |
+| 46 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-model curation failing tests, branch fix/ml-model-curation | ✅ @70d987f; 5 tests (3 fail-before+2 guards), 21 prior green |
+| 47 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-ac0e2d) | ML-model curation implement (exact-id denylist) | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
