@@ -1113,7 +1113,7 @@
       "screen": "/dashboard/agents",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "RCA (AGENTS-ERRORING-RCA.md): NO code regression / no crash / no silent-substitution. The operator-visible Agents-screen status is computed from the SINGLE LAST RUN ONLY (no rolling window/decay), so ONE transient+already-refunded failure (here: the orchestrator's own \u00a73.4/Stage-3 model-sweep probe hitting flaky poolside/laguna-m.1:free \u2192 429, refunded $0) paints a persistent red 'error' badge on a healthy agent. A clean re-run flips it back to 'active'. FIX: status must not show persistent 'error' for a transient/refunded/honest-degrade last-run.",
+      "summary": "CONFIRMED real UX defect + fix spec. Agents-screen per-agent 'status' (agents.py:1794: `if run['status']=='failed': state='error'`) is computed from the SINGLE most-recent AgentRun with NO transient/refund classification and NO window. A TRANSIENT/REFUNDED hard-failure \u2014 e.g. tailor run 'The AI service is temporarily unavailable' (LLMUnavailable, refunded), or a rate-limited 429/refunded sweep run \u2014 sets status='failed' and paints the agent card RED until the next run, even though the agent is healthy and the user was refunded. This is what the operator saw as 'some agents erroring out'. Graceful degrades (status='completed' + coverLetterUnavailable) already correctly show 'active'. FIX: a transient/upstream-unavailable OR refunded (costUsd NULL) last-run failure must NOT render a persistent 'error' badge (show 'active', optional subtle degraded hint); a GENUINE billed agent-logic failure still shows 'error'; AND a persistence guard \u2014 last N(\u22483) runs ALL failed \u2192 'error' so real breakage still surfaces. Fields available on AgentRun: status, error(msg), costUsd(NULL=refund), output(flags), billingAuditJson.",
       "reproduction": [
         "Load /dashboard/agents on prod \u2192 some agents show error state / erroring runs (operator report)"
       ],
@@ -1123,7 +1123,7 @@
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
       ],
       "status": "OPEN",
-      "owner": "test-author \u2192 fixer (refund/honest-degrade-aware status)",
+      "owner": "test-author \u2192 fixer-hard \u2192 reviewer \u2192 deployer \u2192 qa",
       "fixCommits": [],
       "verifiedBy": "",
       "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified)."
@@ -1131,9 +1131,9 @@
     {
       "id": "ML-agents-err-002",
       "screen": "agent pipeline (coverLetter)",
-      "severity": "MEDIUM",
+      "severity": "INFO",
       "category": "defect",
-      "summary": "FOLLOW-UP (RCA): coverLetter's env-default generation model anthropic/claude-3-haiku (via OpenRouter) intermittently returns EMPTY content for the cover_letter prompt \u2192 graceful degrade (coverLetterUnavailable, $0, no error badge \u2014 HONEST, not a crash). Reliability tuning: swap the cover default to a more reliable model OR extend the malformed/empty-JSON retry budget for that prompt/model pair to reduce the degrade rate.",
+      "summary": "RESOLVED \u2014 NOT A DEFECT. Live probe (LIVE-CATALOG-STATUS-NOW.md) + code trace (COVER-STATUS-CONFIG-SCOUT.md) + grep confirm: (1) NO hardcoded claude-3-haiku anywhere in apps/api/app; deployed tier default is AETHER_MODEL_REASONING=deepseek/deepseek-v4-pro. (2) The claude-3-haiku that returned empty JSON at 23:36 was the OPERATOR'S OWN per-agent model selection for coverLetter at that time; the system honored the choice, got empty content, retried, then honestly degraded (coverLetterUnavailable, \\$0 refunded) \u2014 the correct no-silent-substitution behavior. (3) Operator has since switched coverLetter to anthropic/claude-sonnet-5, which runs successfully (\\$0.0016 billed). Honoring a user-selected weak model + honest refund on failure is working as designed; changing it would violate the no-substitution mandate. No code change.",
       "reproduction": [
         "Run coverLetter repeatedly \u2192 intermittent empty-content from claude-3-haiku \u2192 honest coverLetterUnavailable degrade"
       ],
@@ -1142,10 +1142,10 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md"
       ],
-      "status": "OPEN",
+      "status": "CLOSED-NOT-A-DEFECT",
       "owner": "fixer (reliability tuning \u2014 batch with err-001 or backlog)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "evidence probe a44b29c (LIVE-CATALOG-STATUS-NOW.md) + scout addca724 + grep (no hardcoded haiku)"
     }
   ]
 }
