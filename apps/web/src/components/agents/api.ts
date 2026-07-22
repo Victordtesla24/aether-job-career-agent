@@ -366,3 +366,47 @@ export async function verifyProvider(id: string, o: RequestOptions = {}): Promis
     await apiRequest<unknown>(`/agents/providers/${id}/verify`, { ...o, method: "POST" }),
   );
 }
+
+/** Result of POST /agents/providers/anthropic/oauth/start. */
+export const AnthropicOAuthStartSchema = z.object({ authorizeUrl: z.string() });
+export type AnthropicOAuthStart = z.infer<typeof AnthropicOAuthStartSchema>;
+
+/**
+ * Begin the in-app "Connect with Anthropic" (subscription) OAuth flow
+ * (ML-agents-cred-002 / ADR-ML-1): the server mints a PKCE verifier + state and
+ * returns Anthropic's OWN authorize URL. The caller opens it in a new tab; the
+ * operator approves with their Claude Pro/Max account and pastes back a one-time
+ * code (never the long-lived token).
+ */
+export async function startAnthropicOAuth(
+  o: RequestOptions = {},
+): Promise<AnthropicOAuthStart> {
+  return AnthropicOAuthStartSchema.parse(
+    await apiRequest<unknown>("/agents/providers/anthropic/oauth/start", {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
+/**
+ * Complete the Connect-with-Anthropic flow: POST the pasted ``code#state`` to
+ * /agents/providers/anthropic/oauth/exchange. The server exchanges it for a
+ * subscription token (stored encrypted, deployment-wide) and returns the masked
+ * provider row — never the token. Parsed as a partial passthrough (same as the
+ * other credential mutations) so a full enriched row round-trips unchanged.
+ */
+export async function exchangeAnthropicOAuth(
+  pastedCode: string,
+  o: RequestOptions = {},
+): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>("/agents/providers/anthropic/oauth/exchange", {
+        ...o,
+        method: "POST",
+        body: { pastedCode },
+      }),
+    ) as Provider;
+}

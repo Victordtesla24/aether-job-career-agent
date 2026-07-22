@@ -34,6 +34,7 @@ from app.repositories.billing import (
 from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,
+    AnthropicOAuthStateRepository,
     UserProviderCredentialRepository,
     _ensure_user_agent_tables,
 )
@@ -2420,14 +2421,130 @@ def verify_user_provider(provider: str, current_user: CurrentUser) -> dict[str, 
 
 
 # ---------------------------------------------------------------------------
-# Anthropic subscription OAuth was REMOVED (GAP-AUTH-001 / Gate-14): consumer
-# Claude Free/Pro/Max subscription OAuth (claude.ai/oauth/authorize) is
-# non-compliant in a third-party product. The only supported Anthropic auth is
-# a server-side Claude Console API key (x-api-key), configured via the provider
-# credential endpoints above. The former /auth/anthropic/{start,callback}
-# routes are intentionally gone (they now 404). The AnthropicOAuthState /
-# AnthropicOAuthToken tables are retained but unused (additive, backward-compat).
+# In-app "Connect with Anthropic" (subscription) OAuth — ML-agents-cred-002,
+# operator-mandated (ADR-ML-1), approved ADR-ML-2/2a. This is the COMPLIANT
+# re-authoring of the flow removed in GAP-AUTH-001/Gate-14: the operator
+# authorizes on Anthropic's OWN pages with their OWN Pro/Max account and pastes
+# back a one-time code (never the long-lived token). The exchanged access token
+# is stored in the SAME deployment-wide ProviderCredential('anthropic') seam the
+# manual oauth_token paste uses (transport unchanged: Bearer + anthropic-beta:
+# oauth-2025-04-20). Manual API-key / setup-token paste remain as honest
+# fallback. See app/services/anthropic_oauth.py.
 # ---------------------------------------------------------------------------
+
+
+class AnthropicOAuthExchangeBody(BaseModel):
+    pastedCode: str
+
+
+def _oauth_vault_ready_or_503() -> None:
+    """Fail closed (503) when the vault key is absent — the refresh token can't
+    be stored honestly without it (never proceed unencrypted)."""
+    if not credential_vault.key_present():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Credential encryption unavailable: AETHER_CREDENTIAL_KEY is not "
+            "configured on the server.",
+        )
+
+
+@router.post("/providers/anthropic/oauth/start")
+def anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
+    """Begin the Connect-with-Anthropic flow: return the authorize URL.
+
+    Generates a server-side PKCE verifier + opaque single-use state, persists
+    them (the verifier NEVER leaves the server), and returns Anthropic's own
+    authorize URL. 503 when the vault key is absent (fail closed).
+    """
+    from app.services import anthropic_oauth
+
+    _oauth_vault_ready_or_503()
+    verifier, challenge = anthropic_oauth.generate_pkce()
+    state = anthropic_oauth.generate_state()
+    AnthropicOAuthStateRepository().create(state, current_user["id"], verifier)
+    return {"authorizeUrl": anthropic_oauth.build_authorize_url(challenge, state)}
+
+
+def _parse_pasted_oauth_code(pasted: str) -> tuple[str, str]:
+    """Split a pasted ``code#state`` into ``(code, state)`` — both halves required.
+
+    A 422 (honest) when malformed. The submitted value is NEVER echoed in the
+    error (nor is any secret).
+    """
+    value = (pasted or "").strip()
+    code, sep, state = value.partition("#")
+    if not sep or not code or not state:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Paste the full 'code#state' value Anthropic showed you (both halves "
+            "are required).",
+        )
+    return code, state
+
+
+@router.post("/providers/anthropic/oauth/exchange")
+def anthropic_oauth_exchange(
+    body: AnthropicOAuthExchangeBody, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Exchange the pasted one-time ``code#state`` for a subscription token.
+
+    422 malformed paste; 400 unknown/expired/replayed state; 403 state started
+    by a different user; 502 honest token-endpoint error (incl. an unexpected
+    response shape — defensive parse, never a fake success). On success the
+    access token is stored deployment-wide (oauth_token) and the refresh
+    material per-user; the masked provider status object is returned (no token).
+    """
+    from app.services import anthropic_oauth
+
+    code, state = _parse_pasted_oauth_code(body.pastedCode)
+    _oauth_vault_ready_or_503()
+    row = AnthropicOAuthStateRepository().consume(state)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Authorization state is unknown, expired, or already used — restart "
+            "Connect with Anthropic.",
+        )
+    if row.get("userId") != current_user["id"]:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "This authorization was started by a different user.",
+        )
+    try:
+        tok = anthropic_oauth.exchange_code(code, row["codeVerifier"], state)
+    except anthropic_oauth.OAuthExchangeError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Anthropic rejected the authorization code — restart Connect with "
+            "Anthropic.",
+        ) from exc
+    try:
+        anthropic_oauth.persist_tokens(current_user["id"], tok)
+    except credential_vault.CredentialVaultError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    return _provider_status_object("anthropic", current_user["id"])
+
+
+@router.post("/providers/anthropic/oauth/refresh")
+def anthropic_oauth_refresh(current_user: CurrentUser) -> dict[str, Any]:
+    """Force-refresh the stored subscription token (the "Renew now" action).
+
+    502 + ``needs_reauth`` marked on an honest refresh failure; NEVER a stale
+    token, NEVER a cross-provider fallback. Returns the rotated masked status.
+    """
+    from app.services import anthropic_oauth
+
+    try:
+        anthropic_oauth.force_refresh(current_user["id"])
+    except anthropic_oauth.OAuthExchangeError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Anthropic could not refresh the subscription session — click Connect "
+            "with Anthropic to sign in again.",
+        ) from exc
+    except credential_vault.CredentialVaultError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    return _provider_status_object("anthropic", current_user["id"])
 
 
 @router.get("/stats")

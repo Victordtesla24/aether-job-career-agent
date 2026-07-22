@@ -20,7 +20,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   deleteProviderCredential,
+  exchangeAnthropicOAuth,
   putProviderCredential,
+  startAnthropicOAuth,
   verifyProvider,
   type Provider,
   type ProviderAuthMode,
@@ -100,8 +102,16 @@ export default function ProviderConfigModal({
   const [mode, setMode] = useState<ProviderAuthMode>("api_key");
   const [secret, setSecret] = useState("");
   const [reveal, setReveal] = useState(false);
-  const [busy, setBusy] = useState<"saving" | "removing" | "verifying" | null>(null);
+  const [busy, setBusy] = useState<
+    "saving" | "removing" | "verifying" | "connecting" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
+  // Connect-with-Anthropic (ML-agents-cred-002): "idle" until the operator
+  // clicks Connect, then "await_code" while they paste back the one-time
+  // code#state Anthropic showed them. Only the short-lived code lives in
+  // component state — never a token.
+  const [oauthStep, setOauthStep] = useState<"idle" | "await_code">("idle");
+  const [oauthCode, setOauthCode] = useState("");
 
   // Re-seed local state whenever a (different) provider is opened. The parent
   // only ever swaps in a new `provider` object reference when the user opens
@@ -118,6 +128,8 @@ export default function ProviderConfigModal({
     setReveal(false);
     setError(null);
     setBusy(null);
+    setOauthStep("idle");
+    setOauthCode("");
   }, [provider]);
 
   // Move focus into the dialog on open and restore it to the trigger on close.
@@ -227,6 +239,51 @@ export default function ProviderConfigModal({
     }
   };
 
+  // Connect-with-Anthropic step 1: mint the authorize URL server-side and open
+  // Anthropic's OWN sign-in page in a new tab, then reveal the paste-back field.
+  const connectAnthropic = async () => {
+    if (busy) return;
+    setBusy("connecting");
+    setError(null);
+    onNotice({ kind: "info", text: "Opening Anthropic sign-in in a new tab…" });
+    try {
+      const { authorizeUrl } = await startAnthropicOAuth();
+      window.open(authorizeUrl, "_blank", "noopener");
+      setOauthStep("await_code");
+    } catch (e) {
+      onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
+      setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Connect-with-Anthropic step 2: exchange the pasted one-time code#state for a
+  // subscription token (server-side). The raw code is cleared once submitted.
+  const completeAnthropic = async () => {
+    const code = oauthCode.trim();
+    if (!code || busy) return;
+    setBusy("connecting");
+    setError(null);
+    onNotice({ kind: "info", text: `Connecting ${view.name}…` });
+    try {
+      const updated = await exchangeAnthropicOAuth(code);
+      setView((v) => (v ? { ...v, ...updated } : updated));
+      setOauthCode("");
+      setOauthStep("idle");
+      onNotice({
+        kind: "success",
+        text: `${view.name} connected${updated.secretHint ? ` (${updated.secretHint})` : ""}.`,
+      });
+      await onSaved();
+    } catch (e) {
+      onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
+      setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const verify = async () => {
     if (busy) return;
     setBusy("verifying");
@@ -323,6 +380,63 @@ export default function ProviderConfigModal({
             </span>
           ) : null}
         </div>
+
+        {view.id === "anthropic" ? (
+          <div className="mb-4 rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-3">
+            <button
+              type="button"
+              data-testid="anthropic-oauth-connect"
+              onClick={() => void connectAnthropic()}
+              disabled={busy !== null}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-indigo px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-aether-indigo/25 transition hover:opacity-90 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true" />
+              {busy === "connecting" && oauthStep === "idle"
+                ? "Opening Anthropic…"
+                : "Connect with Anthropic (subscription)"}
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed text-aether-muted">
+              Opens Anthropic&apos;s sign-in page in a new tab. Approve access to your
+              Claude Pro/Max account, then paste the one-time code Anthropic shows you.
+              Your token is created on the server — you never copy the token yourself.
+            </p>
+            {oauthStep === "await_code" ? (
+              <div className="mt-3">
+                <label
+                  htmlFor="anthropic-oauth-code"
+                  className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim"
+                >
+                  Paste the code from Anthropic
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="anthropic-oauth-code"
+                    data-testid="anthropic-oauth-code-input"
+                    type="text"
+                    value={oauthCode}
+                    onChange={(e) => setOauthCode(e.target.value)}
+                    placeholder="code#state"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-aether-indigo/50"
+                  />
+                  <button
+                    type="button"
+                    data-testid="anthropic-oauth-complete"
+                    onClick={() => void completeAnthropic()}
+                    disabled={busy !== null || oauthCode.trim() === ""}
+                    className="shrink-0 rounded-lg bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy === "connecting" ? "Connecting…" : "Finish connecting"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <p className="mt-2 text-[10px] text-aether-muted-dim">
+              or paste a token manually below (honest fallback)
+            </p>
+          </div>
+        ) : null}
 
         {options.length > 1 ? (
           <fieldset className="mb-4">
