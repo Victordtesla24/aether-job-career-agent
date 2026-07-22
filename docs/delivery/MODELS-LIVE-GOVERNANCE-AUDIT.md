@@ -53,7 +53,8 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 32 | 2026-07-22T09:35Z | runtime-monitor | haiku | FIX ML-adv-001 + re-establish capture + retro-triage | ✅ regex fixed (m{}), fail255→pass, new capture PID, retro-triage 0 missed (system clean) |
 | 33 | 2026-07-22T10:10Z | catalog-engineer | opus (wt agent-a42852c3) | FIX-1 implement @5db6f43 (per-agent picker + freshness + refresh + 422 validation) | ✅ 9/9+6/6, 122 slice, cred-002 green, resolve_provider untouched; flagged 3 design choices |
 | 34 | 2026-07-22T10:15Z | reviewer | sonnet (fresh) | FIX-1 diff review | ❌ FAIL: B1 silent model substitution (BLOCKER §3.4.4) + B2 billing not user-visible; N1/N2 gaps. Re-fix required (ADR-ML-3) |
-| 35 | 2026-07-22T11:00Z | test-author | sonnet (wt agent-a42852c3) | FIX-1 re-fix failing tests (no-substitution/billing/freshness-load/deterministic) | dispatched |
+| 35 | 2026-07-22T11:00Z | test-author | sonnet (wt agent-a42852c3) | FIX-1 re-fix failing tests | ⛔ FAILED (monthly spend limit) — user raised it |
+| 36 | 2026-07-22T (resumed) | test-author | sonnet (wt agent-a42852c3) | FIX-1 re-fix failing tests (re-dispatch #35 verbatim) | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
