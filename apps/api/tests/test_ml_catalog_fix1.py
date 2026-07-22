@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
+from typing import Any
 
 import pytest
 
@@ -390,3 +391,177 @@ def test_deterministic_sentinel_still_accepted(client, auth_headers):
     )
     assert r.status_code == 200, r.text
     assert r.json()["model"] == "deterministic"
+
+
+# ---------------------------------------------------------------------------
+# ML-catalog-006 (BLOCKER, §3.4.4) — no silent model substitution for a
+# USER-CHOSEN model (ADR-ML-3, docs/delivery/MODELS-LIVE-GOVERNANCE-AUDIT.md).
+#
+# The FIX-1 diff review (5db6f43, reviewer finding B1) traced the real run
+# path and found `_validate_agent_model`'s docstring claim — "a genuinely
+# wrong id fails honestly at call time" — is FALSE: `get_model('REASONING')`
+# (llm_client.py:378-390) returns the user's per-agent override verbatim;
+# `LLMClient._auto()` (llm_client.py:1334-1411) builds a fallback chain via
+# `_model_chain()` (llm_client.py:1413-1417) that ALWAYS appends the
+# hardcoded `FALLBACK_MODEL` ("openai/gpt-oss-20b:free"), regardless of
+# whether the primary model came from a deliberate user choice; when the
+# primary 404s, the broad `except Exception` (llm_client.py:1391) silently
+# retries the fallback and, on success, `_auto()` returns NORMALLY — no
+# exception, no signal a DIFFERENT model actually served the request. This is
+# the exact §3.4.4 BLOCKER: "never a silent fallback to a different model
+# (silent model substitution = BLOCKER finding)."
+#
+# ADR-ML-3 RULING: when a run uses a USER-SELECTED model (`_user_model_override`
+# returned a value), silent substitution to a DIFFERENT model is FORBIDDEN —
+# on failure, surface an honest error + refund any reserved quota + NEVER run
+# a different model and report success. The un-chosen SYSTEM-DEFAULT path may
+# retain its resilience fallback (contrast guard below pins that boundary so
+# the re-fix doesn't over-reach).
+# ---------------------------------------------------------------------------
+
+
+def test_user_chosen_model_failure_does_not_silently_substitute_fallback(
+    client, auth_headers, monkeypatch, test_user_id, tmp_path
+):
+    """THE keystone ML-catalog-006 test — reproduces the diff review's B1
+    finding end-to-end through the REAL run/quota path (`_record_run` ->
+    `_execute_reserved_run` -> `user_model_context` -> `LLMClient._auto`).
+
+    Setup: the user deliberately picks an OpenRouter model for `coverLetter`
+    that will FAIL at call time (a stale/unavailable id — mocked as a 404).
+    `LLMClient._call_live` is mocked so ONLY the user's chosen model fails;
+    the hardcoded `FALLBACK_MODEL` "succeeds" if attempted — this is exactly
+    what the reviewer's reproduction did (5db6f43 review, Item 2(b)).
+
+    REQUIRED (ADR-ML-3): the run must surface an HONEST error (mapped to
+    HTTP 503, matching the sibling `LLMUnavailableError` contract already
+    pinned in `test_gap_p6_billing.py::test_honest_llm_failure_refunds_
+    reserved_run_and_503`) — never a fake 200-equivalent success built from
+    FALLBACK_MODEL's output — and the reserved plan-quota run must be
+    refunded (runsUsed returns to its pre-run value).
+
+    FAILS NOW: today's `_auto()` swallows the primary failure, silently
+    serves the FALLBACK_MODEL's output, and `_record_run` returns a normal
+    completed-run dict (no exception at all) — the `else: pytest.fail(...)`
+    branch below fires and documents the actual silently-substituted output.
+    """
+    from fastapi import HTTPException
+
+    from app.repositories.billing import UsageQuotaRepository, ensure_user_billing
+    from app.routers.agents import _record_run
+    from app.services.llm_client import LLMClient, get_fallback_model, get_model
+
+    # The user deliberately picks an OpenRouter id for coverLetter that will
+    # fail live (mocked below) — a real per-agent override, not the seeded
+    # "claude-sonnet-4" default (see `_RECOMMENDED_FOR_BACKEND`).
+    put = client.put(
+        "/agents/config/coverLetter",
+        json={"model": "vendor/user-chosen-unavailable-model"}, headers=auth_headers,
+    )
+    assert put.status_code == 200, put.text
+
+    fallback_id = get_fallback_model()
+    calls: list[str | None] = []
+
+    def _fake_call_live(self, system, user, *, model=None, temperature=0.0, max_seconds=None):
+        calls.append(model)
+        if model == "vendor/user-chosen-unavailable-model":
+            raise RuntimeError("LLM provider HTTP 404: model not found")
+        # Any OTHER model in the chain (i.e. the hardcoded FALLBACK_MODEL)
+        # "succeeds" — this is the silent-substitution trap.
+        return "content from a model the user never chose"
+
+    monkeypatch.setattr(LLMClient, "_call_live", _fake_call_live)
+
+    def _run_the_real_call_path() -> dict[str, Any]:
+        # Mirrors the real cover-letter agent's call surface exactly
+        # (apps/api/app/agents/cover_letter_agent.py:1121-1127):
+        # `get_model('REASONING')` resolved from inside the bound
+        # `user_model_context`, then passed explicitly to `.complete(...)`.
+        resolved = get_model("REASONING")
+        assert resolved == "vendor/user-chosen-unavailable-model"  # sanity: override IS bound
+        content = LLMClient(mode="auto", fixture_dir=tmp_path).complete(
+            "cover_letter", "sys", "usr", model=resolved, temperature=0.0,
+        )
+        return {"resolved_model_output": content}
+
+    ensure_user_billing(test_user_id)
+    quota_repo = UsageQuotaRepository()
+    runs_used_before = int(quota_repo.get_by_user(test_user_id)["runsUsed"])
+
+    try:
+        result = _record_run(test_user_id, "coverLetter", {}, _run_the_real_call_path)
+    except HTTPException as exc:
+        assert exc.status_code == 503, (
+            f"expected an honest 503 (matching the sibling LLMUnavailableError "
+            f"contract), got {exc.status_code}: {exc.detail}"
+        )
+    else:
+        pytest.fail(
+            "SILENT MODEL SUBSTITUTION (§3.4.4 BLOCKER, ADR-ML-3): a run bound "
+            "to the user's DELIBERATELY CHOSEN model "
+            "('vendor/user-chosen-unavailable-model', which 404'd) returned a "
+            f"normal completed-run result instead of an honest error: {result!r}. "
+            f"Models actually attempted (in order): {calls!r} — the fallback "
+            f"model ({fallback_id!r}) silently served the request with NO "
+            "signal to the caller that a different model than the one the "
+            "user picked actually ran. Required (ADR-ML-3): an honest "
+            "error + refund, never a fake success on a substituted model."
+        )
+
+    # Reserved plan-quota run for this failed, user-chosen-model run must be
+    # refunded — never billed for a run that (should have) failed honestly.
+    runs_used_after = int(quota_repo.get_by_user(test_user_id)["runsUsed"])
+    assert runs_used_after == runs_used_before, (
+        f"reserved quota for the failed user-chosen-model run was not "
+        f"refunded: runsUsed before={runs_used_before} after={runs_used_after}"
+    )
+
+
+def test_default_model_failure_may_still_fall_back_contrast_guard(
+    client, auth_headers, monkeypatch, test_user_id, tmp_path
+):
+    """Contrast guard for ADR-ML-3 (§3.4.4): the strict no-substitution rule is
+    scoped to a USER-CHOSEN model. A run on the unmodified SYSTEM-DEFAULT model
+    (no per-agent override, no openrouter provider-default override — a fresh
+    user who never picked anything) retains its EXISTING resilience — one
+    fallback retry, matching `test_llm_resilience.py::TestModelChain` and
+    `TestAutoModeFallback` — so the re-fix does not over-reach and regress
+    users who never chose a model.
+
+    This is a PIN, not one of the newly-required-behaviour tests: it is
+    expected to PASS both BEFORE and AFTER the re-fix. If a re-fix makes this
+    fail, the re-fix over-reached (broke default resilience) — see the diff
+    review's explicit warning against that (Item 2, closing option (ii)).
+    """
+    from app.repositories.billing import ensure_user_billing
+    from app.routers.agents import _record_run
+    from app.services.llm_client import LLMClient, get_model
+
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "env/system-default-model")
+    monkeypatch.setenv("AETHER_MODEL_FALLBACK", "openai/gpt-oss-20b:free")
+
+    calls: list[str | None] = []
+
+    def _fake_call_live(self, system, user, *, model=None, temperature=0.0, max_seconds=None):
+        calls.append(model)
+        if model == "env/system-default-model":
+            raise RuntimeError("simulated upstream 404 on the env-default model")
+        return "fallback served this system-default run"
+
+    monkeypatch.setattr(LLMClient, "_call_live", _fake_call_live)
+
+    def _run_the_real_call_path() -> dict[str, Any]:
+        resolved = get_model("REASONING")
+        assert resolved == "env/system-default-model"  # sanity: NO override bound
+        content = LLMClient(mode="auto", fixture_dir=tmp_path).complete(
+            "cover_letter", "sys", "usr", model=resolved, temperature=0.0,
+        )
+        return {"resolved_model_output": content}
+
+    ensure_user_billing(test_user_id)
+    # No PUT to /agents/config/coverLetter and no openrouter provider default
+    # -> `_user_model_override` resolves to None for this fresh user.
+    out = _record_run(test_user_id, "coverLetter", {}, _run_the_real_call_path)
+    assert out["resolved_model_output"] == "fallback served this system-default run"
+    assert calls == ["env/system-default-model", "openai/gpt-oss-20b:free"], calls
