@@ -109,7 +109,20 @@ def _refresh_skew_seconds() -> int:
 
 class OAuthExchangeError(RuntimeError):
     """An Anthropic token-endpoint call failed honestly (bad grant, unexpected
-    response shape, network error). The message NEVER contains a token."""
+    response shape, network error). The message NEVER contains a token.
+
+    ``upstream_status`` is set ONLY when a real HTTP response actually reached
+    us from the Anthropic token endpoint (its non-2xx status code) — this is
+    what distinguishes an honest upstream CODE-REJECTION (bad/expired/replayed
+    grant: the operator's pasted code, a client-side mistake) from a genuine
+    network/gateway failure where no response arrived at all (``None``). ML-adv-002:
+    callers use this to map a rejection to 4xx instead of 502 (Cloudflare
+    replaces 502 bodies with a generic page, hiding the honest detail).
+    """
+
+    def __init__(self, message: str, *, upstream_status: int | None = None) -> None:
+        super().__init__(message)
+        self.upstream_status = upstream_status
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +180,8 @@ def _post_token(body: dict) -> dict:
         ) from exc
     if resp.status_code // 100 != 2:
         raise OAuthExchangeError(
-            f"Anthropic token endpoint returned HTTP {resp.status_code}."
+            f"Anthropic token endpoint returned HTTP {resp.status_code}.",
+            upstream_status=resp.status_code,
         )
     try:
         parsed = resp.json()
