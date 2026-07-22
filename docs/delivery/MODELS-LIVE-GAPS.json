@@ -1111,9 +1111,9 @@
     {
       "id": "ML-agents-err-001",
       "screen": "/dashboard/agents",
-      "severity": "HIGH",
-      "category": "agent-integration",
-      "summary": "OPERATOR-REPORTED (2026-07-22, mid-endgame): 'some agents in the Agents screen are erroring out' on live prod @51f1ec8. Under RCA \u2014 classify per agent: real defect (500/Traceback) vs honest-degrade (FabricationError/paywall/Gmail-gate) vs upstream-model-failure vs stuck-bad-config. Fix any real defect in the \u00a77 loop.",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "RCA (AGENTS-ERRORING-RCA.md): NO code regression / no crash / no silent-substitution. The operator-visible Agents-screen status is computed from the SINGLE LAST RUN ONLY (no rolling window/decay), so ONE transient+already-refunded failure (here: the orchestrator's own \u00a73.4/Stage-3 model-sweep probe hitting flaky poolside/laguna-m.1:free \u2192 429, refunded $0) paints a persistent red 'error' badge on a healthy agent. A clean re-run flips it back to 'active'. FIX: status must not show persistent 'error' for a transient/refunded/honest-degrade last-run.",
       "reproduction": [
         "Load /dashboard/agents on prod \u2192 some agents show error state / erroring runs (operator report)"
       ],
@@ -1123,7 +1123,27 @@
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
       ],
       "status": "OPEN",
-      "owner": "RCA (general-purpose a01d98cb) \u2192 fix loop",
+      "owner": "test-author \u2192 fixer (refund/honest-degrade-aware status)",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified)."
+    },
+    {
+      "id": "ML-agents-err-002",
+      "screen": "agent pipeline (coverLetter)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "FOLLOW-UP (RCA): coverLetter's env-default generation model anthropic/claude-3-haiku (via OpenRouter) intermittently returns EMPTY content for the cover_letter prompt \u2192 graceful degrade (coverLetterUnavailable, $0, no error badge \u2014 HONEST, not a crash). Reliability tuning: swap the cover default to a more reliable model OR extend the malformed/empty-JSON retry budget for that prompt/model pair to reduce the degrade rate.",
+      "reproduction": [
+        "Run coverLetter repeatedly \u2192 intermittent empty-content from claude-3-haiku \u2192 honest coverLetterUnavailable degrade"
+      ],
+      "expected": "Higher cover-letter success rate (fewer honest-degrades)",
+      "observed": "Intermittent empty content \u2192 graceful degrade",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md"
+      ],
+      "status": "OPEN",
+      "owner": "fixer (reliability tuning \u2014 batch with err-001 or backlog)",
       "fixCommits": [],
       "verifiedBy": ""
     }
