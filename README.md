@@ -148,7 +148,7 @@ Full behavioural reference: [`docs/subscription/model-catalog.md`](docs/subscrip
 
 ## 🎨 Design System — 17 Screens
 
-**17 high-fidelity screens** (dark mode, glassmorphism, coral accent `#FF6B35`), all built and live under `/dashboard/*`, `/admin`, and `/pricing`. The source wireframes are in [`design/screens/`](design/screens/) (open any `.html` in a browser); the design language spec is [`design/DESIGN.md`](design/DESIGN.md).
+**17 high-fidelity screens** (dark mode, glassmorphism, coral accent `#FF6B35`), all built and live under `/dashboard/*`, `/admin`, and `/pricing`. The source wireframes are in [`design/screens/`](design/screens/) (open any `.html` in a browser); the design language spec is [`design/DESIGN.md`](design/DESIGN.md). This "17" counts the **design wireframes** (`design/screens/*.html`, verified: 17 files) — a distinct, smaller number from the **28 live app routes** (`apps/web/src/app/**/page.tsx`) in `uat/reports/evidence/models-live/SCREEN-MATRIX.md`, since several routes (e.g. every `/admin/*` sub-page, `/login`, `/signup`) were built directly without a dedicated wireframe.
 
 Dashboard, Job Discovery, Résumé Studio, Story Bank, Application Tracker, Interview Center, Networking & CRM, Email Center, Manage Agents, Agent Monitor, Analytics, Offer Comparison, Settings, Approval Modal, Cover Letter Studio, Mobile Dashboard, Mobile Approval.
 
