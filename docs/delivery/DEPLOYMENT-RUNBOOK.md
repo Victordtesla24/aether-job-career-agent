@@ -1,6 +1,8 @@
 # Aether Job & Career Agent — Production Deployment Runbook
 
-**Last Updated:** 2026-07-18 (MV-system-003 — safe test-suite invocation)  
+**Last Updated:** 2026-07-22 (MODELS-LIVE `ML-runbook-001` — corrected the `pnpm` path/provenance
+claim in the Web Service section; see `docs/delivery/MODELS-LIVE-GAPS.json`); prior update
+2026-07-18 (MV-system-003 — safe test-suite invocation)  
 **Production URL:** https://5cb5f0620.abacusai.cloud  
 **Repository:** https://github.com/Victordtesla24/aether-job-career-agent  
 **Evidence Tag:** [VERIFIED-WITH-SOURCE]
@@ -251,10 +253,21 @@ All services share the single working directory:
 - **Working Directory:** `/home/ubuntu/github_repos/aether-job-career-agent`
 - **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/start-web.sh`
 - **Actual Entrypoint:** `pnpm start` (Next.js production server on port 3000)
+- **`pnpm` provenance (CORRECTED, `ML-runbook-001`, 2026-07-22):** `pnpm` is **system-installed at
+  `/usr/bin/pnpm`** (a corepack symlink), **not** an `/opt/abacus-npm/bin` npm global — `pnpm` has
+  no binary under `/opt/abacus-npm/bin/` at all (that directory only holds `abacusai`/`claude`/
+  `codex`/`openclaw`). The `PATH` below lists `/opt/abacus-npm/bin` first for other npm-global
+  tooling, but `/usr/bin` is also on it, so shell lookup falls through and correctly resolves
+  `pnpm` to `/usr/bin/pnpm` — this has always worked; only the implied provenance was wrong.
+  `[VERIFIED-WITH-FRESH-EVIDENCE: which pnpm → /usr/bin/pnpm; ls /opt/abacus-npm/bin/pnpm → No such
+  file or directory; env PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin" which pnpm →
+  /usr/bin/pnpm; this task, 2026-07-22]`.
 - **App Directory:** `./apps/web`
 - **Start Script Details:**
   ```bash
   #!/bin/bash
+  # pnpm resolves to the system-installed /usr/bin/pnpm (corepack) via PATH
+  # fallthrough — NOT from /opt/abacus-npm/bin, which has no pnpm binary.
   export PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin"
   cd /home/ubuntu/github_repos/aether-job-career-agent/apps/web
   # Loads .env from repo root

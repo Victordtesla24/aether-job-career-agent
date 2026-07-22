@@ -4,6 +4,11 @@
 # status would always be gawk's (~always 0), silently defeating
 # aether-web.service's `Restart=on-failure` crash detection.
 set -o pipefail
+# ML-runbook-001 (2026-07-22): `pnpm` resolves to the SYSTEM-INSTALLED
+# /usr/bin/pnpm (a corepack symlink) via PATH fallthrough below — it is NOT
+# an /opt/abacus-npm/bin npm global (that directory has no pnpm binary at
+# all). /opt/abacus-npm/bin is listed first only for other npm-global tools;
+# keep /usr/bin on this PATH or `pnpm start` below will fail to resolve.
 export PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin"
 cd /home/ubuntu/github_repos/aether-job-career-agent/apps/web
 
