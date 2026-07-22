@@ -40,6 +40,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 20 | 2026-07-22T06:00Z | qa-adversary | opus | ML-agents-cred-001 LIVE prod verify | ✅ VERIFIED-CLOSED (4 cases + 2 adversarial, state restored, log-corroborated) |
 | 21 | 2026-07-22T06:05Z | fixer-hard | opus (reuse wt agent-ae79a65) | ML-agents-cred-002 implement on fix/ml-cred-002 (+authorize browser-smoke) | dispatched |
 | 22 | 2026-07-22T06:10Z | test-author | sonnet (worktree) | FIX-1 catalog failing tests (ML-catalog-001/002/003), branch fix/ml-catalog-fix1 | dispatched (parallel; FE files disjoint from cred-002) |
+| 23 | 2026-07-22T06:30Z | runtime-monitor | haiku | periodic triage + route sweep | ✅ CLEAN (capture alive, 0 signatures, 17/17) |
+| 24 | 2026-07-22T07:10Z | fixer-hard | opus | ML-agents-cred-002 implement @7dd17a9 (+authorize smoke 200 subscription) | ✅ 26/26+5/5, resolve_provider unchanged |
+| 25 | 2026-07-22T07:20Z | reviewer | sonnet (fresh) | ML-agents-cred-002 adversarial diff review (PKCE/state/split-brain/refresh/exchange) | dispatched |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 

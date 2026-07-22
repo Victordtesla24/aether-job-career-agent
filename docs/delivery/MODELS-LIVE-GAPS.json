@@ -82,10 +82,14 @@
         "operator directive 2026-07-22 (this run)"
       ],
       "status": "IN-FIX",
-      "owner": "(blueprint APPROVED ADR-ML-2) \u2192 test-author \u2192 fixer-hard (after cred-001 merges)",
-      "fixCommits": [],
+      "owner": "reviewer (diff review) \u2192 deploy \u2192 qa-adversary prod verify",
+      "fixCommits": [
+        "afee5d5 (31 tests)",
+        "7dd17a9 (fix)"
+      ],
       "verifiedBy": "",
-      "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click."
+      "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click.",
+      "implNote": "7dd17a9: new anthropic_oauth.py + /oauth/{start,exchange,refresh} + refresh hook (llm_client resolve_user_credential) + Connect-with-Anthropic UI. 26/26+5/5, 114 regression slice green. Authorize smoke: default claude.com/cai/oauth/authorize scope user:inference \u2192 200 Pro/Max subscription login (correct). resolve_provider byte-for-byte unchanged. Token store: used\u2192ProviderCredential(deployment-wide), refresh\u2192AnthropicOAuthToken. Operator live consent HUMAN-GATED."
     },
     {
       "id": "ML-browser-001",
