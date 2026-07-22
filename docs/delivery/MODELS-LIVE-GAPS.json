@@ -777,7 +777,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (batch w/ mobile fixes)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5bceb2e(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -888,7 +890,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (FE batch)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5bceb2e(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -907,7 +911,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (FE batch)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5bceb2e(tests)"
+      ],
       "verifiedBy": ""
     },
     {
@@ -927,7 +933,9 @@
       ],
       "status": "IN-FIX",
       "owner": "fixer-medium (FE batch-4)",
-      "fixCommits": [],
+      "fixCommits": [
+        "5bceb2e(tests)"
+      ],
       "verifiedBy": ""
     }
   ]
