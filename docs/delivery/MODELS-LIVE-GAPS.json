@@ -1,0 +1,228 @@
+{
+  "run": "MODELS-LIVE",
+  "started": "2026-07-22T02:46Z",
+  "prompt": "/home/ubuntu/aether-subscription-prompt-live-test.md",
+  "schema": {
+    "id": "ML-<area>-<seq>",
+    "screen": "string",
+    "severity": "BLOCKER|HIGH|MEDIUM|LOW",
+    "category": "defect|wiring|agent-integration|model-catalog|runtime-error|browser-exception|visual|validation|security|placeholder-code",
+    "summary": "string",
+    "reproduction": [],
+    "expected": "string",
+    "observed": "string",
+    "evidence": [],
+    "status": "OPEN|IN-FIX|FIXED-AWAITING-QA|VERIFIED-CLOSED|CONDITIONALLY-CLOSED|REJECTED",
+    "owner": "string",
+    "fixCommits": [],
+    "verifiedBy": "string"
+  },
+  "findings": [
+    {
+      "id": "ML-runbook-001",
+      "screen": "n/a (ops docs)",
+      "severity": "LOW",
+      "category": "defect",
+      "summary": "start-web.sh comment claims pnpm at /opt/abacus-npm/bin/pnpm; live pnpm is system-installed at /usr/bin/pnpm (corepack). Documentation drift only, zero functional impact.",
+      "reproduction": [
+        "which pnpm",
+        "grep pnpm scripts/start-web.sh (per RUNBOOK-VERIFICATION.md)"
+      ],
+      "expected": "Runbook/scripts document the actual pnpm provenance/path",
+      "observed": "Comment references /opt/abacus-npm/bin/pnpm; actual /usr/bin/pnpm",
+      "evidence": [
+        "uat/reports/evidence/models-live/governance/RUNBOOK-VERIFICATION.md"
+      ],
+      "status": "OPEN",
+      "owner": "doc-updater (G-09 stage)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-agents-cred-001",
+      "screen": "Agents",
+      "severity": "BLOCKER",
+      "category": "validation",
+      "summary": "USER-REPORTED (operator, 2026-07-22): PUT /agents/providers/anthropic/credential returns 422 'Anthropic credential not recognized. Console API keys start with sk-ant-api. Claude Code O...' \u2014 operator cannot save an Anthropic credential. Dual-mode validation (sk-ant-api03-/sk-ant-oat01-, Phase-7 DEF-A d2df452) is rejecting the operator's real credential.",
+      "reproduction": [
+        "Login as operator on production",
+        "Agents screen \u2192 Anthropic provider \u2192 paste credential \u2192 Save",
+        "Observe 422 with 'not recognized' detail"
+      ],
+      "expected": "A genuine current Anthropic credential (Console API key OR Claude Code OAuth token, current prefix formats) saves successfully (200), verifies, and routes bare claude-* runs to direct Anthropic billing",
+      "observed": "422 'Anthropic credential not recognized...' on save",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/ML-agents-cred-001-RCA.md",
+        "api.log 422s 2026-07-22T02:53:18Z + 02:53:24Z (operator then DELETEd credential)"
+      ],
+      "status": "IN-FIX",
+      "owner": "test-author \u2192 fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "rca": "agents.py:2110-2121 accepts only sk-ant-api / sk-ant-oat01- prefixes, no whitespace strip, 422 text hardcodes oat01. Operator on-disk token sk-ant-oat01- (128ch) but EXPIRED 2026-07-21; pasted value evidently matched neither prefix (newer-prefix or unicode-whitespace hypothesis). No regression since d2df452.",
+      "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat \u2014 would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422."
+    },
+    {
+      "id": "ML-agents-cred-002",
+      "screen": "Agents",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "OPERATOR-MANDATED (2026-07-22): the Anthropic credential / configure-credentials window must OPEN THE ANTHROPIC AUTH WEB PAGE for subscription users (in-app-initiated OAuth authorization, Claude Code-style PKCE), not require manual token pasting. Manual paste stays as honest fallback for Console API keys.",
+      "reproduction": [
+        "Agents screen \u2192 Anthropic provider \u2192 configure credentials",
+        "Observe: only manual paste fields; no button that opens Anthropic's authorization page"
+      ],
+      "expected": "Subscription mode shows a 'Connect Anthropic / open authorization page' action that launches Anthropic's OAuth authorize URL (PKCE); user approves on Anthropic's page; resulting authorization code is exchanged for an oauth token (sk-ant-oat01-*) stored in the vault with authMode oauth_token; runs on bare claude-* models then bill to the subscription via Bearer + anthropic-beta oauth header",
+      "observed": "Paste-only dual-mode fields (Phase-7 DEF-A); no in-app auth-page launch",
+      "evidence": [
+        "operator directive 2026-07-22 (this run)"
+      ],
+      "status": "OPEN",
+      "owner": "orchestrator-triage \u2192 arch probe \u2192 fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-browser-001",
+      "screen": "/pricing",
+      "severity": "LOW",
+      "category": "browser-exception",
+      "summary": "ERR_ABORTED on RSC prefetch /terms?_rsc=6i8d7 during navigation on /pricing. Monitor rated benign (prefetch cancellation, no user-visible failure).",
+      "reproduction": [
+        "Navigate authenticated to /pricing with requestfailed listener attached"
+      ],
+      "expected": "No failed requests, or failures surfaced honestly if user-impacting",
+      "observed": "ERR_ABORTED on /terms?_rsc=6i8d7; page functional",
+      "evidence": [
+        "uat/reports/evidence/models-live/runtime/browser-captures/pricing.json",
+        "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
+      ],
+      "status": "OPEN",
+      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+    },
+    {
+      "id": "ML-browser-002",
+      "screen": "/admin/spend",
+      "severity": "LOW",
+      "category": "browser-exception",
+      "summary": "ERR_ABORTED on RSC prefetch /admin/users/{id}?_rsc=m5ywe during navigation on /admin/spend. Monitor rated benign (prefetch cancellation, no user-visible failure).",
+      "reproduction": [
+        "Navigate authenticated to /admin/spend with requestfailed listener attached"
+      ],
+      "expected": "No failed requests, or failures surfaced honestly if user-impacting",
+      "observed": "ERR_ABORTED on /admin/users/{id}?_rsc=m5ywe; page functional",
+      "evidence": [
+        "uat/reports/evidence/models-live/runtime/browser-captures/admin-spend.json",
+        "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
+      ],
+      "status": "OPEN",
+      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+    },
+    {
+      "id": "ML-browser-003",
+      "screen": "/admin/users",
+      "severity": "LOW",
+      "category": "browser-exception",
+      "summary": "ERR_ABORTED on RSC prefetch /admin/users/{id}?_rsc=12ojy during navigation on /admin/users. Monitor rated benign (prefetch cancellation, no user-visible failure).",
+      "reproduction": [
+        "Navigate authenticated to /admin/users with requestfailed listener attached"
+      ],
+      "expected": "No failed requests, or failures surfaced honestly if user-impacting",
+      "observed": "ERR_ABORTED on /admin/users/{id}?_rsc=12ojy; page functional",
+      "evidence": [
+        "uat/reports/evidence/models-live/runtime/browser-captures/admin-users.json",
+        "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
+      ],
+      "status": "OPEN",
+      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "fixCommits": [],
+      "verifiedBy": "",
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+    },
+    {
+      "id": "ML-agent-cover-001",
+      "screen": "Agents / Cover Letters",
+      "severity": "HIGH",
+      "category": "agent-integration",
+      "summary": "WATCH-ITEM (inventory delta 2026-07-22): coverLetter agent reported in ERROR state, last run failed 2026-07-22T02:49:45Z (near probe time). Must be verified live \u2014 could be the known PROBABILISTIC FabricationError graceful-degradation (aether-agent-pipeline-runtime-fixes) OR a real regression. Not to be dismissed by inference.",
+      "reproduction": [
+        "GET /agents/catalog on production; observe coverLetter status/last_run",
+        "Run cover-letter pipeline live from UI with seeded story+JD; classify outcome (full success / graceful degrade / hard error)"
+      ],
+      "expected": "Cover-letter agent EITHER produces a real business letter OR degrades gracefully (coverLetterUnavailable) \u2014 never a hard error state; honest UI",
+      "observed": "catalog shows coverLetter ERROR state / last run failed 02:49:45Z",
+      "evidence": [
+        "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
+      ],
+      "status": "OPEN",
+      "owner": "screen-tester (Agents + Cover Letters) \u2192 fix loop if real",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-001",
+      "screen": "Agents",
+      "severity": "HIGH",
+      "category": "model-catalog",
+      "summary": "\u00a73.2 GAP: model picker is PROVIDER-GLOBAL (single #openrouter-model-picker saving via updateProvider/AgentProvider.model), NOT per-agent. \u00a73.2.1/\u00a73.2.3 require a per-agent picker for ALL agents; 'No agent may be left on an invisible/unchangeable model' and 'selected model persists per agent'. Backend per-agent plumbing exists (AgentConfig.model + _user_model_override agents.py:878) but FE does not render/save per-agent.",
+      "reproduction": [
+        "/dashboard/agents \u2192 observe one shared model picker, not one per agent card",
+        "Confirm save targets provider (AgentProvider.model) not per-agent (AgentConfig.model via PUT /agents/config/{key})"
+      ],
+      "expected": "Per-agent searchable model picker on each agent; selection saved via PUT /api/agents/config/{agent_key}, persisted per agent, used on that agent's next run",
+      "observed": "Single global OpenRouter picker; per-agent selection not exposed in UI",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md",
+        "uat/reports/evidence/models-live/AGENT-MODEL-MATRIX.md"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer (FIX-1)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-002",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "model-catalog",
+      "summary": "\u00a73.1.2 GAP: no 'catalog last refreshed at \u2026' freshness note in the UI. Required so users know cache age, and mandatory in the upstream-failure-serving-last-good-cache state.",
+      "reproduction": [
+        "/dashboard/agents model picker \u2192 no freshness/last-refreshed timestamp shown"
+      ],
+      "expected": "Visible 'catalog last refreshed at <ts>' note; explicit stale-cache indication on upstream failure",
+      "observed": "No freshness field rendered; catalog API response has no last-refreshed field surfaced",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer (FIX-1)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-catalog-003",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "model-catalog",
+      "summary": "\u00a73.1.2 GAP: manual catalog refresh path not exposed in UI (backend TTL cache exists at llm_client.py:1106-1167; a user-triggerable background refresh is required so the UI never blocks on a slow upstream and can force-refresh).",
+      "reproduction": [
+        "/dashboard/agents model picker \u2192 no refresh control observed"
+      ],
+      "expected": "Manual refresh action that triggers background catalog refresh; UI serves cache immediately, refreshes async",
+      "observed": "No refresh control observed in current UI",
+      "evidence": [
+        "uat/reports/evidence/models-live/catalog/CURRENT-STATE.md"
+      ],
+      "status": "OPEN",
+      "owner": "catalog-engineer (FIX-1)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    }
+  ]
+}
