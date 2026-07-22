@@ -98,18 +98,23 @@ export default function CoverLettersPage() {
 
   /**
    * Apply a completed `/agents/cover-letter/run` result — either a drafted
-   * letter or an honest no-résumé REFUSAL (NF-final-resid-002). The async
-   * job completes successfully either way (never "failed"), so this can't
-   * be told apart in the try/catch's `catch` branch — it has to be checked
-   * on the resolved value. A refusal carries `missingResume: true` and no
-   * `cover_letter_id` (apps/api/app/workers/tasks.py's `except
-   * MissingResumeError` handler); treating it like a success used to call
-   * `load(undefined)` and `setError(null)`, silently swallowing the honest
-   * message. Surface it through the page's existing alert instead, and skip
-   * the pointless reload — nothing new was generated.
+   * letter or an honest DEGRADE. The async job completes successfully either
+   * way (never "failed"), so this can't be told apart in the try/catch's
+   * `catch` branch — it has to be checked on the resolved value:
+   *  - a no-résumé refusal carries `missingResume: true` (backend
+   *    apps/api/app/workers/tasks.py's `except MissingResumeError` handler);
+   *  - a guard rejection or a first-draft LLM-unavailable degrade carries
+   *    `coverLetterUnavailable: true` (ML-cover-002/003) — the async job now
+   *    COMPLETES with this shape instead of failing with a raw 502, so it is
+   *    surfaced HERE off the resolved result, not via `parseCoverLetterRejection`
+   *    in the catch branch.
+   * All three carry no `cover_letter_id` (no letter was generated); treating
+   * that like a success used to call `load(undefined)`/`setError(null)`,
+   * silently swallowing the honest message. Surface it through the page's
+   * existing alert instead, and skip the pointless reload.
    */
   const applyCoverLetterResult = async (result: CoverLetterRunResult) => {
-    if (result.missingResume || !result.cover_letter_id) {
+    if (result.missingResume || result.coverLetterUnavailable || !result.cover_letter_id) {
       setRejection(null);
       setError(result.message ?? "Add your resume before generating a cover letter.");
       return;

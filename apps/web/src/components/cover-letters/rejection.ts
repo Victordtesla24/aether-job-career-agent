@@ -71,8 +71,16 @@ function parseListRepr(repr: string): string[] {
  * errors, non-Error throws).
  */
 export function parseCoverLetterRejection(error: unknown): CoverLetterRejection | null {
-  if (!(error instanceof ApiError) || error.status !== 422) return null;
-  const detail = extractDetail(error.message);
+  // A direct synchronous HTTP rejection surfaces as 422 with a "POST ...
+  // (422): {json}" wrapper; the ASYNC single-agent path (resolveRun,
+  // apps/web/src/lib/api/agents.ts) surfaces the SAME guard wording as a 502
+  // ApiError carrying the RAW job.error text (no wrapper) — ML-cover-002(b).
+  // Recognize both statuses, then read the detail from the wrapper when present
+  // and otherwise fall back to the raw message. A non-guard error at either
+  // status simply won't match the guard patterns below and returns null.
+  if (!(error instanceof ApiError)) return null;
+  if (error.status !== 422 && error.status !== 502) return null;
+  const detail = extractDetail(error.message) ?? error.message;
   if (!detail) return null;
 
   const fabricationMatch = detail.match(/fabrication guard:\s*(\[.*\])/i);

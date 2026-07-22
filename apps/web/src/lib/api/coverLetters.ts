@@ -30,6 +30,13 @@ export interface CoverLetterRunResult {
   // completes the BackgroundJob with THIS shape instead — no letter was
   // generated, so none of the fields above are present.
   missingResume?: boolean;
+  // ML-cover-002/003: an honest "no letter produced" degrade — the cover step's
+  // fabrication/structural guard rejected the draft, or the writing model was
+  // unavailable on the first draft. The async job now COMPLETES with this shape
+  // (never a raw 502 failure), so it's surfaced off the resolved result, not the
+  // catch branch; no `cover_letter_id` is present.
+  coverLetterUnavailable?: boolean;
+  reason?: string;
   message?: string;
 }
 

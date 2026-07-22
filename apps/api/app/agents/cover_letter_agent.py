@@ -29,6 +29,7 @@ from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLMClient,
     LLMFixtureMissingError,
+    LLMUnavailableError,
     get_cover_budget_seconds,
     get_model,
     shared_budget,
@@ -1026,11 +1027,17 @@ def build_approval_extras(letter: str, job: dict[str, Any], corpus: str) -> dict
 
 @dataclass
 class CoverLetterResult:
-    cover_letter_id: str
-    cover_letter: str
-    approval_id: str
-    approval_status: str
+    # Optional so an honest "no letter produced" degrade can be constructed
+    # without a real letter/approval (cover _draft() resilience, ML-cover-002):
+    # a live LLM failure on the FIRST draft returns cover_letter_unavailable
+    # rather than propagating a raw LLMUnavailableError out of run().
+    cover_letter_id: str | None = None
+    cover_letter: str = ""
+    approval_id: str | None = None
+    approval_status: str | None = None
     flagged: list[str] = field(default_factory=list)
+    cover_letter_unavailable: bool = False
+    message: str = ""
 
 
 class FabricationError(RuntimeError):
@@ -1287,12 +1294,30 @@ class CoverLetterAgent:
         # already-drained tailoring budget. Tailoring is untouched. One window for
         # all retries keeps the whole request under the single-request HTTP edge.
         with shared_budget(get_cover_budget_seconds(), not_below_active=True):
-            letter, body, flagged, claim_flags, issues, meta = self._draft(
-                base_prompt, job, corpus, signer, position, fixture_key="default",
-                claim_evidence=claim_evidence, jd_risk=jd_risk,
-                injection_payloads=injection_payloads,
-                untrusted_text=raw_description, provenance_evidence=provenance_evidence,
-            )
+            try:
+                letter, body, flagged, claim_flags, issues, meta = self._draft(
+                    base_prompt, job, corpus, signer, position, fixture_key="default",
+                    claim_evidence=claim_evidence, jd_risk=jd_risk,
+                    injection_payloads=injection_payloads,
+                    untrusted_text=raw_description,
+                    provenance_evidence=provenance_evidence,
+                )
+            except LLMUnavailableError:
+                # cover _draft() resilience (ML-cover-002): a live LLM failure on
+                # the FIRST draft must NOT propagate a raw LLMUnavailableError out
+                # of run(). Degrade to an honest coverLetterUnavailable result the
+                # router/worker recognizes as "no letter produced" — coordinated
+                # with the fabrication/structural guard-rejection degrade
+                # (agents.py:1558-1600). Never fabricates a letter; downstream
+                # the reserved run is refunded and never billed.
+                return CoverLetterResult(
+                    cover_letter_unavailable=True,
+                    message=(
+                        "The cover letter couldn't be generated because the "
+                        "writing model was temporarily unavailable. Please try "
+                        "again in a moment."
+                    ),
+                )
             all_flagged: list[str] = list(flagged)
             all_claims: list[str] = list(claim_flags)
             for attempt in ("retry", "retry2"):
