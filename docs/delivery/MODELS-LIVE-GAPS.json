@@ -925,13 +925,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/screens/misc-dashboard/TESTING-OUTCOME-REPORT.md"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "fixer-medium (FE batch)",
       "fixCommits": [
         "5a45937(re-fix)"
       ],
       "verifiedBy": "",
-      "reviewVerdict": "PASS (ML-fe-polish-diff-review.md, fresh-verified): approvals substantive-excerpt (traced to real compose_letter shape), settings describeApiError bounded + 2nd-overflow-source JUSTIFIED (independent cause), resume/orchestration min-w-0 scoped, agents-005 not reverted, desktop unchanged. 551/551 vitest, Playwright 5/5, build clean. Batch-4+5 combined deploy.",
+      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes.",
       "reopenNote": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: bounded-error+1440px HELD, but 390px no-overflow FAILED \u2014 a 5000-char UNBROKEN-token name still blows the page to 49740px. Root: break-words (overflow-wrap:break-word) doesn't reduce min-content for an unbroken token; grid item .space-y-6 xl:col-span-3 (:533) + grid container (:513) lack min-w-0. Batch-4 fixed the inner div + banner but MISSED this. LESSON: the fixer's LOCAL Playwright passed but PROD fails \u2014 local e2e env not prod-faithful for CSS overflow. Re-fix via ML-adv-003."
     },
     {
@@ -996,12 +996,13 @@
         "uat/reports/evidence/models-live/adversarial/STAGE3-screens-findings.md",
         "stage3-assets/"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "fixer-medium (break-all + min-w-0 :533) \u2192 PROD re-verify",
       "fixCommits": [
         "5a45937(re-fix)"
       ],
-      "verifiedBy": ""
+      "verifiedBy": "",
+      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes."
     },
     {
       "id": "ML-adv-004",
