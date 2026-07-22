@@ -92,7 +92,9 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | — | 2026-07-22 (resumed) | — orchestrator git | — | rebase fix/ml-fe-polish onto current main → fd8f493 (FE-only, disjoint, clean) | ✅ |
 | 83 | 2026-07-22 (resumed) | deployer | haiku | BATCH-4+5 combined deploy (FINAL code) | ✅ LIVE @f28eb82 (all 6 batch-markers preserved, health ok, 3 units, 0 log errs, remote=main+0 PRs, pushed) — ALL CODE FIXES DEPLOYED |
 | 84 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-test-001 vitest exit-0 mock fix (G-07 prep) | dispatched |
-| 85 | 2026-07-22 (resumed) | qa-adversary | opus | §8 STAGE-3 adversarial (batch-4+5 re-verify + closed-sample re-trigger + jobs-001 + screen-coverage audit) | dispatched |
+| 85 | 2026-07-22 (resumed) | qa-adversary | opus | §8 STAGE-3 adversarial | ✅ CAUGHT: settings-001 390px overflow HOLDS on prod (49740px unbroken-token; local-Playwright-passed-but-prod-failed) → REOPEN ML-adv-003. Others HELD (approvals/resume/agents006/adv002/cred005 PASS, jobs-001 flaky-resolved, 6/6 closed-sample held). Coverage gaps → ML-adv-004(/admin/users/[id]), ML-adv-005(/forgot-password) |
+| 86 | 2026-07-22 (resumed) | fixer-medium | sonnet (worktree) | ML-adv-003 settings re-fix (break-all + min-w-0 :533/:513) | dispatched |
+| 87 | 2026-07-22 (resumed) | screen-tester | sonnet | ML-adv-004/005 coverage passes (/admin/users/[id] + /forgot-password) | dispatched |
 | 78 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | batch-5 LOW backend tests | ✅ @5455d80; 6 tests (3 fail-before+3 guard); NO cred-002 502-pin exists (correctly didn't force edit), 45 cred tests green |
 | 80 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a6e3b71a) | batch-5 implement | ✅ @2c144c9 (stranded on bg-waiter → resumed→committed); upstream_status 422-vs-502, needs_reauth gated on source!=none; 95/95, 0 regr, cred-002 45 green |
 | 81 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | batch-5 diff review | ✅ PASS (revert-verified; 422/502 honest, refresh untouched, delete→unconfigured, live-cred warning, 48/48; 2 non-blocking) |
