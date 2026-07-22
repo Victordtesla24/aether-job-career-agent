@@ -543,14 +543,15 @@
         "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
         "screens/public-auth/network/"
       ],
-      "status": "IN-FIX",
+      "status": "FIXED-AWAITING-DEPLOY",
       "owner": "test-author \u2192 fixer-hard (billing race)",
       "fixCommits": [
         "54f5aa4(tests)",
         "913b8fe(fix)"
       ],
       "verifiedBy": "",
-      "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING."
+      "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
+      "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60."
     }
   ]
 }

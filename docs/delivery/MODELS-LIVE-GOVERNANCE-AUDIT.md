@@ -73,7 +73,7 @@ Roster manifest (first artifact): uat/reports/evidence/models-live/governance/RO
 | 50 | 2026-07-22 (resumed) | screen-tester | sonnet | §4 public/auth screens | ✅ mostly clean (login/pricing/legal); ML-browser-001 BENIGN-closed; NEW ML-signup-001 HIGH (entitlement 500 race on fresh signup) |
 | 51 | 2026-07-22 (resumed) | test-author | sonnet (worktree) | ML-signup-001 failing test, branch fix/ml-signup-001 | ✅ @54f5aa4; 3 tests (2 fail-before+1 guard), RCA deterministic (UniqueViolation) |
 | 53 | 2026-07-22 (resumed) | fixer-medium | sonnet (wt agent-a279974c) | ML-signup-001 implement | ✅ @913b8fe; ON CONFLICT DO NOTHING both inserts, 3/3+57 slice green, no suppression, billing amounts untouched |
-| 54 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-signup-001 diff review | dispatched |
+| 54 | 2026-07-22 (resumed) | reviewer | sonnet (fresh) | ML-signup-001 diff review | ✅ PASS (ON CONFLICT correct, no suppression, tests load-bearing via pre-fix swap, 60/60); batch-deploy w/ curation |
 
 **Step 5 outcome (dispatch #7):** ✅ 18 wireframes / 29 routes / 22 catalog agents (8 runtime) / 337 OpenRouter models cached 1h / PUT /api/agents/config/{agent_key} / probe agent jobDiscovery. Deltas: coverLetter ERROR state (→ ML-agent-cover-001 watch), anthropic unconfigured (operator DELETEd post-422). SCREEN-MATRIX.md + AGENT-MODEL-MATRIX.md filed. Browser sweep (dispatch #5): 26 routes, 23 clean, 3 benign ERR_ABORTED prefetch (→ ML-browser-001..003 LOW, tester to confirm). Runtime monitor (#4): capture PID live, 0 baseline critical signatures, 17/17 route sweep OK, catalog endpoint /api/agents/providers/{provider}/models 200.
 
