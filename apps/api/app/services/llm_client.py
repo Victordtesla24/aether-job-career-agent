@@ -660,6 +660,21 @@ def resolve_user_credential(
     ``resolve_credential`` (backward compatibility).
     """
     if user_id:
+        # Refresh-before-expiry hook (ML-agents-cred-002, ADR-ML-2a DECISION-1b).
+        # When a deployment-wide Anthropic subscription OAuth session exists and
+        # is near/after expiry, refresh it and propagate the NEW access token into
+        # the same ProviderCredential('anthropic') row this resolver reads DB-first
+        # — so bare claude-* runs never send a stale token. Best-effort: a refresh
+        # outage must not 500 a run, and this NEVER crosses providers (an honest
+        # 401 on an un-refreshable expired token is surfaced by the live-call path,
+        # with needs_reauth already marked, rather than a silent reroute).
+        if provider == "anthropic":
+            try:
+                from app.services import anthropic_oauth
+
+                anthropic_oauth.refresh_if_needed(user_id)
+            except Exception as exc:  # noqa: BLE001 — best-effort; never break resolution
+                logger.warning("anthropic oauth refresh-before-use skipped: %s", exc)
         from app.repositories.user_provider_credential import (
             UserProviderCredentialRepository,
         )

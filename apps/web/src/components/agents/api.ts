@@ -53,6 +53,11 @@ export const ProviderSchema = z.object({
   secretHint: z.string().nullish(),
   lastVerifiedAt: z.string().nullish(),
   lastVerifyStatus: z.enum(["ok", "failed"]).nullish(),
+  // ML-agents-cred-002 (ADR-ML-2a DECISION-1b): true when the Anthropic
+  // subscription OAuth session was marked needs_reauth (auto-refresh failed /
+  // token revoked). Drives the modal's Reconnect / Renew affordance. Its
+  // `status` is demoted server-side to "warning" (never "connected").
+  needsReauth: z.boolean().nullish(),
 });
 export type Provider = z.infer<typeof ProviderSchema>;
 
@@ -365,4 +370,66 @@ export async function verifyProvider(id: string, o: RequestOptions = {}): Promis
   return VerifyResultSchema.parse(
     await apiRequest<unknown>(`/agents/providers/${id}/verify`, { ...o, method: "POST" }),
   );
+}
+
+/** Result of POST /agents/providers/anthropic/oauth/start. */
+export const AnthropicOAuthStartSchema = z.object({ authorizeUrl: z.string() });
+export type AnthropicOAuthStart = z.infer<typeof AnthropicOAuthStartSchema>;
+
+/**
+ * Begin the in-app "Connect with Anthropic" (subscription) OAuth flow
+ * (ML-agents-cred-002 / ADR-ML-1): the server mints a PKCE verifier + state and
+ * returns Anthropic's OWN authorize URL. The caller opens it in a new tab; the
+ * operator approves with their Claude Pro/Max account and pastes back a one-time
+ * code (never the long-lived token).
+ */
+export async function startAnthropicOAuth(
+  o: RequestOptions = {},
+): Promise<AnthropicOAuthStart> {
+  return AnthropicOAuthStartSchema.parse(
+    await apiRequest<unknown>("/agents/providers/anthropic/oauth/start", {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
+/**
+ * Complete the Connect-with-Anthropic flow: POST the pasted ``code#state`` to
+ * /agents/providers/anthropic/oauth/exchange. The server exchanges it for a
+ * subscription token (stored encrypted, deployment-wide) and returns the masked
+ * provider row — never the token. Parsed as a partial passthrough (same as the
+ * other credential mutations) so a full enriched row round-trips unchanged.
+ */
+export async function exchangeAnthropicOAuth(
+  pastedCode: string,
+  o: RequestOptions = {},
+): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>("/agents/providers/anthropic/oauth/exchange", {
+        ...o,
+        method: "POST",
+        body: { pastedCode },
+      }),
+    ) as Provider;
+}
+
+/**
+ * Renew the stored Anthropic subscription session: POST
+ * /agents/providers/anthropic/oauth/refresh. Rotates the access + refresh token
+ * server-side and returns the masked provider row. On an honest refresh failure
+ * the server responds 502 and the token is marked needs_reauth (never a stale
+ * token, never a cross-provider fallback) — surfaced here as a thrown ApiError.
+ */
+export async function refreshAnthropicOAuth(o: RequestOptions = {}): Promise<Provider> {
+  return ProviderSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>("/agents/providers/anthropic/oauth/refresh", {
+        ...o,
+        method: "POST",
+      }),
+    ) as Provider;
 }

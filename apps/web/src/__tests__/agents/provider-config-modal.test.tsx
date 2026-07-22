@@ -88,13 +88,16 @@ describe("ProviderConfigModal", () => {
       />,
     );
     // GAP-P7-DEF-A: two mutually-exclusive radios — a Console API key and a
-    // pasted Claude Code OAuth token. The in-app subscription OAuth *authorize*
-    // flow stays removed (no subscription_oauth radio, no connect button).
+    // pasted Claude Code OAuth token. The legacy in-app subscription OAuth
+    // *authorize* flow (subscription_oauth authMode) stays removed.
     expect(screen.getByTestId("authmode-api_key")).toBeTruthy();
     expect(screen.getByTestId("authmode-oauth_token")).toBeTruthy();
     expect(screen.queryByTestId("authmode-subscription_oauth")).toBeNull();
     expect(screen.queryByRole("radio", { name: /claude subscription/i })).toBeNull();
-    expect(screen.queryByTestId("anthropic-oauth-connect")).toBeNull();
+    // ML-agents-cred-002 (ADR-ML-1) supersedes the removal for a NEW, compliant
+    // manual-redirect + code-paste-back "Connect with Anthropic" flow — the
+    // connect affordance now EXISTS alongside the manual paste fallback.
+    expect(screen.getByTestId("anthropic-oauth-connect")).toBeTruthy();
     expect(screen.getByTestId("provider-secret-input")).toBeTruthy();
 
     // Default mode is api_key → its placeholder/hint show first.
