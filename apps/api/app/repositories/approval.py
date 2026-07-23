@@ -259,6 +259,51 @@ class ApprovalRepository:
             (new_status, application_id, user_id),
         )
 
+    def delete_by_id(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
+        """Hard-delete one approval, owner-scoped (FEAT-B1).
+
+        Hard delete is the schema convention — the ``ApprovalStatus`` enum has
+        no terminal "dismissed" state, and every other domain (offers,
+        interviews, networking, stories) removes rows with
+        ``DELETE … WHERE id AND userId``. Returns the deleted row, or ``None``
+        when nothing matched (unknown/foreign id — the caller answers 404, so
+        a repeated delete is idempotent-honest with no side effect).
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'DELETE FROM "ApprovalRequest" '
+                    f'WHERE "id" = %s AND "userId" = %s RETURNING {_COLUMNS}',
+                    (approval_id, user_id),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        return rows[0] if rows else None
+
+    def purge_expired(self, user_id: str, expiry_hours: int) -> list[str]:
+        """Bulk hard-delete every EXPIRED PENDING approval for ``user_id``.
+
+        One statement, expiry evaluated SERVER-SIDE with the same window the
+        service layer (and the UI's ``isExpired``) uses: a pending row whose
+        ``createdAt`` is older than ``expiry_hours``. Resolved rows and live
+        pending rows are never touched. Returns the deleted ids.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    DELETE FROM "ApprovalRequest"
+                    WHERE "userId" = %s
+                      AND "status" = 'pending'::"ApprovalStatus"
+                      AND "createdAt" < NOW() - make_interval(hours => %s)
+                    RETURNING "id"
+                    ''',
+                    (user_id, expiry_hours),
+                )
+                ids = [row[0] for row in cur.fetchall()]
+            conn.commit()
+        return ids
+
     def backdate(self, approval_id: str, hours: int) -> None:
         """Test/ops helper: shift ``createdAt`` into the past (expiry checks)."""
         with get_connection() as conn:

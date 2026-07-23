@@ -10,8 +10,9 @@ from pydantic import BaseModel, Field
 
 from app.db import get_connection
 from app.middleware.auth import CurrentUser
+from app.repositories.admin import write_audit
 from app.repositories.approval import ApprovalRepository
-from app.services.approval_service import ApprovalService
+from app.services.approval_service import EXPIRY_HOURS, ApprovalService, _is_expired
 
 router = APIRouter()
 
@@ -108,9 +109,69 @@ def create_approval(
     )
 
 
+@router.post("/purge-expired")
+def purge_expired_approvals(current_user: CurrentUser) -> dict[str, Any]:
+    """Bulk-remove every EXPIRED pending approval in one request (FEAT-B1).
+
+    Expiry is decided SERVER-SIDE in SQL with the same 48h window the service
+    layer and the UI badge use (``approval_service.EXPIRY_HOURS`` — single
+    source of truth): pending rows older than the window are hard-deleted;
+    live pending and resolved rows are never touched. Returns an honest
+    ``{"purged": 0, "ids": []}`` when nothing qualifies.
+    """
+    user_id = current_user["id"]
+    ids = ApprovalRepository().purge_expired(user_id, EXPIRY_HOURS)
+    if ids:
+        write_audit(
+            user_id,
+            "approval.purge_expired",
+            target_type="approval",
+            detail={"purged": len(ids), "ids": ids, "expiry_hours": EXPIRY_HOURS},
+        )
+    return {"purged": len(ids), "ids": ids}
+
+
 @router.get("/{approval_id}")
 def get_approval(approval_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return ApprovalService().get(approval_id, current_user["id"])
+
+
+@router.delete("/{approval_id}")
+def delete_approval(approval_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Remove one stale approval request (FEAT-B1). Hard delete per schema
+    convention (no terminal "dismissed" enum state; offers/interviews/stories
+    all hard-delete).
+
+    - 404: unknown or foreign id — repeating a delete is idempotent-honest
+      (second call finds nothing, changes nothing).
+    - 409: a LIVE (non-expired) pending approval is still actionable; the
+      human-in-the-loop gate cannot be bypassed by deleting the card —
+      approve or reject it instead.
+    - Deletable: expired-pending and resolved (approved/rejected) rows.
+    """
+    user_id = current_user["id"]
+    approval = ApprovalService().get(approval_id, user_id)  # 404 if absent
+    if approval["status"] == "pending" and not _is_expired(approval):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Approval is still pending and not expired — approve or reject it "
+            "instead of removing it.",
+        )
+    deleted = ApprovalRepository().delete_by_id(approval_id, user_id)
+    if deleted is None:  # raced with another delete — honest 404
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Approval not found")
+    write_audit(
+        user_id,
+        "approval.delete",
+        target_type="approval",
+        target_id=approval_id,
+        detail={
+            "status": deleted["status"],
+            "type": deleted["type"],
+            "expired": _is_expired(deleted),
+        },
+    )
+    return deleted
 
 
 @router.post("/{approval_id}/approve")

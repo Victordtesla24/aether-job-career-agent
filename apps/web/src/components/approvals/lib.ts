@@ -109,6 +109,16 @@ export function isExpired(approval: Approval, now: number = Date.now()): boolean
   );
 }
 
+/**
+ * A card is removable when it is no longer actionable: an EXPIRED pending
+ * request or a resolved (approved/rejected) one (FEAT-B1). A live pending
+ * request must be approved or rejected, never silently removed — the server
+ * enforces the same rule with a 409.
+ */
+export function canRemove(approval: Approval, now: number = Date.now()): boolean {
+  return approval.status !== "pending" || isExpired(approval, now);
+}
+
 /** The artifact family a payload describes, discriminated by ``kind`` for the
  *  approvals that share the ``application_submit`` type (MV-resume-studio-001). */
 function payloadKind(approval: Approval): string | undefined {

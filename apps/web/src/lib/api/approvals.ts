@@ -35,3 +35,30 @@ export async function rejectRequest(id: string, options: RequestOptions = {}): P
     await apiRequest<unknown>(`/approvals/${id}/reject`, { ...options, method: "POST" }),
   );
 }
+
+/** Remove one stale (expired or resolved) approval request (FEAT-B1). */
+export async function deleteApproval(
+  id: string,
+  options: RequestOptions = {},
+): Promise<Approval> {
+  return ApprovalSchema.parse(
+    await apiRequest<unknown>(`/approvals/${id}`, { ...options, method: "DELETE" }),
+  );
+}
+
+export const PurgeExpiredResultSchema = z.object({
+  purged: z.number(),
+  ids: z.array(z.string()),
+});
+
+export type PurgeExpiredResult = z.infer<typeof PurgeExpiredResultSchema>;
+
+/** Bulk-remove every expired pending approval in ONE request (FEAT-B1).
+ *  Expiry is decided server-side with the same 48h window as the UI badge. */
+export async function purgeExpiredApprovals(
+  options: RequestOptions = {},
+): Promise<PurgeExpiredResult> {
+  return PurgeExpiredResultSchema.parse(
+    await apiRequest<unknown>("/approvals/purge-expired", { ...options, method: "POST" }),
+  );
+}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Approval } from "../../../lib/api/approvals";
 import {
   EXPIRY_HOURS,
+  canRemove,
   companyInitials,
   isExpired,
   metaLine,
@@ -137,6 +138,26 @@ describe("isExpired", () => {
       createdAt: new Date(now - 100 * 3600 * 1000).toISOString(),
     });
     expect(isExpired(old, now)).toBe(false);
+  });
+});
+
+describe("canRemove (FEAT-B1)", () => {
+  const now = Date.parse("2026-07-10T12:00:00Z");
+  it("is false for a live (non-expired) pending approval — still actionable", () => {
+    const fresh = approval({ createdAt: new Date(now - 3600 * 1000).toISOString() });
+    expect(canRemove(fresh, now)).toBe(false);
+  });
+  it("is true for an expired pending approval", () => {
+    const stale = approval({
+      createdAt: new Date(now - (EXPIRY_HOURS + 1) * 3600 * 1000).toISOString(),
+    });
+    expect(canRemove(stale, now)).toBe(true);
+  });
+  it("is true for resolved approvals regardless of age", () => {
+    const approved = approval({ status: "approved", createdAt: new Date(now).toISOString() });
+    const rejected = approval({ status: "rejected", createdAt: new Date(now).toISOString() });
+    expect(canRemove(approved, now)).toBe(true);
+    expect(canRemove(rejected, now)).toBe(true);
   });
 });
 

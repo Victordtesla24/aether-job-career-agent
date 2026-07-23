@@ -18,12 +18,18 @@ import {
   type DecisionContext,
 } from "../../../components/approvals/api";
 import {
+  canRemove,
   isExpired,
   parseApprovalPayload,
   substantiveExcerpt,
   summarize,
 } from "../../../components/approvals/lib";
-import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
+import {
+  deleteApproval,
+  fetchApprovals,
+  purgeExpiredApprovals,
+  type Approval,
+} from "../../../lib/api/approvals";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
@@ -184,7 +190,51 @@ export default function ApprovalsPage() {
     if (sendError) setListError(sendError);
   };
 
+  /** Remove one stale (expired/resolved) card — server enforces the 409 guard. */
+  const removeFromCard = async (approval: Approval) => {
+    if (
+      !window.confirm(
+        `Remove this ${approval.status === "pending" ? "expired" : approval.status} approval request? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(approval.id);
+    try {
+      await deleteApproval(approval.id);
+      setListError(null);
+      // Reconcile from server truth — list, badges and counters together.
+      await load();
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Failed to remove the approval");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Bulk "Clear expired": ONE request; expiry decided server-side (48h). */
+  const clearExpired = async (count: number) => {
+    if (
+      !window.confirm(
+        `Remove ${count} expired approval request${count === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy("purge-expired");
+    try {
+      await purgeExpiredApprovals();
+      setListError(null);
+      await load();
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Failed to clear expired approvals");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const pendingCount = approvals?.filter((a) => a.status === "pending").length ?? null;
+  const expiredCount = approvals?.filter((a) => isExpired(a)).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -200,6 +250,17 @@ export default function ApprovalsPage() {
             ) : null}
           </p>
         </div>
+        {expiredCount > 0 ? (
+          <button
+            type="button"
+            data-testid="clear-expired-btn"
+            onClick={() => void clearExpired(expiredCount)}
+            disabled={busy === "purge-expired"}
+            className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+          >
+            Clear expired ({expiredCount})
+          </button>
+        ) : null}
         <div
           className="flex gap-1 rounded-xl border border-white/10 p-1"
           role="group"
@@ -329,6 +390,18 @@ export default function ApprovalsPage() {
                           Reject
                         </button>
                       </>
+                    ) : null}
+                    {canRemove(approval) ? (
+                      <button
+                        type="button"
+                        data-testid="remove-btn"
+                        aria-label={`Remove ${approval.status === "pending" ? "expired" : approval.status} approval request`}
+                        onClick={() => void removeFromCard(approval)}
+                        disabled={busy === approval.id}
+                        className="min-h-[44px] rounded-xl border border-white/15 px-4 text-sm font-semibold text-aether-muted hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                      >
+                        Remove
+                      </button>
                     ) : null}
                   </div>
                 </div>
