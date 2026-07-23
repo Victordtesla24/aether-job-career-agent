@@ -1,8 +1,8 @@
 {
-  "phase_step": "PHASE0-COMPLETE",
-  "updated_at": "2026-07-23T16:40:00Z",
+  "phase_step": "W-A-LEDGER-CLOSED",
+  "updated_at": "2026-07-24T08:05:00Z",
   "workstream_status": {
-    "W-A": "in_progress-next",
+    "W-A": "partial",
     "W-B": "in_progress-next",
     "W-C": "pending",
     "W-D": "pending",
@@ -52,9 +52,26 @@
       "severity": "info",
       "summary": "Untracked .env.bak-predeploy present at repo root; left in place per scope (scheduled for reviewed deletion manifest in W-D).",
       "evidence": "uat/reports/evidence/launch-ready/cleanup/worktree-purge.md"
+    },
+    {
+      "id": "WA-001",
+      "severity": "medium",
+      "summary": "ML-adv-001's awaiting-QA m{} monitor fix FAILED QA: perl -ne 'print if m{...}' exits 0 regardless of match, so monitor-tail.sh captured EVERY line (live-matches.log flooded to 14,212 clean-traffic lines). Found and re-fixed within the row's QA (grep -qP), flooded log quarantined, monitor restarted, selectivity proven by synthetic injection.",
+      "evidence": "uat/reports/evidence/launch-ready/models-live/ML-adv-001-qa.md"
     }
   ],
-  "gates": {},
+  "gates": {
+    "W-A": {
+      "status": "partial",
+      "note": "Ledger business CLOSED 2026-07-24: all 5 outstanding W-A rows resolved (ML-env-001 VERIFIED-CLOSED; ML-adv-001, ML-audit-allsources-deadcode-001, ML-audit-seek-fe-hardcode-001, ML-prodverify-low1-allsources VERIFIED-CLOSED-LIVE @ deploy 592a963). The full 11-gate models-live campaign re-run (aether-subscription-prompt-live-test.md) remains a next_action — NOT claimed here.",
+      "evidence": "uat/reports/evidence/launch-ready/models-live/",
+      "suites": {
+        "pytest": "1131 passed / 0 failed (baseline 1118 + 13 new)",
+        "vitest": "559 passed / 0 failed, 81 files (baseline 556 + 3 new)",
+        "playwright": "targeted e2e/jobs.spec.ts 4/4 vs live deploy; full-suite baseline 51P/28F unchanged-documented"
+      }
+    }
+  },
   "baseline": {
     "pytest": {
       "passed": 1118,
@@ -80,10 +97,10 @@
       "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
     }
   },
-  "last_commit": "11784a82799386ad98bd4c447d19055fad4aa8ae",
-  "last_deploy_sha": "03c0c50",
+  "last_commit": "592a963174897ecee688cd669c76cd58b75edc6d",
+  "last_deploy_sha": "592a963",
   "next_actions": [
-    "W-A: read /home/ubuntu/aether-subscription-prompt-live-test.md in full and execute the models-live prompt with maximum accuracy (§3); drive ML-adv-001 through QA; close the 4 OPEN ledger rows (ML-env-001 via completed worktree purge, the two all_sources/seek-hardcode LOW rows, ML-prodverify-low1) through the §9 pipeline; record gates.W-A with fresh evidence under uat/reports/evidence/launch-ready/models-live/",
+    "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence; the 5-row ledger business is already closed (2026-07-24).",
     "W-B: FEAT-B1 approvals purge + FEAT-B2 applications stage-move (§4) at production quality, evidence under features/",
     "W-C: duplicate-implementation elimination (§5) after W-A/W-B land — dedup-surgeon with reviewed manifests, evidence under dedup/",
     "W-D: repo + prod cleanup (§6) — reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",

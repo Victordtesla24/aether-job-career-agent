@@ -43,10 +43,10 @@
       "screen": "Agents",
       "severity": "BLOCKER",
       "category": "validation",
-      "summary": "USER-REPORTED (operator, 2026-07-22): PUT /agents/providers/anthropic/credential returns 422 'Anthropic credential not recognized. Console API keys start with sk-ant-api. Claude Code O...' \u2014 operator cannot save an Anthropic credential. Dual-mode validation (sk-ant-api03-/sk-ant-oat01-, Phase-7 DEF-A d2df452) is rejecting the operator's real credential.",
+      "summary": "USER-REPORTED (operator, 2026-07-22): PUT /agents/providers/anthropic/credential returns 422 'Anthropic credential not recognized. Console API keys start with sk-ant-api. Claude Code O...' — operator cannot save an Anthropic credential. Dual-mode validation (sk-ant-api03-/sk-ant-oat01-, Phase-7 DEF-A d2df452) is rejecting the operator's real credential.",
       "reproduction": [
         "Login as operator on production",
-        "Agents screen \u2192 Anthropic provider \u2192 paste credential \u2192 Save",
+        "Agents screen → Anthropic provider → paste credential → Save",
         "Observe 422 with 'not recognized' detail"
       ],
       "expected": "A genuine current Anthropic credential (Console API key OR Claude Code OAuth token, current prefix formats) saves successfully (200), verifies, and routes bare claude-* runs to direct Anthropic billing",
@@ -56,14 +56,14 @@
         "api.log 422s 2026-07-22T02:53:18Z + 02:53:24Z (operator then DELETEd credential)"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "deployer \u2192 qa (prod verify)",
+      "owner": "deployer → qa (prod verify)",
       "fixCommits": [
         "9396bae (tests)",
         "ddd0a66 (fix)"
       ],
       "verifiedBy": "qa-adversary (opus) LIVE prod @d105031, 2026-07-22T04:13-04:15Z; adversarial/ML-agents-cred-001-prodverify.md; server-log corroborated; state restored",
       "rca": "agents.py:2110-2121 accepts only sk-ant-api / sk-ant-oat01- prefixes, no whitespace strip, 422 text hardcodes oat01. Operator on-disk token sk-ant-oat01- (128ch) but EXPIRED 2026-07-21; pasted value evidently matched neither prefix (newer-prefix or unicode-whitespace hypothesis). No regression since d2df452.",
-      "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat \u2014 would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422.",
+      "planReview": "PASS-WITH-AMENDMENTS (catalog/ML-agents-cred-001-plan-review.md): anchor prefix to ^sk-ant-oat\\d+- in BOTH agents.py:2119 + llm_client.py:470 (NOT bare sk-ant-oat — would admit legacy sk-ant-oat- subscription-oauth shape); keep 'sk-ant-oat01-' literal example in 422 (test_gap_p7_def_a_dual_mode.py:168); add compliance-guard test {authMode:oauth_token, sk-ant-oat-LEGACY} must still 422.",
       "reviewVerdict": "PASS (diff review /tmp .../ML-cred-001-diff-review.md): compliance hole closed (^sk-ant-oat\\d+- both files), secret hygiene clean, scope tight, tests load-bearing, 14/14+5/5 re-run green independently."
     },
     {
@@ -73,7 +73,7 @@
       "category": "defect",
       "summary": "OPERATOR-MANDATED (2026-07-22): the Anthropic credential / configure-credentials window must OPEN THE ANTHROPIC AUTH WEB PAGE for subscription users (in-app-initiated OAuth authorization, Claude Code-style PKCE), not require manual token pasting. Manual paste stays as honest fallback for Console API keys.",
       "reproduction": [
-        "Agents screen \u2192 Anthropic provider \u2192 configure credentials",
+        "Agents screen → Anthropic provider → configure credentials",
         "Observe: only manual paste fields; no button that opens Anthropic's authorization page"
       ],
       "expected": "Subscription mode shows a 'Connect Anthropic / open authorization page' action that launches Anthropic's OAuth authorize URL (PKCE); user approves on Anthropic's page; resulting authorization code is exchanged for an oauth token (sk-ant-oat01-*) stored in the vault with authMode oauth_token; runs on bare claude-* models then bill to the subscription via Bearer + anthropic-beta oauth header",
@@ -82,16 +82,16 @@
         "operator directive 2026-07-22 (this run)"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "reviewer (diff review) \u2192 deploy \u2192 qa-adversary prod verify",
+      "owner": "reviewer (diff review) → deploy → qa-adversary prod verify",
       "fixCommits": [
         "afee5d5",
         "7dd17a9",
         "2b5fefa",
         "merge 61fa6bf (LIVE)"
       ],
-      "verifiedBy": "qa-adversary(opus) LIVE prod @61fa6bf: start issues valid PKCE authorize URL (distinct challenge+state, DB state row), authorize\u2192claude.ai Pro/Max subscription login 200, exchange rejects 9 bogus inputs (no fake 200, single-use blocked, 0 stored), Connect UI works, regression OpenRouter 337+fit-scorer 200. adversarial/ML-agents-cred-002-prodverify.md. HUMAN-GATED residual: operator consent+real code exchange+real subscription-billed run; needs_reauth reconnect (code-verified, live-unreachable w/o revoked token).",
+      "verifiedBy": "qa-adversary(opus) LIVE prod @61fa6bf: start issues valid PKCE authorize URL (distinct challenge+state, DB state row), authorize→claude.ai Pro/Max subscription login 200, exchange rejects 9 bogus inputs (no fake 200, single-use blocked, 0 stored), Connect UI works, regression OpenRouter 337+fit-scorer 200. adversarial/ML-agents-cred-002-prodverify.md. HUMAN-GATED residual: operator consent+real code exchange+real subscription-billed run; needs_reauth reconnect (code-verified, live-unreachable w/o revoked token).",
       "blueprint": "docs/delivery/ML-agents-cred-002-BLUEPRINT.md + catalog/ML-agents-cred-002-cli-oauth-extract.md; ADR-ML-2 rulings. Flow=manual code-paste-back+backend exchange (client 9d1c250a, authorize claude.com/cai/oauth/authorize, token platform.claude.com/v1/oauth/token, scope user:inference, PKCE S256, state single-use). Storage repos exist (no DDL). Auto-refresh REQUIRED. New endpoints /agents/providers/anthropic/oauth/{start,exchange}. Manual paste retained as fallback. HUMAN-GATED: operator live consent click.",
-      "implNote": "7dd17a9: new anthropic_oauth.py + /oauth/{start,exchange,refresh} + refresh hook (llm_client resolve_user_credential) + Connect-with-Anthropic UI. 26/26+5/5, 114 regression slice green. Authorize smoke: default claude.com/cai/oauth/authorize scope user:inference \u2192 200 Pro/Max subscription login (correct). resolve_provider byte-for-byte unchanged. Token store: used\u2192ProviderCredential(deployment-wide), refresh\u2192AnthropicOAuthToken. Operator live consent HUMAN-GATED.",
+      "implNote": "7dd17a9: new anthropic_oauth.py + /oauth/{start,exchange,refresh} + refresh hook (llm_client resolve_user_credential) + Connect-with-Anthropic UI. 26/26+5/5, 114 regression slice green. Authorize smoke: default claude.com/cai/oauth/authorize scope user:inference → 200 Pro/Max subscription login (correct). resolve_provider byte-for-byte unchanged. Token store: used→ProviderCredential(deployment-wide), refresh→AnthropicOAuthToken. Operator live consent HUMAN-GATED.",
       "reviewVerdict": "core PASS + delta PASS (both fresh reviewers). PKCE/state-single-use/secret-hygiene/no-split-brain/refresh-honest/exchange-honest/resolve_provider-unchanged/authorize=subscription/needs_reauth-honest/reconnect-wired all verified. 116 backend + 76 FE green."
     },
     {
@@ -110,10 +110,10 @@
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "owner": "screen-tester (confirm no user impact) → qa-adversary adjudication",
       "fixCommits": [],
       "verifiedBy": "screen-tester public-auth: reproduced 6/8 by nav-away timing; empty console/pageerror; real click always 200 = benign Next.js Link prefetch abort. Not a defect.",
-      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close — not dismissed by inference."
     },
     {
       "id": "ML-browser-002",
@@ -131,10 +131,10 @@
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "owner": "screen-tester (confirm no user impact) → qa-adversary adjudication",
       "fixCommits": [],
       "verifiedBy": "admin screen-tester re-verified benign: standard Next.js Link-prefetch cancellation, 0 console/pageerror/UI impact (2 independent passes).",
-      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close — not dismissed by inference."
     },
     {
       "id": "ML-browser-003",
@@ -152,36 +152,36 @@
         "uat/reports/evidence/models-live/runtime/browser-sweeps.log"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "screen-tester (confirm no user impact) \u2192 qa-adversary adjudication",
+      "owner": "screen-tester (confirm no user impact) → qa-adversary adjudication",
       "fixCommits": [],
       "verifiedBy": "admin screen-tester re-verified benign: standard Next.js Link-prefetch cancellation, 0 console/pageerror/UI impact (2 independent passes).",
-      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close \u2014 not dismissed by inference."
+      "triage": "ORCHESTRATOR: severity LOW (Next.js prefetch-abort pattern); MUST be confirmed benign by the assigned screen-tester with fresh evidence before any REJECT/close — not dismissed by inference."
     },
     {
       "id": "ML-agent-cover-001",
       "screen": "Agents / Cover Letters",
       "severity": "MEDIUM",
       "category": "agent-integration",
-      "summary": "ADJUDICATED (PIPELINE-RCA.md): the '71% failure' is LARGELY a \u00a73.4-SWEEP ARTIFACT \u2014 the DB has 1 real user (operator) whose OpenRouter override was churned through ~13 models today incl. deliberately-broken ones by my own no-substitution sweep; 3/11 cover failures fall in that window. NOT a regression; claude-sonnet-4/direct-Anthropic NEVER invoked (phantom-ignore works, 100% via OpenRouter). Downgraded HIGH\u2192MED. GENUINE underlying bug = cover _draft() (cover_letter_agent.py:1290) has no LLMUnavailableError resilience + complete_json no-retry (see ML-pipeline-001). Fix those.",
+      "summary": "ADJUDICATED (PIPELINE-RCA.md): the '71% failure' is LARGELY a §3.4-SWEEP ARTIFACT — the DB has 1 real user (operator) whose OpenRouter override was churned through ~13 models today incl. deliberately-broken ones by my own no-substitution sweep; 3/11 cover failures fall in that window. NOT a regression; claude-sonnet-4/direct-Anthropic NEVER invoked (phantom-ignore works, 100% via OpenRouter). Downgraded HIGH→MED. GENUINE underlying bug = cover _draft() (cover_letter_agent.py:1290) has no LLMUnavailableError resilience + complete_json no-retry (see ML-pipeline-001). Fix those.",
       "reproduction": [
         "GET /agents/catalog on production; observe coverLetter status/last_run",
         "Run cover-letter pipeline live from UI with seeded story+JD; classify outcome (full success / graceful degrade / hard error)"
       ],
-      "expected": "Cover-letter agent EITHER produces a real business letter OR degrades gracefully (coverLetterUnavailable) \u2014 never a hard error state; honest UI",
+      "expected": "Cover-letter agent EITHER produces a real business letter OR degrades gracefully (coverLetterUnavailable) — never a hard error state; honest UI",
       "observed": "catalog shows coverLetter ERROR state / last run failed 02:49:45Z",
       "evidence": [
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md",
         "AgentRun/BackgroundJob DB rows"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
+      "owner": "test-author → fixer-hard (pipeline cluster)",
       "fixCommits": [
         "86f37f8(tests)",
         "93bfc8c(fix, rebased)",
         "merge 25200ce (LIVE batch-3)"
       ],
-      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: '71%' was \u00a73.4-sweep artifact (config-verified-clean); genuine bug (cover _draft resilience) fixed \u2014 live cover run degrades honestly + refunds, no raw leak.",
-      "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
+      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: '71%' was §3.4-sweep artifact (config-verified-clean); genuine bug (cover _draft resilience) fixed — live cover run degrades honestly + refunds, no raw leak.",
+      "configCheck": "agent-config-state.md: operator agent configs CLEAN — 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored→OpenRouter default, storyExtraction claude-haiku-4-5 ignored→qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
     },
     {
@@ -189,9 +189,9 @@
       "screen": "Agents",
       "severity": "HIGH",
       "category": "model-catalog",
-      "summary": "\u00a73.2 GAP: model picker is PROVIDER-GLOBAL (single #openrouter-model-picker saving via updateProvider/AgentProvider.model), NOT per-agent. \u00a73.2.1/\u00a73.2.3 require a per-agent picker for ALL agents; 'No agent may be left on an invisible/unchangeable model' and 'selected model persists per agent'. Backend per-agent plumbing exists (AgentConfig.model + _user_model_override agents.py:878) but FE does not render/save per-agent.",
+      "summary": "§3.2 GAP: model picker is PROVIDER-GLOBAL (single #openrouter-model-picker saving via updateProvider/AgentProvider.model), NOT per-agent. §3.2.1/§3.2.3 require a per-agent picker for ALL agents; 'No agent may be left on an invisible/unchangeable model' and 'selected model persists per agent'. Backend per-agent plumbing exists (AgentConfig.model + _user_model_override agents.py:878) but FE does not render/save per-agent.",
       "reproduction": [
-        "/dashboard/agents \u2192 observe one shared model picker, not one per agent card",
+        "/dashboard/agents → observe one shared model picker, not one per agent card",
         "Confirm save targets provider (AgentProvider.model) not per-agent (AgentConfig.model via PUT /agents/config/{key})"
       ],
       "expected": "Per-agent searchable model picker on each agent; selection saved via PUT /api/agents/config/{agent_key}, persisted per agent, used on that agent's next run",
@@ -208,8 +208,8 @@
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "Agents deep-test + batch-2 prod-verify @5eb8a36: per-agent picker renders for ALL agents (functional for overridable REASONING/HEAVY/FAST/LIGHT, honest lock for non-overridable STRUCTURED+deterministic), selection persists + displays saved model, config 422. \u00a73.2 fully met (residuals ML-agents-001/002 VERIFIED-CLOSED).",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "verifiedBy": "Agents deep-test + batch-2 prod-verify @5eb8a36: per-agent picker renders for ALL agents (functional for overridable REASONING/HEAVY/FAST/LIGHT, honest lock for non-overridable STRUCTURED+deterministic), selection persists + displays saved model, config 422. §3.2 fully met (residuals ML-agents-001/002 VERIFIED-CLOSED).",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold — under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -217,9 +217,9 @@
       "screen": "Agents",
       "severity": "MEDIUM",
       "category": "model-catalog",
-      "summary": "\u00a73.1.2 GAP: no 'catalog last refreshed at \u2026' freshness note in the UI. Required so users know cache age, and mandatory in the upstream-failure-serving-last-good-cache state.",
+      "summary": "§3.1.2 GAP: no 'catalog last refreshed at …' freshness note in the UI. Required so users know cache age, and mandatory in the upstream-failure-serving-last-good-cache state.",
       "reproduction": [
-        "/dashboard/agents model picker \u2192 no freshness/last-refreshed timestamp shown"
+        "/dashboard/agents model picker → no freshness/last-refreshed timestamp shown"
       ],
       "expected": "Visible 'catalog last refreshed at <ts>' note; explicit stale-cache indication on upstream failure",
       "observed": "No freshness field rendered; catalog API response has no last-refreshed field surfaced",
@@ -235,7 +235,7 @@
         "20838de(refix)"
       ],
       "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold — under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -243,9 +243,9 @@
       "screen": "Agents",
       "severity": "MEDIUM",
       "category": "model-catalog",
-      "summary": "\u00a73.1.2 GAP: manual catalog refresh path not exposed in UI (backend TTL cache exists at llm_client.py:1106-1167; a user-triggerable background refresh is required so the UI never blocks on a slow upstream and can force-refresh).",
+      "summary": "§3.1.2 GAP: manual catalog refresh path not exposed in UI (backend TTL cache exists at llm_client.py:1106-1167; a user-triggerable background refresh is required so the UI never blocks on a slow upstream and can force-refresh).",
       "reproduction": [
-        "/dashboard/agents model picker \u2192 no refresh control observed"
+        "/dashboard/agents model picker → no refresh control observed"
       ],
       "expected": "Manual refresh action that triggers background catalog refresh; UI serves cache immediately, refreshes async",
       "observed": "No refresh control observed in current UI",
@@ -261,7 +261,7 @@
         "20838de(refix)"
       ],
       "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold — under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -269,32 +269,34 @@
       "screen": "n/a (test infra)",
       "severity": "LOW",
       "category": "defect",
-      "summary": "KNOWN-ENVIRONMENTAL (not a code defect): full-repo pytest shows ~50 non-deterministic failures due to ~35 stale prior-run worktrees sharing the single aether_test Postgres schema (concurrent TRUNCATE races \u2014 documented flakiness pattern). Proven NOT caused by cred-001: same failing tests pass in isolation against BOTH pre-fix 9396bae and post-fix code; 0 of the 50 files reference the touched functions.",
+      "summary": "KNOWN-ENVIRONMENTAL (not a code defect): full-repo pytest shows ~50 non-deterministic failures due to ~35 stale prior-run worktrees sharing the single aether_test Postgres schema (concurrent TRUNCATE races — documented flakiness pattern). Proven NOT caused by cred-001: same failing tests pass in isolation against BOTH pre-fix 9396bae and post-fix code; 0 of the 50 files reference the touched functions.",
       "reproduction": [
-        "Run full backend pytest while other worktrees/sessions run pytest \u2192 non-deterministic failures",
-        "Re-run the same failing tests in isolation \u2192 pass"
+        "Run full backend pytest while other worktrees/sessions run pytest → non-deterministic failures",
+        "Re-run the same failing tests in isolation → pass"
       ],
       "expected": "G-07: a fresh full-suite run is green with counts logged",
       "observed": "50/1025 fail under concurrent shared-schema load; 0 fail in isolation",
       "evidence": [
-        "/tmp .../ML-cred-001-pass-after.txt (isolation diagnostic appended by fixer)"
+        "/tmp .../ML-cred-001-pass-after.txt (isolation diagnostic appended by fixer)",
+        "uat/reports/evidence/launch-ready/models-live/ML-env-001-close.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "G-07 stage: clean stale worktrees + serialized fresh full run",
-      "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding.",
+      "note": "At G-07: git worktree prune + remove stale worktree-agent-*/fix-mv-* worktrees, ensure no concurrent pytest, run full pytest+vitest+Playwright fresh under flock, log counts. Any residual failure then is a REAL finding. CLOSED 2026-07-24: Phase 0 purged worktrees 12->1 (main only), pruned; fresh serialized full suites green (pytest 1118/0/0, vitest 556/0/0 -- baseline-suites.md). Fresh re-verification 2026-07-24: 1 worktree, no /tmp residue, no concurrent pytest, 4 branches (main + 3 deliberately-kept fix/*). Environmental cause removed; no code defect existed.",
       "gatePlan": "G-07 PREREQ (gate-prep 2026-07-22): 33 stale worktree-agent-* worktrees + 83 stale local branches (fix/mv-*, fix/nf-*, prior runs) cause the shared aether_test contention. CLEANUP at G-07 (AFTER all fix agents finish): git worktree prune + remove all non-main worktrees; git branch -D the merged/abandoned locals; then run full pytest+vitest+Playwright fresh (serialized, no concurrent pytest) + log counts. G-08 ALREADY MET: git ls-remote origin = refs/heads/main only; gh pr list = 0 open PRs.",
-      "gateResult": "G-07 PARTIAL @b34b1ca: PRUNE \u2705 (worktrees 38\u21927, 87 stale branches deleted, G-08 confirmed remote=main+0PR). Frontend \u2705 556/556 exit-0 + build clean. Backend pytest HUNG @39% (453P/15F unclassified) \u2014 shared-schema contention worsened by concurrent agents (incl. live RCA). NEEDS isolated re-run on a QUIET system (no other pytest/agents) to classify the 15 + confirm green. Deferred until after ML-agents-err-001 resolves + system quiets."
+      "gateResult": "G-07 PARTIAL @b34b1ca: PRUNE ✅ (worktrees 38→7, 87 stale branches deleted, G-08 confirmed remote=main+0PR). Frontend ✅ 556/556 exit-0 + build clean. Backend pytest HUNG @39% (453P/15F unclassified) — shared-schema contention worsened by concurrent agents (incl. live RCA). NEEDS isolated re-run on a QUIET system (no other pytest/agents) to classify the 15 + confirm green. Deferred until after ML-agents-err-001 resolves + system quiets.",
+      "verifiedBy": "launch-ready W-A ledger-close 2026-07-24"
     },
     {
       "id": "ML-catalog-004",
       "screen": "Agents",
       "severity": "HIGH",
       "category": "validation",
-      "summary": "\u00a73.1.3 GAP: PUT /agents/config/{agent_key} accepts ANY string as model with ZERO catalog validation. \u00a73 requires accepting any id present in the live catalog and rejecting unknown ids with an honest 422 naming the problem.",
+      "summary": "§3.1.3 GAP: PUT /agents/config/{agent_key} accepts ANY string as model with ZERO catalog validation. §3 requires accepting any id present in the live catalog and rejecting unknown ids with an honest 422 naming the problem.",
       "reproduction": [
-        "PUT /api/agents/config/{agent_key} body {model:'totally-made-up/nonexistent'} \u2192 currently 200 (should be 422)"
+        "PUT /api/agents/config/{agent_key} body {model:'totally-made-up/nonexistent'} → currently 200 (should be 422)"
       ],
-      "expected": "Valid catalog id \u2192 200; unknown id \u2192 422 naming the problem; no hardcoded allowlist rejecting valid OpenRouter models",
+      "expected": "Valid catalog id → 200; unknown id → 422 naming the problem; no hardcoded allowlist rejecting valid OpenRouter models",
       "observed": "Any string accepted (no validation against live catalog)",
       "evidence": [
         "uat/reports/evidence/models-live/catalog/ML-catalog-fix1-pytest-fail-before.txt",
@@ -309,18 +311,18 @@
         "20838de(refix)"
       ],
       "verifiedBy": "Agents deep-test live @fb8361e: freshness-on-load shows real ts, refresh works, curation 332/olmo-absent, config 422. (Per-agent picker core works; residual UI gaps tracked as ML-agents-001/002.)",
-      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold \u2014 under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
+      "implNote": "5db6f43 branch fix/ml-catalog-fix1: new AgentModelPicker.tsx (per-agent picker), llm_client catalog_freshness()+lastRefreshedAt/stale, POST /agents/providers/{provider}/models/refresh, config 422 validation (fail-open when catalog cold — under review), conftest cache-isolation fixture. 9/9+6/6, 122 regression slice, cred-002 green, resolve_provider untouched. Under adversarial review (fail-open honesty + freshness-on-load adjudication).",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening).",
-      "selectionSweep": "\u00a73.4.2 CATALOG-SWEEP.md: 337/337 selectable+persisted (100%, 0 exceptions), unknown-id\u2192422 works, config restored byte-identical, lastRefreshedAt+stale present. G-02 selection leg PASS."
+      "selectionSweep": "§3.4.2 CATALOG-SWEEP.md: 337/337 selectable+persisted (100%, 0 exceptions), unknown-id→422 works, config restored byte-identical, lastRefreshedAt+stale present. G-02 selection leg PASS."
     },
     {
       "id": "ML-agents-cred-005",
       "screen": "Agents",
       "severity": "LOW",
       "category": "defect",
-      "summary": "Non-blocking (reviewer note): after deleting the anthropic credential, a stale AnthropicOAuthToken row with needs_reauth can make the provider show 'warning' instead of 'unconfigured' in a narrow self-inflicted delete-then-reread sequence (pre-existing DELETE behavior \u2014 the delete path does not also clear the oauth token row).",
+      "summary": "Non-blocking (reviewer note): after deleting the anthropic credential, a stale AnthropicOAuthToken row with needs_reauth can make the provider show 'warning' instead of 'unconfigured' in a narrow self-inflicted delete-then-reread sequence (pre-existing DELETE behavior — the delete path does not also clear the oauth token row).",
       "reproduction": [
-        "Connect anthropic OAuth \u2192 force needs_reauth \u2192 DELETE credential \u2192 re-read provider shows 'warning' not 'unconfigured'"
+        "Connect anthropic OAuth → force needs_reauth → DELETE credential → re-read provider shows 'warning' not 'unconfigured'"
       ],
       "expected": "After credential delete, provider status returns to 'unconfigured' (oauth token row cleared/ignored)",
       "observed": "Shows 'warning' (stale needs_reauth row) in the narrow sequence",
@@ -334,40 +336,42 @@
         "2c144c9(fix)",
         "merge f28eb82 (LIVE batch-4+5)"
       ],
-      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: exercised the exact orphaned-needs_reauth scenario \u2192 DELETE \u2192 provider 'unconfigured' (not warning).",
-      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
+      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: exercised the exact orphaned-needs_reauth scenario → DELETE → provider 'unconfigured' (not warning).",
+      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete→unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-adv-001",
       "screen": "n/a (run instrumentation)",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "EVIDENCE-INTEGRITY: runtime monitor-tail.sh perl regex broken \u2014 unescaped '/' in HTTP/1\\.1 closes the perl /.../ match delimiter, perl exits rc=255 per line, live-matches.log can never capture. Prior continuous-capture 'monitor clean' claims rest on a broken instrument. (System IS clean \u2014 independently confirmed by direct log-greps + 17/17 route-sweeps, a SEPARATE working mechanism \u2014 but the capture leg must be fixed for G-06.)",
+      "summary": "EVIDENCE-INTEGRITY: runtime monitor-tail.sh perl regex broken — unescaped '/' in HTTP/1\\.1 closes the perl /.../ match delimiter, perl exits rc=255 per line, live-matches.log can never capture. Prior continuous-capture 'monitor clean' claims rest on a broken instrument. (System IS clean — independently confirmed by direct log-greps + 17/17 route-sweeps, a SEPARATE working mechanism — but the capture leg must be fixed for G-06.)",
       "reproduction": [
-        "Run matches_error() from monitor-tail.sh on a line containing 'ERROR' \u2192 NO-MATCH + rc=255",
-        "Control m{} delimiter \u2192 matches"
+        "Run matches_error() from monitor-tail.sh on a line containing 'ERROR' → NO-MATCH + rc=255",
+        "Control m{} delimiter → matches"
       ],
       "expected": "Continuous capture appends matching ERROR/5xx/Traceback lines to live-matches.log",
       "observed": "perl rc=255 every line (delimiter broken); live-matches.log always 0 lines",
       "evidence": [
-        "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md"
+        "uat/reports/evidence/models-live/adversarial/ML-agents-cred-002-prodverify.md",
+        "uat/reports/evidence/launch-ready/models-live/ML-adv-001-qa.md"
       ],
-      "status": "FIXED-AWAITING-QA",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "runtime-monitor (fix own script + prove capture)",
       "fixCommits": [
-        "monitor-tail.sh line32 /.../ \u2192 m{...} (evidence-dir, gitignored)"
+        "monitor-tail.sh line32 /.../ → m{...} (evidence-dir, gitignored)",
+        "monitor-tail.sh matches_error() perl -> grep -qP re-fix (evidence-dir script, gitignored by design; fix applied in-place 2026-07-24)"
       ],
-      "verifiedBy": "",
-      "note": "Fail-before rc=255 proven; pass-after 11/21 correct matches; capture restarted (new PID); retro-triage last 3h direct-grep = 0 missed real signatures (system genuinely clean, only instrument broken). FINAL verification = G-06 live observation window must show the working monitor capturing a clean window. Independent capture re-check before G-06. [G-06 window INTERRUPTED 2026-07-22 by operator-reported ML-agents-err-001 \u2014 window restarts clean after that finding resolves.]"
+      "verifiedBy": "launch-ready W-A ledger-close 2026-07-24 (independent QA)",
+      "note": "Fail-before rc=255 proven; pass-after 11/21 correct matches; capture restarted (new PID); retro-triage last 3h direct-grep = 0 missed real signatures (system genuinely clean, only instrument broken). FINAL verification = G-06 live observation window must show the working monitor capturing a clean window. Independent capture re-check before G-06. [G-06 window INTERRUPTED 2026-07-22 by operator-reported ML-agents-err-001 — window restarts clean after that finding resolves.] QA 2026-07-24: the awaiting-QA m{} fix FAILED QA -- perl -ne \"print if m{...}\" exits 0 regardless of match, so the monitor captured EVERY line (live-matches.log flooded to 14,212 clean-traffic lines; false-positive defect, opposite polarity of the original rc=255 capture-nothing defect). Re-fixed matches_error() to grep -qP; pass-after on real live logs (api 1 genuine AdapterFetchError / web 0 / worker 0, cross-checked vs grep -cP); flooded log quarantined (*.false-positive-flood-*); monitor restarted (fresh PID in monitor.pid); end-to-end selectivity proven by marked synthetic ERROR injection (captured) + clean INFO control (not captured). Instrument now verified working live."
     },
     {
       "id": "ML-adv-002",
       "screen": "Agents (OAuth exchange)",
       "severity": "LOW",
       "category": "defect",
-      "summary": "Cloudflare edge replaces the app's honest JSON 502 body ({detail: 'Anthropic rejected the authorization code \u2014 restart Connect with Anthropic.'}) with a generic 'error code: 502' page on the OAuth exchange-failure path, so the operator loses the actionable retry message (400/422 JSON pass through fine). Honesty intact (502 pinned, nothing stored). Fix: map the upstream-rejection to a 4xx so the JSON detail survives the edge.",
+      "summary": "Cloudflare edge replaces the app's honest JSON 502 body ({detail: 'Anthropic rejected the authorization code — restart Connect with Anthropic.'}) with a generic 'error code: 502' page on the OAuth exchange-failure path, so the operator loses the actionable retry message (400/422 JSON pass through fine). Honesty intact (502 pinned, nothing stored). Fix: map the upstream-rejection to a 4xx so the JSON detail survives the edge.",
       "reproduction": [
-        "POST /oauth/exchange with real state + fake code \u2192 app POSTs token endpoint, gets 400 \u2192 returns 502 \u2192 Cloudflare masks detail"
+        "POST /oauth/exchange with real state + fake code → app POSTs token endpoint, gets 400 → returns 502 → Cloudflare masks detail"
       ],
       "expected": "Operator sees the actionable JSON detail (map to 4xx e.g. 422)",
       "observed": "Generic 'error code: 502' text page from Cloudflare",
@@ -381,33 +385,33 @@
         "2c144c9(fix)",
         "merge f28eb82 (LIVE batch-4+5)"
       ],
-      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: exchange real-state+bogus-code \u2192 422 (not 502), honest JSON detail SURVIVES the Cloudflare edge; nothing stored.",
-      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete\u2192unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
+      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: exchange real-state+bogus-code → 422 (not 502), honest JSON detail SURVIVES the Cloudflare edge; nothing stored.",
+      "reviewVerdict": "PASS (ML-cred-cleanup-diff-review.md, revert-verified): upstream_status 422-vs-502 (honest detail, network still 502, refresh untouched), needs_reauth gated on source!=none (delete→unconfigured, live-cred still warning), 48/48. Batch-4+5 combined deploy."
     },
     {
       "id": "ML-catalog-006",
       "screen": "Agents / all agent runs",
       "severity": "BLOCKER",
       "category": "agent-integration",
-      "summary": "\u00a73.4.4 SILENT MODEL SUBSTITUTION: llm_client _auto/_model_chain catches ANY live failure (incl. 404 stale/unavailable model id) and silently retries a hardcoded FALLBACK_MODEL (openai/gpt-oss-20b:free \u2014 different model/provider), returning SUCCESS with no error surfaced. A user's chosen model that fails at run time is silently swapped. Pre-existing; surfaced by FIX-1's honesty claim.",
+      "summary": "§3.4.4 SILENT MODEL SUBSTITUTION: llm_client _auto/_model_chain catches ANY live failure (incl. 404 stale/unavailable model id) and silently retries a hardcoded FALLBACK_MODEL (openai/gpt-oss-20b:free — different model/provider), returning SUCCESS with no error surfaced. A user's chosen model that fails at run time is silently swapped. Pre-existing; surfaced by FIX-1's honesty claim.",
       "reproduction": [
         "Set a user-chosen model on an agent that 404s at run time",
-        "Run the agent \u2192 observe success on gpt-oss-20b:free, no honest error, no refund"
+        "Run the agent → observe success on gpt-oss-20b:free, no honest error, no refund"
       ],
-      "expected": "\u00a73.4.4: a USER-CHOSEN model that errors at run time surfaces an honest user-readable error + refunds quota; NEVER a silent fallback to a different model",
+      "expected": "§3.4.4: a USER-CHOSEN model that errors at run time surfaces an honest user-readable error + refunds quota; NEVER a silent fallback to a different model",
       "observed": "Silent substitution to FALLBACK_MODEL with fake success",
       "evidence": [
-        "/tmp .../ML-catalog-fix1-diff-review.md B1; llm_client.py:8-10 docstring, get_model\u2192_auto\u2192_model_chain\u2192_call_live"
+        "/tmp .../ML-catalog-fix1-diff-review.md B1; llm_client.py:8-10 docstring, get_model→_auto→_model_chain→_call_live"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (ADR-ML-3)",
+      "owner": "test-author → fixer-hard (ADR-ML-3)",
       "fixCommits": [
         "9781d55/da0e558(tests)",
         "5db6f43(impl)",
         "7a7d3a0(refix-tests)",
         "20838de(refix)"
       ],
-      "verifiedBy": "\u00a73.4 NO-SUBSTITUTION-PROOF.md (20/20 real failures honest+refund, 0 substitution) + Agents deep-test (REASONING-tier emailAgent honors override). No-silent-substitution BLOCKER PROVEN live for overridable agents.",
+      "verifiedBy": "§3.4 NO-SUBSTITUTION-PROOF.md (20/20 real failures honest+refund, 0 substitution) + Agents deep-test (REASONING-tier emailAgent honors override). No-silent-substitution BLOCKER PROVEN live for overridable agents.",
       "reviewVerdict": "re-fix PASS (ML-catalog-refix-diff-review.md): B1 no-substitution keystone traced end-to-end (user-model gate, 503+refund, only fallback site gated, default preserved), B2 billing visible, N1 freshness honest, N2 deterministic correct. 155 backend +85 FE, cred-002 green, test files byte-identical (no weakening)."
     },
     {
@@ -415,9 +419,9 @@
       "screen": "Agents",
       "severity": "MEDIUM",
       "category": "visual",
-      "summary": "\u00a73.1.3/\u00a73.3: model picker never shows a USER-VISIBLE provider/billing implication ('billing' only in a code comment). Choosing an OpenRouter model for an Anthropic-direct agent routes billing to OpenRouter \u2014 must be explicit in UI (pattern exists at design/screens/agents.html:490,519,522).",
+      "summary": "§3.1.3/§3.3: model picker never shows a USER-VISIBLE provider/billing implication ('billing' only in a code comment). Choosing an OpenRouter model for an Anthropic-direct agent routes billing to OpenRouter — must be explicit in UI (pattern exists at design/screens/agents.html:490,519,522).",
       "reproduction": [
-        "Open per-agent picker for a claude-default agent \u2192 no user-visible billing note when picking an OpenRouter model"
+        "Open per-agent picker for a claude-default agent → no user-visible billing note when picking an OpenRouter model"
       ],
       "expected": "Explicit user-visible provider/billing implication in the picker",
       "observed": "Not shown (code comment only)",
@@ -440,10 +444,10 @@
       "screen": "Agents",
       "severity": "LOW",
       "category": "defect",
-      "summary": "N1: freshness note discards backend lastRefreshedAt/stale on initial load (shows 'not yet refreshed' until manual click though backend knows). N2: picker renders for deterministic-backend agents (scout/fitScorer/matcher) whose AgentConfig.model is never read at run time \u2014 a pick is a misleading no-op that reverts on reload.",
+      "summary": "N1: freshness note discards backend lastRefreshedAt/stale on initial load (shows 'not yet refreshed' until manual click though backend knows). N2: picker renders for deterministic-backend agents (scout/fitScorer/matcher) whose AgentConfig.model is never read at run time — a pick is a misleading no-op that reverts on reload.",
       "reproduction": [
-        "Load Agents screen \u2192 freshness reads 'not yet refreshed'",
-        "Pick a model on scout \u2192 reload \u2192 reverts (never used at run time)"
+        "Load Agents screen → freshness reads 'not yet refreshed'",
+        "Pick a model on scout → reload → reverts (never used at run time)"
       ],
       "expected": "Freshness shows real backend ts on load; deterministic agents either honor the pick or honestly indicate a fixed model (no misleading picker)",
       "observed": "'not yet refreshed' on load; no-op picker on deterministic agents",
@@ -466,9 +470,9 @@
       "screen": "Agents",
       "severity": "MEDIUM",
       "category": "model-catalog",
-      "summary": "\u00a73.4.3(c): catalog offers OpenRouter models with NO live endpoint for this key (genuine upstream 404 at run time) as equally-selectable, not flagged/filtered 'unavailable'. Run-time error IS honest+refunded (no billing harm) but \u00a73.4 requires unavailable ids be filtered from the catalog OR flagged 'unavailable' in UI. Observed: allenai/olmo-3-32b-think, inflection/inflection-3-pi.",
+      "summary": "§3.4.3(c): catalog offers OpenRouter models with NO live endpoint for this key (genuine upstream 404 at run time) as equally-selectable, not flagged/filtered 'unavailable'. Run-time error IS honest+refunded (no billing harm) but §3.4 requires unavailable ids be filtered from the catalog OR flagged 'unavailable' in UI. Observed: allenai/olmo-3-32b-think, inflection/inflection-3-pi.",
       "reproduction": [
-        "Select allenai/olmo-3-32b-think (valid catalog id) \u2192 run \u2192 upstream 404 'No endpoints found' \u2192 opaque 'AI service unavailable' after a (refunded) reservation"
+        "Select allenai/olmo-3-32b-think (valid catalog id) → run → upstream 404 'No endpoints found' → opaque 'AI service unavailable' after a (refunded) reservation"
       ],
       "expected": "Picker/catalog honestly flags or filters ids with no live endpoint for this key",
       "observed": "Shown as freely selectable; failure only discovered at run time",
@@ -477,7 +481,7 @@
         "models/NO-SUBSTITUTION-PROOF.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
+      "owner": "test-author → catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
         "0b08dfd(fix)",
@@ -492,9 +496,9 @@
       "screen": "Agents",
       "severity": "LOW",
       "category": "model-catalog",
-      "summary": "\u00a73.4.3(c) curation: catalog includes structurally incompatible non-chat models (morph/morph-v3-fast, relace/relace-apply-3 \u2192 400 'Multi-turn not supported'; openai/o3-deep-research \u2192 400 unsupported temperature) that fail for EVERY chat agent. Exclude non-chat-completion model classes from the catalog offered to chat agents.",
+      "summary": "§3.4.3(c) curation: catalog includes structurally incompatible non-chat models (morph/morph-v3-fast, relace/relace-apply-3 → 400 'Multi-turn not supported'; openai/o3-deep-research → 400 unsupported temperature) that fail for EVERY chat agent. Exclude non-chat-completion model classes from the catalog offered to chat agents.",
       "reproduction": [
-        "Select morph/morph-v3-fast \u2192 run \u2192 400 'Multi-turn conversations are not supported'"
+        "Select morph/morph-v3-fast → run → 400 'Multi-turn conversations are not supported'"
       ],
       "expected": "Non-chat model classes excluded/flagged",
       "observed": "Offered as normal chat models",
@@ -502,7 +506,7 @@
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 catalog-engineer (ADR-ML-4 denylist)",
+      "owner": "test-author → catalog-engineer (ADR-ML-4 denylist)",
       "fixCommits": [
         "70d987f(tests)",
         "0b08dfd(fix)",
@@ -517,11 +521,11 @@
       "screen": "n/a (ops)",
       "severity": "LOW",
       "category": "model-catalog",
-      "summary": "INFORMATIONAL (not a defect): the production DEFAULT reasoning model deepseek/deepseek-v4-pro hit 1 transient malformed-response in 82 probes \u2014 handled correctly (honest 503 + refund + no silent fallback). Operational-monitoring note only.",
+      "summary": "INFORMATIONAL (not a defect): the production DEFAULT reasoning model deepseek/deepseek-v4-pro hit 1 transient malformed-response in 82 probes — handled correctly (honest 503 + refund + no silent fallback). Operational-monitoring note only.",
       "reproduction": [
         "82-probe run sweep; 1 transient malformed response on deepseek-v4-pro"
       ],
-      "expected": "n/a \u2014 handled correctly",
+      "expected": "n/a — handled correctly",
       "observed": "Honest 503+refund (correct behavior)",
       "evidence": [
         "uat/reports/evidence/models-live/models/RUN-SWEEP.md"
@@ -529,7 +533,7 @@
       "status": "CONDITIONALLY-CLOSED",
       "owner": "ops-monitoring (no code fix)",
       "fixCommits": [],
-      "verifiedBy": "INFORMATIONAL \u2014 not a defect. The 1/82 transient malformed response on the default deepseek-v4-pro was handled correctly (honest 503 + refund + no silent fallback, per \u00a73.4). Ops-monitoring note only; no code fix. Accepted."
+      "verifiedBy": "INFORMATIONAL — not a defect. The 1/82 transient malformed response on the default deepseek-v4-pro was handled correctly (honest 503 + refund + no silent fallback, per §3.4). Ops-monitoring note only; no code fix. Accepted."
     },
     {
       "id": "ML-networking-001",
@@ -538,7 +542,7 @@
       "category": "wiring",
       "summary": "UNSURE (dashboard-display tester): Networking has a working backend DELETE endpoint for contacts but NO UI delete control. Could be intentional (contacts not user-deletable via UI) or a minor affordance gap. Adjudicate at Stage-3.",
       "reproduction": [
-        "/dashboard/networking \u2192 add a contact \u2192 no visible delete/remove control though backend DELETE works"
+        "/dashboard/networking → add a contact → no visible delete/remove control though backend DELETE works"
       ],
       "expected": "Either a UI delete affordance, or intentional-by-design (documented)",
       "observed": "No UI delete; backend endpoint exists",
@@ -548,34 +552,34 @@
       "status": "CONDITIONALLY-CLOSED",
       "owner": "qa-adversary adjudication (LOW; likely accept-as-design)",
       "fixCommits": [],
-      "verifiedBy": "ORCHESTRATOR ADJUDICATION: not a defect. Networking is a lightweight contact tracker; contact-delete via UI is a nice-to-have affordance, not a correctness/honesty issue (no placeholder, no broken wiring \u2014 the backend DELETE exists and works, verified by the dashboard-display tester's create+delete lifecycle). Accepted as-design; surfacing a UI delete is an OPTIONAL future enhancement, out of scope for this run's zero-tolerance (which targets defects/placeholders/honesty, not missing nice-to-haves)."
+      "verifiedBy": "ORCHESTRATOR ADJUDICATION: not a defect. Networking is a lightweight contact tracker; contact-delete via UI is a nice-to-have affordance, not a correctness/honesty issue (no placeholder, no broken wiring — the backend DELETE exists and works, verified by the dashboard-display tester's create+delete lifecycle). Accepted as-design; surfacing a UI delete is an OPTIONAL future enhancement, out of scope for this run's zero-tolerance (which targets defects/placeholders/honesty, not missing nice-to-haves)."
     },
     {
       "id": "ML-signup-001",
-      "screen": "/signup \u2192 /dashboard",
+      "screen": "/signup → /dashboard",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "GET /api/billing/entitlement intermittently 500s (2/4 fresh signups) on a BRAND-NEW user's first dashboard load right after /signup \u2192 frontend fails-closed showing 'We could not verify your subscription' instead of the paywall. Isolated to first-ever entitlement checks (0/5 for existing admin). Likely non-atomic INSERT...WHERE NOT EXISTS race in ensure_user_billing() billing.py:~256 vs Subscription/UsageQuota unique indexes on userId.",
+      "summary": "GET /api/billing/entitlement intermittently 500s (2/4 fresh signups) on a BRAND-NEW user's first dashboard load right after /signup → frontend fails-closed showing 'We could not verify your subscription' instead of the paywall. Isolated to first-ever entitlement checks (0/5 for existing admin). Likely non-atomic INSERT...WHERE NOT EXISTS race in ensure_user_billing() billing.py:~256 vs Subscription/UsageQuota unique indexes on userId.",
       "reproduction": [
         "POST /signup new user",
-        "Immediately load /dashboard \u2192 GET /api/billing/entitlement occasionally 500 \u2192 'could not verify subscription'"
+        "Immediately load /dashboard → GET /api/billing/entitlement occasionally 500 → 'could not verify subscription'"
       ],
-      "expected": "First entitlement check ALWAYS succeeds \u2014 provisioning is atomic/idempotent (ON CONFLICT / IntegrityError-safe); new user sees paywall (or entitlement) honestly, never a 500",
+      "expected": "First entitlement check ALWAYS succeeds — provisioning is atomic/idempotent (ON CONFLICT / IntegrityError-safe); new user sees paywall (or entitlement) honestly, never a 500",
       "observed": "Intermittent 500 on first-ever entitlement check for new users",
       "evidence": [
         "uat/reports/evidence/models-live/screens/public-auth/TESTING-OUTCOME-REPORT.md",
         "screens/public-auth/network/"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (billing race)",
+      "owner": "test-author → fixer-hard (billing race)",
       "fixCommits": [
         "54f5aa4(tests)",
         "913b8fe(fix)",
         "merge f8835fe (LIVE)"
       ],
-      "verifiedBy": "evidence(haiku) LIVE prod @fb8361e: 6/6 fresh signups entitlement 200 (0\u00d7500), concurrent stress all-200 + exactly 1 sub/quota each, logs clean, users cleaned. adversarial/ML-signup-001-prodverify.md.",
-      "rca": "billing.py:268-290 ensure_user_billing._run \u2014 INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) \u2192 UniqueViolation \u2192 GET /entitlement:782 500 \u2192 subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
-      "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap \u2192 500 reproduced), 60/60.",
+      "verifiedBy": "evidence(haiku) LIVE prod @fb8361e: 6/6 fresh signups entitlement 200 (0×500), concurrent stress all-200 + exactly 1 sub/quota each, logs clean, users cleaned. adversarial/ML-signup-001-prodverify.md.",
+      "rca": "billing.py:268-290 ensure_user_billing._run — INSERT...WHERE NOT EXISTS (non-atomic) vs Subscription/UsageQuota unique(userId) → UniqueViolation → GET /entitlement:782 500 → subscription-gate.tsx:231 fallback. Fix = ON CONFLICT DO NOTHING.",
+      "reviewVerdict": "PASS (ML-signup-001-diff-review.md): ON CONFLICT target correct (unconditional unique indexes), semantics preserved, no suppression, idempotent, scope 1 file, tests load-bearing (pre-fix swap → 500 reproduced), 60/60.",
       "deployNote": "Batch-1 live @fb8361e: entitlement 200 (deployer-verified). qa prod-verify (6 fresh signups + concurrent) in flight."
     },
     {
@@ -583,17 +587,17 @@
       "screen": "/dashboard/agents",
       "severity": "BLOCKER",
       "category": "agent-integration",
-      "summary": "storyExtraction shows a FUNCTIONAL model picker but the pick is a silent no-op \u2014 saves 200 yet the run always uses the fixed qwen/qwen3-coder-next (STRUCTURED tier is deliberately non-overridable per design, to protect JSON). Dishonest UI: implies the pick takes effect. The ML-catalog-008 N2 lock covered only DETERMINISTIC backends; non-overridable LLM tiers (STRUCTURED) were missed. Control (emailAgent, REASONING) correctly honors overrides.",
+      "summary": "storyExtraction shows a FUNCTIONAL model picker but the pick is a silent no-op — saves 200 yet the run always uses the fixed qwen/qwen3-coder-next (STRUCTURED tier is deliberately non-overridable per design, to protect JSON). Dishonest UI: implies the pick takes effect. The ML-catalog-008 N2 lock covered only DETERMINISTIC backends; non-overridable LLM tiers (STRUCTURED) were missed. Control (emailAgent, REASONING) correctly honors overrides.",
       "reproduction": [
-        "/dashboard/agents \u2192 storyExtraction \u2192 pick a model \u2192 save 200 \u2192 run \u2192 served model = qwen/qwen3-coder-next regardless (repro'd twice)"
+        "/dashboard/agents → storyExtraction → pick a model → save 200 → run → served model = qwen/qwen3-coder-next regardless (repro'd twice)"
       ],
-      "expected": "Non-overridable agents (deterministic OR STRUCTURED-tier) show the honest 'fixed model / not user-selectable' lock \u2014 no functional picker that silently no-ops",
+      "expected": "Non-overridable agents (deterministic OR STRUCTURED-tier) show the honest 'fixed model / not user-selectable' lock — no functional picker that silently no-ops",
       "observed": "storyExtraction shows a functional picker; pick ignored at run time",
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (extend lock to non-overridable tiers)",
+      "owner": "test-author → fixer-hard (extend lock to non-overridable tiers)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
@@ -607,9 +611,9 @@
       "screen": "/dashboard/agents",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "'Model for this agent' display never updates after save+reload for any LLM agent \u2014 the config layer PERSISTS correctly (API verified) but the UI doesn't reflect the saved selection on reload (\u00a73.2.2 'current selection always visible' violated). Mocked FE unit tests missed this (they mock reload).",
+      "summary": "'Model for this agent' display never updates after save+reload for any LLM agent — the config layer PERSISTS correctly (API verified) but the UI doesn't reflect the saved selection on reload (§3.2.2 'current selection always visible' violated). Mocked FE unit tests missed this (they mock reload).",
       "reproduction": [
-        "Pick+save a model on an LLM agent \u2192 reload \u2192 picker/display shows default, not the saved model (though GET config returns it)"
+        "Pick+save a model on an LLM agent → reload → picker/display shows default, not the saved model (though GET config returns it)"
       ],
       "expected": "Current saved model is displayed as the selection after reload",
       "observed": "Display doesn't update; config persisted underneath",
@@ -617,7 +621,7 @@
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard",
+      "owner": "test-author → fixer-hard",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
@@ -631,9 +635,9 @@
       "screen": "/dashboard/agents",
       "severity": "LOW",
       "category": "visual",
-      "summary": "ADJUDICATED (probe ML-agents-003-oauth-url-probe.md): the current claude.com/cai/oauth/authorize (scope user:inference) is the CORRECT SUBSCRIPTION flow (mints sk-ant-oat01- billed to Max). platform.claude.com/oauth/authorize is the API-KEY-creation flow \u2014 switching would BREAK subscription billing. CF challenge on claude.ai is Anthropic's own bot-protection (real-operator-passable), NOT an app defect. Downgraded HIGH\u2192LOW: resolution = KEEP URL + add an honest UI hint ('you may see a security check \u2014 that's Anthropic's login') to reduce operator confusion.",
+      "summary": "ADJUDICATED (probe ML-agents-003-oauth-url-probe.md): the current claude.com/cai/oauth/authorize (scope user:inference) is the CORRECT SUBSCRIPTION flow (mints sk-ant-oat01- billed to Max). platform.claude.com/oauth/authorize is the API-KEY-creation flow — switching would BREAK subscription billing. CF challenge on claude.ai is Anthropic's own bot-protection (real-operator-passable), NOT an app defect. Downgraded HIGH→LOW: resolution = KEEP URL + add an honest UI hint ('you may see a security check — that's Anthropic's login') to reduce operator confusion.",
       "reproduction": [
-        "Agents \u2192 Anthropic \u2192 Connect with Anthropic \u2192 opens claude.com/cai/oauth/authorize \u2192 claude.ai/login shows Cloudflare challenge"
+        "Agents → Anthropic → Connect with Anthropic → opens claude.com/cai/oauth/authorize → claude.ai/login shows Cloudflare challenge"
       ],
       "expected": "Correct subscription authorize flow (kept) + optional honest CF-expectation hint",
       "observed": "CF-challenged claude.ai login (subscription flow); platform.claude.com is cleaner but may be wrong billing flow",
@@ -655,17 +659,17 @@
       "screen": "/dashboard/agents",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "\u00a7 correctness (RCA-refined, NOT placeholder): the Test Run cost/token estimate + the catalog DISPLAY model both call _model_for_agent(backend) WITHOUT override=_user_model_override(...) (agents.py agent_catalog ~1725 + test_run ~2764), so they reflect the TIER DEFAULT model, not the user's saved per-agent selection \u2014 estimate is a real number for the WRONG model, appearing static across same-tier agents. (Downgraded BLOCKER\u2192HIGH: real math on wrong model, not fabricated data.) Shares root cause with ML-agents-002.",
+      "summary": "§ correctness (RCA-refined, NOT placeholder): the Test Run cost/token estimate + the catalog DISPLAY model both call _model_for_agent(backend) WITHOUT override=_user_model_override(...) (agents.py agent_catalog ~1725 + test_run ~2764), so they reflect the TIER DEFAULT model, not the user's saved per-agent selection — estimate is a real number for the WRONG model, appearing static across same-tier agents. (Downgraded BLOCKER→HIGH: real math on wrong model, not fabricated data.) Shares root cause with ML-agents-002.",
       "reproduction": [
-        "Open Test Run modal on any agent \u2192 cost/token estimate is the same static value for all 22 agents"
+        "Open Test Run modal on any agent → cost/token estimate is the same static value for all 22 agents"
       ],
-      "expected": "Real per-model estimate (from catalog promptPerM/completionPerM \u00d7 typical tokens) OR honest 'estimate unavailable' \u2014 never a fixed fake number",
+      "expected": "Real per-model estimate (from catalog promptPerM/completionPerM × typical tokens) OR honest 'estimate unavailable' — never a fixed fake number",
       "observed": "Identical static placeholder for all agents",
       "evidence": [
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-medium (real estimate or remove)",
+      "owner": "test-author → fixer-medium (real estimate or remove)",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
@@ -681,7 +685,7 @@
       "category": "visual",
       "summary": "Mobile (390px) horizontal overflow from unwrapped price badges in the model picker (repro'd twice).",
       "reproduction": [
-        "/dashboard/agents at 390px \u2192 horizontal scroll from price badges"
+        "/dashboard/agents at 390px → horizontal scroll from price badges"
       ],
       "expected": "No horizontal overflow at 390px (wrap/truncate price badges)",
       "observed": "Overflow from unwrapped badges",
@@ -689,13 +693,13 @@
         "uat/reports/evidence/models-live/screens/agents/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-medium",
+      "owner": "test-author → fixer-medium",
       "fixCommits": [
         "06c57dd(tests)",
         "b3f20f3(fix)",
         "merge f7f3871/5eb8a36 (LIVE batch-2)"
       ],
-      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): the identified cause (price badges + toggle tap-target) IS fixed+reduces overflow. A SEPARATE untouched component (Orchestration.tsx grid) is the remaining dominant overflow cause \u2192 filed as ML-agents-006. 005's scope (badges) closed.",
+      "verifiedBy": "screen-tester(sonnet) LIVE prod-verify @5eb8a36 (batch2-prodverify.md, verified twice): the identified cause (price badges + toggle tap-target) IS fixed+reduces overflow. A SEPARATE untouched component (Orchestration.tsx grid) is the remaining dominant overflow cause → filed as ML-agents-006. 005's scope (badges) closed.",
       "reviewVerdict": "PASS (ML-agents-refix-diff-review.md): stale-test update VALIDATED via git-history reconstruction (old assertion pinned the ML-agents-002 bug post-64cb4fc; STRUCTURED contract preserved in new tests, no regression masked); override threaded both sites, modelOverridable correct, structured locked, no silent substitution, mobile fixed, hint no-URL-change. 94/94+88/88, Playwright 2/2. Batch-2."
     },
     {
@@ -703,9 +707,9 @@
       "screen": "/dashboard/cover-letters",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "The FabricationError graceful-degrade path exists only in the pipeline runner, NOT the single-agent ASYNC path the Cover Letter Studio actually uses \u2192 raw exception text leaks to the user, and the frontend's dedicated rejection panel can structurally never fire (it matches 422 only, but the async failures are always 502).",
+      "summary": "The FabricationError graceful-degrade path exists only in the pipeline runner, NOT the single-agent ASYNC path the Cover Letter Studio actually uses → raw exception text leaks to the user, and the frontend's dedicated rejection panel can structurally never fire (it matches 422 only, but the async failures are always 502).",
       "reproduction": [
-        "Cover Letter Studio \u2192 generate \u2192 on FabricationError, async path returns 502 with raw exception; FE rejection panel (422-matcher) never shows"
+        "Cover Letter Studio → generate → on FabricationError, async path returns 502 with raw exception; FE rejection panel (422-matcher) never shows"
       ],
       "expected": "The async single-agent cover path degrades gracefully like the pipeline runner (honest coverLetterUnavailable / rejection panel), no raw exception leak",
       "observed": "Raw exception, 502, rejection panel never fires",
@@ -713,14 +717,14 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (cluster)",
+      "owner": "test-author → fixer-hard (cluster)",
       "fixCommits": [
         "86f37f8(tests)",
         "93bfc8c(fix, rebased)",
         "merge 25200ce (LIVE batch-3)"
       ],
       "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: cover async run degraded HONESTLY (coverLetterUnavailable message), quotaRefundedAt set, costUsd=0, no raw exception/class-prefix leak/hang.",
-      "rca": "Pipeline path degrades gracefully agents.py:1558-1600; async single-agent path workers/tasks.py:262 does NOT; FE hardcodes failed async\u2192502 api/agents.ts:92-97 while rejection matcher requires 422 rejection.ts:74 \u2192 structurally unreachable. Fix: async path graceful-degrade + align FE matcher to the async failure shape.",
+      "rca": "Pipeline path degrades gracefully agents.py:1558-1600; async single-agent path workers/tasks.py:262 does NOT; FE hardcodes failed async→502 api/agents.ts:92-97 while rejection matcher requires 422 rejection.ts:74 → structurally unreachable. Fix: async path graceful-degrade + align FE matcher to the async failure shape.",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
     },
     {
@@ -730,7 +734,7 @@
       "category": "defect",
       "summary": "'Drafting...' button stays stuck ~15-20s with NO error shown after a backend failure is already recorded, before eventually self-correcting (delayed/absent error surfacing).",
       "reproduction": [
-        "Cover Letter generate \u2192 backend fails+records \u2192 button stuck 'Drafting...' 15-20s \u2192 self-corrects"
+        "Cover Letter generate → backend fails+records → button stuck 'Drafting...' 15-20s → self-corrects"
       ],
       "expected": "Prompt honest error surfacing when the backend failure is recorded",
       "observed": "~15-20s stuck with no error",
@@ -744,7 +748,7 @@
         "93bfc8c(fix, rebased)",
         "merge 25200ce (LIVE batch-3)"
       ],
-      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: no stuck-hang \u2014 degrade completes + surfaces honestly (resolved transitively by cover-002 async completion).",
+      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: no stuck-hang — degrade completes + surfaces honestly (resolved transitively by cover-002 async completion).",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
     },
     {
@@ -752,9 +756,9 @@
       "screen": "/dashboard/resume",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "ADJUDICATED (PIPELINE-RCA.md): tailor '24% failure' = \u00a73.4-SWEEP ARTIFACT (23/23 visible tailor failures inside my sweep's broken-model window), NOT a regression. GENUINE bug = complete_json() (llm_client.py:1343-1366) never retries malformed JSON (parse outside _auto retry loop). Downgraded HIGH\u2192MED. Fix via ML-pipeline-001.",
+      "summary": "ADJUDICATED (PIPELINE-RCA.md): tailor '24% failure' = §3.4-SWEEP ARTIFACT (23/23 visible tailor failures inside my sweep's broken-model window), NOT a regression. GENUINE bug = complete_json() (llm_client.py:1343-1366) never retries malformed JSON (parse outside _auto retry loop). Downgraded HIGH→MED. Fix via ML-pipeline-001.",
       "reproduction": [
-        "/dashboard/resume \u2192 tailor \u2192 ~24% fail with malformed-JSON error"
+        "/dashboard/resume → tailor → ~24% fail with malformed-JSON error"
       ],
       "expected": "High tailor success rate; malformed-JSON handled/retried",
       "observed": "24% failure",
@@ -762,14 +766,14 @@
         "uat/reports/evidence/models-live/screens/agent-running/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard (pipeline cluster)",
+      "owner": "test-author → fixer-hard (pipeline cluster)",
       "fixCommits": [
         "86f37f8(tests)",
         "93bfc8c(fix, rebased)",
         "merge 25200ce (LIVE batch-3)"
       ],
-      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: '24%' was \u00a73.4-sweep artifact; genuine bug (complete_json malformed-JSON retry) fixed+unit-tested; tailor runs complete honestly live.",
-      "configCheck": "agent-config-state.md: operator agent configs CLEAN \u2014 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored\u2192OpenRouter default, storyExtraction claude-haiku-4-5 ignored\u2192qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
+      "verifiedBy": "LIVE smoke @25200ce (batch3-smoke.md, 5/5 PASS) + review PASS + 86-test suite: '24%' was §3.4-sweep artifact; genuine bug (complete_json malformed-JSON retry) fixed+unit-tested; tailor runs complete honestly live.",
+      "configCheck": "agent-config-state.md: operator agent configs CLEAN — 0 pointing at broken/denylisted models (5 deterministic, 3 phantom claude-sonnet-4 ignored→OpenRouter default, storyExtraction claude-haiku-4-5 ignored→qwen STRUCTURED). Confirms no ongoing broken-model failures; the high rates were sweep-only.",
       "reviewVerdict": "PASS (ML-pipeline-diff-review.md): retry bounded+honest (_MALFORMED_JSON_RETRIES=1), ADR-ML-3 preserved, async degrade refund-once, draft resilient, email no-op zero-cost billing-unchanged, FE matcher reachable, rebase integrity + batch-2 green. 86 backend +21 vitest +build. 2 cosmetic non-blocking."
     },
     {
@@ -779,7 +783,7 @@
       "category": "visual",
       "summary": "16px horizontal overflow at 390px mobile on /dashboard/resume.",
       "reproduction": [
-        "/dashboard/resume at 390px \u2192 16px overflow"
+        "/dashboard/resume at 390px → 16px overflow"
       ],
       "expected": "No overflow @390px",
       "observed": "16px overflow",
@@ -801,9 +805,9 @@
       "screen": "/dashboard/jobs",
       "severity": "LOW",
       "category": "defect",
-      "summary": "UNSURE: scout POST aborted client-side in session 1, did NOT reproduce in session 2. Filed with both interpretations \u2014 likely transient/flaky, needs re-verify.",
+      "summary": "UNSURE: scout POST aborted client-side in session 1, did NOT reproduce in session 2. Filed with both interpretations — likely transient/flaky, needs re-verify.",
       "reproduction": [
-        "/dashboard/jobs \u2192 scout run \u2192 session1 client-abort; session2 clean"
+        "/dashboard/jobs → scout run → session1 client-abort; session2 clean"
       ],
       "expected": "Deterministic scout run",
       "observed": "1 abort not reproduced",
@@ -813,16 +817,16 @@
       "status": "VERIFIED-CLOSED",
       "owner": "qa-adversary re-verify",
       "fixCommits": [],
-      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: scout run 4/4 clean, no reproducible client-abort \u2192 RESOLVED-FLAKY (the session-1 abort was transient)."
+      "verifiedBy": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: scout run 4/4 clean, no reproducible client-abort → RESOLVED-FLAKY (the session-1 abort was transient)."
     },
     {
       "id": "ML-stories-001",
       "screen": "/dashboard/stories",
       "severity": "MEDIUM",
       "category": "agent-integration",
-      "summary": "storyExtractor configured model (claude-haiku-4-5) \u2260 model recorded on the run (qwen/qwen3-coder-next) \u2014 CORROBORATES ML-agents-001 (STRUCTURED tier non-overridable; the picker/config shows a model that isn't used). Resolved by the ML-agents-001 fix (lock non-overridable pickers).",
+      "summary": "storyExtractor configured model (claude-haiku-4-5) ≠ model recorded on the run (qwen/qwen3-coder-next) — CORROBORATES ML-agents-001 (STRUCTURED tier non-overridable; the picker/config shows a model that isn't used). Resolved by the ML-agents-001 fix (lock non-overridable pickers).",
       "reproduction": [
-        "/dashboard/stories \u2192 storyExtractor run \u2192 recorded model qwen \u2260 configured claude-haiku-4-5"
+        "/dashboard/stories → storyExtractor run → recorded model qwen ≠ configured claude-haiku-4-5"
       ],
       "expected": "Configured model used OR honestly locked (ML-agents-001 fix)",
       "observed": "Config ignored (STRUCTURED tuned model used)",
@@ -844,9 +848,9 @@
       "screen": "/dashboard/email",
       "severity": "LOW",
       "category": "defect",
-      "summary": "UNSURE: degraded/no-op emailAgent triage response still carries non-zero cost/tokens + a model that doesn't match config. Needs triage \u2014 may be a metering artifact on the degraded path.",
+      "summary": "UNSURE: degraded/no-op emailAgent triage response still carries non-zero cost/tokens + a model that doesn't match config. Needs triage — may be a metering artifact on the degraded path.",
       "reproduction": [
-        "/dashboard/email \u2192 emailAgent (Gmail disconnected) \u2192 degraded response has nonzero cost/tokens + mismatched model"
+        "/dashboard/email → emailAgent (Gmail disconnected) → degraded response has nonzero cost/tokens + mismatched model"
       ],
       "expected": "Degraded/no-op path meters honestly (0 cost, or correct model)",
       "observed": "Nonzero cost/tokens + mismatched model on no-op",
@@ -869,9 +873,9 @@
       "screen": "agent pipelines (tailor/cover/all structured)",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "GENUINE (RCA): complete_json() (llm_client.py:1343-1366) never retries a malformed-JSON response \u2014 the JSON parse happens OUTSIDE _auto()'s retry loop, so even the default model chain hard-fails on one malformed response instead of retrying. A bounded malformed-JSON retry would materially improve tailor/cover/structured reliability (all agents benefit).",
+      "summary": "GENUINE (RCA): complete_json() (llm_client.py:1343-1366) never retries a malformed-JSON response — the JSON parse happens OUTSIDE _auto()'s retry loop, so even the default model chain hard-fails on one malformed response instead of retrying. A bounded malformed-JSON retry would materially improve tailor/cover/structured reliability (all agents benefit).",
       "reproduction": [
-        "A structured LLM call returns malformed JSON \u2192 complete_json raises immediately, no retry \u2192 run fails"
+        "A structured LLM call returns malformed JSON → complete_json raises immediately, no retry → run fails"
       ],
       "expected": "Bounded retry (e.g. 1-2x) on malformed JSON before failing honestly",
       "observed": "No retry; immediate hard fail on one malformed response",
@@ -879,7 +883,7 @@
         "uat/reports/evidence/models-live/catalog/PIPELINE-RCA.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-hard",
+      "owner": "test-author → fixer-hard",
       "fixCommits": [
         "86f37f8(tests)",
         "93bfc8c(fix, rebased)",
@@ -893,9 +897,9 @@
       "screen": "/dashboard/approvals",
       "severity": "MEDIUM",
       "category": "visual",
-      "summary": "Approvals queue card preview (whitespace-pre-line + line-clamp-3) truncates to just the letterhead lines, never showing substantive content \u2014 the full Review modal is correct. Poor preview UX.",
+      "summary": "Approvals queue card preview (whitespace-pre-line + line-clamp-3) truncates to just the letterhead lines, never showing substantive content — the full Review modal is correct. Poor preview UX.",
       "reproduction": [
-        "/dashboard/approvals \u2192 a cover-letter/offer-response approval card \u2192 preview shows only letterhead, not the body"
+        "/dashboard/approvals → a cover-letter/offer-response approval card → preview shows only letterhead, not the body"
       ],
       "expected": "Card preview shows substantive content (skip letterhead / show body excerpt)",
       "observed": "Only letterhead lines shown",
@@ -919,7 +923,7 @@
       "category": "validation",
       "summary": "An oversized adversarial field value is correctly rejected server-side (422) but the FE renders the RAW unwrapped Pydantic error (echoing the full invalid input back), blowing the page to ~50,600px horizontal overflow. Error rendering should be honest+bounded, not raw-echo.",
       "reproduction": [
-        "/dashboard/settings \u2192 paste an oversized value in a field \u2192 save \u2192 422 \u2192 FE renders raw Pydantic error + full input \u2192 ~50,600px overflow"
+        "/dashboard/settings → paste an oversized value in a field → save → 422 → FE renders raw Pydantic error + full input → ~50,600px overflow"
       ],
       "expected": "Honest, bounded, user-friendly validation error (no raw Pydantic echo, no page overflow)",
       "observed": "Raw Pydantic error echoed + 50,600px overflow",
@@ -933,17 +937,17 @@
         "merge 35f34f0/51f1ec8 (LIVE final)"
       ],
       "verifiedBy": "final-fixes prod-verify LIVE @51f1ec8 (final-fixes-prodverify.md), verified twice, AUTHORITATIVE: /dashboard/settings 390px = 390/390 (0px overflow) across all steps incl. 5000-char unbroken name (was 49740px); desktop 1440/1440; bounded honest error no raw-echo; state restored.",
-      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes.",
-      "reopenNote": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: bounded-error+1440px HELD, but 390px no-overflow FAILED \u2014 a 5000-char UNBROKEN-token name still blows the page to 49740px. Root: break-words (overflow-wrap:break-word) doesn't reduce min-content for an unbroken token; grid item .space-y-6 xl:col-span-3 (:533) + grid container (:513) lack min-w-0. Batch-4 fixed the inner div + banner but MISSED this. LESSON: the fixer's LOCAL Playwright passed but PROD fails \u2014 local e2e env not prod-faithful for CSS overflow. Re-fix via ML-adv-003."
+      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative → PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes.",
+      "reopenNote": "Stage-3 qa-adversary(opus) LIVE prod @f28eb82 (STAGE3-screens-findings.md), fresh session/different data: bounded-error+1440px HELD, but 390px no-overflow FAILED — a 5000-char UNBROKEN-token name still blows the page to 49740px. Root: break-words (overflow-wrap:break-word) doesn't reduce min-content for an unbroken token; grid item .space-y-6 xl:col-span-3 (:533) + grid container (:513) lack min-w-0. Batch-4 fixed the inner div + banner but MISSED this. LESSON: the fixer's LOCAL Playwright passed but PROD fails — local e2e env not prod-faithful for CSS overflow. Re-fix via ML-adv-003."
     },
     {
       "id": "ML-agents-006",
       "screen": "/dashboard/agents",
       "severity": "MEDIUM",
       "category": "visual",
-      "summary": "Dominant mobile-overflow cause (found during batch-2 prod-verify): the Agent Orchestration panel's Task Queue/Performance/Error Log 3-column grid (apps/web/src/components/agents/Orchestration.tsx) blows out its correctly-sized 358px parent to 629px via a classic missing-min-w-0 CSS Grid content-blowout \u2192 /dashboard/agents scrollWidth 645 vs 390 (255px overflow at 390px). Distinct from ML-agents-005 (badges, fixed).",
+      "summary": "Dominant mobile-overflow cause (found during batch-2 prod-verify): the Agent Orchestration panel's Task Queue/Performance/Error Log 3-column grid (apps/web/src/components/agents/Orchestration.tsx) blows out its correctly-sized 358px parent to 629px via a classic missing-min-w-0 CSS Grid content-blowout → /dashboard/agents scrollWidth 645 vs 390 (255px overflow at 390px). Distinct from ML-agents-005 (badges, fixed).",
       "reproduction": [
-        "/dashboard/agents at 390px \u2192 255px horizontal overflow; DOM sweep \u2192 Orchestration grid children 629px in 358px parent"
+        "/dashboard/agents at 390px → 255px horizontal overflow; DOM sweep → Orchestration grid children 629px in 358px parent"
       ],
       "expected": "No horizontal overflow at 390px (min-w-0 on the grid/columns, responsive stacking)",
       "observed": "255px overflow from Orchestration 3-col grid",
@@ -966,9 +970,9 @@
       "screen": "n/a (test infra)",
       "severity": "LOW",
       "category": "test-coverage",
-      "summary": "PRE-EXISTING (not introduced this run; identical at 5bceb2e + 4af0c91): apps/web/src/app/dashboard/agents/__tests__/page.test.tsx uses a full-replacement vi.mock missing the ApiError export \u2192 6 unhandled-rejection warnings \u2192 `pnpm test` exits 1 DESPITE 551/551 tests passing. For a clean G-07 exit-0, add the missing ApiError to the mock (or handle the rejections).",
+      "summary": "PRE-EXISTING (not introduced this run; identical at 5bceb2e + 4af0c91): apps/web/src/app/dashboard/agents/__tests__/page.test.tsx uses a full-replacement vi.mock missing the ApiError export → 6 unhandled-rejection warnings → `pnpm test` exits 1 DESPITE 551/551 tests passing. For a clean G-07 exit-0, add the missing ApiError to the mock (or handle the rejections).",
       "reproduction": [
-        "cd apps/web && pnpm test \u2192 551/551 pass but exit code 1 (unhandled rejections in agents/page.test.tsx)"
+        "cd apps/web && pnpm test → 551/551 pass but exit code 1 (unhandled rejections in agents/page.test.tsx)"
       ],
       "expected": "Full vitest suite exits 0 with all tests green",
       "observed": "551/551 pass but process exit 1 (pre-existing mock gap)",
@@ -977,7 +981,7 @@
         "ML-fe-polish-diff-review.md non-blocking note"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "fixer-medium (G-07 prep \u2014 tiny mock fix)",
+      "owner": "fixer-medium (G-07 prep — tiny mock fix)",
       "fixCommits": [
         "70eb76f (merged main, test-only)"
       ],
@@ -990,7 +994,7 @@
       "category": "visual",
       "summary": "REOPEN of ML-settings-001 mobile-overflow (Stage-3 live): a 5000-char UNBROKEN-token Full-name still overflows to 49740px at 390px. break-words doesn't reduce min-content for an unbroken token; grid item settings-client.tsx:533 (.space-y-6 xl:col-span-3) + container :513 lack min-w-0; name/role preview <p>:547-548 need break-all/overflow-wrap:anywhere.",
       "reproduction": [
-        "/dashboard/settings 390px \u2192 Full name = 'X'*5000 \u2192 scrollWidth 50130 vs 390 (49740px). Realistic name w/ spaces = 0px."
+        "/dashboard/settings 390px → Full name = 'X'*5000 → scrollWidth 50130 vs 390 (49740px). Realistic name w/ spaces = 0px."
       ],
       "expected": "No overflow at 390px even for an unbroken token",
       "observed": "49740px overflow",
@@ -999,20 +1003,20 @@
         "stage3-assets/"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "fixer-medium (break-all + min-w-0 :533) \u2192 PROD re-verify",
+      "owner": "fixer-medium (break-all + min-w-0 :533) → PROD re-verify",
       "fixCommits": [
         "5a45937(re-fix)",
         "merge 35f34f0/51f1ec8 (LIVE final)"
       ],
       "verifiedBy": "final-fixes prod-verify LIVE @51f1ec8 (final-fixes-prodverify.md), verified twice, AUTHORITATIVE: /dashboard/settings 390px = 390/390 (0px overflow) across all steps incl. 5000-char unbroken name (was 49740px); desktop 1440/1440; bounded honest error no raw-echo; state restored.",
-      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative \u2192 PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes."
+      "reviewVerdict": "PASS (ML-adv-003-diff-review.md, CSS-spec verified): min-w-0 on grid item (load-bearing) + break-all reduces min-content (spec-correct), desktop unchanged, error-banner untouched, 553/553. Local Playwright non-authoritative → PROD re-verify post-deploy required. Deploy held until catalog re-sample (run probes on prod) finishes."
     },
     {
       "id": "ML-adv-004",
       "screen": "/admin/users/[id]",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "COVERAGE GAP (Stage-3): the SCREEN-MATRIX admin-user-detail row (/admin/users/[id], controls GET/PUT /admin/users/{id} + POST impersonate) has NO schema-complete TESTING-OUTCOME-REPORT \u2014 the admin report explicitly scoped it out. Per \u00a78 coverage mandate this reopens the screen \u2192 needs a schema-complete pass.",
+      "summary": "COVERAGE GAP (Stage-3): the SCREEN-MATRIX admin-user-detail row (/admin/users/[id], controls GET/PUT /admin/users/{id} + POST impersonate) has NO schema-complete TESTING-OUTCOME-REPORT — the admin report explicitly scoped it out. Per §8 coverage mandate this reopens the screen → needs a schema-complete pass.",
       "reproduction": [
         "No screens/admin-user-detail/TESTING-OUTCOME-REPORT.md exists"
       ],
@@ -1031,7 +1035,7 @@
       "screen": "/forgot-password",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "COVERAGE GAP (Stage-3): the forgot-password screen (ACTIVE auth: POST /auth/forgot-password + /auth/reset-password) has NO schema-complete TESTING-OUTCOME-REPORT \u2014 public-auth report only click-tested the /login link to it. Reopens the screen \u2192 needs a schema-complete pass.",
+      "summary": "COVERAGE GAP (Stage-3): the forgot-password screen (ACTIVE auth: POST /auth/forgot-password + /auth/reset-password) has NO schema-complete TESTING-OUTCOME-REPORT — public-auth report only click-tested the /login link to it. Reopens the screen → needs a schema-complete pass.",
       "reproduction": [
         "No screens/forgot-password/TESTING-OUTCOME-REPORT.md; the form/endpoints/reset-token/390px unexercised"
       ],
@@ -1043,7 +1047,7 @@
       "status": "VERIFIED-CLOSED",
       "owner": "screen-tester",
       "fixCommits": [],
-      "verifiedBy": "coverage screen-tester LIVE prod @f28eb82 (schema-complete report), verified twice: /forgot-password now has schema-complete report (screens/forgot-password/) \u2014 intentional static honest-notice page (no form/endpoints; correct). Doc-accuracy \u2192 ML-forgotpw-001."
+      "verifiedBy": "coverage screen-tester LIVE prod @f28eb82 (schema-complete report), verified twice: /forgot-password now has schema-complete report (screens/forgot-password/) — intentional static honest-notice page (no form/endpoints; correct). Doc-accuracy → ML-forgotpw-001."
     },
     {
       "id": "ML-admindetail-001",
@@ -1052,15 +1056,15 @@
       "category": "validation",
       "summary": "Empty spend-cap input SILENTLY saves as $0.00 with a SUCCESS notice (frontend Number('')===0 bypasses the >=0 validation guard); persisted (confirmed via AdminAuditLog rows). An admin clearing the field + saving unintentionally sets a $0 cap, told it succeeded.",
       "reproduction": [
-        "/admin/users/[id] \u2192 clear the spend-cap field \u2192 save \u2192 SUCCESS notice, cap persisted as $0.00 (not rejected as empty)"
+        "/admin/users/[id] → clear the spend-cap field → save → SUCCESS notice, cap persisted as $0.00 (not rejected as empty)"
       ],
-      "expected": "Empty/invalid spend-cap \u2192 honest validation error (not a silent $0.00 save); require a valid number",
+      "expected": "Empty/invalid spend-cap → honest validation error (not a silent $0.00 save); require a valid number",
       "observed": "Empty saves as $0.00 with success",
       "evidence": [
         "uat/reports/evidence/models-live/screens/admin-user-detail/TESTING-OUTCOME-REPORT.md"
       ],
       "status": "VERIFIED-CLOSED",
-      "owner": "test-author \u2192 fixer-medium (validation)",
+      "owner": "test-author → fixer-medium (validation)",
       "fixCommits": [
         "0afe860(tests)",
         "a975473(fix)",
@@ -1075,7 +1079,7 @@
       "screen": "n/a (SCREEN-MATRIX doc)",
       "severity": "LOW",
       "category": "defect",
-      "summary": "SCREEN-MATRIX admin-user-detail row lists stale endpoints (PUT /admin/users/{id} \u2192 actually 405; POST impersonate \u2192 doesn't exist, 404). Real mutating surface is spend-cap/suspend/unsuspend. Fix the matrix at G-09.",
+      "summary": "SCREEN-MATRIX admin-user-detail row lists stale endpoints (PUT /admin/users/{id} → actually 405; POST impersonate → doesn't exist, 404). Real mutating surface is spend-cap/suspend/unsuspend. Fix the matrix at G-09.",
       "reproduction": [
         "Compare SCREEN-MATRIX.md admin-user-detail row vs live (405 on PUT, 404 on impersonate)"
       ],
@@ -1113,9 +1117,9 @@
       "screen": "/dashboard/agents",
       "severity": "MEDIUM",
       "category": "defect",
-      "summary": "CONFIRMED real UX defect + fix spec. Agents-screen per-agent 'status' (agents.py:1794: `if run['status']=='failed': state='error'`) is computed from the SINGLE most-recent AgentRun with NO transient/refund classification and NO window. A TRANSIENT/REFUNDED hard-failure \u2014 e.g. tailor run 'The AI service is temporarily unavailable' (LLMUnavailable, refunded), or a rate-limited 429/refunded sweep run \u2014 sets status='failed' and paints the agent card RED until the next run, even though the agent is healthy and the user was refunded. This is what the operator saw as 'some agents erroring out'. Graceful degrades (status='completed' + coverLetterUnavailable) already correctly show 'active'. FIX: a transient/upstream-unavailable OR refunded (costUsd NULL) last-run failure must NOT render a persistent 'error' badge (show 'active', optional subtle degraded hint); a GENUINE billed agent-logic failure still shows 'error'; AND a persistence guard \u2014 last N(\u22483) runs ALL failed \u2192 'error' so real breakage still surfaces. Fields available on AgentRun: status, error(msg), costUsd(NULL=refund), output(flags), billingAuditJson.",
+      "summary": "CONFIRMED real UX defect + fix spec. Agents-screen per-agent 'status' (agents.py:1794: `if run['status']=='failed': state='error'`) is computed from the SINGLE most-recent AgentRun with NO transient/refund classification and NO window. A TRANSIENT/REFUNDED hard-failure — e.g. tailor run 'The AI service is temporarily unavailable' (LLMUnavailable, refunded), or a rate-limited 429/refunded sweep run — sets status='failed' and paints the agent card RED until the next run, even though the agent is healthy and the user was refunded. This is what the operator saw as 'some agents erroring out'. Graceful degrades (status='completed' + coverLetterUnavailable) already correctly show 'active'. FIX: a transient/upstream-unavailable OR refunded (costUsd NULL) last-run failure must NOT render a persistent 'error' badge (show 'active', optional subtle degraded hint); a GENUINE billed agent-logic failure still shows 'error'; AND a persistence guard — last N(≈3) runs ALL failed → 'error' so real breakage still surfaces. Fields available on AgentRun: status, error(msg), costUsd(NULL=refund), output(flags), billingAuditJson.",
       "reproduction": [
-        "Load /dashboard/agents on prod \u2192 some agents show error state / erroring runs (operator report)"
+        "Load /dashboard/agents on prod → some agents show error state / erroring runs (operator report)"
       ],
       "expected": "Agents run cleanly OR degrade honestly (no unhandled 500/Traceback)",
       "observed": "Operator sees agents 'erroring out' (specifics under RCA)",
@@ -1123,31 +1127,31 @@
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
       ],
       "status": "VERIFIED-CLOSED-LIVE",
-      "owner": "test-author \u2192 fixer-hard \u2192 reviewer \u2192 deployer \u2192 qa",
+      "owner": "test-author → fixer-hard → reviewer → deployer → qa",
       "fixCommits": [
         "d632ed9 (corrected tests)",
         "15c8aea (keyword-only rework)"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS /agents/catalog vs /agents 0 error/0 failed/0 disagreements across 8 agents; OBS-A/B live-correct",
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS /agents/catalog vs /agents 0 error/0 failed/0 disagreements across 8 agents; OBS-A/B live-correct",
       "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified).",
-      "reviewFail": "Fix af98b04 FAILED adversarial review (ERR-001-REVIEW.md, reviewer addd9666). BLOCKER: _is_transient_or_refunded_failure short-circuits True on costUsd IS NULL, but EVERY failed run has costUsd=None (no finish(...,'failed',...) call site records cost \u2014 only the success path at agents.py:841 does). So the refund heuristic matches ALL failures, the keyword list is dead code, and a genuine billed logic error (KeyError/validation) is misclassified transient \u2192 status 'active', HIDING a broken agent (proven live: 50% genuine-failure rate never trips the 3-in-a-row chronic guard \u2192 'active' forever). The guard test passed only because it seeded an unrealistic cost_usd=0.0164 on a FAILED run. REWORK: drop the costUsd heuristic; classify transient by ERROR-MESSAGE keyword only (LLMUnavailable msg 'temporarily unavailable' + upstream 429/503/502/504/timeout/overloaded/rate-limit); keep chronic guard; CORRECT the test to production-realistic seeding (failed runs -> costUsd=None)."
+      "reviewFail": "Fix af98b04 FAILED adversarial review (ERR-001-REVIEW.md, reviewer addd9666). BLOCKER: _is_transient_or_refunded_failure short-circuits True on costUsd IS NULL, but EVERY failed run has costUsd=None (no finish(...,'failed',...) call site records cost — only the success path at agents.py:841 does). So the refund heuristic matches ALL failures, the keyword list is dead code, and a genuine billed logic error (KeyError/validation) is misclassified transient → status 'active', HIDING a broken agent (proven live: 50% genuine-failure rate never trips the 3-in-a-row chronic guard → 'active' forever). The guard test passed only because it seeded an unrealistic cost_usd=0.0164 on a FAILED run. REWORK: drop the costUsd heuristic; classify transient by ERROR-MESSAGE keyword only (LLMUnavailable msg 'temporarily unavailable' + upstream 429/503/502/504/timeout/overloaded/rate-limit); keep chronic guard; CORRECT the test to production-realistic seeding (failed runs -> costUsd=None)."
     },
     {
       "id": "ML-agents-err-002",
       "screen": "agent pipeline (coverLetter)",
       "severity": "INFO",
       "category": "defect",
-      "summary": "RESOLVED \u2014 NOT A DEFECT. Live probe (LIVE-CATALOG-STATUS-NOW.md) + code trace (COVER-STATUS-CONFIG-SCOUT.md) + grep confirm: (1) NO hardcoded claude-3-haiku anywhere in apps/api/app; deployed tier default is AETHER_MODEL_REASONING=deepseek/deepseek-v4-pro. (2) The claude-3-haiku that returned empty JSON at 23:36 was the OPERATOR'S OWN per-agent model selection for coverLetter at that time; the system honored the choice, got empty content, retried, then honestly degraded (coverLetterUnavailable, \\$0 refunded) \u2014 the correct no-silent-substitution behavior. (3) Operator has since switched coverLetter to anthropic/claude-sonnet-5, which runs successfully (\\$0.0016 billed). Honoring a user-selected weak model + honest refund on failure is working as designed; changing it would violate the no-substitution mandate. No code change.",
+      "summary": "RESOLVED — NOT A DEFECT. Live probe (LIVE-CATALOG-STATUS-NOW.md) + code trace (COVER-STATUS-CONFIG-SCOUT.md) + grep confirm: (1) NO hardcoded claude-3-haiku anywhere in apps/api/app; deployed tier default is AETHER_MODEL_REASONING=deepseek/deepseek-v4-pro. (2) The claude-3-haiku that returned empty JSON at 23:36 was the OPERATOR'S OWN per-agent model selection for coverLetter at that time; the system honored the choice, got empty content, retried, then honestly degraded (coverLetterUnavailable, \\$0 refunded) — the correct no-silent-substitution behavior. (3) Operator has since switched coverLetter to anthropic/claude-sonnet-5, which runs successfully (\\$0.0016 billed). Honoring a user-selected weak model + honest refund on failure is working as designed; changing it would violate the no-substitution mandate. No code change.",
       "reproduction": [
-        "Run coverLetter repeatedly \u2192 intermittent empty-content from claude-3-haiku \u2192 honest coverLetterUnavailable degrade"
+        "Run coverLetter repeatedly → intermittent empty-content from claude-3-haiku → honest coverLetterUnavailable degrade"
       ],
       "expected": "Higher cover-letter success rate (fewer honest-degrades)",
-      "observed": "Intermittent empty content \u2192 graceful degrade",
+      "observed": "Intermittent empty content → graceful degrade",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md"
       ],
       "status": "CLOSED-NOT-A-DEFECT",
-      "owner": "fixer (reliability tuning \u2014 batch with err-001 or backlog)",
+      "owner": "fixer (reliability tuning — batch with err-001 or backlog)",
       "fixCommits": [],
       "verifiedBy": "evidence probe a44b29c (LIVE-CATALOG-STATUS-NOW.md) + scout addca724 + grep (no hardcoded haiku)"
     },
@@ -1156,7 +1160,7 @@
       "screen": "story extraction / Story Bank",
       "severity": "BLOCKER",
       "category": "privacy/fabrication",
-      "summary": "CROSS-ACCOUNT PII LEAK + FABRICATION. story_extractor.py:85 _resolve_resume_text calls resolve_user_resume_text(user_id) WITHOUT allow_operator_fallback=False \u2014 the ONLY production call site that doesn't (email_agent:178, cover_letters:582/660/839, jobs:247 all pass False). A subscribed user with NO resume who runs story-extraction gets STAR stories silently extracted from the OPERATOR'S bundled personal resume (assets/resume/Vik_Resume_Final.pdf) persisted into their Story Bank as self-authored, then fed into their real tailored resumes/cover letters. FIX: pass allow_operator_fallback=False so a user with no resume gets an honest no-resume refusal.",
+      "summary": "CROSS-ACCOUNT PII LEAK + FABRICATION. story_extractor.py:85 _resolve_resume_text calls resolve_user_resume_text(user_id) WITHOUT allow_operator_fallback=False — the ONLY production call site that doesn't (email_agent:178, cover_letters:582/660/839, jobs:247 all pass False). A subscribed user with NO resume who runs story-extraction gets STAR stories silently extracted from the OPERATOR'S bundled personal resume (assets/resume/Vik_Resume_Final.pdf) persisted into their Story Bank as self-authored, then fed into their real tailored resumes/cover letters. FIX: pass allow_operator_fallback=False so a user with no resume gets an honest no-resume refusal.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
       ],
@@ -1165,7 +1169,7 @@
       "fixCommits": [
         "d1b3cb0"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS story-leak closed live (deshpande in 0 non-operator story banks; fresh no-r\u00e9sum\u00e9 user 0 stories+402; admin own-r\u00e9sum\u00e9 3 real stories)"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS story-leak closed live (deshpande in 0 non-operator story banks; fresh no-résumé user 0 stories+402; admin own-résumé 3 real stories)"
     },
     {
       "id": "ML-audit-admin-pw-001",
@@ -1177,7 +1181,7 @@
         "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
       ],
       "status": "ACCEPTED-BY-OWNER",
-      "owner": "(owner decision 2026-07-23: leave admin123 as-is, intentional for this deployment; NO code or value change \u2014 a weak-password deny-list would break intended access)",
+      "owner": "(owner decision 2026-07-23: leave admin123 as-is, intentional for this deployment; NO code or value change — a weak-password deny-list would break intended access)",
       "fixCommits": [],
       "verifiedBy": "owner decision"
     },
@@ -1186,7 +1190,7 @@
       "screen": "infra / LLM safety",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "AETHER_ENV unset (defaults 'development') so the main.py:93-118 guard that HARD-FAILS boot on AETHER_LLM_MODE=replay in production is DISARMED \u2014 a future LLM-mode misconfig would silently serve canned fixture output to paying users with only a stderr warning. Currently inert (AETHER_LLM_MODE=auto). Verified AETHER_ENV only gates this guard (safe to set). FIX: set AETHER_ENV=production in .env.",
+      "summary": "AETHER_ENV unset (defaults 'development') so the main.py:93-118 guard that HARD-FAILS boot on AETHER_LLM_MODE=replay in production is DISARMED — a future LLM-mode misconfig would silently serve canned fixture output to paying users with only a stderr warning. Currently inert (AETHER_LLM_MODE=auto). Verified AETHER_ENV only gates this guard (safe to set). FIX: set AETHER_ENV=production in .env.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md",
         "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
@@ -1196,14 +1200,14 @@
       "fixCommits": [
         "ef7df30"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS AETHER_ENV=production armed+healthy live"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS AETHER_ENV=production armed+healthy live"
     },
     {
       "id": "ML-audit-source-disclosure-001",
       "screen": "dashboard/jobs source filter",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "LinkedIn/Indeed adapters have no live mode (NotImplementedError, honestly skipped) but remain listed as ordinary undisclosed options in the job-source filter dropdown (jobs/page.tsx:61-88,739-744; adapter_registry.py:43-58) \u2014 always return zero results with no in-context explanation. FIX: disclose 'not available'/disable these options (and Seek which is gated off) in the dropdown.",
+      "summary": "LinkedIn/Indeed adapters have no live mode (NotImplementedError, honestly skipped) but remain listed as ordinary undisclosed options in the job-source filter dropdown (jobs/page.tsx:61-88,739-744; adapter_registry.py:43-58) — always return zero results with no in-context explanation. FIX: disclose 'not available'/disable these options (and Seek which is gated off) in the dropdown.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
       ],
@@ -1212,7 +1216,7 @@
       "fixCommits": [
         "32733f5"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS linkedin/indeed/seek disabled \"(unavailable)\" in deployed bundle"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS linkedin/indeed/seek disabled \"(unavailable)\" in deployed bundle"
     },
     {
       "id": "ML-audit-emailverify-toggle-001",
@@ -1228,7 +1232,7 @@
       "fixCommits": [
         "32733f5"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS toggle inert (disabled+no-op) live"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS toggle inert (disabled+no-op) live"
     },
     {
       "id": "ML-audit-staletoken-001",
@@ -1244,14 +1248,14 @@
       "fixCommits": [
         "ef7df30"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS stale CLAUDE_CODE_OAUTH_TOKEN removed from live .env"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS stale CLAUDE_CODE_OAUTH_TOKEN removed from live .env"
     },
     {
       "id": "ML-audit-loginpw-001",
       "screen": "infra / .env",
       "severity": "INFO",
       "category": "benign",
-      "summary": "RESOLVED not-a-defect: LOGIN_PASSWORD=AetherDemo1 in env is NOT a backdoor \u2014 zero hits in apps/api/app/; only consumed by offline seed_demo.py + UAT tooling, never HTTP-reachable. auth login does ordinary per-account bcrypt, no special-case string. Stale, harmless.",
+      "summary": "RESOLVED not-a-defect: LOGIN_PASSWORD=AetherDemo1 in env is NOT a backdoor — zero hits in apps/api/app/; only consumed by offline seed_demo.py + UAT tooling, never HTTP-reachable. auth login does ordinary per-account bcrypt, no special-case string. Stale, harmless.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
       ],
@@ -1265,7 +1269,7 @@
       "screen": "full pipeline (live)",
       "severity": "INFO",
       "category": "verification",
-      "summary": "INDEPENDENT 3RD-PARTY LIVE FULL-RUN AUTHENTICITY REVIEW (qa-adversary a2ff4156, 2026-07-23T00:23-00:37Z, real admin session): ALL stages GENUINE, twice-verified. Discovery=real (Greenhouse authoritative API cross-match, live wellfound-403 honestly surfaced \u2014 a fixture cannot 403); FitScoring=real (30 distinct scores 24.89-50.05, per-job matched/gap sets track JD-vs-resume, independent mean 40.07==dashboard 40.3); Tailoring=real + FABRICATION-GUARD PROVEN WORKING (run cada252a: kept 1 grounded edit, REJECTED 7 invented metrics); CoverLetter=real (run c6fd095e claude-sonnet-5: cites Databricks JD VERBATIM + exact base-resume facts, zero canned-phrase hits); StoryExtraction=real (4 STAR from real resume/employers); Billing=real sk_live Stripe + correct GST (Pro $39=$35.45+$3.55); ModelSelection=real (run cdb4ea8a stamped+billed deepseek-v4-pro as chosen, bogus id->422, NO silent substitution); Dashboards=real aggregates cross-reconcile; catalog=332 live models stale:false. G-05 PASS. NO BLOCKER/HIGH/MED authenticity findings; NO fake/canned/fixture/fabricated output on any user-reachable path.",
+      "summary": "INDEPENDENT 3RD-PARTY LIVE FULL-RUN AUTHENTICITY REVIEW (qa-adversary a2ff4156, 2026-07-23T00:23-00:37Z, real admin session): ALL stages GENUINE, twice-verified. Discovery=real (Greenhouse authoritative API cross-match, live wellfound-403 honestly surfaced — a fixture cannot 403); FitScoring=real (30 distinct scores 24.89-50.05, per-job matched/gap sets track JD-vs-resume, independent mean 40.07==dashboard 40.3); Tailoring=real + FABRICATION-GUARD PROVEN WORKING (run cada252a: kept 1 grounded edit, REJECTED 7 invented metrics); CoverLetter=real (run c6fd095e claude-sonnet-5: cites Databricks JD VERBATIM + exact base-resume facts, zero canned-phrase hits); StoryExtraction=real (4 STAR from real resume/employers); Billing=real sk_live Stripe + correct GST (Pro $39=$35.45+$3.55); ModelSelection=real (run cdb4ea8a stamped+billed deepseek-v4-pro as chosen, bogus id->422, NO silent substitution); Dashboards=real aggregates cross-reconcile; catalog=332 live models stale:false. G-05 PASS. NO BLOCKER/HIGH/MED authenticity findings; NO fake/canned/fixture/fabricated output on any user-reachable path.",
       "evidence": [
         "qa-adversary a2ff4156 review (AgentRun run_ids queryable via GET /api/agents/runs); scratchpad ev/ captures"
       ],
@@ -1279,23 +1283,23 @@
       "screen": "infra / LLM resilience",
       "severity": "LOW",
       "category": "reliability",
-      "summary": "AETHER_MODEL_FALLBACK == deepseek/deepseek-v4-flash, which is ALSO the FAST+LIGHT tier model. So a transient blip of the flash model on the DEFAULT path cannot be caught by the fallback (same model) \u2192 user-facing honest 503 instead of degrading to a different model (observed live: bg job cb5a85d2 chosen deepseek-v4-flash failed 503+refunded \u2014 honest, no substitution, but no distinct fallback). NOTE: user-chosen models correctly get NO fallback per ADR-ML-3; this only affects the system-DEFAULT resilience path. FIX (LOW, config): set AETHER_MODEL_FALLBACK to a distinct reliable cheap model so a flash-tier blip degrades to a different model.",
+      "summary": "AETHER_MODEL_FALLBACK == deepseek/deepseek-v4-flash, which is ALSO the FAST+LIGHT tier model. So a transient blip of the flash model on the DEFAULT path cannot be caught by the fallback (same model) → user-facing honest 503 instead of degrading to a different model (observed live: bg job cb5a85d2 chosen deepseek-v4-flash failed 503+refunded — honest, no substitution, but no distinct fallback). NOTE: user-chosen models correctly get NO fallback per ADR-ML-3; this only affects the system-DEFAULT resilience path. FIX (LOW, config): set AETHER_MODEL_FALLBACK to a distinct reliable cheap model so a flash-tier blip degrades to a different model.",
       "evidence": [
-        "qa-adversary a2ff4156 review \u2014 finding ML-adv-001"
+        "qa-adversary a2ff4156 review — finding ML-adv-001"
       ],
       "status": "VERIFIED-CLOSED-LIVE",
       "owner": "prod-hardening cluster (config)",
       "fixCommits": [
         "ef7df30"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS AETHER_MODEL_FALLBACK=deepseek-v4-pro (distinct from fast tier) live"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS AETHER_MODEL_FALLBACK=deepseek-v4-pro (distinct from fast tier) live"
     },
     {
       "id": "ML-audit-emailidempotent-001",
       "screen": "email agent / idempotency",
       "severity": "LOW",
       "category": "test-hygiene / CI",
-      "summary": "TRIAGED = STALE-TEST (NOT a production bug). Production email idempotency is CORRECT: approvals.py::execute_gated_action claims via approval.py::claim_execution atomic UPDATE...WHERE status='approved' AND executedAt IS NULL RETURNING id BEFORE any Gmail send (at-most-once; release only on failure). Proven: with AETHER_CREDENTIAL_KEY set the test PASSES (200 sent, 409 replay, GmailService.send called once). The test test_mv_j_correctness.py:~225 omits the monkeypatch.setenv('AETHER_CREDENTIAL_KEY', vault.generate_key()) that 19 sibling tests carry \u2192 fails in SETUP (CredentialVaultError) before the idempotency logic runs. ALSO fails in real CI (.github/workflows/ci.yml doesn't set the var). FIX (1-line test hygiene): add the setenv at test_mv_j_correctness.py:225 matching test_ml_cred_001.py:89. Consider also setting AETHER_CREDENTIAL_KEY in ci.yml. No production change.",
+      "summary": "TRIAGED = STALE-TEST (NOT a production bug). Production email idempotency is CORRECT: approvals.py::execute_gated_action claims via approval.py::claim_execution atomic UPDATE...WHERE status='approved' AND executedAt IS NULL RETURNING id BEFORE any Gmail send (at-most-once; release only on failure). Proven: with AETHER_CREDENTIAL_KEY set the test PASSES (200 sent, 409 replay, GmailService.send called once). The test test_mv_j_correctness.py:~225 omits the monkeypatch.setenv('AETHER_CREDENTIAL_KEY', vault.generate_key()) that 19 sibling tests carry → fails in SETUP (CredentialVaultError) before the idempotency logic runs. ALSO fails in real CI (.github/workflows/ci.yml doesn't set the var). FIX (1-line test hygiene): add the setenv at test_mv_j_correctness.py:225 matching test_ml_cred_001.py:89. Consider also setting AETHER_CREDENTIAL_KEY in ci.yml. No production change.",
       "evidence": [
         "story test-author aa09975b regression note"
       ],
@@ -1304,14 +1308,14 @@
       "fixCommits": [
         "32733f5"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS (test hygiene shipped; full suite green)"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS (test hygiene shipped; full suite green)"
     },
     {
       "id": "ML-audit-grounding-docstring-001",
       "screen": "resume_grounding.py docstring",
       "severity": "LOW",
       "category": "doc-drift",
-      "summary": "Follow-up from story-leak review (F2): apps/api/app/services/resume_grounding.py module docstring still names 'the story extractor' as an internal path that keeps the operator fallback \u2014 now STALE after d1b3cb0 (story extractor passes allow_operator_fallback=False like all others). Fix: update the docstring. Fold into deploy batch.",
+      "summary": "Follow-up from story-leak review (F2): apps/api/app/services/resume_grounding.py module docstring still names 'the story extractor' as an internal path that keeps the operator fallback — now STALE after d1b3cb0 (story extractor passes allow_operator_fallback=False like all others). Fix: update the docstring. Fold into deploy batch.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/STORY-LEAK-REVIEW.md"
       ],
@@ -1320,21 +1324,25 @@
       "fixCommits": [
         "ef7df30"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS docstring shipped"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS docstring shipped"
     },
     {
       "id": "ML-audit-allsources-deadcode-001",
       "screen": "discovery/admin",
       "severity": "LOW",
       "category": "doc/deadcode",
-      "summary": "OBS-1 (source review): adapter_registry.all_sources() has ZERO callers (prod+tests) \u2014 the FE delivers source disclosure; GET /agents/scout/sources uses JobSourceStatusRepository. The 32733f5 backend change is honest-but-unconsumed. HAND TO DE-DUP: either wire FE availability from backend (single source of truth, would also fix OBS-2 seek env-gating) OR hard-delete all_sources() as dead code.",
+      "summary": "OBS-1 (source review): adapter_registry.all_sources() has ZERO callers (prod+tests) — the FE delivers source disclosure; GET /agents/scout/sources uses JobSourceStatusRepository. The 32733f5 backend change is honest-but-unconsumed. HAND TO DE-DUP: either wire FE availability from backend (single source of truth, would also fix OBS-2 seek env-gating) OR hard-delete all_sources() as dead code.",
       "evidence": [
-        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
+        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md",
+        "uat/reports/evidence/launch-ready/models-live/ML-allsources-fix-tests.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "de-dup phase",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "592a963"
+      ],
+      "verifiedBy": "launch-ready W-A ledger-close 2026-07-24",
+      "note": "CLOSED 2026-07-24 (both halves of the hand-off done): fresh reference trace confirmed zero callers; all_sources() HARD-DELETED and superseded by consumed source_availability() (call-time env evaluation), exposed via GET /agents/scout/sources/availability and consumed by the FE source dropdown. Tests-first: apps/api/tests/test_source_availability.py RED 11F/2P -> GREEN 13P. Deployed 592a963."
     },
     {
       "id": "ML-audit-seek-fe-hardcode-001",
@@ -1343,19 +1351,23 @@
       "category": "doc/deadcode",
       "summary": "OBS-2 (source review): FE hardcodes seek as '(unavailable)' but backend availability is env-gated (AETHER_ENABLE_SEEK / ADR-P6-SEEK). Honest in default (seek OFF); latent inaccuracy only if operator enables seek. Fix by driving FE availability from backend (ties to OBS-1).",
       "evidence": [
-        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
+        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md",
+        "uat/reports/evidence/launch-ready/models-live/PROD-VERIFY-592a963.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "de-dup/enhancement",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "592a963"
+      ],
+      "verifiedBy": "launch-ready W-A ledger-close 2026-07-24",
+      "note": "CLOSED 2026-07-24: FE hardcoded NO_LIVE_MODE_SOURCES deleted; dropdown availability now backend-driven from GET /agents/scout/sources/availability (adapter registry evaluates AETHER_ENABLE_SEEK at call time). Fetch-failure degrades honestly (options stay enabled; backend 422 remains the truth-teller -- no fabricated unavailable label). Tests-first: vitest RED 3F -> GREEN 12/12 (page.test.tsx availability suite). Deployed 592a963."
     },
     {
       "id": "ML-audit-adminsettings-docstring-001",
       "screen": "discovery/admin",
       "severity": "LOW",
       "category": "doc/deadcode",
-      "summary": "OBS-3 (source review): stale module docstring apps/web/src/app/admin/settings/page.tsx:3-7 still says the email-verify toggle is 'wired' \u2014 now inert after 32733f5. Fold doc fix into deploy batch.",
+      "summary": "OBS-3 (source review): stale module docstring apps/web/src/app/admin/settings/page.tsx:3-7 still says the email-verify toggle is 'wired' — now inert after 32733f5. Fold doc fix into deploy batch.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
       ],
@@ -1364,7 +1376,7 @@
       "fixCommits": [
         "ef7df30"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS docstring shipped"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS docstring shipped"
     },
     {
       "id": "ML-agents-err-001-obsA",
@@ -1381,7 +1393,7 @@
         "adc3766 (tests)",
         "c50450c (fix)"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS cuid digit cases NOT transient live"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS cuid digit cases NOT transient live"
     },
     {
       "id": "ML-agents-err-001-obsB",
@@ -1398,7 +1410,7 @@
         "adc3766 (tests)",
         "c50450c (fix)"
       ],
-      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md \u2014 PASS list_agents consistent with catalog live"
+      "verifiedBy": "qa-adversary a4bd416d PROD-VERIFY-ef7df30.md — PASS list_agents consistent with catalog live"
     },
     {
       "id": "DEDUP-DISCOVERY-COMPLETE",
@@ -1420,14 +1432,18 @@
       "screen": "jobs/discovery",
       "severity": "LOW",
       "category": "defense-in-depth",
-      "summary": "Prod-verify LOW-1: source disclosure is FE-only; API still accepts GET /jobs?source=linkedin -> 200 with 0 jobs (unreachable \u2014 option disabled). all_sources() remains unconsumed. Follow-up: backend-derived source availability (ties to de-dup all_sources handling / OBS-1/OBS-2).",
+      "summary": "Prod-verify LOW-1: source disclosure is FE-only; API still accepts GET /jobs?source=linkedin -> 200 with 0 jobs (unreachable — option disabled). all_sources() remains unconsumed. Follow-up: backend-derived source availability (ties to de-dup all_sources handling / OBS-1/OBS-2).",
       "evidence": [
-        "uat/reports/evidence/models-live/PROD-VERIFY-ef7df30.md"
+        "uat/reports/evidence/models-live/PROD-VERIFY-ef7df30.md",
+        "uat/reports/evidence/launch-ready/models-live/PROD-VERIFY-592a963.md"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "de-dup phase",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "592a963"
+      ],
+      "verifiedBy": "launch-ready W-A ledger-close 2026-07-24",
+      "note": "CLOSED 2026-07-24: GET /jobs?source=<unknown|unavailable> now rejected 422 with honest detail (unknown -> known-set disclosure; unavailable -> real reason + include_stale hint; include_stale=true keeps history reachable per GAP-P6-DATA-001; available sources and env-enabled seek -> 200). Convention matches the existing status-filter 422. Verified live post-deploy 592a963 (see PROD-VERIFY evidence)."
     }
   ]
 }
