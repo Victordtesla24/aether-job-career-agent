@@ -44,7 +44,7 @@
     {
       "id": "P0-006",
       "severity": "info",
-      "summary": "14 legacy .claude/agents files outside the \u00a70.2 roster left untouched; roster reconciliation documented.",
+      "summary": "14 legacy .claude/agents files outside the §0.2 roster left untouched; roster reconciliation documented.",
       "evidence": "uat/reports/evidence/launch-ready/governance/roster-manifest.md"
     },
     {
@@ -56,18 +56,38 @@
   ],
   "gates": {},
   "baseline": {
-    "pytest": { "passed": 1118, "failed": 0, "skipped": 0, "duration_s": 1650.55, "exit": 0 },
-    "vitest": { "passed": 556, "failed": 0, "skipped": 0, "files": 81, "duration_s": 108.2, "exit": 0 },
-    "playwright": { "passed": 51, "failed": 28, "skipped": 0, "duration": "11.7m", "exit": 1, "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123" }
+    "pytest": {
+      "passed": 1118,
+      "failed": 0,
+      "skipped": 0,
+      "duration_s": 1650.55,
+      "exit": 0
+    },
+    "vitest": {
+      "passed": 556,
+      "failed": 0,
+      "skipped": 0,
+      "files": 81,
+      "duration_s": 108.2,
+      "exit": 0
+    },
+    "playwright": {
+      "passed": 51,
+      "failed": 28,
+      "skipped": 0,
+      "duration": "11.7m",
+      "exit": 1,
+      "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
+    }
   },
-  "last_commit": "PHASE0-BOOTSTRAP (this commit; parent 03c0c50)",
+  "last_commit": "11784a82799386ad98bd4c447d19055fad4aa8ae",
   "last_deploy_sha": "03c0c50",
   "next_actions": [
-    "W-A: read /home/ubuntu/aether-subscription-prompt-live-test.md in full and execute the models-live prompt with maximum accuracy (\u00a73); drive ML-adv-001 through QA; close the 4 OPEN ledger rows (ML-env-001 via completed worktree purge, the two all_sources/seek-hardcode LOW rows, ML-prodverify-low1) through the \u00a79 pipeline; record gates.W-A with fresh evidence under uat/reports/evidence/launch-ready/models-live/",
-    "W-B: FEAT-B1 approvals purge + FEAT-B2 applications stage-move (\u00a74) at production quality, evidence under features/",
-    "W-C: duplicate-implementation elimination (\u00a75) after W-A/W-B land \u2014 dedup-surgeon with reviewed manifests, evidence under dedup/",
-    "W-D: repo + prod cleanup (\u00a76) \u2014 reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
-    "W-E: top-10-paid-app quality hardening sweep (\u00a77) after W-A..W-C deploy, evidence under quality/screens",
-    "W-F: docs truth refresh \u2192 adversarial review \u2192 exit gates (\u00a79\u2013\u00a710), evidence under governance/ and adversarial/"
+    "W-A: read /home/ubuntu/aether-subscription-prompt-live-test.md in full and execute the models-live prompt with maximum accuracy (§3); drive ML-adv-001 through QA; close the 4 OPEN ledger rows (ML-env-001 via completed worktree purge, the two all_sources/seek-hardcode LOW rows, ML-prodverify-low1) through the §9 pipeline; record gates.W-A with fresh evidence under uat/reports/evidence/launch-ready/models-live/",
+    "W-B: FEAT-B1 approvals purge + FEAT-B2 applications stage-move (§4) at production quality, evidence under features/",
+    "W-C: duplicate-implementation elimination (§5) after W-A/W-B land — dedup-surgeon with reviewed manifests, evidence under dedup/",
+    "W-D: repo + prod cleanup (§6) — reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
+    "W-E: top-10-paid-app quality hardening sweep (§7) after W-A..W-C deploy, evidence under quality/screens",
+    "W-F: docs truth refresh → adversarial review → exit gates (§9–§10), evidence under governance/ and adversarial/"
   ]
 }
