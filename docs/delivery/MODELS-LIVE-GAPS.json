@@ -1202,10 +1202,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
       ],
-      "status": "OPEN",
+      "status": "REVIEW-PASS-AWAITING-DEPLOY",
       "owner": "source-disclosure cluster",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "32733f5"
+      ],
+      "verifiedBy": "independent opus reviewer a75cda60 PASS (SOURCE-DISCLOSURE-REVIEW.md): RED->GREEN reproduced, override-detection correct, FE disabled non-selectable, no scope creep"
     },
     {
       "id": "ML-audit-emailverify-toggle-001",
@@ -1216,10 +1218,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
       ],
-      "status": "OPEN",
+      "status": "REVIEW-PASS-AWAITING-DEPLOY",
       "owner": "source-disclosure cluster",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "32733f5"
+      ],
+      "verifiedBy": "reviewer a75cda60 PASS"
     },
     {
       "id": "ML-audit-staletoken-001",
@@ -1286,10 +1290,12 @@
       "evidence": [
         "story test-author aa09975b regression note"
       ],
-      "status": "OPEN",
+      "status": "REVIEW-PASS-AWAITING-DEPLOY",
       "owner": "fold into source-disclosure fixer (test hygiene)",
-      "fixCommits": [],
-      "verifiedBy": "triage a1e4631b (EMAIL-IDEMPOTENT-TRIAGE.md)"
+      "fixCommits": [
+        "32733f5"
+      ],
+      "verifiedBy": "reviewer a75cda60 PASS (test hygiene)"
     },
     {
       "id": "ML-audit-grounding-docstring-001",
@@ -1299,6 +1305,48 @@
       "summary": "Follow-up from story-leak review (F2): apps/api/app/services/resume_grounding.py module docstring still names 'the story extractor' as an internal path that keeps the operator fallback \u2014 now STALE after d1b3cb0 (story extractor passes allow_operator_fallback=False like all others). Fix: update the docstring. Fold into deploy batch.",
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/STORY-LEAK-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "fold into deploy batch (doc)",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-allsources-deadcode-001",
+      "screen": "discovery/admin",
+      "severity": "LOW",
+      "category": "doc/deadcode",
+      "summary": "OBS-1 (source review): adapter_registry.all_sources() has ZERO callers (prod+tests) \u2014 the FE delivers source disclosure; GET /agents/scout/sources uses JobSourceStatusRepository. The 32733f5 backend change is honest-but-unconsumed. HAND TO DE-DUP: either wire FE availability from backend (single source of truth, would also fix OBS-2 seek env-gating) OR hard-delete all_sources() as dead code.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "de-dup phase",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-seek-fe-hardcode-001",
+      "screen": "discovery/admin",
+      "severity": "LOW",
+      "category": "doc/deadcode",
+      "summary": "OBS-2 (source review): FE hardcodes seek as '(unavailable)' but backend availability is env-gated (AETHER_ENABLE_SEEK / ADR-P6-SEEK). Honest in default (seek OFF); latent inaccuracy only if operator enables seek. Fix by driving FE availability from backend (ties to OBS-1).",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "de-dup/enhancement",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-adminsettings-docstring-001",
+      "screen": "discovery/admin",
+      "severity": "LOW",
+      "category": "doc/deadcode",
+      "summary": "OBS-3 (source review): stale module docstring apps/web/src/app/admin/settings/page.tsx:3-7 still says the email-verify toggle is 'wired' \u2014 now inert after 32733f5. Fold doc fix into deploy batch.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/SOURCE-DISCLOSURE-REVIEW.md"
       ],
       "status": "OPEN",
       "owner": "fold into deploy batch (doc)",
