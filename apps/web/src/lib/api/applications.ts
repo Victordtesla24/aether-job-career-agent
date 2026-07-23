@@ -17,7 +17,6 @@ export const ApplicationSchema = z.object({
 });
 
 export type Application = z.infer<typeof ApplicationSchema>;
-export type ApplicationStatus = Application["status"];
 
 export async function fetchApplications(options: RequestOptions = {}): Promise<Application[]> {
   return z.array(ApplicationSchema).parse(await apiRequest<unknown>("/applications", options));

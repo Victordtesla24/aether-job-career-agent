@@ -8,28 +8,7 @@
  */
 import { apiRequest, type RequestOptions } from "./client";
 
-export interface GmailAccount {
-  id: string;
-  accountEmail: string | null;
-  isPrimary: boolean;
-  scopes: string | null;
-  connectedAt: string | null;
-  updatedAt: string | null;
-}
 
-export interface OAuthStatus {
-  configured: boolean;
-  connected: boolean;
-  accountCount: number;
-}
-
-export async function fetchGmailAccounts(o: RequestOptions = {}): Promise<GmailAccount[]> {
-  return apiRequest<GmailAccount[]>("/emails/accounts", o);
-}
-
-export async function fetchOAuthStatus(o: RequestOptions = {}): Promise<OAuthStatus> {
-  return apiRequest<OAuthStatus>("/emails/oauth/status", o);
-}
 
 /** Start connecting ANOTHER Gmail account — navigates to Google's chooser. */
 export async function connectAnotherGmail(o: RequestOptions = {}): Promise<void> {

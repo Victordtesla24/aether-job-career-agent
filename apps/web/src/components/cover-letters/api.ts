@@ -45,7 +45,7 @@ export async function fetchLetterInsights(letterId: string): Promise<LetterInsig
   );
 }
 
-export interface RefineResult {
+interface RefineResult {
   cover_letter_id: string;
   cover_letter: string;
   approval_id: string;

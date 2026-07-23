@@ -12,7 +12,7 @@
  */
 import { useState } from "react";
 
-export interface Negotiation {
+interface Negotiation {
   insight: string;
   suggestedCounter: number | null;
   leverage: string[];

@@ -19,19 +19,19 @@ export class AuthApiError extends Error {
   }
 }
 
-export interface LoginResult {
+interface LoginResult {
   accessToken: string;
   userId: string;
   email: string;
 }
 
-export interface RegisterInput {
+interface RegisterInput {
   email: string;
   password: string;
   name?: string;
 }
 
-export interface RegisterResult {
+interface RegisterResult {
   id: string;
   email: string;
   createdAt: string;

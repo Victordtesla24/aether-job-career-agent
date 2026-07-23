@@ -10,7 +10,7 @@
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-export interface MetricTooltipProps {
+interface MetricTooltipProps {
   /** Optional label shown before the value (e.g. "Interview Rate"). */
   label?: string;
   /** The metric value itself, e.g. "42%" or a number. */

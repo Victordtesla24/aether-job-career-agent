@@ -80,7 +80,7 @@ function isKnownDashboardRoute(pathname: string): boolean {
 
 /** True when `pathname` is an always-reachable account-management route, or an
  * unmapped `/dashboard/*` path that only the `[...slug]` catch-all can serve. */
-export function isGateExempt(pathname: string | null): boolean {
+function isGateExempt(pathname: string | null): boolean {
   if (!pathname) return false;
   if (
     GATE_EXEMPT_PREFIXES.some(

@@ -22,7 +22,7 @@ export interface CareerDataInputs {
 }
 
 /** Human-readable label for each persisted source status. */
-export const CAREER_STATUS_LABEL: Record<string, string> = {
+const CAREER_STATUS_LABEL: Record<string, string> = {
   ok: "Synced",
   pending: "Pending",
   empty: "Not provided",
@@ -31,7 +31,7 @@ export const CAREER_STATUS_LABEL: Record<string, string> = {
 };
 
 /** Tailwind chip styling per status, mirroring the settings STATUS_STYLE map. */
-export const CAREER_STATUS_STYLE: Record<string, string> = {
+const CAREER_STATUS_STYLE: Record<string, string> = {
   ok: "bg-aether-green/15 text-aether-green border-aether-green/25",
   pending: "bg-aether-amber/15 text-aether-amber border-aether-amber/25",
   empty: "bg-white/5 text-aether-muted-dim border-white/10",

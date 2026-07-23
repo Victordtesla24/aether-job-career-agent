@@ -43,7 +43,7 @@ export async function fetchAgentRuns(options: RequestOptions = {}): Promise<Agen
 // synchronous body and this resolver returns it unchanged (dormant, §6.3).
 // ---------------------------------------------------------------------------
 
-export interface BackgroundJobStatus {
+interface BackgroundJobStatus {
   job_id: string;
   status: "enqueued" | "processing" | "completed" | "failed";
   agentKey?: string | null;
@@ -58,7 +58,7 @@ const JOB_POLL_INTERVAL_MS = 3000; // §16.2 / J3 step 2
 const JOB_POLL_CAP_MS = 10 * 60 * 1000; // client cap: 10 min (~200 polls)
 
 /** Poll a single background job's status (owner-scoped on the server). */
-export async function pollJob(
+async function pollJob(
   jobId: string,
   options: RequestOptions = {},
 ): Promise<BackgroundJobStatus> {

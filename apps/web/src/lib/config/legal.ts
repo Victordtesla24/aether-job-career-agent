@@ -25,7 +25,7 @@
  * Set these in the repo-root `.env` (see `.env.example`); `start-web.sh`
  * loads it before `pnpm start` (docs/delivery/DEPLOYMENT-RUNBOOK.md).
  */
-export interface OperatorLegalConfig {
+interface OperatorLegalConfig {
   businessName: string;
   abn: string | null;
   supportEmail: string | null;

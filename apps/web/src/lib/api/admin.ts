@@ -14,13 +14,13 @@ import { apiRequest, type RequestOptions } from "./client";
 // Identity (used by the AdminGuard)
 // --------------------------------------------------------------------------- //
 
-export const MeSchema = z.object({
+const MeSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().optional().default(""),
   isAdmin: z.boolean().optional().default(false),
 });
-export type Me = z.infer<typeof MeSchema>;
+type Me = z.infer<typeof MeSchema>;
 
 export async function fetchMe(options: RequestOptions = {}): Promise<Me> {
   return MeSchema.parse(await apiRequest<unknown>("/auth/me", options));
@@ -70,13 +70,13 @@ export const AdminUserSchema = z.object({
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 
-export const AdminUserListSchema = z.object({
+const AdminUserListSchema = z.object({
   users: z.array(AdminUserSchema),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
 });
-export type AdminUserList = z.infer<typeof AdminUserListSchema>;
+type AdminUserList = z.infer<typeof AdminUserListSchema>;
 
 export interface UserFilters {
   q?: string;
@@ -235,13 +235,13 @@ export const AuditEntrySchema = z.object({
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 
-export const AuditLogSchema = z.object({
+const AuditLogSchema = z.object({
   entries: z.array(AuditEntrySchema),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
 });
-export type AuditLog = z.infer<typeof AuditLogSchema>;
+type AuditLog = z.infer<typeof AuditLogSchema>;
 
 export async function fetchAuditLog(
   limit = 50,

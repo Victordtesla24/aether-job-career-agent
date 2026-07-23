@@ -9,7 +9,7 @@
 import MetricTooltip from "../MetricTooltip";
 import type { Funnel } from "../../lib/api/analytics";
 
-export interface StatCard {
+interface StatCard {
   label: string;
   value: string;
   unit?: string;
@@ -21,7 +21,7 @@ export interface StatCard {
   tooltip: string;
 }
 
-export interface StatExtras {
+interface StatExtras {
   /** Applications created in the last 7 days (funnel period=7d). */
   weeklyApplied?: number | null;
   /** Average job fitScore (0–100) across discovered jobs. */

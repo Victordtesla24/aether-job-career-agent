@@ -5,7 +5,7 @@
 import type { Offer } from "../../lib/api/workspaces";
 
 /** A user-added offer has no agent-scored fit yet, so fitScore may be null. */
-export type UiOffer = Omit<Offer, "fitScore"> & {
+type UiOffer = Omit<Offer, "fitScore"> & {
   fitScore: number | null;
   /** True for offers added in-session via the Add-Offer modal. */
   isNew?: boolean;
@@ -89,7 +89,7 @@ const parseMoney = (raw: string): number | null => {
   return Math.round(n);
 };
 
-export interface ValidationResult {
+interface ValidationResult {
   ok: boolean;
   errors: DraftErrors;
   offer?: UiOffer;

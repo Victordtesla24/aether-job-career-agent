@@ -6,23 +6,6 @@ import { apiRequest, type RequestOptions } from "./client";
 
 /* ----------------------------- Interview Center ----------------------------- */
 
-export interface InterviewPrep {
-  session: { role: string; company: string; round: string; scheduledFor: string; format: string } | null;
-  compliance: { message: string; level: string };
-  brief: { columns: Array<{ title: string; items: string[] }>; insight: string } | null;
-  questions: Array<{ question: string; likelihood: "High" | "Medium" | "Low"; mappedStory: string; angle: string }>;
-  liveAssist: {
-    enabled: boolean;
-    fillerWordsPerMin: number;
-    wordsPerMin: number;
-    talkListenRatio: { talk: number; listen: number };
-    coachingCue: string;
-  };
-  debrief: { company: string; round: string; score: number; strengths: string[]; warnings: string[] } | null;
-}
-
-export const fetchInterviewPrep = (options: RequestOptions = {}) =>
-  apiRequest<InterviewPrep>("/workspaces/interviews/prep", options);
 
 /* ------------------------------- Networking ------------------------------- */
 
@@ -83,7 +66,7 @@ export interface NetworkingContactRecord {
   updatedAt: string;
 }
 
-export interface NetworkingContactCreateInput {
+interface NetworkingContactCreateInput {
   name: string;
   title?: string;
   company?: string;
@@ -152,7 +135,7 @@ export interface EmailMessage {
  * intelligence has been computed yet (`intelligence: null`), the panel shows an
  * honest "not analyzed yet" state instead of crashing.
  */
-export type EmailIntelligenceView =
+type EmailIntelligenceView =
   | { available: false }
   | { available: true; score: number; breakdown: EmailIntelligence["breakdown"]; summary: string };
 
@@ -294,7 +277,7 @@ export function emailSendErrorMessage(error: unknown): string {
   return fallback;
 }
 
-export interface DraftPayload {
+interface DraftPayload {
   subject: string;
   body: string;
   application_id?: string;

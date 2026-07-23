@@ -26,7 +26,7 @@ export interface SessionTokenPayload {
   name?: string;
 }
 
-export interface VerifiedSessionClaims extends SessionTokenPayload {
+interface VerifiedSessionClaims extends SessionTokenPayload {
   /** Issued-at (epoch seconds). */
   iat: number;
   /** Expiry (epoch seconds). */

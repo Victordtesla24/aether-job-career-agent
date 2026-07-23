@@ -37,7 +37,7 @@ export function filterSearchHits(hits: SearchHit[], query: string, limit = 8): S
 }
 
 /** Build the search index from the user's live jobs, applications and agents. */
-export async function loadSearchIndex(): Promise<SearchHit[]> {
+async function loadSearchIndex(): Promise<SearchHit[]> {
   const [jobs, applications, agents] = await Promise.all([
     apiRequest<Array<{ id: string; title: string; company: string }>>("/jobs?"),
     apiRequest<Array<{ id: string; jobTitle?: string | null; company?: string | null }>>(

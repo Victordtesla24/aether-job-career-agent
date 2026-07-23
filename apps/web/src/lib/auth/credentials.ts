@@ -9,7 +9,7 @@
  *
  * SECURITY: the returned user object NEVER carries the password hash.
  */
-export interface Credentials {
+interface Credentials {
   email: string;
   password: string;
 }
@@ -23,14 +23,14 @@ export interface StoredUser {
 }
 
 /** The safe, hash-free user returned to the session layer. */
-export interface AuthorizedUser {
+interface AuthorizedUser {
   id: string;
   email: string;
   name?: string;
 }
 
-export type UserLookup = (email: string) => Promise<StoredUser | null>;
-export type PasswordVerifier = (
+type UserLookup = (email: string) => Promise<StoredUser | null>;
+type PasswordVerifier = (
   plain: string,
   hash: string,
 ) => Promise<boolean>;

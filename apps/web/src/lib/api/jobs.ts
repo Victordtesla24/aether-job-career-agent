@@ -11,7 +11,7 @@ import { z } from "zod";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
-export const JobStatusSchema = z.enum([
+const JobStatusSchema = z.enum([
   "discovered",
   "screening",
   "matched",
@@ -42,7 +42,7 @@ export const JobSchema = z.object({
 });
 
 export type Job = z.infer<typeof JobSchema>;
-export type JobStatus = z.infer<typeof JobStatusSchema>;
+type JobStatus = z.infer<typeof JobStatusSchema>;
 
 /** Per-source discovery sync status row (GAP-SRC-003), from the JobSourceStatus table. */
 export const ScoutSourceStatusSchema = z.object({
@@ -65,14 +65,14 @@ export const SourceAvailabilitySchema = z.object({
 
 export type SourceAvailability = z.infer<typeof SourceAvailabilitySchema>;
 
-export interface JobFilters {
+interface JobFilters {
   status?: JobStatus;
   source?: string;
   saved?: boolean;
   sort?: "createdAt" | "fitScore" | "title" | "company";
 }
 
-export interface RequestOptions {
+interface RequestOptions {
   /** Bearer token for the Authorization header. */
   token: string;
   /** Override the API base URL (mainly for tests). */

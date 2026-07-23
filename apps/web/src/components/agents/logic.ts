@@ -12,7 +12,7 @@ export function formatTokens(n: number): string {
   return `${n}`;
 }
 
-export interface ProviderAction {
+interface ProviderAction {
   label: string;
   icon: string;
   next: Provider["status"];
@@ -136,7 +136,7 @@ export function filterModels(
   });
 }
 
-export interface ModelTierGroup {
+interface ModelTierGroup {
   tier: ModelTier;
   label: string;
   models: ProviderModel[];

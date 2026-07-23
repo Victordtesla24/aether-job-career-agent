@@ -3,7 +3,7 @@
  * Kept intentionally tiny — this exists to anchor the test harness (P1-S00).
  */
 
-export interface HealthStatus {
+interface HealthStatus {
   status: "ok";
   service: "web";
   version: string;

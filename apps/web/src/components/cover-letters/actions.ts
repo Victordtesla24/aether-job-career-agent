@@ -23,7 +23,7 @@ export interface ActionsState {
 }
 
 /** A mutating action (Regenerate / refine) is in flight. */
-export function isBusy(s: Pick<ActionsState, "regenerating" | "refining">): boolean {
+function isBusy(s: Pick<ActionsState, "regenerating" | "refining">): boolean {
   return s.regenerating || s.refining;
 }
 

@@ -89,7 +89,7 @@ export type ProviderModel = z.infer<typeof ProviderModelSchema>;
 /** Budget bucket a model falls into — the picker groups the catalog by this. */
 export type ModelTier = ProviderModel["tier"];
 
-export const ProviderModelsResponseSchema = z.object({
+const ProviderModelsResponseSchema = z.object({
   provider: z.string(),
   count: z.number(),
   models: z.array(ProviderModelSchema),
@@ -104,7 +104,7 @@ export const ProviderModelsResponseSchema = z.object({
  * the models plus when they were last actually fetched from upstream and
  * whether we're serving a stale (last-good) copy because a refresh failed.
  */
-export interface ProviderCatalog {
+interface ProviderCatalog {
   provider: string;
   count: number;
   models: ProviderModel[];
@@ -128,18 +128,18 @@ function toProviderCatalog(
 export type ProviderAuthMode = "api_key" | "subscription_oauth" | "oauth_token";
 
 /** Body for PUT /agents/providers/{id}/credential. */
-export interface CredentialInput {
+interface CredentialInput {
   authMode: ProviderAuthMode;
   secret: string;
   baseUrl?: string;
 }
 
-export const VerifyResultSchema = z.object({
+const VerifyResultSchema = z.object({
   ok: z.boolean(),
   status: z.string(),
   detail: z.string(),
 });
-export type VerifyResult = z.infer<typeof VerifyResultSchema>;
+type VerifyResult = z.infer<typeof VerifyResultSchema>;
 
 export const StatsSchema = z.object({
   spendUsd: z.number(),
@@ -278,7 +278,7 @@ export async function fetchAgentStats(o: RequestOptions = {}): Promise<AgentStat
 export type ThinkingEffort = "none" | "low" | "medium" | "high";
 
 /** Full per-agent configuration (GAP-D3) merged over catalog defaults. */
-export const AgentConfigSchema = z.object({
+const AgentConfigSchema = z.object({
   key: z.string(),
   enabled: z.boolean(),
   model: z.string(),
@@ -288,10 +288,10 @@ export const AgentConfigSchema = z.object({
   temperature: z.number(),
   thinkingEffort: z.enum(["none", "low", "medium", "high"]),
 });
-export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 /** Patch body for PUT /agents/config/{key}; every field is optional (merge). */
-export interface AgentConfigPatch {
+interface AgentConfigPatch {
   enabled?: boolean;
   model?: string;
   provider?: string | null;
@@ -308,9 +308,6 @@ export async function fetchAgentConfig(
   return AgentConfigSchema.parse(await apiRequest<unknown>(`/agents/config/${key}`, o));
 }
 
-export async function fetchAgentConfigList(o: RequestOptions = {}): Promise<AgentConfig[]> {
-  return z.array(AgentConfigSchema).parse(await apiRequest<unknown>("/agents/config", o));
-}
 
 export async function updateAgentConfig(
   key: string,
@@ -341,52 +338,8 @@ export async function listUserCredentials(o: RequestOptions = {}): Promise<UserC
   );
 }
 
-/**
- * Store (or rotate) THIS user's own encrypted credential for a provider, then
- * verify it server-side (GAP-NEW-001). Returns the masked row incl. the honest
- * lastVerifyStatus — never the secret.
- */
-export async function putUserCredential(
-  provider: string,
-  body: CredentialInput,
-  o: RequestOptions = {},
-): Promise<UserCredential> {
-  return UserCredentialSchema.partial()
-    .passthrough()
-    .parse(
-      await apiRequest<unknown>(`/agents/user/providers/${provider}/credential`, {
-        ...o,
-        method: "PUT",
-        body,
-      }),
-    ) as UserCredential;
-}
 
-export async function deleteUserCredential(
-  provider: string,
-  o: RequestOptions = {},
-): Promise<UserCredential> {
-  return UserCredentialSchema.partial()
-    .passthrough()
-    .parse(
-      await apiRequest<unknown>(`/agents/user/providers/${provider}/credential`, {
-        ...o,
-        method: "DELETE",
-      }),
-    ) as UserCredential;
-}
 
-export async function verifyUserCredential(
-  provider: string,
-  o: RequestOptions = {},
-): Promise<VerifyResult> {
-  return VerifyResultSchema.parse(
-    await apiRequest<unknown>(`/agents/user/providers/${provider}/verify`, {
-      ...o,
-      method: "POST",
-    }),
-  );
-}
 
 export async function updateProvider(
   id: string,
@@ -456,8 +409,8 @@ export async function verifyProvider(id: string, o: RequestOptions = {}): Promis
 }
 
 /** Result of POST /agents/providers/anthropic/oauth/start. */
-export const AnthropicOAuthStartSchema = z.object({ authorizeUrl: z.string() });
-export type AnthropicOAuthStart = z.infer<typeof AnthropicOAuthStartSchema>;
+const AnthropicOAuthStartSchema = z.object({ authorizeUrl: z.string() });
+type AnthropicOAuthStart = z.infer<typeof AnthropicOAuthStartSchema>;
 
 /**
  * Begin the in-app "Connect with Anthropic" (subscription) OAuth flow

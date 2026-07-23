@@ -28,7 +28,7 @@ export function initials(name: string): string {
     .toUpperCase();
 }
 
-export interface PipelineColumnView {
+interface PipelineColumnView {
   stage: string;
   count: number;
   contacts: NetworkingContact[];

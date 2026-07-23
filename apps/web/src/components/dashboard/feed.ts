@@ -6,12 +6,12 @@
  */
 import type { AgentRun } from "../../lib/api/agents";
 
-export interface FeedBadge {
+interface FeedBadge {
   label: string;
   cls: string;
 }
 
-export interface FeedTile {
+interface FeedTile {
   icon: string;
   cls: string;
 }

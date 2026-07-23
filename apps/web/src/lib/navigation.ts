@@ -9,7 +9,7 @@
  *
  * `icon` holds a Font Awesome 6 class name (rendered as `<i className={icon} />`).
  */
-export interface NavItem {
+interface NavItem {
   /** Human-readable label shown in the sidebar. */
   label: string;
   /** App Router route the item links to. */

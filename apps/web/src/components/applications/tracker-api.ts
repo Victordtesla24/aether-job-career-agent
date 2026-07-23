@@ -55,13 +55,13 @@ export async function moveApplication(
   );
 }
 
-export const PipelineMoveResultSchema = z.object({
+const PipelineMoveResultSchema = z.object({
   id: z.string(),
   status: z.string(),
   stage: z.string(),
 });
 
-export type PipelineMoveResult = z.infer<typeof PipelineMoveResultSchema>;
+type PipelineMoveResult = z.infer<typeof PipelineMoveResultSchema>;
 
 /**
  * Move an agent-pipeline job card (no application yet) to another job-fed
@@ -83,7 +83,7 @@ export async function movePipelineJob(
 
 // ---- Canonical sankey (REQ-R2: 847 → 412 → 156 → 23 → 4) -------------------
 
-export const SankeyStageSchema = z.object({
+const SankeyStageSchema = z.object({
   key: z.string(),
   label: z.string(),
   value: z.number(),

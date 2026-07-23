@@ -12,21 +12,21 @@
  * wiring to P1-S06.
  */
 
-export type SessionStrategy = "jwt" | "database";
+type SessionStrategy = "jwt" | "database";
 
-export interface CredentialField {
+interface CredentialField {
   label: string;
   type: "text" | "email" | "password";
 }
 
-export interface AuthProviderConfig {
+interface AuthProviderConfig {
   id: string;
   name: string;
   type: "credentials" | "oauth";
   credentials?: Record<string, CredentialField>;
 }
 
-export interface AuthConfig {
+interface AuthConfig {
   providers: AuthProviderConfig[];
   session: { strategy: SessionStrategy; maxAge: number };
   pages: { signIn: string };

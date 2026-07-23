@@ -13,13 +13,13 @@ import {
   type AetherSession,
 } from "./session";
 
-export type AuthFailureReason = "no_token" | "invalid_token";
+type AuthFailureReason = "no_token" | "invalid_token";
 
-export type AuthResult =
+type AuthResult =
   | { authenticated: true; session: AetherSession }
   | { authenticated: false; reason: AuthFailureReason };
 
-export interface RequestLike {
+interface RequestLike {
   headers: { get(name: string): string | null };
   cookies?: { get(name: string): { value: string } | undefined };
 }

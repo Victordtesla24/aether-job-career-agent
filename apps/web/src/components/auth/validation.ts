@@ -7,17 +7,17 @@
  */
 
 /** Mirrors apps/api/app/repositories/user.py MIN_PASSWORD_LENGTH. */
-export const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MIN_LENGTH = 8;
 
 /** Mirrors apps/api/app/security.py BCRYPT_MAX_PASSWORD_BYTES. bcrypt only
  * hashes the first 72 bytes, so the server rejects longer passwords
  * (MV-signup-001) — mirror the cap here for instant feedback. */
-export const PASSWORD_MAX_BYTES = 72;
+const PASSWORD_MAX_BYTES = 72;
 
 /** RFC 5321 total-length limit for an email address. The server's EmailStr
  * validator rejects longer addresses with a raw technical message, so cap it
  * client-side with an honest error instead (MV-signup-003). */
-export const EMAIL_MAX_LENGTH = 254;
+const EMAIL_MAX_LENGTH = 254;
 
 /** UTF-8 byte length — the unit bcrypt's 72-byte limit is measured in (a
  * multibyte character counts as its encoded length, not one character). */
@@ -47,7 +47,7 @@ export function emailLooksValid(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-export interface SignupFormValues {
+interface SignupFormValues {
   name: string;
   email: string;
   password: string;

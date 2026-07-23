@@ -41,9 +41,6 @@ export async function fetchResumes(options: RequestOptions = {}): Promise<Resume
   return z.array(ResumeSchema).parse(data);
 }
 
-export async function fetchResume(id: string, options: RequestOptions = {}): Promise<Resume> {
-  return ResumeSchema.parse(await apiRequest<unknown>(`/resumes/${id}`, options));
-}
 
 export async function fetchResumeDiff(id: string, options: RequestOptions = {}): Promise<ResumeDiff> {
   return ResumeDiffSchema.parse(await apiRequest<unknown>(`/resumes/${id}/diff`, options));

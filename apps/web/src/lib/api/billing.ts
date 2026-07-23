@@ -11,12 +11,11 @@ import { z } from "zod";
 
 import { apiBaseUrl, apiRequest, type RequestOptions } from "./client";
 
-export const GstBreakdownSchema = z.object({
+const GstBreakdownSchema = z.object({
   total: z.number(),
   gst: z.number(),
   net: z.number(),
 });
-export type GstBreakdown = z.infer<typeof GstBreakdownSchema>;
 
 export const PlanSchema = z.object({
   id: z.string(),
@@ -30,12 +29,12 @@ export const PlanSchema = z.object({
 });
 export type Plan = z.infer<typeof PlanSchema>;
 
-export const PlansResponseSchema = z.object({
+const PlansResponseSchema = z.object({
   currency: z.string(),
   gstIncluded: z.boolean(),
   plans: z.array(PlanSchema),
 });
-export type PlansResponse = z.infer<typeof PlansResponseSchema>;
+type PlansResponse = z.infer<typeof PlansResponseSchema>;
 
 /** PUBLIC — no auth token attached. */
 export async function fetchPlans(baseUrl: string = apiBaseUrl()): Promise<PlansResponse> {
@@ -49,7 +48,7 @@ export async function fetchPlans(baseUrl: string = apiBaseUrl()): Promise<PlansR
 }
 
 /** The default outcome — redirect the browser to Stripe Checkout. */
-export interface CheckoutRedirectResult {
+interface CheckoutRedirectResult {
   checkoutUrl: string;
   sessionId: string;
 }
@@ -62,13 +61,13 @@ export interface CheckoutRedirectResult {
  * the caller re-fetches subscription state and shows `message` in place of
  * a Checkout redirect.
  */
-export interface CheckoutSwitchedResult {
+interface CheckoutSwitchedResult {
   switched: true;
   planId: string;
   message: string;
 }
 
-export type CheckoutResult = CheckoutRedirectResult | CheckoutSwitchedResult;
+type CheckoutResult = CheckoutRedirectResult | CheckoutSwitchedResult;
 
 /** Narrows a `CheckoutResult` to the "switched in place" branch. */
 export function isCheckoutSwitchedResult(
@@ -132,12 +131,12 @@ export async function openBillingPortal(
  * gate (status='active' AND planId != 'free'); `requiresSubscription` reflects
  * the operator flag, so the dashboard shows its paywall IFF the gate is enforced.
  */
-export const EntitlementSchema = z.object({
+const EntitlementSchema = z.object({
   active_paid: z.boolean(),
   plan: z.object({ id: z.string(), status: z.string() }).nullable(),
   requiresSubscription: z.boolean(),
 });
-export type Entitlement = z.infer<typeof EntitlementSchema>;
+type Entitlement = z.infer<typeof EntitlementSchema>;
 
 export async function fetchEntitlement(
   options: RequestOptions = {},

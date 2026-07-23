@@ -1,10 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import {
-  authorizeCredentials,
-  type StoredUser,
-  SESSION_MAX_AGE_SECONDS,
-} from "./index";
+import { authorizeCredentials, type StoredUser } from "./credentials";
+import { SESSION_MAX_AGE_SECONDS } from "./options";
 
 /**
  * Live NextAuth options (P1-S06) — this file wires the framework-free auth

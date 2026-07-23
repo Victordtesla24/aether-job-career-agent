@@ -30,7 +30,7 @@ export type StageKey =
   | "interview"
   | "offer";
 
-export type StageDef = {
+type StageDef = {
   key: StageKey;
   label: string;
   /** Column-header status dot (literal class so Tailwind JIT picks it up). */
@@ -110,7 +110,7 @@ export const APP_STAGE: Partial<Record<TrackerApplication["status"], StageKey>> 
 };
 
 /** Job.status → stage key (agent pipeline half, pre-application). */
-export const JOB_STAGE: Record<string, StageKey> = {
+const JOB_STAGE: Record<string, StageKey> = {
   discovered: "discovered",
   screening: "evaluating",
   matched: "evaluating",
@@ -169,7 +169,7 @@ export type StageCard = {
   meta: TrackerMeta;
 };
 
-export type Stage = StageDef & { cards: StageCard[] };
+type Stage = StageDef & { cards: StageCard[] };
 
 /** Company initials chip (wireframe card avatar). */
 export function initials(company: string): string {
@@ -277,7 +277,7 @@ export const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; label: string }> = [
  * status==='draft' heuristic could disagree with the banner whenever a
  * draft Application had no linked approval request (or vice versa).
  */
-export type PendingApprovalIds = ReadonlySet<string>;
+type PendingApprovalIds = ReadonlySet<string>;
 
 export function cardMatchesFilter(
   card: StageCard,

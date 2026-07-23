@@ -6,7 +6,6 @@
  * against the same signing path the app uses in production.
  */
 import { signSessionToken, type SessionTokenPayload } from "./jwt";
-import type { AetherSession } from "./session";
 
 /** Mint a signed session token for tests. */
 export async function createTestToken(
@@ -19,18 +18,4 @@ export async function createTestToken(
     name: overrides.name ?? "Test User",
   };
   return signSessionToken(payload, secret);
-}
-
-/** Build a resolved session object without touching the JWT layer. */
-export function createTestSession(
-  overrides: Partial<AetherSession["user"]> = {},
-): AetherSession {
-  return {
-    user: {
-      id: overrides.id ?? "test-user",
-      email: overrides.email ?? "test@aether.dev",
-      name: overrides.name ?? "Test User",
-    },
-    expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-  };
 }

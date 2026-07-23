@@ -32,7 +32,7 @@ export const StoryStatsSchema = z.object({
 
 export type StoryStats = z.infer<typeof StoryStatsSchema>;
 
-export interface FetchStoriesOptions extends RequestOptions {
+interface FetchStoriesOptions extends RequestOptions {
   /** Optional category filter sent as a query param to the API. */
   category?: string;
 }

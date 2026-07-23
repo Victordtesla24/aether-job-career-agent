@@ -11,7 +11,7 @@
  * since the component tree isn't otherwise exercised by the node vitest
  * environment.
  */
-export interface ExtractorTriggerState {
+interface ExtractorTriggerState {
   label: string;
   disabled: boolean;
 }

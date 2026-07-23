@@ -46,12 +46,12 @@ export async function deleteApproval(
   );
 }
 
-export const PurgeExpiredResultSchema = z.object({
+const PurgeExpiredResultSchema = z.object({
   purged: z.number(),
   ids: z.array(z.string()),
 });
 
-export type PurgeExpiredResult = z.infer<typeof PurgeExpiredResultSchema>;
+type PurgeExpiredResult = z.infer<typeof PurgeExpiredResultSchema>;
 
 /** Bulk-remove every expired pending approval in ONE request (FEAT-B1).
  *  Expiry is decided server-side with the same 48h window as the UI badge. */

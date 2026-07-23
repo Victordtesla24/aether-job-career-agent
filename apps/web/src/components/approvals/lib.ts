@@ -10,12 +10,12 @@ import type { Approval } from "../../lib/api/approvals";
 /** Server-side expiry window (see apps/api approval_service.EXPIRY_HOURS). */
 export const EXPIRY_HOURS = 48;
 
-export interface ReasoningItem {
+interface ReasoningItem {
   kind: "check" | "warning";
   text: string;
 }
 
-export interface ApprovalDetails {
+interface ApprovalDetails {
   /** Agent asking for approval, e.g. "Tailoring Agent". */
   agent: string;
   /** Verb phrase for the header subtitle, e.g. "submit an application". */

@@ -7,9 +7,9 @@
 import type { ScoutSourceStatus } from "../../lib/api/jobs";
 import { relTime } from "./feed";
 
-export type SourceBadge = "ok" | "error" | "neutral";
+type SourceBadge = "ok" | "error" | "neutral";
 
-export interface SourceStatusView {
+interface SourceStatusView {
   source: string;
   /** Jobs persisted from this source in its most recent sync run. */
   count: number;

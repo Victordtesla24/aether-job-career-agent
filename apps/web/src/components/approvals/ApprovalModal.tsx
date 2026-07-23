@@ -15,7 +15,7 @@ import type { Approval } from "../../lib/api/approvals";
 import type { DecisionContext } from "./api";
 import { isExpired, metaLine, parseApprovalPayload, previewLabel } from "./lib";
 
-export interface ApprovalModalProps {
+interface ApprovalModalProps {
   approval: Approval;
   onClose: () => void;
   /** Resolves when the API call lands; throwing keeps the modal open. */

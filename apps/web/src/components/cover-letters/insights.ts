@@ -5,9 +5,9 @@
  */
 import type { EvidenceRow } from "./api";
 
-export type SegmentKind = "plain" | "grounded" | "ungrounded";
+type SegmentKind = "plain" | "grounded" | "ungrounded";
 
-export interface Segment {
+interface Segment {
   text: string;
   kind: SegmentKind;
 }

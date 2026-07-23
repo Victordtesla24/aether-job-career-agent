@@ -9,11 +9,11 @@
  */
 import { apiRequest, type RequestOptions } from "./client";
 
-export interface GoogleLoginResponse {
+interface GoogleLoginResponse {
   authUrl: string;
 }
 
-export async function fetchGoogleLoginUrl(o: RequestOptions = {}): Promise<GoogleLoginResponse> {
+async function fetchGoogleLoginUrl(o: RequestOptions = {}): Promise<GoogleLoginResponse> {
   return apiRequest<GoogleLoginResponse>("/auth/google/login", o);
 }
 
@@ -23,7 +23,7 @@ export async function connectGmail(): Promise<void> {
   window.location.href = authUrl;
 }
 
-export type GmailConnectResult =
+type GmailConnectResult =
   | { kind: "success" }
   | { kind: "error"; message: string }
   | null;

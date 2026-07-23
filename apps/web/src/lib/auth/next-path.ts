@@ -11,7 +11,7 @@
  * backslash tricks, path traversal, or non-dashboard routes — falls back to
  * /dashboard.
  */
-export const DEFAULT_POST_LOGIN_PATH = "/dashboard";
+const DEFAULT_POST_LOGIN_PATH = "/dashboard";
 
 export function safeNextPath(raw: string | null | undefined): string {
   if (!raw) return DEFAULT_POST_LOGIN_PATH;
