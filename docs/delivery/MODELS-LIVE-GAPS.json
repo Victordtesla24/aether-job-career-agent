@@ -1278,16 +1278,16 @@
     {
       "id": "ML-audit-emailidempotent-001",
       "screen": "email agent / idempotency",
-      "severity": "UNKNOWN-TRIAGE",
-      "category": "defect?",
-      "summary": "Story test-author observed pre-existing test FAILURE on UNMODIFIED HEAD: apps/api tests/..test_execute_email_send_is_idempotent fails, reproduces IN ISOLATION (so not shared-DB flakiness). Either (a) real bug \u2014 email send idempotency broken (duplicate sends possible for real users) or (b) stale/broken test. Needs triage: real-bug vs broken-test, file:line + root cause.",
+      "severity": "LOW",
+      "category": "test-hygiene / CI",
+      "summary": "TRIAGED = STALE-TEST (NOT a production bug). Production email idempotency is CORRECT: approvals.py::execute_gated_action claims via approval.py::claim_execution atomic UPDATE...WHERE status='approved' AND executedAt IS NULL RETURNING id BEFORE any Gmail send (at-most-once; release only on failure). Proven: with AETHER_CREDENTIAL_KEY set the test PASSES (200 sent, 409 replay, GmailService.send called once). The test test_mv_j_correctness.py:~225 omits the monkeypatch.setenv('AETHER_CREDENTIAL_KEY', vault.generate_key()) that 19 sibling tests carry \u2192 fails in SETUP (CredentialVaultError) before the idempotency logic runs. ALSO fails in real CI (.github/workflows/ci.yml doesn't set the var). FIX (1-line test hygiene): add the setenv at test_mv_j_correctness.py:225 matching test_ml_cred_001.py:89. Consider also setting AETHER_CREDENTIAL_KEY in ci.yml. No production change.",
       "evidence": [
         "story test-author aa09975b regression note"
       ],
-      "status": "OPEN-TRIAGE",
-      "owner": "triage",
+      "status": "OPEN",
+      "owner": "fold into source-disclosure fixer (test hygiene)",
       "fixCommits": [],
-      "verifiedBy": ""
+      "verifiedBy": "triage a1e4631b (EMAIL-IDEMPOTENT-TRIAGE.md)"
     }
   ]
 }
