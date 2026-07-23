@@ -117,6 +117,47 @@ export const JOB_STAGE: Record<string, StageKey> = {
   tailoring: "tailoring",
 };
 
+// ---- FEAT-B2: stage moves ---------------------------------------------------
+
+/** Stage key → Application.status write target (inverse of APP_STAGE). */
+export const STAGE_TO_APP_STATUS: Partial<Record<StageKey, TrackerApplication["status"]>> = {
+  ready: "draft",
+  submitted: "submitted",
+  "in-review": "screening",
+  interview: "interview",
+  offer: "offer",
+};
+
+/** Stage key → Job.status write target ("evaluating" canonically writes
+ *  'screening'; the column also renders 'matched' jobs). */
+export const STAGE_TO_JOB_STATUS: Partial<Record<StageKey, Job["status"]>> = {
+  discovered: "discovered",
+  evaluating: "screening",
+  tailoring: "tailoring",
+};
+
+/** The 5 application-fed stage keys, board order. */
+export const APP_STAGE_KEYS: readonly StageKey[] = [
+  "ready",
+  "submitted",
+  "in-review",
+  "interview",
+  "offer",
+];
+
+/** The 3 job-fed stage keys, board order. */
+export const JOB_STAGE_KEYS: readonly StageKey[] = ["discovered", "evaluating", "tailoring"];
+
+/**
+ * Legal move targets for a card (FEAT-B2): application cards move between the
+ * 5 application-fed stages, pipeline job cards between the 3 job-fed stages —
+ * the server enforces the same split with 422s. Excludes ``currentStage``.
+ */
+export function moveTargetsFor(card: StageCard, currentStage: StageKey): StageKey[] {
+  const keys = card.app ? APP_STAGE_KEYS : JOB_STAGE_KEYS;
+  return keys.filter((k) => k !== currentStage);
+}
+
 /** One card on the board — a live application or an agent-pipeline job. */
 export type StageCard = {
   id: string;

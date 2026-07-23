@@ -4,16 +4,23 @@ import { describe, expect, it } from "vitest";
 import type { Job } from "../../../lib/api/jobs";
 import type { TrackerApplication } from "../tracker-api";
 import {
+  APP_STAGE,
+  APP_STAGE_KEYS,
+  JOB_STAGE_KEYS,
   STAGE_DEFS,
+  STAGE_TO_APP_STATUS,
+  STAGE_TO_JOB_STATUS,
   buildStages,
   cardMatchesFilter,
   fitClass,
   initials,
+  moveTargetsFor,
   shortDate,
   sortCards,
   timeAgo,
   viewStages,
   type StageCard,
+  type StageKey,
 } from "../tracker-lib";
 
 const NOW = new Date("2026-07-10T12:00:00Z").getTime();
@@ -150,6 +157,62 @@ describe("buildStages", () => {
     );
     expect(stages).toHaveLength(8);
     for (const s of stages) expect(s.cards.length).toBeGreaterThan(0);
+  });
+});
+
+describe("FEAT-B2 stage-move helpers", () => {
+  it("STAGE_TO_APP_STATUS is the exact inverse of APP_STAGE over the 5 app-fed stages", () => {
+    for (const [status, stage] of Object.entries(APP_STAGE)) {
+      expect(STAGE_TO_APP_STATUS[stage as StageKey]).toBe(status);
+    }
+    expect(Object.keys(STAGE_TO_APP_STATUS).sort()).toEqual([...APP_STAGE_KEYS].sort());
+  });
+
+  it("STAGE_TO_JOB_STATUS covers the 3 job-fed stages, evaluating → screening", () => {
+    expect(Object.keys(STAGE_TO_JOB_STATUS).sort()).toEqual([...JOB_STAGE_KEYS].sort());
+    expect(STAGE_TO_JOB_STATUS.discovered).toBe("discovered");
+    expect(STAGE_TO_JOB_STATUS.evaluating).toBe("screening");
+    expect(STAGE_TO_JOB_STATUS.tailoring).toBe("tailoring");
+  });
+
+  it("moveTargetsFor: application cards offer the other 4 app-fed stages only", () => {
+    const card: StageCard = {
+      id: "a1",
+      title: "Engineer",
+      company: "Acme",
+      updatedAt: "2026-07-01T00:00:00Z",
+      app: app({ status: "submitted" }),
+      meta: {},
+    };
+    const targets = moveTargetsFor(card, "submitted");
+    expect(targets).toEqual(["ready", "in-review", "interview", "offer"]);
+    expect(targets).not.toContain("submitted");
+    for (const t of targets) expect(JOB_STAGE_KEYS).not.toContain(t);
+  });
+
+  it("moveTargetsFor: pipeline job cards offer the other 2 job-fed stages only", () => {
+    const card: StageCard = {
+      id: "job-j1",
+      title: "Engineer",
+      company: "Acme",
+      updatedAt: "2026-07-01T00:00:00Z",
+      meta: {},
+    };
+    const targets = moveTargetsFor(card, "evaluating");
+    expect(targets).toEqual(["discovered", "tailoring"]);
+    for (const t of targets) expect(APP_STAGE_KEYS).not.toContain(t);
+  });
+
+  it("moveTargetsFor allows backward application moves (offer → ready listed)", () => {
+    const card: StageCard = {
+      id: "a2",
+      title: "Engineer",
+      company: "Acme",
+      updatedAt: "2026-07-01T00:00:00Z",
+      app: app({ status: "offer" }),
+      meta: {},
+    };
+    expect(moveTargetsFor(card, "offer")).toContain("ready");
   });
 });
 

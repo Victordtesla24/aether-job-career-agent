@@ -34,6 +34,53 @@ export async function fetchTrackerApplication(
   );
 }
 
+// ---- FEAT-B2: stage moves ----------------------------------------------------
+
+/**
+ * Move an application card to another application-fed stage
+ * (POST /applications/{id}/move). The server enforces the legal-transition
+ * matrix and answers 422 for job-fed or unknown targets.
+ */
+export async function moveApplication(
+  id: string,
+  toStage: string,
+  options: RequestOptions = {},
+): Promise<TrackerApplication> {
+  return TrackerApplicationSchema.parse(
+    await apiRequest<unknown>(`/applications/${id}/move`, {
+      ...options,
+      method: "POST",
+      body: { to_stage: toStage },
+    }),
+  );
+}
+
+export const PipelineMoveResultSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  stage: z.string(),
+});
+
+export type PipelineMoveResult = z.infer<typeof PipelineMoveResultSchema>;
+
+/**
+ * Move an agent-pipeline job card (no application yet) to another job-fed
+ * stage (POST /applications/pipeline/{jobId}/move).
+ */
+export async function movePipelineJob(
+  jobId: string,
+  toStage: string,
+  options: RequestOptions = {},
+): Promise<PipelineMoveResult> {
+  return PipelineMoveResultSchema.parse(
+    await apiRequest<unknown>(`/applications/pipeline/${jobId}/move`, {
+      ...options,
+      method: "POST",
+      body: { to_stage: toStage },
+    }),
+  );
+}
+
 // ---- Canonical sankey (REQ-R2: 847 → 412 → 156 → 23 → 4) -------------------
 
 export const SankeyStageSchema = z.object({

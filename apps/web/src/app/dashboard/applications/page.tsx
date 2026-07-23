@@ -24,6 +24,8 @@ import {
   fetchSankey,
   fetchTrackerApplication,
   fetchTrackerApplications,
+  moveApplication,
+  movePipelineJob,
   type AgentConfig,
   type SankeyData,
   type TrackerApplication,
@@ -31,9 +33,13 @@ import {
 import {
   FILTER_OPTIONS,
   SORT_OPTIONS,
+  STAGE_DEFS,
+  STAGE_TO_APP_STATUS,
+  STAGE_TO_JOB_STATUS,
   buildStages,
   fitClass,
   initials,
+  moveTargetsFor,
   shortDate,
   timeAgo,
   viewStages,
@@ -124,6 +130,99 @@ function HeaderMenu<K extends string>({
             >
               {o.label}
               {o.key === value ? <i className="fa-solid fa-check text-[9px]" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * FEAT-B2: accessible per-card "Move to…" menu — the keyboard/screen-reader
+ * path for stage moves (drag-and-drop is the pointer path). Offers only the
+ * legal targets for the card's half of the board (moveTargetsFor); the server
+ * enforces the same matrix with 422s.
+ */
+function MoveMenu({
+  card,
+  stage,
+  onMove,
+}: {
+  card: StageCard;
+  stage: StageKey;
+  onMove: (toStage: StageKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const targets = moveTargetsFor(card, stage);
+  const labelOf = (key: StageKey) => STAGE_DEFS.find((d) => d.key === key)?.label ?? key;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (targets.length === 0) return null;
+  return (
+    <div
+      className="relative"
+      ref={rootRef}
+      // The card itself is a click/Enter target (opens details) — keep the
+      // menu's events from bubbling into it. Escape is handled here too,
+      // because stopPropagation keeps it from the document listener.
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setOpen(false);
+        e.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        data-testid="move-menu-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Move ${card.title} at ${card.company} to another stage`}
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-aether-muted transition hover:bg-white/10 hover:text-white max-sm:min-h-[36px]"
+      >
+        <i className="fa-solid fa-arrow-right-arrow-left text-[9px]" aria-hidden="true" />
+        Move to…
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label={`Move ${card.title} to stage`}
+          className="absolute bottom-full left-0 z-20 mb-1 w-44 rounded-xl border border-white/10 bg-[#16161f] p-1 shadow-xl"
+        >
+          {targets.map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              data-testid={`move-option-${key}`}
+              onClick={() => {
+                setOpen(false);
+                onMove(key);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-aether-muted transition hover:bg-white/5 hover:text-white max-sm:min-h-[44px]"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${STAGE_DEFS.find((d) => d.key === key)?.dotClass ?? "bg-white/30"}`}
+                aria-hidden="true"
+              />
+              {labelOf(key)}
             </button>
           ))}
         </div>
@@ -305,6 +404,80 @@ export default function ApplicationsPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  /**
+   * FEAT-B2: move a card to another stage — optimistic local update, honest
+   * rollback on failure, then a full reload so column counts, badges and the
+   * closed strip reconcile against the server.
+   */
+  const moveCard = async (card: StageCard, fromStage: StageKey, toStage: StageKey) => {
+    if (toStage === fromStage) return;
+    if (!moveTargetsFor(card, fromStage).includes(toStage)) {
+      // Honest client-side mirror of the server's 422 split: application
+      // cards live in Ready→Offer, agent-pipeline job cards in
+      // Discovered→Tailoring.
+      setError(
+        card.app
+          ? `"${card.title}" is a live application — it can only move between Ready to Apply, Submitted, In Review, Interview and Offer.`
+          : `"${card.title}" is still in the agent pipeline — it can only move between Discovered, Evaluating and Tailoring.`,
+      );
+      return;
+    }
+    const prevApps = apps;
+    const prevJobs = jobs;
+    try {
+      if (card.app) {
+        const nextStatus = STAGE_TO_APP_STATUS[toStage];
+        if (!nextStatus) return;
+        const appId = card.app.id;
+        setApps((cur) => cur?.map((a) => (a.id === appId ? { ...a, status: nextStatus } : a)) ?? cur);
+        await moveApplication(appId, toStage);
+      } else {
+        const nextStatus = STAGE_TO_JOB_STATUS[toStage];
+        if (!nextStatus) return;
+        const jobId = card.id.replace(/^job-/, "");
+        setJobs((cur) => cur.map((j) => (j.id === jobId ? { ...j, status: nextStatus } : j)));
+        await movePipelineJob(jobId, toStage);
+      }
+      setError(null);
+      await load();
+    } catch (e) {
+      // Roll back the optimistic update — never leave the board showing a
+      // move the server rejected.
+      setApps(prevApps);
+      setJobs(prevJobs);
+      setError(e instanceof Error ? e.message : "Failed to move card");
+    }
+  };
+
+  /** FEAT-B2 drag-and-drop: card → column via the HTML5 DnD API. */
+  const onCardDragStart = (e: React.DragEvent, card: StageCard, stage: StageKey) => {
+    e.dataTransfer.setData(
+      "application/json",
+      JSON.stringify({ cardId: card.id, fromStage: stage }),
+    );
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const onColumnDrop = (e: React.DragEvent, toStage: StageKey) => {
+    e.preventDefault();
+    let payload: { cardId?: string; fromStage?: string };
+    try {
+      payload = JSON.parse(e.dataTransfer.getData("application/json")) as {
+        cardId?: string;
+        fromStage?: string;
+      };
+    } catch {
+      return;
+    }
+    if (!payload.cardId || !payload.fromStage) return;
+    const fromStage = payload.fromStage as StageKey;
+    const card = stages
+      .find((s) => s.key === fromStage)
+      ?.cards.find((c) => c.id === payload.cardId);
+    if (!card) return;
+    void moveCard(card, fromStage, toStage);
   };
 
   const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort, pendingApprovalIds);
@@ -500,6 +673,11 @@ export default function ApplicationsPage() {
                   data-testid={`kanban-column-${stage.key}`}
                   aria-label={`${stage.label} stage, ${stage.cards.length} cards`}
                   className="w-[260px] shrink-0"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(e) => onColumnDrop(e, stage.key)}
                 >
                   <header className="mb-3 flex items-center justify-between px-1">
                     <div className="flex items-center gap-2">
@@ -522,6 +700,8 @@ export default function ApplicationsPage() {
                           <article
                             key={card.id}
                             data-testid="application-card"
+                            draggable
+                            onDragStart={(e) => onCardDragStart(e, card, stage.key)}
                             {...(clickable
                               ? {
                                   role: "button" as const,
@@ -577,9 +757,16 @@ export default function ApplicationsPage() {
                             <p className="text-[11px] text-aether-muted-dim">{card.company}</p>
                             <CardMeta card={card} stageKey={stage.key} />
                             <CardLink stageKey={stage.key} />
-                            <p className="mono mt-2 text-[10px] text-aether-muted-dim">
-                              {timeAgo(card.updatedAt)}
-                            </p>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <p className="mono text-[10px] text-aether-muted-dim">
+                                {timeAgo(card.updatedAt)}
+                              </p>
+                              <MoveMenu
+                                card={card}
+                                stage={stage.key}
+                                onMove={(toStage) => void moveCard(card, stage.key, toStage)}
+                              />
+                            </div>
                           </article>
                         );
                       })
