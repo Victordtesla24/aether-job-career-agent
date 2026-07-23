@@ -1,0 +1,73 @@
+{
+  "phase_step": "PHASE0-COMPLETE",
+  "updated_at": "2026-07-23T16:40:00Z",
+  "workstream_status": {
+    "W-A": "in_progress-next",
+    "W-B": "in_progress-next",
+    "W-C": "pending",
+    "W-D": "pending",
+    "W-E": "pending",
+    "W-F": "pending"
+  },
+  "waves": [],
+  "findings_delta": [
+    {
+      "id": "P0-001",
+      "severity": "medium",
+      "summary": "Stale test credentials in repo-root .env: LOGIN_EMAIL/LOGIN_PASSWORD return 401 from POST /auth/login. Default `pnpm e2e` auth setup fails until rotated; suites runnable via env override (LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123).",
+      "evidence": "uat/reports/evidence/launch-ready/runtime/baseline-suites.md"
+    },
+    {
+      "id": "P0-002",
+      "severity": "low",
+      "summary": "Canonical test account `admin` has isAdmin:true; spec assumed a non-admin canonical login. Drift noted, not changed.",
+      "evidence": "uat/reports/evidence/launch-ready/canonical-login.md"
+    },
+    {
+      "id": "P0-003",
+      "severity": "low",
+      "summary": "Extra git remote `origin-local` exists alongside `origin`. Out of PHASE 0 scope; flagged for W-D cleanup review.",
+      "evidence": "uat/reports/evidence/launch-ready/cleanup/worktree-purge.md"
+    },
+    {
+      "id": "P0-004",
+      "severity": "info",
+      "summary": "Branches kept (not provably merged by git cherry): fix/ml-agents-err-001-status, fix/ml-source-disclosure, fix/ml-story-operator-leak. Changes appear folded into batch commit ef7df30; verify then delete in W-D.",
+      "evidence": "uat/reports/evidence/launch-ready/cleanup/worktree-purge.md"
+    },
+    {
+      "id": "P0-005",
+      "severity": "medium",
+      "summary": "Playwright baseline red under default config: 51 passed / 28 failed. Failure classes: prod-domain authed sweep vs local storageState (17), specs requiring dedicated repro stacks on 8010/3010+8012/3012 (9), @aether.local settings-email data precondition (1), manual-verification aggregate sweep with 12 failed captures (1). Pre-existing; none introduced in PHASE 0.",
+      "evidence": "uat/reports/evidence/launch-ready/runtime/baseline-suites.md"
+    },
+    {
+      "id": "P0-006",
+      "severity": "info",
+      "summary": "14 legacy .claude/agents files outside the \u00a70.2 roster left untouched; roster reconciliation documented.",
+      "evidence": "uat/reports/evidence/launch-ready/governance/roster-manifest.md"
+    },
+    {
+      "id": "P0-007",
+      "severity": "info",
+      "summary": "Untracked .env.bak-predeploy present at repo root; left in place per scope (scheduled for reviewed deletion manifest in W-D).",
+      "evidence": "uat/reports/evidence/launch-ready/cleanup/worktree-purge.md"
+    }
+  ],
+  "gates": {},
+  "baseline": {
+    "pytest": { "passed": 1118, "failed": 0, "skipped": 0, "duration_s": 1650.55, "exit": 0 },
+    "vitest": { "passed": 556, "failed": 0, "skipped": 0, "files": 81, "duration_s": 108.2, "exit": 0 },
+    "playwright": { "passed": 51, "failed": 28, "skipped": 0, "duration": "11.7m", "exit": 1, "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123" }
+  },
+  "last_commit": "PHASE0-BOOTSTRAP (this commit; parent 03c0c50)",
+  "last_deploy_sha": "03c0c50",
+  "next_actions": [
+    "W-A: read /home/ubuntu/aether-subscription-prompt-live-test.md in full and execute the models-live prompt with maximum accuracy (\u00a73); drive ML-adv-001 through QA; close the 4 OPEN ledger rows (ML-env-001 via completed worktree purge, the two all_sources/seek-hardcode LOW rows, ML-prodverify-low1) through the \u00a79 pipeline; record gates.W-A with fresh evidence under uat/reports/evidence/launch-ready/models-live/",
+    "W-B: FEAT-B1 approvals purge + FEAT-B2 applications stage-move (\u00a74) at production quality, evidence under features/",
+    "W-C: duplicate-implementation elimination (\u00a75) after W-A/W-B land \u2014 dedup-surgeon with reviewed manifests, evidence under dedup/",
+    "W-D: repo + prod cleanup (\u00a76) \u2014 reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
+    "W-E: top-10-paid-app quality hardening sweep (\u00a77) after W-A..W-C deploy, evidence under quality/screens",
+    "W-F: docs truth refresh \u2192 adversarial review \u2192 exit gates (\u00a79\u2013\u00a710), evidence under governance/ and adversarial/"
+  ]
+}

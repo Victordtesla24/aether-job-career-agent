@@ -1,8 +1,11 @@
 # Aether Job & Career Agent — Production Deployment Runbook
 
-**Last Updated:** 2026-07-22 (MODELS-LIVE `ML-runbook-001` — corrected the `pnpm` path/provenance
-claim in the Web Service section; see `docs/delivery/MODELS-LIVE-GAPS.json`); prior update
-2026-07-18 (MV-system-003 — safe test-suite invocation)  
+**Last Updated:** 2026-07-23 (LAUNCH-READY PHASE 0 runbook verification — §2 start-script snippets
+synced to the live `start-api.sh`/`start-web.sh` MV-system-001 state: `--log-config
+logging_config.json` on the API entrypoint, `set -o pipefail` + gawk timestamp pipe on the web
+entrypoint; all other operational commands verified unchanged — see
+`uat/reports/evidence/launch-ready/runtime/runbook-verification.md`); prior updates 2026-07-22
+(ML-runbook-001), 2026-07-18 (MV-system-003)  
 **Production URL:** https://5cb5f0620.abacusai.cloud  
 **Repository:** https://github.com/Victordtesla24/aether-job-career-agent  
 **Evidence Tag:** [VERIFIED-WITH-SOURCE]
@@ -229,7 +232,7 @@ All services share the single working directory:
 - **Unit File:** `/etc/systemd/system/aether-api.service`
 - **Working Directory:** `/home/ubuntu/github_repos/aether-job-career-agent`
 - **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/start-api.sh`
-- **Actual Entrypoint:** `/opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
+- **Actual Entrypoint:** `/opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-config logging_config.json` (the `--log-config` flag was added under MV-system-001 — ISO-8601 timestamps; verified against the live script 2026-07-23)
 - **App Directory:** `./apps/api`
 - **Start Script Details:**
   ```bash
@@ -245,14 +248,15 @@ All services share the single working directory:
       value="${value#\'}" && value="${value%\'}"
       export "$key"="$value"
   done < /home/ubuntu/github_repos/aether-job-career-agent/.env
-  exec /opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+  # MV-system-001: --log-config adds ISO-8601 UTC timestamps to every log line
+  exec /opt/abacus-python/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-config logging_config.json
   ```
 
 ### Web Service (aether-web.service)
 - **Unit File:** `/etc/systemd/system/aether-web.service`
 - **Working Directory:** `/home/ubuntu/github_repos/aether-job-career-agent`
 - **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/start-web.sh`
-- **Actual Entrypoint:** `pnpm start` (Next.js production server on port 3000)
+- **Actual Entrypoint:** `pnpm start 2>&1 | gawk '{ print strftime("%Y-%m-%dT%H:%M:%SZ", systime(), 1) " " $0; fflush() }'` — Next.js production server on port 3000; stdout/stderr piped through `gawk` under `set -o pipefail` for ISO-8601 timestamps (MV-system-001; verified against the live script 2026-07-23)
 - **`pnpm` provenance (CORRECTED, `ML-runbook-001`, 2026-07-22):** `pnpm` is **system-installed at
   `/usr/bin/pnpm`** (a corepack symlink), **not** an `/opt/abacus-npm/bin` npm global — `pnpm` has
   no binary under `/opt/abacus-npm/bin/` at all (that directory only holds `abacusai`/`claude`/
@@ -266,6 +270,9 @@ All services share the single working directory:
 - **Start Script Details:**
   ```bash
   #!/bin/bash
+  # pipefail (MV-system-001): the gawk timestamp pipe below must not mask
+  # pnpm/next's real exit code, or Restart=on-failure is defeated.
+  set -o pipefail
   # pnpm resolves to the system-installed /usr/bin/pnpm (corepack) via PATH
   # fallthrough — NOT from /opt/abacus-npm/bin, which has no pnpm binary.
   export PATH="/opt/abacus-npm/bin:/usr/local/bin:/usr/bin:/bin"
@@ -280,7 +287,8 @@ All services share the single working directory:
       export "$key"="$value"
   done < /home/ubuntu/github_repos/aether-job-career-agent/.env
   export NODE_ENV=production
-  exec pnpm start
+  # MV-system-001: prefix every log line with an ISO-8601 UTC timestamp
+  pnpm start 2>&1 | gawk '{ print strftime("%Y-%m-%dT%H:%M:%SZ", systime(), 1) " " $0; fflush() }'
   ```
 
 ### Worker Service (aether-worker.service)
