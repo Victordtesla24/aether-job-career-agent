@@ -81,6 +81,3 @@ class FabricationGuard:
 
     def check(self, generated: str, evidence_corpus: str) -> list[str]:
         return find_unsupported_entities(generated, evidence_corpus)
-
-    def is_clean(self, generated: str, evidence_corpus: str) -> bool:
-        return not self.check(generated, evidence_corpus)

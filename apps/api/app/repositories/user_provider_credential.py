@@ -362,16 +362,6 @@ class AnthropicOAuthStateRepository:
             conn.commit()
         return rows[0] if rows else None
 
-    def purge_expired(self) -> None:
-        _ensure_user_agent_tables()
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'DELETE FROM "AnthropicOAuthState" WHERE "expiresAt" <= now()'
-                )
-            conn.commit()
-
-
 class AnthropicOAuthTokenRepository:
     """Encrypted subscription OAuth access/refresh token store (one per user)."""
 
@@ -471,14 +461,3 @@ class AgentQuotaBlockRepository:
                 )
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
-
-    def clear(self, user_id: str, provider: str) -> None:
-        _ensure_user_agent_tables()
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'DELETE FROM "AgentQuotaBlock" '
-                    'WHERE "userId" = %s AND "provider" = %s',
-                    (user_id, provider),
-                )
-            conn.commit()

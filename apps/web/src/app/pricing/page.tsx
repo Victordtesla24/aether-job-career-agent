@@ -43,6 +43,7 @@ import { useCallback, useEffect, useState } from "react";
 import MetricTooltip from "../../components/MetricTooltip";
 import PublicFooter from "../../components/PublicFooter";
 import { ApiError, formatRetryAfter } from "../../lib/api/client";
+import { formatAud } from "../../lib/format";
 import {
   fetchPlans,
   fetchSubscription,
@@ -67,14 +68,6 @@ const MODEL_TIER_CLAIM_RE = /model tier|model access/i;
 // `status: "active"`, so status alone never implies a paid plan; `planId`
 // must additionally be non-free.
 const ENTITLED_STATUSES = new Set(["active", "trialing", "past_due"]);
-
-function formatAud(amount: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-}
 
 export default function PricingPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null);

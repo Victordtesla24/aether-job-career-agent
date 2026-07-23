@@ -34,14 +34,6 @@ def webhook_secret() -> str | None:
     return os.environ.get("STRIPE_WEBHOOK_SECRET")
 
 
-def automatic_tax_enabled() -> bool:
-    """Stripe Tax toggle — defaults OFF (§1.5; requires the paid Stripe Tax
-    product, which launch does not use)."""
-    return os.environ.get("STRIPE_AUTOMATIC_TAX", "false").strip().lower() in (
-        "1", "true", "yes", "on",
-    )
-
-
 def app_base_url() -> str:
     return os.environ.get(
         "APP_BASE_URL", "https://5cb5f0620.abacusai.cloud"

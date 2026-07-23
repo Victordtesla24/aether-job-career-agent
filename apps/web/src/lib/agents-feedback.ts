@@ -218,18 +218,9 @@ export function missingResumeNotice(output: Record<string, unknown>): Notice | n
  */
 function extractApiDetail(err: unknown): string | null {
   if (!(err instanceof Error) || !err.message.trim()) return null;
-  const match = err.message.match(/\{[\s\S]*\}$/);
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[0]) as { detail?: unknown };
-      if (typeof parsed.detail === "string" && parsed.detail.trim()) {
-        return parsed.detail;
-      }
-    } catch {
-      // Not JSON — fall through to the raw message.
-    }
-  }
-  return err.message;
+  // Shared JSON-detail core lives in extractApiJsonDetail (hoisted declaration);
+  // this variant adds the documented raw-message fallback.
+  return extractApiJsonDetail(err) ?? err.message;
 }
 
 /**

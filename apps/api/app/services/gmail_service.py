@@ -51,13 +51,6 @@ class GmailAuthError(GmailError):
     message "reconnect" vs "connect" precisely, though both fail the send-gate."""
 
 
-def gmail_connected(user_id: str) -> bool:
-    """Whether a Gmail credential exists for ``user_id`` (the send-gate's truth
-    source). Does not verify token liveness — existence is the contract; a
-    revoked token surfaces at call time as :class:`GmailNotConnectedError`."""
-    return GmailAccountRepository().is_connected(user_id)
-
-
 def ensure_email_thread_gmail_columns() -> None:
     """Idempotently add the Gmail linkage columns to the Prisma-managed
     ``EmailThread`` table (additive, backward-compatible; survives TRUNCATE).
@@ -377,29 +370,6 @@ class GmailService:
             raise
         except Exception as exc:  # noqa: BLE001
             raise GmailError(f"Gmail send failed: {exc}") from exc
-
-    def create_draft(
-        self,
-        to: str,
-        subject: str,
-        body: str,
-        thread_id: str | None = None,
-    ) -> dict[str, Any]:
-        svc = self._client()
-        raw = self._raw_message(to, subject, body)
-        message: dict[str, Any] = {"raw": raw}
-        if thread_id:
-            message["threadId"] = thread_id
-        try:
-            draft = (
-                svc.users()
-                .drafts()
-                .create(userId="me", body={"message": message})
-                .execute()
-            )
-            return {"id": draft.get("id")}
-        except Exception as exc:  # noqa: BLE001
-            raise GmailError(f"Gmail draft create failed: {exc}") from exc
 
     def modify_labels(
         self, message_id: str, add: list[str] | None = None, remove: list[str] | None = None

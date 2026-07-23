@@ -67,19 +67,12 @@ import {
   type CareerDataInputs,
 } from "../../../components/settings/career-data";
 import { SECTIONS } from "./sections";
+import { formatAud } from "../../../lib/format";
+import { emailLooksValid } from "../../../components/auth/validation";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Matches the AUD formatter on /pricing (apps/web/src/app/pricing/page.tsx)
  * so the same plan price reads identically everywhere it's shown. */
-function formatAud(amount: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-}
-
 const STATUS_STYLE: Record<string, string> = {
   connected: "bg-aether-green/15 text-aether-green border-aether-green/25",
   syncing: "bg-aether-amber/15 text-aether-amber border-aether-amber/25",
@@ -349,7 +342,7 @@ export default function SettingsClient({
   const validation = useMemo(() => {
     const errors: Record<string, string> = {};
     if (!profile.fullName.trim()) errors.fullName = "Full name is required";
-    if (!EMAIL_RE.test(profile.email)) errors.email = "Enter a valid email address";
+    if (!emailLooksValid(profile.email)) errors.email = "Enter a valid email address";
     if (!profile.targetRole.trim()) errors.targetRole = "Target role is required";
     if (!profile.location.trim()) errors.location = "Location is required";
     return errors;

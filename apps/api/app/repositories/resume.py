@@ -63,33 +63,6 @@ class ResumeRepository:
             conn.commit()
         return rows[0]
 
-    def set_approval_status(
-        self, resume_id: str, user_id: str, status: str
-    ) -> dict[str, Any] | None:
-        """Set a résumé version's human-review state (MV-resume-studio-001).
-
-        Owner-scoped and validated against :data:`RESUME_APPROVAL_STATES`. Called
-        when the version's linked tailor ApprovalRequest is approved/rejected so a
-        tailored version stays ``pending`` until a human signs off — no longer a
-        decorative flag."""
-        if status not in RESUME_APPROVAL_STATES:
-            raise ValueError(f"Invalid résumé approval status '{status}'")
-        ensure_resume_columns()
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f'''
-                    UPDATE "Resume"
-                    SET "approvalStatus" = %s, "updatedAt" = NOW()
-                    WHERE "id" = %s AND "userId" = %s
-                    RETURNING {_RESUME_COLUMNS}
-                    ''',
-                    (status, resume_id, user_id),
-                )
-                rows = rows_to_dicts(cur)
-            conn.commit()
-        return rows[0] if rows else None
-
     def update_sections(
         self, resume_id: str, user_id: str, sections: dict[str, Any], format_hash: str
     ) -> dict[str, Any] | None:

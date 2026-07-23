@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../../components/admin/admin-shell";
+import { formatDateTime } from "../../../../lib/format";
 import {
   fetchAdminUser,
   formatUsd,
@@ -15,12 +16,6 @@ import {
   setSuspended,
   type AdminUserDetail,
 } from "../../../../lib/api/admin";
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
-}
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -114,9 +109,9 @@ export default function AdminUserDetailPage() {
             <dt className="text-aether-muted">Admin</dt>
             <dd className="text-aether-text">{u.isAdmin ? "yes" : "no"}</dd>
             <dt className="text-aether-muted">Signed up</dt>
-            <dd className="text-aether-text">{fmtDate(u.signupAt)}</dd>
+            <dd className="text-aether-text">{formatDateTime(u.signupAt)}</dd>
             <dt className="text-aether-muted">Last login</dt>
-            <dd className="text-aether-text">{fmtDate(u.lastLoginAt)}</dd>
+            <dd className="text-aether-text">{formatDateTime(u.lastLoginAt)}</dd>
             <dt className="text-aether-muted">Total LLM spend</dt>
             <dd className="font-mono text-aether-text">{formatUsd(detail.spendUsd)} US$</dd>
             <dt className="text-aether-muted">Runs</dt>
@@ -136,7 +131,7 @@ export default function AdminUserDetailPage() {
               <dt className="text-aether-muted">Spend cap</dt>
               <dd className="font-mono text-aether-text">{formatUsd(detail.quota.spendCapUsd)}</dd>
               <dt className="text-aether-muted">Period ends</dt>
-              <dd className="text-aether-text">{fmtDate(detail.quota.periodEnd)}</dd>
+              <dd className="text-aether-text">{formatDateTime(detail.quota.periodEnd)}</dd>
             </dl>
           ) : (
             <p className="text-sm text-aether-muted">No quota row.</p>
@@ -204,7 +199,7 @@ export default function AdminUserDetailPage() {
                   <td className="py-2 pr-4 text-right font-mono text-aether-text">
                     {formatUsd(r.costUsd)}
                   </td>
-                  <td className="py-2 pr-4 text-aether-muted">{fmtDate(r.createdAt)}</td>
+                  <td className="py-2 pr-4 text-aether-muted">{formatDateTime(r.createdAt)}</td>
                 </tr>
               ))}
               {detail.recentRuns.length === 0 ? (

@@ -1461,6 +1461,3 @@ class CoverLetterAgent:
             flagged=[],
         )
 
-
-def _job_summary(job: dict[str, Any]) -> str:
-    return f"{job['title']} at {job['company']}"

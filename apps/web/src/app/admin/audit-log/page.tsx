@@ -9,14 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { fetchAuditLog, type AuditEntry } from "../../../lib/api/admin";
+import { formatDateTime } from "../../../lib/format";
 
 const PAGE = 50;
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
-}
 
 function detailText(detail: unknown): string {
   if (detail === null || detail === undefined) return "—";
@@ -73,7 +68,7 @@ export default function AdminAuditLogPage() {
           <tbody className="divide-y divide-white/5">
             {entries.map((e) => (
               <tr key={e.id} className="hover:bg-white/5 align-top">
-                <td className="px-4 py-3 text-aether-muted whitespace-nowrap">{fmtDate(e.createdAt)}</td>
+                <td className="px-4 py-3 text-aether-muted whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
                 <td className="px-4 py-3 font-mono text-xs text-aether-muted">{e.actorUserId}</td>
                 <td className="px-4 py-3 text-aether-text">{e.action}</td>
                 <td className="px-4 py-3 text-aether-muted">

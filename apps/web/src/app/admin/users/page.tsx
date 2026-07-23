@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
+import { formatDate } from "../../../lib/format";
 import {
   fetchAdminUsers,
   formatUsd,
@@ -16,12 +17,6 @@ import {
 } from "../../../lib/api/admin";
 
 const PLANS = ["", "free", "starter", "pro", "power"];
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
-}
 
 export default function AdminUsersPage() {
   const [rows, setRows] = useState<AdminUser[]>([]);
@@ -140,8 +135,8 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-4 py-3 text-aether-muted">{u.email}</td>
                 <td className="px-4 py-3 text-aether-muted">{u.plan ?? "—"}</td>
-                <td className="px-4 py-3 text-aether-muted">{fmtDate(u.lastLoginAt)}</td>
-                <td className="px-4 py-3 text-aether-muted">{fmtDate(u.signupAt)}</td>
+                <td className="px-4 py-3 text-aether-muted">{formatDate(u.lastLoginAt)}</td>
+                <td className="px-4 py-3 text-aether-muted">{formatDate(u.signupAt)}</td>
                 <td className="px-4 py-3 text-right font-mono text-aether-text">
                   {formatUsd(u.spendUsd)}
                 </td>

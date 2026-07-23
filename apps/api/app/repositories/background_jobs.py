@@ -342,17 +342,6 @@ class BackgroundJobRepository:
             conn.commit()
         return outstanding
 
-    def mark_refunded(self, job_id: str) -> None:
-        _ensure_table()
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'UPDATE "BackgroundJob" SET "quotaRefundedAt"=now(),'
-                    '"updatedAt"=now() WHERE "id"=%s',
-                    (job_id,),
-                )
-            conn.commit()
-
     def sweep_stale(
         self, enqueued_secs: int, processing_secs: int
     ) -> list[dict[str, Any]]:

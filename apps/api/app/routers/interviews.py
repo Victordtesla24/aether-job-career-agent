@@ -125,25 +125,6 @@ class InterviewUpdate(BaseModel):
     contact_email: str | None = Field(default=None, max_length=320)
 
 
-class InterviewResponse(BaseModel):
-    """Canonical interview response shape."""
-
-    id: str
-    user_id: str
-    application_id: str | None
-    type: str
-    status: str
-    scheduled_at: datetime
-    duration_minutes: int
-    location: str | None
-    meeting_link: str | None
-    notes: str | None
-    contact_name: str | None
-    contact_email: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -156,7 +137,7 @@ _INTERVIEW_COLUMNS = (
 
 
 def _row_to_response(row: dict[str, Any]) -> dict[str, Any]:
-    """Normalise raw DB column names into the InterviewResponse shape."""
+    """Normalise raw DB column names into the interview wire shape."""
     return {
         "id": row["id"],
         "user_id": row["userId"],

@@ -1,0 +1,29 @@
+=== mark_refunded ===
+apps/api/app/repositories/background_jobs.py:345:    def mark_refunded(self, job_id: str) -> None:
+=== set_approval_status ===
+apps/api/app/repositories/resume.py:66:    def set_approval_status(
+=== purge_expired ===
+apps/api/app/routers/approvals.py:113:def purge_expired_approvals(current_user: CurrentUser) -> dict[str, Any]:
+apps/api/app/routers/approvals.py:123:    ids = ApprovalRepository().purge_expired(user_id, EXPIRY_HOURS)
+apps/api/app/routers/approvals.py:127:            "approval.purge_expired",
+apps/api/app/repositories/user_provider_credential.py:365:    def purge_expired(self) -> None:
+apps/api/app/repositories/approval.py:283:    def purge_expired(self, user_id: str, expiry_hours: int) -> list[str]:
+apps/api/tests/test_approvals_delete.py:180:        rows = _audit_rows(db_session, user_id, "approval.purge_expired")
+apps/api/tests/test_approvals_delete.py:181:        assert rows, "expected an approval.purge_expired audit row"
+=== is_clean ===
+apps/api/app/services/fabrication_guard.py:85:    def is_clean(self, generated: str, evidence_corpus: str) -> bool:
+=== automatic_tax_enabled ===
+apps/api/app/services/stripe_gateway.py:37:def automatic_tax_enabled() -> bool:
+=== _job_summary ===
+apps/api/app/agents/cover_letter_agent.py:1465:def _job_summary(job: dict[str, Any]) -> str:
+=== gmail_connected( ===
+apps/api/app/services/gmail_service.py:54:def gmail_connected(user_id: str) -> bool:
+apps/api/tests/test_email_send_gate.py:50:def test_send_real_when_gmail_connected(client, auth_headers, test_user_id, monkeypatch):
+=== create_draft( ===
+apps/api/app/services/gmail_service.py:381:    def create_draft(
+apps/api/app/routers/emails.py:206:def create_draft(body: DraftEmail, current_user: CurrentUser) -> dict[str, Any]:
+apps/api/tests/test_emails.py:7:def test_create_draft(client, auth_headers):
+=== InterviewResponse ===
+apps/api/app/routers/interviews.py:128:class InterviewResponse(BaseModel):
+apps/api/app/routers/interviews.py:159:    """Normalise raw DB column names into the InterviewResponse shape."""
+apps/web/src/lib/api/interviews.ts:6: * snake_case (see ``InterviewResponse``), so the wire schema below mirrors that

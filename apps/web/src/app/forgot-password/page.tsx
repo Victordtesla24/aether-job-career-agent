@@ -20,6 +20,24 @@ export const metadata = {
   title: "Reset your password · Aether",
 };
 
+
+/** Optional "You can also call ..." tail, shared by both render branches (DEDUP-011). */
+function SupportPhoneLine({ supportPhone }: { supportPhone: string | null }) {
+  if (!supportPhone) return null;
+  return (
+    <>
+      {" "}You can also call{" "}
+      <a
+        href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
+        className="text-aether-indigo hover:underline"
+      >
+        {supportPhone}
+      </a>
+      .
+    </>
+  );
+}
+
 export default function ForgotPasswordPage() {
   const { supportEmail, supportPhone } = getOperatorLegalConfig();
 
@@ -51,18 +69,7 @@ export default function ForgotPasswordPage() {
                 {supportEmail}
               </a>{" "}
               from the address you registered with and we&apos;ll help you reset it.
-              {supportPhone ? (
-                <>
-                  {" "}You can also call{" "}
-                  <a
-                    href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
-                    className="text-aether-indigo hover:underline"
-                  >
-                    {supportPhone}
-                  </a>
-                  .
-                </>
-              ) : null}
+              <SupportPhoneLine supportPhone={supportPhone} />
             </p>
           ) : (
             <p className="text-sm text-aether-muted leading-relaxed">
@@ -73,18 +80,7 @@ export default function ForgotPasswordPage() {
                 Terms
               </Link>{" "}
               page.
-              {supportPhone ? (
-                <>
-                  {" "}You can also call{" "}
-                  <a
-                    href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`}
-                    className="text-aether-indigo hover:underline"
-                  >
-                    {supportPhone}
-                  </a>
-                  .
-                </>
-              ) : null}
+              <SupportPhoneLine supportPhone={supportPhone} />
             </p>
           )}
 
