@@ -207,7 +207,7 @@ aether-job-career-agent/
 ├── uat/            # UAT runner + reports/evidence
 ├── start-api.sh · start-web.sh · start-worker.sh   # systemd entrypoints
 ├── turbo.json · pnpm-workspace.yaml
-└── docs/delivery/EXECUTION-REPORT.md   # (root EXECUTION-REPORT.md is a pointer stub)
+└── docs/delivery/EXECUTION-REPORT.md   # authoritative delivery record (root pointer stub removed)
 ```
 
 ## 📜 Delivery History

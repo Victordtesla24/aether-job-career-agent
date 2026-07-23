@@ -5,7 +5,7 @@
 **Evidence root:** `uat/reports/evidence/phase5/` (gitignored)
 **Note:** Fresh discovery; trusts no prior ledger (§2.1). This is a NEW ledger for the Phase-5
 prompt (`aether-prod-trmediation-prompt.md`), distinct from the earlier completed "prud"
-remediation ledger (`gap-analysis.json` at repo root).
+remediation ledger (`docs/delivery/gap-analysis.json`, relocated from repo root in the Workstream C dedup).
 
 **Final status (2026-07-15):** All 6 gaps **VERIFIED-CLOSED** (verdict CONFIRMED-FIXED) and all 20
 §12 exit gates **PASS** on production (`https://5cb5f0620.abacusai.cloud`, deployed HEAD `80536f2`),

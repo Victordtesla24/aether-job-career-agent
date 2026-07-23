@@ -78,20 +78,17 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm --filter @aether/db run prisma:generate
-
       - name: Lint
-        run: pnpm -r run lint
+        run: pnpm --filter @aether/web run lint
 
       - name: Type-check
-        run: pnpm -r run type-check
+        run: pnpm --filter @aether/web run type-check
 
       - name: Unit tests
-        run: pnpm -r run test
+        run: pnpm --filter @aether/web run test
 
       - name: Build
-        run: pnpm -r run build
+        run: pnpm --filter @aether/web run build
 
   # ---------------------------------------------------------------------------
   # API app — FastAPI / Python (3.11)
@@ -153,9 +150,6 @@ jobs:
 
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm --filter @aether/db run prisma:generate
 
       - name: Install Playwright browser (chromium)
         run: pnpm --filter @aether/web exec playwright install --with-deps chromium

@@ -14,8 +14,10 @@ On every push to `main` / `phase-*/**` and every PR into `main`:
   requires a long alphanumeric tail so short, clearly-synthetic
   test/doc placeholders are not flagged.
 - **node workspace** (Node 20): `pnpm install --frozen-lockfile` →
-  **generate Prisma client** (`@aether/db`) → lint → type-check → unit tests
-  (Vitest, across every package) → build. Agent tests run with
+  lint → type-check → unit tests (Vitest, `@aether/web`) → build.
+  (The orphaned `packages/*` TS layer and its Prisma-client generation step
+  were removed in the Workstream C dedup; `packages/db/src/schema.prisma`
+  remains as the documentation-only schema-of-record.) Agent tests run with
   `AETHER_LLM_MODE=replay`, so they replay committed fixtures and never touch
   the network.
 - **api** (Python 3.11): ruff → mypy → pytest.

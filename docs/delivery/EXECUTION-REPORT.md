@@ -54,7 +54,7 @@ The two USER-GATED gates are the **live human OAuth consent clicks** (registerin
 | GAP-NEW-002 | LOW | Seek job freshness (149/155 seek URLs resolve) | VERIFIED-CLOSED (already-fixed) | — |
 | GAP-NEW-003 | HIGH | Cover-letter prompt-injection hardening | VERIFIED-CLOSED | fixer-medium (sonnet) |
 
-Machine-readable detail: `gap-analysis.json` (each record carries `verdict`, `remaining_work`, `post_evidence`, `fixer_model`, `reviewer_model`).
+Machine-readable detail: `gap-analysis.json` (relocated to `docs/delivery/gap-analysis.json`; each record carries `verdict`, `remaining_work`, `post_evidence`, `fixer_model`, `reviewer_model`).
 
 ---
 
