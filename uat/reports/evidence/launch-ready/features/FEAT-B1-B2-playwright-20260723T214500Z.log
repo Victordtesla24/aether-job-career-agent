@@ -1,0 +1,13 @@
+
+Running 8 tests using 1 worker
+
+  ✓  1 [setup] › e2e/auth.setup.ts:26:1 › authenticate (1.3s)
+  ✓  2 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:25:3 › FEAT-B1: remove approval requests › resolved approval card exposes Remove; removal persists across reload (4.2s)
+  ✓  3 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:81:3 › FEAT-B1: remove approval requests › live pending approvals cannot be removed (409) and show no Remove button (2.5s)
+  ✓  4 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:122:3 › FEAT-B1: remove approval requests › bulk Clear expired control matches the server-side expired count (1.5s)
+  ✓  5 [chromium] › e2e/launch-b2-move-stage.spec.ts:48:3 › FEAT-B2: stage moves › every card exposes an accessible Move to… menu with only legal targets (1.3s)
+  ✓  6 [chromium] › e2e/launch-b2-move-stage.spec.ts:75:3 › FEAT-B2: stage moves › menu move persists across reload, then moves back (state restored) (3.1s)
+  ✓  7 [chromium] › e2e/launch-b2-move-stage.spec.ts:131:3 › FEAT-B2: stage moves › drag-and-drop moves a card between columns, then drags it back (2.2s)
+  ✓  8 [chromium] › e2e/launch-b2-move-stage.spec.ts:179:3 › FEAT-B2: stage moves › illegal cross-split move is rejected with an honest 422 (878ms)
+
+  8 passed (18.6s)

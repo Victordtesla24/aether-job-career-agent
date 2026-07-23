@@ -1,0 +1,13 @@
+
+Running 8 tests using 1 worker
+
+  ✓  1 [setup] › e2e/auth.setup.ts:26:1 › authenticate (1.2s)
+  ✓  2 [chromium] › e2e/analytics.spec.ts:8:3 › Analytics page › renders the funnel with live numbers from the API (1.7s)
+  ✓  3 [chromium] › e2e/analytics.spec.ts:29:3 › Analytics page › period selector switches the funnel period (1.3s)
+  ✓  4 [chromium] › e2e/analytics.spec.ts:41:3 › Analytics page › renders the ATS distribution and agent ROI sections (1.2s)
+  ✓  5 [chromium] › e2e/applications.spec.ts:8:3 › Applications page › renders the kanban board with pipeline columns (1.2s)
+  ✓  6 [chromium] › e2e/applications.spec.ts:19:3 › Applications page › columns resolve application cards or render empty (1.2s)
+  ✓  7 [chromium] › e2e/approvals.spec.ts:8:3 › Approvals page › renders the approval queue or its empty state (1.2s)
+  ✓  8 [chromium] › e2e/approvals.spec.ts:17:3 › Approvals page › pending approvals expose approve/reject actions (1.2s)
+
+  8 passed (11.9s)

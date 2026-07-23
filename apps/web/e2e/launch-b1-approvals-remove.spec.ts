@@ -34,7 +34,7 @@ test.describe("FEAT-B1: remove approval requests", () => {
       headers: auth,
       data: {
         type: "application_submit",
-        payload: { kind: "cover_letter", jobTitle: marker, company: "E2E Co" },
+        payload: { kind: "cover_letter", job_title: marker, company: "E2E Co" },
       },
     });
     expect(created.status()).toBe(201);
@@ -89,7 +89,7 @@ test.describe("FEAT-B1: remove approval requests", () => {
       headers: auth,
       data: {
         type: "application_submit",
-        payload: { kind: "cover_letter", jobTitle: marker, company: "E2E Co" },
+        payload: { kind: "cover_letter", job_title: marker, company: "E2E Co" },
       },
     });
     expect(created.status()).toBe(201);
