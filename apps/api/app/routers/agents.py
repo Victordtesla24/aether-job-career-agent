@@ -1409,6 +1409,19 @@ def scout_sources(current_user: CurrentUser) -> list[dict[str, Any]]:
     return JobSourceStatusRepository().list_by_user(current_user["id"])
 
 
+@router.get("/scout/sources/availability")
+def scout_source_availability(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """Backend-derived per-source availability (ML-audit-seek-fe-hardcode-001).
+
+    ``{"source", "available", "reason"}`` rows computed at call time from the
+    adapter registry (env-gated Seek included) — the FE drives its source
+    filter options from this instead of hardcoding availability.
+    """
+    from app.services.discovery.adapter_registry import source_availability
+
+    return source_availability()
+
+
 @router.post("/fit-scorer/run")
 def run_fit_scorer(
     current_user: CurrentUser, request: Request, rescore: bool = False

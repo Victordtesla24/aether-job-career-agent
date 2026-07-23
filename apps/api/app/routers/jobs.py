@@ -31,6 +31,39 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
     return job
 
 
+def _validate_source_filter(source: str, include_stale: bool) -> None:
+    """Honest ``?source=`` validation (ML-prodverify-low1-allsources).
+
+    A filter on an unknown or currently-unavailable source must never return
+    a silent 200/empty — reject with the real reason (422 HTTPException, the
+    app's convention for invalid filter values, matching the ``status``
+    filter above). Exception: history is never deleted (GAP-P6-DATA-001), so
+    the sanctioned historical view (``include_stale=true``) may still filter
+    by a known-but-unavailable source.
+    """
+    from app.services.discovery.adapter_registry import source_availability
+
+    rows = {row["source"]: row for row in source_availability()}
+    if source not in rows:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown source '{source}'. Known sources: "
+                f"{', '.join(sorted(rows))}"
+            ),
+        )
+    row = rows[source]
+    if not row["available"] and not include_stale:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Source '{source}' is currently unavailable: {row['reason']}. "
+                "Historical rows are retained — pass include_stale=true to "
+                "view previously discovered jobs from this source."
+            ),
+        )
+
+
 @router.get("")
 def list_jobs(
     current_user: CurrentUser,
@@ -50,6 +83,8 @@ def list_jobs(
     """
     if status is not None and status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail=f"Invalid status '{status}'")
+    if source is not None:
+        _validate_source_filter(source, include_stale)
     jobs = JobRepository().list_by_user(
         current_user["id"], status=status, source=source, saved=saved, sort=sort
     )

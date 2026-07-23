@@ -21,8 +21,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
 import { resolveRun } from "../../../lib/api/agents";
-import { fetchScoutSources } from "../../../lib/api/jobs";
-import type { Job, ScoutSourceStatus } from "../../../lib/api/jobs";
+import { fetchScoutSources, fetchSourceAvailability } from "../../../lib/api/jobs";
+import type { Job, ScoutSourceStatus, SourceAvailability } from "../../../lib/api/jobs";
 import type { TailorRunResult } from "../../../lib/api/resumes";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
@@ -69,19 +69,6 @@ const SOURCE_FILTERS = [
   "indeed",
 ] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
-
-/**
- * Sources with NO live discovery mode (ML-audit-source-disclosure-001):
- * linkedin/indeed have no live-HTTP implementation at all
- * (BaseAdapter._fetch_live raises NotImplementedError unconditionally —
- * apps/api/app/services/discovery/base_adapter.py) and seek is excluded
- * from the live registry by default (ADR-P6-SEEK, ToS-prohibited
- * scraping — apps/api/app/services/discovery/adapter_registry.py).
- * Selecting one always silently returns zero results, so the dropdown
- * must disclose them as unavailable rather than offer them as ordinary
- * selectable sources.
- */
-const NO_LIVE_MODE_SOURCES = new Set<string>(["linkedin", "indeed", "seek"]);
 
 /** Minimum-salary bands (in thousands, "0" = no filter) — MV-job-discovery-004. */
 const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
@@ -391,6 +378,38 @@ export default function JobsPage() {
   useEffect(() => {
     void loadSourceStatus();
   }, [loadSourceStatus]);
+
+  // Backend-derived source availability (ML-audit-seek-fe-hardcode-001): the
+  // adapter registry (incl. the AETHER_ENABLE_SEEK gate) is the single
+  // authority on which sources are live-filterable — never hardcoded here.
+  // On fetch failure availability is UNKNOWN: options stay enabled rather
+  // than showing a fabricated "(unavailable)" label; filtering a dead source
+  // then surfaces the backend's honest 422.
+  const [sourceAvailability, setSourceAvailability] = useState<Record<
+    string,
+    SourceAvailability
+  > | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const rows = await fetchSourceAvailability({ token, baseUrl: apiBaseUrl() });
+        if (!cancelled) {
+          setSourceAvailability(Object.fromEntries(rows.map((r) => [r.source, r])));
+        }
+      } catch {
+        if (!cancelled) setSourceAvailability(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isSourceUnavailable = useCallback(
+    (source: string) => sourceAvailability?.[source]?.available === false,
+    [sourceAvailability],
+  );
 
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   const selectedInsights = selected ? insights[selected.id] : undefined;
@@ -753,11 +772,11 @@ export default function JobsPage() {
             <option
               key={s}
               value={s}
-              disabled={NO_LIVE_MODE_SOURCES.has(s)}
+              disabled={isSourceUnavailable(s)}
               className="bg-black"
             >
               {s === "all" ? "All sources" : SOURCE_LABEL[s] ?? s}
-              {NO_LIVE_MODE_SOURCES.has(s) ? " (unavailable)" : ""}
+              {isSourceUnavailable(s) ? " (unavailable)" : ""}
             </option>
           ))}
         </select>

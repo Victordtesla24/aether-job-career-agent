@@ -98,20 +98,49 @@ def get_adapter_class(source: str) -> type[BaseAdapter]:
         ) from None
 
 
-def all_sources() -> list[str]:
-    """Live compliant sources the scout runs (Seek excluded by default).
+def source_availability() -> list[dict[str, object]]:
+    """Per-source availability, computed fresh at CALL time.
 
-    Excludes sources that have NO live-HTTP implementation at all — i.e.
-    their adapter inherits ``BaseAdapter._fetch_live``'s ``NotImplementedError``
-    stub unmodified (legacy fixture-only adapters such as LinkedIn/Indeed).
-    Those stay in ``ADAPTERS`` so the scout can still fan out over them and
-    honestly record a per-source "skipped" status at run time, but this
-    function's contract is "live" sources ahead of any run, so a source that
-    can never actually go live must not be reported as one (ML-audit-source-
-    disclosure-001).
+    The single backend authority the API (and through it the FE) uses to
+    decide which sources are filterable/selectable — the FE must never
+    hardcode availability (ML-audit-seek-fe-hardcode-001). Supersedes the
+    deleted zero-caller ``all_sources()`` helper
+    (ML-audit-allsources-deadcode-001).
+
+    Each row is ``{"source": str, "available": bool, "reason": str | None}``:
+
+    - available sources have ``reason`` ``None``;
+    - legacy fixture-only adapters (LinkedIn/Indeed — they inherit
+      ``BaseAdapter._fetch_live``'s ``NotImplementedError`` stub unmodified)
+      are honestly unavailable with a "no live" reason. They stay in
+      ``ADAPTERS`` so the scout can fan out and record a per-source
+      "skipped" status at run time;
+    - compliance-gated sources (Seek, ADR-P6-SEEK) are unavailable unless
+      their explicit enable env flag is truthy — evaluated NOW via
+      ``build_live_registry()``, not the import-time ``ADAPTERS`` snapshot,
+      so flipping ``AETHER_ENABLE_SEEK`` changes the answer without a
+      process restart of the import graph.
     """
-    return sorted(
-        source
-        for source, cls in ADAPTERS.items()
-        if cls._fetch_live is not BaseAdapter._fetch_live
-    )
+    live = build_live_registry()
+    rows: list[dict[str, object]] = []
+    for source in sorted(_ALL_ADAPTERS):
+        cls = _ALL_ADAPTERS[source]
+        if source in _COMPLIANCE_GATED and source not in live:
+            env_var = _COMPLIANCE_GATED[source][1]
+            rows.append({
+                "source": source,
+                "available": False,
+                "reason": (
+                    "compliance-gated (ADR-P6-SEEK): ToS-prohibited scraping; "
+                    f"enable only via {env_var}"
+                ),
+            })
+        elif cls._fetch_live is BaseAdapter._fetch_live:
+            rows.append({
+                "source": source,
+                "available": False,
+                "reason": "no live discovery implementation (fixture-only legacy adapter)",
+            })
+        else:
+            rows.append({"source": source, "available": True, "reason": None})
+    return rows

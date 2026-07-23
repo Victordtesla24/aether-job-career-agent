@@ -16,6 +16,7 @@ const apiRequest = vi.fn();
 const getToken = vi.fn();
 const apiBaseUrl = vi.fn();
 const fetchScoutSources = vi.fn();
+const fetchSourceAvailability = vi.fn();
 
 vi.mock("../../../../lib/api/client", () => ({
   apiRequest: (...args: unknown[]) => apiRequest(...(args as [string])),
@@ -25,6 +26,7 @@ vi.mock("../../../../lib/api/client", () => ({
 
 vi.mock("../../../../lib/api/jobs", () => ({
   fetchScoutSources: (...args: unknown[]) => fetchScoutSources(...args),
+  fetchSourceAvailability: (...args: unknown[]) => fetchSourceAvailability(...args),
 }));
 
 // eslint-disable-next-line import/first
@@ -158,9 +160,92 @@ getToken.mockResolvedValue("test-token");
 apiBaseUrl.mockReturnValue("http://test.local");
 fetchScoutSources.mockResolvedValue([]);
 
+/** Default backend availability: mirrors production (seek gated, linkedin/
+ * indeed fixture-only). Individual tests override this to prove the FE is
+ * backend-driven, not hardcoded (ML-audit-seek-fe-hardcode-001). */
+const DEFAULT_AVAILABILITY = [
+  { source: "greenhouse", available: true, reason: null },
+  { source: "lever", available: true, reason: null },
+  { source: "remotive", available: true, reason: null },
+  { source: "remoteok", available: true, reason: null },
+  { source: "seek", available: false, reason: "compliance-gated (ADR-P6-SEEK): ToS-prohibited scraping; enable only via AETHER_ENABLE_SEEK" },
+  { source: "linkedin", available: false, reason: "no live discovery implementation (fixture-only legacy adapter)" },
+  { source: "indeed", available: false, reason: "no live discovery implementation (fixture-only legacy adapter)" },
+];
+fetchSourceAvailability.mockResolvedValue(DEFAULT_AVAILABILITY);
+
 afterEach(() => {
   cleanup();
   apiRequest.mockClear();
+  fetchSourceAvailability.mockClear();
+  fetchSourceAvailability.mockResolvedValue(DEFAULT_AVAILABILITY);
+});
+
+function sourceOption(name: string): HTMLOptionElement {
+  const select = screen.getByTestId("job-source-filter") as HTMLSelectElement;
+  const option = Array.from(select.options).find((o) => o.value === name);
+  if (!option) throw new Error(`option '${name}' not found`);
+  return option;
+}
+
+describe("Backend-driven source availability (ML-audit-seek-fe-hardcode-001)", () => {
+  it("disables and labels sources the BACKEND reports unavailable", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    // The FE must actually consult the backend availability endpoint —
+    // hardcoded availability is the exact defect this row closes.
+    await waitFor(() => expect(fetchSourceAvailability).toHaveBeenCalled());
+
+    await waitFor(() => {
+      for (const src of ["seek", "linkedin", "indeed"]) {
+        const option = sourceOption(src);
+        expect(option.disabled).toBe(true);
+        expect(option.textContent).toContain("(unavailable)");
+      }
+    });
+    for (const src of ["greenhouse", "lever", "remotive", "remoteok"]) {
+      const option = sourceOption(src);
+      expect(option.disabled).toBe(false);
+      expect(option.textContent).not.toContain("(unavailable)");
+    }
+  });
+
+  it("re-enables seek when the backend reports it available (env gate ON)", async () => {
+    fetchSourceAvailability.mockResolvedValue(
+      DEFAULT_AVAILABILITY.map((row) =>
+        row.source === "seek" ? { source: "seek", available: true, reason: null } : row,
+      ),
+    );
+
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    await waitFor(() => {
+      const option = sourceOption("seek");
+      expect(option.disabled).toBe(false);
+      expect(option.textContent).not.toContain("(unavailable)");
+    });
+    // Fixture-only sources stay honestly disabled.
+    expect(sourceOption("linkedin").disabled).toBe(true);
+  });
+
+  it("degrades honestly when the availability fetch fails: options stay enabled, the backend's 422 remains the truth-teller", async () => {
+    fetchSourceAvailability.mockRejectedValue(new Error("network down"));
+
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+    await waitFor(() => expect(fetchSourceAvailability).toHaveBeenCalled());
+
+    // Unknown availability must NOT be presented as a made-up "(unavailable)"
+    // label — leave options selectable; a filter on a dead source then gets
+    // the backend's honest 422 instead of a fabricated FE claim.
+    for (const src of ["seek", "linkedin", "indeed", "greenhouse"]) {
+      const option = sourceOption(src);
+      expect(option.disabled).toBe(false);
+      expect(option.textContent).not.toContain("(unavailable)");
+    }
+  });
 });
 
 describe("Job Discovery market tabs (GAP-P6-WIRE-001)", () => {

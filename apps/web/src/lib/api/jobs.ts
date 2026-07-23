@@ -56,6 +56,15 @@ export const ScoutSourceStatusSchema = z.object({
 
 export type ScoutSourceStatus = z.infer<typeof ScoutSourceStatusSchema>;
 
+/** Backend-derived per-source availability (ML-audit-seek-fe-hardcode-001). */
+export const SourceAvailabilitySchema = z.object({
+  source: z.string().min(1),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+});
+
+export type SourceAvailability = z.infer<typeof SourceAvailabilitySchema>;
+
 export interface JobFilters {
   status?: JobStatus;
   source?: string;
@@ -147,4 +156,15 @@ export async function fetchScoutSources(
 ): Promise<ScoutSourceStatus[]> {
   const body = await request("/agents/scout/sources", options);
   return z.array(ScoutSourceStatusSchema).parse(body);
+}
+
+/**
+ * Backend-derived per-source availability — which sources are live-filterable
+ * right now and, when not, the honest reason (ML-audit-seek-fe-hardcode-001).
+ */
+export async function fetchSourceAvailability(
+  options: RequestOptions,
+): Promise<SourceAvailability[]> {
+  const body = await request("/agents/scout/sources/availability", options);
+  return z.array(SourceAvailabilitySchema).parse(body);
 }
