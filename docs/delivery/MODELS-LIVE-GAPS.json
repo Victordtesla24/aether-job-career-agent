@@ -1122,11 +1122,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
       ],
-      "status": "OPEN",
+      "status": "REVIEW-FAILED-REWORK",
       "owner": "test-author \u2192 fixer-hard \u2192 reviewer \u2192 deployer \u2192 qa",
       "fixCommits": [],
       "verifiedBy": "",
-      "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified)."
+      "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified).",
+      "reviewFail": "Fix af98b04 FAILED adversarial review (ERR-001-REVIEW.md, reviewer addd9666). BLOCKER: _is_transient_or_refunded_failure short-circuits True on costUsd IS NULL, but EVERY failed run has costUsd=None (no finish(...,'failed',...) call site records cost \u2014 only the success path at agents.py:841 does). So the refund heuristic matches ALL failures, the keyword list is dead code, and a genuine billed logic error (KeyError/validation) is misclassified transient \u2192 status 'active', HIDING a broken agent (proven live: 50% genuine-failure rate never trips the 3-in-a-row chronic guard \u2192 'active' forever). The guard test passed only because it seeded an unrealistic cost_usd=0.0164 on a FAILED run. REWORK: drop the costUsd heuristic; classify transient by ERROR-MESSAGE keyword only (LLMUnavailable msg 'temporarily unavailable' + upstream 429/503/502/504/timeout/overloaded/rate-limit); keep chronic guard; CORRECT the test to production-realistic seeding (failed runs -> costUsd=None)."
     },
     {
       "id": "ML-agents-err-002",
@@ -1146,6 +1147,133 @@
       "owner": "fixer (reliability tuning \u2014 batch with err-001 or backlog)",
       "fixCommits": [],
       "verifiedBy": "evidence probe a44b29c (LIVE-CATALOG-STATUS-NOW.md) + scout addca724 + grep (no hardcoded haiku)"
+    },
+    {
+      "id": "ML-audit-story-leak-001",
+      "screen": "story extraction / Story Bank",
+      "severity": "BLOCKER",
+      "category": "privacy/fabrication",
+      "summary": "CROSS-ACCOUNT PII LEAK + FABRICATION. story_extractor.py:85 _resolve_resume_text calls resolve_user_resume_text(user_id) WITHOUT allow_operator_fallback=False \u2014 the ONLY production call site that doesn't (email_agent:178, cover_letters:582/660/839, jobs:247 all pass False). A subscribed user with NO resume who runs story-extraction gets STAR stories silently extracted from the OPERATOR'S bundled personal resume (assets/resume/Vik_Resume_Final.pdf) persisted into their Story Bank as self-authored, then fed into their real tailored resumes/cover letters. FIX: pass allow_operator_fallback=False so a user with no resume gets an honest no-resume refusal.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
+      ],
+      "status": "OPEN",
+      "owner": "test-author->fixer-medium->reviewer",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-admin-pw-001",
+      "screen": "auth / admin",
+      "severity": "BLOCKER",
+      "category": "security",
+      "summary": "WEAK INTERNET-REACHABLE ADMIN LOGIN on real-money app. apply_admin_rotation (admin.py:548-561, run every boot by main.py:121-139) re-pins the OWNER account (admin / sarkar.vikram@gmail.com / isAdmin) to AETHER_ADMIN_PASSWORD_HASH (=admin123) UNCONDITIONALLY on every boot. Proven live: POST /api/auth/login admin/admin123 -> 200+JWT that passes GET /admin/users. Anyone can gain full admin (all users' PII, spend caps, real Stripe refunds). AETHER_CRON_PASSWORD also =admin123. FIX (code): make rotation bootstrap-once (don't overwrite an existing account every boot) + prod deny-list guard vs known-weak defaults. FIX (value, USER-GATED): rotate AETHER_ADMIN_PASSWORD_HASH + AETHER_CRON_PASSWORD to strong unique values. NOTE: admin123 needed for this session's QA logins; value rotation sequenced with user.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
+      ],
+      "status": "ACCEPTED-BY-OWNER",
+      "owner": "(owner decision 2026-07-23: leave admin123 as-is, intentional for this deployment; NO code or value change \u2014 a weak-password deny-list would break intended access)",
+      "fixCommits": [],
+      "verifiedBy": "owner decision"
+    },
+    {
+      "id": "ML-audit-env-guard-001",
+      "screen": "infra / LLM safety",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "AETHER_ENV unset (defaults 'development') so the main.py:93-118 guard that HARD-FAILS boot on AETHER_LLM_MODE=replay in production is DISARMED \u2014 a future LLM-mode misconfig would silently serve canned fixture output to paying users with only a stderr warning. Currently inert (AETHER_LLM_MODE=auto). Verified AETHER_ENV only gates this guard (safe to set). FIX: set AETHER_ENV=production in .env.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md",
+        "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
+      ],
+      "status": "OPEN",
+      "owner": "prod-hardening cluster",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-source-disclosure-001",
+      "screen": "dashboard/jobs source filter",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "LinkedIn/Indeed adapters have no live mode (NotImplementedError, honestly skipped) but remain listed as ordinary undisclosed options in the job-source filter dropdown (jobs/page.tsx:61-88,739-744; adapter_registry.py:43-58) \u2014 always return zero results with no in-context explanation. FIX: disclose 'not available'/disable these options (and Seek which is gated off) in the dropdown.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
+      ],
+      "status": "OPEN",
+      "owner": "source-disclosure cluster",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-emailverify-toggle-001",
+      "screen": "admin/settings",
+      "severity": "LOW",
+      "category": "incomplete",
+      "summary": "Admin 'Email verification' toggle (admin.py:178-222 + admin/settings/page.tsx:105-111) persists + echoes 'saved' but NOTHING reads it (no enforcement in auth.py register/login). Honest UI copy calls it placeholder but it's a stateful control implying a working feature. FIX: wire real enforcement or remove until shipped.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
+      ],
+      "status": "OPEN",
+      "owner": "source-disclosure cluster",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-staletoken-001",
+      "screen": "infra / .env",
+      "severity": "LOW",
+      "category": "hygiene",
+      "summary": "Stale synthetic token CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat03-FAKEtest... in live .env (matches test-fixture literal). Confirmed INERT (llm_client.py:550-565 treats this env var write-only, never read as credential; no anthropic ProviderCredential row). FIX: remove for hygiene; consider rejecting saves matching the test-fixture pattern.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
+      ],
+      "status": "OPEN",
+      "owner": "prod-hardening cluster",
+      "fixCommits": [],
+      "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-loginpw-001",
+      "screen": "infra / .env",
+      "severity": "INFO",
+      "category": "benign",
+      "summary": "RESOLVED not-a-defect: LOGIN_PASSWORD=AetherDemo1 in env is NOT a backdoor \u2014 zero hits in apps/api/app/; only consumed by offline seed_demo.py + UAT tooling, never HTTP-reachable. auth login does ordinary per-account bcrypt, no special-case string. Stale, harmless.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/KEYFEATURES-TESTDATA-AUDIT.md"
+      ],
+      "status": "CLOSED-NOT-A-DEFECT",
+      "owner": "",
+      "fixCommits": [],
+      "verifiedBy": "keyfeatures audit a8b904f"
+    },
+    {
+      "id": "ML-audit-fullrun-verdict",
+      "screen": "full pipeline (live)",
+      "severity": "INFO",
+      "category": "verification",
+      "summary": "INDEPENDENT 3RD-PARTY LIVE FULL-RUN AUTHENTICITY REVIEW (qa-adversary a2ff4156, 2026-07-23T00:23-00:37Z, real admin session): ALL stages GENUINE, twice-verified. Discovery=real (Greenhouse authoritative API cross-match, live wellfound-403 honestly surfaced \u2014 a fixture cannot 403); FitScoring=real (30 distinct scores 24.89-50.05, per-job matched/gap sets track JD-vs-resume, independent mean 40.07==dashboard 40.3); Tailoring=real + FABRICATION-GUARD PROVEN WORKING (run cada252a: kept 1 grounded edit, REJECTED 7 invented metrics); CoverLetter=real (run c6fd095e claude-sonnet-5: cites Databricks JD VERBATIM + exact base-resume facts, zero canned-phrase hits); StoryExtraction=real (4 STAR from real resume/employers); Billing=real sk_live Stripe + correct GST (Pro $39=$35.45+$3.55); ModelSelection=real (run cdb4ea8a stamped+billed deepseek-v4-pro as chosen, bogus id->422, NO silent substitution); Dashboards=real aggregates cross-reconcile; catalog=332 live models stale:false. G-05 PASS. NO BLOCKER/HIGH/MED authenticity findings; NO fake/canned/fixture/fabricated output on any user-reachable path.",
+      "evidence": [
+        "qa-adversary a2ff4156 review (AgentRun run_ids queryable via GET /api/agents/runs); scratchpad ev/ captures"
+      ],
+      "status": "VERIFIED-GENUINE",
+      "owner": "",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary a2ff4156 (independent)"
+    },
+    {
+      "id": "ML-audit-fallback-tier-001",
+      "screen": "infra / LLM resilience",
+      "severity": "LOW",
+      "category": "reliability",
+      "summary": "AETHER_MODEL_FALLBACK == deepseek/deepseek-v4-flash, which is ALSO the FAST+LIGHT tier model. So a transient blip of the flash model on the DEFAULT path cannot be caught by the fallback (same model) \u2192 user-facing honest 503 instead of degrading to a different model (observed live: bg job cb5a85d2 chosen deepseek-v4-flash failed 503+refunded \u2014 honest, no substitution, but no distinct fallback). NOTE: user-chosen models correctly get NO fallback per ADR-ML-3; this only affects the system-DEFAULT resilience path. FIX (LOW, config): set AETHER_MODEL_FALLBACK to a distinct reliable cheap model so a flash-tier blip degrades to a different model.",
+      "evidence": [
+        "qa-adversary a2ff4156 review \u2014 finding ML-adv-001"
+      ],
+      "status": "OPEN",
+      "owner": "prod-hardening cluster (config)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
