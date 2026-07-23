@@ -1,9 +1,9 @@
 {
-  "phase_step": "W-A-LEDGER-CLOSED",
-  "updated_at": "2026-07-24T08:05:00Z",
+  "phase_step": "W-B-CLOSED",
+  "updated_at": "2026-07-24T07:55:00+10:00",
   "workstream_status": {
     "W-A": "partial",
-    "W-B": "in_progress-next",
+    "W-B": "closed",
     "W-C": "pending",
     "W-D": "pending",
     "W-E": "pending",
@@ -70,6 +70,16 @@
         "vitest": "559 passed / 0 failed, 81 files (baseline 556 + 3 new)",
         "playwright": "targeted e2e/jobs.spec.ts 4/4 vs live deploy; full-suite baseline 51P/28F unchanged-documented"
       }
+    },
+    "W-B": {
+      "status": "closed",
+      "note": "FEAT-B1 (approvals remove/purge-expired, commit 1de73a9) and FEAT-B2 (application/pipeline stage moves via menu + drag-and-drop, commit abb8e92) implemented tests-first, deployed in ONE batch at abb8e92 and verified against live prod: B1 DELETE 409(live-pending)/200(resolved)/404(gone) + purge 3->0 + GET 404; B2 legal moves 200+persisted both card types, illegal/unknown 422, applied-job pipeline move 409, sankey consistent. Ledger rows FEAT-B1-approvals-remove / FEAT-B2-stage-move VERIFIED-CLOSED-LIVE. e2e spec stabilization (test-only) committed post-deploy at a28cf8f.",
+      "evidence": "uat/reports/evidence/launch-ready/features/",
+      "suites": {
+        "pytest": "1173 passed / 0 failed (W-A baseline 1131 + 42 new: 12 approvals-delete, 30 applications-move)",
+        "vitest": "567 passed / 0 failed (W-A baseline 559 + 8 new: 3 canRemove, 5 stage-move helpers)",
+        "playwright": "launch-b1 + launch-b2 specs 8/8 vs live prod; regression smoke approvals/applications/analytics 8/8; full-suite baseline 51P/28F unchanged-documented"
+      }
     }
   },
   "baseline": {
@@ -97,11 +107,10 @@
       "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
     }
   },
-  "last_commit": "592a963174897ecee688cd669c76cd58b75edc6d",
-  "last_deploy_sha": "592a963",
+  "last_commit": "a28cf8f",
+  "last_deploy_sha": "abb8e92",
   "next_actions": [
     "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence; the 5-row ledger business is already closed (2026-07-24).",
-    "W-B: FEAT-B1 approvals purge + FEAT-B2 applications stage-move (§4) at production quality, evidence under features/",
     "W-C: duplicate-implementation elimination (§5) after W-A/W-B land — dedup-surgeon with reviewed manifests, evidence under dedup/",
     "W-D: repo + prod cleanup (§6) — reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
     "W-E: top-10-paid-app quality hardening sweep (§7) after W-A..W-C deploy, evidence under quality/screens",

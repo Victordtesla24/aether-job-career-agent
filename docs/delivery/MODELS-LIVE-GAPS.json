@@ -1444,6 +1444,52 @@
       ],
       "verifiedBy": "launch-ready W-A ledger-close 2026-07-24",
       "note": "CLOSED 2026-07-24: GET /jobs?source=<unknown|unavailable> now rejected 422 with honest detail (unknown -> known-set disclosure; unavailable -> real reason + include_stale hint; include_stale=true keeps history reachable per GAP-P6-DATA-001; available sources and env-enabled seek -> 200). Convention matches the existing status-filter 422. Verified live post-deploy 592a963 (see PROD-VERIFY evidence)."
+    },
+    {
+      "id": "FEAT-B1-approvals-remove",
+      "screen": "dashboard/approvals",
+      "severity": "MEDIUM",
+      "category": "feature",
+      "summary": "Workstream B FEAT-B1: stale/expired approval requests could not be removed — resolved (approved/rejected) and expired-pending rows accumulated forever in the queue with no per-card or bulk removal path.",
+      "reproduction": "Pre-fix: open /dashboard/approvals with resolved or >48h-expired pending rows — no removal control exists; DELETE /approvals/{id} -> 405 (route absent).",
+      "expected": "Resolved and expired-pending approvals are removable per-card (with confirm) and expired rows bulk-purgeable; live pending approvals must never be silently removable (approve/reject only).",
+      "observed": "IMPLEMENTED+VERIFIED LIVE: DELETE /approvals/{id} (200 resolved/expired-pending, 409 live-pending, 404 missing/foreign) + POST /approvals/purge-expired (owner-scoped, returns purged ids); FE Remove button on removable cards only + 'Clear expired (N)' bulk control. Prod: 409->reject->200->404 sequence and purge 3->0->404 all confirmed at deploy abb8e92.",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/features/FEAT-B1-prod-verify-20260723T212021Z.md",
+        "uat/reports/evidence/launch-ready/features/FEAT-B1-B2-playwright-20260723T214500Z.log",
+        "uat/reports/evidence/launch-ready/features/FEAT-B1-approvals-remove-ui.png",
+        "uat/reports/evidence/launch-ready/features/DESIGN-W-B.md"
+      ],
+      "status": "VERIFIED-CLOSED-LIVE",
+      "owner": "launch-ready W-B",
+      "fixCommits": [
+        "1de73a9"
+      ],
+      "verifiedBy": "launch-ready W-B prod verification 2026-07-23/24 @ deploy abb8e92",
+      "note": "CLOSED 2026-07-24: 12 new pytest (tests/test_approvals_delete.py), 3 new vitest (canRemove), 3-test e2e spec (launch-b1-approvals-remove.spec.ts) all green vs live prod. Live-pending gate is server-enforced (409), removal is hard-delete (second DELETE 404), purge is owner-scoped and idempotent (second call {purged:0})."
+    },
+    {
+      "id": "FEAT-B2-stage-move",
+      "screen": "dashboard/applications",
+      "severity": "MEDIUM",
+      "category": "feature",
+      "summary": "Workstream B FEAT-B2: application tracker cards could not be moved between kanban stages — no menu, no drag-and-drop, no API; the board was read-only.",
+      "reproduction": "Pre-fix: open /dashboard/applications — cards expose no move control and are not draggable; no move endpoint exists.",
+      "expected": "Cards move between legal stages via an accessible menu AND drag-and-drop, persisted server-side with honest 422 on illegal cross-split moves (app cards: ready/submitted/in-review/interview/offer; pipeline job cards: discovered/evaluating/tailoring) and 409 when a job with an application is moved as a job card.",
+      "observed": "IMPLEMENTED+VERIFIED LIVE: POST /applications/{id}/move + POST /applications/pipeline/{job_id}/move with audit rows; FE Move-to menu (keyboard accessible, only legal targets) + HTML5 drag-and-drop with optimistic update and rollback. Prod: legal moves 200+persisted both directions for app and job cards, illegal/unknown stages 422 with actionable detail, applied-job pipeline move 409, sankey byte-identical before/after reverted sequence — all at deploy abb8e92.",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/features/FEAT-B2-prod-verify-20260723T212330Z.md",
+        "uat/reports/evidence/launch-ready/features/FEAT-B1-B2-playwright-20260723T214500Z.log",
+        "uat/reports/evidence/launch-ready/features/FEAT-B2-move-menu-ui.png",
+        "uat/reports/evidence/launch-ready/features/DESIGN-W-B.md"
+      ],
+      "status": "VERIFIED-CLOSED-LIVE",
+      "owner": "launch-ready W-B",
+      "fixCommits": [
+        "abb8e92"
+      ],
+      "verifiedBy": "launch-ready W-B prod verification 2026-07-23/24 @ deploy abb8e92",
+      "note": "CLOSED 2026-07-24: 30 new pytest (tests/test_applications_move.py), 5 new vitest (stage-move helpers), 4-test e2e spec (launch-b2-move-stage.spec.ts) all green vs live prod (8/8 incl. FEAT-B1 spec); regression smoke approvals/applications/analytics 8/8. e2e hardening documented in commit for spec stability: moves await the server /move response (optimistic UI races), draft 'ready' column excluded (DISTINCT ON jobId collapse), count-delta assertions (duplicate titles)."
     }
   ]
 }
