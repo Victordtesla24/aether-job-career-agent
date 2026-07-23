@@ -22,12 +22,8 @@ import {
 } from "../../components/dashboard/feed";
 import { fetchAgentRuns, type AgentRun } from "../../lib/api/agents";
 import { fetchFunnel, type Funnel } from "../../lib/api/analytics";
-import {
-  approveRequest,
-  fetchApprovals,
-  rejectRequest,
-  type Approval,
-} from "../../lib/api/approvals";
+import { decideApproval } from "../../components/approvals/api";
+import { fetchApprovals, type Approval } from "../../lib/api/approvals";
 import { apiRequest, ApiError } from "../../lib/api/client";
 import type { Job } from "../../lib/api/jobs";
 import { fetchStories, type Story } from "../../lib/api/stories";
@@ -170,7 +166,7 @@ export default function DashboardPage() {
     setBusyApprovalId(id);
     setApprovalActionError(null);
     try {
-      await (action === "approve" ? approveRequest(id) : rejectRequest(id));
+      await decideApproval(id, action);
       approvals.setData(pending.filter((a) => a.id !== id));
       showToast(
         action === "approve" ? "Approved ✓" : "Rejected",

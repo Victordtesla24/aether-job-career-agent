@@ -24,18 +24,6 @@ export async function fetchApprovals(
   return z.array(ApprovalSchema).parse(data);
 }
 
-export async function approveRequest(id: string, options: RequestOptions = {}): Promise<Approval> {
-  return ApprovalSchema.parse(
-    await apiRequest<unknown>(`/approvals/${id}/approve`, { ...options, method: "POST" }),
-  );
-}
-
-export async function rejectRequest(id: string, options: RequestOptions = {}): Promise<Approval> {
-  return ApprovalSchema.parse(
-    await apiRequest<unknown>(`/approvals/${id}/reject`, { ...options, method: "POST" }),
-  );
-}
-
 /** Remove one stale (expired or resolved) approval request (FEAT-B1). */
 export async function deleteApproval(
   id: string,

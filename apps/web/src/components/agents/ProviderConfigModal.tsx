@@ -250,21 +250,29 @@ export default function ProviderConfigModal({
 
   // Connect-with-Anthropic step 1: mint the authorize URL server-side and open
   // Anthropic's OWN sign-in page in a new tab, then reveal the paste-back field.
-  const connectAnthropic = async () => {
-    if (busy) return;
-    setBusy("connecting");
-    setError(null);
-    onNotice({ kind: "info", text: "Opening Anthropic sign-in in a new tab…" });
+  // Shared catch/finally for the two Connect-with-Anthropic steps (DEDUP-026):
+  // identical error notice/context and busy reset, distinct happy paths.
+  const runConnect = async (fn: () => Promise<void>) => {
     try {
-      const { authorizeUrl } = await startAnthropicOAuth();
-      window.open(authorizeUrl, "_blank", "noopener");
-      setOauthStep("await_code");
+      await fn();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
       setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
     } finally {
       setBusy(null);
     }
+  };
+
+  const connectAnthropic = async () => {
+    if (busy) return;
+    setBusy("connecting");
+    setError(null);
+    onNotice({ kind: "info", text: "Opening Anthropic sign-in in a new tab…" });
+    await runConnect(async () => {
+      const { authorizeUrl } = await startAnthropicOAuth();
+      window.open(authorizeUrl, "_blank", "noopener");
+      setOauthStep("await_code");
+    });
   };
 
   // Connect-with-Anthropic step 2: exchange the pasted one-time code#state for a
@@ -275,7 +283,7 @@ export default function ProviderConfigModal({
     setBusy("connecting");
     setError(null);
     onNotice({ kind: "info", text: `Connecting ${view.name}…` });
-    try {
+    await runConnect(async () => {
       const updated = await exchangeAnthropicOAuth(code);
       setView((v) => (v ? { ...v, ...updated } : updated));
       setOauthCode("");
@@ -285,12 +293,7 @@ export default function ProviderConfigModal({
         text: `${view.name} connected${updated.secretHint ? ` (${updated.secretHint})` : ""}.`,
       });
       await onSaved();
-    } catch (e) {
-      onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
-    } finally {
-      setBusy(null);
-    }
+    });
   };
 
   // Connect-with-Anthropic renew: rotate the stored subscription session via the

@@ -1,0 +1,8 @@
+# Wave 4 fresh traces (captured 2026-07-23T23:42Z)
+## DEDUP-037 — approveRequest/rejectRequest consumers (pre-change)
+app/dashboard/page.tsx:26,28,173 (only live consumer) + app/dashboard/__tests__/page.test.tsx mocks (46-54,162-163,199,219)
+decideApproval superset verified: components/approvals/api.ts:23-34 — decideApproval(id,'approve') with default context {} sends POST /approvals/{id}/approve with body undefined => identical request; both parse ApprovalSchema.
+## DEDUP-026 — ProviderConfigModal connect handlers
+connectAnthropic (253-269) + completeAnthropic (271-294): identical catch (providerCredentialErrorNotice 'Connecting ${view.name}', slice(0,160), 'Connect failed') + finally setBusy(null). renewAnthropic/verify have DIFFERENT contexts/messages — deliberately not folded in.
+## DEDUP-027 — agents/api.ts provider-catalog fetch tail
+fetchProviderCatalog + refreshProviderModels: identical 'toProviderCatalog(ProviderModelsResponseSchema.parse(res))' + ApiError liftApiDetail rewrap (verified byte-identical this session).

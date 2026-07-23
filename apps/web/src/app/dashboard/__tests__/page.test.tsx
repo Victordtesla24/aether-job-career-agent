@@ -43,15 +43,19 @@ vi.mock("../../../lib/api/analytics", async (importOriginal) => {
 });
 
 const fetchApprovalsMock = vi.hoisted(() => vi.fn());
-const approveRequestMock = vi.hoisted(() => vi.fn());
-const rejectRequestMock = vi.hoisted(() => vi.fn());
+const decideApprovalMock = vi.hoisted(() => vi.fn());
 vi.mock("../../../lib/api/approvals", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../lib/api/approvals")>();
   return {
     ...actual,
     fetchApprovals: (...args: unknown[]) => fetchApprovalsMock(...args),
-    approveRequest: (...args: unknown[]) => approveRequestMock(...args),
-    rejectRequest: (...args: unknown[]) => rejectRequestMock(...args),
+  };
+});
+vi.mock("../../../components/approvals/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../components/approvals/api")>();
+  return {
+    ...actual,
+    decideApproval: (...args: unknown[]) => decideApprovalMock(...args),
   };
 });
 
@@ -159,8 +163,7 @@ afterEach(() => {
   fetchNetworkingSummaryMock.mockReset();
   fetchMarketPulseMock.mockReset();
   fetchApprovalsMock.mockReset();
-  approveRequestMock.mockReset();
-  rejectRequestMock.mockReset();
+  decideApprovalMock.mockReset();
 });
 
 describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () => {
@@ -196,7 +199,7 @@ describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () =>
   it("shows an honest, non-technical error and never leaks the raw HTTP method/endpoint/JSON when approve 409s", async () => {
     fetchAgentRunsMock.mockResolvedValue([coverLetterRun()]);
     fetchApprovalsMock.mockResolvedValue([approval()]);
-    approveRequestMock.mockRejectedValue(
+    decideApprovalMock.mockRejectedValue(
       new ApiError(
         'POST /approvals/appr-1/approve failed (409): {"detail":"Approval already approved — terminal state"}',
         409,
@@ -216,7 +219,7 @@ describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () =>
   it("shows a clean generic honest message (not raw error text) for a non-409 approve failure", async () => {
     fetchAgentRunsMock.mockResolvedValue([coverLetterRun()]);
     fetchApprovalsMock.mockResolvedValue([approval()]);
-    approveRequestMock.mockRejectedValue(
+    decideApprovalMock.mockRejectedValue(
       new ApiError("POST /approvals/appr-1/approve failed (500): Internal Server Error", 500),
     );
 

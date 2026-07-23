@@ -231,19 +231,31 @@ export async function fetchProviderModels(
  * initial load, not a "not yet refreshed" placeholder. Same honest-error
  * contract (the backend serves last-good stale data on upstream failure).
  */
-export async function fetchProviderCatalog(
-  provider: string,
-  o: RequestOptions = {},
-): Promise<ProviderCatalog> {
+// Shared provider-catalog fetch tail (DEDUP-027): validate + map the wire
+// response, and re-wrap ApiError detail via liftApiDetail for user display.
+function parseProviderCatalog(res: unknown): ProviderCatalog {
+  return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
+}
+
+async function withLiftedApiError<T>(fn: () => Promise<T>): Promise<T> {
   try {
-    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
-    return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
+    return await fn();
   } catch (e) {
     if (e instanceof ApiError) {
       throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
     }
     throw e;
   }
+}
+
+export async function fetchProviderCatalog(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<ProviderCatalog> {
+  return withLiftedApiError(async () => {
+    const res = await apiRequest<unknown>(`/agents/providers/${provider}/models`, o);
+    return parseProviderCatalog(res);
+  });
 }
 
 /**
@@ -256,18 +268,13 @@ export async function refreshProviderModels(
   provider: string,
   o: RequestOptions = {},
 ): Promise<ProviderCatalog> {
-  try {
+  return withLiftedApiError(async () => {
     const res = await apiRequest<unknown>(`/agents/providers/${provider}/models/refresh`, {
       ...o,
       method: "POST",
     });
-    return toProviderCatalog(ProviderModelsResponseSchema.parse(res));
-  } catch (e) {
-    if (e instanceof ApiError) {
-      throw new ApiError(liftApiDetail(e.message), e.status, e.retryAfterSeconds);
-    }
-    throw e;
-  }
+    return parseProviderCatalog(res);
+  });
 }
 
 export async function fetchAgentStats(o: RequestOptions = {}): Promise<AgentStats> {
