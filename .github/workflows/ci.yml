@@ -43,6 +43,14 @@ jobs:
       - name: pytest (hosted DB)
         env:
           DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+          # Deterministic Fernet key for the credential vault (ADR-PC-3) so the
+          # encrypted-credential suites (Google-OAuth callback persist, provider
+          # config) run green in CI. This is a TEST-ONLY key that encrypts
+          # ephemeral rows in the aether_test schema — NOT a production secret
+          # (production sets its own key in the server .env). conftest.py sets the
+          # same value via os.environ.setdefault(); pinning it here (a literal, not
+          # a possibly-empty secret ref) keeps CI robust to an unset secret.
+          AETHER_CREDENTIAL_KEY: htOwdaXn8QwZE8LSvZF1oCdgVBisuJnJHrgxBGvVrEU=
         run: |
           if [ -z "$DATABASE_URL_TEST" ]; then
             echo "::warning::DATABASE_URL_TEST secret not set — DB test suite skipped"

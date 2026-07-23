@@ -220,6 +220,9 @@ def test_insights_skillgap_not_garbage(client, auth_headers, test_user_id):
 # --------------------------------------------------------------------------- #
 def test_execute_email_send_is_idempotent(client, auth_headers, test_user_id, monkeypatch):
     from app.repositories.gmail_account import GmailAccountRepository
+    from app.services import credential_vault as vault
+
+    monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
 
     repo = GmailAccountRepository()
     repo.upsert_account(

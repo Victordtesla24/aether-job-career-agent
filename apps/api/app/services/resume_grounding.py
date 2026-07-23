@@ -5,15 +5,23 @@ on "the candidate résumé" MUST use these helpers so no account is ever grounde
 on another user's — or the operator's — résumé (NF-final-B-001/002/005,
 MV-story-bank-006).
 
-Two fallback regimes:
+The ``allow_operator_fallback`` parameter still exists on the helpers below and
+defaults to ``True``, but EVERY per-user grounding call site now passes
+``False`` and REFUSES to ground on the operator résumé when the user has no
+résumé of their own:
 
-* INTERNAL analytics (e.g. the story extractor) may keep the bundled base PDF as
-  a last-resort fallback when the user has no résumé — nothing user-visible
-  leaves the system (``allow_operator_fallback=True``, the default).
 * OUTBOUND artifacts (cover letters, email drafts, refined letters, exported
-  PDFs / attachments) MUST pass ``allow_operator_fallback=False`` and REFUSE to
-  generate when the user has no résumé — emitting the bundled operator résumé
-  into a third-party-visible artifact is a cross-account PII leak.
+  PDFs / attachments) refuse and raise :class:`MissingResumeError` / surface an
+  honest 4xx rather than emit the operator résumé.
+* The STORY EXTRACTOR likewise passes ``False``: its STAR output is PERSISTED
+  into the caller's OWN user-visible Story Bank, so it is no longer treated as
+  a purely-internal computation that may keep the bundled operator PDF
+  (ML-audit-story-leak-001 closed that last remaining fallback path).
+
+Emitting the bundled operator résumé into any user-visible artifact or store is
+a cross-account PII leak. The ``allow_operator_fallback=True`` default is
+retained only for a hypothetical strictly-internal computation whose result
+never persists and never reaches a user; no current caller relies on it.
 """
 from __future__ import annotations
 

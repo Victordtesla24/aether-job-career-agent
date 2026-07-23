@@ -19,7 +19,10 @@ from the tailoring-constrained 65s: standalone cover (a single generation) gets
 ~88s (< the ~100s edge), and inside the pipeline the cover no longer inherits the
 already-drained tailoring budget. Tailoring (prompt ``tailor`` +
 ``tailor_entailment``) is untouched. AUTH-002 is preserved: a genuine live failure
-still raises an HONEST error (no fixture fallback) rather than a canned letter.
+is surfaced HONESTLY — ML-cover-002 (commit 93bfc8c) changed run()'s raw
+``LLMUnavailableError`` raise into an explicit ``coverLetterUnavailable`` degrade
+(no fixture fallback, no canned letter, nothing persisted or billed); the test
+below asserts that honest-degrade contract, not the superseded raise.
 """
 from __future__ import annotations
 
@@ -229,12 +232,15 @@ def test_cover_budget_strictly_exceeds_tailoring_generation_budget(monkeypatch) 
 
 
 # ===========================================================================
-# (c) AUTH-002 preserved — a genuine live failure inside the cover window
-#     raises an HONEST error; it is NEVER swallowed into a fixture fallback.
+# (c) AUTH-002 preserved — a genuine live failure inside the cover window is
+#     surfaced HONESTLY as a coverLetterUnavailable degrade; it is NEVER
+#     swallowed into a fixture fallback or a canned/fabricated letter.
 # ===========================================================================
 
 
-def test_cover_run_raises_honest_error_no_fixture_fallback(monkeypatch) -> None:
+def test_cover_run_degrades_honestly_on_live_failure_no_fixture_fallback(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("AETHER_LLM_MODE", "auto")
     _stub_evidence(monkeypatch)
     # DI-stub test using a fake user id ("user-1"); stub the résumé-grounding
@@ -258,5 +264,19 @@ def test_cover_run_raises_honest_error_no_fixture_fallback(monkeypatch) -> None:
     agent = CoverLetterAgent(
         llm=_FailingLLM(), jobs=_FakeJobs(), users=_FakeUsers(), stories=_FakeStories()
     )
-    with pytest.raises(LLMUnavailableError):
-        agent.run("user-1", "job-1")
+    # ML-cover-002 (commit 93bfc8c): a live LLM failure on the FIRST draft no
+    # longer propagates a raw LLMUnavailableError out of run(); it degrades to an
+    # explicit, HONEST coverLetterUnavailable result. The AUTH-002 guarantee this
+    # test protects is UNCHANGED — the failure is NEVER swallowed into a fixture
+    # fallback or a canned/fabricated letter; assert exactly that contract.
+    result = agent.run("user-1", "job-1")
+    assert result.cover_letter_unavailable is True
+    # No canned/fixture letter was substituted for the failed live call …
+    assert result.cover_letter == ""
+    # … and nothing was persisted or queued for approval.
+    assert result.cover_letter_id is None
+    assert result.approval_id is None
+    assert result.approval_status is None
+    # The honest message never leaks the raw Python exception-class prefix.
+    assert result.message
+    assert "llmunavailableerror" not in result.message.lower()

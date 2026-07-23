@@ -72,6 +72,50 @@ os.environ["AETHER_LLM_MODE"] = "replay"
 # dedicated gate suite (test_gap_p6_paywall) sets the flag EXPLICITLY per test.
 os.environ["AETHER_REQUIRE_PAID_SUBSCRIPTION"] = "false"
 
+# Async background generation (GAP-P7-ASYNC-001) is OFF in the code default and
+# the whole suite is written against the SYNCHRONOUS request path (run endpoints
+# return a synchronous 200, not a 202 "enqueued"). A developer/production ``.env``
+# that has flipped ``AETHER_ASYNC_GENERATION=true`` (read by pydantic via
+# ``config.py``'s ``env_file=".env"``) must NOT leak into the suite and turn every
+# synchronous run assertion into a 202 — so pin it OFF here, exactly like
+# AETHER_LLM_MODE above. The dedicated async suites (test_gap_p7_async_*) set the
+# flag EXPLICITLY per test via ``monkeypatch.setenv`` (which overrides this and is
+# restored afterwards), so pinning the default false leaves them intact.
+os.environ["AETHER_ASYNC_GENERATION"] = "false"
+
+# §14.7 admin-credential rotation (apply_admin_rotation, run on EVERY app
+# construction via the FastAPI lifespan) UPSERTs a phantom "owner" admin User
+# — with a Free-plan Subscription — whenever ``AETHER_ADMIN_EMAIL`` +
+# ``AETHER_ADMIN_PASSWORD_HASH`` are present in the environment. That seeding
+# happens AFTER the per-test truncation (the ``client`` fixture truncates, then
+# constructs the app), so any ambient value leaves a stray extra User in every
+# subsequent test's DB — breaking user-count assertions (test_ml_admin_001) and
+# any fixture that assumes a single row (``SELECT id FROM "User" LIMIT 1`` in
+# test_job_discovery / test_jobs_insights_apply, which would then create Jobs
+# under the wrong owner and 404). The suite must be deterministic regardless of
+# ambient env (a developer shell, a CI secret, or a module-import side-effect),
+# so pin these OUT of the default test environment — exactly like the flags
+# above. The dedicated rotation suite (test_gap_p6_admin) sets them EXPLICITLY
+# per test via ``monkeypatch.setenv`` (overrides this and is restored after),
+# so pinning the default absent leaves that suite intact.
+os.environ.pop("AETHER_ADMIN_EMAIL", None)
+os.environ.pop("AETHER_ADMIN_PASSWORD_HASH", None)
+
+# Credential vault key (ADR-PC-3): provider secrets / OAuth tokens are encrypted
+# at rest with a deployment-wide Fernet key read from ``AETHER_CREDENTIAL_KEY``
+# (credential_vault.py). Without it the vault raises CredentialVaultError and any
+# test that persists an encrypted credential (e.g. the Google-OAuth callback
+# storing a refresh token) fails on a pure env gap rather than a code defect.
+# Provide a deterministic, valid test key globally so NO test depends on ambient
+# env (CI has none) — mirroring the ~10 sibling suites that already do
+# ``monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())`` locally.
+# ``setdefault`` respects a real key already exported (e.g. a CI secret); tests
+# that exercise the KEY-ABSENT honesty path use ``monkeypatch.delenv`` (removed
+# for that test, restored after), so this global default never masks them.
+os.environ.setdefault(
+    "AETHER_CREDENTIAL_KEY", "htOwdaXn8QwZE8LSvZF1oCdgVBisuJnJHrgxBGvVrEU="
+)
+
 # ---------------------------------------------------------------------------
 # MV-system-003 — fail-closed guard against truncating the PRODUCTION schema.
 #

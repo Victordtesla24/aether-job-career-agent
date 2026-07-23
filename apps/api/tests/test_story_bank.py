@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from conftest import seed_own_resume
+
 from app.agents.fit_scorer import get_base_resume_path
 from app.services.resume_parser import parse_resume_pdf
 
@@ -12,6 +14,16 @@ STAR_FIELDS = ("title", "situation", "task", "action", "result")
 
 
 def _extract(client, auth_headers) -> list[dict]:
+    # Story extraction grounds ONLY on the CALLING user's own résumé, never
+    # the operator's bundled one (ML-audit-story-leak-001) — a user with no
+    # résumé of their own now honestly extracts zero stories. Seed the test
+    # user their OWN copy of the base résumé (the very corpus the
+    # metrics-not-invented assertion below validates against) via the
+    # established per-user seeding helper before running extraction.
+    seed_own_resume(
+        client, auth_headers,
+        raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"],
+    )
     resp = client.post("/agents/story-extractor/run", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["created"] >= 1

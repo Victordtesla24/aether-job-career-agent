@@ -80,9 +80,16 @@ class StoryExtractorAgent:
     @staticmethod
     def _resolve_resume_text(user_id: str) -> str:
         """The caller's OWN resume text (MV-story-bank-006) — delegates to the
-        shared per-user grounding helper so every agent path resolves résumé text
-        identically (bundled base PDF only when the user has no résumé)."""
-        return resolve_user_resume_text(user_id)
+        shared per-user grounding helper with ``allow_operator_fallback=False``
+        (ML-audit-story-leak-001). STAR stories extracted here are PERSISTED
+        into the calling user's OWN Story Bank, so — unlike a purely internal
+        computation — they ARE user-visible; the OPERATOR's bundled résumé
+        must never ground them. A user with no résumé of their own therefore
+        gets an honest empty resume corpus (and so extracts zero stories this
+        run) instead of stories silently derived from the operator's real
+        personal history, mirroring every other per-user grounding call site
+        (email_agent.py, cover_letters.py, jobs.py)."""
+        return resolve_user_resume_text(user_id, allow_operator_fallback=False)
 
     @staticmethod
     def _metrics_evidenced(metrics: dict[str, Any], resume_numbers: set[str]) -> bool:

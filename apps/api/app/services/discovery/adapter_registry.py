@@ -99,5 +99,19 @@ def get_adapter_class(source: str) -> type[BaseAdapter]:
 
 
 def all_sources() -> list[str]:
-    """Live compliant sources the scout runs (Seek excluded by default)."""
-    return sorted(ADAPTERS)
+    """Live compliant sources the scout runs (Seek excluded by default).
+
+    Excludes sources that have NO live-HTTP implementation at all — i.e.
+    their adapter inherits ``BaseAdapter._fetch_live``'s ``NotImplementedError``
+    stub unmodified (legacy fixture-only adapters such as LinkedIn/Indeed).
+    Those stay in ``ADAPTERS`` so the scout can still fan out over them and
+    honestly record a per-source "skipped" status at run time, but this
+    function's contract is "live" sources ahead of any run, so a source that
+    can never actually go live must not be reported as one (ML-audit-source-
+    disclosure-001).
+    """
+    return sorted(
+        source
+        for source, cls in ADAPTERS.items()
+        if cls._fetch_live is not BaseAdapter._fetch_live
+    )

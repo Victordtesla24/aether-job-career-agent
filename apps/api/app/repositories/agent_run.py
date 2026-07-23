@@ -108,3 +108,38 @@ class AgentRunRepository:
                 )
                 rows = rows_to_dicts(cur)
         return {row["agentName"]: row for row in rows}
+
+    def recent_runs_by_agent(
+        self, user_id: str, window: int = 3
+    ) -> dict[str, list[dict[str, Any]]]:
+        """The most-recent ``window`` runs per agent name, newest-first.
+
+        Backs the windowed, transient-tolerant agent status on the Agents
+        screen (ML-agents-err-001): the catalog must tell a one-off transient
+        upstream blip apart from chronic breakage, which needs the last N runs
+        per agent — not just the single latest that ``last_run_by_agent``
+        returns. Additive; ``last_run_by_agent`` and its callers are unchanged.
+        Same column set as the other reads, scoped to the caller's own runs.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'''
+                    SELECT {_COLUMNS} FROM (
+                        SELECT {_COLUMNS},
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY "agentName"
+                                   ORDER BY "createdAt" DESC
+                               ) AS _rn
+                        FROM "AgentRun" WHERE "userId" = %s
+                    ) ranked
+                    WHERE _rn <= %s
+                    ORDER BY "agentName", "createdAt" DESC
+                    ''',
+                    (user_id, window),
+                )
+                rows = rows_to_dicts(cur)
+        result: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            result.setdefault(row["agentName"], []).append(row)
+        return result

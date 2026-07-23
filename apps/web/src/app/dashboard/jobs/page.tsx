@@ -70,6 +70,19 @@ const SOURCE_FILTERS = [
 ] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
 
+/**
+ * Sources with NO live discovery mode (ML-audit-source-disclosure-001):
+ * linkedin/indeed have no live-HTTP implementation at all
+ * (BaseAdapter._fetch_live raises NotImplementedError unconditionally —
+ * apps/api/app/services/discovery/base_adapter.py) and seek is excluded
+ * from the live registry by default (ADR-P6-SEEK, ToS-prohibited
+ * scraping — apps/api/app/services/discovery/adapter_registry.py).
+ * Selecting one always silently returns zero results, so the dropdown
+ * must disclose them as unavailable rather than offer them as ordinary
+ * selectable sources.
+ */
+const NO_LIVE_MODE_SOURCES = new Set<string>(["linkedin", "indeed", "seek"]);
+
 /** Minimum-salary bands (in thousands, "0" = no filter) — MV-job-discovery-004. */
 const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
 type SalaryFilter = (typeof SALARY_FILTERS)[number];
@@ -737,8 +750,14 @@ export default function JobsPage() {
           className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs"
         >
           {SOURCE_FILTERS.map((s) => (
-            <option key={s} value={s} className="bg-black">
+            <option
+              key={s}
+              value={s}
+              disabled={NO_LIVE_MODE_SOURCES.has(s)}
+              className="bg-black"
+            >
               {s === "all" ? "All sources" : SOURCE_LABEL[s] ?? s}
+              {NO_LIVE_MODE_SOURCES.has(s) ? " (unavailable)" : ""}
             </option>
           ))}
         </select>

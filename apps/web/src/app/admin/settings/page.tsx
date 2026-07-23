@@ -2,8 +2,11 @@
 
 /**
  * /admin/settings — platform settings (§15 Tier 1). Signup toggle: when off,
- * POST /api/auth/register returns 403. Email-verification is a placeholder
- * toggle wired to the same append-only audit trail.
+ * POST /api/auth/register returns 403. Email-verification is an INERT toggle:
+ * it is disabled (read-only) and its handler is a no-op — no backend code reads
+ * or enforces the setting yet, so it is NOT wired to any audit trail or side
+ * effect (ML-audit-emailverify-toggle-001). It is a not-yet-enforced
+ * placeholder, surfaced only to signal the roadmap item.
  */
 import { useEffect, useState } from "react";
 
@@ -104,10 +107,12 @@ export default function AdminSettingsPage() {
         />
         <Toggle
           label="Email verification"
-          hint="Placeholder toggle for the upcoming email-verification requirement."
+          hint="Not yet available — no backend code reads or enforces this setting."
           checked={settings.emailVerificationEnabled}
-          disabled={busy}
-          onChange={(v) => void patch({ emailVerificationEnabled: v })}
+          disabled
+          onChange={() => {
+            /* no-op: nothing enforces this setting yet (ML-audit-emailverify-toggle-001) */
+          }}
         />
       </div>
     </div>

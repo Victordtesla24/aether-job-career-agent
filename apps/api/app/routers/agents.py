@@ -1292,15 +1292,42 @@ def _job_status_payload(job: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("")
 def list_agents(current_user: CurrentUser) -> list[dict[str, Any]]:
-    """All known agents with their most recent run (P2-S08)."""
-    last = AgentRunRepository().last_run_by_agent(current_user["id"])
+    """All known agents with their most recent run (P2-S08).
+
+    ``status`` is transient-tolerant and SEMANTICALLY CONSISTENT with
+    ``GET /agents/catalog`` (ML-agents-err-001 OBS-B): both endpoints classify
+    agent health through the shared ``_latest_failure_is_hard`` helper over the
+    SAME recent-run window (``recent_runs_by_agent``), so the Agents-screen
+    catalog cards and the Orchestration view — which reads
+    ``AgentSummary.status`` from THIS list — never disagree about whether an
+    agent is broken. A genuine/chronic failure is reported as the raw
+    ``"failed"`` (hard failure, matching the catalog's "error"); a lone
+    transient upstream blip on an otherwise-healthy agent is reported as
+    ``"active"`` (matching the catalog's "active"), NOT the raw ``"failed"``.
+    ``AgentSummary.status`` is a free-form string and Orchestration.nodeStatus
+    renders any non-"idle" status as a healthy (green) node, so "active" (like
+    the pre-existing raw "completed"/"queued"/"running") renders correctly;
+    only "idle" and "failed" carry special handling, both preserved here.
+    """
+    recent = AgentRunRepository().recent_runs_by_agent(current_user["id"])
     agents = []
     for name in AGENT_NAMES:
-        run = last.get(name)
+        runs = recent.get(name)
+        run = runs[0] if runs else None
+        if run is None:
+            status_value = "idle"
+        elif run["status"] == "failed" and not _latest_failure_is_hard(runs):
+            # Tolerated transient/upstream blip — not a hard failure. Report the
+            # same health verdict the catalog shows ("active") rather than the
+            # raw "failed", so the Orchestration node does not paint red while
+            # the catalog card is green for the identical underlying run.
+            status_value = "active"
+        else:
+            status_value = run["status"]
         agents.append(
             {
                 "name": name,
-                "status": run["status"] if run else "idle",
+                "status": status_value,
                 "last_run": run["createdAt"].isoformat() if run else None,
                 "approval_gated": name in _APPROVAL_GATED,
             }
@@ -1755,6 +1782,109 @@ def _config_response(agent_key: str, row: dict[str, Any] | None) -> dict[str, An
     return out
 
 
+#: Case-insensitive substrings that mark a ``failed`` AgentRun as a TRANSIENT /
+#: upstream-unavailable blip rather than genuine agent breakage (ML-agents-err-001).
+#: Kept conservative on purpose: these are all provider/transport signals (rate
+#: limiting, upstream 429/5xx, timeouts, "temporarily unavailable" — the real
+#: LLM_UNAVAILABLE_USER_MESSAGE text), never the agent's own deterministic logic
+#: errors — so a real failure such as a KeyError during tailoring does NOT match
+#: and still surfaces as "error". This ERROR-MESSAGE keyword is the ONLY honest
+#: transient signal: a ``costUsd IS NULL`` run is NOT evidence of a transient
+#: failure, because EVERY failed AgentRun has ``costUsd`` NULL in production (no
+#: ``finish(..., "failed", ...)`` call site records cost — only the success path
+#: does), so a cost-based refund heuristic would classify all failures transient
+#: and hide genuine breakage. Cost is deliberately not consulted here.
+_TRANSIENT_FAILURE_KEYWORDS = (
+    "temporarily unavailable",
+    "rate limit",
+    "rate-limited",
+    "429",
+    "503",
+    "502",
+    "504",
+    "timeout",
+    "timed out",
+    "overloaded",
+    "service unavailable",
+    "try again",
+)
+
+#: The keyword tuple is split — WITHOUT duplicating it — into the phrase
+#: keywords (matched as plain substrings, as before) and the bare numeric
+#: HTTP-status codes (matched only as standalone tokens via word boundaries).
+#: Derived from the single tuple above so the two never drift (ML-agents-err-001
+#: OBS-A). An unanchored substring match on "429"/"502"/"503"/"504" wrongly
+#: classified a GENUINE failure whose message merely embeds those digits inside
+#: an unrelated identifier — a cuid ("Job c429k2j9x... not found"), a record id,
+#: a field name ("field_503_value") — as a transient upstream blip, hiding real
+#: breakage behind an "active"/"completed" card. The ``\b`` anchoring makes a
+#: digit run count only when it stands alone as an HTTP-status token (e.g.
+#: "HTTP 503 Service Unavailable"), not when buried in an identifier.
+_TRANSIENT_PHRASE_KEYWORDS = tuple(
+    k for k in _TRANSIENT_FAILURE_KEYWORDS if not k.isdigit()
+)
+_TRANSIENT_CODE_TOKENS = tuple(
+    k for k in _TRANSIENT_FAILURE_KEYWORDS if k.isdigit()
+)
+_TRANSIENT_CODE_RE = (
+    re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _TRANSIENT_CODE_TOKENS) + r")\b")
+    if _TRANSIENT_CODE_TOKENS
+    else None
+)
+
+
+def _is_transient_failure(run: dict[str, Any]) -> bool:
+    """True when a ``failed`` run is an honest transient/upstream-unavailable
+    blip, not genuine agent breakage (ML-agents-err-001).
+
+    Classified by the ERROR MESSAGE ONLY: the lowercased ``run["error"]``
+    contains a known transient/upstream signal — a phrase keyword (provider
+    rate-limit / timeout / "temporarily unavailable") matched as a substring,
+    OR a bare HTTP-status code (429/502/503/504) matched only as a STANDALONE
+    token (word-boundary anchored), never as a digit run embedded inside an
+    unrelated identifier such as a cuid / record id / field name (OBS-A). Cost
+    is intentionally NOT consulted: every failed AgentRun has ``costUsd`` NULL
+    in production (no ``finish(..., "failed", ...)`` call site records cost), so
+    a ``costUsd IS NULL`` refund heuristic would match ALL failures and
+    misclassify a genuine billed logic error (KeyError, validation) as transient
+    — hiding a broken agent behind an "active" card.
+
+    Pure and side-effect free. Deliberately conservative so a genuine failure
+    (non-transient message) returns False and still paints the card "error".
+    """
+    error = (run.get("error") or "").lower()
+    if any(keyword in error for keyword in _TRANSIENT_PHRASE_KEYWORDS):
+        return True
+    return bool(_TRANSIENT_CODE_RE is not None and _TRANSIENT_CODE_RE.search(error))
+
+
+def _latest_failure_is_hard(runs: list[dict[str, Any]] | None) -> bool:
+    """Single source of truth for whether an agent's MOST-RECENT run is a HARD
+    failure (operator-visible breakage) vs a tolerated transient blip
+    (ML-agents-err-001 OBS-B).
+
+    ``runs`` is the recent window (newest-first, from
+    ``AgentRunRepository.recent_runs_by_agent``). Returns True only when the
+    latest run failed AND that failure is genuine breakage: either CHRONIC
+    (the last 3 runs are all ``failed``) or the latest error message is
+    non-transient. A lone transient/upstream blip (rate-limit / 5xx / timeout /
+    "temporarily unavailable") on an otherwise-healthy agent is NOT a hard
+    failure; a completed / queued / running / absent latest run is not either.
+
+    Both ``GET /agents/catalog`` (agent_catalog) and ``GET /agents``
+    (list_agents) classify agent health through THIS one helper over the same
+    recent-run window, so the Agents-screen catalog cards and the Orchestration
+    view never disagree about whether an agent is broken.
+    """
+    if not runs:
+        return False
+    latest = runs[0]
+    if latest["status"] != "failed":
+        return False
+    chronic = len(runs) >= 3 and all(r["status"] == "failed" for r in runs[:3])
+    return chronic or not _is_transient_failure(latest)
+
+
 @router.get("/catalog")
 def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
     """Full agent catalog merged with persisted config + real run status.
@@ -1768,7 +1898,7 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
     """
     user_id = current_user["id"]
     cfg = _config_map(user_id)
-    last = AgentRunRepository().last_run_by_agent(user_id)
+    recent = AgentRunRepository().recent_runs_by_agent(user_id)
     agents: list[dict[str, Any]] = []
     active = paused = error = planned = 0
     for entry in AGENT_CATALOG:
@@ -1776,7 +1906,8 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
         c = cfg.get(key, {})
         enabled = bool(c.get("enabled", True))
         backend = entry["backend"]
-        run = last.get(backend) if backend else None
+        runs = recent.get(backend) if backend else None
+        run = runs[0] if runs else None
         if backend is None:
             state = "planned"
             planned += 1
@@ -1792,8 +1923,19 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 state = "paused"
                 paused += 1
             elif run and run["status"] == "failed":
-                state = "error"
-                error += 1
+                # ML-agents-err-001: windowed, transient-tolerant health via the
+                # shared classifier (OBS-B: the SAME source of truth list_agents
+                # uses, so the two endpoints never disagree). A chronically
+                # broken agent (last 3 runs ALL failed) or a genuine
+                # non-transient error surfaces as "error"; a lone transient
+                # upstream blip on an otherwise-healthy agent does not paint the
+                # card red.
+                if _latest_failure_is_hard(runs):
+                    state = "error"
+                    error += 1
+                else:
+                    state = "active"
+                    active += 1
             else:
                 state = "active"
                 active += 1

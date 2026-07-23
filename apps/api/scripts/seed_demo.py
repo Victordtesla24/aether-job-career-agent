@@ -14,17 +14,38 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Load the repo root .env so DATABASE_URL is available when run standalone.
 import os
 import re
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(?:\"([^\"]*)\"|'([^']*)'|(.*))$")
-_root_env = Path(__file__).resolve().parents[3] / ".env"
-if _root_env.exists():
-    for line in _root_env.read_text().splitlines():
+
+
+def _load_root_env_into_environ() -> None:
+    """Load the repo-root ``.env`` into ``os.environ`` so ``DATABASE_URL`` (and
+    the admin/demo password vars) are available when this module is run as a
+    STANDALONE script (``python scripts/seed_demo.py``).
+
+    IMPORTANT — this MUST NOT run at import time. This module exports
+    ``seed_admin_user`` / ``ADMIN_EMAIL``, which the test-suite imports inside
+    test functions (``tests/test_gap_p6_admin.py``, ``tests/test_auth.py``). If
+    the ``.env`` were slurped into ``os.environ`` as an import side-effect, keys
+    the test harness deliberately leaves UNSET — notably ``AETHER_ADMIN_EMAIL``
+    / ``AETHER_ADMIN_PASSWORD_HASH`` — would leak in for the rest of the pytest
+    PROCESS. Every later app construction's §14.7 ``apply_admin_rotation()``
+    would then seed a phantom owner admin AFTER the per-test truncation,
+    breaking downstream isolation (a stray extra ``User`` row and Jobs owned by
+    it). So the load is confined to the standalone entrypoint below; importing
+    the module has no environment side-effects. Only keys not already present
+    are set, so an explicit env/CI value always wins.
+    """
+    root_env = Path(__file__).resolve().parents[3] / ".env"
+    if not root_env.exists():
+        return
+    for line in root_env.read_text().splitlines():
         m = _ENV_LINE.match(line.strip())
         if m and m.group(1) not in os.environ:
             os.environ[m.group(1)] = next(g for g in m.groups()[1:] if g is not None)
+
 
 from app.db import ensure_user_profile_columns, get_connection, new_id  # noqa: E402
 from app.repositories.user import UserRepository  # noqa: E402
@@ -120,6 +141,9 @@ def _demo_password() -> str:
 
 
 def main() -> None:
+    # Standalone run: pull DATABASE_URL / passwords from the repo-root .env.
+    # (Never at import time — see _load_root_env_into_environ's docstring.)
+    _load_root_env_into_environ()
     random.seed(42)
     # Provision the admin account first (idempotent, independent of the demo
     # funnel below) so a standard seed run always yields a usable admin login.
