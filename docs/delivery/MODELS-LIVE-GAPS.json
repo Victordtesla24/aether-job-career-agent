@@ -1490,6 +1490,23 @@
       ],
       "verifiedBy": "launch-ready W-B prod verification 2026-07-23/24 @ deploy abb8e92",
       "note": "CLOSED 2026-07-24: 30 new pytest (tests/test_applications_move.py), 5 new vitest (stage-move helpers), 4-test e2e spec (launch-b2-move-stage.spec.ts) all green vs live prod (8/8 incl. FEAT-B1 spec); regression smoke approvals/applications/analytics 8/8. e2e hardening documented in commit for spec stability: moves await the server /move response (optimistic UI races), draft 'ready' column excluded (DISTINCT ON jobId collapse), count-delta assertions (duplicate titles)."
+    },
+    {
+      "id": "DEDUP-EXECUTION-COMPLETE",
+      "screen": "codebase (de-dup)",
+      "severity": "INFO",
+      "category": "dedup",
+      "summary": "Workstream C de-dup EXECUTION complete: 4 waves (SAFE->CAREFUL), 19 candidates deleted/consolidated, 29 adjudicated kept-with-reason, 5 false-positives adjudicated-kept. Wave 1 b005f2c (SAFE web: auth barrel, 8 dead fetchers, createTestSession, ~99 export-drops, 5 orphan types, 3 stale ml-*.playwright configs; 49 files +124/-392). Wave 2 708abcc (SAFE: 9 dead python symbols, 3 one-off scripts, shared lib/format.ts, extractApiDetail core, EMAIL_RE->emailLooksValid, SupportPhoneLine; 21 files +137/-474). Wave 3 2de6e70 (CAREFUL: orphaned packages/* TS layer hard-deleted, schema.prisma PRESERVED as schema-of-record, CI mirror de-wired (N01/Correction-2: live .github/workflows/ci.yml never referenced packages), root docs relocated/deleted (DEDUP-041), redundant @typescript-eslint devDeps dropped (DEDUP-042); 71 files +143/-3246). Wave 4 cb0186d (CAREFUL: runConnect wrapper, parseProviderCatalog/withLiftedApiError tail, approvals decideApproval superset; 7 files +93/-55). TOTAL: 146 file changes (8e8e2a2..cb0186d), +497/-4167 lines (net -3670 LOC), 66 tracked files hard-deleted. RISKY: 043 KEEP-DRIFTED, 044 DEFERRED (behavior-changing lazy-DDL merge), 045-048 KEPT with reasons. Reclassifications: auth barrel + createTestToken were live (caught by tsc, corrected pre-commit); BLUEPRINT case-pair adjudicated-kept (both ADR-referenced).",
+      "evidence": "uat/reports/evidence/launch-ready/dedup/wave-{1,2,3,4}-manifest.md + wave-{2,3,4}-traces.txt + knip-fresh-pre-8e8e2a2.json + knip-final-post.json + final-sweep.md. Final sweep: knip 0 unused files/exports/types; jscpd(lib+components/agents) 1 remaining clone = DEDUP-028 (adjudicated-kept). Suites vs baseline: pytest 1173/0 (29m28s, post-wave-2, python untouched after), vitest 567/0 (re-run after every wave), tsc/lint/ruff clean, build OK. Deployed cb0186d per DEPLOYMENT-RUNBOOK: health {status:ok,version:0.2.0}, login+5 authed APIs 200, 7 pages 200, _next/static 200, 0 5xx in api.log post-restart window. Playwright targeted smoke (approvals/dashboard) blocked twice by pre-existing auth.setup flakiness (waitForURL timeout) - recorded honestly in wave-4-manifest; approve/reject path covered by dashboard vitest + live API smoke.",
+      "status": "VERIFIED-CLOSED",
+      "owner": "workstream-C-executor",
+      "fixCommits": [
+        "b005f2c",
+        "708abcc",
+        "2de6e70",
+        "cb0186d"
+      ],
+      "verifiedBy": "full pytest 1173/0 + vitest 567/0 vs baseline; prod deploy cb0186d health+smoke 0x5xx"
     }
   ]
 }

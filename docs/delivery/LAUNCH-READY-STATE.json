@@ -1,15 +1,67 @@
 {
-  "phase_step": "W-B-CLOSED",
-  "updated_at": "2026-07-24T07:55:00+10:00",
+  "phase_step": "W-C-CLOSED",
+  "updated_at": "2026-07-24T10:05:00+10:00",
   "workstream_status": {
     "W-A": "partial",
     "W-B": "closed",
-    "W-C": "pending",
+    "W-C": "closed",
     "W-D": "pending",
     "W-E": "pending",
     "W-F": "pending"
   },
-  "waves": [],
+  "waves": [
+    {
+      "wave": 1,
+      "class": "SAFE",
+      "commit": "b005f2c",
+      "candidates": [
+        "DEDUP-002",
+        "DEDUP-003",
+        "DEDUP-004",
+        "DEDUP-005",
+        "DEDUP-006",
+        "DEDUP-012"
+      ],
+      "stat": "49 files, +124/-392"
+    },
+    {
+      "wave": 2,
+      "class": "SAFE",
+      "commit": "708abcc",
+      "candidates": [
+        "DEDUP-001",
+        "DEDUP-007",
+        "DEDUP-008",
+        "DEDUP-009",
+        "DEDUP-010",
+        "DEDUP-011",
+        "DEDUP-013"
+      ],
+      "stat": "21 files, +137/-474"
+    },
+    {
+      "wave": 3,
+      "class": "CAREFUL",
+      "commit": "2de6e70",
+      "candidates": [
+        "DEDUP-040+N01",
+        "DEDUP-041",
+        "DEDUP-042"
+      ],
+      "stat": "71 files, +143/-3246"
+    },
+    {
+      "wave": 4,
+      "class": "CAREFUL",
+      "commit": "cb0186d",
+      "candidates": [
+        "DEDUP-026",
+        "DEDUP-027",
+        "DEDUP-037"
+      ],
+      "stat": "7 files, +93/-55"
+    }
+  ],
   "findings_delta": [
     {
       "id": "P0-001",
@@ -80,6 +132,18 @@
         "vitest": "567 passed / 0 failed (W-A baseline 559 + 8 new: 3 canRemove, 5 stage-move helpers)",
         "playwright": "launch-b1 + launch-b2 specs 8/8 vs live prod; regression smoke approvals/applications/analytics 8/8; full-suite baseline 51P/28F unchanged-documented"
       }
+    },
+    "W-C": {
+      "status": "closed",
+      "note": "53-candidate inventory fully adjudicated: 19 deleted/consolidated across 4 waves (each candidate with a fresh reference-graph trace recorded pre-deletion in wave manifests), 29 kept-with-reason (12 python billing/SQL/DDL extractions, 11 web a11y/copy-risk refactors, 6 RISKY incl. DEDUP-044 deferred behavior-changing lazy-DDL merge), 5 false-positives adjudicated-kept. packages/* orphan TS layer hard-deleted with CI-mirror de-wire in one revertible commit (2de6e70); packages/db/src/schema.prisma PRESERVED as schema-of-record. Totals: 146 file changes total (8e8e2a2..cb0186d), +497/-4167 (net -3670 LOC), 66 tracked files hard-deleted. ONE batched deploy at cb0186d per DEPLOYMENT-RUNBOOK: health ok/0.2.0, login + 5 authed APIs 200, 7 pages 200, static assets 200, 0 5xx post-restart. Final sweep: knip 0/0/0; jscpd 1 remaining clone = DEDUP-028 adjudicated-kept. Known limitation: targeted Playwright smoke (approvals/dashboard) blocked twice by pre-existing auth.setup waitForURL flakiness — recorded honestly; path covered by dashboard vitest + live API smoke.",
+      "evidence": "uat/reports/evidence/launch-ready/dedup/",
+      "suites": {
+        "pytest": "1173 passed / 0 failed (W-B baseline held; run post-wave-2, python untouched by waves 3-4 — verified via git diff)",
+        "vitest": "567 passed / 0 failed (W-B baseline held; re-run green after every wave)",
+        "playwright": "full-suite baseline 51P/28F unchanged-documented; targeted smoke blocked by pre-existing P0-001-class auth.setup flakiness (2 attempts)"
+      },
+      "loc_removed_net": 3670,
+      "files_hard_deleted": 66
     }
   },
   "baseline": {
@@ -107,11 +171,10 @@
       "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
     }
   },
-  "last_commit": "a28cf8f",
-  "last_deploy_sha": "abb8e92",
+  "last_commit": "cb0186d",
+  "last_deploy_sha": "cb0186d",
   "next_actions": [
     "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence; the 5-row ledger business is already closed (2026-07-24).",
-    "W-C: duplicate-implementation elimination (§5) after W-A/W-B land — dedup-surgeon with reviewed manifests, evidence under dedup/",
     "W-D: repo + prod cleanup (§6) — reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
     "W-E: top-10-paid-app quality hardening sweep (§7) after W-A..W-C deploy, evidence under quality/screens",
     "W-F: docs truth refresh → adversarial review → exit gates (§9–§10), evidence under governance/ and adversarial/"
