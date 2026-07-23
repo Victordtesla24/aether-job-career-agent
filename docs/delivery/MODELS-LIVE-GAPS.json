@@ -1274,6 +1274,20 @@
       "owner": "prod-hardening cluster (config)",
       "fixCommits": [],
       "verifiedBy": ""
+    },
+    {
+      "id": "ML-audit-emailidempotent-001",
+      "screen": "email agent / idempotency",
+      "severity": "UNKNOWN-TRIAGE",
+      "category": "defect?",
+      "summary": "Story test-author observed pre-existing test FAILURE on UNMODIFIED HEAD: apps/api tests/..test_execute_email_send_is_idempotent fails, reproduces IN ISOLATION (so not shared-DB flakiness). Either (a) real bug \u2014 email send idempotency broken (duplicate sends possible for real users) or (b) stale/broken test. Needs triage: real-bug vs broken-test, file:line + root cause.",
+      "evidence": [
+        "story test-author aa09975b regression note"
+      ],
+      "status": "OPEN-TRIAGE",
+      "owner": "triage",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
