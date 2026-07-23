@@ -1122,10 +1122,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/AGENTS-ERRORING-RCA.md (in progress)"
       ],
-      "status": "REVIEW-FAILED-REWORK",
+      "status": "REWORK-AWAITING-REVIEW",
       "owner": "test-author \u2192 fixer-hard \u2192 reviewer \u2192 deployer \u2192 qa",
-      "fixCommits": [],
-      "verifiedBy": "",
+      "fixCommits": [
+        "d632ed9 (corrected tests)",
+        "15c8aea (keyword-only rework)"
+      ],
+      "verifiedBy": "fixer ae458adb: 9/9 target + 47/47 regression green (twice); independent review in flight",
       "rca": "/agents/catalog status = last-run-only. resumeTailoring red badge = tail artifact of orchestrator's RUN-SWEEP.md 429 (refunded). No unhandled 500/Traceback on any agent-run path; no cross-provider silent substitution (billingAuditJson+refund verified).",
       "reviewFail": "Fix af98b04 FAILED adversarial review (ERR-001-REVIEW.md, reviewer addd9666). BLOCKER: _is_transient_or_refunded_failure short-circuits True on costUsd IS NULL, but EVERY failed run has costUsd=None (no finish(...,'failed',...) call site records cost \u2014 only the success path at agents.py:841 does). So the refund heuristic matches ALL failures, the keyword list is dead code, and a genuine billed logic error (KeyError/validation) is misclassified transient \u2192 status 'active', HIDING a broken agent (proven live: 50% genuine-failure rate never trips the 3-in-a-row chronic guard \u2192 'active' forever). The guard test passed only because it seeded an unrealistic cost_usd=0.0164 on a FAILED run. REWORK: drop the costUsd heuristic; classify transient by ERROR-MESSAGE keyword only (LLMUnavailable msg 'temporarily unavailable' + upstream 429/503/502/504/timeout/overloaded/rate-limit); keep chronic guard; CORRECT the test to production-realistic seeding (failed runs -> costUsd=None)."
     },
