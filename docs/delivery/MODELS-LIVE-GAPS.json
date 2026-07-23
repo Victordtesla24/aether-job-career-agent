@@ -1157,10 +1157,12 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/PIPELINE-AUTHENTICITY-AUDIT.md"
       ],
-      "status": "OPEN",
+      "status": "REVIEW-PASS-AWAITING-DEPLOY",
       "owner": "test-author->fixer-medium->reviewer",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "d1b3cb0"
+      ],
+      "verifiedBy": "independent opus reviewer af5b3ac2 PASS (STORY-LEAK-REVIEW.md): leak reproduced vs buggy, 3/3 vs fixed; no-r\u00e9sum\u00e9 graceful created:0; test seed load-bearing; no scope creep"
     },
     {
       "id": "ML-audit-admin-pw-001",
@@ -1288,6 +1290,20 @@
       "owner": "fold into source-disclosure fixer (test hygiene)",
       "fixCommits": [],
       "verifiedBy": "triage a1e4631b (EMAIL-IDEMPOTENT-TRIAGE.md)"
+    },
+    {
+      "id": "ML-audit-grounding-docstring-001",
+      "screen": "resume_grounding.py docstring",
+      "severity": "LOW",
+      "category": "doc-drift",
+      "summary": "Follow-up from story-leak review (F2): apps/api/app/services/resume_grounding.py module docstring still names 'the story extractor' as an internal path that keeps the operator fallback \u2014 now STALE after d1b3cb0 (story extractor passes allow_operator_fallback=False like all others). Fix: update the docstring. Fold into deploy batch.",
+      "evidence": [
+        "uat/reports/evidence/models-live/adversarial/STORY-LEAK-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "fold into deploy batch (doc)",
+      "fixCommits": [],
+      "verifiedBy": ""
     }
   ]
 }
