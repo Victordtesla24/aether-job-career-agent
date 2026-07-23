@@ -1383,6 +1383,21 @@
       "owner": "err-001 OBS hardening (test-author->fixer->review)",
       "fixCommits": [],
       "verifiedBy": ""
+    },
+    {
+      "id": "DEDUP-DISCOVERY-COMPLETE",
+      "screen": "codebase (de-dup)",
+      "severity": "INFO",
+      "category": "dedup-discovery",
+      "summary": "De-dup discovery Workflow w4kwuoz3k COMPLETE (8 agents, jscpd+vulture+knip+depcheck + semantic api/web/repo audits). 53 candidates ranked SAFE(13)/CAREFUL(29)/RISKY(6)/FALSE-POSITIVE(5); ~4000 LOC / ~55 files removable, dominated by orphaned packages/* TS layer (~2758 LOC, 0 runtime imports but CI-wired). Corroborates all_sources() dead-code (OBS-1). DO-NOT-TOUCH: packages/db/src/schema.prisma, e2e/auth.setup.ts, Vik_Resume fixture+generator. SEQUENCING: consolidate ONLY after authenticity batch deploys (candidates overlap fix files e.g. all_sources in adapter_registry.py). Each candidate SAFE-first, hard-delete, guarded by full pytest+vitest+pnpm build + live smoke = 0 regression.",
+      "evidence": [
+        "uat/reports/evidence/dedup/DEDUP-INVENTORY.md",
+        "tasks/w4kwuoz3k.output"
+      ],
+      "status": "INVENTORY-READY",
+      "owner": "de-dup consolidation phase (post-authenticity-deploy)",
+      "fixCommits": [],
+      "verifiedBy": "discovery workflow w4kwuoz3k (8 agents, 0 errors)"
     }
   ]
 }
