@@ -1365,10 +1365,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ERR-001-REWORK-REVIEW.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "err-001 OBS hardening (test-author->fixer->review)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "adc3766 (tests)",
+        "c50450c (fix)"
+      ],
+      "verifiedBy": "fixer a22998f2: shared _latest_failure_is_hard helper; 16/16 + 54 regression green; independent review dispatched"
     },
     {
       "id": "ML-agents-err-001-obsB",
@@ -1379,10 +1382,13 @@
       "evidence": [
         "uat/reports/evidence/models-live/adversarial/ERR-001-REWORK-REVIEW.md"
       ],
-      "status": "OPEN",
+      "status": "FIXED-AWAITING-REVIEW",
       "owner": "err-001 OBS hardening (test-author->fixer->review)",
-      "fixCommits": [],
-      "verifiedBy": ""
+      "fixCommits": [
+        "adc3766 (tests)",
+        "c50450c (fix)"
+      ],
+      "verifiedBy": "fixer a22998f2: shared _latest_failure_is_hard helper; 16/16 + 54 regression green; independent review dispatched"
     },
     {
       "id": "DEDUP-DISCOVERY-COMPLETE",
