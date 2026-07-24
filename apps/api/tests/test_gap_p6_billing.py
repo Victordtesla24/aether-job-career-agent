@@ -446,3 +446,104 @@ def test_backfill_assigns_free_plan_and_quota_to_existing_users(client, auth_hea
         assert quota is not None
         assert int(quota["runsAllowed"]) == 5  # Free ratified quota
         assert int(quota["runsUsed"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# HOTFIX: board sweep / system runs must NOT consume user paid quota
+# (t_fdc27946 — quota_exceeded on paid plan from autopilot sweep)
+# ---------------------------------------------------------------------------
+
+
+def test_record_run_skip_quota_does_not_reserve(client, auth_headers, test_user_id):
+    """``skip_quota=True`` skips the plan-quota reserve/spend-cap gate entirely.
+
+    Exhaust the Free quota so a normal metered run would 429, then prove a
+    ``skip_quota=True`` run succeeds AND leaves ``runsUsed`` unchanged — the
+    user's paid quota is not consumed by automated infrastructure."""
+    repo = UsageQuotaRepository()
+    ensure_user_billing(test_user_id)
+    # Exhaust the Free quota (5 runs).
+    for _ in range(5):
+        assert repo.reserve(test_user_id) is not None
+    assert repo.reserve(test_user_id) is None
+    before = int(repo.get_by_user(test_user_id)["runsUsed"])
+    assert before == 5
+
+    # A normal metered run 429s (regression guard for the gate itself).
+    with pytest.raises(HTTPException) as ei:
+        _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
+    assert ei.value.status_code == 429
+    assert ei.value.detail["code"] == "quota_exceeded"
+
+    # The skip_quota run succeeds despite the exhausted quota…
+    out = _record_run(
+        test_user_id, "tailor", {"job_id": "j"}, _tailor_stub, skip_quota=True
+    )
+    assert out.get("resume_id") == "r1"
+
+    # …and the user's paid quota counter is UNCHANGED (not consumed, not refunded-
+    # churned). The audit row is stamped systemRun: true (honest traceability).
+    after = int(repo.get_by_user(test_user_id)["runsUsed"])
+    assert after == before == 5
+
+
+def test_record_run_skip_quota_stamps_system_run_audit(
+    client, auth_headers, test_user_id
+):
+    """A ``skip_quota=True`` run stamps ``systemRun: true`` on the AgentRun
+    billing audit so the exemption is honestly traceable in /dashboard/agents."""
+    import json as _json
+
+    from app.db import get_connection
+
+    ensure_user_billing(test_user_id)
+    out = _record_run(
+        test_user_id, "tailor", {"job_id": "j"}, _tailor_stub, skip_quota=True
+    )
+    run_id = out.get("run_id")
+    # The billing audit is persisted to the additive billingAuditJson column.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "billingAuditJson" FROM "AgentRun" WHERE "id" = %s',
+                (run_id,),
+            )
+            row = cur.fetchone()
+    assert row is not None, "expected an AgentRun row"
+    audit = row[0] or {}
+    if isinstance(audit, str):
+        audit = _json.loads(audit)
+    assert audit.get("systemRun") is True
+
+
+def test_board_sweep_run_agent_passes_skip_quota(client, auth_headers, test_user_id):
+    """``board_sweep._run_agent`` threads ``skip_quota=True`` to ``_dispatch`` so
+    autopilot work cannot exhaust the user's paid plan quota. We spy on
+    ``_dispatch`` (the real seam ``_run_agent`` wraps) and assert the kwarg lands
+    even when the user's quota is already exhausted."""
+    from app.workers import board_sweep
+
+    repo = UsageQuotaRepository()
+    ensure_user_billing(test_user_id)
+    for _ in range(5):
+        repo.reserve(test_user_id)
+    assert repo.reserve(test_user_id) is None  # exhausted
+
+    captured: dict[str, object] = {}
+
+    def _fake_dispatch(uid, name, params, *, system_run=False, skip_quota=False):
+        captured["system_run"] = system_run
+        captured["skip_quota"] = skip_quota
+        return {"ok": True}
+
+    import app.routers.agents as agents_mod
+
+    orig = agents_mod._dispatch
+    agents_mod._dispatch = _fake_dispatch
+    try:
+        out = board_sweep._run_agent(test_user_id, "tailor", {"job_id": "j"})
+    finally:
+        agents_mod._dispatch = orig
+    assert out == {"ok": True}
+    assert captured.get("skip_quota") is True
+    assert captured.get("system_run") is True

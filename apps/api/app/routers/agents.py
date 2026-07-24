@@ -610,6 +610,7 @@ def _record_run(
     fn: Callable[[], Any],
     *,
     system_run: bool = False,
+    skip_quota: bool = False,
 ) -> dict[str, Any]:
     """Execute ``fn`` under an AgentRun audit record.
 
@@ -625,13 +626,20 @@ def _record_run(
     the exemption is honestly traceable, and is otherwise inert here — the
     actual gate skip happens (scoped to ``agent_name``) in
     ``_require_active_subscription``.
+
+    ``skip_quota``: True when the caller is an automated system operation
+    (e.g. the board sweep) that MUST NOT consume the user's paid plan quota.
+    When True the plan-quota reserve / spend-cap gates are skipped entirely,
+    and the audit row is stamped ``systemRun: true`` so the exemption is
+    honestly traceable. The quota cooldown block check still runs — a
+    genuinely blocked user should never have system ops run either.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
     _require_active_subscription(user_id, agent_name=agent_name, system_run=system_run)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
-    if system_run:
+    if system_run or skip_quota:
         audit["systemRun"] = True
     # Quota cooldown check BEFORE starting a run row — a blocked user gets a
     # clean 429 with no wasted audit record.
@@ -650,8 +658,15 @@ def _record_run(
     # against the accumulated spend right after reserving; on breach the reserved
     # run is refunded and the caller gets a distinct 429. A run reserved here is
     # refunded on any failure path below, so a failed run is never billed.
+    #
+    # When ``skip_quota`` is True (automated system operations such as the board
+    # sweep), the plan-quota reserve / spend-cap gates are skipped entirely so
+    # system work cannot exhaust the user's paid plan quota. The cooldown block
+    # above still applies — a blocked user gets no system ops either.
     metered = agent_name in _LLM_TIER_BY_BACKEND
-    quota_repo = UsageQuotaRepository() if metered else None
+    quota_repo = (
+        UsageQuotaRepository() if (metered and not skip_quota) else None
+    )
     if quota_repo is not None:
         reserved = quota_repo.reserve(user_id)
         if reserved is None:
@@ -1070,14 +1085,22 @@ def _agent_callable(
 
 
 def _dispatch(
-    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False
+    user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False,
+    skip_quota: bool = False,
 ) -> dict[str, Any]:
     """Resolve the agent callable (pure) then execute + audit it. ``system_run``
     (ADR-P7-05) is threaded to ``_record_run`` -> ``_require_active_subscription``,
     which honors the paywall exemption ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``
-    (scout, fitScorer). Every other agent name ignores it (defense in depth)."""
+    (scout, fitScorer). Every other agent name ignores it (defense in depth).
+
+    ``skip_quota`` is threaded to ``_record_run`` so automated system operations
+    (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
+    gates while still keeping the cooldown block and an honest audit trail."""
     canonical, fn = _agent_callable(user_id, name, params)
-    return _record_run(user_id, canonical, params, fn, system_run=system_run)
+    return _record_run(
+        user_id, canonical, params, fn,
+        system_run=system_run, skip_quota=skip_quota,
+    )
 
 
 def _require_job_id(params: dict[str, Any]) -> str:

@@ -152,6 +152,12 @@ def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str
 
     Module-level seam (tests monkeypatch it) wrapping the router ``_dispatch``
     in the worker-tier LLM budget, mirroring ``_wrap_worker_budget``.
+
+    Board sweep is an AUTOMATED system operation — it passes ``system_run=True``
+    to skip the paywall gate and ``skip_quota=True`` so the plan-quota reserve
+    is skipped. The user's paid quota must NOT be consumed by automated
+    infrastructure. The audit row is still stamped ``systemRun: true`` so the
+    exemption is honestly traceable.
     """
     from app.routers.agents import _dispatch
     from app.services.llm_client import (
@@ -166,7 +172,7 @@ def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str
         else get_worker_budget_seconds()
     )
     with shared_budget(seconds):
-        return _dispatch(user_id, agent_key, params)
+        return _dispatch(user_id, agent_key, params, system_run=True, skip_quota=True)
 
 
 def sweep_user_stretch(
