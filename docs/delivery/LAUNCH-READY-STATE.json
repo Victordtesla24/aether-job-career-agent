@@ -246,10 +246,10 @@
       "RT-009": "VERIFIED-CLOSED-LIVE — applied jobs flush; 0 applied jobs with lingering draft card",
       "RT-010": "VERIFIED-CLOSED-LIVE — tailoredResumeId on all 46 jobs; apply flow seeded from backend truth"
     },
+    "observation_window": "RT-006 CLEAN: 35 min (12:24-12:59Z), 6 autopilot sweeps, 0 genuine api 5xx/traceback/ASGI-exception, 0 worker/web errors, discovery scout runs clean (errors:[], wellfound status=blocked). The 2 grep-counted 'error-ish' lines were case-insensitive substring matches on 'SourceBlockedError:' (RT-008's benign INFO disclosure), not real errors. Evidence: uat/reports/evidence/launch-ready/runtime/RT-006-observation-window.log",
     "note": "Continuous board-sweep autopilot LIVE (AETHER_BOARD_SWEEP_ENABLED=true). Owner test account hit 100/100 plan quota — autopilot stops honestly on quota (by design). Real paid users get their own plan quota."
   },
   "next_actions": [
-    "RT-006 monitored observation window in progress (>=30 min post-deploy prod traffic + autopilot ticks)",
     "Operator (human-gated, LAUNCH-READY-BLOCKED-ON-HUMAN.md): Adzuna AU key (RT-003), live Stripe payment + portal cancel (QUALITY-WE-006), operator admin credential, 2nd Gmail consent, Anthropic OAuth operator consent",
     "Optional: restore SCREEN-MATRIX.json from S3 if the baseline capture sweeps are ever needed again",
     "Deferred by decision: DEDUP-044 lazy-DDL merge"
