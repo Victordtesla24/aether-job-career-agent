@@ -118,6 +118,42 @@ def _guard_production_replay_mode() -> None:
     )
 
 
+def _guard_production_discovery_fixtures() -> None:
+    """Fail fast if a production deploy would serve discovery fixtures.
+
+    ``AETHER_DISCOVERY_FIXTURE_DIR`` is a test/dev env var that redirects
+    ALL job-board discovery adapters to serve pre-canned HTTP fixtures
+    (``apps/api/tests/fixtures/http/<source>/jobs.json``) instead of making
+    live HTTP calls. It is set by ``tests/conftest.py`` at import time and
+    must NEVER be present in a production environment — it would silently
+    serve stale fixture data as if it were live job listings, with no
+    visible error and no audit trail (§REC-05).
+
+    This guard is a pure env-var check (no file I/O, no imports) so it is
+    safe to call early in ``create_app()`` before settings/DB are wired.
+    Non-production deployments with the fixture dir set print a warning
+    (it is expected in tests and offline development).
+    """
+    fixture_dir = os.environ.get("AETHER_DISCOVERY_FIXTURE_DIR", "").strip()
+    if not fixture_dir:
+        return
+    env = os.environ.get("AETHER_ENV", "development").strip().lower()
+    if env == "production":
+        raise RuntimeError(
+            "§REC-05: AETHER_DISCOVERY_FIXTURE_DIR is set while "
+            "AETHER_ENV=production — this would silently serve canned job "
+            "discovery fixtures instead of live job-board data. Unset "
+            "AETHER_DISCOVERY_FIXTURE_DIR for production deploys."
+        )
+    print(
+        "WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery "
+        "adapters will serve canned HTTP fixtures instead of making live "
+        "calls. This is expected in development/tests only; it must never "
+        "be used in production (§REC-05).",
+        file=sys.stderr,
+    )
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
@@ -142,6 +178,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """Construct and configure the FastAPI application."""
     _guard_production_replay_mode()
+    _guard_production_discovery_fixtures()
     # NOTE (§15.2, GAP-P7-DEF-B, revised cycle 2): apply_email_domain_allowlist()
     # is a pure loader with no global state to prime — it is called directly,
     # per-request, by app.routers.workspaces's SettingsProfile.email
