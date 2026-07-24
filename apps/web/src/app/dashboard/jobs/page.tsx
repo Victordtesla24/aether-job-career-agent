@@ -1312,6 +1312,16 @@ export default function JobsPage() {
                                 </span>
                               ) : null}
                             </>
+                          ) : selected.tailoredResumeStatus === "pending" ? (
+                            <span className="text-aether-amber">
+                              ✓ Resume tailored —{" "}
+                              <a
+                                href="/dashboard/approvals"
+                                className="font-semibold underline"
+                              >
+                                pending your review
+                              </a>
+                            </span>
                           ) : (
                             <>✓ Resume already tailored for this role</>
                           )}
