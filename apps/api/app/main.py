@@ -148,6 +148,13 @@ def create_app() -> FastAPI:
     # validator, so no startup call is needed here.
     settings = get_settings()
 
+    # W-E prod hygiene (spec §7.3): interactive schema explorers (/docs,
+    # /redoc, /openapi.json) are debug surfaces that enumerate every endpoint
+    # for anonymous visitors — never serve them when AETHER_ENV=production.
+    is_production = (
+        os.environ.get("AETHER_ENV", "development").strip().lower() == "production"
+    )
+
     app = FastAPI(
         title=settings.api_title,
         version=settings.api_version,
@@ -156,6 +163,9 @@ def create_app() -> FastAPI:
             "resume tailoring, applications, and approvals."
         ),
         lifespan=_lifespan,
+        docs_url=None if is_production else "/docs",
+        redoc_url=None if is_production else "/redoc",
+        openapi_url=None if is_production else "/openapi.json",
     )
 
     # Per-app auth rate limiters (see app.rate_limit), keyed on the submitted

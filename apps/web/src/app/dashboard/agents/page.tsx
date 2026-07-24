@@ -518,7 +518,7 @@ export default function AgentsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-aether-muted">
-                      {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}
+                      {run.startedAt ? new Date(run.startedAt).toLocaleString("en-AU") : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-aether-muted-dim">{run.error ?? "—"}</td>
                   </tr>

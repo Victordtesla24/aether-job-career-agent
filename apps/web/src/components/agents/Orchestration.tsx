@@ -210,6 +210,7 @@ export default function Orchestration({
                       />
                     ) : (
                       <div
+                        role="progressbar"
                         className="h-1.5 w-full animate-pulse rounded-full bg-aether-coral/40"
                         aria-label="in progress, no measured completion percentage available"
                       />

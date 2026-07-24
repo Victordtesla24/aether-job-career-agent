@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
     "Avg Fit Score": "Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting.",
     "Agent Runs": "Total number of agent executions (discovery, tailoring, scoring, etc.) in this period.",
-    "Agent Spend": "Total LLM API cost incurred by agent runs in this period.",
+    "Agent Spend (USD)": "Total LLM API cost incurred by agent runs in this period, in US dollars (provider billing currency).",
   };
 
   const CONVERSION_TIP: Record<string, string> = {
@@ -139,6 +139,20 @@ export default function AnalyticsPage() {
         </p>
       ) : null}
 
+      {dashboard === null && !error ? (
+        /* Space reservation while the summary loads — rendering nothing and
+           then inserting the 7-card grid shifted every section below it
+           (CLS 0.67 on prod load, W-E quality sweep). */
+        <section aria-busy="true" data-testid="dashboard-summary-loading">
+          <div className="mb-3 h-5 w-56 animate-pulse rounded bg-white/5" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="glass h-[92px] animate-pulse rounded-2xl border border-white/10" />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {dashboard ? (
         <section data-testid="dashboard-summary">
           {/* Every field on this card is period-scoped server-side (GET
@@ -149,7 +163,7 @@ export default function AnalyticsPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
             Dashboard summary ({period})
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
               ["Applications", dashboard.totalApplications, "text-aether-coral"],
@@ -158,7 +172,7 @@ export default function AnalyticsPage() {
               ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],
               ["Avg Fit Score", `${dashboard.avgFitScore}%`, "text-aether-coral"],
               ["Agent Runs", dashboard.agentRuns, "text-aether-violet"],
-              ["Agent Spend", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
+              ["Agent Spend (USD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
             ] as const
           ).map(([label, value, color]) => (
             <div key={label} className="glass rounded-2xl border border-white/10 p-4">
@@ -168,7 +182,7 @@ export default function AnalyticsPage() {
               </dd>
             </div>
           ))}
-          </div>
+          </dl>
         </section>
       ) : null}
 

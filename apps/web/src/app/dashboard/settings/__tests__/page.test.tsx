@@ -194,9 +194,10 @@ describe("SettingsPage — Billing & Subscription (MV-settings-003, MV-pricing-0
     expect(screen.getByTestId("billing-plan-price").textContent).toMatch(/\$39.*\/\s*month/i);
 
     await waitFor(() => screen.getByTestId("billing-next-date"));
-    // SUBSCRIPTION.currentPeriodEnd = "2026-08-01T00:00:00Z"
+    // SUBSCRIPTION.currentPeriodEnd = "2026-08-01T00:00:00Z" — rendered
+    // day-first in en-AU (W-E quality sweep), never the runtime default.
     expect(screen.getByTestId("billing-next-date").textContent).toMatch(
-      new Date("2026-08-01T00:00:00Z").toLocaleDateString(),
+      new Date("2026-08-01T00:00:00Z").toLocaleDateString("en-AU"),
     );
 
     // Distinct from the usage-quota reset date — both are shown, not conflated.

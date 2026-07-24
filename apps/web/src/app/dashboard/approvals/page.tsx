@@ -349,9 +349,9 @@ export default function ApprovalsPage() {
                       ) : null}
                     </div>
                     <p className="mt-1 text-xs text-aether-muted-dim">
-                      {approval.type} · requested {new Date(approval.createdAt).toLocaleString()}
+                      {approval.type} · requested {new Date(approval.createdAt).toLocaleString("en-AU")}
                       {approval.resolvedAt
-                        ? ` · resolved ${new Date(approval.resolvedAt).toLocaleString()}`
+                        ? ` · resolved ${new Date(approval.resolvedAt).toLocaleString("en-AU")}`
                         : ""}
                     </p>
                     {details.preview ? (

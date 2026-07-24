@@ -667,7 +667,12 @@ export default function JobsPage() {
             {lastSync ? `Last synced: ${timeAgo(lastSync)}` : "Sync time unavailable"}
           </span>
         </div>
-        <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
+        <div
+          className="flex items-stretch gap-3 overflow-x-auto pb-1"
+          role="region"
+          aria-label="Connected job board cards (scrollable)"
+          tabIndex={0}
+        >
           {sourceCards.map((s) => (
             <div key={s.source} className="glass-raised w-52 shrink-0 rounded-xl border border-white/10 p-3.5">
               <div className="mb-2 flex items-center justify-between">
@@ -700,7 +705,13 @@ export default function JobsPage() {
           Sync Status
         </span>
         {scoutSources === null ? (
-          <div className="flex gap-2 overflow-x-auto pb-1" aria-busy="true">
+          <div
+            className="flex gap-2 overflow-x-auto pb-1"
+            aria-busy="true"
+            role="region"
+            aria-label="Per-source sync status (loading)"
+            tabIndex={0}
+          >
             {[0, 1, 2].map((i) => (
               <div key={i} className="glass h-11 w-48 shrink-0 animate-pulse rounded-lg border border-white/10" />
             ))}
@@ -938,16 +949,7 @@ export default function JobsPage() {
                   <article
                     key={job.id}
                     data-testid="job-card"
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={active}
                     onClick={() => setSelectedId(job.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedId(job.id);
-                      }
-                    }}
                     className={`relative cursor-pointer rounded-xl border p-4 transition ${
                       active ? "border-aether-coral/40 bg-aether-coral/[0.08]" : "glass border-white/10 hover:border-white/20"
                     }`}
@@ -970,7 +972,24 @@ export default function JobsPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <h2 className="truncate text-sm font-semibold">{job.title}</h2>
+                              <h2 className="truncate text-sm font-semibold">
+                                {/* Keyboard path for card selection — the card
+                                    <article> is mouse-only sugar; nesting
+                                    controls under role="button" fails axe
+                                    nested-interactive (W-E quality sweep). */}
+                                <button
+                                  type="button"
+                                  aria-pressed={active}
+                                  aria-label={`${job.title} at ${job.company}, view details`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedId(job.id);
+                                  }}
+                                  className="max-w-full truncate text-left"
+                                >
+                                  {job.title}
+                                </button>
+                              </h2>
                               <p className="truncate text-xs text-aether-muted">
                                 {job.company}
                                 {job.location ? ` · ${job.location}` : ""}

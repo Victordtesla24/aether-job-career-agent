@@ -22,7 +22,7 @@ import { agentRunDisabledReason } from "./logic";
 function refreshedLabel(iso: string | null, stale: boolean): string {
   if (!iso) return "Catalog not yet refreshed — showing the latest loaded list.";
   const when = new Date(iso);
-  const ts = Number.isNaN(when.getTime()) ? iso : when.toLocaleString();
+  const ts = Number.isNaN(when.getTime()) ? iso : when.toLocaleString("en-AU");
   return stale
     ? `Catalog last refreshed ${ts} · stale — showing cached data`
     : `Catalog last refreshed ${ts}`;

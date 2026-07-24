@@ -250,7 +250,7 @@ export default function ResumePage() {
       ) : null}
 
       <section className="grid gap-4 lg:grid-cols-2" data-design-id="panes-rs0405">
-        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
+        <div className="glass min-h-[240px] min-w-0 rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-aether-muted-dim" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Original — Base Resume</h2>
@@ -273,7 +273,7 @@ export default function ResumePage() {
             Base resume is immutable — every tailored version derives from this source of truth.
           </p>
         </div>
-        <div className="glass min-w-0 rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
+        <div className="glass min-h-[240px] min-w-0 rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Tailored — Latest Version</h2>
@@ -378,7 +378,7 @@ export default function ResumePage() {
           </h2>
           {resumes === null ? (
             <div className="space-y-3" aria-busy="true">
-              {[0, 1, 2].map((i) => (
+              {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="glass h-16 animate-pulse rounded-xl border border-white/10" />
               ))}
             </div>
@@ -403,7 +403,7 @@ export default function ResumePage() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">v{resume.version}</span>
                     <span className="text-xs text-aether-muted-dim">
-                      {new Date(resume.createdAt).toLocaleDateString()}
+                      {new Date(resume.createdAt).toLocaleDateString("en-AU")}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-aether-muted">

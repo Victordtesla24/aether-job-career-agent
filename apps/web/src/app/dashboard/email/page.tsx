@@ -456,17 +456,17 @@ export default function EmailCenterPage() {
               <div
                 key={a.id ?? a.email}
                 data-testid="inbox-account"
-                className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${
+                className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${
                   accountFilter === a.email ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => setAccountFilter(a.email)}
-                  className="flex items-center gap-2"
+                  className="flex min-w-0 items-center gap-2"
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-aether-green" />
-                  {a.email}
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-aether-green" />
+                  <span className="min-w-0 truncate">{a.email}</span>
                   {a.isPrimary ? (
                     <span className="rounded border border-aether-violet/30 bg-aether-violet/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-aether-violet">
                       Primary
@@ -840,7 +840,7 @@ export default function EmailCenterPage() {
         </section>
 
         {/* Right rail */}
-        <div className="space-y-4 xl:col-span-1">
+        <div className="min-w-0 space-y-4 xl:col-span-1">
           <section className="glass rounded-2xl border border-white/10 p-5" data-testid="followups">
             <h2 className="mb-3 text-[15px] font-semibold">Automated Follow-Ups</h2>
             {inbox.followUps.length === 0 ? (

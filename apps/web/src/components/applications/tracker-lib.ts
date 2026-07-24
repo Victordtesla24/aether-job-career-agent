@@ -205,7 +205,7 @@ export function timeAgo(iso: string, now: number = Date.now()): string {
 export function shortDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 }
 
 function metaOf(app: TrackerApplication): TrackerMeta {

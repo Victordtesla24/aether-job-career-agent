@@ -408,7 +408,7 @@ export default function ProviderConfigModal({
             >
               Last test: {view.lastVerifyStatus === "ok" ? "passed" : "failed"}
               {view.lastVerifiedAt
-                ? ` · ${new Date(view.lastVerifiedAt).toLocaleString()}`
+                ? ` · ${new Date(view.lastVerifiedAt).toLocaleString("en-AU")}`
                 : ""}
             </span>
           ) : null}

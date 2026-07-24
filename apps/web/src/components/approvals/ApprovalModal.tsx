@@ -291,7 +291,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted">
               This request was already {approval.status}
               {approval.resolvedAt
-                ? ` on ${new Date(approval.resolvedAt).toLocaleString()}`
+                ? ` on ${new Date(approval.resolvedAt).toLocaleString("en-AU")}`
                 : ""}
               .
             </p>

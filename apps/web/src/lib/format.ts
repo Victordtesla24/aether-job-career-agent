@@ -19,12 +19,12 @@ export function formatAud(amount: number): string {
 export function formatDateTime(value: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("en-AU");
 }
 
 /** Locale date only, em-dash on null/invalid (admin users list). */
 export function formatDate(value: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-AU");
 }

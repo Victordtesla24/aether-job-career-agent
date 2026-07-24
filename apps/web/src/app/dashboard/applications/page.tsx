@@ -606,7 +606,7 @@ export default function ApplicationsPage() {
               </h2>
               <p className="mono mt-1 text-xs text-aether-muted-dim">
                 status: {detail.status} · resume version: {detail.resumeId} · updated{" "}
-                {new Date(detail.updatedAt).toLocaleString()}
+                {new Date(detail.updatedAt).toLocaleString("en-AU")}
               </p>
             </div>
             <button
@@ -702,24 +702,7 @@ export default function ApplicationsPage() {
                             data-testid="application-card"
                             draggable
                             onDragStart={(e) => onCardDragStart(e, card, stage.key)}
-                            {...(clickable
-                              ? {
-                                  role: "button" as const,
-                                  tabIndex: 0,
-                                  "aria-label": `${card.title} at ${card.company}, open details`,
-                                }
-                              : {})}
                             onClick={clickable ? () => void openDetail(card.app!.id) : undefined}
-                            onKeyDown={
-                              clickable
-                                ? (e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      void openDetail(card.app!.id);
-                                    }
-                                  }
-                                : undefined
-                            }
                             className={`glass rounded-xl border p-3.5 transition ${
                               stage.key === "tailoring"
                                 ? "border-aether-coral/25"
@@ -752,7 +735,25 @@ export default function ApplicationsPage() {
                               </span>
                             </div>
                             <h3 className="mt-2.5 text-xs font-semibold leading-tight">
-                              {card.title}
+                              {clickable ? (
+                                /* Keyboard path for opening details — the card
+                                   <article> stays a mouse-only convenience so
+                                   the MoveMenu buttons are not nested inside a
+                                   role="button" (axe nested-interactive, W-E). */
+                                <button
+                                  type="button"
+                                  aria-label={`${card.title} at ${card.company}, open details`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void openDetail(card.app!.id);
+                                  }}
+                                  className="max-w-full text-left"
+                                >
+                                  {card.title}
+                                </button>
+                              ) : (
+                                card.title
+                              )}
                             </h3>
                             <p className="text-[11px] text-aether-muted-dim">{card.company}</p>
                             <CardMeta card={card} stageKey={stage.key} />

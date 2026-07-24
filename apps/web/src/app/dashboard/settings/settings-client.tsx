@@ -965,7 +965,7 @@ export default function SettingsClient({
                       Next billing date:{" "}
                       <span className="mono font-semibold text-aether-text">
                         {subscription.currentPeriodEnd
-                          ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                          ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-AU")
                           : "No upcoming charge"}
                       </span>
                     </span>
@@ -1006,7 +1006,7 @@ export default function SettingsClient({
                              date, not necessarily the Stripe renewal date
                              (e.g. an annual plan still resets its run quota
                              monthly). */}
-                          Usage quota resets {new Date(subscription.quota.periodEnd).toLocaleDateString()}
+                          Usage quota resets {new Date(subscription.quota.periodEnd).toLocaleDateString("en-AU")}
                         </p>
                       ) : null}
                     </div>
@@ -1140,6 +1140,7 @@ function Toggle({
       <button
         type="button"
         role="switch"
+        aria-label={label}
         aria-checked={value}
         aria-disabled={disabled ? "true" : undefined}
         disabled={disabled}

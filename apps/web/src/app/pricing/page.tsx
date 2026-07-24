@@ -430,7 +430,7 @@ export default function PricingPage() {
 
         <p className="mt-10 text-center text-xs text-aether-muted-dim">
           Already have an account?{" "}
-          <Link href="/login" className="text-aether-indigo hover:underline">
+          <Link href="/login" className="font-semibold text-white underline underline-offset-2 hover:text-aether-coral">
             Sign in
           </Link>
         </p>

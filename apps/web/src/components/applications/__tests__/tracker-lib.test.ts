@@ -239,7 +239,7 @@ describe("fitClass / initials / time formatting", () => {
   });
 
   it("formats short badge dates", () => {
-    expect(shortDate("2026-07-03")).toBe("Jul 3");
+    expect(shortDate("2026-07-03")).toBe("3 July");
   });
 });
 

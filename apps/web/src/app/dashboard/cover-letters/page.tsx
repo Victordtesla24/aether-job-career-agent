@@ -324,7 +324,7 @@ export default function CoverLettersPage() {
 
       {letters === null ? (
         <div className="space-y-3" aria-busy="true">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="glass h-28 animate-pulse rounded-2xl border border-white/10" />
           ))}
         </div>
@@ -361,7 +361,7 @@ export default function CoverLettersPage() {
                     <div>
                       <h2 className="font-semibold">{jobLabel}</h2>
                       <p className="mt-0.5 text-xs text-aether-muted-dim">
-                        {letter.status} · {parseApiDate(letter.createdAt).toLocaleString()}
+                        {letter.status} · {parseApiDate(letter.createdAt).toLocaleString("en-AU")}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
