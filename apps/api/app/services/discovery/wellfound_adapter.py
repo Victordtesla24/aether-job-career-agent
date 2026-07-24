@@ -15,7 +15,12 @@ import logging
 from typing import Any
 
 from app.services.discovery import relevance
-from app.services.discovery.base_adapter import AdapterFetchError, BaseAdapter, JobRaw
+from app.services.discovery.base_adapter import (
+    AdapterFetchError,
+    BaseAdapter,
+    JobRaw,
+    SourceBlockedError,
+)
 from app.services.discovery.live_http import fetch_json
 
 logger = logging.getLogger(__name__)
@@ -32,9 +37,13 @@ class WellfoundAdapter(BaseAdapter):
         try:
             payload = fetch_json(url)
         except Exception as exc:  # noqa: BLE001 — surface honestly, don't fabricate
-            raise AdapterFetchError(
-                f"Wellfound public listings unavailable: {exc}"
-            ) from exc
+            message = f"Wellfound public listings unavailable: {exc}"
+            if "403" in str(exc) or "forbidden" in str(exc).lower():
+                # RT-008: Wellfound structurally blocks automated/datacenter
+                # access — a permanent, not-user-actionable "blocked" state, not
+                # a transient error to re-alarm on every sync.
+                raise SourceBlockedError(message) from exc
+            raise AdapterFetchError(message) from exc
         jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
         return {"jobs": jobs}
 

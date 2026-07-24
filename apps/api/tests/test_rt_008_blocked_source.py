@@ -13,7 +13,9 @@ honest ``error``.
 """
 from __future__ import annotations
 
-from app.services.discovery.base_adapter import AdapterFetchError
+import pytest
+
+from app.services.discovery.base_adapter import AdapterFetchError, SourceBlockedError
 from app.agents import scout_agent as scout_module
 from app.agents.scout_agent import ScoutAgent
 
@@ -22,7 +24,7 @@ class _BlockedAdapter:
     source = "wellfound"
 
     def fetch(self, query: str, location: str):
-        raise AdapterFetchError(
+        raise SourceBlockedError(
             "Wellfound public listings unavailable: HTTP Error 403: Forbidden"
         )
 
@@ -31,7 +33,9 @@ class _BrokenAdapter:
     source = "greenhouse"
 
     def fetch(self, query: str, location: str):
-        raise AdapterFetchError("boards API unreachable: HTTP Error 502: Bad Gateway")
+        # A plain AdapterFetchError — even a 403 across all boards — is an
+        # honest ERROR (only an adapter-asserted SourceBlockedError is "blocked").
+        raise AdapterFetchError("boards API unreachable: HTTP Error 403: Forbidden")
 
 
 def _run_scout(client, auth_headers, monkeypatch, adapter_cls) -> dict:
@@ -62,4 +66,27 @@ class TestBlockedClassification:
     def test_other_failures_stay_honest_errors(self, client, auth_headers, monkeypatch):
         out = _run_scout(client, auth_headers, monkeypatch, _BrokenAdapter)
         assert out["src"]["status"] == "error"
-        assert any("502" in e for e in out["result"].errors)
+        assert any("403" in e for e in out["result"].errors)
+
+    def test_wellfound_live_adapter_raises_blocked_on_403(self, monkeypatch):
+        """The real wellfound adapter raises SourceBlockedError (not a plain
+        AdapterFetchError) when its endpoint 403s — the type the scout keys on."""
+        from app.services.discovery import wellfound_adapter as mod
+
+        def _403(url, *a, **k):
+            raise RuntimeError("HTTP Error 403: Forbidden")
+
+        monkeypatch.setattr(mod, "fetch_json", _403)
+        with pytest.raises(SourceBlockedError):
+            mod.WellfoundAdapter()._fetch_live("engineer", "Melbourne")
+
+    def test_wellfound_live_adapter_raises_plain_error_on_500(self, monkeypatch):
+        from app.services.discovery import wellfound_adapter as mod
+
+        def _500(url, *a, **k):
+            raise RuntimeError("HTTP Error 500: Server Error")
+
+        monkeypatch.setattr(mod, "fetch_json", _500)
+        with pytest.raises(AdapterFetchError) as exc_info:
+            mod.WellfoundAdapter()._fetch_live("engineer", "Melbourne")
+        assert not isinstance(exc_info.value, SourceBlockedError)

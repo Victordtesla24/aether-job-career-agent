@@ -30,6 +30,23 @@ class AdapterFetchError(RuntimeError):
     """
 
 
+class SourceBlockedError(AdapterFetchError):
+    """The source PERMANENTLY denies automated access from this server (RT-008).
+
+    A subclass of :class:`AdapterFetchError` (so existing ``except
+    AdapterFetchError`` handling still catches it), raised ONLY by an adapter
+    that has determined its source structurally blocks this deployment — e.g.
+    Wellfound's public listings return HTTP 403 on every request. The scout
+    records this as a disclosed ``status="blocked"`` (calm "unavailable" pill),
+    NOT a red ``status="error"`` re-alarming on every sync, and it is excluded
+    from the run's ``errors`` list. This is deliberately narrow: a plain
+    ``AdapterFetchError`` (incl. an ATS provider that 403s across all its
+    boards — a genuine, actionable outage) stays an honest ``error``
+    (GAP-SRC-002). Blocked-ness is asserted by the ADAPTER, never inferred from
+    an error string in the scout.
+    """
+
+
 class JobRaw(TypedDict):
     """Normalized job posting as produced by every adapter."""
 

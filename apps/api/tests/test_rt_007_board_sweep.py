@@ -245,9 +245,7 @@ class TestEligibilityAndCron:
             async def enqueue_job(self, *a, **k):  # pragma: no cover — must not run
                 pytest.fail("disabled cron must not enqueue")
 
-        result = asyncio.get_event_loop().run_until_complete(
-            board_sweep.board_sweep_cron({"redis": _NoRedis()})
-        )
+        result = asyncio.run(board_sweep.board_sweep_cron({"redis": _NoRedis()}))
         assert result == 0
 
     def test_cron_enqueues_dedup_job_ids_when_enabled(
@@ -264,8 +262,6 @@ class TestEligibilityAndCron:
                 seen.append((fn, _job_id))
                 return object()
 
-        n = asyncio.get_event_loop().run_until_complete(
-            board_sweep.board_sweep_cron({"redis": _Redis()})
-        )
+        n = asyncio.run(board_sweep.board_sweep_cron({"redis": _Redis()}))
         assert n >= 1
         assert ("board_sweep_user", f"board-sweep:{user_id}") in seen

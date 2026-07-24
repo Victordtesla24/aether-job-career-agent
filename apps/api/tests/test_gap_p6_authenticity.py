@@ -302,6 +302,12 @@ def test_persisted_raw_text_reflects_tailored_bullets():
         def get_by_id(self, job_id, user_id):  # noqa: ANN001
             return {"title": "Backend Engineer", "company": "Acme", "description": _JD}
 
+        def advance_status(self, job_id, status, *, allowed_from):  # noqa: ANN001
+            # RT-005: after a successful tailor the agent advances the job's
+            # board status. Pure-unit stub — record nothing, just satisfy the
+            # collaborator interface so this DB-free test doesn't hit psycopg2.
+            return True
+
     class _StubStories:
         def list_by_user(self, user_id):  # noqa: ANN001
             return []
