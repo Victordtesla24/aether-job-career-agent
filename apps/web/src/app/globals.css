@@ -99,8 +99,12 @@ body {
     flex-shrink: 0;
     accent-color: #ff6b35;
   }
-  /* DEF-020: guard against stray horizontal overflow on small screens */
+  /* DEF-020 (+W-E): guard against stray horizontal overflow on small
+     screens — user-generated content (email bodies, long unbroken strings)
+     can exceed the viewport; clip at the root so the document never scrolls
+     sideways. `clip` (not `hidden`) avoids creating a scroll container. */
+  html,
   body {
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 }

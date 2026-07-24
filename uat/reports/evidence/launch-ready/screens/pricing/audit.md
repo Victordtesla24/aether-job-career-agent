@@ -40,3 +40,7 @@ All actionable items are tracked in the quality ledger (docs/delivery/MODELS-LIV
 - 360px: `s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/we-screens/pricing-360.png`
 
 Raw audit data: `s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/we-screens/results.json`
+
+## Post-fix re-audit (wave 2, 2026-07-24)
+
+Re-run of the full headless audit after the W-E fix waves (deploy = wave-2 commit): **0 console errors, 0 axe serious/critical violations, 0 unnamed controls, no 360 px horizontal scroll, 0 failed requests.** One benign Next.js RSC prefetch ERR_ABORTED remains (not user-visible).

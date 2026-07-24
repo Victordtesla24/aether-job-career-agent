@@ -950,7 +950,7 @@ export default function JobsPage() {
                     key={job.id}
                     data-testid="job-card"
                     onClick={() => setSelectedId(job.id)}
-                    className={`relative cursor-pointer rounded-xl border p-4 transition ${
+                    className={`relative cursor-pointer overflow-hidden rounded-xl border p-4 transition ${
                       active ? "border-aether-coral/40 bg-aether-coral/[0.08]" : "glass border-white/10 hover:border-white/20"
                     }`}
                   >
@@ -985,7 +985,7 @@ export default function JobsPage() {
                                     e.stopPropagation();
                                     setSelectedId(job.id);
                                   }}
-                                  className="max-w-full truncate text-left"
+                                  className="block w-full truncate text-left"
                                 >
                                   {job.title}
                                 </button>
@@ -1203,7 +1203,12 @@ export default function JobsPage() {
                 {/* Role Description */}
                 <section className="mt-5" data-testid="role-description">
                   <h3 className="mb-2 text-sm font-semibold">Role Description</h3>
-                  <p className="max-h-48 overflow-y-auto whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-aether-muted">
+                  <p
+                    className="max-h-48 overflow-y-auto whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-aether-muted"
+                    role="region"
+                    aria-label="Role description (scrollable)"
+                    tabIndex={0}
+                  >
                     {selected.description || "No description captured for this posting."}
                   </p>
                 </section>

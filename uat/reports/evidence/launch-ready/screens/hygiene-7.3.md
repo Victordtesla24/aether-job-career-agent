@@ -18,7 +18,23 @@ Threshold: performance / accessibility / best-practices ≥ 90 each.
 
 ### Post-fix (re-measured after the W-E quality wave deploy)
 
-_See table appended below after deploy._
+| Route | Perf | A11y | Best Practices | Notes |
+|---|---|---|---|---|
+| /dashboard | **98 ✓** | **100 ✓** | **100 ✓** | CLS 0 |
+| /dashboard/jobs | 81 ✗ | **100 ✓** | **100 ✓** | LCP 4.1s, CLS 0.114 (list render post-fetch) |
+| /dashboard/agents | 82 ✗ | **100 ✓** | **100 ✓** | LCP ~4s, CLS 0 |
+| /dashboard/analytics | 83 ✗ | **100 ✓** | **100 ✓** | **CLS 0.668 → 0** (summary skeleton reservation), perf 64 → 83 |
+| /dashboard/applications | 86 ✗ | **100 ✓** | **100 ✓** | LCP 3.9s |
+
+Post-fix verdict: **A11y 100 and Best Practices 100 on all five heaviest routes.** Performance ≥90 on
+/dashboard only; the four remaining routes sit at 81–86 driven by LCP ≈ 4s, which is architectural —
+these are authenticated SPA views whose primary content arrives via a client-side API fetch after
+hydration. Converting them to SSR/streaming is a disproportionate refactor for this wave and is
+recorded as an accepted residual in the ledger (QUALITY-WE-005). All layout-shift regressions that
+were fixable with skeleton reservations were fixed (analytics CLS 0.668 → 0).
+Raw post-fix Lighthouse JSONs: S3 prefix `we-screens/lh2/`; post-fix 15-screen re-audit:
+`we-screens/results-postfix.json` (0 console errors, 0 axe serious/critical, 0 unnamed controls,
+no 360 px horizontal scroll on any screen).
 
 ## API p95 snapshot (timed curl, n=20 per endpoint, authenticated)
 
