@@ -50,35 +50,48 @@ class WellfoundAdapter(BaseAdapter):
     def _parse(self, payload: dict[str, Any]) -> list[JobRaw]:
         jobs: list[JobRaw] = []
         for item in payload.get("jobs", []):
-            company = item.get("company") or {}
-            company_name = (
-                str(company.get("name") or "")
-                if isinstance(company, dict)
-                else str(company)
-            )
-            apply_url = str(item.get("url") or "")
-            if not apply_url and item.get("id"):
-                apply_url = f"https://wellfound.com/jobs/{item.get('id')}"
-            if not apply_url:
-                continue
-            locations = item.get("locations") or []
-            location = ", ".join(
-                str(loc.get("name") if isinstance(loc, dict) else loc)
-                for loc in locations
-            ) or str(item.get("location") or "")
-            jobs.append(
-                JobRaw(
-                    title=str(item.get("title") or ""),
-                    company=company_name,
-                    location=location or "Remote",
-                    remote=bool(item.get("remote")),
-                    description=relevance.snippet(
-                        item.get("description"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
-                    ),
-                    requirements=[],
-                    source=self.source,
-                    sourceUrl=apply_url,
-                    postedAt=str(item.get("liveStartAt") or item.get("createdAt") or ""),
+            try:
+                company = item.get("company") or {}
+                company_name = (
+                    str(company.get("name") or "")
+                    if isinstance(company, dict)
+                    else str(company)
                 )
-            )
+                apply_url = str(item.get("url") or "")
+                if not apply_url and item.get("id"):
+                    apply_url = f"https://wellfound.com/jobs/{item.get('id')}"
+                if not apply_url:
+                    logger.warning(
+                        "wellfound: job skipped — cannot construct sourceUrl "
+                        "(title=%r company=%r, id=%r)",
+                        str(item.get("title") or "")[:80],
+                        company_name[:80],
+                        item.get("id"),
+                    )
+                    continue
+                locations = item.get("locations") or []
+                location = ", ".join(
+                    str(loc.get("name") if isinstance(loc, dict) else loc)
+                    for loc in locations
+                ) or str(item.get("location") or "")
+                jobs.append(
+                    JobRaw(
+                        title=str(item.get("title") or ""),
+                        company=company_name,
+                        location=location or "Remote",
+                        remote=bool(item.get("remote")),
+                        description=relevance.snippet(
+                            item.get("description"), limit=relevance.DESCRIPTION_STORAGE_LIMIT
+                        ),
+                        requirements=[],
+                        source=self.source,
+                        sourceUrl=apply_url,
+                        postedAt=str(item.get("liveStartAt") or item.get("createdAt") or ""),
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 — log + skip bad item, don't fail whole source
+                logger.warning(
+                    "wellfound: parse error on item (title=%r): %s",
+                    str(item.get("title") or "")[:80], exc,
+                )
         return relevance.filter_relevant(jobs)
