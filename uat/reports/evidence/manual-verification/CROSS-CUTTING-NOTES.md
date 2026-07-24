@@ -1,7 +1,0 @@
-## Serving model (observed live, PRO tier) — 2026-07-17
-resume-studio tester observed the tailor agent served by `deepseek/deepseek-v4-pro` via OpenRouter, `authMode:api_key` (never oauth_token). REFUTES CLM-010 (claimed Anthropic/claude path). Ties to MV-pricing-002 (per-plan "model tier"/"Full model access" marketing) and the Phase-0 log note that 503s referenced "deepseek models". IMPLICATION for Stage 2: verify what model the pricing page implies vs what actually serves; "Light model tier"/"Standard model tier" copy must match the real OpenRouter routing. Confirm across other agent-run screens (cover-letter, story-bank, job-discovery) whether all use deepseek/OpenRouter.
-
-## Serving models — UPDATE (3 agents observed, all OpenRouter, none Anthropic)
-- tailor (resume-studio + job-discovery): deepseek/deepseek-v4-pro (authMode=api_key)
-- storyExtractor (story-bank): qwen/qwen3-coder-next
-CONCLUSION: PRO tier routes different agents to different OpenRouter models; NONE use the direct Anthropic/claude path that ground truth + several claims (CLM-010) assert. This is a cross-cutting CLAIM-REFUTED cluster + relates to pricing "model tier" copy (MV-pricing-002). Stage 2 must reconcile: (a) marketing model-tier language, (b) the CLM claims about Anthropic path, (c) what actually serves. Not necessarily a defect (OpenRouter routing may be intended) but the CLAIMS about it are false → adjudicate.

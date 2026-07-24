@@ -1,0 +1,127 @@
+{
+  "manifest": "DELETION-MANIFEST-1 (repo)",
+  "workstream": "W-D",
+  "date": "2026-07-24",
+  "repo": "aether-job-career-agent",
+  "protocol": "spec §6.1 propose→manifest→execute→verify",
+  "kept_active": [
+    "uat/reports/evidence/launch-ready/ (27 tracked files, minus 2 >200KB binaries replaced by pointers)",
+    "uat/reports/.gitignore",
+    "docs/delivery keep-set: ADR-MV-02-paywall-marketing.md, DECISIONS.md, DEPLOYMENT-RUNBOOK.md, INCIDENT-2026-07-21-web-build-clobber.md, INCIDENT-PROD-DB-WIPE-2026-07-18.md, LAUNCH-READY-STATE.json, MODELS-LIVE-GAPS.json, PROGRESS.md, REQUIREMENTS-TRACEABILITY-PRODUCTION.md, TRACEABILITY-MATRIX.md, ML-agents-cred-002-BLUEPRINT.md"
+  ],
+  "items": [
+    {
+      "path": "uat/ (prior-phase contents: all tracked+untracked EXCEPT uat/reports/evidence/launch-ready/ and uat/reports/.gitignore)",
+      "class": "prior-phase bulk evidence + sweep scripts (~489MB on disk, 1213 tracked files ~11MB)",
+      "refs_proof": "grep of .github/, scripts/, package.json, turbo.json, apps/api/pyproject.toml found zero references to uat_runner/uat tests/sweep scripts; pytest testpaths=['tests'] (apps/api) excludes uat/; launch-ready evidence dir is the only ACTIVE evidence path per LAUNCH-READY-STATE.json",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/repo-archive/uat-prior-phase.tar.gz",
+      "tracked_file_count": 1212
+    },
+    {
+      "path": "evidence/ (repo root, 8MB, 0 tracked files - gitignored)",
+      "class": "legacy prod-remediation on-disk evidence (untracked)",
+      "refs_proof": "git ls-files evidence/ returns 0 files; .gitignore already ignores evidence/; nothing in code imports from it",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/repo-archive/evidence-legacy.tar.gz"
+    },
+    {
+      "path": "uat/reports/evidence/launch-ready/features/FEAT-B1-approvals-remove-ui.png",
+      "class": "active-evidence binary >200KB (228KB)",
+      "refs_proof": "referenced only from FEAT-B1/B2 prod-verify notes in same dir; pointer note replaces it",
+      "disposition": "archive-to-S3-then-delete (replaced by S3-URI pointer .md)",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/repo-archive/launch-ready-binaries/FEAT-B1-approvals-remove-ui.png"
+    },
+    {
+      "path": "uat/reports/evidence/launch-ready/features/FEAT-B2-move-menu-ui.png",
+      "class": "active-evidence binary >200KB (212KB)",
+      "refs_proof": "referenced only from FEAT-B1/B2 prod-verify notes in same dir; pointer note replaces it",
+      "disposition": "archive-to-S3-then-delete (replaced by S3-URI pointer .md)",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/repo-archive/launch-ready-binaries/FEAT-B2-move-menu-ui.png"
+    },
+    {
+      "path": ".mypy_cache (19MB)",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": ".turbo (37MB)",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": ".pytest_cache",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": ".ruff_cache",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/web/dist",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/web/tsconfig.tsbuildinfo",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/web/.pytest_cache",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/api/.pytest_cache",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/api/.ruff_cache",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": "apps/api/aether_api.egg-info",
+      "class": "regenerable cache/build residue (untracked; 0 tracked residue found)",
+      "refs_proof": "git ls-files | grep -E 'mypy_cache|.turbo|pytest_cache|ruff_cache|tsbuildinfo|egg-info|test-results|dist/' returned empty — nothing tracked",
+      "disposition": "delete"
+    },
+    {
+      "path": ".env.bak-predeploy",
+      "class": "stale env backup (untracked; P0-007)",
+      "refs_proof": ".env exists on disk; aether-api/web/worker all active; prod health 200 — backup no longer needed. Contents never printed.",
+      "disposition": "delete (shred)"
+    },
+    {
+      "path": "docs/delivery/{DEFECTS-PHASE-2-AUDIT.md, EXECUTION-REPORT-PHASE7.md, EXECUTION-REPORT.md, FINAL-REPORT-PHASE-2-AUDIT.md, MANUAL-VERIFICATION-BLOCKED-ON-HUMAN.md, MANUAL-VERIFICATION-CLAIM-LEDGER.md, MANUAL-VERIFICATION-FINAL-REPORT.md, MANUAL-VERIFICATION-GAPS.json, MANUAL-VERIFICATION-GOVERNANCE-AUDIT.md, MANUAL-VERIFICATION-TRIAGE.md, ML-AGENTS-CRED-002-BLUEPRINT.md, MODELS-LIVE-GOVERNANCE-AUDIT.md, PHASE-0-REVIEW.md, PHASE-1-VERIFICATION.md, PHASE-2-AGENT-PROMPT.md, PHASE-2-REVIEW.md, PHASE3-GAP-LEDGER.md, PHASE4-GAP-ANALYSIS.md, PHASE5-EXECUTION-SUMMARY.md, PHASE5-GAP-ANALYSIS.md, PHASE6-BLOCKED-ON-HUMAN.md, PHASE6-EXECUTION-SUMMARY.md, PHASE6-GAP-ANALYSIS.md, PHASE6-GOVERNANCE-AUDIT.md, PHASE6-RERUN-EXECUTION-SUMMARY.md, PHASE6-RERUN-GOVERNANCE.md, PHASE7-ASYNC-BLUEPRINT.md, PHASE7-BLOCKED-ON-HUMAN.md, PHASE7-CLAIM-LEDGER.md, PHASE7-DEFECT-A-BLUEPRINT.md, PHASE7-GAP-ANALYSIS.md, PHASE7-GOVERNANCE-AUDIT.md, PROVIDER-CONFIG-RUN.md, gap-analysis.json, phase5-gap-analysis.json, phase6-gap-analysis.json, phase6-rerun-gap-analysis.json, phase7-gap-analysis.json}",
+      "class": "superseded per-phase reports/gap-analyses/blueprints (38 files)",
+      "refs_proof": "per-phase artifacts superseded by MODELS-LIVE-GAPS.json (current ledger) + LAUNCH-READY-STATE.json; ML-AGENTS-CRED-002-BLUEPRINT.md is the unapproved draft twin — ADR-ML-2 (DECISIONS.md L134) approved the lowercase ML-agents-cred-002-BLUEPRINT.md which stays",
+      "disposition": "git mv to docs/delivery/archive/ (kept in history + tree, indexed by archive/README.md)"
+    },
+    {
+      "path": "gap-analysis.json, gap_analysis_report.md, EXECUTION-REPORT.md (repo root strays)",
+      "class": "root strays named in W-D spec",
+      "refs_proof": "ls: files do not exist at repo root (already removed in a prior phase)",
+      "disposition": "no-op (already absent)"
+    },
+    {
+      "path": ".gitignore",
+      "class": "hardening",
+      "refs_proof": "existing rules already cover .mypy_cache/.turbo/.pytest_cache/.ruff_cache/*.tsbuildinfo/dist/ /*.egg-info/test-results//node_modules",
+      "disposition": "append .env.bak* rule (only missing pattern)"
+    }
+  ]
+}

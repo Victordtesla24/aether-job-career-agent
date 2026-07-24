@@ -1,2 +1,0 @@
-{"detail":"Too many checkout attempts, retry later"}
-HTTP_STATUS:429

@@ -1,6 +1,0 @@
-=== PHASE B disposable account setup ===
-captured_utc: 2026-07-20T01:22:58Z
-email: mv-qa-resample-ac3fb1@example.com
--- register --
-{"id":"c90279607e7688144c3d73b4d","email":"mv-qa-resample-ac3fb1@example.com","createdAt":"2026-07-20T01:23:01.753000"}
-HTTP:201

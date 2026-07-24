@@ -1,9 +1,0 @@
-plugins: anyio-4.14.1, cov-7.1.0
-collecting ... collected 3 items
-
-apps/api/tests/test_mv_no_fixture_content_in_prod_data.py::test_no_fixture_cover_letter_spans_in_production PASSED [ 33%]
-apps/api/tests/test_mv_no_fixture_content_in_prod_data.py::test_restored_real_application_rows_present PASSED [ 66%]
-apps/api/tests/test_mv_no_fixture_content_in_prod_data.py::test_fingerprint_does_not_flag_legitimate_metric_content PASSED [100%]
-
-============================== 3 passed in 0.19s ===============================
-Fri Jul 17 23:51:46 UTC 2026

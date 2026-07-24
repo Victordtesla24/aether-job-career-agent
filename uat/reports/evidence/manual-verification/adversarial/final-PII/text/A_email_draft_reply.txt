@@ -1,1 +1,0 @@
-Hi, thank you for reaching out. Based on the resume, I have extensive Kafka experience, including rearchitecting a high-throughput ingestion service in Rust with Tokio to handle a 4 billion event/day Kafka firehose at Atlassian. I also hold a Confluent Certified Developer for Apache Kafka certification. I am open to discussing the Staff Rust role further.

@@ -1,6 +1,0 @@
-REVERT applied: 2026-07-18T09:31:05Z
-userId: c5dc9f214d581a28eb910671d (disposable MV-vb45 account)
-Byte-for-byte match to pre-grant snapshot: EXACT (Subscription + UsageQuota identical to grant-before-*.json)
-Post-revert API: GET /billing/entitlement -> {"active_paid":false,"plan":{"id":"free","status":"active"},"requiresSubscription":true}
-Test-induced usage reset: runsUsed 2->0, spendUsedUsd 0.001657->0 (restores exact pre-grant free state).
-Seeded test rows deleted (all 0 residual): AgentRun, ApprovalRequest, EmailThread(mv-vb45-thr-*), GmailAccount(mv-vb45-gmail-1), Contact(mv-vb45-contact-1).

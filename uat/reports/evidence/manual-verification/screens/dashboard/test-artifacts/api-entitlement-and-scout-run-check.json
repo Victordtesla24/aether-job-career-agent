@@ -1,6 +1,0 @@
-{
-  "GET /billing/entitlement": {"active_paid": false, "plan": {"id": "free", "status": "active"}, "requiresSubscription": true},
-  "GET /auth/me": {"id": "cc29a76e324fbf19f438eb8be", "email": "admin@aether.local", "name": "Administrator", "isAdmin": false},
-  "POST /agents/scout/run (valid body)": {"http_status": 402, "body": {"detail": {"error": "subscription_required", "message": "An active subscription is required to use Aether. Subscribe to unlock.", "upgradeUrl": "/pricing"}}},
-  "GET /": {"http_status": 307, "location": "/dashboard"}
-}

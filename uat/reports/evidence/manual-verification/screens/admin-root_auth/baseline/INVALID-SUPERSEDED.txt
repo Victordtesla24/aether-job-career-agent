@@ -1,1 +1,0 @@
-Captured logged-out (broken recipe); superseded by ../baseline-authed/

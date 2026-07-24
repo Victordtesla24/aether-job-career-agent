@@ -1,4 +1,0 @@
-=== GET /billing/subscription ===
-{"plan":{"id":"free","name":"Free","modelTier":"light"},"status":"active","interval":null,"currentPeriodEnd":null,"cancelAtPeriodEnd":false,"quota":{"runsUsed":3,"runsAllowed":5,"spendUsedUsd":0.058292,"spendCapUsd":1.0,"periodEnd":"2026-08-01T00:00:00+00:00"}}
-=== GET /billing/entitlement ===
-{"active_paid":false,"plan":{"id":"free","status":"active"},"requiresSubscription":true}

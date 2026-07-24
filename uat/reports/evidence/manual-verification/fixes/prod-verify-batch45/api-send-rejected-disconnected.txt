@@ -1,2 +1,0 @@
-{"detail":{"error":"no_email_provider_connected","message":"No email provider connected — connect your Gmail account to send. No email has been sent."}}
-HTTP=409

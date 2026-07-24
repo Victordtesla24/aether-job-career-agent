@@ -1,3 +1,0 @@
-[2026-07-17T16:58:59.730Z] Add Provider opened modal titled: "Configure OpenAI" (expect first UNCONFIGURED provider, e.g. OpenAI)
-[2026-07-17T16:59:01.204Z] jobDiscovery Run button present, disabled=false, title="null" (NOT clicked, to conserve shared quota per brief)
-[2026-07-17T16:59:01.206Z] Run All (pipeline) button present, disabled=false (NOT clicked - full pipeline run, quota-heavy, out of scope per brief)

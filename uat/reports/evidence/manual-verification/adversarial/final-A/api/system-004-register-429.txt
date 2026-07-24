@@ -1,4 +1,0 @@
-HTTP/2 429 
-retry-after: 3599
-{"detail":"Too many registration attempts for this email. Please wait and try again."}
-{"detail":"Too many registration attempts for this email. Please wait and try again."}
