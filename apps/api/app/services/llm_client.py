@@ -1375,11 +1375,17 @@ class LLMClient:
         validate = None
         if self.mode == "auto":
             def validate(content: str) -> None:  # noqa: E306 — local validator
-                json.loads(self._strip_fences(content))
+                # strict=False: models (observed live: anthropic/claude-sonnet-5
+                # cover letters, RT-001) emit well-formed JSON whose string
+                # values contain LITERAL control characters (raw newlines/tabs).
+                # That content is genuinely usable; rejecting it made every
+                # same-model re-draft fail identically and 503'd the run.
+                # Truncated/structurally-malformed JSON still fails the parse.
+                json.loads(self._strip_fences(content), strict=False)
 
         raw = self.complete(prompt_name, system, user, validate=validate, **kwargs)
         try:
-            return json.loads(self._strip_fences(raw))
+            return json.loads(self._strip_fences(raw), strict=False)
         except json.JSONDecodeError as exc:
             if self.mode != "auto":
                 raise
