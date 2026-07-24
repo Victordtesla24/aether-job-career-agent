@@ -1,0 +1,160 @@
+{
+  "manifest": "DELETION-MANIFEST-2 (home)",
+  "workstream": "W-D",
+  "date": "2026-07-24",
+  "scope": "/home/ubuntu",
+  "before_du_total_MB": 6261,
+  "protected_untouched": [
+    "all dotfiles/dot-dirs",
+    "skills/",
+    "Uploads/",
+    "Projects/",
+    "hermes/",
+    "aether-brand/ (nginx-LIVE)",
+    "aether-setup/",
+    "aether-subscription-prompt-live-test.md",
+    "Uploads/aether-agent-final-prompt.md",
+    "github_repos/ (dir itself)",
+    "AGENTS.md (current)",
+    "aether-agent-final-prompt.md home copy (duplicate of protected Uploads canonical — not in deletion scope)",
+    "all remaining *.md prompt sources"
+  ],
+  "items": [
+    {
+      "path": [
+        "/home/ubuntu/.swarm-report.py",
+        "/home/ubuntu/debug_page.py",
+        "/home/ubuntu/evidence_probe.py",
+        "/home/ubuntu/evidence_probe_final.py",
+        "/home/ubuntu/evidence_probe_v2.py",
+        "/home/ubuntu/evidence_probe_v3.py",
+        "/home/ubuntu/inspect_dom.py",
+        "/home/ubuntu/interaction_test.py",
+        "/home/ubuntu/interaction_test2.py",
+        "/home/ubuntu/swarm-monitor.sh",
+        "/home/ubuntu/test_all_screens.py",
+        "/home/ubuntu/test_dom.py",
+        "/home/ubuntu/test_interactions.py",
+        "/home/ubuntu/test_login.py",
+        "/home/ubuntu/test_login_flow.py",
+        "/home/ubuntu/test_modal.py",
+        "/home/ubuntu/test_modal2.py",
+        "/home/ubuntu/test_modal_click.py",
+        "/home/ubuntu/test_modal_content.py",
+        "/home/ubuntu/test_modal_debug.py",
+        "/home/ubuntu/test_modal_structure.py",
+        "/home/ubuntu/test_nw_interactions.py",
+        "/home/ubuntu/test_nw_proper.py",
+        "/home/ubuntu/test_verification.py",
+        "/home/ubuntu/test_verification_v2.py"
+      ],
+      "class": "top-level scratch automation scripts (verified: each exists at /home/ubuntu top level, none in protected dirs)",
+      "refs_proof": "one-off Playwright/DOM probe scripts from prior verification phases; not referenced by any systemd unit, repo script, or cron",
+      "disposition": "delete"
+    },
+    {
+      "path": [
+        "/home/ubuntu/AGENTS.md.bkp.202607171257",
+        "/home/ubuntu/AGENTS.md.bkp.202607220042",
+        "/home/ubuntu/AGENTS.md.bkp.202607220718",
+        "/home/ubuntu/AGENTS.md.bkp.202607231044"
+      ],
+      "class": "stale AGENTS.md backups (current AGENTS.md kept)",
+      "refs_proof": "timestamped .bkp copies; canonical AGENTS.md remains",
+      "disposition": "delete"
+    },
+    {
+      "path": [
+        "/home/ubuntu/aether-subscription-prompt.md",
+        "/home/ubuntu/aether-prod-trmediation-prompt.md",
+        "/home/ubuntu/aether-full-manual-verification-fix-execution-prompt.md"
+      ],
+      "class": "superseded prompt sources",
+      "refs_proof": "superseded by /home/ubuntu/Uploads/aether-agent-final-prompt.md (current, PROTECTED); live-test variant aether-subscription-prompt-live-test.md is PROTECTED and kept",
+      "disposition": "delete"
+    },
+    {
+      "path": [
+        "/home/ubuntu/ADVERSARIAL_REVIEW_PERPLEXITY_RESULT.docx",
+        "/home/ubuntu/ADVERSARIAL_REVIEW_PERPLEXITY_RESULT.pdf",
+        "/home/ubuntu/AETHER_CLAUDE_CODE_EXECUTION_PROMPT.docx",
+        "/home/ubuntu/AETHER_CLAUDE_CODE_EXECUTION_PROMPT.pdf",
+        "/home/ubuntu/AETHER_FABLE5_LAUNCH_READY_MASTER_PROMPT.docx",
+        "/home/ubuntu/AETHER_FABLE5_LAUNCH_READY_MASTER_PROMPT.pdf",
+        "/home/ubuntu/AETHER_FULL_MANUAL_VERIFICATION_PROMPT.docx",
+        "/home/ubuntu/AETHER_FULL_MANUAL_VERIFICATION_PROMPT.pdf",
+        "/home/ubuntu/AETHER_MASTER_EXECUTION_PROMPT.docx",
+        "/home/ubuntu/AETHER_MASTER_EXECUTION_PROMPT.pdf",
+        "/home/ubuntu/AETHER_OPENROUTER_MODELS_LIVE_VERIFICATION_PROMPT.docx",
+        "/home/ubuntu/AETHER_OPENROUTER_MODELS_LIVE_VERIFICATION_PROMPT.pdf",
+        "/home/ubuntu/OpenRouter-Custom-Router-Config.docx",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT.docx",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT.pdf",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V2_OPUS48.docx",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V2_OPUS48.pdf",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V3_SUBSCRIPTION.docx",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V3_SUBSCRIPTION.pdf",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V4_PHASE7.docx",
+        "/home/ubuntu/PERPLEXITY_DEEP_RESEARCH_PROMPT_V4_PHASE7.pdf",
+        "/home/ubuntu/prompt2-verification-and-ba-resume.docx",
+        "/home/ubuntu/prompt2-verification-and-ba-resume.pdf"
+      ],
+      "class": "duplicate .docx/.pdf exports of prompt/report .md files (canonical .md of each kept at /home/ubuntu)",
+      "refs_proof": "each has a same-stem .md sibling that remains; exports are auto-generated duplicates",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/prompt-doc-pdf-exports.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/aether_wireframe_verification/",
+      "class": "stale audit/scratch directory (~115MB)",
+      "refs_proof": "prior-phase audit evidence / one-off DB-cleanup scripts / stray top-level uat probe dir; repo holds the active launch-ready evidence",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/aether_wireframe_verification.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/aether_audit_evidence/",
+      "class": "stale audit/scratch directory (~14MB)",
+      "refs_proof": "prior-phase audit evidence / one-off DB-cleanup scripts / stray top-level uat probe dir; repo holds the active launch-ready evidence",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/aether_audit_evidence.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/aether_gap_audit_2026-07-12/",
+      "class": "stale audit/scratch directory (~7MB)",
+      "refs_proof": "prior-phase audit evidence / one-off DB-cleanup scripts / stray top-level uat probe dir; repo holds the active launch-ready evidence",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/aether_gap_audit_2026-07-12.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/aether-cleanup-mv/",
+      "class": "stale audit/scratch directory (~1MB)",
+      "refs_proof": "prior-phase audit evidence / one-off DB-cleanup scripts / stray top-level uat probe dir; repo holds the active launch-ready evidence",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/aether-cleanup-mv.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/uat/",
+      "class": "stale audit/scratch directory (~1MB)",
+      "refs_proof": "prior-phase audit evidence / one-off DB-cleanup scripts / stray top-level uat probe dir; repo holds the active launch-ready evidence",
+      "disposition": "archive-to-S3-then-delete",
+      "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/home-archive/uat.tar.gz"
+    },
+    {
+      "path": "/home/ubuntu/claude_oauth_line.txt",
+      "class": "credential-bearing scratch file",
+      "refs_proof": "quiet secret-pattern scan performed (match COUNT recorded in CLEANUP-REPORT only; contents never printed)",
+      "disposition": "delete (shred -u) — NEVER archived per spec"
+    },
+    {
+      "path": [
+        "/home/ubuntu/.stripe-charge-id.txt",
+        "/home/ubuntu/.stripe-gst-rate.txt",
+        "/home/ubuntu/.stripe-test-invoice-id.txt",
+        "/home/ubuntu/github_repos/clientid_ctx.txt"
+      ],
+      "class": "scratch id/context files",
+      "refs_proof": "one-off Stripe test ids and OAuth clientid context notes from prior phases",
+      "disposition": "delete"
+    }
+  ]
+}

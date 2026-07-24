@@ -1,11 +1,11 @@
 {
-  "phase_step": "W-C-CLOSED",
-  "updated_at": "2026-07-24T10:05:00+10:00",
+  "phase_step": "W-D-CLOSED",
+  "updated_at": "2026-07-24T11:15:00+10:00",
   "workstream_status": {
     "W-A": "partial",
     "W-B": "closed",
     "W-C": "closed",
-    "W-D": "pending",
+    "W-D": "closed",
     "W-E": "pending",
     "W-F": "pending"
   },
@@ -144,6 +144,12 @@
       },
       "loc_removed_net": 3670,
       "files_hard_deleted": 66
+    },
+    "W-D": {
+      "status": "passed",
+      "closed_at": "2026-07-24T11:15:00+10:00",
+      "summary": "File-management sweep executed per manifests (repo 1.6G->992M tree, home 6261M->5578M); bulk evidence archived to S3 launch-ready-evidence/{repo-archive,home-archive}/; docs/delivery consolidated (38 -> archive/); .env.bak-predeploy shredded (P0-007); suites green post-eviction (pytest 1173/0, vitest 567/0), services active, prod health 200.",
+      "evidence": "uat/reports/evidence/launch-ready/cleanup/CLEANUP-REPORT.md"
     }
   },
   "baseline": {
@@ -175,8 +181,7 @@
   "last_deploy_sha": "cb0186d",
   "next_actions": [
     "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence; the 5-row ledger business is already closed (2026-07-24).",
-    "W-D: repo + prod cleanup (§6) — reviewed deletion manifests (incl. .env.bak-predeploy, origin-local remote review, kept-branch verification), evidence under cleanup/",
-    "W-E: top-10-paid-app quality hardening sweep (§7) after W-A..W-C deploy, evidence under quality/screens",
-    "W-F: docs truth refresh → adversarial review → exit gates (§9–§10), evidence under governance/ and adversarial/"
+    "W-E: top-10-paid-app quality hardening sweep (§7), evidence under quality/screens",
+    "W-F: docs truth refresh -> adversarial review -> exit gates (§9-§10), evidence under governance/ and adversarial/"
   ]
 }

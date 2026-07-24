@@ -1507,6 +1507,24 @@
         "cb0186d"
       ],
       "verifiedBy": "full pytest 1173/0 + vitest 567/0 vs baseline; prod deploy cb0186d health+smoke 0x5xx"
+    },
+    {
+      "id": "CLEANUP-WD-COMPLETE",
+      "screen": "repo + /home/ubuntu (file management)",
+      "severity": "INFO",
+      "category": "cleanup",
+      "summary": "Workstream D professional file-management sweep complete per spec §6.1–§6.3 (manifest-driven, no history rewrite). REPO: 1212 prior-phase uat/ tracked files + untracked evidence dirs (489MB) and legacy evidence/ (8MB) archived to S3 (launch-ready-evidence/repo-archive/{uat-prior-phase,evidence-legacy}.tar.gz) then git rm'd; 2 launch-ready PNGs >200KB moved to S3 with in-tree .s3-pointer.md notes; regenerable caches removed (~57MB: .turbo/.mypy_cache/.pytest_cache/.ruff_cache/dist/tsbuildinfo/egg-info); .gitignore hardened (.env.bak*); .env.bak-predeploy shredded after verifying .env + active services + prod health 200 (P0-007 closed); docs/delivery consolidated — 38 superseded artifacts moved to docs/delivery/archive/ with index README, case-twin resolved (unapproved ML-AGENTS-CRED-002-BLUEPRINT.md draft archived, ADR-ML-2-approved lowercase twin active); repo tree 1.6G -> 992M (.git residual 63M, honest: blobs stay in history by design). HOME: stale audit dirs (~137MB: aether_wireframe_verification, aether_audit_evidence, aether_gap_audit_2026-07-12, aether-cleanup-mv, stray uat/) archived to S3 (home-archive/) then deleted; 23 duplicate .docx/.pdf prompt exports archived then deleted (canonical .md kept); 25 scratch scripts, 4 AGENTS.md backups, 3 superseded prompts, .stripe-*.txt, clientid_ctx.txt deleted; claude_oauth_line.txt quiet-scanned (2 secret-pattern lines, contents never printed) and shredded, never archived; home 6261M -> 5578M. PROTECTED items untouched.",
+      "reproduction": "n/a (cleanup workstream)",
+      "expected": "Lean production monorepo + clean home dir; active launch-ready evidence and delivery keep-set retained; bulk evidence recoverable from S3.",
+      "observed": "Executed exactly per DELETION-MANIFEST-1.json (repo, 18 items) and DELETION-MANIFEST-2.json (home, 11 items). Post-cleanup verification: pnpm build exit 0 + immediate aether-web restart, pytest 1173/0 (flock scripts/run-tests.sh), vitest 567/0 (81 files), services aether-api/web/worker active, prod /api/health 200.",
+      "evidence": "uat/reports/evidence/launch-ready/cleanup/{DELETION-MANIFEST-1.json,DELETION-MANIFEST-2.json,CLEANUP-REPORT.md}; S3 s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/launch-ready-evidence/{repo-archive,home-archive}/",
+      "status": "VERIFIED-CLOSED",
+      "owner": "fable-5",
+      "fixCommits": [
+        "8ef28ce"
+      ],
+      "verifiedBy": "pytest 1173/0 + vitest 567/0 + prod health 200 after eviction; S3 ls confirms all archives present",
+      "note": "No force-push, no --no-verify, no history rewrite. .git residual 63M documented honestly."
     }
   ]
 }
