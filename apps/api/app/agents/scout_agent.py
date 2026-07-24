@@ -26,6 +26,13 @@ from app.services.discovery.adapter_registry import ADAPTERS
 logger = logging.getLogger(__name__)
 
 
+def _is_upstream_block(message: str) -> bool:
+    """True when an adapter failure is the upstream DENYING access (RT-008):
+    HTTP 403/Forbidden — permanent for this server, not a transient outage."""
+    lowered = message.lower()
+    return "403" in lowered or "forbidden" in lowered
+
+
 @dataclass
 class ScoutResult:
     """Summary of a scout run."""
@@ -73,10 +80,19 @@ class ScoutAgent:
                 continue
             except Exception as exc:  # noqa: BLE001 — SURFACE the failure, don't swallow it
                 message = f"{type(exc).__name__}: {exc}"
-                logger.warning("scout: %s adapter failed: %s", source, message)
-                src["status"] = "error"
-                src["error"] = message
-                result.errors.append(f"{source}: {message}")
+                if _is_upstream_block(message):
+                    # RT-008: the source refuses automated access from this
+                    # server (403/Forbidden — e.g. wellfound). Permanent and
+                    # not user-actionable, so it is a disclosed "blocked"
+                    # source state, NOT a run error re-alarming every sync.
+                    logger.info("scout: %s blocked upstream: %s", source, message)
+                    src["status"] = "blocked"
+                    src["error"] = message
+                else:
+                    logger.warning("scout: %s adapter failed: %s", source, message)
+                    src["status"] = "error"
+                    src["error"] = message
+                    result.errors.append(f"{source}: {message}")
                 result.per_source.append(src)
                 self._record_status(user_id, src)
                 continue

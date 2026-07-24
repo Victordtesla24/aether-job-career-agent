@@ -52,11 +52,22 @@ class FitScorerAgent:
         )
         for job in self._repository.list_by_user(user_id):
             if job.get("fitScore") is not None and not rescore:
+                # RT-005 self-heal: a job scored before agent stage-sync existed
+                # may still sit at "discovered" — advance it so the board stays
+                # truthful. Guarded forward-only: never demotes a manual move.
+                self._repository.advance_status(
+                    job["id"], "screening", allowed_from={"discovered"}
+                )
                 continue
             try:
                 jd = self._job_text(job)
                 score = self._engine.score(resume_text, jd)
                 self._repository.update_fit_score(job["id"], score.overall, score.overall)
+                # RT-005: a scored job has been evaluated — its board card
+                # belongs in "Evaluating", not "Discovered". Forward-only.
+                self._repository.advance_status(
+                    job["id"], "screening", allowed_from={"discovered"}
+                )
                 result.scored += 1
             except Exception as exc:  # noqa: BLE001 — one bad job must not sink the run
                 result.errors.append(f"{job['id']}: {exc}")

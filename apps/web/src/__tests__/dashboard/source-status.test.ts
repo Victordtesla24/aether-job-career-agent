@@ -85,3 +85,22 @@ describe("sourceStatusView", () => {
     expect(views.map((v) => v.source)).toEqual(["lever", "indeed"]);
   });
 });
+
+describe("sourceStatusView blocked sources (RT-008)", () => {
+  it("renders status=blocked as a calm neutral 'unavailable' pill, never an error", () => {
+    const [view] = sourceStatusView(
+      [
+        row({
+          source: "wellfound",
+          status: "blocked",
+          lastError:
+            "AdapterFetchError: Wellfound public listings unavailable: HTTP Error 403: Forbidden",
+        }),
+      ],
+      NOW,
+    );
+    expect(view.badge).toBe("neutral");
+    expect(view.badgeLabel).toBe("unavailable (blocked by source)");
+    expect(view.errorText).toBeNull();
+  });
+});

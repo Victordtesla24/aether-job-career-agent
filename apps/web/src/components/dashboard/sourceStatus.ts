@@ -31,8 +31,19 @@ export function sourceStatusView(
     const count = row.lastPersisted;
     const isError = row.status === "error";
     const isOk = row.status === "ok";
+    // RT-008: "blocked" = the source denies automated access from this server
+    // (e.g. wellfound 403). Permanent + not user-actionable, so it renders as
+    // a calm neutral "unavailable" pill, never a red error re-alarming on
+    // every sync. The real reason stays in the row's lastError via the API.
+    const isBlocked = row.status === "blocked";
     const badge: SourceBadge = isError ? "error" : isOk ? "ok" : "neutral";
-    const badgeLabel = isError ? "error" : isOk ? `ok, ${count} new` : row.status;
+    const badgeLabel = isError
+      ? "error"
+      : isOk
+        ? `ok, ${count} new`
+        : isBlocked
+          ? "unavailable (blocked by source)"
+          : row.status;
     const errorText = isError
       ? row.lastError && row.lastError.trim().length > 0
         ? row.lastError

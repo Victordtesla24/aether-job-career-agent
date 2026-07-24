@@ -1453,6 +1453,15 @@ class CoverLetterAgent:
             },
             application_id=stored["id"],
         )
+        # RT-005: tailored résumé + drafted letter + pending approval means the
+        # application is ready for human review — advance the job so Job.status
+        # honestly matches the draft-Application card the board shows in
+        # "Ready to Apply". Forward-only: never demotes a manual move.
+        self._jobs.advance_status(
+            job_id,
+            "ready",
+            allowed_from={"discovered", "screening", "matched", "tailoring"},
+        )
         return CoverLetterResult(
             cover_letter_id=stored["id"],
             cover_letter=letter,

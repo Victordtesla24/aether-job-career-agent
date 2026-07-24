@@ -14,6 +14,17 @@ _JOB_COLUMNS = (
     '"createdAt", "updatedAt"'
 )
 
+#: RT-010: the id of the newest résumé tailored FOR this job (Resume.sourceJobId
+#: == Job.id), or NULL. Lets the Jobs screen show a job's real tailored state
+#: instead of an ephemeral client-only "untailored" step, and drives the honest
+#: apply gate. Selected as an extra column alongside ``_JOB_COLUMNS``; the "j"
+#: alias is bound in the queries that use it.
+_TAILORED_RESUME_SUBQUERY = (
+    '(SELECT r."id" FROM "Resume" r '
+    'WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" '
+    'ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId"'
+)
+
 #: Statuses accepted by ``update_status`` (mirrors the Prisma JobStatus enum).
 VALID_STATUSES = frozenset(
     {
@@ -110,7 +121,8 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS} FROM "Job" WHERE {" AND ".join(clauses)} '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY} '
+                    f'FROM "Job" j WHERE {" AND ".join(clauses)} '
                     f"ORDER BY {order_column} DESC NULLS LAST",
                     params,
                 )
@@ -120,7 +132,8 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS} FROM "Job" WHERE "id" = %s AND "userId" = %s',
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY} '
+                    f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
@@ -130,6 +143,41 @@ class JobRepository:
         if status not in VALID_STATUSES:
             raise ValueError(f"Invalid job status '{status}'. Valid: {sorted(VALID_STATUSES)}")
         return self._update(job_id, '"status" = %s::"JobStatus"', (status,))
+
+    def advance_status(
+        self, job_id: str, status: str, *, allowed_from: set[str] | frozenset[str]
+    ) -> bool:
+        """Forward-only guarded transition (RT-005 agent board management).
+
+        Sets ``status`` ONLY when the row currently sits in one of
+        ``allowed_from`` — a silent no-op otherwise, so an agent-driven advance
+        can never demote a manual FEAT-B2 move or touch a terminal state
+        (mirrors the ``AND "status" = 'draft'`` guard pattern in
+        ``ApprovalRepository._sync_application``). Returns True when the row
+        actually advanced.
+        """
+        if status not in VALID_STATUSES:
+            raise ValueError(
+                f"Invalid job status '{status}'. Valid: {sorted(VALID_STATUSES)}"
+            )
+        bad = set(allowed_from) - VALID_STATUSES
+        if bad:
+            raise ValueError(
+                f"Invalid allowed_from statuses {sorted(bad)}. "
+                f"Valid: {sorted(VALID_STATUSES)}"
+            )
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    UPDATE "Job" SET "status" = %s::"JobStatus", "updatedAt" = NOW()
+                    WHERE "id" = %s AND "status"::text = ANY(%s)
+                    ''',
+                    (status, job_id, sorted(allowed_from)),
+                )
+                advanced = cur.rowcount == 1
+            conn.commit()
+        return advanced
 
     def update_fit_score(
         self, job_id: str, fit_score: float, ats_score: float

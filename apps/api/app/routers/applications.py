@@ -55,14 +55,18 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
             cur.execute('SELECT count(*) FROM "Job" WHERE "userId" = %s', (uid,))
             jobs_found = cur.fetchone()[0]
             applied = get_application_counts(cur, uid)["submitted"]
+            # RT-004: DISTINCT jobs, not letter-version rows — 9 submitted
+            # versions of one job are ONE application in the funnel.
             cur.execute(
                 '''
                 SELECT
-                    COUNT(*) FILTER (
+                    COUNT(DISTINCT "jobId") FILTER (
                         WHERE "status" IN ('screening','interview','offer')
                     ) AS screened,
-                    COUNT(*) FILTER (WHERE "status" IN ('interview','offer')) AS interviewed,
-                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers
+                    COUNT(DISTINCT "jobId") FILTER (
+                        WHERE "status" IN ('interview','offer')
+                    ) AS interviewed,
+                    COUNT(DISTINCT "jobId") FILTER (WHERE "status" = 'offer') AS offers
                 FROM "Application" WHERE "userId" = %s
                 ''',
                 (uid,),
@@ -109,24 +113,41 @@ def list_applications(
     where = " AND ".join(clauses)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # DISTINCT ON collapses letter versions: each draft/refine of a
-            # cover letter is its own Application row (the studio's version
-            # history), but the tracker must show ONE card per job in the
-            # draft column — the newest version. Non-draft rows (real
-            # submissions and beyond) are all shown.
+            # RT-004: ONE board card per job, however many letter-version rows
+            # exist. Application rows double as the cover-letter studio's
+            # version history (one row per draft/refine), and historically each
+            # promoted version became its own permanent card (live evidence:
+            # 11 cards for one Plenti job). ACTIVE rows collapse per job to the
+            # most-advanced status (offer > interview > screening > submitted >
+            # draft; ties → newest); CLOSED rows (rejected/withdrawn) collapse
+            # per job to the newest and may coexist with an active
+            # re-application card.
             cur.execute(
                 f'''
                 SELECT * FROM (
                     SELECT DISTINCT ON (a."jobId") {_COLUMNS}
                     FROM "Application" a
                     JOIN "Job" j ON j."id" = a."jobId"
-                    WHERE {where} AND a."status" = 'draft'
-                    ORDER BY a."jobId", a."createdAt" DESC
-                ) drafts
+                    WHERE {where} AND a."status" IN
+                        ('draft','submitted','screening','interview','offer')
+                    ORDER BY a."jobId",
+                        CASE a."status"
+                            WHEN 'offer' THEN 5
+                            WHEN 'interview' THEN 4
+                            WHEN 'screening' THEN 3
+                            WHEN 'submitted' THEN 2
+                            ELSE 1
+                        END DESC,
+                        a."createdAt" DESC
+                ) active
                 UNION ALL
-                SELECT {_COLUMNS} FROM "Application" a
-                JOIN "Job" j ON j."id" = a."jobId"
-                WHERE {where} AND a."status" <> 'draft'
+                SELECT * FROM (
+                    SELECT DISTINCT ON (a."jobId") {_COLUMNS}
+                    FROM "Application" a
+                    JOIN "Job" j ON j."id" = a."jobId"
+                    WHERE {where} AND a."status" IN ('rejected','withdrawn')
+                    ORDER BY a."jobId", a."createdAt" DESC
+                ) closed
                 ORDER BY "createdAt" DESC
                 ''',
                 params + params,
@@ -287,19 +308,39 @@ def move_application(
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "status" FROM "Application" WHERE "id" = %s AND "userId" = %s',
+                'SELECT "status", "jobId" FROM "Application" '
+                'WHERE "id" = %s AND "userId" = %s',
                 (application_id, uid),
             )
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
-            from_status = row[0]
+            from_status, move_job_id = row
             if from_status in _CLOSED_STATUSES:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     f"Application is {from_status} (closed) — closed applications "
                     "cannot be moved between pipeline stages.",
                 )
+            if from_status == "draft" and new_status != "draft":
+                # RT-004 promotion guard: Application rows double as
+                # cover-letter versions; promoting a SECOND version of an
+                # already-applied job minted a permanent duplicate board card
+                # (live evidence: 11 cards for one job). One active
+                # application per job.
+                cur.execute(
+                    'SELECT "id" FROM "Application" WHERE "userId" = %s '
+                    'AND "jobId" = %s AND "id" <> %s AND "status" IN '
+                    "('submitted','screening','interview','offer') LIMIT 1",
+                    (uid, move_job_id, application_id),
+                )
+                if cur.fetchone() is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "This job already has an active application — move that "
+                        "card instead; this draft stays in the letter's version "
+                        "history.",
+                    )
             if from_status != new_status:
                 cur.execute(
                     'UPDATE "Application" '
@@ -338,7 +379,7 @@ def submit_application(
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "status", "answers" FROM "Application" '
+                'SELECT "status", "answers", "jobId" FROM "Application" '
                 'WHERE "id" = %s AND "userId" = %s',
                 (application_id, current_user["id"]),
             )
@@ -346,6 +387,21 @@ def submit_application(
             if row is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
             if row[0] == "draft":
+                # RT-004 promotion guard — one active application per job (see
+                # move_application): submitting a second letter-version of an
+                # already-applied job would mint a duplicate board card.
+                cur.execute(
+                    'SELECT "id" FROM "Application" WHERE "userId" = %s '
+                    'AND "jobId" = %s AND "id" <> %s AND "status" IN '
+                    "('submitted','screening','interview','offer') LIMIT 1",
+                    (current_user["id"], row[2], application_id),
+                )
+                if cur.fetchone() is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "This job already has an active application — this draft "
+                        "stays in the letter's version history.",
+                    )
                 cur.execute(
                     """
                     UPDATE "Application"

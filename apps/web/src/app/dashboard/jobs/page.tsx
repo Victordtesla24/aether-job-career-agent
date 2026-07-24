@@ -262,6 +262,19 @@ export default function JobsPage() {
       if (sourceFilter !== "all") params.set("source", sourceFilter);
       const data = await apiRequest<Job[]>(`/jobs?${params.toString()}`);
       setJobs(data);
+      // RT-010: seed the apply step from the backend's tailored-résumé truth so
+      // a job already tailored (this session, a prior session, or the agents)
+      // opens at "Review & Apply" — never re-prompting to tailor or warning
+      // "untailored". Client-set steps (a tailoring run in THIS session) win.
+      setApplyStep((prev) => {
+        const next = { ...prev };
+        for (const job of data) {
+          if (job.tailoredResumeId && next[job.id] == null) {
+            next[job.id] = "tailored";
+          }
+        }
+        return next;
+      });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load jobs");
@@ -1282,16 +1295,26 @@ export default function JobsPage() {
                     <div className="flex flex-col gap-3" data-testid="apply-step2">
                       <div className="rounded-xl border border-aether-green/25 bg-aether-green/10 px-4 py-3">
                         <div className="flex items-center gap-2 text-[13px] text-[#C8C8DC]">
-                          ✓ Resume tailored ·{" "}
-                          <span className="mono font-semibold text-aether-green">
-                            {tailorResults[selected.id]?.changes ?? 0}
-                          </span>{" "}
-                          changes applied
-                          {tailorResults[selected.id]?.rejected?.length ? (
-                            <span className="text-aether-muted-dim">
-                              · {tailorResults[selected.id].rejected.length} rejected by fabrication guard
-                            </span>
-                          ) : null}
+                          {/* RT-010: an in-session tailoring run reports its
+                              change count; a job already tailored in a prior
+                              session / by the agents has no local result, so
+                              state the honest fact without a fake "0 changes". */}
+                          {tailorResults[selected.id] ? (
+                            <>
+                              ✓ Resume tailored ·{" "}
+                              <span className="mono font-semibold text-aether-green">
+                                {tailorResults[selected.id].changes}
+                              </span>{" "}
+                              changes applied
+                              {tailorResults[selected.id]?.rejected?.length ? (
+                                <span className="text-aether-muted-dim">
+                                  · {tailorResults[selected.id].rejected.length} rejected by fabrication guard
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>✓ Resume already tailored for this role</>
+                          )}
                         </div>
                         {tailorResults[selected.id]?.rejected?.length ? (
                           <p

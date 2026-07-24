@@ -63,11 +63,16 @@ def get_application_counts(
     ``period_clause`` is an optional ``AND ...`` SQL fragment (see
     ``_period_clause``) applied to both counts, e.g. a rolling time window.
     """
+    # RT-004: count DISTINCT JOBS, not Application rows. Application rows
+    # double as cover-letter versions (one row per draft/refine), so raw
+    # row-counts inflated every "applications" surface — live evidence
+    # 2026-07-24: one Plenti job with 9 promoted letter-versions counted as
+    # 9 applications in the funnel's "Applied" node.
     cur.execute(
         f'''
         SELECT
-            COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE "status" <> 'draft') AS submitted
+            COUNT(DISTINCT "jobId") AS total,
+            COUNT(DISTINCT "jobId") FILTER (WHERE "status" <> 'draft') AS submitted
         FROM "Application" WHERE "userId" = %s{period_clause}
         ''',
         (user_id,),

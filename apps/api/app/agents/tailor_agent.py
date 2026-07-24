@@ -426,6 +426,12 @@ class TailoringAgent:
                 **build_tailor_approval_extras(result, job, evidence_corpus),
             },
         )
+        # RT-005: a successfully tailored job belongs in the "Tailoring"
+        # swimlane. Forward-only guarded advance — never demotes a manual
+        # FEAT-B2 move (e.g. a card the user already dragged to a later stage).
+        self._jobs.advance_status(
+            job_id, "tailoring", allowed_from={"discovered", "screening", "matched"}
+        )
         return TailorRunResult(
             resume_id=tailored["id"],
             changes=result.changes,

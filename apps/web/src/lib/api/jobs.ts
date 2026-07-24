@@ -39,6 +39,11 @@ export const JobSchema = z.object({
   postedAt: z.string().nullish(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+  // RT-010: id of the newest résumé already tailored FOR this job (or null).
+  // Lets the apply flow reflect real tailored state instead of an ephemeral
+  // client-only step, so a job the user (or the agents) already tailored is
+  // never mislabelled "untailored".
+  tailoredResumeId: z.string().nullish(),
 });
 
 export type Job = z.infer<typeof JobSchema>;

@@ -26,6 +26,7 @@ from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.background_jobs import BackgroundJobRepository
+from app.repositories.job import JobRepository
 from app.repositories.billing import (
     SubscriptionRepository,
     UsageQuotaRepository,
@@ -1636,6 +1637,13 @@ def _pipeline_core(
     top_job_id = match_out.get("top_job_id")
     if not top_job_id:
         return {"status": "completed", "steps": steps, "approvalRequired": False}
+    # RT-005: the matcher chose this job — surface that on the board
+    # ("matched" renders in the Evaluating column). Forward-only guarded
+    # advance; kept here (not in MatcherAgent) so the standalone read-only
+    # ranking endpoint stays side-effect-free.
+    JobRepository().advance_status(
+        top_job_id, "matched", allowed_from={"discovered", "screening"}
+    )
     # One shared wall-clock budget across BOTH LLM-backed steps: without it
     # tailor and coverLetter each armed their own 60 s budget, so the pipeline
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).

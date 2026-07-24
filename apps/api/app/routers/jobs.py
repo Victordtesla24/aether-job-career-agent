@@ -462,6 +462,24 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
                     (application_id, user_id, job_id, resume_id, "submitted"),
                 )
             conn.commit()
+    else:
+        # RT-009: a pipeline/autopilot cover-letter step leaves a DRAFT
+        # Application (the "Ready to Apply" card). Applying reused that draft's
+        # id but historically left it at 'draft', so the applied job never
+        # flushed out of the pipeline — it lingered forever in "Ready to
+        # Apply". Promote the reused draft to 'submitted' so the board card
+        # moves to Submitted (idempotent: already-submitted+ rows untouched).
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    UPDATE "Application"
+                    SET "status" = 'submitted'::"ApplicationStatus", "updatedAt" = NOW()
+                    WHERE "id" = %s AND "userId" = %s AND "status" = 'draft'
+                    ''',
+                    (application_id, user_id),
+                )
+            conn.commit()
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
