@@ -272,3 +272,59 @@ def ensure_approval_columns() -> None:
             )
         conn.commit()
     _approval_columns_ready = True
+
+
+#: Guard so the additive ``Job`` dedup columns are only ensured once per
+#: worker process (see ``ensure_job_dedup_columns``).
+_job_dedup_columns_ready = False
+
+
+def ensure_job_dedup_columns() -> None:
+    """Idempotently add the additive ``Job.dedupHash`` and ``Job.contentHash``
+    columns on first use.
+
+    ``dedupHash`` (Phase 2A — NULL sourceUrl dedup fix) is a composite hash of
+    (userId + title + company + location) that closes the PostgreSQL NULL != NULL
+    gap in the ``@@unique([userId, sourceUrl])`` constraint.  Jobs that share
+    the same ``dedupHash`` are considered duplicates and are upserted instead of
+    inserted.
+
+    ``contentHash`` (Phase 2A — secondary dedup signal) is sha256 of the first
+    500 characters of the job description.  It catches near-duplicate postings
+    that may have slightly different titles, companies, or locations.
+
+    ``ADD COLUMN ... text`` with no default is a metadata-only change on
+    PostgreSQL (existing rows read ``NULL`` = no hash yet computed), so it is
+    fast and safe on the production ``Job`` table and backfills the shared test
+    schema — fully backward compatible.  A transaction-scoped advisory lock
+    serializes concurrent first-hit callers so the DDL cannot race; ``TRUNCATE``
+    never drops columns, so this survives teardown.  Introduced by lazy DDL
+    (ADR-TR-1 — there is no migration runner), mirroring
+    ``ensure_resume_columns``.
+    """
+    global _job_dedup_columns_ready
+    if _job_dedup_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Job'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('dedupHash', 'contentHash')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 2:
+                _job_dedup_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240730,))
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "dedupHash" text'
+            )
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "contentHash" text'
+            )
+        conn.commit()
+    _job_dedup_columns_ready = True
