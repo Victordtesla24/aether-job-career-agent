@@ -22,7 +22,15 @@ _JOB_COLUMNS = (
 _TAILORED_RESUME_SUBQUERY = (
     '(SELECT r."id" FROM "Resume" r '
     'WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" '
+    'AND r."approvalStatus" != \'rejected\' '
     'ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId"'
+)
+
+_TAILORED_RESUME_STATUS_SUBQUERY = (
+    '(SELECT r."approvalStatus" FROM "Resume" r '
+    'WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" '
+    'AND r."approvalStatus" != \'rejected\' '
+    'ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus"'
 )
 
 VALID_STATUSES = frozenset(
@@ -196,7 +204,7 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY} '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY} '
                     f'FROM "Job" j WHERE {" AND ".join(clauses)} '
                     f"ORDER BY {order_column} DESC NULLS LAST",
                     params,
@@ -207,7 +215,7 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY} '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY} '
                     f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),
                 )

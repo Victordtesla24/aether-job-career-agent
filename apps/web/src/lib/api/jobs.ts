@@ -42,8 +42,12 @@ export const JobSchema = z.object({
   // RT-010: id of the newest résumé already tailored FOR this job (or null).
   // Lets the apply flow reflect real tailored state instead of an ephemeral
   // client-only step, so a job the user (or the agents) already tailored is
-  // never mislabelled "untailored".
+  // never mislabelled "untailored". Excludes rejected résumés (phase3).
   tailoredResumeId: z.string().nullish(),
+  // RT-010 / Phase 3: approval status of the newest non-rejected tailored
+  // résumé ("approved" | "pending" | null). Drives the "Tailored (pending
+  // review)" vs "Tailored (approved)" badge in the apply flow.
+  tailoredResumeStatus: z.string().nullish(),
 });
 
 export type Job = z.infer<typeof JobSchema>;
