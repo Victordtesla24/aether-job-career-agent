@@ -19,28 +19,16 @@ _JOB_COLUMNS = (
     '"createdAt", "updatedAt"'
 )
 
-#: RT-010: the id of the newest résumé tailored FOR this job (Resume.sourceJobId
-#: == Job.id), or NULL. Lets the Jobs screen show a job's real tailored state
-#: instead of an ephemeral client-only "untailored" step, and drives the honest
-#: apply gate. Selected as an extra column alongside ``_JOB_COLUMNS``; the "j"
-#: alias is bound in the queries that use it.
 _TAILORED_RESUME_SUBQUERY = (
     '(SELECT r."id" FROM "Resume" r '
     'WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" '
     'ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId"'
 )
 
-#: Statuses accepted by ``update_status`` (mirrors the Prisma JobStatus enum).
 VALID_STATUSES = frozenset(
     {
-        "discovered",
-        "screening",
-        "matched",
-        "tailoring",
-        "ready",
-        "applied",
-        "archived",
-        "rejected",
+        "discovered", "screening", "matched", "tailoring",
+        "ready", "applied", "archived", "rejected",
     }
 )
 
@@ -67,13 +55,11 @@ class JobRepository:
         raw_source_url = job_raw.get("sourceUrl")
         normalized_url = normalize_source_url(raw_source_url)
 
-        # Compute dedup hashes
         dedup_hash: str | None = None
         content_hash: str | None = None
         if job_raw.get("description"):
             content_hash = compute_description_hash(job_raw["description"])
         if normalized_url is None:
-            # NULL sourceUrl — compute composite hash to close the NULL != NULL gap
             dedup_hash = compute_null_source_url_hash(
                 user_id,
                 job_raw["title"],
@@ -83,7 +69,6 @@ class JobRepository:
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # --- NULL sourceUrl dedup check ---
                 if dedup_hash is not None:
                     cur.execute(
                         'SELECT "id" FROM "Job" '
@@ -92,7 +77,6 @@ class JobRepository:
                     )
                     existing = cur.fetchone()
                     if existing:
-                        # Duplicate detected — update the existing record instead
                         existing_id = existing[0]
                         cur.execute(
                             """
@@ -135,7 +119,6 @@ class JobRepository:
                         conn.commit()
                         return rows[0]
 
-                # --- Standard upsert path ---
                 cur.execute(
                     f"""
                     INSERT INTO "Job" (
@@ -192,7 +175,6 @@ class JobRepository:
         saved: bool | None = None,
         sort: str = "createdAt",
     ) -> list[dict[str, Any]]:
-        """List a user's jobs with optional filters; newest first by default."""
         clauses = ['"userId" = %s']
         params: list[Any] = [user_id]
         if status is not None:
@@ -240,15 +222,6 @@ class JobRepository:
     def advance_status(
         self, job_id: str, status: str, *, allowed_from: set[str] | frozenset[str]
     ) -> bool:
-        """Forward-only guarded transition (RT-005 agent board management).
-
-        Sets ``status`` ONLY when the row currently sits in one of
-        ``allowed_from`` — a silent no-op otherwise, so an agent-driven advance
-        can never demote a manual FEAT-B2 move or touch a terminal state
-        (mirrors the ``AND "status" = 'draft'`` guard pattern in
-        ``ApprovalRepository._sync_application``). Returns True when the row
-        actually advanced.
-        """
         if status not in VALID_STATUSES:
             raise ValueError(
                 f"Invalid job status '{status}'. Valid: {sorted(VALID_STATUSES)}"
