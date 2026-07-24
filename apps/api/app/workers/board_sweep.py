@@ -97,6 +97,7 @@ def eligible_users(limit: int | None = None) -> list[str]:
                      OR (j."status" IN ('screening','matched')
                          AND j."fitScore" IS NOT NULL)
                       )
+                  AND j."status" NOT IN ('applied','archived')
                   AND NOT EXISTS (
                         SELECT 1 FROM "Application" a
                         WHERE a."jobId" = j."id" AND a."userId" = j."userId"
@@ -127,6 +128,7 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
                      OR (j."status" IN ('screening','matched')
                          AND j."fitScore" IS NOT NULL)
                       )
+                  AND j."status" NOT IN ('applied','archived')
                   AND NOT EXISTS (
                         SELECT 1 FROM "Application" a
                         WHERE a."jobId" = j."id" AND a."userId" = j."userId"

@@ -98,8 +98,17 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
 
 @router.get("")
 def list_applications(
-    current_user: CurrentUser, app_status: str | None = None
+    current_user: CurrentUser,
+    app_status: str | None = None,
+    include_applied: bool = False,
 ) -> list[dict[str, Any]]:
+    """List the authenticated user's applications, joined with job metadata.
+
+    By default excludes jobs whose Job.status is 'applied' or 'archived' —
+    those are terminal and live in the separate Applied/History views
+    (phase4). Pass ``?include_applied=true`` to fetch only those terminal
+    jobs.
+    """
     clauses = ['a."userId" = %s']
     params: list[Any] = [current_user["id"]]
     if app_status is not None:
@@ -110,6 +119,12 @@ def list_applications(
             )
         clauses.append('a."status" = %s::"ApplicationStatus"')
         params.append(app_status)
+    if include_applied:
+        clauses.append('j."status" = %s::"JobStatus"')
+        params.append("applied")
+    else:
+        clauses.append('j."status" NOT IN (%s::"JobStatus", %s::"JobStatus")')
+        params.extend(["applied", "archived"])
     where = " AND ".join(clauses)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -375,7 +390,11 @@ def submit_application(
     The user applies on the company site themselves (human-in-the-loop);
     this endpoint only tracks that it happened. Idempotent: re-submitting an
     already-submitted application is a no-op that returns the current row.
+
+    Advances the parent Job.status to 'applied' so the card is removed from
+    the active pipeline board and moves to the Applied view (phase4).
     """
+    submitted_job_id: str | None = None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -421,5 +440,17 @@ def submit_application(
                         current_user["id"],
                     ),
                 )
+                submitted_job_id = row[2]
                 conn.commit()
+    # Phase 4: advance the parent job to 'applied' so the card flushes from
+    # the active board. Guarded forward-only via advance_status — an
+    # already-applied job is left untouched (idempotent).
+    if submitted_job_id is not None:
+        from app.repositories.job import JobRepository
+
+        JobRepository().advance_status(
+            submitted_job_id,
+            "applied",
+            allowed_from={"discovered", "screening", "matched", "tailoring", "ready"},
+        )
     return get_application(application_id, current_user)
