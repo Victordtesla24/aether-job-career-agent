@@ -155,6 +155,20 @@
       "class": "scratch id/context files",
       "refs_proof": "one-off Stripe test ids and OAuth clientid context notes from prior phases",
       "disposition": "delete"
+    },
+    {
+      "path": "/home/ubuntu/aether-subscription-prompt-live-test.md",
+      "class": "prompt artifact (spec: delete after G-A closes)",
+      "refs_proof": "W-F: G-A adjudicated CLOSED (MODELS-LIVE-FINAL-REPORT.md); content preserved in the campaign evidence + Uploads/ master prompt retained",
+      "disposition": "delete (no archive needed: superseded by MODELS-LIVE-FINAL-REPORT.md)",
+      "executed": "2026-07-24 W-F"
+    },
+    {
+      "path": "/home/ubuntu/OpenRouter-Custom-Router-Config.docx",
+      "class": "W-F resurrection-replay miss remediation (WF-eviction-miss-001)",
+      "refs_proof": "original row disposed archive-to-S3-then-delete but file remained",
+      "disposition": "archived s3://.../launch-ready-evidence/home-archive/OpenRouter-Custom-Router-Config.docx then deleted",
+      "executed": "2026-07-24 W-F"
     }
   ]
 }

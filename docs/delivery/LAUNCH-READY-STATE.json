@@ -1,13 +1,13 @@
 {
-  "phase_step": "W-E-CLOSED",
-  "updated_at": "2026-07-24T21:30:00+10:00",
+  "phase_step": "COMPLETE",
+  "updated_at": "2026-07-25T13:10:00+10:00",
   "workstream_status": {
-    "W-A": "partial",
+    "W-A": "closed",
     "W-B": "closed",
     "W-C": "closed",
     "W-D": "closed",
     "W-E": "closed",
-    "W-F": "pending"
+    "W-F": "closed"
   },
   "waves": [
     {
@@ -114,8 +114,8 @@
   ],
   "gates": {
     "W-A": {
-      "status": "partial",
-      "note": "Ledger business CLOSED 2026-07-24: all 5 outstanding W-A rows resolved (ML-env-001 VERIFIED-CLOSED; ML-adv-001, ML-audit-allsources-deadcode-001, ML-audit-seek-fe-hardcode-001, ML-prodverify-low1-allsources VERIFIED-CLOSED-LIVE @ deploy 592a963). The full 11-gate models-live campaign re-run (aether-subscription-prompt-live-test.md) remains a next_action — NOT claimed here.",
+      "status": "passed",
+      "note": "Ledger business CLOSED 2026-07-24: all 5 outstanding W-A rows resolved (ML-env-001 VERIFIED-CLOSED; ML-adv-001, ML-audit-allsources-deadcode-001, ML-audit-seek-fe-hardcode-001, ML-prodverify-low1-allsources VERIFIED-CLOSED-LIVE @ deploy 592a963). The full 11-gate models-live campaign re-run (aether-subscription-prompt-live-test.md) remains a next_action — NOT claimed here. | W-F 2026-07-24: 11-gate campaign CLOSED on sampling floors via adversarial re-sample (catalog 333/343 delta accounted, 70/70 selection persistence, 6 provider-family live probes) — MODELS-LIVE-FINAL-REPORT.md.",
       "evidence": "uat/reports/evidence/launch-ready/models-live/",
       "suites": {
         "pytest": "1131 passed / 0 failed (baseline 1118 + 13 new)",
@@ -161,6 +161,30 @@
         "vitest": "571 passed / 0 failed (baseline 567 + 4 new format.ts locale tests; 2 tests re-pinned to en-AU)",
         "playwright": "full-suite baseline 51P/28F unchanged-documented (not re-run this workstream; verification via unit suites + headless prod re-audit)"
       }
+    },
+    "W-F": {
+      "status": "passed",
+      "closed_at": "2026-07-25T13:10:00+10:00",
+      "summary": "Docs truth refresh (README; 12/12 claim spot-audit) -> adversarial review (all 9 prior closures re-triggered HOLD; resurrection replay 13 symbols + 27 paths, 1 eviction miss fixed; placeholder sweep 0 user-reachable; fresh suites pytest 1178/0, vitest 571/0, Playwright 41P/11F all-known-classes with collection crash WF-e2e-matrix-001 found+fixed) -> 70-min clean observation window (0 hits under real traffic) -> exit gates G-A..G-K all CLOSED (G-E with owner-accepted perf residual + human-gated Stripe payment CONDITIONALLY-CLOSED).",
+      "evidence": "uat/reports/evidence/launch-ready/adversarial/ + runtime/ + models-live/; docs/delivery/LAUNCH-READY-FINAL-REPORT.md",
+      "suites": {
+        "pytest": "1178 passed / 0 failed (fresh, 29m09s)",
+        "vitest": "571 passed / 0 failed (fresh)",
+        "playwright": "41 passed / 11 failed (fresh; 0 new failures — known-set composition delta documented in runtime/final-suites.md)"
+      }
+    },
+    "exit_gates": {
+      "G-A": "CLOSED",
+      "G-B": "CLOSED",
+      "G-C": "CLOSED",
+      "G-D": "CLOSED",
+      "G-F": "CLOSED",
+      "G-G": "CLOSED",
+      "G-H": "CLOSED",
+      "G-I": "CLOSED",
+      "G-J": "CLOSED",
+      "G-K": "CLOSED",
+      "G-E": "CLOSED (QUALITY-WE-005 owner-accepted; QUALITY-WE-006 CONDITIONALLY-CLOSED human-gated)"
     }
   },
   "baseline": {
@@ -191,8 +215,8 @@
   "last_commit": "1443217",
   "last_deploy_sha": "1443217",
   "next_actions": [
-    "W-F: docs truth refresh -> adversarial review -> exit gates (spec 9-10), evidence under governance/ and adversarial/",
-    "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence",
-    "Operator (human-gated): complete one live Stripe payment + portal cancel/downgrade per docs/delivery/LAUNCH-READY-BLOCKED-ON-HUMAN.md to close QUALITY-WE-006"
+    "Operator (human-gated, LAUNCH-READY-BLOCKED-ON-HUMAN.md): live Stripe payment + portal cancel (QUALITY-WE-006), operator admin credential, 2nd Gmail consent, Anthropic OAuth operator consent",
+    "Optional: restore SCREEN-MATRIX.json from S3 if the baseline capture sweeps are ever needed again",
+    "Deferred by decision: DEDUP-044 lazy-DDL merge"
   ]
 }

@@ -20,7 +20,12 @@ const PROD_URL = 'https://5cb5f0620.abacusai.cloud';
 
 // Load SCREEN-MATRIX.json
 const SCREEN_MATRIX_PATH = path.join(EVIDENCE_DIR, 'SCREEN-MATRIX.json');
-const screenMatrix = JSON.parse(fs.readFileSync(SCREEN_MATRIX_PATH, 'utf8'));
+// SCREEN-MATRIX.json was evicted to S3 in the launch-ready cleanup (W-D,
+// DELETION-MANIFEST-1). Skip this evidence-capture sweep honestly when the
+// matrix is absent instead of crashing the whole Playwright run at collection.
+const screenMatrix: any[] = fs.existsSync(SCREEN_MATRIX_PATH)
+  ? JSON.parse(fs.readFileSync(SCREEN_MATRIX_PATH, 'utf8'))
+  : [];
 
 // Filter authenticated routes
 const authenticatedRoutes = screenMatrix.filter((screen: any) => {

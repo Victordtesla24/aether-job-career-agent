@@ -1,0 +1,26 @@
+=== PROBE openai/gpt-4o-mini 2026-07-24T02:14:19Z ===
+REQUEST: POST /chat/completions {model:openai/gpt-4o-mini, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): {"content": "OK", "model": "openai/gpt-4o-mini", "usage": {"prompt_tokens": 12, "completion_tokens": 1, "total_tokens": 13, "cost": 2.376e-06, "is_byok": false, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0, "audio_tokens": 0, "video_tokens": 0}, "cost_details": {"upstream_inference_cost": 2.4e-06, "upstream_inference_prompt_cost": 1.8e-06, "upstream_inference_completions_cost": 6e-07}, "completion_tokens_details": {"reasoning_tokens": 0, "image_tokens": 0, "audio_tokens": 0}}}
+=== PROBE anthropic/claude-3.5-haiku 2026-07-24T02:14:20Z ===
+REQUEST: POST /chat/completions {model:anthropic/claude-3.5-haiku, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): {"content": "", "model": null, "usage": {}}
+=== PROBE google/gemini-2.5-flash-lite 2026-07-24T02:14:20Z ===
+REQUEST: POST /chat/completions {model:google/gemini-2.5-flash-lite, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): {"content": "OK", "model": "google/gemini-2.5-flash-lite", "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6, "cost": 0, "is_byok": true, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0, "audio_tokens": 0, "video_tokens": 0}, "cost_details": {"upstream_inference_cost": 9e-07, "upstream_inference_prompt_cost": 5e-07, "upstream_inference_completions_cost": 4e-07}, "completion_tokens_details": {"reasoning_tokens": 0, "image_tokens": 0, "audio_tokens": 0}}}
+=== PROBE z-ai/glm-5.2 2026-07-24T02:14:21Z ===
+REQUEST: POST /chat/completions {model:z-ai/glm-5.2, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): PARSE-FAIL 'NoneType' object is not subscriptable
+=== PROBE deepseek/deepseek-chat-v3-0324 2026-07-24T02:14:23Z ===
+REQUEST: POST /chat/completions {model:deepseek/deepseek-chat-v3-0324, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): {"content": "OK", "model": "deepseek/deepseek-chat-v3-0324", "usage": {"prompt_tokens": 9, "completion_tokens": 2, "total_tokens": 11, "cost": 7.425e-06, "is_byok": false, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0, "audio_tokens": 0, "video_tokens": 0}, "cost_details": {"upstream_inference_cost": 7.5e-06, "upstream_inference_prompt_cost": 4.5e-06, "upstream_inference_completions_cost": 3e-06}, "completion_tokens_details": {"reasoning_tokens": 0, "image_tokens": 0, "audio_tokens": 0}}}
+=== PROBE meta-llama/llama-3.3-70b-instruct 2026-07-24T02:14:24Z ===
+REQUEST: POST /chat/completions {model:meta-llama/llama-3.3-70b-instruct, messages:[{role:user,content:'Reply with exactly: OK'}], max_tokens:8}
+RESPONSE (trimmed): {"content": "OK", "model": "meta-llama/llama-3.3-70b-instruct", "usage": {"prompt_tokens": 16, "completion_tokens": 2, "total_tokens": 18, "cost": 2.9304e-06, "is_byok": false, "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0, "audio_tokens": 0, "video_tokens": 0}, "cost_details": {"upstream_inference_cost": 2.96e-06, "upstream_inference_prompt_cost": 2.16e-06, "upstream_inference_completions_cost": 8e-07}, "completion_tokens_details": {"reasoning_tokens": 0, "image_tokens": 0, "audio_tokens": 0}}}
+=== RE-PROBE anthropic/claude-3.5-haiku 2026-07-24T02:14:34Z (raw, key redacted) ===
+{"error":{"message":"No endpoints found for anthropic/claude-3.5-haiku.","code":404},"user_id":"user_2piNfzVC1Ox5YMlkrXENPnlhcr5"}
+=== RE-PROBE z-ai/glm-5.2 2026-07-24T02:14:34Z (raw, key redacted) ===
+
+         
+{"id":"gen-1784859275-B7TKZFbFQvLTbTYZJRKb","object":"chat.completion","created":1784859275,"model":"z-ai/glm-5.2","provider":"DeepInfra","system_fingerprint":null,"service_tier":null,"choices":[{"index":0,"logprobs":null,"finish_reason":"length","native_finish_reason":"length","message":{"role":"assistant","content":null,"refusal":null,"reasoning":"1.  **Analyze the Request:** The user wants me to reply with","reasoning_details":[{"type":"reasoning.text","text":"1.  **Analyze the Request:** The user wants me to reply with","format":"unknown","index":0}]}}],"usage":{"prompt_tokens":
+=== PROBE anthropic/claude-haiku-4.5 (catalog member; claude-3.5-haiku was a stale non-catalog id, honest 404 upstream) 2026-07-24T02:14:55Z ===
+{"content": "OK", "model": "anthropic/claude-haiku-4.5", "usage": {"total_tokens": 16, "cost": 3.168e-05}}

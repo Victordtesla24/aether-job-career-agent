@@ -1,0 +1,26 @@
+# G-G window prod exercises — 2026-07-24T02:08:00Z
+## Agent run 1: scout
+{"status":"accepted","persisted":0,"updated":37,"errors":["wellfound: AdapterFetchError: Wellfound public listings unavailable: HTTP Error 403: Forbidden"],"per_source":[{"source":"greenhouse","fetched":14,"persisted":0,"updated":14,"error":null,"status":"ok"},{"source":"lever","fetched":9,"persisted":0,"updated":9,"error":null,"status":"ok"},{"source":"ashby","fetched":13,"persisted":0,"updated":13,"error":null,"status":"ok"},{"source":"workable","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"adzuna","fetched":0,"persisted":0,"updated":0,"error":null,"status":"sk
+## Agent run 2: fit-scorer
+{"status":"completed","scored":0,"errors":[]}
+HTTP 200
+## Agent run 3: tailor (job cb82d1091f294eb6a3b685923) 2026-07-24T02:08:45Z
+{"job_id":"ccbc3894f68b65d0e55439f25","status":"enqueued"}
+HTTP 202
+## W-B exercise: approval purge-expired 2026-07-24T02:09:02Z
+{"purged":0,"ids":[]}
+HTTP 200
+
+## W-B exercise: application stage-move
+app: c59dbb9686c1081a493ec2904 
+## Stage-move: cf4c4701b3edffe5b126d5382 submitted -> in-review -> submitted (round-trip) 2026-07-24T02:09:25Z
+{"id":"cf4c4701b3edffe5b126d5382","userId":"c6c8d0163d973a8048e7e33b8","jobId":"c40090ef033bb2408e524bcdb","resumeId":"c16a1ba47a3823a9dcc24746b","status":"screening","coverLetter":"23 July 2026\n\nHiring Team\nPlenti\nRe: Senior Product Manager, Strategic Origination Platforms\n\nDear Hiring Team a
+{"id":"cf4c4701b3edffe5b126d5382","userId":"c6c8d0163d973a8048e7e33b8","jobId":"c40090ef033bb2408e524bcdb","resumeId":"c16a1ba47a3823a9dcc24746b","status":"submitted","coverLetter":"23 July 2026\n\nHiring Team\nPlenti\nRe: Senior Product Manager, Strategic Origination Platforms\n\nDear Hiring Team a
+## Illegal move (variant path): draft app via move endpoint
+{"id":"c59dbb9686c1081a493ec2904","userId":"c6c8d0163d973a8048e7e33b8","jobId":"c40090ef033bb2408e524bcdb","resumeId":"c16a1ba47a3823a9dcc24746b","status":"offer","coverLetter":"24 July 2026\n\nHiring Team\nPlenti\nRe: Senior Product Manager, Strategic Origination Platforms\n\nDear Hiring Team at Pl
+--- Additional in-window prod exercises (02:20–02:48Z) ---
+- 12-claim docs spot-audit probe batch (health/headers/docs404/availability/plans/purge/login) — all expected codes
+- Adversarial re-trigger batch: purge 200, DELETE nonexistent approval 404, illegal stage 422, jobs?source=linkedin 422, jobs?source=seek 422-honest-reason
+- Per-screen data variants: approvals/applications/analytics-funnel/agents-config/jobs 200s
+- Full Playwright e2e suite (41P/11F known-set) driving real browser traffic at prod
+- Headless 16-route authed sweep: 0 console errors, 0 5xx (final-route-sweep.json)

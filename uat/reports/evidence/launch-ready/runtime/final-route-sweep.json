@@ -1,0 +1,87 @@
+{
+  "ts": "2026-07-24T02:12:02.852128Z",
+  "routes": [
+    {
+      "route": "/dashboard",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/agents",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/analytics",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/applications",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/approvals",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/cover-letters",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/email",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/interviews",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/jobs",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/networking",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/offers",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/resume",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/settings",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/dashboard/stories",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/pricing",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    },
+    {
+      "route": "/login",
+      "title": "Aether Career Agent",
+      "console_errors_new": 0
+    }
+  ],
+  "console_errors": [],
+  "responses_5xx": []
+}
