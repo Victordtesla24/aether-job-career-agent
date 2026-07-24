@@ -97,8 +97,17 @@ class ScoutAgent:
                 continue
 
             src["fetched"] = len(jobs)
+            no_source_url = 0
             for job in jobs:
                 if not job.get("sourceUrl"):
+                    title = job.get("title", "")[:80]
+                    company = job.get("company", "")[:80]
+                    logger.warning(
+                        "scout: %s job skipped — empty sourceUrl (title=%r company=%r); "
+                        "the adapter MUST populate sourceUrl for deduplication",
+                        source, title, company,
+                    )
+                    no_source_url += 1
                     continue
                 key = (
                     job["company"].strip().lower(),
@@ -118,6 +127,12 @@ class ScoutAgent:
                 else:
                     result.persisted += 1
                     src["persisted"] += 1
+            if no_source_url:
+                logger.warning(
+                    "scout: %s dropped %d/%d jobs with empty sourceUrl — "
+                    "deduplication requires every job to carry its real apply URL",
+                    source, no_source_url, len(jobs),
+                )
             result.per_source.append(src)
             self._record_status(user_id, src)
         return result

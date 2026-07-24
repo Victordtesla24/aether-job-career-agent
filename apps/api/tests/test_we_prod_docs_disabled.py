@@ -17,6 +17,10 @@ from app.main import create_app
 def _non_replay_llm_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     # Keep the §REC-04 replay guard out of the way for production app builds.
     monkeypatch.setenv("AETHER_LLM_MODE", "auto")
+    # Keep the §REC-05 discovery-fixture guard out of the way too: conftest
+    # sets AETHER_DISCOVERY_FIXTURE_DIR at import time for the test suite,
+    # but these tests build a production app and must not trip the guard.
+    monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
