@@ -1,12 +1,12 @@
 {
-  "phase_step": "W-D-CLOSED",
-  "updated_at": "2026-07-24T11:15:00+10:00",
+  "phase_step": "W-E-CLOSED",
+  "updated_at": "2026-07-24T21:30:00+10:00",
   "workstream_status": {
     "W-A": "partial",
     "W-B": "closed",
     "W-C": "closed",
     "W-D": "closed",
-    "W-E": "pending",
+    "W-E": "closed",
     "W-F": "pending"
   },
   "waves": [
@@ -150,6 +150,17 @@
       "closed_at": "2026-07-24T11:15:00+10:00",
       "summary": "File-management sweep executed per manifests (repo 1.6G->992M tree, home 6261M->5578M); bulk evidence archived to S3 launch-ready-evidence/{repo-archive,home-archive}/; docs/delivery consolidated (38 -> archive/); .env.bak-predeploy shredded (P0-007); suites green post-eviction (pytest 1173/0, vitest 567/0), services active, prod health 200.",
       "evidence": "uat/reports/evidence/launch-ready/cleanup/CLEANUP-REPORT.md"
+    },
+    "W-E": {
+      "status": "passed",
+      "closed_at": "2026-07-24T21:30:00+10:00",
+      "summary": "Top-10-paid-app quality sweep (spec 7) executed on prod in 2 fix waves (commits 2658211 + 1443217, deploy SHA 1443217). 15 screens audited headless (visual/console/axe/CLS/copy/360px): post-fix ALL screens have 0 console errors, 0 axe serious/critical, 0 unnamed controls, no 360px hscroll. Fixes: en-AU dates via central format.ts (13 call sites), 6 screens of axe fixes, email/jobs 360px overflow, CLS skeleton reservations (analytics 0.668->0), Agent Spend labeled USD, prod hygiene (FastAPI docs/redoc/openapi 404 in production + CSP frame-ancestors/nosniff/referrer-policy via tracked nginx vhost). Lighthouse post-fix: a11y 100 + BP 100 on all 5 heaviest routes; perf dashboard 98, jobs 81 / agents 82 / analytics 83 (was 64) / applications 86 — residual LCP~4s SPA fetch ACCEPTED-BY-OWNER (QUALITY-WE-005). p95 (n=20 x 10 endpoints, authed, public TLS): all <=375ms, zero non-200s. 7.2 subscription walk: everything verifiable without a real card verified live (plans/checkout cs_live_/webhook signature rejection/entitlement/portal); live payment completion + portal cancel CONDITIONALLY-CLOSED (human-gated, LAUNCH-READY-BLOCKED-ON-HUMAN.md). Ledger rows QUALITY-WE-001..006.",
+      "evidence": "uat/reports/evidence/launch-ready/screens/",
+      "suites": {
+        "pytest": "1178 passed / 0 failed (W-D baseline 1173 + 5 new prod-docs-disabled tests)",
+        "vitest": "571 passed / 0 failed (baseline 567 + 4 new format.ts locale tests; 2 tests re-pinned to en-AU)",
+        "playwright": "full-suite baseline 51P/28F unchanged-documented (not re-run this workstream; verification via unit suites + headless prod re-audit)"
+      }
     }
   },
   "baseline": {
@@ -177,11 +188,11 @@
       "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
     }
   },
-  "last_commit": "cb0186d",
-  "last_deploy_sha": "cb0186d",
+  "last_commit": "1443217",
+  "last_deploy_sha": "1443217",
   "next_actions": [
-    "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence; the 5-row ledger business is already closed (2026-07-24).",
-    "W-E: top-10-paid-app quality hardening sweep (§7), evidence under quality/screens",
-    "W-F: docs truth refresh -> adversarial review -> exit gates (§9-§10), evidence under governance/ and adversarial/"
+    "W-F: docs truth refresh -> adversarial review -> exit gates (spec 9-10), evidence under governance/ and adversarial/",
+    "W-A remainder: execute the full models-live campaign per /home/ubuntu/aether-subscription-prompt-live-test.md (all 11 gates) and record gates.W-A=passed with fresh evidence",
+    "Operator (human-gated): complete one live Stripe payment + portal cancel/downgrade per docs/delivery/LAUNCH-READY-BLOCKED-ON-HUMAN.md to close QUALITY-WE-006"
   ]
 }

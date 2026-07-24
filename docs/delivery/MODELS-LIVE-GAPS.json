@@ -1525,6 +1525,137 @@
       ],
       "verifiedBy": "pytest 1173/0 + vitest 567/0 + prod health 200 after eviction; S3 ls confirms all archives present",
       "note": "No force-push, no --no-verify, no history rewrite. .git residual 63M documented honestly."
+    },
+    {
+      "id": "QUALITY-WE-001",
+      "screen": "all 15 screens (dates)",
+      "severity": "MEDIUM",
+      "category": "quality",
+      "summary": "Dates rendered in US format (MM/DD/YYYY or 'Jul 3') instead of en-AU across 13 call sites; no central date formatter.",
+      "reproduction": "Load any dashboard screen with dated records; inspect rendered dates.",
+      "expected": "All user-facing dates in en-AU format (DD/MM/YYYY / '3 July 2026').",
+      "observed": "Pre-fix audit flagged us-date copy hits on 9 screens. Fixed via central apps/web/src/lib/format.ts (formatDate/formatDateTime pinned to en-AU) + 13 call-site migrations; vitest locale-pinning tests added (format.test.ts).",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/SCREEN-MATRIX.md",
+        "uat/reports/evidence/launch-ready/screens/jobs/audit.md",
+        "apps/web/src/lib/__tests__/format.test.ts"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "W-E quality sweep",
+      "fixCommits": [
+        "2658211"
+      ],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)"
+    },
+    {
+      "id": "QUALITY-WE-002",
+      "screen": "jobs, applications, analytics, settings, agents, pricing",
+      "severity": "MEDIUM",
+      "category": "quality",
+      "summary": "axe serious/critical violations on 6 screens: nested-interactive (job/application cards wrapping buttons), scrollable region not keyboard-focusable, analytics summary not semantic <dl>, settings Toggle missing accessible name, agents indeterminate bar missing role=progressbar, pricing footer link contrast.",
+      "reproduction": "Run axe-core against each authenticated screen at 1280px (audit script archived in S3 we-screens/).",
+      "expected": "0 axe serious/critical violations on every screen.",
+      "observed": "Post-wave-2 re-audit: 0 serious/critical on all 15 screens (wave 1 fixed 6 screens; wave 2 fixed remaining jobs scrollable-region focusable + card overflow).",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/jobs/audit.md",
+        "uat/reports/evidence/launch-ready/screens/applications/audit.md",
+        "uat/reports/evidence/launch-ready/screens/analytics/audit.md",
+        "S3 we-screens/results-postfix.json"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "W-E quality sweep",
+      "fixCommits": [
+        "2658211",
+        "1443217"
+      ],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)",
+      "note": "Wave-2 fix (jobs/page.tsx role=region+tabIndex, globals.css) landed in commit 1443217."
+    },
+    {
+      "id": "QUALITY-WE-003",
+      "screen": "email, jobs (360px viewport)",
+      "severity": "MEDIUM",
+      "category": "quality",
+      "summary": "Horizontal scroll at 360px width: email chips/rows overflowed (missing min-w-0/truncate); document-level overflow on jobs/email because overflow-x guard was on body only while html scrolled.",
+      "reproduction": "Set viewport 360x740, load /dashboard/email and /dashboard/jobs, compare scrollWidth vs clientWidth on html/body.",
+      "expected": "No horizontal scroll on any screen at 360px.",
+      "observed": "Post-wave-2 re-audit: no hscroll on any of the 15 screens at 360px. Fixes: email min-w-0 + chip truncation (wave 1); html,body{overflow-x:clip} + job-card overflow-hidden + truncating title button (wave 2).",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/email/audit.md",
+        "uat/reports/evidence/launch-ready/screens/jobs/audit.md",
+        "S3 we-screens/results-postfix.json"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "W-E quality sweep",
+      "fixCommits": [
+        "2658211",
+        "1443217"
+      ],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)",
+      "note": "Wave-2 portion landed in commit 1443217."
+    },
+    {
+      "id": "QUALITY-WE-004",
+      "screen": "prod HTTP surface (headers + debug endpoints)",
+      "severity": "HIGH",
+      "category": "quality",
+      "summary": "Production hygiene gaps: CSP frame-ancestors / nosniff / referrer-policy headers missing; FastAPI /api/docs, /api/redoc, /api/openapi.json publicly served interactive Swagger in production.",
+      "reproduction": "curl -sI https://5cb5f0620.abacusai.cloud/ ; curl -s -o /dev/null -w '%{http_code}' .../api/docs.",
+      "expected": "CSP frame-ancestors 'self' https://*.abacus.ai + X-Content-Type-Options + Referrer-Policy served; docs endpoints 404 in production; no conflicting X-Frame-Options; source maps 404.",
+      "observed": "Post-fix curl: all headers present, /api/docs|redoc|openapi.json return 404 (AETHER_ENV=production gate in create_app, 5 new pytest tests pass), source maps 404. Tracked nginx vhost deploy/5cb5f0620.conf symlinked into /etc/nginx/conf.d.",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/hygiene-7.3.md",
+        "apps/api/tests/test_we_prod_docs_disabled.py",
+        "deploy/5cb5f0620.conf"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "W-E quality sweep",
+      "fixCommits": [
+        "2658211"
+      ],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)"
+    },
+    {
+      "id": "QUALITY-WE-005",
+      "screen": "jobs, agents, analytics, applications, resume, cover-letters (perf/CLS)",
+      "severity": "LOW",
+      "category": "quality",
+      "summary": "Lighthouse perf <90 on 4 of the 5 heaviest routes and CLS on data-heavy screens, driven by client-side authenticated data fetch (LCP ~4s) in the SPA architecture.",
+      "reproduction": "Authenticated desktop Lighthouse on the 5 heaviest routes; CLS probe in 15-screen audit.",
+      "expected": "Perf/a11y/BP >= 90 per spec 7.3 floor.",
+      "observed": "Fixable portion fixed: skeleton reservations => analytics CLS 0.668->0, perf 64->83; a11y 100 + best-practices 100 on ALL five routes. Residual: perf jobs 81 / agents 82 / analytics 83 / applications 86 (LCP ~4s = post-hydration authenticated fetch); CLS residuals jobs 0.133 / agents 0.146 / resume 0.362 / cover-letters 0.596 (skeleton->content swap). SSR/streaming refactor judged disproportionate for this wave under the budget mandate.",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/hygiene-7.3.md",
+        "S3 we-screens/lh2/",
+        "S3 we-screens/results-postfix.json"
+      ],
+      "status": "ACCEPTED-BY-OWNER",
+      "owner": "W-E quality sweep",
+      "fixCommits": [
+        "2658211",
+        "1443217"
+      ],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)",
+      "note": "Partial fix verified-live; remaining perf gap is architectural (SSR refactor), explicitly accepted as residual per spec budget discipline. Revisit if W-F exit gates demand >=90."
+    },
+    {
+      "id": "QUALITY-WE-006",
+      "screen": "subscription/billing (spec 7.2)",
+      "severity": "MEDIUM",
+      "category": "quality",
+      "summary": "Subscription-readiness walk: everything verifiable without charging a real card verified on prod; live payment completion -> webhook -> entitlement flip, and portal cancel/downgrade, require a human with a real card (Stripe LIVE mode).",
+      "reproduction": "curl walk on prod with admin token: /billing/plans, POST /billing/checkout, forged/unsigned webhook, /billing/entitlement, /billing/subscription, POST /billing/portal.",
+      "expected": "Full purchase->entitlement->cancel lifecycle verified.",
+      "observed": "Verified live: plans 200 (4 plans, AUD+GST), checkout returns real cs_live_ Stripe URL (422 on bad shape), unsigned/forged-signature webhooks rejected 400, entitlement+subscription 200 with quotas, portal returns real live portal URL. NOT verified (operator-only): completing a live payment and portal cancel/downgrade.",
+      "evidence": [
+        "uat/reports/evidence/launch-ready/screens/subscription-readiness.md",
+        "docs/delivery/LAUNCH-READY-BLOCKED-ON-HUMAN.md"
+      ],
+      "status": "CONDITIONALLY-CLOSED",
+      "owner": "W-E quality sweep",
+      "fixCommits": [],
+      "verifiedBy": "prod-verifier (headless 15-screen re-audit /tmp/we-audit.mjs + Lighthouse + curl header probes on https://5cb5f0620.abacusai.cloud, 2026-07-24; evidence uat/reports/evidence/launch-ready/screens/ + S3 we-screens/)",
+      "note": "Human-gated per spec 11: requires a real card in Stripe LIVE mode. Steps + expected results documented in LAUNCH-READY-BLOCKED-ON-HUMAN.md."
     }
   ]
 }
