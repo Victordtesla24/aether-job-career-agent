@@ -224,10 +224,33 @@
       "note": "see P0-001/P0-005; run with LOGIN_EMAIL=admin LOGIN_PASSWORD=admin123"
     }
   },
-  "last_commit": "1443217",
-  "last_deploy_sha": "1443217",
+  "last_commit": "26d1f1d",
+  "last_deploy_sha": "26d1f1d",
+  "runtime_wave_RT": {
+    "trigger": "Operator live-run interrupt 2026-07-24 (real paid-user runs on prod)",
+    "commits": ["3cccad7", "cc21cd1", "26d1f1d"],
+    "deployed_at": "2026-07-24T12:21:00Z",
+    "suites": {
+      "pytest": "1223 passed / 0 failed (single-process run-tests.sh, 34m06s)",
+      "vitest": "572 passed / 0 failed",
+      "build": "pnpm build exit 0"
+    },
+    "findings": {
+      "RT-001": "VERIFIED-CLOSED-LIVE — cover_letter control-char JSON parse (strict=False); 0 post-deploy 503/control-char errors, 20 jobs reached 'ready'",
+      "RT-002": "VERIFIED-CLOSED-LIVE (env) — entailment budget 6->20/25->40; autopilot tailored bullets kept (tailored:1/2 per stretch)",
+      "RT-003": "CONDITIONALLY-CLOSED — Adzuna AU adapter ready; operator free credential is the only gap (LAUNCH-READY-BLOCKED-ON-HUMAN.md §2)",
+      "RT-004": "VERIFIED-CLOSED-LIVE — per-job card dedup; 25 cards/25 jobs, 0 duplicate active cards",
+      "RT-005": "VERIFIED-CLOSED-LIVE — agents manage swimlanes; 43/46 jobs agent-advanced (screening20/ready20/tailoring3)",
+      "RT-007": "VERIFIED-CLOSED-LIVE — continuous board-sweep autopilot; 3 cron ticks, full ~300s stretches, graceful stop, 0 tracebacks",
+      "RT-008": "VERIFIED-CLOSED-LIVE — wellfound status=blocked via SourceBlockedError marker",
+      "RT-009": "VERIFIED-CLOSED-LIVE — applied jobs flush; 0 applied jobs with lingering draft card",
+      "RT-010": "VERIFIED-CLOSED-LIVE — tailoredResumeId on all 46 jobs; apply flow seeded from backend truth"
+    },
+    "note": "Continuous board-sweep autopilot LIVE (AETHER_BOARD_SWEEP_ENABLED=true). Owner test account hit 100/100 plan quota — autopilot stops honestly on quota (by design). Real paid users get their own plan quota."
+  },
   "next_actions": [
-    "Operator (human-gated, LAUNCH-READY-BLOCKED-ON-HUMAN.md): live Stripe payment + portal cancel (QUALITY-WE-006), operator admin credential, 2nd Gmail consent, Anthropic OAuth operator consent",
+    "RT-006 monitored observation window in progress (>=30 min post-deploy prod traffic + autopilot ticks)",
+    "Operator (human-gated, LAUNCH-READY-BLOCKED-ON-HUMAN.md): Adzuna AU key (RT-003), live Stripe payment + portal cancel (QUALITY-WE-006), operator admin credential, 2nd Gmail consent, Anthropic OAuth operator consent",
     "Optional: restore SCREEN-MATRIX.json from S3 if the baseline capture sweeps are ever needed again",
     "Deferred by decision: DEDUP-044 lazy-DDL merge"
   ]

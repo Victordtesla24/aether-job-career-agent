@@ -1752,12 +1752,13 @@
       "expected": "One active card per job (most-advanced status); counts per distinct job",
       "observed": "9 Submitted + 1 In-Review + 1 Ready duplicate cards; funnel over-counted",
       "evidence": "scratchpad/rt004-rt003-investigation.md; tests/test_rt_004_application_card_dedup.py",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "9 tests; per-job dedup + 409 promotion guards + COUNT(DISTINCT jobId)"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     },
     {
       "id": "RT-005",
@@ -1769,12 +1770,13 @@
       "expected": "Agents advance cards through swimlanes automatically, never demoting manual moves",
       "observed": "Jobs stuck at discovered regardless of pipeline progress",
       "evidence": "tests/test_rt_005_board_stage_sync.py; JobRepository.advance_status forward-only guard",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "9 tests; fit_scorer/tailor/cover/matcher advances"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     },
     {
       "id": "RT-007",
@@ -1786,12 +1788,13 @@
       "expected": "Agents run continuously until board clear or ~10-min stretch, processing all eligible jobs",
       "observed": "Manual, one-job-per-run",
       "evidence": "app/workers/board_sweep.py; tests/test_rt_007_board_sweep.py (13 tests)",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "13 tests; ARQ cron every 10min, reserved-run machinery, quota/deadline/outage bounds"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     },
     {
       "id": "RT-008",
@@ -1803,12 +1806,13 @@
       "expected": "Permanent upstream block shows a calm 'unavailable (blocked by source)' state",
       "observed": "Red error re-alarming every run",
       "evidence": "tests/test_rt_008_blocked_source.py; src/__tests__/dashboard/source-status.test.ts",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "scout classifies 403->blocked; FE neutral pill"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     },
     {
       "id": "RT-009",
@@ -1820,12 +1824,13 @@
       "expected": "Applied job flushes out of pipeline job columns; its card moves to Submitted",
       "observed": "Draft card stuck in Ready-to-Apply after apply",
       "evidence": "tests/test_rt_009_010_apply_wiring.py",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "6 tests; apply promotes reused draft to submitted"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     },
     {
       "id": "RT-010",
@@ -1837,12 +1842,13 @@
       "expected": "Job already tailored (this/prior session or agents) opens at Review & Apply",
       "observed": "False untailored prompt/warning",
       "evidence": "tests/test_rt_009_010_apply_wiring.py; job payload tailoredResumeId + FE seed",
-      "status": "VERIFIED-CLOSED",
+      "status": "VERIFIED-CLOSED-LIVE",
       "owner": "orchestrator",
       "fixCommits": [
-        "cc21cd1"
+        "cc21cd1",
+        "26d1f1d"
       ],
-      "verifiedBy": "tailoredResumeId exposed + FE initializes applyStep"
+      "verifiedBy": "Prod-verified live 2026-07-24 @deploy 26d1f1d: RT-004 25/25 no dup cards; RT-005 43/46 agent-advanced (screening20/ready20/tailoring3); RT-007 3 cron ticks tailored1/2 graceful; RT-008 wellfound status=blocked; RT-009 0 lingering drafts; RT-010 tailoredResumeId on 46 jobs. 0 post-deploy 5xx/control-char errors."
     }
   ]
 }
