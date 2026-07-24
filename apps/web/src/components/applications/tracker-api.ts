@@ -25,6 +25,21 @@ export async function fetchTrackerApplications(
     .parse(await apiRequest<unknown>("/applications", options));
 }
 
+/**
+ * Fetch applied/terminal applications — jobs the user has already applied to.
+ * These are excluded from the active board and shown in a separate
+ * \"Applied\" / \"History\" section (phase4).
+ */
+export async function fetchAppliedApplications(
+  options: RequestOptions = {},
+): Promise<TrackerApplication[]> {
+  return z
+    .array(TrackerApplicationSchema)
+    .parse(
+      await apiRequest<unknown>("/applications?include_applied=true", options),
+    );
+}
+
 export async function fetchTrackerApplication(
   id: string,
   options: RequestOptions = {},

@@ -21,6 +21,7 @@ import type { Job } from "../../../lib/api/jobs";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
 import {
   fetchAgentConfig,
+  fetchAppliedApplications,
   fetchSankey,
   fetchTrackerApplication,
   fetchTrackerApplications,
@@ -49,7 +50,7 @@ import {
   type StageKey,
 } from "../../../components/applications/tracker-lib";
 
-type ViewMode = "board" | "sankey" | "timeline";
+type ViewMode = "board" | "sankey" | "timeline" | "applied";
 
 /** Accessible dropdown for the header Filter / Sort controls. */
 function HeaderMenu<K extends string>({
@@ -339,6 +340,9 @@ export default function ApplicationsPage() {
   const [sankey, setSankey] = useState<SankeyData | null>(null);
   const [sankeyError, setSankeyError] = useState<string | null>(null);
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  // Phase 4: separate applied-jobs view — fetched lazily on first open.
+  const [appliedApps, setAppliedApps] = useState<TrackerApplication[] | null>(null);
+  const [appliedError, setAppliedError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -384,6 +388,19 @@ export default function ApplicationsPage() {
         setSankeyError(e instanceof Error ? e.message : "Failed to load sankey data");
       });
   }, [view, sankey]);
+
+  // Applied jobs — lazily loaded on first view (phase4).
+  useEffect(() => {
+    if (view !== "applied" || appliedApps !== null) return;
+    fetchAppliedApplications()
+      .then((d) => {
+        setAppliedApps(d);
+        setAppliedError(null);
+      })
+      .catch((e) => {
+        setAppliedError(e instanceof Error ? e.message : "Failed to load applied jobs");
+      });
+  }, [view, appliedApps]);
 
   const openDetail = async (id: string) => {
     try {
@@ -512,6 +529,7 @@ export default function ApplicationsPage() {
                 { key: "board", label: "Board View", icon: null },
                 { key: "sankey", label: "Sankey Flow", icon: "fa-diagram-project" },
                 { key: "timeline", label: "Timeline", icon: null },
+                { key: "applied", label: "Applied", icon: "fa-check-circle" },
               ] as Array<{ key: ViewMode; label: string; icon: string | null }>
             ).map((v) => (
               <button
@@ -836,6 +854,81 @@ export default function ApplicationsPage() {
               className="glass mt-4 h-72 animate-pulse rounded-2xl border border-white/10"
               aria-busy="true"
             />
+          )}
+        </section>
+      ) : view === "applied" ? (
+        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="applied-view">
+          <div className="flex items-center gap-2.5 mb-4">
+            <i className="fa-solid fa-check-circle text-sm text-aether-green" aria-hidden="true" />
+            <h2 className="text-[15px] font-semibold">Applied Jobs</h2>
+            <span className="text-[11px] text-aether-muted-dim">
+              jobs you&apos;ve applied to — they stay here for your records
+            </span>
+          </div>
+          {appliedApps === null ? (
+            <div
+              className="glass h-48 animate-pulse rounded-2xl border border-white/10"
+              aria-busy="true"
+            />
+          ) : appliedError ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm text-red-300">{appliedError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAppliedError(null);
+                  setAppliedApps(null);
+                }}
+                className="rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 max-sm:min-h-[44px]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : appliedApps.length === 0 ? (
+            <p className="text-sm text-aether-muted-dim">No applied jobs yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {appliedApps.map((a) => (
+                <article
+                  key={a.id}
+                  className="glass rounded-xl border border-white/10 p-3.5 cursor-pointer hover:border-white/25 transition"
+                  onClick={() => void openDetail(a.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                        {initials(a.company)}
+                      </span>
+                      {a.fitScore != null ? (
+                        <span className={`mono text-[11px] font-semibold ${fitClass(Math.round(Number(a.fitScore)))}`}>
+                          {Math.round(Number(a.fitScore))}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="flex items-center gap-1.5 rounded-md bg-aether-green/15 px-2 py-0.5 text-[10px] text-aether-green">
+                      <i className="fa-solid fa-check text-[9px]" aria-hidden="true" />
+                      applied
+                    </span>
+                  </div>
+                  <h3 className="mt-2.5 text-xs font-semibold leading-tight">{a.jobTitle}</h3>
+                  <p className="text-[11px] text-aether-muted-dim">{a.company}</p>
+                  {a.applyUrl && !a.applyUrl.includes("demo.aether.dev") ? (
+                    <a
+                      href={a.applyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+                    >
+                      View listing <i className="fa-solid fa-arrow-right text-[8px]" aria-hidden="true" />
+                    </a>
+                  ) : null}
+                  <p className="mono mt-2 text-[10px] text-aether-muted-dim">
+                    {timeAgo(a.updatedAt)}
+                  </p>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       ) : (

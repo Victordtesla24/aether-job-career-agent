@@ -108,19 +108,31 @@ def is_stale(
     return effective < now - timedelta(days=window)
 
 
+#: Job statuses that are excluded from the active feed — these jobs have been
+#: acted on and live in the Application Tracker's applied/archived views instead.
+_TERMINAL_JOB_STATUSES = frozenset({"applied", "archived"})
+
+
 def active_feed(
     jobs: Iterable[dict[str, Any]],
     *,
     now: datetime | None = None,
     max_age_days: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Filter a job list to the live, fresh, de-duplicated active feed."""
+    """Filter a job list to the live, fresh, de-duplicated active feed.
+
+    Excludes jobs with terminal statuses (applied, archived) — those live in
+    the Application Tracker's separate applied/archived views, not on the
+    active pipeline board.
+    """
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     prohibited = prohibited_sources()
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for job in jobs:
         if str(job.get("source") or "").lower() in prohibited:
+            continue
+        if str(job.get("status") or "").lower() in _TERMINAL_JOB_STATUSES:
             continue
         if is_stale(job, now=now, max_age_days=max_age_days):
             continue
