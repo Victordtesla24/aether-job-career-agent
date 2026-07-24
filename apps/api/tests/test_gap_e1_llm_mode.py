@@ -28,6 +28,9 @@ def test_non_replay_modes_in_production_do_not_raise(
 ) -> None:
     monkeypatch.setenv("AETHER_ENV", "production")
     monkeypatch.setenv("AETHER_LLM_MODE", mode)
+    # §REC-05 guard must not fire: clear the discovery fixture dir that
+    # conftest.py sets so production-app tests don't trip the new guard.
+    monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
 
     create_app()  # must not raise
 
