@@ -1,6 +1,18 @@
 {
   "phase_step": "COMPLETE",
-  "updated_at": "2026-07-25T13:10:00+10:00",
+  "updated_at": "2026-07-24T18:50:00+10:00",
+  "last_validated": {
+    "at": "2026-07-24T08:48:00Z",
+    "by": "orchestrator resume check (spec 2.3.3)",
+    "probes": {
+      "git": "local == origin/main @ 5fb88d7; branch main only; 0 PRs; 1 worktree; single remote origin",
+      "systemd": "aether-api/web/worker all active",
+      "prod": "GET /api/health 200 {status:ok,version:0.2.0}; GET /dashboard 200 (public URL)",
+      "suite_smoke": "pytest test_approvals_delete.py+test_applications_move.py 42/42; vitest approvals+lib slices 32/32",
+      "ledger": "MODELS-LIVE-GAPS.json 78 rows, 0 OPEN (matches final report)"
+    },
+    "note": "Prior-session date stamps said 2026-07-25 (+10) but were written 2026-07-24 ~02:50Z; corrected to actual. No unverified items found; COMPLETE state stands."
+  },
   "workstream_status": {
     "W-A": "closed",
     "W-B": "closed",
@@ -164,7 +176,7 @@
     },
     "W-F": {
       "status": "passed",
-      "closed_at": "2026-07-25T13:10:00+10:00",
+      "closed_at": "2026-07-24T12:50:00+10:00",
       "summary": "Docs truth refresh (README; 12/12 claim spot-audit) -> adversarial review (all 9 prior closures re-triggered HOLD; resurrection replay 13 symbols + 27 paths, 1 eviction miss fixed; placeholder sweep 0 user-reachable; fresh suites pytest 1178/0, vitest 571/0, Playwright 41P/11F all-known-classes with collection crash WF-e2e-matrix-001 found+fixed) -> 70-min clean observation window (0 hits under real traffic) -> exit gates G-A..G-K all CLOSED (G-E with owner-accepted perf residual + human-gated Stripe payment CONDITIONALLY-CLOSED).",
       "evidence": "uat/reports/evidence/launch-ready/adversarial/ + runtime/ + models-live/; docs/delivery/LAUNCH-READY-FINAL-REPORT.md",
       "suites": {
