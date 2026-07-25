@@ -121,6 +121,7 @@ class TestSweepProcessesWholeBoard:
         assert summary == {
             "user_id": user_id, "processed": 0, "tailored": 0, "covers": 0,
             "failures": 0, "reason": "board-complete", "skipped_failures": 0,
+            "needs_continuation": False,
         }
 
     def test_unscored_discovered_jobs_are_not_touched(
