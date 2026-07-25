@@ -17,6 +17,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
