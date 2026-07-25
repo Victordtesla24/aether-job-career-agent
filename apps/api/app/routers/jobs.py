@@ -495,3 +495,139 @@ def archive_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     job = repository.update_status(job_id, "archived")
     assert job is not None  # existence checked above
     return _public(job)
+
+
+# ---------------------------------------------------------------------------
+# Clear Pipeline — hard-reset the Discovery + Application pipeline for the
+# signed-in user (FEATURE: Clear Pipeline backend).
+# ---------------------------------------------------------------------------
+
+#: The confirmation flag the client MUST echo back. A bare ``DELETE`` would
+#: be an easily-mistyped, easily-triggered wipe (e.g. a misconfigured prefetch
+#: or an over-broad retry) of a paying user's entire pipeline. The explicit,
+#: truthy ``confirm`` requirement makes the operation impossible to fire
+#: accidentally — the frontend can only issue it from a confirmation dialog,
+#: and an absent/false flag returns 422 without touching any rows.
+_CLEAR_PIPELINE_CONFIRM_KEY = "confirm"
+
+
+class ClearPipelineRequest(BaseModel):
+    """Confirmation payload for the irreversible pipeline wipe."""
+
+    confirm: bool = False
+
+
+@router.delete("/clear-pipeline")
+def clear_pipeline(
+    body: ClearPipelineRequest,
+    current_user: CurrentUser,
+) -> dict[str, Any]:
+    """Permanently wipe ALL Jobs + Applications for the calling user.
+
+    Requires an explicit ``{"confirm": true}`` body — a 422 is returned
+    otherwise, so an accidental GET or empty POST cannot trigger the
+    destruction. The confirmation is the only accepted shape; a query
+    string or header trick cannot substitute.
+
+    This is a full, irreversible wipe for the calling user:
+      * Deletes every ``Application`` row (every status).
+      * Deletes every ``Job`` row.
+      * Detaches (``sourceJobId = NULL``) tailored ``Resume`` versions so
+        no orphan resume points at a deleted job — the user-authored
+        resume content is preserved as a standalone version (the resume
+        is the user's own work product; a pipeline reset must not destroy
+        it). The ``Resume`` self-referential ``parentId`` chain is
+        preserved: only the ``sourceJobId`` FK is cleared, so a resume
+        that was tailored for a cleared job remains a valid version with
+        its parent chain intact.
+      * Deletes every ``AgentRun`` row for the user (the execution-audit
+        trail is meaningless once the pipeline it audited is gone, and
+        keeping it would leave the board-sweep failure-backoff hotfix
+        (RT-007) excluding jobs that no longer exist).
+      * ``JobEmbedding`` and ``ApprovalRequest`` rows cascade off the
+        Job/Application FKs per the Prisma schema
+        (``onDelete: Cascade``). ``EmailThread.applicationId`` is
+        ``ON DELETE SET NULL``, so a sent/received email thread is never
+        silently destroyed by a pipeline reset — it is preserved with
+        ``applicationId`` NULL.
+
+    Order follows the safe-dependent-handling pattern established in
+    ``scripts/dedup_cleanup.py``: dependants are deleted before parents,
+    so cascades are explicit and never relied upon silently.
+
+    Permanent re-discovery is the design intent. The per-user dedup the
+    scout relies on is keyed on ``sourceUrl`` (DB ``@@unique([userId,
+    sourceUrl])``) and on ``dedupHash`` (NULL-sourceUrl composite). Both
+    live on the ``Job`` row itself, so deleting the row drops the dedup
+    memory — a subsequent scout run re-discovers the same posting as a
+    fresh ``persisted`` job (the upsert has no prior row to update). There
+    is no separate ``SeenJob``, ``DiscoveryHistory``, or tombstone column
+    consulted by the upsert path. This is deliberate: it is the only
+    honest way to let a user start over after a bad query, a stale board,
+    or a tailoring dead-end.
+
+    Idempotent — an empty pipeline is a success with ``jobsDeleted: 0,
+    applicationsDeleted: 0``.
+    """
+    if not body.confirm:
+        raise HTTPException(
+            status_code=422,
+            detail="confirm must be true — this action is irreversible",
+        )
+
+    from app.repositories.admin import write_audit
+
+    uid = current_user["id"]
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Count before touching anything (the response carries honest counts).
+            cur.execute('SELECT count(*) FROM "Application" WHERE "userId" = %s', (uid,))
+            apps_count = cur.fetchone()[0]
+            cur.execute('SELECT count(*) FROM "Job" WHERE "userId" = %s', (uid,))
+            jobs_count = cur.fetchone()[0]
+
+            # 1. Delete Applications (cascades ApprovalRequest ON DELETE CASCADE,
+            #    SET NULL on EmailThread.applicationId — see docstring).
+            cur.execute('DELETE FROM "Application" WHERE "userId" = %s', (uid,))
+
+            # 2. Detach tailored resumes: Resume.sourceJobId → NULL so no orphan
+            #    resume points at a Job row we are about to delete. SET NULL
+            #    (not delete) preserves the user-authored resume content and its
+            #    parentId self-reference chain — only the job link is cleared.
+            cur.execute(
+                'UPDATE "Resume" SET "sourceJobId" = NULL '
+                'WHERE "userId" = %s AND "sourceJobId" IS NOT NULL',
+                (uid,),
+            )
+
+            # 3. Delete AgentRuns (per-user, not per-job; wiped for a clean
+            #    slate). The board-sweep failure-backoff (RT-007) reads failed
+            #    AgentRuns by (userId, agentName, createdAt, input.job_id); with
+            #    the jobs gone those rows would exclude non-existent job ids
+            #    forever, so they must go too.
+            cur.execute('DELETE FROM "AgentRun" WHERE "userId" = %s', (uid,))
+
+            # 4. Delete Jobs (cascades JobEmbedding ON DELETE CASCADE).
+            cur.execute('DELETE FROM "Job" WHERE "userId" = %s', (uid,))
+
+            # 5. Audit the reset atomically with the deletes above.
+            write_audit(
+                uid,
+                "pipeline.clear_all",
+                target_type="user",
+                target_id=uid,
+                detail={
+                    "jobsDeleted": int(jobs_count),
+                    "applicationsDeleted": int(apps_count),
+                    "dedupCleared": True,
+                },
+                cur=cur,
+            )
+        conn.commit()
+
+    return {
+        "jobsDeleted": int(jobs_count),
+        "applicationsDeleted": int(apps_count),
+        "dedupCleared": True,
+    }
