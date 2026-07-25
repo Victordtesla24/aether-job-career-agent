@@ -120,6 +120,91 @@ def cover_failure_window_hours() -> int:
         return COVER_FAILURE_WINDOW_HOURS
 
 
+def user_has_board_work(user_id: str) -> bool:
+    """Whether this ONE user has actionable board work right now.
+
+    The single-user variant of ``eligible_users`` — used by the event-driven
+    trigger (``enqueue_user_sweep``) so a freshly-scored user is enqueued only
+    when they actually have tailoring/cover work pending, not unconditionally.
+    """
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT 1 FROM "Job" j
+                WHERE j."userId" = %s
+                  AND (
+                        (j."status" = 'tailoring')
+                     OR (j."status" IN ('screening','matched')
+                         AND j."fitScore" IS NOT NULL)
+                      )
+                  AND j."status" NOT IN ('applied','archived')
+                  AND NOT EXISTS (
+                        SELECT 1 FROM "Application" a
+                        WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+                      )
+                LIMIT 1
+                ''',
+                (user_id,),
+            )
+            return cur.fetchone() is not None
+
+
+def enqueue_user_sweep(user_id: str) -> str | None:
+    """Event-driven trigger: enqueue one sweep stretch for this user NOW.
+
+    Closes the latency gap the operator flagged: the discovery cron runs
+    scout → fit-scorer synchronously, but the board sweep that consumes the
+    freshly-scored jobs runs on a SEPARATE 10-minute ARQ cron tick — so a user
+    whose jobs just landed could wait up to 10 minutes before any tailoring /
+    cover work starts. This seam lets the scout + fit-scorer completion paths
+    (and an explicit operator endpoint) enqueue the user's sweep immediately,
+    using the SAME idempotent ``_job_id`` dedup the cron uses
+    (``board-sweep:<user_id>``), so an event trigger racing the cron can NEVER
+    stack a second concurrent sweep for the same user.
+
+    Gated by ``sweep_enabled()`` (kill-switch parity with the cron) and by
+    ``user_has_board_work`` (no-op when the user has nothing actionable — e.g.
+    a scout that found zero new jobs, or a fit-scorer that re-scored an
+    already-complete board). Returns the ARQ job id (or None when skipped /
+    the enqueue was deduped against an in-flight stretch).
+
+    Never raises on an enqueue failure: the event trigger is best-effort
+    automation layered ON TOP of the cron, so a transient redis outage must
+    not crash the discovery run that triggered it. The cron still fires and
+    picks the user up on its next tick.
+    """
+    if not sweep_enabled():
+        return None
+    if not user_has_board_work(user_id):
+        return None
+    try:
+        from app.workers.queue import get_arq_pool
+
+        pool = get_arq_pool()
+        import asyncio
+
+        job = asyncio.run(
+            pool.enqueue_job("board_sweep_user", user_id, _job_id=f"board-sweep:{user_id}")
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort; cron is the floor
+        logger.warning(
+            "board-sweep event trigger %s: enqueue failed (cron will retry): %s",
+            user_id, exc,
+        )
+        return None
+    if job is None:
+        logger.info(
+            "board-sweep event trigger %s: deduped (stretch already queued/running)",
+            user_id,
+        )
+        return None
+    logger.info("board-sweep event trigger %s: sweep enqueued", user_id)
+    return getattr(job, "job_id", None)
+
+
 def eligible_users(limit: int | None = None) -> list[str]:
     """User ids with actionable board work, oldest-touched first."""
     from app.db import get_connection
@@ -414,14 +499,54 @@ def sweep_user_stretch(
         user_id, summary["reason"], summary["processed"], summary["tailored"],
         summary["covers"], summary["failures"],
     )
+    # RT-008: signal the caller (board_sweep_user) whether this stretch was
+    # cut off by a soft limit (job-cap or deadline) — more work exists but we
+    # hit bounds. board_sweep_user uses this to decide whether to re-enqueue
+    # itself so the sweep continues until the board is truly empty, per the
+    # operator mandate ("keep working non-stop until the pipeline is cleared").
+    # board-complete / quota-exhausted / no-resume / llm-unavailable are HARD
+    # stops — retrying immediately would either find nothing or fail again.
+    summary["needs_continuation"] = summary["reason"] in ("job-cap", "deadline")
     return summary
 
 
+#: Cooldown (seconds) before re-enqueuing a continued stretch. Long enough
+#: that a stretch which finished in well under a second (e.g. every
+#: remaining job was skipped for cover-failure saturation) can't tight-loop
+#: the worker; short enough that "non-stop until empty" stays honest.
+_CONTINUATION_COOLDOWN_SECONDS = 15.0
+
+
 async def board_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
-    """ARQ task: run one sweep stretch for one user off the event loop."""
+    """ARQ task: run one sweep stretch for one user off the event loop.
+
+    RT-008 continuous-sweep enforcement: when the stretch stops because it
+    hit a SOFT limit (job-cap or deadline — ``needs_continuation`` is True),
+    more board work exists and the operator mandate is "keep working
+    non-stop until the pipeline is not cleared" — so this re-enqueues itself
+    with a short cooldown rather than waiting for the next 10-minute cron
+    tick. A HARD stop (board-complete, quota-exhausted, no-resume,
+    llm-unavailable) does NOT re-enqueue — retrying immediately would just
+    find nothing new or fail again for the same reason.
+    """
     import asyncio
 
-    return await asyncio.to_thread(sweep_user_stretch, user_id)
+    summary = await asyncio.to_thread(sweep_user_stretch, user_id)
+    if summary.get("needs_continuation") and sweep_enabled():
+        try:
+            await ctx["redis"].enqueue_job(
+                "board_sweep_user",
+                user_id,
+                _job_id=f"board-sweep:{user_id}",
+                _defer_by=_CONTINUATION_COOLDOWN_SECONDS,
+            )
+            logger.info(
+                "board-sweep %s: re-enqueued continuation (reason=%s, cooldown=%.0fs)",
+                user_id, summary["reason"], _CONTINUATION_COOLDOWN_SECONDS,
+            )
+        except Exception:  # noqa: BLE001 — best-effort; next cron tick is the floor
+            logger.exception("board-sweep %s: failed to re-enqueue continuation", user_id)
+    return summary
 
 
 async def board_sweep_cron(ctx: Any) -> int:
