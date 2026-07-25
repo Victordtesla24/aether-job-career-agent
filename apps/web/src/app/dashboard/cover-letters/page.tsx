@@ -423,7 +423,7 @@ export default function CoverLettersPage() {
                       {/*
                         Brand-matched preview (resume_pdf.py branded template):
                         peach #FCD9CF letterhead panel with a coral #F4715C
-                        accent rule at its foot, ink #1A1A1A body on white —
+                        accent rule at its foot, ink #2B2B2B body on white —
                         the same visual identity as the uploaded/tailored
                         resume, so the cover letter reads as one product.
                       */}
