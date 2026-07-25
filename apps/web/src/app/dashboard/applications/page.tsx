@@ -574,6 +574,13 @@ export default function ApplicationsPage() {
   const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort, pendingApprovalIds);
   const closed = (apps ?? []).filter((a) => a.status === "rejected" || a.status === "withdrawn");
   const activeCount = stages.reduce((n, s) => n + s.cards.length, 0);
+  // Pipeline job cards live in the first 3 columns (Discovered / Evaluating /
+  // Tailoring) — the agent-fed half of the board. Only show the Clear Pipeline
+  // button when there is at least one such card to clear; an empty pipeline
+  // should not offer a destructive button with nothing to act on.
+  const pipelineJobCount = stages
+    .filter((s) => s.key === "discovered" || s.key === "evaluating" || s.key === "tailoring")
+    .reduce((n, s) => n + s.cards.length, 0);
   const autoApplyOn = agentConfig?.autoApply ?? false;
   const threshold = agentConfig?.matchThreshold ?? 85;
 
@@ -644,15 +651,21 @@ export default function ApplicationsPage() {
             value={sort}
             onSelect={setSort}
           />
-          <button
-            type="button"
-            data-testid="clear-pipeline-btn"
-            onClick={(e) => openClearGate(e.currentTarget)}
-            className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/20 hover:text-red-200 max-sm:min-h-[44px]"
-          >
-            <i className="fa-solid fa-trash-can text-[10px]" aria-hidden="true" />
-            Clear Pipeline
-          </button>
+          {view === "board" && pipelineJobCount > 0 ? (
+            <button
+              type="button"
+              data-testid="clear-pipeline-btn"
+              onClick={(e) => openClearGate(e.currentTarget)}
+              aria-label={`Clear pipeline — archive ${pipelineJobCount} pipeline job${
+                pipelineJobCount === 1 ? "" : "s"
+              } in Discovered, Evaluating and Tailoring`}
+              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/20 hover:text-red-200 max-sm:min-h-[44px]"
+            >
+              <i className="fa-solid fa-trash-can text-[10px]" aria-hidden="true" />
+              Clear Pipeline
+              <span className="mono text-[10px] text-red-400/70">{pipelineJobCount}</span>
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -1065,10 +1078,13 @@ export default function ApplicationsPage() {
                   Clear the entire pipeline?
                 </h3>
                 <p className="mt-1 text-[12px] text-aether-muted">
-                  This is <span className="font-semibold text-red-300">irreversible</span> and will permanently delete{" "}
-                  <span className="text-[#C7C7D6]">ALL</span> jobs and applications in every stage —{" "}
-                  Discovered, Evaluating, Tailoring, Ready to Apply, Submitted, In Review, Interview, and Offer.
-                  Closed items (rejected / withdrawn) will also be removed.
+                  This will <span className="font-semibold text-red-300">archive</span>{" "}
+                  <span className="text-[#C7C7D6]">ALL</span> jobs still sitting in the
+                  agent-driven pipeline columns — Discovered, Evaluating and Tailoring.
+                  Archived jobs are soft-deleted (recoverable in the history view), not
+                  destroyed. Your applications, the Ready-to-Apply through Offer columns,
+                  and closed items (rejected / withdrawn) are{" "}
+                  <span className="text-[#C7C7D6]">left untouched</span>.
                 </p>
               </div>
               <button
@@ -1087,9 +1103,10 @@ export default function ApplicationsPage() {
                 data-testid="clear-pipeline-success"
                 role="status"
               >
-                ✓ Cleared {clearResult.jobsDeleted} job{clearResult.jobsDeleted === 1 ? "" : "s"} and{" "}
-                {clearResult.applicationsDeleted} application{clearResult.applicationsDeleted === 1 ? "" : "s"}.
-                The board will now show its empty state.
+                ✓ Archived {clearResult.archived} pipeline job
+                {clearResult.archived === 1 ? "" : "s"}. The Discovered,
+                Evaluating and Tailoring columns are now empty — applications
+                and closed items were left untouched.
               </div>
             ) : (
               <div className="mt-5 flex items-center justify-end gap-2">
@@ -1109,7 +1126,7 @@ export default function ApplicationsPage() {
                   disabled={clearSubmitting}
                   className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
                 >
-                  {clearSubmitting ? "Clearing…" : "✕ Yes, Delete Everything"}
+                  {clearSubmitting ? "Clearing…" : "✕ Yes, Archive Pipeline Jobs"}
                 </button>
               </div>
             )}
