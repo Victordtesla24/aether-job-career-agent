@@ -26,6 +26,15 @@ class AshbyAdapter(BaseAdapter):
     source = "ashby"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        # Pagination audit (2026-07-25): Ashby's public posting API
+        # (`GET /posting-api/job-board/<token>?includeCompensation=false`)
+        # returns ALL published jobs for a board in a single response (e.g.
+        # OpenAI returns 755 jobs at once).  The only query parameter is
+        # ``includeCompensation`` — no ``page``, ``limit``, or ``offset``
+        # exists.  The authenticated ``jobPosting.list`` endpoint has
+        # pagination, but that requires auth.  The adapter iterates over *all*
+        # configured boards with no artificial slice/cap — genuinely
+        # single-response-complete per board, and all boards are exhausted.
         tokens = portals.ashby_boards()
         boards: list[dict[str, Any]] = []
         failures: list[str] = []

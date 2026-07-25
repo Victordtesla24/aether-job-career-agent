@@ -32,6 +32,15 @@ class GreenhouseAdapter(BaseAdapter):
     source = "greenhouse"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        # Pagination audit (2026-07-25): Greenhouse's public boards API
+        # (`GET /v1/boards/<token>/jobs?content=true`) returns ALL published
+        # jobs for a board in a single response — ``meta.total`` always equals
+        # ``len(jobs)``.  There is no ``page``, ``per_page``, or ``offset``
+        # parameter on this endpoint (the *Harvest* API has pagination, but
+        # that requires authentication and is a different endpoint).  The
+        # adapter iterates over *all* configured boards with no artificial
+        # slice/cap — genuinely single-response-complete per board, and all
+        # boards are exhausted.
         tokens = configured_boards()
         boards: list[dict[str, Any]] = []
         failures: list[str] = []

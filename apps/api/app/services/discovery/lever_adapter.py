@@ -39,6 +39,13 @@ class LeverAdapter(BaseAdapter):
     source = "lever"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        # Pagination audit (2026-07-25): Lever's public v0 postings endpoint
+        # (`GET /v0/postings/<slug>?mode=json`) returns ALL published postings
+        # for a company in a single flat JSON array (e.g. Spotify returns 108
+        # postings at once).  The authenticated v1 API has pagination, but the
+        # public v0 endpoint used here is genuinely single-response-complete.
+        # The adapter iterates over *all* configured companies with no
+        # artificial slice/cap — all companies are exhausted.
         slugs = configured_companies()
         companies: list[dict[str, Any]] = []
         failures: list[str] = []

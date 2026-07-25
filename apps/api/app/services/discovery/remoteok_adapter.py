@@ -19,6 +19,11 @@ class RemoteOkAdapter(BaseAdapter):
     source = "remoteok"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        # Pagination audit (2026-07-25): RemoteOK's ``/api`` endpoint returns
+        # the ENTIRE board as a single flat JSON array (the first element is a
+        # legal notice, not a job).  There is no pagination mechanism — no
+        # ``page``, ``offset``, ``limit``, or ``next`` parameter exists on
+        # this endpoint.  Genuinely single-response-complete.
         payload = fetch_json("https://remoteok.com/api")
         return {"jobs": payload} if isinstance(payload, list) else {"jobs": []}
 
