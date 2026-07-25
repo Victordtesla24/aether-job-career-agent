@@ -96,6 +96,34 @@ export async function movePipelineJob(
   );
 }
 
+// ---- FEAT-CLEAR: Clear Pipeline (archive all agent-pipeline job cards) ------
+
+const ClearPipelineResultSchema = z.object({
+  archived: z.number(),
+  jobIds: z.array(z.string()),
+});
+
+export type ClearPipelineResult = z.infer<typeof ClearPipelineResultSchema>;
+
+/**
+ * Archive every agent-pipeline job card (Discovered / Evaluating / Tailoring
+ * columns — jobs with no application yet). POST /applications/pipeline/clear.
+ * Soft-archive only; jobs stay recoverable in the history view. The server
+ * rejects the call without ``confirm: true``; the UI must show a confirmation
+ * gate first.
+ */
+export async function clearPipeline(
+  options: RequestOptions = {},
+): Promise<ClearPipelineResult> {
+  return ClearPipelineResultSchema.parse(
+    await apiRequest<unknown>("/applications/pipeline/clear", {
+      ...options,
+      method: "POST",
+      body: { confirm: true },
+    }),
+  );
+}
+
 // ---- Canonical sankey (REQ-R2: 847 → 412 → 156 → 23 → 4) -------------------
 
 const SankeyStageSchema = z.object({

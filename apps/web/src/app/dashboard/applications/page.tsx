@@ -20,6 +20,7 @@ import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
 import {
+  clearPipeline,
   fetchAgentConfig,
   fetchAppliedApplications,
   fetchSankey,
@@ -28,6 +29,7 @@ import {
   moveApplication,
   movePipelineJob,
   type AgentConfig,
+  type ClearPipelineResult,
   type SankeyData,
   type TrackerApplication,
 } from "../../../components/applications/tracker-api";
@@ -344,6 +346,15 @@ export default function ApplicationsPage() {
   const [appliedApps, setAppliedApps] = useState<TrackerApplication[] | null>(null);
   const [appliedError, setAppliedError] = useState<string | null>(null);
 
+  // Clear Pipeline confirmation gate — mirrors the bulk-apply gate pattern
+  // from the Jobs page (MV-job-discovery-002): irreversible action, explicit
+  // confirm required, focus trap + ESC-close.
+  const [clearGateOpen, setClearGateOpen] = useState(false);
+  const [clearSubmitting, setClearSubmitting] = useState(false);
+  const [clearResult, setClearResult] = useState<ClearPipelineResult | null>(null);
+  const clearGateTriggerRef = useRef<HTMLElement | null>(null);
+  const clearGateConfirmRef = useRef<HTMLButtonElement | null>(null);
+
   const load = useCallback(async () => {
     try {
       setApps(await fetchTrackerApplications());
@@ -447,6 +458,45 @@ export default function ApplicationsPage() {
     }
   };
 
+  // Clear Pipeline gate — mirrored from the bulk-apply confirmation gate
+  // pattern on the Jobs page (MV-job-discovery-002 § lines 562-621).
+  const openClearGate = (trigger: HTMLElement | null) => {
+    clearGateTriggerRef.current = trigger;
+    setClearResult(null);
+    setClearGateOpen(true);
+  };
+  const closeClearGate = useCallback(() => {
+    setClearGateOpen(false);
+    clearGateTriggerRef.current?.focus?.();
+  }, []);
+
+  const confirmClearPipeline = async () => {
+    setClearSubmitting(true);
+    setError(null);
+    try {
+      const result = await clearPipeline();
+      setClearResult(result);
+      // Reload the board immediately so it shows the empty state.
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to clear pipeline");
+      setClearGateOpen(false);
+    } finally {
+      setClearSubmitting(false);
+    }
+  };
+
+  // Modal a11y: focus the confirm button on open; ESC closes.
+  useEffect(() => {
+    if (!clearGateOpen) return;
+    clearGateConfirmRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeClearGate();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [clearGateOpen, closeClearGate]);
+
   /**
    * FEAT-B2: move a card to another stage — optimistic local update, honest
    * rollback on failure, then a full reload so column counts, badges and the
@@ -524,6 +574,13 @@ export default function ApplicationsPage() {
   const stages = viewStages(buildStages(apps ?? [], jobs), filter, sort, pendingApprovalIds);
   const closed = (apps ?? []).filter((a) => a.status === "rejected" || a.status === "withdrawn");
   const activeCount = stages.reduce((n, s) => n + s.cards.length, 0);
+  // Pipeline job cards live in the first 3 columns (Discovered / Evaluating /
+  // Tailoring) — the agent-fed half of the board. Only show the Clear Pipeline
+  // button when there is at least one such card to clear; an empty pipeline
+  // should not offer a destructive button with nothing to act on.
+  const pipelineJobCount = stages
+    .filter((s) => s.key === "discovered" || s.key === "evaluating" || s.key === "tailoring")
+    .reduce((n, s) => n + s.cards.length, 0);
   const autoApplyOn = agentConfig?.autoApply ?? false;
   const threshold = agentConfig?.matchThreshold ?? 85;
 
@@ -594,6 +651,21 @@ export default function ApplicationsPage() {
             value={sort}
             onSelect={setSort}
           />
+          {view === "board" && pipelineJobCount > 0 ? (
+            <button
+              type="button"
+              data-testid="clear-pipeline-btn"
+              onClick={(e) => openClearGate(e.currentTarget)}
+              aria-label={`Clear pipeline — archive ${pipelineJobCount} pipeline job${
+                pipelineJobCount === 1 ? "" : "s"
+              } in Discovered, Evaluating and Tailoring`}
+              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/20 hover:text-red-200 max-sm:min-h-[44px]"
+            >
+              <i className="fa-solid fa-trash-can text-[10px]" aria-hidden="true" />
+              Clear Pipeline
+              <span className="mono text-[10px] text-red-400/70">{pipelineJobCount}</span>
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -984,6 +1056,83 @@ export default function ApplicationsPage() {
           )}
         </section>
       )}
+
+      {/* Clear Pipeline confirmation gate — mirrors the bulk-apply gate
+          pattern from the Jobs page (MV-job-discovery-002): irreversible
+          action, explicit confirm, focus trap + ESC-close a11y. */}
+      {clearGateOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="clear-pipeline-gate">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeClearGate} aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clearGateTitle"
+            className="glass-raised relative w-[520px] max-w-[92vw] rounded-2xl border border-red-500/40 p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/15 text-red-400">
+                ⚠️
+              </span>
+              <div className="flex-1">
+                <h3 id="clearGateTitle" className="text-base font-semibold leading-snug">
+                  Clear the entire pipeline?
+                </h3>
+                <p className="mt-1 text-[12px] text-aether-muted">
+                  This will <span className="font-semibold text-red-300">archive</span>{" "}
+                  <span className="text-[#C7C7D6]">ALL</span> jobs still sitting in the
+                  agent-driven pipeline columns — Discovered, Evaluating and Tailoring.
+                  Archived jobs are soft-deleted (recoverable in the history view), not
+                  destroyed. Your applications, the Ready-to-Apply through Offer columns,
+                  and closed items (rejected / withdrawn) are{" "}
+                  <span className="text-[#C7C7D6]">left untouched</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeClearGate}
+                aria-label="Close"
+                className="text-aether-muted transition hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {clearResult ? (
+              <div
+                className="mt-4 flex items-center gap-2 rounded-xl border border-aether-green/25 bg-aether-green/10 px-3.5 py-2.5 text-[12px]"
+                data-testid="clear-pipeline-success"
+                role="status"
+              >
+                ✓ Archived {clearResult.archived} pipeline job
+                {clearResult.archived === 1 ? "" : "s"}. The Discovered,
+                Evaluating and Tailoring columns are now empty — applications
+                and closed items were left untouched.
+              </div>
+            ) : (
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  data-testid="clear-pipeline-cancel"
+                  onClick={closeClearGate}
+                  className="glass-raised rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20"
+                >
+                  Cancel
+                </button>
+                <button
+                  ref={clearGateConfirmRef}
+                  type="button"
+                  data-testid="clear-pipeline-confirm"
+                  onClick={() => void confirmClearPipeline()}
+                  disabled={clearSubmitting}
+                  className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+                >
+                  {clearSubmitting ? "Clearing…" : "✕ Yes, Archive Pipeline Jobs"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

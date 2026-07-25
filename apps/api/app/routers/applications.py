@@ -381,6 +381,93 @@ def move_application(
     return get_application(application_id, current_user)
 
 
+# ---- Clear Pipeline (FEAT-CLEAR): archive every agent-pipeline job card ----
+#
+# The board's first 3 columns (Discovered / Evaluating / Tailoring) are fed by
+# Job.status — the agent-driven pipeline half. "Clear Pipeline" archives every
+# one of the user's jobs still sitting in that half (status IN discovered /
+# screening / matched / tailoring) AND with no application yet, in one audited
+# transaction. Soft-archive only (jobs are never destroyed — see DELETE
+# /jobs/{id}); the rows stay recoverable in the history view. Jobs that already
+# have an application are untouched — they left the pipeline half when the
+# application was created and now live on the application-fed side of the
+# board, where each card is a real application the user chose to track.
+
+#: Job.status values that render in the 3 pipeline-fed columns.
+_PIPELINE_JOB_STATUSES = ("discovered", "screening", "matched", "tailoring")
+
+
+class ClearPipelineRequest(BaseModel):
+    """Optional confirm flag so the client signals the user saw the gate."""
+
+    confirm: bool = Field(
+        default=False, description="Must be true — the UI confirms first."
+    )
+
+
+@router.post("/pipeline/clear")
+def clear_pipeline(
+    body: ClearPipelineRequest, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Archive every agent-pipeline job card (FEAT-CLEAR).
+
+    Idempotent: an empty pipeline is a 200 with ``archived=0``. Only the 3
+    pipeline-fed columns are touched — applications, closed cards and already
+    applied/archived jobs are never modified. Every archived job is recorded
+    in the audit log as ``job.pipeline_clear`` so the action is traceable to
+    the actor even though no single ``target_id`` covers a bulk delete.
+    """
+    if not body.confirm:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Confirmation required — set confirm=true to clear the pipeline.",
+        )
+    uid = current_user["id"]
+    archived_ids: list[str] = []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Pipeline jobs WITH no application — the visible board cards in
+            # Discovered/Evaluating/Tailoring. Jobs that already have an
+            # application left the pipeline half and must be left alone.
+            cur.execute(
+                f'''
+                SELECT j."id" FROM "Job" j
+                WHERE j."userId" = %s
+                  AND j."status" IN ({",".join(
+                      f"%s::\"JobStatus\"" for _ in _PIPELINE_JOB_STATUSES
+                  )})
+                  AND NOT EXISTS (
+                      SELECT 1 FROM "Application" a
+                      WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+                  )
+                ''',
+                (uid, *_PIPELINE_JOB_STATUSES),
+            )
+            ids = [r[0] for r in cur.fetchall()]
+            if ids:
+                cur.execute(
+                    f'''
+                    UPDATE "Job"
+                    SET "status" = 'archived'::"JobStatus", "updatedAt" = NOW()
+                    WHERE "userId" = %s AND "id" = ANY(%s)
+                    ''',
+                    (uid, ids),
+                )
+                from app.repositories.admin import write_audit
+
+                write_audit(
+                    uid,
+                    "job.pipeline_clear",
+                    target_type="job",
+                    target_id=None,
+                    detail={"archived_count": len(ids), "job_ids": ids},
+                    cur=cur,
+                )
+                archived_ids = ids
+            conn.commit()
+    return {"archived": len(archived_ids), "jobIds": archived_ids}
+
+
 @router.post("/{application_id}/submit")
 def submit_application(
     application_id: str, body: SubmitRequest, current_user: CurrentUser
