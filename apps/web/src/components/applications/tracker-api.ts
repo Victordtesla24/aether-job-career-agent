@@ -140,3 +140,35 @@ export async function fetchAgentConfig(
   );
   return AgentConfigSchema.parse(settings.agentConfig);
 }
+
+// ---- Clear Pipeline (DELETE /jobs/clear-pipeline?confirm=true) -------------
+
+const ClearPipelineResultSchema = z.object({
+  jobsDeleted: z.number(),
+  applicationsDeleted: z.number(),
+});
+
+export type ClearPipelineResult = z.infer<typeof ClearPipelineResultSchema>;
+
+/**
+ * Irreversibly delete every job and application in the pipeline.
+ *
+ * The backend requires an explicit `?confirm=true` query parameter as a
+ * double-check gate — this client always sends it because the user has
+ * already passed through the frontend confirmation modal.
+ *
+ * NOTE: The exact endpoint path (DELETE /jobs/clear-pipeline) is assumed by
+ * contract with the backend teammate implementing this feature in a separate
+ * worktree. If the final path differs slightly when it lands, this is a
+ * 1-line fix in the URL string below.
+ */
+export async function clearPipeline(
+  options: RequestOptions = {},
+): Promise<ClearPipelineResult> {
+  return ClearPipelineResultSchema.parse(
+    await apiRequest<unknown>("/jobs/clear-pipeline?confirm=true", {
+      ...options,
+      method: "DELETE",
+    }),
+  );
+}

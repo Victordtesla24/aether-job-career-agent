@@ -172,3 +172,153 @@ describe("Tracker header label honesty (MV-adv-A-001)", () => {
     expect(subtitle.textContent?.toLowerCase()).not.toMatch(/active application/);
   });
 });
+
+describe("Clear Pipeline confirmation gate", () => {
+  it("opens the confirmation modal when 'Clear Pipeline' is clicked", async () => {
+    render(<ApplicationsPage />);
+    await screen.findByTestId("applications-kanban");
+
+    // Modal should not be visible initially.
+    expect(screen.queryByTestId("clear-pipeline-gate")).toBeNull();
+
+    // Click the Clear Pipeline button.
+    fireEvent.click(screen.getByTestId("clear-pipeline-btn"));
+
+    // Modal should now be visible with the confirm and cancel buttons.
+    expect(screen.getByTestId("clear-pipeline-gate")).not.toBeNull();
+    expect(screen.getByTestId("clear-pipeline-confirm")).not.toBeNull();
+    expect(screen.getByTestId("clear-pipeline-cancel")).not.toBeNull();
+    expect(screen.getByText("Clear the entire pipeline?")).not.toBeNull();
+    expect(screen.getByText("irreversible")).not.toBeNull();
+  });
+
+  it("closes the modal without calling the API when Cancel is clicked", async () => {
+    // Track whether clear-pipeline endpoint was called.
+    let clearCalled = false;
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return [APP_FIXTURE];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      if (path.startsWith("/jobs/clear-pipeline")) {
+        clearCalled = true;
+        return { jobsDeleted: 5, applicationsDeleted: 3 };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+    await screen.findByTestId("applications-kanban");
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-btn"));
+    expect(screen.getByTestId("clear-pipeline-gate")).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-cancel"));
+
+    // Modal should close.
+    expect(screen.queryByTestId("clear-pipeline-gate")).toBeNull();
+    // API should NOT have been called.
+    expect(clearCalled).toBe(false);
+  });
+
+  it("closes the modal without calling the API when Escape is pressed", async () => {
+    let clearCalled = false;
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return [APP_FIXTURE];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      if (path.startsWith("/jobs/clear-pipeline")) {
+        clearCalled = true;
+        return { jobsDeleted: 5, applicationsDeleted: 3 };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+    await screen.findByTestId("applications-kanban");
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-btn"));
+    expect(screen.getByTestId("clear-pipeline-gate")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // Modal should close.
+    expect(screen.queryByTestId("clear-pipeline-gate")).toBeNull();
+    // API should NOT have been called.
+    expect(clearCalled).toBe(false);
+  });
+
+  it("calls clearPipeline on confirm and shows success with returned counts", async () => {
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return [APP_FIXTURE];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      if (path === "/jobs/clear-pipeline?confirm=true") {
+        return { jobsDeleted: 7, applicationsDeleted: 12 };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+    await screen.findByTestId("applications-kanban");
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-btn"));
+    expect(screen.getByTestId("clear-pipeline-gate")).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-confirm"));
+
+    // The success message should appear with the counts from the API response.
+    const success = await screen.findByTestId("clear-pipeline-success");
+    expect(success.textContent).toContain("7");
+    expect(success.textContent).toContain("12");
+    expect(success.textContent).toContain("jobs");
+    expect(success.textContent).toContain("applications");
+
+    // Confirm button should be gone (replaced by success state).
+    expect(screen.queryByTestId("clear-pipeline-confirm")).toBeNull();
+
+    // The API should have been called.
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/jobs/clear-pipeline?confirm=true",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("shows error on failed clearPipeline call and keeps the modal open state cleared", async () => {
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return [APP_FIXTURE];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      if (path === "/jobs/clear-pipeline?confirm=true") {
+        throw new Error("Server error: database connection lost");
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+    await screen.findByTestId("applications-kanban");
+
+    fireEvent.click(screen.getByTestId("clear-pipeline-btn"));
+    fireEvent.click(screen.getByTestId("clear-pipeline-confirm"));
+
+    // The modal should close on failure (per the gate pattern — error is shown
+    // in the page-level error banner, not in the modal).
+    await screen.findByText("Server error: database connection lost");
+    expect(screen.queryByTestId("clear-pipeline-gate")).toBeNull();
+
+    // The kanban board should still be visible (not optimistically cleared).
+    expect(screen.getByTestId("applications-kanban")).not.toBeNull();
+    expect(screen.getByText("Senior Product Owner")).not.toBeNull();
+  });
+});
