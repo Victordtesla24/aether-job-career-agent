@@ -120,7 +120,7 @@ class TestSweepProcessesWholeBoard:
         summary = board_sweep.sweep_user_stretch(user_id, deadline=_far_deadline())
         assert summary == {
             "user_id": user_id, "processed": 0, "tailored": 0, "covers": 0,
-            "failures": 0, "reason": "board-complete",
+            "failures": 0, "reason": "board-complete", "skipped_failures": 0,
         }
 
     def test_unscored_discovered_jobs_are_not_touched(
@@ -265,3 +265,107 @@ class TestEligibilityAndCron:
         n = asyncio.run(board_sweep.board_sweep_cron({"redis": _Redis()}))
         assert n >= 1
         assert ("board_sweep_user", f"board-sweep:{user_id}") in seen
+
+
+class TestCoverFailureBackoff:
+    """RT-007 hotfix: a job whose coverLetter draft is PERMANENTLY
+    unfabricatable (FabricationGuard correctly rejecting every attempt) must
+    NOT be retried every cron tick forever — 13+ failed attempts over 14h
+    observed in production before this fix. The sweep backs off after
+    ``max_cover_failures()`` failures in a sliding window.
+    """
+
+    def _seed_failed_cover_runs(self, conn, user_id: str, job_id: str, n: int) -> None:
+        """Seed ``n`` failed coverLetter AgentRun rows for this job+user."""
+        import uuid as _uuid
+
+        with conn.cursor() as cur:
+            for _ in range(n):
+                run_id = "c" + _uuid.uuid4().hex[:24]
+                cur.execute(
+                    'INSERT INTO "AgentRun" '
+                    '("id","userId","agentName","status","input","createdAt","startedAt") '
+                    "VALUES (%s,%s,'coverLetter','failed'::\"AgentRunStatus\",%s,NOW(),NOW())",
+                    (run_id, user_id, json.dumps({"job_id": job_id})),
+                )
+        conn.commit()
+
+    def test_job_skipped_after_max_cover_failures(
+        self, db_session, user_id, monkeypatch
+    ):
+        """A job with ``max_cover_failures()`` coverLetter failures in the
+        window is PERMANENTLY skipped — the sweep does not retry it."""
+        bad = _seed_job(db_session, user_id, fit=95.0)
+        good = _seed_job(db_session, user_id, fit=50.0)
+        # Seed exactly MAX_COVER_FAILURES failed cover runs for `bad`.
+        self._seed_failed_cover_runs(db_session, user_id, bad,
+                                     board_sweep.MAX_COVER_FAILURES)
+        calls: list[str] = []
+        monkeypatch.setattr(
+            board_sweep, "_run_agent",
+            lambda uid, agent, params: calls.append(params["job_id"]) or {},
+        )
+        summary = board_sweep.sweep_user_stretch(user_id, deadline=_far_deadline())
+        # `good` was processed; `bad` was skipped.
+        assert good in calls
+        assert bad not in calls
+        assert summary["processed"] == 1
+        # `bad` remains on the board but saturated — honest reason.
+        assert summary["reason"] == "skipped-failures"
+        assert summary["skipped_failures"] == 1
+
+    def test_failure_below_threshold_still_processed(
+        self, db_session, user_id, monkeypatch
+    ):
+        """A job with fewer than ``max_cover_failures()`` failures is still
+        eligible — the backoff only kicks in AT the threshold, not below it."""
+        job = _seed_job(db_session, user_id, fit=80.0)
+        # Seed MAX_COVER_FAILURES - 1 failures — below threshold.
+        self._seed_failed_cover_runs(db_session, user_id, job,
+                                     board_sweep.MAX_COVER_FAILURES - 1)
+        calls: list[str] = []
+        monkeypatch.setattr(
+            board_sweep, "_run_agent",
+            lambda uid, agent, params: calls.append(params["job_id"]) or {},
+        )
+        summary = board_sweep.sweep_user_stretch(user_id, deadline=_far_deadline())
+        assert job in calls
+        assert summary["processed"] == 1
+
+    def test_skipped_failures_reason_when_all_jobs_saturated(
+        self, db_session, user_id, monkeypatch
+    ):
+        """When ALL eligible jobs are failure-saturated, the summary reason is
+        ``skipped-failures`` (not ``board-complete``) so the operator can tell
+        the sweep is backing off, not done."""
+        bad = _seed_job(db_session, user_id, fit=95.0)
+        self._seed_failed_cover_runs(db_session, user_id, bad,
+                                     board_sweep.MAX_COVER_FAILURES)
+        monkeypatch.setattr(
+            board_sweep, "_run_agent",
+            lambda *a, **k: pytest.fail("saturated job must not be attempted"),
+        )
+        summary = board_sweep.sweep_user_stretch(user_id, deadline=_far_deadline())
+        assert summary["reason"] == "skipped-failures"
+        assert summary["skipped_failures"] == 1
+        assert summary["processed"] == 0
+
+    def test_cover_failure_count_helper(self, db_session, user_id):
+        """The ``_cover_failure_count`` helper counts failed coverLetter
+        AgentRuns for this job+user in the window."""
+        job = _seed_job(db_session, user_id, fit=80.0)
+        assert board_sweep._cover_failure_count(user_id, job) == 0
+        self._seed_failed_cover_runs(db_session, user_id, job, 2)
+        assert board_sweep._cover_failure_count(user_id, job) == 2
+
+    def test_env_tunable_max_failures(self, db_session, user_id, monkeypatch):
+        """``AETHER_BOARD_SWEEP_MAX_COVER_FAILURES`` tightens/loosens the
+        backoff threshold without a redeploy."""
+        job = _seed_job(db_session, user_id, fit=80.0)
+        monkeypatch.setenv("AETHER_BOARD_SWEEP_MAX_COVER_FAILURES", "5")
+        self._seed_failed_cover_runs(db_session, user_id, job, 3)
+        # 3 failures < threshold 5 — still eligible.
+        assert board_sweep._cover_failure_count(user_id, job) == 3
+        assert board_sweep.max_cover_failures() == 5
+        target = board_sweep._next_target(user_id, set())
+        assert target is not None and target["job_id"] == job
