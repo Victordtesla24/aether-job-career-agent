@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field
 from app.db import get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.routers.analytics import get_application_counts
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -301,6 +304,18 @@ def move_pipeline_job(
                     cur=cur,
                 )
             conn.commit()
+    # RT-008 event-driven trigger: a card moved into evaluating or tailoring
+    # is exactly the signal that creates board-sweep work — enqueue a sweep
+    # NOW instead of waiting up to 10 minutes for the next cron tick. The
+    # cron remains the floor: best-effort, never blocks or surfaces an
+    # enqueue failure to the user making the move.
+    if from_status != new_status and new_status in ("screening", "tailoring"):
+        try:
+            from app.workers.board_sweep import enqueue_user_sweep
+
+            enqueue_user_sweep(uid)
+        except Exception:  # noqa: BLE001 — best-effort; cron still fires
+            logger.exception("job.stage_move %s: sweep trigger failed", job_id)
     return {"id": job_id, "status": new_status, "stage": body.to_stage}
 
 

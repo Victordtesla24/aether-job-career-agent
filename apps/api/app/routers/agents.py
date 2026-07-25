@@ -1455,7 +1455,55 @@ def run_fit_scorer(
         current_user["id"], "fitScorer", {"rescore": rescore},
         system_run=_is_system_run(request),
     )
+    # Event-driven trigger (RT-008): fit-scorer completion is the event that
+    # creates board work — jobs move from "discovered" to "screening" with a
+    # fitScore, which is exactly what the board sweep consumes. Enqueue a sweep
+    # stretch NOW instead of waiting up to 10 minutes for the next cron tick.
+    # Best-effort: the cron is the floor; a transient enqueue failure must not
+    # taint the honest fit-scorer result the caller already paid for.
+    if int(output.get("scored") or 0) > 0:
+        try:
+            from app.workers.board_sweep import enqueue_user_sweep
+
+            enqueue_user_sweep(current_user["id"])
+        except Exception:  # noqa: BLE001 — best-effort; cron still fires
+            pass
     return {"status": "completed", "scored": output["scored"], "errors": output["errors"]}
+
+
+@router.post("/board-sweep/trigger", status_code=status.HTTP_202_ACCEPTED)
+def trigger_board_sweep(
+    current_user: CurrentUser, request: Request
+) -> dict[str, Any]:
+    """Event-driven trigger: enqueue a board-sweep stretch for the caller NOW.
+
+    Closes the latency gap between discovery (scout + fit-scorer, which run
+    synchronously on the 30-minute discovery timer) and the board sweep (which
+    otherwise runs on a SEPARATE 10-minute ARQ cron). The operator can also hit
+    this endpoint manually to nudge a user's board forward without waiting for
+    the next cron tick.
+
+    Gated by the same ``AETHER_BOARD_SWEEP_ENABLED`` kill-switch as the cron,
+    and a no-op (200 ``{"status":"skipped"}``) when the user has no actionable
+    board work — so a scout that found nothing, or a board that's already
+    complete, does not enqueue an empty stretch.
+
+    ``system_run`` is honored for parity with the discovery cron path (scout /
+    fit-scorer are ``_SYSTEM_RUN_EXEMPT_AGENTS``), but this endpoint only
+    ENQUEUES the sweep — the sweep itself is the one that calls ``_run_agent``
+    with ``system_run=True, skip_quota=True``, so the user's paid quota is
+    never consumed (RT-007). The idempotent ``_job_id`` dedup the cron uses is
+    reused here, so an event trigger racing the cron can never stack a second
+    concurrent sweep for the same user.
+    """
+    from app.workers.board_sweep import enqueue_user_sweep, sweep_enabled
+
+    if not sweep_enabled():
+        return {"status": "skipped", "reason": "board-sweep disabled"}
+    job_id = enqueue_user_sweep(current_user["id"])
+    if job_id is None:
+        return {"status": "skipped", "reason": "no board work or deduped"}
+    return {"status": "enqueued", "job_id": job_id}
 
 
 class JobTargetRequest(BaseModel):
