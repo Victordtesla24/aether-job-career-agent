@@ -45,6 +45,22 @@ const SEGMENT_CLASS = {
   ungrounded: "rounded bg-[#FBBF24]/30 px-0.5",
 } as const;
 
+/**
+ * Cover-letter brand palette — mirrors the uploaded/tailored resume format
+ * (resume_pdf.py branded template) so the cover letter reads as the same
+ * visual identity across the product.
+ *   peach panel  #FCD9CF  — letterhead band behind the candidate's name
+ *   coral accent #F4715C  — 3pt rule at the panel foot
+ *   coral wash   #FF6B35  — changed-line highlight (matches resume swap wash)
+ *   ink          #2B2B2B  — body / heading text
+ *   muted ink    #2B2B2B  — bold lead-in weight
+ *   muted grey   #4D4D4D  — sub-text / contact lines
+ */
+const CL_PANEL = "#FCD9CF";
+const CL_ACCENT = "#F4715C";
+const CL_INK = "#2B2B2B";
+const CL_MUTED = "#4D4D4D";
+
 export default function CoverLettersPage() {
   const [letters, setLetters] = useState<CoverLetter[] | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -404,20 +420,51 @@ export default function CoverLettersPage() {
                           page
                         </span>
                       </div>
-                      <div className="mx-auto max-w-[720px] whitespace-pre-line rounded-xl bg-[#F7F7FB] p-8 text-sm leading-relaxed text-[#1A1A24] shadow-lg">
-                        {segments.map((seg, i) =>
-                          seg.kind === "plain" ? (
-                            <span key={i}>{seg.text}</span>
-                          ) : (
-                            <mark
-                              key={i}
-                              data-testid={`highlight-${seg.kind}`}
-                              className={`${SEGMENT_CLASS[seg.kind]} text-[#1A1A24]`}
-                            >
-                              {seg.text}
-                            </mark>
-                          ),
-                        )}
+                      {/*
+                        Brand-matched preview (resume_pdf.py branded template):
+                        peach #FCD9CF letterhead panel with a coral #F4715C
+                        accent rule at its foot, ink #1A1A1A body on white —
+                        the same visual identity as the uploaded/tailored
+                        resume, so the cover letter reads as one product.
+                      */}
+                      <div
+                        className="mx-auto max-w-[720px] overflow-hidden rounded-xl bg-white shadow-lg"
+                        style={{ border: `1px solid ${CL_PANEL}` }}
+                      >
+                        <div
+                          className="px-8 py-5"
+                          style={{ backgroundColor: CL_PANEL }}
+                        >
+                          <p
+                            className="text-lg font-bold leading-tight"
+                            style={{ color: CL_INK }}
+                          >
+                            {job ? `${job.title} · Cover Letter` : "Cover Letter"}
+                          </p>
+                          <p className="mt-0.5 text-xs" style={{ color: CL_MUTED }}>
+                            {jobLabel}
+                          </p>
+                        </div>
+                        <div style={{ height: 3, backgroundColor: CL_ACCENT }} />
+                        <div
+                          className="whitespace-pre-line px-8 py-6 text-sm leading-relaxed"
+                          style={{ color: CL_INK }}
+                        >
+                          {segments.map((seg, i) =>
+                            seg.kind === "plain" ? (
+                              <span key={i}>{seg.text}</span>
+                            ) : (
+                              <mark
+                                key={i}
+                                data-testid={`highlight-${seg.kind}`}
+                                className={`${SEGMENT_CLASS[seg.kind]}`}
+                                style={{ color: CL_INK }}
+                              >
+                                {seg.text}
+                              </mark>
+                            ),
+                          )}
+                        </div>
                       </div>
                     </div>
                   ) : null}

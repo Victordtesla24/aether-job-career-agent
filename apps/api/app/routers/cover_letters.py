@@ -804,11 +804,16 @@ def refine_cover_letter(
 
 
 # --- Business-letter PDF export (light, submission-ready) --------------------
-#: Neutral print palette — dark ink on white, no third-party/tool branding
-#: and no AI-generated disclosure (GAP-P4-048): the output is submission-ready.
-_PDF_INK = "#1A1A1A"
-_PDF_MUTED = "#555555"
+#: Brand-matched palette — mirrors the uploaded/tailored resume format
+#: (resume_pdf.py branded template) so the exported cover letter carries the
+#: same visual identity as the resume. Peach panel header, coral accent rule,
+#: ink body — no third-party/tool branding, no AI-generated disclosure
+#: (GAP-P4-048): the output is submission-ready.
+_PDF_INK = "#2B2B2B"
+_PDF_MUTED = "#4D4D4D"
 _PDF_RULE = "#CCCCCC"
+_PDF_PANEL = "#FCD9CF"      # peach title panel (resume_pdf._PANEL_HEX)
+_PDF_ACCENT = "#F4715C"     # coral accent rule (resume_pdf._ACCENT_HEX)
 
 #: Vendored fonts live beside the app package so export works off-CDN in CI/prod.
 _FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
@@ -863,6 +868,7 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
 
     regular, bold = _pdf_fonts()
     ink, muted, rule = HexColor(_PDF_INK), HexColor(_PDF_MUTED), HexColor(_PDF_RULE)
+    panel, accent = HexColor(_PDF_PANEL), HexColor(_PDF_ACCENT)
 
     buf = io.BytesIO()
     page = pdf_canvas.Canvas(buf, pagesize=A4)
@@ -894,17 +900,28 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
         if buff:
             _line(buff, font, size, color)
 
-    # Sender contact block — the candidate's own identity heads the letter.
+    # --- Brand letterhead: peach panel + coral accent rule ----------------
+    # Matches resume_pdf.py's branded template so the cover letter carries
+    # the same visual identity as the uploaded/tailored resume.
+    panel_h = 18 * mm
+    page.setFillColor(panel)
+    page.rect(margin, y - panel_h + 4 * mm, usable, panel_h, fill=1, stroke=0)
     name, contact_lines = _sender_block(current_user)
+    text_y = y - 4 * mm
     if name:
-        _line(name, bold, 14, ink)
-        y -= 1 * mm
+        page.setFillColor(ink)
+        page.setFont(bold, 14)
+        page.drawString(margin + 5 * mm, text_y, name)
+        text_y -= 5 * mm
     for contact_line in contact_lines:
-        _line(contact_line, regular, 9.5, muted)
-    y -= 5 * mm
-    page.setStrokeColor(rule)
-    page.setLineWidth(0.6)
-    page.line(margin, y, width - margin, y)
+        page.setFillColor(muted)
+        page.setFont(regular, 9.5)
+        page.drawString(margin + 5 * mm, text_y, contact_line)
+        text_y -= 4.5 * mm
+    y -= panel_h
+    # Coral accent rule at the panel foot.
+    page.setFillColor(accent)
+    page.rect(margin, y, usable, 2.5, fill=1, stroke=0)
     y -= 9 * mm
 
     # Letter content: date, addressee, salutation, body, sign-off — parsed from

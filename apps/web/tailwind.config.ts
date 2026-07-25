@@ -21,6 +21,8 @@ const config: Config = {
           muted: "#A0A0B8",
           "muted-dim": "#8B8BA3",
           coral: "#FF6B35",
+          "coral-accent": "#F4715C",
+          peach: "#FCD9CF",
           amber: "#F59E0B",
           indigo: "#4F46E5",
           violet: "#7C3AED",
