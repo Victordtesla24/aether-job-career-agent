@@ -376,6 +376,30 @@ export default function ApplicationsPage() {
     void load();
   }, [load]);
 
+  // Real-time board sync (HOTFIX realtime-board-refresh): the pipeline's
+  // first 3 stages (Discovered/Evaluating/Tailoring) are agent-driven —
+  // scout, fit-scorer and the board sweep advance Job.status server-side on
+  // their own schedule, with no user click in this tab to trigger a refetch.
+  // Without a periodic reload those cards visibly sit in a stale stage until
+  // the user manually reloads the page. Poll every 20s, paused while the tab
+  // is hidden, mirroring the existing sidebar.tsx (30s) / topbar.tsx (60s)
+  // idiom and the identical fix applied to the Jobs page.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let cancelled = false;
+    const tick = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      void load();
+    };
+    const timer = window.setInterval(tick, 20_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [load]);
+
   // Canonical sankey loads lazily the first time the view is opened.
   useEffect(() => {
     if (view !== "sankey" || sankey !== null) return;

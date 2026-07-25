@@ -286,6 +286,31 @@ export default function JobsPage() {
     void load();
   }, [load]);
 
+  // Real-time board sync (HOTFIX realtime-board-refresh): agents (scout,
+  // fit-scorer, tailor, board sweep) mutate Job rows server-side outside any
+  // click the user makes, and applying a job removes it from the active feed
+  // server-side too — without a periodic refetch the list only ever reflects
+  // the single mutation this tab itself just made, going stale the moment a
+  // background agent run (or another tab) advances a job. Poll every 20s
+  // (fast enough to feel live, well under the API's per-request cost) and
+  // pause while the tab is hidden so a backgrounded tab doesn't burn quota.
+  // Mirrors the existing sidebar.tsx (30s) / topbar.tsx (60s) polling idiom.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let cancelled = false;
+    const tick = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      void load();
+    };
+    const timer = window.setInterval(tick, 20_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [load]);
+
   // Lazily fetch insights for a job (cached; powers cards + detail panel).
   const fetchInsights = useCallback(async (jobId: string) => {
     if (insights[jobId] || insightsInFlight.current.has(jobId)) return;
