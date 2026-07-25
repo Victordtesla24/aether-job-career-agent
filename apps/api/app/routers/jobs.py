@@ -396,8 +396,27 @@ def toggle_save(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _cover_letter_for_apply(user_id: str, job_id: str) -> bool:
+    """True when Cover Letter Studio prepared a non-empty draft for this job."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM "Application" '
+                'WHERE "userId" = %s AND "jobId" = %s '
+                'AND "status" = \'draft\'::"ApplicationStatus" '
+                'AND NULLIF(BTRIM("coverLetter"), \'\') IS NOT NULL '
+                'LIMIT 1',
+                (user_id, job_id),
+            )
+            return cur.fetchone() is not None
+
+
 def _resume_for_apply(user_id: str, job_id: str) -> str | None:
-    """Pick the resume to apply with: a job-tailored one if present, else base."""
+    """Pick the resume to apply with: the most recent job-tailored one.
+
+    The submission gate (apply_to_job) requires a tailored resume, so the
+    base-resume fallback that once lived here is unreachable — kept minimal.
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -407,35 +426,29 @@ def _resume_for_apply(user_id: str, job_id: str) -> str | None:
                 (user_id, job_id),
             )
             rows = rows_to_dicts(cur)
-            if rows:
-                return rows[0]["id"]
-            cur.execute(
-                'SELECT "id" FROM "Resume" WHERE "userId" = %s '
-                'ORDER BY "version" ASC LIMIT 1',
-                (user_id,),
-            )
-            rows = rows_to_dicts(cur)
     return rows[0]["id"] if rows else None
 
 
-def _existing_application(user_id: str, job_id: str) -> str | None:
+def _existing_application(user_id: str, job_id: str) -> tuple[str, str] | None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "id" FROM "Application" WHERE "userId" = %s AND "jobId" = %s '
+                'SELECT "id", "status" FROM "Application" '
+                'WHERE "userId" = %s AND "jobId" = %s '
                 'ORDER BY "createdAt" DESC LIMIT 1',
                 (user_id, job_id),
             )
-            rows = rows_to_dicts(cur)
-    return rows[0]["id"] if rows else None
+            row = cur.fetchone()
+    return (row[0], row[1]) if row else None
 
 
 @router.post("/{job_id}/apply")
 def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     """Create an Application and advance the job to ``applied`` (idempotent).
 
-    Powers the Review & Apply submit gate on the Job Discovery screen. Uses the
-    user's job-tailored resume when one exists, otherwise their base resume.
+    Requires both a job-tailored resume and a non-empty Cover Letter Studio
+    draft before promoting the application to submitted. Already-submitted
+    applications remain idempotent.
     """
     user_id = current_user["id"]
     repository = JobRepository()
@@ -443,27 +456,44 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    application_id = _existing_application(user_id, job_id)
-    if application_id is None:
+    existing_application = _existing_application(user_id, job_id)
+    resume_id: str | None = None
+    if existing_application is not None and existing_application[1] != "draft":
+        application_id = existing_application[0]
+    else:
         resume_id = _resume_for_apply(user_id, job_id)
         if resume_id is None:
             raise HTTPException(
                 status_code=422,
-                detail="No resume available to apply with — create one first.",
+                detail="A tailored resume is required before applying. Tailor your resume first.",
             )
+        if not _cover_letter_for_apply(user_id, job_id):
+            raise HTTPException(
+                status_code=422,
+                detail="A cover letter is required before applying. Generate one in the Cover Letter Studio first.",
+            )
+
+        application_id = existing_application[0] if existing_application is not None else None
+    if application_id is None:
         application_id = new_id()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     '''
                     INSERT INTO "Application"
-                        ("id", "userId", "jobId", "resumeId", "status", "updatedAt")
-                    VALUES (%s, %s, %s, %s, %s::"ApplicationStatus", NOW())
+                        ("id", "userId", "jobId", "resumeId", "coverLetter", "status", "updatedAt")
+                    SELECT %s, %s, %s, %s, "coverLetter", %s::"ApplicationStatus", NOW()
+                    FROM "Application"
+                    WHERE "userId" = %s AND "jobId" = %s
+                      AND "status" = 'draft'::"ApplicationStatus"
+                      AND NULLIF(BTRIM("coverLetter"), '') IS NOT NULL
+                    ORDER BY "createdAt" DESC LIMIT 1
                     ''',
-                    (application_id, user_id, job_id, resume_id, "submitted"),
+                    (application_id, user_id, job_id, resume_id, "submitted", user_id, job_id),
                 )
             conn.commit()
-    else:
+    elif existing_application is not None and existing_application[1] == "draft":
+        assert resume_id is not None
         # RT-009: a pipeline/autopilot cover-letter step leaves a DRAFT
         # Application (the "Ready to Apply" card). Applying reused that draft's
         # id but historically left it at 'draft', so the applied job never
@@ -475,10 +505,11 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
                 cur.execute(
                     '''
                     UPDATE "Application"
-                    SET "status" = 'submitted'::"ApplicationStatus", "updatedAt" = NOW()
+                    SET "status" = 'submitted'::"ApplicationStatus", "resumeId" = %s,
+                        "updatedAt" = NOW()
                     WHERE "id" = %s AND "userId" = %s AND "status" = 'draft'
                     ''',
-                    (application_id, user_id),
+                    (resume_id, application_id, user_id),
                 )
             conn.commit()
 

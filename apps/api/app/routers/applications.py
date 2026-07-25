@@ -500,7 +500,7 @@ def submit_application(
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "status", "answers", "jobId" FROM "Application" '
+                'SELECT "status", "answers", "jobId", "coverLetter", "resumeId" FROM "Application" '
                 'WHERE "id" = %s AND "userId" = %s',
                 (application_id, current_user["id"]),
             )
@@ -508,6 +508,24 @@ def submit_application(
             if row is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
             if row[0] == "draft":
+                if not row[3] or not row[3].strip():
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "Cannot submit — this application has no cover letter. "
+                        "Generate one from the Cover Letter Studio.",
+                    )
+                cur.execute(
+                    'SELECT "sourceJobId" FROM "Resume" WHERE "id" = %s '
+                    'AND "userId" = %s',
+                    (row[4], current_user["id"]),
+                )
+                resume = cur.fetchone()
+                if resume is None or resume[0] != row[2]:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "Cannot submit — the attached resume is not tailored for this job. "
+                        "Tailor your resume first.",
+                    )
                 # RT-004 promotion guard — one active application per job (see
                 # move_application): submitting a second letter-version of an
                 # already-applied job would mint a duplicate board card.

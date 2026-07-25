@@ -58,17 +58,107 @@ def _seed_resume(conn, user_id: str, *, source_job_id: str | None, version: int)
     return resume_id
 
 
-def _seed_draft_app(conn, user_id: str, job_id: str, resume_id: str) -> str:
+def _seed_draft_app(
+    conn, user_id: str, job_id: str, resume_id: str, *, cover_letter: str | None = None
+) -> str:
     app_id = _uid()
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Application" ("id","userId","jobId","resumeId","status",'
-            "\"createdAt\",\"updatedAt\") VALUES (%s,%s,%s,%s,'draft'::\"ApplicationStatus\","
-            "NOW(),NOW())",
-            (app_id, user_id, job_id, resume_id),
+            '"coverLetter","createdAt","updatedAt") '
+            "VALUES (%s,%s,%s,%s,'draft'::\"ApplicationStatus\",%s,NOW(),NOW())",
+            (app_id, user_id, job_id, resume_id, cover_letter),
         )
     conn.commit()
     return app_id
+
+
+def _submit(client, app_id: str, auth_headers):
+    return client.post(
+        f"/applications/{app_id}/submit",
+        json={"applied_url": "https://example.com/apply"},
+        headers=auth_headers,
+    )
+
+
+class TestSubmissionValidationGate:
+    def test_apply_rejects_when_no_tailored_resume(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        _seed_resume(db_session, user_id, source_job_id=None, version=1)
+
+        response = client.post(f"/jobs/{job}/apply", headers=auth_headers)
+
+        assert response.status_code == 422
+        assert "tailored resume" in response.json()["detail"].lower()
+
+    def test_apply_rejects_when_no_cover_letter(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        _seed_resume(db_session, user_id, source_job_id=job, version=1)
+
+        response = client.post(f"/jobs/{job}/apply", headers=auth_headers)
+
+        assert response.status_code == 422
+        assert "cover letter" in response.json()["detail"].lower()
+
+    def test_apply_accepts_tailored_resume_and_cover_letter(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        draft = _seed_draft_app(
+            db_session, user_id, job, tailored, cover_letter="Dear hiring team"
+        )
+
+        response = client.post(f"/jobs/{job}/apply", headers=auth_headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["applicationId"] == draft
+
+    def test_submit_rejects_draft_without_cover_letter(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        draft = _seed_draft_app(db_session, user_id, job, tailored)
+
+        response = _submit(client, draft, auth_headers)
+
+        assert response.status_code == 422
+        assert "cover letter" in response.json()["detail"].lower()
+
+    def test_submit_rejects_draft_with_base_resume(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        base = _seed_resume(db_session, user_id, source_job_id=None, version=1)
+        draft = _seed_draft_app(
+            db_session, user_id, job, base, cover_letter="Dear hiring team"
+        )
+
+        response = _submit(client, draft, auth_headers)
+
+        assert response.status_code == 422
+        assert "not tailored" in response.json()["detail"].lower()
+
+    def test_submit_accepts_prepared_draft(
+        self, db_session, user_id, client, auth_headers
+    ):
+        job = _seed_job(db_session, user_id)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        draft = _seed_draft_app(
+            db_session, user_id, job, tailored, cover_letter="Dear hiring team"
+        )
+
+        response = _submit(client, draft, auth_headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "submitted"
+
+
 
 
 class TestApplyFlushesBoard:
@@ -76,8 +166,10 @@ class TestApplyFlushesBoard:
         self, db_session, user_id, client, auth_headers
     ):
         job = _seed_job(db_session, user_id, status="ready")
-        base = _seed_resume(db_session, user_id, source_job_id=None, version=1)
-        draft = _seed_draft_app(db_session, user_id, job, base)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        draft = _seed_draft_app(
+            db_session, user_id, job, tailored, cover_letter="Dear hiring team"
+        )
         resp = client.post(f"/jobs/{job}/apply", headers=auth_headers)
         assert resp.status_code == 200, resp.text
         # The reused application is now SUBMITTED, not a lingering draft.
@@ -85,7 +177,7 @@ class TestApplyFlushesBoard:
             cur.execute('SELECT "status" FROM "Application" WHERE "id" = %s', (draft,))
             assert cur.fetchone()[0] == "submitted"
         # And the board shows it in Submitted, never "Ready to Apply".
-        cards = client.get("/applications", headers=auth_headers).json()
+        cards = client.get("/applications?include_applied=true", headers=auth_headers).json()
         job_cards = [c for c in cards if c["jobId"] == job]
         assert len(job_cards) == 1
         assert job_cards[0]["status"] == "submitted"
@@ -94,7 +186,10 @@ class TestApplyFlushesBoard:
         self, db_session, user_id, client, auth_headers
     ):
         job = _seed_job(db_session, user_id, status="ready")
-        _seed_resume(db_session, user_id, source_job_id=None, version=1)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        _seed_draft_app(
+            db_session, user_id, job, tailored, cover_letter="Dear hiring team"
+        )
         client.post(f"/jobs/{job}/apply", headers=auth_headers)
         after = client.get("/jobs?include_stale=true", headers=auth_headers).json()
         status = next(j["status"] for j in after if j["id"] == job)
@@ -104,10 +199,13 @@ class TestApplyFlushesBoard:
         self, db_session, user_id, client, auth_headers
     ):
         job = _seed_job(db_session, user_id, status="ready")
-        _seed_resume(db_session, user_id, source_job_id=None, version=1)
+        tailored = _seed_resume(db_session, user_id, source_job_id=job, version=1)
+        _seed_draft_app(
+            db_session, user_id, job, tailored, cover_letter="Dear hiring team"
+        )
         client.post(f"/jobs/{job}/apply", headers=auth_headers)
         client.post(f"/jobs/{job}/apply", headers=auth_headers)
-        cards = client.get("/applications", headers=auth_headers).json()
+        cards = client.get("/applications?include_applied=true", headers=auth_headers).json()
         assert len([c for c in cards if c["jobId"] == job]) == 1
 
 
