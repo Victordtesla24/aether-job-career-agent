@@ -28,6 +28,14 @@ class WorkableAdapter(BaseAdapter):
     source = "workable"
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
+        # Pagination audit (2026-07-25): Workable's PUBLIC keyless v3 endpoint
+        # (`POST /api/v3/accounts/<sub>/jobs`) returns ALL published jobs in a
+        # single response — it explicitly REJECTS `limit`, `offset`, and `page`
+        # in the POST body (each returns ``"Not allowed"``).  The ``total``
+        # field in the response always equals ``len(results)`` for this
+        # endpoint.  The *authenticated* ``spi/v3/jobs`` endpoint has
+        # `limit`/`paging.next`, but the public endpoint used here is
+        # genuinely single-response-complete — no pagination to add.
         body = {
             "query": query or "",
             "location": [],

@@ -19,6 +19,13 @@ from app.services.discovery.live_http import fetch_json
 #: future-larger board isn't silently truncated (GAP-SRC-001 pagination
 #: depth). ``search`` is unreliable so this is a plain higher ceiling, not a
 #: filter.
+#:
+#: Pagination audit (2026-07-25): Remotive's ``/api/remote-jobs`` endpoint
+#: returns ALL matching jobs in a single response — ``limit`` controls the
+#: maximum returned (default: all), but there is no ``offset``, ``page``, or
+#: ``next`` parameter.  The ``job-count`` and ``total-job-count`` fields
+#: always match because there is no paging.  Genuinely
+#: single-response-complete.
 _DEFAULT_LIMIT = "250"
 
 
