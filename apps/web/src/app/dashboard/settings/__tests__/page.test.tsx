@@ -262,6 +262,30 @@ describe("SettingsPage — Agent Configuration honest inert-preference hints (IN
     expect(text.toLowerCase()).not.toContain("coming soon");
   });
 
+  it("gives the auto-apply toggle an honest description consistent with the hint below it (NTH-5)", async () => {
+    // Fresh finding (uat/reports/evidence/models-live/qa-res-001-review-verdict.json
+    // wave-3 niceToHave NTH-5): the toggle's OWN description used to read "Let
+    // agents submit applications without a manual approval step" — implying the
+    // preference is live — directly above a hint retracting that ("Saved, but
+    // not yet enforced..."). The description itself must be honest, not just the
+    // hint underneath it.
+    await renderOnAgents();
+
+    const toggle = screen.getByTestId("toggle-autoapply");
+    const paragraphs = toggle.parentElement?.querySelectorAll("p") ?? [];
+    // paragraphs[0] is the "Auto-apply" label; paragraphs[1] is the description.
+    const description = paragraphs[1]?.textContent ?? "";
+
+    expect(description.toLowerCase()).not.toContain("let agents submit applications");
+    expect(description.toLowerCase()).not.toMatch(/without a manual approval step/);
+    expect(description).toMatch(/saved/i);
+    expect(description).toMatch(/future|once auto-apply ships|not yet/i);
+
+    // The hint must still be present and must not contradict the new description.
+    const hint = screen.getByTestId("hint-autoapply");
+    expect((hint.textContent ?? "")).toMatch(/saved/i);
+  });
+
   it("discloses under match threshold that the preference is saved but not yet enforced by the agents", async () => {
     await renderOnAgents();
 

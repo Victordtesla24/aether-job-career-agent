@@ -161,6 +161,124 @@ def test_credentials_refresh_persists_new_token_for_expired_credential(monkeypat
     assert call["account_id"] == "acct1"
 
 
+def test_credentials_refresh_with_no_expiry_in_response_falls_back_to_now_plus_55min(
+    monkeypatch, caplog
+):
+    """qa-res-001-review-verdict niceToHave (c) — a refresh grant whose
+    response carries no ``expires_in`` leaves google-auth's ``creds.expiry``
+    at ``None``. Persisting that NULL would silently RE-DISABLE this whole fix
+    for the account: google-auth's own ``.expired`` treats ``expiry=None`` as
+    "never expires", so every LATER read would see "never expires" and skip
+    refresh forever, no matter how stale the token really gets — exactly the
+    original QA-RES-001 defect, reintroduced for this one account. The fix
+    must fall back to a conservative now+55min instead of persisting ``None``,
+    keep the in-memory ``creds`` object consistent with what was persisted,
+    and log one INFO note."""
+    import logging
+
+    stale_expiry = datetime.now(timezone.utc) - timedelta(hours=2)
+    repo = _FakeAccountRepo(expiry=stale_expiry, access_token="OLD_TOKEN")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
+
+    def _fake_refresh_no_expiry(self, request):
+        self.token = "NEW_TOKEN"
+        self.expiry = None  # Google's response omitted expires_in
+
+    monkeypatch.setattr(
+        "google.oauth2.credentials.Credentials.refresh", _fake_refresh_no_expiry
+    )
+
+    svc = GmailService("u1", creds_repo=repo, account_id="acct1")
+    before = datetime.now(timezone.utc)
+    with caplog.at_level(logging.INFO, logger="app.services.gmail_service"):
+        creds = svc._credentials()
+    after = datetime.now(timezone.utc)
+
+    assert len(repo.update_calls) == 1
+    call = repo.update_calls[0]
+    assert call["expires_at"] is not None, (
+        "a None expiry must never be persisted here -- it silently "
+        "re-disables the fix (every future read would see 'never expires' "
+        "and skip refresh forever)"
+    )
+    assert call["expires_at"].tzinfo is not None
+    lo = before + timedelta(minutes=54)
+    hi = after + timedelta(minutes=56)
+    assert lo <= call["expires_at"] <= hi, call["expires_at"]
+    # The in-memory credentials object stays consistent with what was
+    # persisted, and must not itself report "never expiring" going forward.
+    assert creds.expiry is not None
+    assert creds.expired is False
+
+    fallback_notes = [
+        r
+        for r in caplog.records
+        if r.name == "app.services.gmail_service"
+        and r.levelno == logging.INFO
+        and "no expiry" in r.getMessage().lower()
+    ]
+    assert len(fallback_notes) == 1, [r.getMessage() for r in caplog.records]
+
+
+def test_credentials_none_stored_expiry_is_treated_as_never_expiring_no_refresh(
+    monkeypatch,
+):
+    """Pins the None-expiry branch of ``_credentials()`` (qa-res-001-review-verdict
+    niceToHave (d), previously unpinned in this suite): a stored row with NO
+    ``accessTokenExpiresAt`` at all (e.g. a legacy row from before an expiry
+    was ever captured) builds a ``Credentials`` with ``expiry=None`` —
+    google-auth's OWN semantics treat that as never-expiring, so
+    ``creds.valid`` is True and refresh is never attempted. Distinct from (and
+    unaffected by) the NULL-after-refresh fallback pinned above, which only
+    fires once a refresh has actually been performed."""
+    repo = _FakeAccountRepo(expiry=None, access_token="ONLY_TOKEN")
+    refresh_spy = MagicMock(return_value=None)
+    monkeypatch.setattr(
+        "google.oauth2.credentials.Credentials.refresh", refresh_spy
+    )
+
+    svc = GmailService("u1", creds_repo=repo, account_id="acct1")
+    creds = svc._credentials()
+
+    assert creds.expiry is None
+    assert creds.expired is False
+    assert creds.token == "ONLY_TOKEN"
+    refresh_spy.assert_not_called()
+    assert repo.update_calls == []
+
+
+def test_credentials_naive_stale_stored_expiry_still_detected_as_expired(
+    monkeypatch,
+):
+    """Pins the naive-expiry branch of ``_credentials()`` (qa-res-001-review-verdict
+    niceToHave (d), previously unpinned in this suite): ``_credentials()``
+    normalizes a stored expiry ONLY when it is aware
+    (``expiry.tzinfo is not None``, gmail_service.py:389-391) — an
+    already-naive stored value (e.g. a row written before tz-awareness was
+    guaranteed) passes straight through to the ``Credentials`` constructor
+    unchanged. This must not raise (google-auth's own ``.expired`` compares
+    against a naive UTC ``now``), and a genuinely stale naive value must still
+    be detected as expired and refreshed, exactly like the aware-expiry case
+    pinned above."""
+    naive_stale_expiry = (
+        datetime.now(timezone.utc) - timedelta(hours=2)
+    ).replace(tzinfo=None)
+    repo = _FakeAccountRepo(expiry=naive_stale_expiry)
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
+    noop_refresh = MagicMock(return_value=None)
+    monkeypatch.setattr(
+        "google.oauth2.credentials.Credentials.refresh", noop_refresh
+    )
+
+    svc = GmailService("u1", creds_repo=repo, account_id="acct1")
+    creds = svc._credentials()
+
+    assert creds.expired is True
+    noop_refresh.assert_called_once()
+
+
 def test_credentials_with_fresh_expiry_never_refreshes(monkeypatch):
     """QA-RES-001 M4 — the load-bearing invariant of the whole fix: a stored
     token that is genuinely NOT stale must never trigger a refresh or a DB
@@ -245,6 +363,37 @@ def test_credentials_missing_oauth_config_raises_gmail_error_not_auth_error(monk
     assert not isinstance(excinfo.value, GmailAuthError)
     refresh_spy.assert_not_called()
     assert repo.update_calls == []
+
+
+def test_credentials_missing_oauth_config_logs_error_with_detail_before_raising(
+    monkeypatch, caplog
+):
+    """qa-res-001-review-verdict niceToHave — the routers that catch this
+    ``GmailError`` re-raise their own ``HTTPException`` ``from None``
+    (approvals.py:305-312 / :... , workspaces.py:577-587), which discards the
+    original detail entirely: 'server OAuth configuration is missing' reaches
+    neither the user nor the server logs. The SERVICE itself must log one
+    ERROR line carrying that detail BEFORE raising, independent of whatever
+    any router does with the exception afterwards."""
+    import logging
+
+    stale_expiry = datetime.now(timezone.utc) - timedelta(hours=2)
+    repo = _FakeAccountRepo(expiry=stale_expiry)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+
+    svc = GmailService("u1", creds_repo=repo, account_id="acct1")
+    with caplog.at_level(logging.ERROR, logger="app.services.gmail_service"):
+        with pytest.raises(GmailError):
+            svc._credentials()
+
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == "app.services.gmail_service" and r.levelno == logging.ERROR
+    ]
+    assert len(errors) == 1, [r.getMessage() for r in caplog.records]
+    assert "server oauth configuration is missing" in errors[0].getMessage().lower()
 
 
 # ------------------------------------------------------------------ send

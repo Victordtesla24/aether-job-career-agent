@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -39,6 +39,12 @@ _EMAIL_AI_COLS_LOCK = 7420240723
 
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
 _MAX_MESSAGE_BYTES = 25 * 1024 * 1024
+
+#: Conservative fallback TTL applied when a refresh grant's response carries no
+#: expiry at all (``creds.expiry is None`` after ``creds.refresh()``). Google's
+#: access tokens are ~1h in practice, so 55 minutes is comfortably inside that
+#: window without risking a false "still fresh" read (qa-res-001 niceToHave (c)).
+_FALLBACK_EXPIRY_MINUTES = 55
 
 #: Freshness window (seconds) for the Email Center's best-effort inbox sync.
 #: A sync is threads().list() + up to ``max_results`` threads().get() round-trips
@@ -404,10 +410,22 @@ class GmailService:
             # user to reconnect their (perfectly fine) account. Surface it as
             # a transient GmailError instead, before ever calling refresh().
             if not client_id or not client_secret:
-                raise GmailError(
+                detail = (
                     "Gmail email service is temporarily unavailable — server "
                     "OAuth configuration is missing."
                 )
+                # qa-res-001-review-verdict niceToHave: the routers raise their
+                # HTTPException `from None` (approvals.py, workspaces.py), which
+                # discards this detail — log it here, at the source, so ops can
+                # actually see the misconfiguration instead of it reaching
+                # neither the user nor the logs.
+                logger.error(
+                    "Gmail service misconfigured for user=%s account=%s: %s",
+                    self._user_id,
+                    self._resolved_account_id,
+                    detail,
+                )
+                raise GmailError(detail)
 
             from google.auth.exceptions import RefreshError, TransportError
             from google.auth.transport.requests import Request
@@ -440,6 +458,29 @@ class GmailService:
             new_expiry = creds.expiry
             if new_expiry is not None and new_expiry.tzinfo is None:
                 new_expiry = new_expiry.replace(tzinfo=timezone.utc)
+            elif new_expiry is None:
+                # qa-res-001-review-verdict niceToHave (c): a refresh response
+                # without ``expires_in`` leaves ``creds.expiry`` at ``None`` —
+                # and google-auth's OWN ``.expired`` treats expiry=None as
+                # "never expires". Persisting NULL here would silently
+                # RE-DISABLE this very fix for this one account: every future
+                # read would see "never expires" and skip refresh forever,
+                # regardless of how stale the token really gets. Fall back to
+                # a conservative now+55min (Google's refresh grants run ~1h in
+                # practice) so the next request's staleness check still fires
+                # well before the real token could have expired.
+                new_expiry = datetime.now(timezone.utc) + timedelta(
+                    minutes=_FALLBACK_EXPIRY_MINUTES
+                )
+                creds.expiry = new_expiry.replace(tzinfo=None)
+                logger.info(
+                    "Gmail refresh response for user=%s account=%s carried no "
+                    "expiry — falling back to a conservative now+%dmin expiry "
+                    "instead of persisting NULL",
+                    self._user_id,
+                    self._resolved_account_id,
+                    _FALLBACK_EXPIRY_MINUTES,
+                )
 
             self._creds_repo.update_access_token(
                 self._user_id,

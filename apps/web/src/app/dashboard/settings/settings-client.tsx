@@ -852,7 +852,7 @@ export default function SettingsClient({
                 <div>
                   <Toggle
                     label="Auto-apply"
-                    description="Let agents submit applications without a manual approval step"
+                    description="Preference for future automatic submission — saved now, enforced once auto-apply ships"
                     value={agentConfig.autoApply}
                     testId="toggle-autoapply"
                     onChange={(v) => setAgentConfig((c) => ({ ...c, autoApply: v }))}
