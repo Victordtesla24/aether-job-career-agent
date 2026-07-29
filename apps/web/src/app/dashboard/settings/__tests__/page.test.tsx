@@ -135,6 +135,62 @@ const FREE_SUBSCRIPTION = {
 };
 
 describe("SettingsPage — Privacy & Compliance tab", () => {
+  it("ML-SETTINGS-001: renders a distinct Privacy & Compliance panel, not the Profile panel underneath", async () => {
+    // Fresh production evidence (uat/reports/evidence/deep-sweep-2026-07-29/
+    // INTERACTION-FINDINGS.json): the Privacy & Compliance nav tab visually
+    // activates (highlight + aria-pressed=true) but the Profile panel renders
+    // underneath instead of privacy-specific content. Reproduced 3x.
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("settings-nav-privacy"));
+    fireEvent.click(screen.getByTestId("settings-nav-privacy"));
+
+    expect(screen.getByTestId("settings-nav-privacy").getAttribute("aria-pressed")).toBe("true");
+
+    // A genuinely distinct panel must render...
+    const panel = await waitFor(() => screen.getByTestId("settings-privacy"));
+    expect(panel.textContent ?? "").toMatch(/privacy/i);
+
+    // ...and the Profile panel (name/email/target-role/location form) must
+    // NOT render underneath it — that's the exact defect being pinned here.
+    expect(screen.queryByTestId("settings-profile")).toBeNull();
+    expect(screen.queryByTestId("settings-fullname")).toBeNull();
+  });
+
+  it("ML-SETTINGS-001: links to the real /privacy-policy and /terms pages and shows the real connected-Gmail count, no fabricated controls", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ...SETTINGS,
+      connectedAccounts: [
+        { name: "Google (Gmail)", status: "connected", detail: "Connected as jamie@example.com (primary)" },
+        { name: "OpenAI", status: "connected", detail: "gpt-4.1 configured" },
+      ],
+    });
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("settings-nav-privacy"));
+    fireEvent.click(screen.getByTestId("settings-nav-privacy"));
+
+    const panel = await waitFor(() => screen.getByTestId("settings-privacy"));
+    const privacyLink = panel.querySelector('a[href="/privacy-policy"]');
+    const termsLink = panel.querySelector('a[href="/terms"]');
+    expect(privacyLink).toBeTruthy();
+    expect(termsLink).toBeTruthy();
+
+    // Only ONE connected account is Gmail — the panel must reflect the real
+    // count derived from data already on the page, not a placeholder.
+    expect(panel.textContent ?? "").toMatch(/1 (connected )?gmail/i);
+
+    // No fabricated self-service export/delete buttons — none of that
+    // backend capability exists.
+    expect(screen.queryByRole("button", { name: /export my data/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /delete my account/i })).toBeNull();
+  });
+
   it("does not claim a self-service export/delete-all-data feature that does not exist", async () => {
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
@@ -161,6 +217,75 @@ describe("SettingsPage — Privacy & Compliance tab", () => {
     expect(bodyText).toMatch(/gmail/i);
     expect(bodyText).toMatch(/no self-service/i);
     expect(bodyText).toMatch(/contact/i);
+  });
+});
+
+describe("SettingsPage — Agent Configuration honest inert-preference hints (INERT-CONFIG-001)", () => {
+  // Fresh finding (uat/reports/evidence/models-live/web-fixes-review-verdict.json):
+  // autoApply, approvalGate and matchThreshold are persisted via PUT
+  // /workspaces/settings and echoed back, but no backend code reads them for
+  // behavior. The real approval gate is structural and unconditional
+  // (_APPROVAL_GATED = {"tailor","coverLetter","emailAgent"} in
+  // apps/api/app/routers/agents.py:77) — every such run creates an
+  // ApprovalRequest regardless of the toggle. These tests pin honest,
+  // unobtrusive helper text disclosing that gap — no behavior change.
+  async function renderOnAgents() {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    render(<SettingsPage />);
+    await waitFor(() => screen.getByTestId("settings-nav-agents"));
+    fireEvent.click(screen.getByTestId("settings-nav-agents"));
+    await waitFor(() => screen.getByTestId("settings-agents"));
+  }
+
+  it("discloses under the approval-gate toggle that approval is currently always enforced for submission-type runs, regardless of the preference", async () => {
+    await renderOnAgents();
+
+    const hint = screen.getByTestId("hint-approvalgate");
+    const text = hint.textContent ?? "";
+    expect(text).toMatch(/always enforced/i);
+    expect(text).toMatch(/tailor/i);
+    expect(text).toMatch(/cover letter/i);
+    expect(text).toMatch(/email/i);
+    expect(text).toMatch(/regardless of this (preference|setting)/i);
+    expect(text.toLowerCase()).not.toContain("coming soon");
+  });
+
+  it("discloses under auto-apply that the preference is saved but not yet enforced by the agents", async () => {
+    await renderOnAgents();
+
+    const hint = screen.getByTestId("hint-autoapply");
+    const text = hint.textContent ?? "";
+    expect(text).toMatch(/saved/i);
+    expect(text).toMatch(/not (yet )?enforced/i);
+    expect(text.toLowerCase()).not.toContain("coming soon");
+  });
+
+  it("discloses under match threshold that the preference is saved but not yet enforced by the agents", async () => {
+    await renderOnAgents();
+
+    const hint = screen.getByTestId("hint-matchthreshold");
+    const text = hint.textContent ?? "";
+    expect(text).toMatch(/saved/i);
+    expect(text).toMatch(/not (yet )?enforced/i);
+    expect(text.toLowerCase()).not.toContain("coming soon");
+  });
+
+  it("does not change the persisted toggle/slider behavior — Save still round-trips agentConfig unchanged", async () => {
+    await renderOnAgents();
+
+    const autoApply = screen.getByTestId("toggle-autoapply") as HTMLButtonElement;
+    expect(autoApply.disabled).toBe(false);
+    expect(autoApply.getAttribute("aria-checked")).toBe("false");
+
+    const approvalGate = screen.getByTestId("toggle-approvalgate") as HTMLButtonElement;
+    expect(approvalGate.disabled).toBe(false);
+    expect(approvalGate.getAttribute("aria-checked")).toBe("true");
+
+    const slider = screen.getByTestId("threshold-slider") as HTMLInputElement;
+    expect(slider.disabled).toBe(false);
+    expect(slider.value).toBe("80");
   });
 });
 

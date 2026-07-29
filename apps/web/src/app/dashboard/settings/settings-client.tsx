@@ -38,6 +38,7 @@
  * amount being charged, alongside an explicit "Next billing date" (distinct
  * from the agent-run quota's own reset date, a different underlying field).
  */
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, ApiError, describeApiError, formatRetryAfter, getToken } from "../../../lib/api/client";
@@ -428,6 +429,10 @@ export default function SettingsClient({
     .join("")
     .toUpperCase();
 
+  // ML-SETTINGS-001: real count derived from the same `connectedAccounts`
+  // data the Connected Accounts section renders — never fabricated.
+  const gmailAccountCount = data.connectedAccounts.filter((a) => a.name === "Google (Gmail)").length;
+
   return (
     <div className="space-y-6" data-testid="settings-page">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -544,7 +549,7 @@ export default function SettingsClient({
             to the viewport, letting the break-all fix below actually wrap
             the text instead of merely being ready to. */}
         <div className="min-w-0 space-y-6 xl:col-span-3">
-          {(active === "profile" || active === "privacy") && (
+          {active === "profile" && (
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-profile">
               <h2 className="mb-4 text-[15px] font-semibold">Profile</h2>
               <div className="mb-5 flex items-center gap-4">
@@ -599,16 +604,68 @@ export default function SettingsClient({
                 <Input label="Location" value={profile.location} error={validation.location} testId="settings-location"
                   onChange={(v) => setProfile((p) => ({ ...p, location: v }))} />
               </div>
-              {active === "privacy" ? (
-                <p className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted">
-                  <i className="fa-solid fa-shield-halved mr-2 text-aether-green" aria-hidden="true" />
-                  Aether stores your data locally to this workspace. Agents never submit an application, send an
-                  email, or share your profile without an explicit approval. You can correct your profile here at
-                  any time and disconnect a connected Gmail account from the Email Center whenever you like —
-                  there is no self-service &ldquo;export all data&rdquo; or &ldquo;delete all data&rdquo; button
-                  yet; contact us to request a full data export or deletion and we will process it manually.
+            </section>
+          )}
+
+          {/* ML-SETTINGS-001: previously the Privacy & Compliance nav tab
+              highlighted (aria-pressed=true) but rendered the Profile panel
+              underneath instead of any privacy-specific content — reproduced
+              3x on production (uat/reports/evidence/deep-sweep-2026-07-29/
+              INTERACTION-FINDINGS.json). This is a genuinely distinct panel,
+              built only from controls/links that actually exist: the real
+              /privacy-policy and /terms pages, and the real connected-Gmail
+              count already present in `data.connectedAccounts` (same data the
+              Connected Accounts section below renders), pointing at the Email
+              Command Center where Gmail disconnect actually lives. No
+              fabricated "export my data" / "delete my account" buttons —
+              apps/api has no such endpoint (only DELETE
+              /emails/accounts/{id} for Gmail disconnect exists), so none is
+              invented here. */}
+          {active === "privacy" && (
+            <section
+              className="glass rounded-2xl border border-white/10 p-5"
+              data-testid="settings-privacy"
+              aria-labelledby="privacy-heading"
+            >
+              <h2 id="privacy-heading" className="mb-4 text-[15px] font-semibold">
+                Privacy &amp; Compliance
+              </h2>
+              <p className="mb-4 text-xs text-aether-muted">
+                <i className="fa-solid fa-shield-halved mr-2 text-aether-green" aria-hidden="true" />
+                Aether stores your data for this workspace only. Agents never submit an application, send an
+                email, or share your profile without an explicit approval.
+              </p>
+              <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted">
+                <p>
+                  {gmailAccountCount > 0
+                    ? `${gmailAccountCount} connected Gmail account${gmailAccountCount === 1 ? "" : "s"}.`
+                    : "No Gmail account connected."}{" "}
+                  Manage or disconnect a connected Gmail account from the{" "}
+                  <Link href="/dashboard/email" className="text-aether-coral hover:underline">
+                    Email Command Center
+                  </Link>
+                  .
                 </p>
-              ) : null}
+                <p className="mt-2">
+                  You can correct your profile details from the Profile tab at any time. There is no
+                  self-service &ldquo;export all data&rdquo; or &ldquo;delete all data&rdquo; feature yet;
+                  contact us to request a full data export or deletion and we will process it manually.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <Link
+                  href="/privacy-policy"
+                  className="rounded-lg border border-white/15 px-3 py-1.5 font-semibold text-aether-muted hover:border-white/30 hover:text-white"
+                >
+                  Privacy Policy
+                </Link>
+                <Link
+                  href="/terms"
+                  className="rounded-lg border border-white/15 px-3 py-1.5 font-semibold text-aether-muted hover:border-white/30 hover:text-white"
+                >
+                  Terms of Service
+                </Link>
+              </div>
             </section>
           )}
 
@@ -792,20 +849,44 @@ export default function SettingsClient({
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-agents">
               <h2 className="mb-4 text-[15px] font-semibold">Agent Configuration</h2>
               <div className="space-y-4">
-                <Toggle
-                  label="Auto-apply"
-                  description="Let agents submit applications without a manual approval step"
-                  value={agentConfig.autoApply}
-                  testId="toggle-autoapply"
-                  onChange={(v) => setAgentConfig((c) => ({ ...c, autoApply: v }))}
-                />
-                <Toggle
-                  label="Approval gate"
-                  description="Require explicit approval for anything that leaves the system"
-                  value={agentConfig.approvalGate}
-                  testId="toggle-approvalgate"
-                  onChange={(v) => setAgentConfig((c) => ({ ...c, approvalGate: v }))}
-                />
+                <div>
+                  <Toggle
+                    label="Auto-apply"
+                    description="Let agents submit applications without a manual approval step"
+                    value={agentConfig.autoApply}
+                    testId="toggle-autoapply"
+                    onChange={(v) => setAgentConfig((c) => ({ ...c, autoApply: v }))}
+                  />
+                  {/* INERT-CONFIG-001: this preference is persisted (PUT
+                      /workspaces/settings) but no backend agent code reads it
+                      — apps/api/app/workers/board_sweep.py's autopilot work
+                      always lands behind the same structural approval gate
+                      regardless of this toggle. Honest disclosure, no
+                      behavior change. */}
+                  <p className="mt-1 text-[10px] text-aether-muted-dim" data-testid="hint-autoapply">
+                    Saved, but not yet enforced by the agents — this preference doesn&rsquo;t currently change
+                    agent behaviour.
+                  </p>
+                </div>
+                <div>
+                  <Toggle
+                    label="Approval gate"
+                    description="Require explicit approval for anything that leaves the system"
+                    value={agentConfig.approvalGate}
+                    testId="toggle-approvalgate"
+                    onChange={(v) => setAgentConfig((c) => ({ ...c, approvalGate: v }))}
+                  />
+                  {/* INERT-CONFIG-001: the real approval gate is structural
+                      and unconditional — _APPROVAL_GATED =
+                      {"tailor","coverLetter","emailAgent"}
+                      (apps/api/app/routers/agents.py) creates an
+                      ApprovalRequest for every such run regardless of this
+                      toggle's value. Honest disclosure, no behavior change. */}
+                  <p className="mt-1 text-[10px] text-aether-muted-dim" data-testid="hint-approvalgate">
+                    Always enforced today for tailor, cover letter and email-agent runs, regardless of this
+                    preference.
+                  </p>
+                </div>
                 <div>
                   <div className="mb-1 flex justify-between text-xs">
                     <span className="text-aether-muted">Match threshold — only surface jobs above</span>
@@ -822,6 +903,13 @@ export default function SettingsClient({
                     className="w-full accent-[#FF6B35]"
                     aria-label="Match threshold"
                   />
+                  {/* INERT-CONFIG-001: persisted but not yet read by any
+                      backend job-surfacing logic. Honest disclosure, no
+                      behavior change. */}
+                  <p className="mt-1 text-[10px] text-aether-muted-dim" data-testid="hint-matchthreshold">
+                    Saved, but not yet enforced by the agents — this value doesn&rsquo;t currently filter which
+                    jobs are surfaced.
+                  </p>
                 </div>
               </div>
             </section>
