@@ -65,9 +65,12 @@ _UNITS = frozenset(
 )
 
 #: Timezone abbreviations are scheduling/logistics context ("Thursday
-#: afternoon AEST"), not an experience claim about the candidate — so they
-#: are exempt from evidence matching entirely. Kept narrow and explicit; do
-#: not widen without a new documented finding.
+#: afternoon AEST"), not an experience claim about the candidate. They are
+#: exempt ONLY when the surrounding sentence is itself scheduling context
+#: (see ``_is_scheduling_context``) — wave-3.5 adversarial review (NTH-R11)
+#: found a context-free exemption let a real employer name slip through
+#: ("EST Holdings", "at CET"). Kept narrow and explicit; do not widen
+#: without a new documented finding.
 _TIMEZONE_ALLOWLIST = frozenset(
     {
         "aest", "aedt", "acst", "acdt", "awst",
@@ -76,8 +79,40 @@ _TIMEZONE_ALLOWLIST = frozenset(
     }
 )
 
+#: Day/time vocabulary that marks a sentence as scheduling/logistics context
+#: ("I'm available Thursday afternoon AEST"). Deliberately narrow — a
+#: weekday name, a time-of-day word, or an explicit clock time — NOT generic
+#: words like "available"/"call" that could co-occur with an unrelated claim.
+_WEEKDAYS = frozenset(
+    {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+)
+_TIME_OF_DAY_WORDS = frozenset({"morning", "afternoon", "evening", "tonight", "noon", "midnight"})
+_CLOCK_TIME_RE = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b", re.IGNORECASE)
+
+
+def _sentence_containing(text: str, pos: int) -> str:
+    """The sentence (bounded by ``_SENTENCE_ENDERS``) that contains ``pos``."""
+    start = pos
+    while start > 0 and text[start - 1] not in _SENTENCE_ENDERS:
+        start -= 1
+    end = pos
+    while end < len(text) and text[end] not in _SENTENCE_ENDERS:
+        end += 1
+    return text[start:end]
+
+
+def _is_scheduling_context(sentence: str) -> bool:
+    """True when ``sentence`` names a weekday, a time-of-day word, or an
+    explicit clock time — the only contexts a timezone abbreviation is
+    logistics rather than a claim."""
+    if _CLOCK_TIME_RE.search(sentence):
+        return True
+    words = {_norm(t) for t in _TOKEN_RE.findall(sentence)}
+    return bool(words & (_WEEKDAYS | _TIME_OF_DAY_WORDS))
+
+
 #: Generic team/size descriptor nouns that pair with a resume-evidenced
-#: NUMBER without needing their own independent evidence match — "6-person
+#: NUMBER without needing their OWN independent evidence match — "6-person
 #: team" is a faithful paraphrase of "led 6 engineers": the NUMBER is the
 #: claim, "person" is a generic size descriptor, not a new fact. A specific
 #: role/skill/achievement noun (e.g. "6-patent", "6-certification") is NOT in
@@ -86,48 +121,85 @@ _SIZE_NOUNS = frozenset(
     {"person", "people", "member", "members", "team", "teams", "staff", "employee", "employees"}
 )
 
+#: Words that follow a number in the evidence WITHOUT that number denoting a
+#: headcount/quantity-of-things claim ("40 percent", "3 years", "5 hours") —
+#: excluded from the generic _SIZE_NOUNS pairing so a number used elsewhere
+#: in the resume for a date/percentage/duration cannot be repurposed as an
+#: unrelated team size (wave-3.5 adversarial review MF-3: "40-person" was
+#: accepted against a résumé whose only "40" was "improving throughput 40
+#: percent" — truth was "6 engineers").
+_NON_HEADCOUNT_WORDS = _UNITS | frozenset(
+    """
+    percent pct percentage dollar dollars cent cents
+    time times year years month months week weeks day days
+    hour hours minute minutes second seconds
+    """.split()
+)
+
 #: A NUMBER immediately followed by a WORD, joined by a hyphen or glued
 #: directly together — "200ms", "200-ms", "6-person", "6-engineer".
 _NUMBER_WORD_RE = re.compile(r"^(\d+(?:\.\d+)?)-?([a-z]+)$")
 
 #: Same NUMBER+WORD shape scanned across the raw evidence text (not just its
-#: token set), so a resume stating "200 ms" (number and unit as two SEPARATE
-#: tokens, space-separated) is still recognized as the same measurement as a
-#: glued/hyphenated candidate token.
-_EVIDENCE_MEASURE_RE = re.compile(r"(\d+(?:\.\d+)?)[ \t]*-?[ \t]*([A-Za-z]+)")
+#: token set), so a resume stating "200 ms" / "6 engineers" (number and word
+#: as two SEPARATE tokens, space-separated) is still recognized as the same
+#: pairing as a glued/hyphenated candidate token — and, critically, so the
+#: number and word must have actually occurred TOGETHER in the evidence, not
+#: merely both exist somewhere in it (wave-3.5 review MF-3).
+_EVIDENCE_NUMBER_WORD_RE = re.compile(r"(\d+(?:\.\d+)?)[ \t]*-?[ \t]*([A-Za-z]+)")
 
 
 def _stem(word: str) -> str:
-    """Cheap plural-suffix stripper — only needs to be consistent between the
-    two sides of the comparison, not linguistically perfect."""
-    if word.endswith("ies") and len(word) > 3:
+    """Minimal, ORTHOGRAPHICALLY-GUARDED singular/plural fold — only needs to
+    be consistent between the two sides of the comparison, not a real
+    lemmatizer. wave-3.5 review NTH-R12: the previous unconditional
+    strip-trailing-s collapsed unrelated words ("cares" -> "car", "bus" ->
+    "bu") and was asymmetric (stem("process") != stem("processes")). This
+    version only treats a trailing "s" as a plural marker when the word does
+    NOT already end in a bare sibilant ("ss", "us", "is" — process, bus,
+    axis), and only strips "-es" when the word is a genuine sibilant plural
+    (boxes, watches, buses) — so both directions of a real plural now fold
+    to the same stem, and singular words ending in "s" are left alone."""
+    if len(word) > 4 and word.endswith("ies"):
         return word[:-3] + "y"
-    if word.endswith("es") and len(word) > 2:
+    if len(word) > 4 and word.endswith("es") and word[:-2].endswith(("s", "x", "z", "ch", "sh")):
         return word[:-2]
-    if word.endswith("s") and len(word) > 1:
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
         return word[:-1]
     return word
 
 
-def _evidence_measurements(evidence_corpus: str) -> set[tuple[str, str]]:
-    """Canonical (number, unit) pairs found in the evidence text, however
-    they were formatted there (glued, hyphenated, or space-separated)."""
-    out: set[tuple[str, str]] = set()
-    for m in _EVIDENCE_MEASURE_RE.finditer(evidence_corpus):
-        number, unit = m.group(1), m.group(2).lower()
-        if unit in _UNITS:
-            out.add((number, unit))
-    return out
+def _evidence_number_word_index(
+    evidence_corpus: str,
+) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """Scan the evidence text for every NUMBER+WORD adjacency, however it was
+    formatted (glued, hyphenated, or space-separated). Returns two pair sets:
+
+    * ``measurements`` — (number, unit) pairs, exact unit text (lowercased,
+      unstemmed — units are abbreviations, not plurals).
+    * ``pairs`` — (number, stem(word)) pairs for EVERY adjacency, used to
+      require that a claimed NUMBER+NOUN compound actually co-occurred in
+      the evidence, not merely that each half exists somewhere in it.
+    """
+    measurements: set[tuple[str, str]] = set()
+    pairs: set[tuple[str, str]] = set()
+    for m in _EVIDENCE_NUMBER_WORD_RE.finditer(evidence_corpus):
+        number, word = m.group(1), m.group(2).lower()
+        pairs.add((number, _stem(word)))
+        if word in _UNITS:
+            measurements.add((number, word))
+    return measurements, pairs
 
 
 def _verified_number_word_compound(
     token: str,
-    evidence: set[str],
-    evidence_stems: set[str],
     measurements: set[tuple[str, str]],
+    pairs: set[tuple[str, str]],
 ) -> bool:
     """True when a NUMBER+WORD compound token is a verified restatement of
-    the evidence corpus, per the ML-W15 normalization rules above."""
+    the evidence corpus, per the ML-W15 normalization rules above. Every
+    branch requires the NUMBER and the WORD to have occurred TOGETHER in the
+    evidence (wave-3.5 review MF-3) — never independent membership tests."""
     m = _NUMBER_WORD_RE.match(token)
     if not m:
         return False
@@ -136,12 +208,19 @@ def _verified_number_word_compound(
         # Measurement compound: number AND unit must match verbatim as a
         # pair, however the evidence formatted them.
         return (number, word) in measurements
-    # Team-size / role-noun compound: the NUMBER must be resume-evidenced,
-    # and the WORD must either be a generic size descriptor or stem-match an
-    # evidenced word (e.g. "engineer" ~ "engineers").
-    if number not in evidence:
-        return False
-    return word in evidence or _stem(word) in evidence_stems or word in _SIZE_NOUNS
+    if word in _SIZE_NOUNS:
+        # Generic team-size descriptor: the number must be paired, in
+        # evidence, with SOME headcount-shaped noun (i.e. the number is
+        # actually counting people/things there, not a date/percentage/
+        # duration that happens to share the digits).
+        return any(
+            pair_number == number and pair_word not in _NON_HEADCOUNT_WORDS
+            for pair_number, pair_word in pairs
+        )
+    # Specific role/skill noun: the number must be paired, in evidence, with
+    # THIS noun (stem-matched) specifically — "6-engineer" verified only by
+    # an evidenced "6 engineers", never by an unrelated evidenced "6".
+    return (number, _stem(word)) in pairs
 
 
 #: Characters that terminate a sentence — a title-case word right after one of
@@ -160,15 +239,18 @@ def _is_sentence_start(text: str, start: int) -> bool:
 def find_unsupported_entities(generated: str, evidence_corpus: str) -> list[str]:
     """Return entities/metrics in ``generated`` that lack evidence support."""
     evidence = _tokens(evidence_corpus)
-    evidence_stems = {_stem(t) for t in evidence}
-    measurements = _evidence_measurements(evidence_corpus)
+    measurements, pairs = _evidence_number_word_index(evidence_corpus)
     flagged: list[str] = []
     for match in _TOKEN_RE.finditer(generated):
         raw = match.group()
         lower = _norm(raw)
         if not lower:
             continue
-        if lower in _EXEMPT or lower in evidence or lower in _TIMEZONE_ALLOWLIST:
+        if lower in _EXEMPT or lower in evidence:
+            continue
+        if lower in _TIMEZONE_ALLOWLIST and _is_scheduling_context(
+            _sentence_containing(generated, match.start())
+        ):
             continue
         has_number = bool(_NUMBER_RE.search(raw))
         is_capitalized = raw[0].isupper()
@@ -182,10 +264,9 @@ def find_unsupported_entities(generated: str, evidence_corpus: str) -> list[str]
             # ML-W15: a NUMBER+WORD compound ("6-person", "200ms") that is a
             # verified formatting variant / faithful paraphrase of the
             # evidence is not a fabrication — everything else still is,
-            # including an inflated/deflated number in the same shape.
-            if has_number and _verified_number_word_compound(
-                lower, evidence, evidence_stems, measurements
-            ):
+            # including an inflated/deflated number, or an evidenced number
+            # paired with an unrelated evidenced noun, in the same shape.
+            if has_number and _verified_number_word_compound(lower, measurements, pairs):
                 continue
             if raw not in flagged:
                 flagged.append(raw)
