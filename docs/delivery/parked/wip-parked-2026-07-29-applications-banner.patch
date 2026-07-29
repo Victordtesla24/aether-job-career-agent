@@ -1,0 +1,163 @@
+diff --git a/apps/web/src/app/dashboard/applications/__tests__/page.test.tsx b/apps/web/src/app/dashboard/applications/__tests__/page.test.tsx
+index fd1bbc5..ae947a7 100644
+--- a/apps/web/src/app/dashboard/applications/__tests__/page.test.tsx
++++ b/apps/web/src/app/dashboard/applications/__tests__/page.test.tsx
+@@ -399,3 +399,59 @@ describe("Clear Pipeline confirmation gate (FEAT-CLEAR)", () => {
+     expect(screen.getByText("Senior Product Owner")).not.toBeNull();
+   });
+ });
++
++describe("Safety banner gate-OFF branch (WEB-4 / R-4)", () => {
++  it("renders the red 'Approval gate is OFF' warning when approvalGate is false", async () => {
++    apiRequest.mockImplementation(async (path: string) => {
++      if (path === "/applications") return [APP_FIXTURE];
++      if (path === "/jobs") return [];
++      if (path.startsWith("/approvals")) return [];
++      if (path === "/workspaces/settings") {
++        return { agentConfig: { autoApply: false, approvalGate: false, matchThreshold: 85 } };
++      }
++      throw new Error(`unexpected apiRequest(${path})`);
++    });
++
++    render(<ApplicationsPage />);
++    await screen.findByTestId("applications-kanban");
++
++    const banner = await screen.findByTestId("auto-apply-banner");
++    expect(banner.textContent).toContain("Approval gate is OFF");
++    expect(banner.textContent).toContain(
++      "generated proposals can be submitted without your review",
++    );
++    // Must not render the gate-ON reassurance copy.
++    expect(banner.textContent).not.toContain("Approval gate is on —");
++  });
++
++  it("also warns that auto-apply will submit without review when both auto-apply and gate-OFF are true", async () => {
++    apiRequest.mockImplementation(async (path: string) => {
++      if (path === "/applications") return [APP_FIXTURE];
++      if (path === "/jobs") return [];
++      if (path.startsWith("/approvals")) return [];
++      if (path === "/workspaces/settings") {
++        return { agentConfig: { autoApply: true, approvalGate: false, matchThreshold: 85 } };
++      }
++      throw new Error(`unexpected apiRequest(${path})`);
++    });
++
++    render(<ApplicationsPage />);
++    await screen.findByTestId("applications-kanban");
++
++    const banner = await screen.findByTestId("auto-apply-banner");
++    expect(banner.textContent).toContain("Approval gate is OFF");
++    expect(banner.textContent).toContain(
++      "Auto-apply is also on — agents will process AND submit",
++    );
++  });
++
++  it("renders the green gate-ON reassurance banner when approvalGate is true (control)", async () => {
++    defaultMock();
++    render(<ApplicationsPage />);
++    await screen.findByTestId("applications-kanban");
++
++    const banner = await screen.findByTestId("auto-apply-banner");
++    expect(banner.textContent).toContain("Approval gate is on —");
++    expect(banner.textContent).not.toContain("Approval gate is OFF");
++  });
++});
+diff --git a/apps/web/src/app/dashboard/applications/page.tsx b/apps/web/src/app/dashboard/applications/page.tsx
+index 5de1bc0..4dd85d1 100644
+--- a/apps/web/src/app/dashboard/applications/page.tsx
++++ b/apps/web/src/app/dashboard/applications/page.tsx
+@@ -583,6 +583,7 @@ export default function ApplicationsPage() {
+     .reduce((n, s) => n + s.cards.length, 0);
+   const autoApplyOn = agentConfig?.autoApply ?? false;
+   const threshold = agentConfig?.matchThreshold ?? 85;
++  const approvalGateOn = agentConfig?.approvalGate ?? true;
+ 
+   return (
+     <div className="space-y-5">
+@@ -669,20 +670,72 @@ export default function ApplicationsPage() {
+         </div>
+       </header>
+ 
+-      <div
+-        className="flex items-start gap-3 rounded-xl border border-aether-yellow/25 bg-aether-yellow/[0.08] px-4 py-3"
+-        data-testid="auto-apply-banner"
+-      >
+-        <i className="fa-solid fa-shield-halved mt-0.5 text-aether-yellow" aria-hidden="true" />
+-        <p className="text-xs leading-relaxed text-aether-muted">
+-          <span className="font-semibold text-aether-yellow">
+-            Auto-apply is a high-risk action.
+-          </span>{" "}
+-          Only applications with <span className="mono text-white">Match Score &gt; {threshold}%</span>{" "}
+-          and your explicit approval will be submitted. Auto-apply is currently{" "}
+-          <span className="font-medium text-white">{autoApplyOn ? "on" : "off"}</span>.
+-        </p>
+-      </div>
++      {/* G-P4-AUTOAPPLY-CONTRACT-006: auto-apply vs approval-gate clarified.
++          autoApply controls GENERATION automation (agents run without manual
++          triggers). approvalGate controls SUBMISSION gating (nothing leaves
++          the system without explicit human sign-off). They are orthogonal:
++          auto-apply ON with gate ON = agents auto-process but still require
++          approval; gate OFF = genuine risk because generated proposals could
++          be submitted without review, regardless of auto-apply state. */}
++      {approvalGateOn ? (
++        <div
++          className="flex items-start gap-3 rounded-xl border border-aether-green/25 bg-aether-green/[0.06] px-4 py-3"
++          data-testid="auto-apply-banner"
++        >
++          <i className="fa-solid fa-shield-halved mt-0.5 text-aether-green" aria-hidden="true" />
++          <p className="text-xs leading-relaxed text-aether-muted">
++            <span className="font-semibold text-aether-green">Approval gate is on —</span>{" "}
++            nothing is submitted without your explicit approval.{" "}
++            {autoApplyOn ? (
++              <>
++                <span className="font-medium text-white">Auto-apply is on:</span>{" "}
++                agents will process pipeline jobs automatically (Match Score &gt;{" "}
++                <span className="mono text-white">{threshold}%</span>), but every
++                proposal still lands in your{" "}
++                <Link href="/dashboard/approvals" className="underline hover:text-aether-green">
++                  Approvals queue
++                </Link>{" "}
++                for review.
++              </>
++            ) : (
++              <>
++                Trigger agents manually from the{" "}
++                <Link href="/dashboard/agents" className="underline hover:text-aether-green">
++                  Agents
++                </Link>{" "}
++                screen — all outputs are approval-gated before submission.
++              </>
++            )}
++          </p>
++        </div>
++      ) : (
++        <div
++          className="flex items-start gap-3 rounded-xl border border-red-500/35 bg-red-500/[0.08] px-4 py-3"
++          data-testid="auto-apply-banner"
++        >
++          <i className="fa-solid fa-triangle-exclamation mt-0.5 text-red-400" aria-hidden="true" />
++          <p className="text-xs leading-relaxed text-aether-muted">
++            <span className="font-semibold text-red-400">
++              Approval gate is OFF —
++            </span>{" "}
++            generated proposals can be submitted without your review. Turn the
++            approval gate back on in{" "}
++            <Link href="/dashboard/settings" className="underline hover:text-white">
++              Settings → Agent Configuration
++            </Link>{" "}
++            to require explicit approval before anything leaves the system.
++            {autoApplyOn ? (
++              <>
++                {" "}
++                <span className="font-medium text-red-300">
++                  Auto-apply is also on — agents will process AND submit
++                  without any human in the loop.
++                </span>
++              </>
++            ) : null}
++          </p>
++        </div>
++      )}
+ 
+       {pendingCount > 0 ? (
+         <Link

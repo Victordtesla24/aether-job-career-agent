@@ -1,0 +1,168 @@
+"""G-P4-STORY-DEDUP-004 — Story content-hash dedup tests."""
+from __future__ import annotations
+
+import pytest
+
+
+class TestStoryDedup:
+    def test_create_duplicate_returns_existing_not_new(
+        self, client, auth_headers,
+    ):
+        """POST /stories with identical content returns 201 but the same row."""
+        payload = {
+            "title": "Dedup test story",
+            "situation": "Situation text for dedup.",
+            "task": "Task text for dedup.",
+            "action": "Action text for dedup.",
+            "result": "Result text for dedup.",
+            "tags": ["dedup"],
+        }
+        r1 = client.post("/stories", json=payload, headers=auth_headers)
+        assert r1.status_code == 201
+        first_id = r1.json()["id"]
+
+        # Submit the exact same story — should return the same id.
+        r2 = client.post("/stories", json=payload, headers=auth_headers)
+        assert r2.status_code == 201
+        assert r2.json()["id"] == first_id, (
+            "duplicate POST must return the existing row, not create a new one"
+        )
+
+    def test_create_different_stories_different_ids(
+        self, client, auth_headers,
+    ):
+        """Different content creates distinct rows."""
+        r1 = client.post(
+            "/stories",
+            json={
+                "title": "Story A",
+                "situation": "S A",
+                "task": "T A",
+                "action": "A A",
+                "result": "R A",
+            },
+            headers=auth_headers,
+        )
+        r2 = client.post(
+            "/stories",
+            json={
+                "title": "Story B",
+                "situation": "S B",
+                "task": "T B",
+                "action": "A B",
+                "result": "R B",
+            },
+            headers=auth_headers,
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r1.json()["id"] != r2.json()["id"]
+
+    def test_same_title_different_body_different_ids(
+        self, client, auth_headers,
+    ):
+        """Title-only match does NOT trigger dedup when content differs."""
+        title = "Same Title Story"
+        r1 = client.post(
+            "/stories",
+            json={
+                "title": title,
+                "situation": "First version S.",
+                "task": "First version T.",
+                "action": "First version A.",
+                "result": "First version R.",
+            },
+            headers=auth_headers,
+        )
+        r2 = client.post(
+            "/stories",
+            json={
+                "title": title,
+                "situation": "Second version S.",
+                "task": "Second version T.",
+                "action": "Second version A.",
+                "result": "Second version R.",
+            },
+            headers=auth_headers,
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r1.json()["id"] != r2.json()["id"], (
+            "same title but different body must create separate rows"
+        )
+
+    def test_different_tags_metrics_still_deduped(
+        self, client, auth_headers,
+    ):
+        """Tags and metrics are decorators — same core STAR = dedup."""
+        core = {
+            "title": "Core story",
+            "situation": "Core S.",
+            "task": "Core T.",
+            "action": "Core A.",
+            "result": "Core R.",
+        }
+        r1 = client.post(
+            "/stories",
+            json={**core, "tags": ["tag-a"], "metrics": {"pct": 50}},
+            headers=auth_headers,
+        )
+        r2 = client.post(
+            "/stories",
+            json={**core, "tags": ["tag-b"], "metrics": {"pct": 75}},
+            headers=auth_headers,
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r1.json()["id"] == r2.json()["id"], (
+            "same core STAR fields must dedup regardless of tags/metrics"
+        )
+
+    def test_whitespace_normalized(self, client, auth_headers):
+        """Leading/trailing whitespace should not defeat dedup."""
+        r1 = client.post(
+            "/stories",
+            json={
+                "title": "  WS Normalized  ",
+                "situation": " S ",
+                "task": " T ",
+                "action": " A ",
+                "result": " R ",
+            },
+            headers=auth_headers,
+        )
+        r2 = client.post(
+            "/stories",
+            json={
+                "title": "ws normalized",
+                "situation": "s",
+                "task": "t",
+                "action": "a",
+                "result": "r",
+            },
+            headers=auth_headers,
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r1.json()["id"] == r2.json()["id"], (
+            "whitespace-insensitive dedup should match despite spacing"
+        )
+
+    def test_list_returns_no_duplicates(self, client, auth_headers):
+        """After repeated identical POSTs, list should only have one copy."""
+        payload = {
+            "title": "List dedup story",
+            "situation": "List S.",
+            "task": "List T.",
+            "action": "List A.",
+            "result": "List R.",
+        }
+        for _ in range(3):
+            r = client.post("/stories", json=payload, headers=auth_headers)
+            assert r.status_code == 201
+
+        stories = client.get("/stories", headers=auth_headers).json()
+        titles = [s["title"] for s in stories]
+        assert titles.count("List dedup story") == 1, (
+            "list must never return duplicate rows for the same content"
+        )

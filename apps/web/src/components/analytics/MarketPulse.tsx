@@ -297,6 +297,16 @@ export default function MarketPulse() {
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Market vs. Your Performance
           </h3>
+
+          {!data.marketVsYou.marketDataConnected && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-xs font-semibold text-amber-300">External market benchmark unavailable</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-aether-muted-dim">
+                Provider: none configured — your figures are derived from your saved jobs and applications.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-4">
             {data.marketVsYou.comparisons.map((c) => {
               const max = Math.max(c.market ?? 0, c.you, 1);

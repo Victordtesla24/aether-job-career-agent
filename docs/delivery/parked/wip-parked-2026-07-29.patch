@@ -1,0 +1,360 @@
+diff --git a/apps/api/app/db.py b/apps/api/app/db.py
+index 341f189..fb45ea4 100644
+--- a/apps/api/app/db.py
++++ b/apps/api/app/db.py
+@@ -328,3 +328,45 @@ def ensure_job_dedup_columns() -> None:
+             )
+         conn.commit()
+     _job_dedup_columns_ready = True
++
++
++#: Guard so the additive ``StoryEntry`` dedup column is only ensured once per
++#: worker process (see ``ensure_story_dedup_column``).
++_story_dedup_column_ready = False
++
++
++def ensure_story_dedup_column() -> None:
++    """Idempotently add the additive ``StoryEntry.contentHash`` column on first use.
++
++    ``contentHash`` (G-P4-STORY-DEDUP-004) is a sha256 of
++    (userId + title + situation + task + action + result).  Stories that share
++    the same ``contentHash`` are considered duplicates; the repository skips
++    them instead of inserting a duplicate row.
++
++    ``ADD COLUMN IF NOT EXISTS text`` with no default is a metadata-only change
++    on PostgreSQL (existing rows read ``NULL`` = no hash yet computed), so it
++    is fast, safe on the production table, and backfills the shared test schema.
++    Mirrors ``ensure_job_dedup_columns``.
++    """
++    global _story_dedup_column_ready
++    if _story_dedup_column_ready:
++        return
++    with get_connection() as conn:
++        with conn.cursor() as cur:
++            cur.execute(
++                "SELECT count(*) FROM information_schema.columns"
++                " WHERE table_name = 'StoryEntry'"
++                " AND table_schema = ANY(current_schemas(false))"
++                " AND column_name = 'contentHash'"
++            )
++            row = cur.fetchone()
++            if row and row[0] == 1:
++                _story_dedup_column_ready = True
++                return
++            cur.execute("SELECT pg_advisory_xact_lock(%s)", (9380710313,))
++            cur.execute(
++                'ALTER TABLE "StoryEntry" '
++                'ADD COLUMN IF NOT EXISTS "contentHash" text'
++            )
++        conn.commit()
++    _story_dedup_column_ready = True
+diff --git a/apps/api/app/repositories/story.py b/apps/api/app/repositories/story.py
+index b62730d..e5515e9 100644
+--- a/apps/api/app/repositories/story.py
++++ b/apps/api/app/repositories/story.py
+@@ -1,12 +1,26 @@
+-"""Story bank repository — ``StoryEntry`` table (P2-S09)."""
++"""Story bank repository — ``StoryEntry`` table (P2-S09).
++
++G-P4-STORY-DEDUP-004: the ``create`` method now hashes the five STAR
++content fields + userId into a ``contentHash`` and skips the insert when a
++row with the same hash already exists (returning the existing row instead).
++This prevents both re-run duplicates from the story extractor agent and
++double-saves from the REST create endpoint.
++"""
+ from __future__ import annotations
+ 
+ import json
+ from typing import Any
+ 
+-from app.db import get_connection, new_id, rows_to_dicts
++from app.db import ensure_story_dedup_column, get_connection, new_id, rows_to_dicts
++from app.services.dedup import compute_story_content_hash
+ 
+ _COLUMNS = (
++    '"id", "userId", "title", "situation", "task", "action", "result", '
++    '"metrics", "tags", "contentHash", "createdAt", "updatedAt"'
++)
++
++# Columns returned for non-create read paths (no contentHash needed).
++_READ_COLUMNS = (
+     '"id", "userId", "title", "situation", "task", "action", "result", '
+     '"metrics", "tags", "createdAt", "updatedAt"'
+ )
+@@ -14,14 +28,39 @@ _COLUMNS = (
+ 
+ class StoryRepository:
+     def create(self, user_id: str, story: dict[str, Any]) -> dict[str, Any]:
++        ensure_story_dedup_column()
++        content_hash = compute_story_content_hash(
++            user_id,
++            story["title"],
++            story["situation"],
++            story["task"],
++            story["action"],
++            story["result"],
++        )
+         with get_connection() as conn:
+             with conn.cursor() as cur:
++                # Check for an existing story with the same content hash.
++                cur.execute(
++                    'SELECT "id" FROM "StoryEntry" '
++                    'WHERE "userId" = %s AND "contentHash" = %s '
++                    'LIMIT 1',
++                    (user_id, content_hash),
++                )
++                existing = cur.fetchone()
++                if existing:
++                    # Return the existing row — dedup, don't create a duplicate.
++                    cur.execute(
++                        f'SELECT {_READ_COLUMNS} FROM "StoryEntry" WHERE "id" = %s',
++                        (existing[0],),
++                    )
++                    return rows_to_dicts(cur)[0]
++
+                 cur.execute(
+                     f'''
+                     INSERT INTO "StoryEntry"
+                         ("id", "userId", "title", "situation", "task", "action",
+-                         "result", "metrics", "tags", "updatedAt")
+-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
++                         "result", "metrics", "tags", "contentHash", "updatedAt")
++                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                     RETURNING {_COLUMNS}
+                     ''',
+                     (
+@@ -34,6 +73,7 @@ class StoryRepository:
+                         story["result"],
+                         json.dumps(story.get("metrics") or {}),
+                         story.get("tags") or [],
++                        content_hash,
+                     ),
+                 )
+                 rows = rows_to_dicts(cur)
+@@ -44,7 +84,7 @@ class StoryRepository:
+         with get_connection() as conn:
+             with conn.cursor() as cur:
+                 cur.execute(
+-                    f'SELECT {_COLUMNS} FROM "StoryEntry" WHERE "userId" = %s '
++                    f'SELECT {_READ_COLUMNS} FROM "StoryEntry" WHERE "userId" = %s '
+                     'ORDER BY "createdAt" DESC',
+                     (user_id,),
+                 )
+@@ -54,7 +94,7 @@ class StoryRepository:
+         with get_connection() as conn:
+             with conn.cursor() as cur:
+                 cur.execute(
+-                    f'SELECT {_COLUMNS} FROM "StoryEntry" '
++                    f'SELECT {_READ_COLUMNS} FROM "StoryEntry" '
+                     'WHERE "id" = %s AND "userId" = %s',
+                     (story_id, user_id),
+                 )
+@@ -71,13 +111,30 @@ class StoryRepository:
+                 params.append(json.dumps(value) if key == "metrics" else value)
+         if not sets:
+             return self.get_by_id(story_id, user_id)
++        # Recompute content hash if any STAR field changed.
++        refresh_hash = bool({"title", "situation", "task", "action", "result"} & set(story))
++        if refresh_hash:
++            current = self.get_by_id(story_id, user_id)
++            if current is None:
++                return None
++            sets.append('"contentHash" = %s')
++            params.append(
++                compute_story_content_hash(
++                    user_id,
++                    story.get("title", current["title"]),
++                    story.get("situation", current["situation"]),
++                    story.get("task", current["task"]),
++                    story.get("action", current["action"]),
++                    story.get("result", current["result"]),
++                )
++            )
+         with get_connection() as conn:
+             with conn.cursor() as cur:
+                 cur.execute(
+                     f'''
+                     UPDATE "StoryEntry" SET {", ".join(sets)}, "updatedAt" = NOW()
+                     WHERE "id" = %s AND "userId" = %s
+-                    RETURNING {_COLUMNS}
++                    RETURNING {_READ_COLUMNS}
+                     ''',
+                     (*params, story_id, user_id),
+                 )
+@@ -94,4 +151,4 @@ class StoryRepository:
+                 )
+                 deleted = cur.rowcount
+             conn.commit()
+-        return deleted > 0
++        return deleted > 0
+\ No newline at end of file
+diff --git a/apps/api/app/routers/agents.py b/apps/api/app/routers/agents.py
+index 99de2f6..207ced6 100644
+--- a/apps/api/app/routers/agents.py
++++ b/apps/api/app/routers/agents.py
+@@ -782,6 +782,39 @@ def _execute_reserved_run(
+         # so a no-op is refunded exactly once on either path, never twice.
+         _refund_once()
+         raise
++    except FabricationError as exc:
++        # GAP-P4-002: the cover agent's fabrication guard rejected the draft
++        # after every corrective retry — the guard WORKING is NOT a failure.
++        # ``FabricationError.__init__`` already prefixes the message with
++        # ``"Fabricated entities detected: <list>"``, so ``str(exc)`` is the
++        # entity list rendered into English — NEVER verbatim LLM output, zero
++        # PII risk. Record an honest COMPLETED degrade (mirroring the async
++        # worker at tasks.py:263-292) so the AgentRun audit table NEVER
++        # surfaces a fabricated entity as a red "failed" activity row. Refund
++        # the reserved run — no letter was produced — and re-raise so the
++        # caller's handler (``run_cover_letter`` → 422, ``_pipeline_core`` →
++        # degrade) keeps building its own response shape unchanged.
++        honest_output: dict[str, Any] = {
++            "cover_letter_id": None,
++            "coverLetterUnavailable": True,
++            "reason": str(exc.flagged),
++        }
++        runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
++        _refund_once()
++        raise
++    except StructuralError as exc:
++        # Mirror of the FabricationError handler above: the structural guard
++        # rejecting a non-compliant letter is the guard WORKING. Record an
++        # honest COMPLETED degrade so the Activity feed never shows a
++        # fabricated or structurally-invalid entity as a red failure.
++        honest_output: dict[str, Any] = {
++            "cover_letter_id": None,
++            "coverLetterUnavailable": True,
++            "reason": str(exc.issues),
++        }
++        runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
++        _refund_once()
++        raise
+     except QuotaExhaustedError as exc:
+         # Subscription quota exhausted mid-run — record honestly and 429.
+         runs.finish(run_id, "failed", error=str(exc))
+diff --git a/apps/api/app/services/dedup.py b/apps/api/app/services/dedup.py
+index 55fa76b..39a3eba 100644
+--- a/apps/api/app/services/dedup.py
++++ b/apps/api/app/services/dedup.py
+@@ -69,3 +69,27 @@ def compute_null_source_url_hash(
+ def compute_description_hash(description: str) -> str:
+     normalized = description.strip()[:500]
+     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
++
++
++def compute_story_content_hash(
++    user_id: str, title: str, situation: str, task: str,
++    action: str, result: str,
++) -> str:
++    """Content-based dedup hash for STAR stories.
++
++    Hashes (userId + title + situation + task + action + result) so that
++    re-running story extraction on the same résumé does not create duplicate
++    rows and to prevent manual create of identical stories from the REST API.
++
++    This mirrors ``compute_null_source_url_hash`` for jobs.  Tags and metrics
++    are intentionally excluded — they are decoration, not identity.
++    """
++    key = (
++        f"{user_id}|"
++        f"{title.strip().lower()}|"
++        f"{situation.strip().lower()}|"
++        f"{task.strip().lower()}|"
++        f"{action.strip().lower()}|"
++        f"{result.strip().lower()}"
++    )
++    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+diff --git a/apps/web/src/__tests__/dashboard/subscription-gate.test.tsx b/apps/web/src/__tests__/dashboard/subscription-gate.test.tsx
+index 061fc33..bcd4b4e 100644
+--- a/apps/web/src/__tests__/dashboard/subscription-gate.test.tsx
++++ b/apps/web/src/__tests__/dashboard/subscription-gate.test.tsx
+@@ -176,6 +176,29 @@ describe("SubscriptionGate", () => {
+     expect(screen.queryByTestId("subscription-paywall")).toBeNull();
+   });
+ 
++  it("keeps Email Center rendered for an authenticated free user so inbox access is not replaced by dashboard chrome only (G-P4-EMAIL-RENDER-001)", async () => {
++    // Email Center's read/compose surface must mount for an authenticated user.
++    // The backend remains the authority for privileged actions (agent runs/send),
++    // so the dashboard-wide entitlement wall must not replace this page entirely.
++    usePathnameMock.mockReturnValue("/dashboard/email");
++    fetchEntitlementMock.mockResolvedValue({
++      active_paid: false,
++      plan: { id: "free", status: "active" },
++      requiresSubscription: true,
++    });
++
++    render(
++      <SubscriptionGate>
++        <div data-testid="email-center">Email Command Center</div>
++      </SubscriptionGate>,
++    );
++
++    await waitFor(() => expect(screen.getByTestId("email-center")).toBeTruthy());
++    expect(screen.queryByTestId("subscription-paywall")).toBeNull();
++    // An exempt route should not wait on or depend on the entitlement request.
++    expect(fetchEntitlementMock).not.toHaveBeenCalled();
++  });
++
+   it("still gates a real, known dashboard section for a free user (MV-dashboard-001 must not open the whole dashboard)", async () => {
+     usePathnameMock.mockReturnValue("/dashboard/jobs");
+     fetchEntitlementMock.mockResolvedValue({
+diff --git a/apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx b/apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx
+index 2c4900d..9e64515 100644
+--- a/apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx
++++ b/apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx
+@@ -137,6 +137,10 @@ describe("Analytics period selector (MV-analytics-004)", () => {
+       /all time|all sources and time periods/,
+     );
+     expect(tooltip?.textContent?.toLowerCase()).toMatch(/selected period/);
++    // G-P4-FUNNEL-INCONSISTENCY-002: Analytics Summary must describe the
++    // same submitted-only count shown by Dashboard and Tracker funnels.
++    expect(tooltip?.textContent?.toLowerCase()).toMatch(/submitted to an employer/);
++    expect(tooltip?.textContent?.toLowerCase()).toMatch(/drafts.*excluded/);
+ 
+     // The period indicator itself updates when the selector changes.
+     fireEvent.click(screen.getByText("7d"));
+diff --git a/apps/web/src/app/dashboard/analytics/page.tsx b/apps/web/src/app/dashboard/analytics/page.tsx
+index 95f4d60..560e733 100644
+--- a/apps/web/src/app/dashboard/analytics/page.tsx
++++ b/apps/web/src/app/dashboard/analytics/page.tsx
+@@ -84,15 +84,12 @@ export default function AnalyticsPage() {
+   const maxBucket = ats ? Math.max(1, ...ats.buckets.map((b) => b.count)) : 1;
+ 
+   const SUMMARY_TIP: Record<string, string> = {
+-    // Honest about what's counted (data-consistency ruling,
+-    // MV-analytics-005): this is the canonical, unqualified "Applications"
+-    // figure — every Application record you have, including drafts you
+-    // haven't submitted yet — not the narrower "Applied"/submitted count
+-    // shown in the funnel below. It respects the period selector above
+-    // (GET /analytics/dashboard?period=..., MV-analytics-004) — the copy
+-    // must say so instead of claiming "all time periods" while the number
+-    // visibly changes when the selector is used.
+-    Applications: "Every application record created in the selected period — draft through offer or rejection.",
++    // This matches the Dashboard's "Active Applications" stat and each
++    // funnel's "Applied" stage: one distinct job that was submitted to an
++    // employer. Draft-only application work stays visible in the Tracker's
++    // separately labelled pipeline-item total. The selected period is applied
++    // server-side by GET /analytics/dashboard?period=... .
++    Applications: "Distinct jobs submitted to an employer in the selected period; drafts in progress are excluded.",
+     Interviews: "Applications that have progressed to at least one interview stage.",
+     Offers: "Applications where an employer has extended a formal offer.",
+     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
+diff --git a/apps/web/src/components/subscription-gate.tsx b/apps/web/src/components/subscription-gate.tsx
+index d057894..44c474b 100644
+--- a/apps/web/src/components/subscription-gate.tsx
++++ b/apps/web/src/components/subscription-gate.tsx
+@@ -41,10 +41,11 @@ type GateState = "loading" | "allowed" | "gated" | "error";
+ 
+ /**
+  * Routes that must stay reachable for every authenticated user regardless of
+- * subscription status — account/billing management, not metered agent features.
+- * A user must always be able to see their plan/quota and cancel their sub.
++ * subscription status. Settings is account management; Email Center's inbox,
++ * compose-draft and Gmail-connection UI must remain visible to authenticated
++ * users. Privileged email actions remain protected by their backend endpoints.
+  */
+-const GATE_EXEMPT_PREFIXES: readonly string[] = ["/dashboard/settings"];
++const GATE_EXEMPT_PREFIXES: readonly string[] = ["/dashboard/settings", "/dashboard/email"];
+ 
+ /**
+  * Every real dashboard section — one entry per `app/dashboard/<x>/page.tsx`.

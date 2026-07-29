@@ -67,6 +67,18 @@ describe("MarketPulse sources widget label", () => {
   });
 });
 
+describe("MarketPulse unavailable external market data state (GAP-P4-004)", () => {
+  it("identifies the unavailable external provider and keeps it distinct from user-derived metrics", async () => {
+    fetchMarketPulse.mockResolvedValue(FIXTURE);
+    render(<MarketPulse />);
+
+    const marketComparison = await screen.findByTestId("market-vs-you");
+    expect(marketComparison.textContent).toMatch(/external market benchmark unavailable/i);
+    expect(marketComparison.textContent).toMatch(/provider: none configured/i);
+    expect(marketComparison.textContent).toMatch(/your figures are derived from your saved jobs and applications/i);
+  });
+});
+
 describe("MarketPulse top-skills honest empty state (MV-mobile-dashboard-006, MV-analytics-006)", () => {
   it("shows explanatory copy instead of a silent blank area when topSkills is empty", async () => {
     fetchMarketPulse.mockResolvedValue({ ...FIXTURE, topSkills: [] });

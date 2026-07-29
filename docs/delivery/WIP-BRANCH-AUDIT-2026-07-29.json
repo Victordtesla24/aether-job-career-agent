@@ -1,0 +1,373 @@
+{
+  "artifact": "docs/delivery/WIP-BRANCH-AUDIT-2026-07-29.json",
+  "generatedAt": "2026-07-29T03:54:43Z",
+  "auditor": "reviewer sub-agent (adversarial, non-authoring, read-only)",
+  "repo": "/home/ubuntu/github_repos/aether-job-career-agent",
+  "branch": "fix/remove-fabricated-origination-activity",
+  "head": "5f0af49f004e293a0a0240b9e0b3eb40af083ec5",
+  "evidenceDiscipline": "Every claim below is tagged [VERIFIED-WITH-FRESH-EVIDENCE] (command output captured this run), [INFERRED] (deduced from read code, no runtime probe), or [ASSUMED-PENDING-PROBE].",
+
+  "intent": {
+    "summary": "A single interrupted session bundled SIX unrelated remediation workstreams from docs/delivery/PHASE4-GAP-ANALYSIS.md (gap ledger GAP-P4-001..004 plus derived G-P4-* finding ids) into one uncommitted tree. The branch NAME ('remove fabricated origination activity') corresponds to only ONE of them (GAP-P4-002).",
+    "evidence": "[VERIFIED-WITH-FRESH-EVIDENCE] docs/delivery/PHASE4-GAP-ANALYSIS.md lines 184-221 (GAP-P4-002 CRITICAL 'Fabricated entities detected: [origination]'; GAP-P4-004 MEDIUM 'Market data: not connected'); docs/delivery/GAP-P4-003-RCA.md (funnel RCA, concluded NO code defect); docs/delivery/EXTERNAL-CLIENT-ACCESS-FIX-2026-07-29.md line 17 (OBS-EXT-004 flags this exact WIP tree).",
+    "workstreams": [
+      {
+        "id": "G-P4-STORY-DEDUP-004",
+        "goal": "Content-hash dedup for STAR stories so re-running the story-extractor agent / double-POSTing does not create duplicate StoryEntry rows.",
+        "files": ["apps/api/app/db.py", "apps/api/app/services/dedup.py", "apps/api/app/repositories/story.py", "apps/api/tests/test_story_dedup.py"]
+      },
+      {
+        "id": "GAP-P4-002 (branch namesake)",
+        "goal": "Stop the cover agent's fabrication/structural guard rejection from rendering as a red 'failed' row in the Activity feed; record an honest COMPLETED degrade instead.",
+        "files": ["apps/api/app/routers/agents.py"]
+      },
+      {
+        "id": "GAP-P4-004",
+        "goal": "Name the unavailable external market-benchmark provider explicitly instead of only 'not connected'.",
+        "files": ["apps/web/src/components/analytics/MarketPulse.tsx", "apps/web/src/components/analytics/__tests__/MarketPulse.test.tsx"]
+      },
+      {
+        "id": "G-P4-FUNNEL-INCONSISTENCY-002",
+        "goal": "Make the Analytics 'Applications' summary tooltip describe the same count as the Dashboard/Tracker funnels.",
+        "files": ["apps/web/src/app/dashboard/analytics/page.tsx", "apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx"]
+      },
+      {
+        "id": "G-P4-EMAIL-RENDER-001",
+        "goal": "Exempt /dashboard/email from the subscription paywall so authenticated free users reach the inbox.",
+        "files": ["apps/web/src/components/subscription-gate.tsx", "apps/web/src/__tests__/dashboard/subscription-gate.test.tsx"]
+      },
+      {
+        "id": "G-P4-AUTOAPPLY-CONTRACT-006",
+        "goal": "Rewrite the Applications safety banner to distinguish auto-apply (generation automation) from the approval gate (submission gating).",
+        "files": ["apps/web/src/app/dashboard/applications/page.tsx"]
+      }
+    ],
+    "branchCommitContext": "[VERIFIED-WITH-FRESH-EVIDENCE] git show --stat: c5676ec = 1-line board-sweep test expectation; 14e30c5 = submission validation gate (applications.py, jobs.py + 2 test files); 5f0af49 = jobs.ts apiBaseUrl() footgun removal (separately reviewed PASS, already deployed). NONE of the three commits touches the WIP files; the WIP is entirely uncommitted."
+  },
+
+  "perFile": {
+    "apps/api/app/db.py": {
+      "purpose": "Adds ensure_story_dedup_column() — lazy, idempotent, advisory-locked ALTER TABLE \"StoryEntry\" ADD COLUMN IF NOT EXISTS \"contentHash\" text.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": ["apps/api/app/repositories/story.py"],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Faithfully mirrors the established ensure_job_dedup_columns precedent at apps/api/app/db.py:295-331 (same information_schema pre-check, same pg_advisory_xact_lock serialization, distinct lock key 9380710313 vs 7420240730). Additive-only, no DROP/ALTER TYPE. Meets the additive-migrations-only standard.",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] The absence of contentHash from packages/db/src/schema.prisma is NOT a defect: grep for contentHash|dedupHash|sourceUrlHash|descriptionHash over schema.prisma returns ZERO hits, i.e. the already-shipped Job dedup columns are also runtime-only. db.py:302-303 documents the governing ruling: 'Introduced by lazy DDL (ADR-TR-1 — there is no migration runner)'. Consistent with precedent."
+      ]
+    },
+
+    "apps/api/app/services/dedup.py": {
+      "purpose": "Adds compute_story_content_hash(user_id, title, situation, task, action, result) -> sha256 of the pipe-joined, stripped, lower-cased key.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": ["apps/api/app/repositories/story.py"],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Pure and deterministic. No Math.random, no placeholder, no TODO, no @ts-ignore, no broad any cast, no suppressed exception (grep over all changed source files returned zero prohibited-pattern hits).",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Tags/metrics exclusion is deliberate and matches its docstring; tests/test_story_dedup.py::test_different_tags_metrics_still_deduped and ::test_whitespace_normalized both pass, so the documented behaviour is the actual behaviour."
+      ]
+    },
+
+    "apps/api/tests/test_story_dedup.py": {
+      "purpose": "6 API-level tests for story content-hash dedup (duplicate returns existing id, distinct content distinct ids, title-only collision does NOT dedup, tags/metrics ignored, whitespace normalized, list has no duplicates).",
+      "complete": true,
+      "dependsOn": ["apps/api/app/repositories/story.py", "apps/api/app/services/dedup.py", "apps/api/app/db.py"],
+      "risks": [
+        "MED — [VERIFIED-WITH-FRESH-EVIDENCE] No test covers PUT /stories/{id} (the update() hash-refresh path this same WIP added), which is exactly where defect API-3 below lives. Missing edge case."
+      ],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] 6 passed in 13.17s via 'flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_story_dedup.py -q'.",
+        "[INFERRED] No failing-before evidence exists on disk for this file (TDD standard not demonstrably met), but the fix is genuinely exercised by the tests, so this is a documentation gap not a fake-green."
+      ]
+    },
+
+    "apps/api/app/repositories/story.py": {
+      "purpose": "create() computes contentHash, SELECTs an existing row with the same (userId, contentHash) and returns it instead of inserting a duplicate; update() recomputes the hash when any STAR field changes; read paths switched to a new _READ_COLUMNS list that omits contentHash.",
+      "complete": false,
+      "dependsOn": ["apps/api/app/db.py", "apps/api/app/services/dedup.py"],
+      "dependedOnBy": [],
+      "risks": [
+        "HIGH (API-3) — [VERIFIED-WITH-FRESH-EVIDENCE by code read + call-site grep] apps/api/app/repositories/story.py update() appends '\"contentHash\" = %s' to the UPDATE SET clause but NEVER calls ensure_story_dedup_column(). grep -rn 'ensure_story_dedup_column' apps/api/ returns exactly two call sites: the def in db.py:338 and ONE invocation at story.py:31 (create only). The module-level _story_dedup_column_ready guard is per-process, so in a freshly restarted api process whose first StoryEntry operation is a PUT /stories/{id} carrying a STAR field, the column has never been ensured. [INFERRED] Production schema 'aether' has never run this DDL (prod runs pre-WIP code per EXTERNAL-CLIENT-ACCESS-FIX-2026-07-29.md OBS-EXT-004), so that PUT raises psycopg2 UndefinedColumn -> HTTP 500. Not caught by tests because the shared aether_test schema already has the column once any create-path test has run.",
+        "MED (API-4) — [VERIFIED-WITH-FRESH-EVIDENCE] Response-shape inconsistency and internal-value leak. story.py:5-8 _COLUMNS (used by the INSERT ... RETURNING) INCLUDES contentHash; the dedup-hit branch re-SELECTs with _READ_COLUMNS which EXCLUDES it. apps/api/app/routers/stories.py:144-146 create_story is annotated '-> dict[str, Any]' with NO response_model, so FastAPI serializes the repository dict verbatim. Consequence: POST /stories returns the raw internal sha256 on a first insert and omits the field entirely on a dedup hit — two different response shapes from one endpoint, one of them exposing an internal dedup token.",
+        "LOW (API-5) — [VERIFIED-WITH-FRESH-EVIDENCE] File no longer ends with a newline (xxd of the last 30 bytes ends '...return deleted > 0' with no 0x0a; git diff reports '\\ No newline at end of file'). A classic interrupted-edit marker, and a diff-noise/lint regression."
+      ],
+      "notes": [
+        "The create() dedup logic itself is correct and proven by 6 green tests; the incompleteness is confined to update(), the response shape, and EOF hygiene."
+      ]
+    },
+
+    "apps/api/app/routers/agents.py": {
+      "purpose": "Adds 'except FabricationError' and 'except StructuralError' handlers to _execute_reserved_run so a guard rejection is recorded as an honest COMPLETED degrade (coverLetterUnavailable) rather than a red 'failed' Activity row (GAP-P4-002).",
+      "complete": false,
+      "dependsOn": ["apps/api/app/agents/cover_letter_agent.py"],
+      "dependedOnBy": [],
+      "risks": [
+        "BLOCKER (API-1) — [VERIFIED-WITH-FRESH-EVIDENCE, runtime traceback] apps/api/app/routers/agents.py:785 'except FabricationError as exc:' and :805 'except StructuralError as exc:' reference names that are NEVER bound at module scope. grep over agents.py shows the ONLY imports of these symbols are FUNCTION-LOCAL, at line 1611 and line 1754 ('from app.agents.cover_letter_agent import FabricationError, StructuralError'), neither of which is in scope inside _execute_reserved_run. The module header (agents.py:8-57) imports nothing from app.agents.cover_letter_agent.",
+        "BLOCKER (API-1, blast radius) — [VERIFIED-WITH-FRESH-EVIDENCE] Python evaluates except-clause expressions in order at raise time. The chain in _execute_reserved_run is: HTTPException -> NoChangesApplied -> FabricationError(UNDEFINED) -> StructuralError(UNDEFINED) -> QuotaExhaustedError -> LLMUnavailableError -> Exception. Therefore EVERY exception that is not HTTPException and not NoChangesApplied now dies on a NameError BEFORE reaching its intended handler. Concretely: (a) runs.finish(run_id, 'failed', ...) never executes, leaving the AgentRun audit row orphaned in 'running' forever; (b) _refund_once() never executes, so a PAYING USER'S RESERVED RUN IS NEVER REFUNDED after a failure — a direct billing defect; (c) LLMUnavailableError no longer maps to a clean 503 and QuotaExhaustedError no longer maps to 429 — both surface as an opaque 500. This is precisely the honest-error-state and no-silent-failure standard being violated, and it is a revenue-affecting regression.",
+        "BLOCKER (API-1, proof) — [VERIFIED-WITH-FRESH-EVIDENCE] Two PRE-EXISTING, UNTOUCHED tests fail on this working tree: 'flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_ml_agents_err_001_obs.py tests/test_llm_resilience.py -q' -> '2 failed, 29 passed'. Both failures are tests/test_llm_resilience.py::TestRouter503Mapping::test_tailor_returns_503_not_500_when_llm_unavailable and ::test_failed_run_is_audited. Captured traceback: '>       except FabricationError as exc:' / 'E       NameError: name FabricationError is not defined' / 'app/routers/agents.py:785: NameError'. test_llm_resilience.py is NOT in the modified-file set, so the regression is unambiguously attributable to this WIP hunk.",
+        "HIGH (API-2) — [VERIFIED-WITH-FRESH-EVIDENCE] Zero test coverage for the intended new behaviour. No test asserts that a FabricationError or StructuralError produces status='completed' with coverLetterUnavailable=true on the AgentRun row. The TDD standard (failing-before evidence, legible) is entirely unmet for the branch's namesake change.",
+        "MED (API-6) — [INFERRED] The handler records status='completed' with cost_usd=0.0 AND calls _refund_once() AND re-raises. On the async path _execute_reserved_run is invoked with manage_quota=False (agents.py:717-724 docstring) so _refund_once() is a no-op and the worker refunds after its first-terminal-wins transition — but the re-raise now also propagates past a handler that already wrote a terminal 'completed' status, so the async worker may write a SECOND terminal transition for the same run. Unproven either way, and untested. Needs a probe before this handler ships.",
+        "LOW (API-7) — [VERIFIED-WITH-FRESH-EVIDENCE] 'honest_output: dict[str, Any]' is re-annotated in two sibling except blocks within a scope that already assigns an unannotated 'honest_output' in the NoChangesApplied handler. Legal at runtime; a mypy redefinition complaint."
+      ],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] The attribute accesses themselves are correct: apps/api/app/agents/cover_letter_agent.py:1043-1046 defines FabricationError.flagged and :1049-1056 defines StructuralError.issues. The defect is purely the missing module-level import — but its consequence is severe and unbounded.",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] The inline comment claims the reason string is 'NEVER verbatim LLM output, zero PII risk'. str(exc.flagged) is a list of guard-extracted entity strings lifted FROM the model draft (e.g. ['origination']); calling that 'never verbatim LLM output' is an overstatement. Low risk in practice, but the comment asserts more than the code guarantees."
+      ]
+    },
+
+    "apps/web/src/app/dashboard/analytics/page.tsx": {
+      "purpose": "Rewrites the SUMMARY_TIP.Applications tooltip from 'Every application record created in the selected period — draft through offer or rejection.' to 'Distinct jobs submitted to an employer in the selected period; drafts in progress are excluded.'",
+      "complete": false,
+      "dependsOn": ["apps/api/app/routers/analytics.py (NOT modified)"],
+      "dependedOnBy": ["apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx"],
+      "risks": [
+        "BLOCKER (WEB-1, fabricated claim) — [VERIFIED-WITH-FRESH-EVIDENCE] The new copy is FALSE against the live backend. The card renders dashboard.totalApplications (apps/web/src/app/dashboard/analytics/page.tsx:166). The backend builds that value at apps/api/app/routers/analytics.py:631 via get_application_counts(cur, user_id, app_filter)['total'], and analytics.py:49-51 defines 'total' as COUNT(DISTINCT \"jobId\") with NO status filter, versus a separate 'submitted' key defined as COUNT(DISTINCT \"jobId\") FILTER (WHERE \"status\" <> 'draft'). The card uses total. Drafts are therefore INCLUDED, and the new tooltip claims the exact opposite.",
+        "BLOCKER (WEB-1, proof) — [VERIFIED-WITH-FRESH-EVIDENCE] 'flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_analytics.py -q' -> '11 passed'. That green suite includes apps/api/tests/test_analytics.py:219-234, which seeds 3 drafts + 4 non-draft applications and asserts dashboard['totalApplications'] == 7 while funnel['applied'] == 4. So on that fixture the card shows 7 and the new tooltip tells the user it is showing 4.",
+        "BLOCKER (WEB-1, reverses a documented ruling with no ADR) — [VERIFIED-WITH-FRESH-EVIDENCE] The DELETED comment block and the backend docstring both encode a prior data-consistency ruling (MV-analytics-005). apps/api/app/routers/analytics.py:40-42: \"'total' is ... the canonical 'applications' figure for any surface whose label does not itself narrow to a subset (e.g. the analytics dashboard-summary card).\" analytics.py:625-630: \"this card's label is the unqualified 'Applications', so it must show every Application row, not a narrower submitted-only count.\" The WIP silently inverts that ruling in copy only, with no ADR and no backend change.",
+        "BLOCKER (WEB-1, direction) — [INFERRED] This change makes the product LESS honest, on a branch whose stated purpose is removing fabricated claims. The removed copy was the accurate one."
+      ],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] apps/api/app/routers/analytics.py is NOT in git status --porcelain — the backend half of this change was never written. This is a genuine half-done edit, not a deliberate copy-only decision."
+      ]
+    },
+
+    "apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx": {
+      "purpose": "Adds two assertions that the Applications tooltip matches /submitted to an employer/ and /drafts.*excluded/.",
+      "complete": true,
+      "dependsOn": ["apps/web/src/app/dashboard/analytics/page.tsx"],
+      "dependedOnBy": [],
+      "risks": [
+        "BLOCKER (WEB-2, fabricated green) — [VERIFIED-WITH-FRESH-EVIDENCE] This test passes (3 tests green) while the assertion it locks in is factually false about the product. It asserts the STRING in the tooltip, never the SEMANTICS of the number beside it, so it converts defect WEB-1 into a protected regression. A green test that enforces a false user-facing claim is worse than no test."
+      ],
+      "notes": []
+    },
+
+    "apps/web/src/components/analytics/MarketPulse.tsx": {
+      "purpose": "Renders an explicit 'External market benchmark unavailable / Provider: none configured' notice inside the market-vs-you card when data.marketVsYou.marketDataConnected is false (GAP-P4-004).",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": ["apps/web/src/components/analytics/__tests__/MarketPulse.test.tsx"],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Fully wired end to end, no half-references. The field is typed at apps/web/src/lib/api/workspaces.ts:439 ('marketDataConnected: boolean'), served by the backend at apps/api/app/routers/analytics.py:552 ('\"marketDataConnected\": _MARKET_DATA_SOURCE_CONNECTED'), covered by a green backend assertion at apps/api/tests/test_analytics.py:196, and the enclosing data-testid=\"market-vs-you\" container already exists at MarketPulse.tsx:296.",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] This is an HONEST degraded state, not a silent fallback and not fabricated data — it satisfies the GAP-P4-004 fix specification ('retain a clearly labelled unavailable state ... never replace it with static/mock market metrics'). This is the single best change in the tree."
+      ]
+    },
+
+    "apps/web/src/components/analytics/__tests__/MarketPulse.test.tsx": {
+      "purpose": "Adds a test asserting the unavailable-provider notice renders and stays distinct from user-derived metrics.",
+      "complete": true,
+      "dependsOn": ["apps/web/src/components/analytics/MarketPulse.tsx"],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": ["[VERIFIED-WITH-FRESH-EVIDENCE] 4 tests green; the fixture at line 45 sets marketDataConnected: false, matching the real backend default."]
+    },
+
+    "apps/web/src/components/subscription-gate.tsx": {
+      "purpose": "Adds '/dashboard/email' to GATE_EXEMPT_PREFIXES so the Email Center bypasses the subscription paywall entirely.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": ["apps/web/src/__tests__/dashboard/subscription-gate.test.tsx"],
+      "risks": [
+        "MED (WEB-3, unverified revenue claim) — [VERIFIED-WITH-FRESH-EVIDENCE] The new docstring asserts 'Privileged email actions remain protected by their backend endpoints.' That claim does not hold for subscription entitlement: grep -rn 'subscription|quota|entitle' over apps/api/app/routers/emails.py returns ZERO matches, and the module's imports (emails.py:6-24) pull in only db, CurrentUser auth, GmailAccountRepository and google_oauth — no billing dependency. Authentication is enforced; PAID entitlement is not. Agent-run email paths that route through /agents/* remain quota-gated, but the direct email endpoints do not.",
+        "MED (WEB-3, scope) — [INFERRED] Opening a dashboard section to unpaid users is a pricing/packaging decision, not a rendering bug fix. It belongs to the owner, not to a fixer session, and there is no ADR authorizing it in this tree."
+      ],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Mechanically the change is complete and correct: isGateExempt (subscription-gate.tsx:84-89) covers both exact match and prefix, the effect early-returns before fetchEntitlement (line 110-112), and the render path early-returns children (line 131-133). The fail-closed error branch for non-exempt routes is untouched. No silent fallback introduced."
+      ]
+    },
+
+    "apps/web/src/__tests__/dashboard/subscription-gate.test.tsx": {
+      "purpose": "Adds a test that /dashboard/email renders children for an authenticated free user and never calls fetchEntitlement.",
+      "complete": true,
+      "dependsOn": ["apps/web/src/components/subscription-gate.tsx"],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] 9 tests green, including the pre-existing counter-test 'still gates a real, known dashboard section for a free user' — so the paywall was not blanket-disabled. The test is honest about what it locks in."
+      ]
+    },
+
+    "apps/web/src/app/dashboard/applications/page.tsx": {
+      "purpose": "Replaces the single yellow 'Auto-apply is a high-risk action' banner with a two-state banner keyed on agentConfig.approvalGate: green reassurance when the gate is on, red warning when it is off.",
+      "complete": false,
+      "dependsOn": ["apps/api/app/routers/workspaces.py"],
+      "dependedOnBy": [],
+      "risks": [
+        "MED (WEB-4, zero coverage on a SAFETY surface) — [VERIFIED-WITH-FRESH-EVIDENCE] grep -rln 'auto-apply-banner' apps/web/src matches exactly ONE file: the page itself. No test file references the testid. A human-in-the-loop safety banner was rewritten with no assertion that the red 'Approval gate is OFF' branch ever renders. Missing edge case on the highest-consequence branch.",
+        "LOW (WEB-5, broken icon) — [VERIFIED-WITH-FRESH-EVIDENCE] applications/page.tsx:685 uses 'fa-solid fa-shield-check'. apps/web/src/app/layout.tsx:35 loads Font Awesome 6.5.1 FREE from cdnjs, in which fa-shield-check is a Pro-only glyph. Every other shield in the codebase (9 call sites: dashboard/page.tsx:564, cover-letters/page.tsx:272, email/page.tsx:901, settings-client.tsx:604, ProviderConfigModal.tsx:467, ApprovalModal.tsx:138, RejectionPanel.tsx:15, NegotiationCoach.tsx:59) correctly uses the free 'fa-shield-halved'. This one line will render an empty box — a concrete signal the hunk was never viewed in a browser."
+      ],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] The data dependency IS properly wired, so this is not a half-reference: approvalGate is typed at apps/web/src/lib/api/workspaces.ts:366, declared at apps/api/app/routers/workspaces.py:755 and served with a True default at workspaces.py:772 and :808. The '?? true' fallback at page.tsx:586 fails safe (assumes the gate is on rather than showing a false red alarm).",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] 'import Link from \"next/link\"' is already present at page.tsx:14, so the three new <Link> elements compile."
+      ]
+    },
+
+    "docs/delivery/GAP-P4-003-RCA.md": {
+      "purpose": "Untracked RCA concluding GAP-P4-003 (0% interview/offer conversion) is expected behaviour, not a code defect — there is no connected employer-outcome source, and inventing a Submitted->Screened transition would fabricate an employer response.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Documentation only, no code impact. Honest about its own limits — lines 108-111 explicitly decline to assert an unverified DB count. Safe to commit as-is. Its conclusion ('Do not add a timer- or agent-based Submitted->Screened->Interview transition') is a fabrication guard that this tree respects."
+      ]
+    },
+
+    "docs/delivery/PHASE4-GAP-ANALYSIS.md": {
+      "purpose": "Untracked Stage-B gap ledger (GAP-P4-001..004) that is the source of intent for this entire WIP.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": ["[VERIFIED-WITH-FRESH-EVIDENCE] Documentation only. Explicitly marks nothing VERIFIED-CLOSED. Safe to commit as-is."]
+    },
+
+    "docs/delivery/EXTERNAL-CLIENT-ACCESS-FIX-2026-07-29.md": {
+      "purpose": "Untracked record of the separate, already-deployed external-client access fix (DEF-EXT-001/002 -> commit 5f0af49).",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Documentation only, safe to commit. Line 17 (OBS-EXT-004) independently predicted this audit's core risk: 'the healthy prod API runs pre-WIP code. aether-api deliberately NOT restarted (would activate untested WIP). A VM reboot would activate that WIP untested.' This audit CONFIRMS that warning and quantifies it (see API-1).",
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Line 34 (QA-RES-001) states the pending Gmail-credential-cache api fix is blocked on exactly this decision."
+      ]
+    },
+
+    "uat/scripts/phase4_scout_sweep.mjs": {
+      "purpose": "Untracked Playwright scout-sweep harness used to produce the Phase-4 evidence.",
+      "complete": true,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "risks": [],
+      "notes": [
+        "[VERIFIED-WITH-FRESH-EVIDENCE] Test tooling only, not shipped code. Its only prohibited-pattern grep hit (line 72) is a DETECTOR regex searching rendered pages for /Lorem|TODO|Sample|Test data|Demo|example\\.com/ — i.e. it hunts placeholders rather than introducing them. No Math.random, no fabricated fixtures. Mode 0600; harmless to commit."
+      ]
+    }
+  },
+
+  "coherent": false,
+  "coherenceAssessment": "The tree is SIX independent workstreams sharing one working directory, not one coherent change. Only the story-dedup cluster (db.py + dedup.py + story.py + test_story_dedup.py) has genuine internal coupling; every other file is independent of every other. Two of the six workstreams contain defects that are individually sufficient to block a commit, and the branch's own namesake workstream (GAP-P4-002 in agents.py) is the single most broken thing in the tree.",
+
+  "missingPieces": [
+    "BLOCKER — module-level 'from app.agents.cover_letter_agent import FabricationError, StructuralError' in apps/api/app/routers/agents.py. Without it, agents.py:785 raises NameError and the QuotaExhaustedError/LLMUnavailableError/Exception handlers below it become UNREACHABLE, killing both the AgentRun failure audit and the quota refund for paying users.",
+    "BLOCKER — the backend half of the analytics tooltip change. Either apps/api/app/routers/analytics.py:631 must switch from get_application_counts(...)['total'] to ['submitted'] (which reverses documented ruling MV-analytics-005 across the Dashboard, mobile dashboard, Tracker and Market Pulse and would break the green assertion at apps/api/tests/test_analytics.py:232), or the tooltip copy and its two new test assertions must be reverted to the honest original. Nothing in this tree does either.",
+    "HIGH — ensure_story_dedup_column() call at the top of StoryRepository.update() in apps/api/app/repositories/story.py (currently only create() at story.py:31 calls it).",
+    "HIGH — any test asserting the intended GAP-P4-002 behaviour: that a FabricationError/StructuralError yields AgentRun status='completed' with coverLetterUnavailable=true rather than 'failed'. Zero such test exists; the branch's namesake change has no failing-before evidence and no pass-after evidence.",
+    "MED — a resolution for the async double-terminal-transition question (API-6): _execute_reserved_run now writes a terminal 'completed' AND re-raises, while the async worker independently writes its own terminal transition.",
+    "MED — response-shape reconciliation in apps/api/app/repositories/story.py: create() must return the SAME column set on the insert path (_COLUMNS, includes contentHash) and the dedup path (_READ_COLUMNS, excludes it); the internal hash should be dropped from both.",
+    "MED — an owner/ADR ruling on whether /dashboard/email is a free-tier feature (WEB-3), plus backend entitlement enforcement on apps/api/app/routers/emails.py if it is not.",
+    "MED — a test covering the red 'Approval gate is OFF' branch of the Applications safety banner (WEB-4).",
+    "LOW — fa-shield-check -> fa-shield-halved at apps/web/src/app/dashboard/applications/page.tsx:685 (Pro-only glyph on a Free CDN build).",
+    "LOW — trailing newline at end of apps/api/app/repositories/story.py."
+  ],
+
+  "targetedTests": {
+    "runbookCompliance": "[VERIFIED-WITH-FRESH-EVIDENCE] docs/delivery/DEPLOYMENT-RUNBOOK.md §0 read before any pytest. All backend runs used 'flock /tmp/aether-pytest.lock scripts/run-tests.sh ...' exactly; .env was never sourced. Every run printed '[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.'",
+    "run": [
+      "flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_story_dedup.py -q",
+      "flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_ml_agents_err_001_obs.py tests/test_llm_resilience.py -q",
+      "flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_llm_resilience.py::TestRouter503Mapping -q",
+      "flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_analytics.py -q",
+      "pnpm --dir apps/web exec vitest run src/__tests__/dashboard/subscription-gate.test.tsx src/app/dashboard/analytics/__tests__/page.test.tsx src/components/analytics/__tests__/MarketPulse.test.tsx --silent"
+    ],
+    "passed": 62,
+    "failed": 2,
+    "results": [
+      {"suite": "tests/test_story_dedup.py", "passed": 6, "failed": 0, "duration": "13.17s"},
+      {"suite": "tests/test_ml_agents_err_001_obs.py + tests/test_llm_resilience.py", "passed": 29, "failed": 2, "duration": "27.28s"},
+      {"suite": "tests/test_analytics.py", "passed": 11, "failed": 0, "duration": "23.58s"},
+      {"suite": "vitest x3 (subscription-gate, analytics page, MarketPulse)", "passed": 16, "failed": 0, "duration": "10.32s"}
+    ],
+    "failures": [
+      {
+        "test": "apps/api/tests/test_llm_resilience.py::TestRouter503Mapping::test_tailor_returns_503_not_500_when_llm_unavailable",
+        "cause": "NameError: name 'FabricationError' is not defined — app/routers/agents.py:785",
+        "attribution": "[VERIFIED-WITH-FRESH-EVIDENCE] test_llm_resilience.py is untouched by this WIP (not in git status --porcelain); the failure is caused solely by the uncommitted apps/api/app/routers/agents.py hunk.",
+        "severity": "BLOCKER"
+      },
+      {
+        "test": "apps/api/tests/test_llm_resilience.py::TestRouter503Mapping::test_failed_run_is_audited",
+        "cause": "NameError: name 'FabricationError' is not defined — app/routers/agents.py:785",
+        "attribution": "[VERIFIED-WITH-FRESH-EVIDENCE] Same root cause. This is the AUDIT-TRAIL test: it proves the AgentRun row is no longer recorded as failed, i.e. the audit trail silently loses failed runs.",
+        "severity": "BLOCKER"
+      }
+    ],
+    "notRun": [
+      "Full pytest suite and full vitest suite — out of scope per brief (targeted tests only).",
+      "Any test of StoryRepository.update() on a schema lacking contentHash — cannot be constructed without editing the repo (read-only mandate) and the shared aether_test schema already has the column.",
+      "Any live production probe — prohibited by the read-only/no-restart mandate."
+    ]
+  },
+
+  "prohibitedPatternScan": {
+    "scanned": ["Math.random()", "fabricated/fake data", "hardcoded metrics or model lists", "placeholder strings", "TODO/FIXME", "@ts-ignore", "eslint-disable", "broad any casts", "suppressed errors"],
+    "result": "[VERIFIED-WITH-FRESH-EVIDENCE] Zero hits across all changed source files (apps/api/app/db.py, repositories/story.py, services/dedup.py, apps/web analytics/page.tsx, MarketPulse.tsx, subscription-gate.tsx). The one grep hit in uat/scripts/phase4_scout_sweep.mjs:72 is a placeholder DETECTOR regex in test tooling, not a planted placeholder.",
+    "howeverFabricationFound": "The fabrication in this tree is not a code pattern — it is FALSE USER-FACING COPY (WEB-1) backed by a green test that asserts the false string (WEB-2). This is the fabrication/entailment guard being weakened in the most literal sense, on the branch explicitly named for removing fabricated claims."
+  },
+
+  "billingAndProviderSeparation": {
+    "verdict": "[VERIFIED-WITH-FRESH-EVIDENCE] The resolve_provider contract is UNTOUCHED by this tree — no changed file references resolve_provider, model-id routing, OpenRouter, or the '/' in model id => OpenRouter / bare claude-* => direct Anthropic rule. Provider/billing separation is preserved.",
+    "butBillingRegression": "[VERIFIED-WITH-FRESH-EVIDENCE] A DIFFERENT billing invariant IS broken: API-1 makes _refund_once() unreachable on every failure path below agents.py:785, so a paying user's reserved run is consumed by a failed run and never refunded. This is a silent revenue-affecting defect that would begin the moment aether-api restarts."
+  },
+
+  "recommendation": "REVERT",
+
+  "recommendationDetail": {
+    "headline": "REVERT the tree as it stands. Do NOT commit it, and do NOT restart aether-api until at minimum apps/api/app/routers/agents.py and apps/api/app/repositories/story.py are reverted.",
+    "rationale": "COMMIT-AS-IS is disqualified outright by API-1 (proven NameError breaking refunds and the failure audit trail for paying users) and WEB-1 (proven false user-facing metric copy). COMPLETE-AND-COMMIT is rejected as a single action because completing this tree is not a bug-fix exercise: it requires an owner pricing ruling (WEB-3), an ADR-level reversal or abandonment of documented data-consistency ruling MV-analytics-005 (WEB-1), and an unresolved async double-terminal-transition design question (API-6). None of those can be closed by a fixer, and the api deploy blocked behind this decision (QA-RES-001, the Gmail credential-cache fix) should not wait on them. Reverting the four api files unblocks aether-api restart IMMEDIATELY and costs nothing that cannot be re-landed cleanly.",
+    "perClusterAction": [
+      {
+        "cluster": "GAP-P4-002 — apps/api/app/routers/agents.py",
+        "action": "REVERT NOW",
+        "why": "Proven production-breaking (API-1). Re-land later as its own branch WITH a module-level import, a failing-before test asserting status='completed' + coverLetterUnavailable, and a resolution for API-6.",
+        "unblocks": "aether-api restart / the QA-RES-001 Gmail credential-cache deploy."
+      },
+      {
+        "cluster": "G-P4-STORY-DEDUP-004 — db.py, dedup.py, story.py, tests/test_story_dedup.py",
+        "action": "REVERT NOW, RE-LAND SEPARATELY",
+        "why": "The work is genuinely good (6/6 green, additive DDL matching the ensure_job_dedup_columns/ADR-TR-1 precedent) but story.py carries a latent 500 (API-3: update() never ensures the column, and production's aether schema has never had it) plus a response-shape leak (API-4). Reverting all four together keeps the api tree clean for an immediate restart; re-land as one small branch once update() calls ensure_story_dedup_column(), create() returns a consistent column set, a PUT /stories test exists, and the trailing newline is restored.",
+        "alternative": "If the orchestrator wants to preserve the dedup work in-place, the MINIMUM before any api restart is: add the ensure call to update(), align _COLUMNS/_READ_COLUMNS, add the PUT test. That is a small, bounded fix — but it must not be bundled with agents.py."
+      },
+      {
+        "cluster": "G-P4-FUNNEL-INCONSISTENCY-002 — analytics/page.tsx + its test",
+        "action": "REVERT NOW",
+        "why": "The tooltip is provably false (WEB-1) and the modified test protects the falsehood (WEB-2). This is currently LIVE in the running web build — the app is telling users right now that a drafts-inclusive number excludes drafts. Reverting restores the honest copy. If the underlying inconsistency is still considered a real gap, re-open it as a backend/ADR question, not a copy edit."
+      },
+      {
+        "cluster": "GAP-P4-004 — MarketPulse.tsx + its test",
+        "action": "KEEP — COMPLETE AND COMMITTABLE",
+        "why": "Fully wired (typed at workspaces.ts:439, served at analytics.py:552, covered by green tests both sides), honest degraded state, zero risk, satisfies the GAP-P4-004 fix spec. The only unambiguously good change in the tree. Already live in the running web build."
+      },
+      {
+        "cluster": "G-P4-EMAIL-RENDER-001 — subscription-gate.tsx + its test",
+        "action": "HOLD FOR OWNER RULING",
+        "why": "Mechanically complete and correctly fail-closed, but it is a pricing/packaging decision (WEB-3) whose in-code justification ('protected by their backend endpoints') does not hold for subscription entitlement — emails.py has no billing dependency. Already live in the running web build, so the paywall hole is OPEN right now; escalate rather than quietly ratify."
+      },
+      {
+        "cluster": "G-P4-AUTOAPPLY-CONTRACT-006 — applications/page.tsx",
+        "action": "KEEP WITH FOLLOW-UPS",
+        "why": "Correctly wired to a real, defaulted backend field and fails safe; genuinely clearer than the banner it replaces. Needs a test for the red gate-OFF branch (WEB-4) and the fa-shield-check -> fa-shield-halved fix (WEB-5). Already live in the running web build."
+      },
+      {
+        "cluster": "docs/delivery/*.md + uat/scripts/phase4_scout_sweep.mjs (untracked)",
+        "action": "COMMIT AS-IS",
+        "why": "Documentation and test tooling only. No code impact, no prohibited patterns. GAP-P4-003-RCA.md in particular is a valuable fabrication guard (it argues AGAINST inventing employer-outcome transitions) and should be preserved."
+      }
+    ],
+    "webSideCaveat": "[VERIFIED-WITH-FRESH-EVIDENCE per EXTERNAL-CLIENT-ACCESS-FIX-2026-07-29.md line 17] All six web files are ALREADY in the running aether-web build. Reverting analytics/page.tsx therefore requires a web rebuild + immediate restart under runbook §0.3 (build->restart atomically, per INCIDENT-2026-07-21-web-build-clobber). That is a separate, deliberate action — do not revert web files on disk and leave the build stale, or you recreate the split-brain that caused DEF-EXT-001."
+  },
+
+  "apiRestartSafe": false,
+  "apiRestartSafeExplanation": "[VERIFIED-WITH-FRESH-EVIDENCE] NO. Restarting aether-api against this tree loads apps/api/app/routers/agents.py with two undefined-name except clauses at lines 785 and 805. From that moment, every agent-run failure that is not an HTTPException or NoChangesApplied raises NameError instead of its handler: the AgentRun row is never finished (orphaned 'running' forever), the reserved run is NEVER REFUNDED to a paying user, LLM outages return 500 instead of 503, and quota exhaustion returns 500 instead of 429. Proven, not theorised — two untouched pre-existing tests fail with the exact traceback 'NameError: name FabricationError is not defined / app/routers/agents.py:785'. A second, independent restart hazard exists in apps/api/app/repositories/story.py: update() writes \"contentHash\" without ever calling ensure_story_dedup_column(), and production's aether schema has never had that column, so the first PUT /stories/{id} carrying a STAR field in a fresh process returns 500.",
+  "apiRestartSafeAfterRevert": true,
+  "apiRestartSafeAfterRevertExplanation": "[INFERRED] Reverting the four api-side files (app/db.py, app/repositories/story.py, app/routers/agents.py, app/services/dedup.py) returns the api tree to HEAD 5f0af49, which is the code family production has been running healthily. tests/test_llm_resilience.py::TestRouter503Mapping should then pass again — re-run it as the restart gate before touching the service.",
+
+  "reasoning": "Three independent, individually-blocking defects, each proven with fresh command output rather than inference. (1) apps/api/app/routers/agents.py:785 and :805 catch FabricationError and StructuralError, which are bound nowhere at module scope — the only imports are function-local at lines 1611 and 1754. Because Python evaluates except expressions in order at raise time, this makes every handler BELOW them unreachable, so failed agent runs are neither audited nor refunded; two untouched pre-existing tests now fail with 'NameError: name FabricationError is not defined'. This is a revenue-affecting billing regression that arms itself on the next api restart or VM reboot. (2) apps/web/src/app/dashboard/analytics/page.tsx now tells users the Applications card shows 'distinct jobs submitted to an employer ... drafts in progress are excluded', while apps/api/app/routers/analytics.py:631 demonstrably feeds it the drafts-INCLUSIVE total — proven by the green apps/api/tests/test_analytics.py:230-232 which seeds 3 drafts + 4 submitted and asserts the card shows 7. The accompanying test edit asserts the false string, converting the falsehood into a protected regression. On a branch named 'remove fabricated origination activity', this ADDS a fabricated claim and silently reverses documented ruling MV-analytics-005 with no ADR. (3) apps/api/app/repositories/story.py update() writes the new contentHash column without ever ensuring it exists, a latent 500 on a production schema that has never seen the DDL. Against those, the tree contains real value — the story-dedup cluster is 6/6 green and its lazy DDL correctly mirrors the ensure_job_dedup_columns/ADR-TR-1 precedent, and the MarketPulse honest-unavailable state is exemplary — but that value is separable and re-landable, whereas the risk is not containable in a single commit. Completing the tree in place is additionally impossible without decisions no fixer owns: an owner pricing ruling on the /dashboard/email paywall exemption, an ADR on the analytics metric semantics, and a design answer on async double-terminal transitions. Reverting the four api files is therefore the fastest and safest path: it makes aether-api restart-safe within minutes and unblocks the queued Gmail credential-cache deploy (QA-RES-001), while each surviving workstream re-lands on its own merits with the tests it currently lacks.",
+
+  "verdict": "FAIL",
+  "verdictSummary": "FAIL — this tree must not be committed and aether-api must not be restarted against it. Blocking file:line reasons: apps/api/app/routers/agents.py:785 (NameError, undefined FabricationError, kills refund + failure audit — proven by 2 failing untouched tests); apps/api/app/routers/agents.py:805 (same, StructuralError); apps/web/src/app/dashboard/analytics/page.tsx:93 (false metric copy, contradicted by green apps/api/tests/test_analytics.py:232); apps/web/src/app/dashboard/analytics/__tests__/page.test.tsx:140-143 (green test asserting the false claim); apps/api/app/repositories/story.py:114-129 (contentHash written without ensure_story_dedup_column, latent 500). Non-blocking but required before re-land: apps/api/app/repositories/story.py:5-8 vs :44-48 (inconsistent response shape / internal hash leak via apps/api/app/routers/stories.py:144-146), apps/web/src/components/subscription-gate.tsx:48 (paywall exemption with an unverified backend-protection claim — apps/api/app/routers/emails.py has no entitlement check), apps/web/src/app/dashboard/applications/page.tsx:685 (Pro-only fa-shield-check on a Free FA 6.5.1 CDN build), apps/web/src/app/dashboard/applications/page.tsx:680-738 (safety banner with zero test coverage), apps/api/app/repositories/story.py EOF (missing newline)."
+}
