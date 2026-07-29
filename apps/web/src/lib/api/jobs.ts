@@ -7,9 +7,7 @@
  */
 import { z } from "zod";
 
-/** Where the FastAPI backend lives. Overridable per environment. */
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+import { apiBaseUrl } from "./client";
 
 const JobStatusSchema = z.enum([
   "discovered",
@@ -103,7 +101,7 @@ async function request(
   options: RequestOptions,
   init: RequestInit = {},
 ): Promise<unknown> {
-  const base = options.baseUrl ?? API_BASE_URL;
+  const base = options.baseUrl ?? apiBaseUrl();
   const response = await fetch(`${base}${path}`, {
     ...init,
     headers: {
