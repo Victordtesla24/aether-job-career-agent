@@ -138,6 +138,32 @@ function ringColor(v: number): string {
   return v >= 85 ? "#34D399" : v >= 70 ? "#FBBF24" : "#F87171";
 }
 
+/**
+ * QA #4 residual (ML-W25) — the board-sweep autopilot's cover-failure
+ * backoff (RT-007/ML-W19) correctly stops retrying a job for up to 24h once
+ * it accrues repeated letterless coverLetter runs, but until now nothing in
+ * the product told the owner WHY autopilot had gone quiet on that job. The
+ * backend now carries the honest expiry as `job.autopilotSuppressedUntil`
+ * (null when not suppressed) — this renders it as a small, muted hint.
+ */
+function formatSuppressionUntil(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function autopilotSuppressionHint(job: Job): string | null {
+  if (!job.autopilotSuppressedUntil) return null;
+  const when = formatSuppressionUntil(job.autopilotSuppressedUntil);
+  if (!when) return null;
+  return `Autopilot paused for this job until ${when} — recent generation attempts couldn't produce a letter`;
+}
+
 // ---------------------------------------------------------------------------
 // Presentational: circular match-score ring (SVG)
 // ---------------------------------------------------------------------------
@@ -1078,6 +1104,14 @@ export default function JobsPage() {
                               <span className="shrink-0">{timeAgo(job.createdAt)}</span>
                             </span>
                           </div>
+                          {autopilotSuppressionHint(job) ? (
+                            <p
+                              data-testid="autopilot-suppressed-hint"
+                              className="mt-2 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] leading-snug text-aether-muted-dim"
+                            >
+                              {autopilotSuppressionHint(job)}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1126,6 +1160,14 @@ export default function JobsPage() {
                             : `Discovered ${timeAgo(selected.createdAt) || "recently"}`}
                         </span>
                       </div>
+                      {autopilotSuppressionHint(selected) ? (
+                        <p
+                          data-testid="autopilot-suppressed-hint-detail"
+                          className="mt-2 max-w-md rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] leading-relaxed text-aether-muted-dim"
+                        >
+                          {autopilotSuppressionHint(selected)}
+                        </p>
+                      ) : null}
                       <Link
                         href="/dashboard/networking"
                         data-testid="crm-link"

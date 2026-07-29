@@ -46,6 +46,12 @@ export const JobSchema = z.object({
   // résumé ("approved" | "pending" | null). Drives the "Tailored (pending
   // review)" vs "Tailored (approved)" badge in the apply flow.
   tailoredResumeStatus: z.string().nullish(),
+  // QA #4 residual (ML-W25): wall-clock time the board-sweep autopilot's
+  // cover-failure backoff (RT-007/ML-W19) naturally expires for THIS job, or
+  // null when the job is not currently suppressed. Lets the Jobs screen
+  // explain an otherwise-silent ~24h autopilot pause instead of the job just
+  // going quiet with no in-app explanation.
+  autopilotSuppressedUntil: z.string().nullish(),
 });
 
 export type Job = z.infer<typeof JobSchema>;

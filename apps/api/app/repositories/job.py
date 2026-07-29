@@ -2,9 +2,16 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
-from app.db import ensure_job_dedup_columns, get_connection, new_id, rows_to_dicts
+from app.db import (
+    ensure_job_cover_suppression_column,
+    ensure_job_dedup_columns,
+    get_connection,
+    new_id,
+    rows_to_dicts,
+)
 from app.services.dedup import (
     compute_description_hash,
     compute_null_source_url_hash,
@@ -32,6 +39,149 @@ _TAILORED_RESUME_STATUS_SUBQUERY = (
     'AND r."approvalStatus" != \'rejected\' '
     'ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus"'
 )
+
+# ---------------------------------------------------------------------------
+# Autopilot suppression visibility (QA #4 residual — "autopilot goes quiet
+# ~24h with no in-app explanation"). The board-sweep autopilot
+# (``app/workers/board_sweep.py``, RT-007 / ML-W-19) permanently skips a job
+# once it accrues ``max_cover_failures()`` LETTERLESS coverLetter AgentRun
+# rows inside ``cover_failure_window_hours()`` since the job's own last
+# genuine success/ops-clear — correct backoff behaviour, but until now
+# invisible: nothing in the job payload told the owner WHY a job simply
+# stopped progressing.
+#
+# THIRD-COPY WARNING — this is now the THIRD place that encodes the
+# letterless-run predicate / since-last-success-or-clear floor, after:
+#   1. ``app/workers/board_sweep.py`` — the SOURCE OF TRUTH
+#      (``_COVER_RUN_PRODUCED_NO_LETTER``, ``_COVER_RUN_PRODUCED_A_LETTER``,
+#      ``_SINCE_LAST_SUCCESS_OR_CLEAR``, ``_job_suppression_expiry``).
+#   2. ``scripts/clear_cover_suppression.py`` — the ops escape hatch, kept
+#      standalone by design (zero import-time side effects).
+#   3. HERE — a correlated subquery (the same RT-010 style as
+#      ``_TAILORED_RESUME_SUBQUERY`` above) so ``GET /jobs`` and
+#      ``GET /jobs/{id}`` can expose the expiry without importing the ARQ
+#      worker module into the API request path.
+# Deliberately NOT implemented by importing ``app.workers.board_sweep`` — do
+# not "fix" this by adding that import; keep it mirrored, and update ALL
+# THREE copies together on any predicate change or the UI, ops tool and the
+# sweep itself will disagree about which jobs are suppressed.
+# ---------------------------------------------------------------------------
+
+
+def _autopilot_max_cover_failures() -> int:
+    """Mirrors ``app.workers.board_sweep.max_cover_failures()`` — reads the
+    SAME env var (default 3) so this mirror can never drift from the
+    worker's runtime-tunable value."""
+    try:
+        return max(1, int(os.environ.get("AETHER_BOARD_SWEEP_MAX_COVER_FAILURES", "3")))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _autopilot_cover_failure_window_hours() -> int:
+    """Mirrors ``app.workers.board_sweep.cover_failure_window_hours()`` —
+    reads the SAME env var (default 24)."""
+    try:
+        return max(1, int(os.environ.get(
+            "AETHER_BOARD_SWEEP_COVER_FAILURE_WINDOW_HOURS", "24")))
+    except (TypeError, ValueError):
+        return 24
+
+
+#: Mirrors ``board_sweep._COVER_RUN_PRODUCED_NO_LETTER`` verbatim (see
+#: THIRD-COPY WARNING above): a coverLetter ``AgentRun`` that produced NO
+#: letter — either ``status='failed'``, or a ``completed`` run carrying the
+#: honest ``coverLetterUnavailable`` degrade flag (either spelling).
+_AP_COVER_RUN_PRODUCED_NO_LETTER = '''
+    ({run}."status" = 'failed'
+     OR ({run}."status" = 'completed'
+         AND ({run}."output"->'coverLetterUnavailable' = 'true'::jsonb
+              OR {run}."output"->'cover_letter_unavailable' = 'true'::jsonb)))
+'''
+
+#: Mirrors ``board_sweep._COVER_RUN_PRODUCED_A_LETTER`` verbatim: only a
+#: non-null letter id counts as a genuine success.
+_AP_COVER_RUN_PRODUCED_A_LETTER = '''
+    ({run}."status" = 'completed'
+     AND ({run}."output"->>'cover_letter_id' IS NOT NULL
+          OR {run}."output"->>'coverLetterId' IS NOT NULL))
+'''
+
+#: Mirrors ``board_sweep._SINCE_LAST_SUCCESS_OR_CLEAR`` verbatim, pre-bound to
+#: this module's fixed query shape (always a correlated subquery against the
+#: outer ``"Job" j``, unlike board_sweep's multi-shape template).
+_AP_SINCE_LAST_SUCCESS_OR_CLEAR = f'''
+    GREATEST(
+        COALESCE(
+            (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
+             WHERE r2."userId" = j."userId" AND r2."agentName" = 'coverLetter'
+               AND {_AP_COVER_RUN_PRODUCED_A_LETTER.format(run="r2").strip()}
+               AND (r2."input"->>'job_id') = j."id"),
+            '-infinity'::timestamptz),
+        COALESCE(j."coverFailureClearedAt", '-infinity'::timestamptz))
+'''
+
+
+def _autopilot_suppressed_until_subquery() -> str:
+    """Correlated subquery (RT-010 style) computing the wall-clock time this
+    job's cover-failure suppression naturally expires — ``NULL`` when the job
+    is not currently suppressed.
+
+    Mirrors ``board_sweep._job_suppression_expiry()``: with the window's
+    letterless runs (since the job's last success/clear) ordered oldest to
+    newest, the job is suppressed once there are ``>= limit`` of them, and
+    the expiry clock is set by the OLDEST of the ``limit`` most-recent ones
+    ageing out of the window. Ordering DESC and taking ``OFFSET (limit - 1)
+    LIMIT 1`` lands on exactly that row: with ``N >= limit`` qualifying rows
+    it is the ``limit``-th most recent one; with ``N < limit`` rows the
+    OFFSET exceeds the result set and the subquery returns NULL — the same
+    "not suppressed" answer as the Python function's ``len(rows) < limit``
+    guard.
+
+    Also mirrors ``board_sweep._saturated_job_ids``'s eligibility gate
+    (``tailoring``, or ``screening``/``matched`` with a fitScore; not
+    ``applied``/``archived``; no ``Application`` row yet) — a job outside the
+    sweep's eligibility (e.g. already applied) must never show a suppression
+    hint even if its historical ``AgentRun`` rows would otherwise satisfy the
+    count, because the sweep is no longer tracking it.
+
+    ``limit``/``window`` are inlined as validated positive ints (never raw
+    strings) rather than bind params: this subquery text is spliced into the
+    middle of a larger SELECT whose own ``%s`` placeholders are positionally
+    bound from ``list_by_user``'s/``get_by_id``'s own params list, so adding
+    more ``%s`` here would require re-deriving that ordering — the tailored-
+    resume subqueries above set the same precedent of literal (non-templated)
+    SQL text.
+    """
+    limit = _autopilot_max_cover_failures()
+    window = _autopilot_cover_failure_window_hours()
+    offset = limit - 1
+    return f'''
+        (CASE WHEN (
+                ( (j."status" = 'tailoring')
+               OR (j."status" IN ('screening', 'matched') AND j."fitScore" IS NOT NULL) )
+                AND j."status" NOT IN ('applied', 'archived')
+                AND NOT EXISTS (
+                      SELECT 1 FROM "Application" a
+                      WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+                    )
+              )
+              THEN (
+                SELECT r."createdAt" + (INTERVAL '1 hour' * {window})
+                FROM "AgentRun" r
+                WHERE r."userId" = j."userId"
+                  AND r."agentName" = 'coverLetter'
+                  AND {_AP_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
+                  AND r."createdAt" >= NOW() - (INTERVAL '1 hour' * {window})
+                  AND (r."input"->>'job_id') = j."id"
+                  AND r."createdAt" > {_AP_SINCE_LAST_SUCCESS_OR_CLEAR}
+                ORDER BY r."createdAt" DESC
+                OFFSET {offset} LIMIT 1
+              )
+              ELSE NULL
+         END) AS "autopilotSuppressedUntil"
+    '''
+
 
 VALID_STATUSES = frozenset(
     {
@@ -201,10 +351,12 @@ class JobRepository:
             "title": '"title"',
             "company": '"company"',
         }.get(sort, '"createdAt"')
+        ensure_job_cover_suppression_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY} '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY}, '
+                    f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE {" AND ".join(clauses)} '
                     f"ORDER BY {order_column} DESC NULLS LAST",
                     params,
@@ -212,10 +364,12 @@ class JobRepository:
                 return rows_to_dicts(cur)
 
     def get_by_id(self, job_id: str, user_id: str) -> dict[str, Any] | None:
+        ensure_job_cover_suppression_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY} '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY}, '
+                    f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),
                 )
