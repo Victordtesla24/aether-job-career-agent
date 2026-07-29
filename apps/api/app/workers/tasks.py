@@ -283,8 +283,27 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
                 "Letter studio to generate or write one manually."
             ),
         }
+        # QA3-F-05: ``_execute_reserved_run`` already recorded the AgentRun row
+        # with the real model/tokens/cost for the served-but-guard-rejected
+        # calls (or honest zeros when nothing was ever served) and carried that
+        # same figure on the exception as ``degradedUsage`` — surface it on the
+        # BackgroundJob result too instead of leaving it absent, and accrue the
+        # realized spend against the cap exactly like a genuine completion does
+        # below (the run itself stays refunded, never billed against the
+        # run-count allowance — two separate ledgers).
+        usage = getattr(exc, "degradedUsage", None) or {}
+        degraded_cost = float(usage.get("costUsd") or 0)
+        honest_result["model"] = usage.get("model")
+        honest_result["tokensIn"] = usage.get("tokensIn", 0)
+        honest_result["tokensOut"] = usage.get("tokensOut", 0)
+        honest_result["costUsd"] = degraded_cost
         if repo.mark_completed(job_id, honest_result):
             repo.refund_single_reservation(job_id)
+            if degraded_cost and job.get("quotaReserved"):
+                try:
+                    UsageQuotaRepository().record_spend(user_id, degraded_cost)
+                except Exception:  # noqa: BLE001 — spend accounting best-effort
+                    pass
         logger.info(
             "job %s cover degraded (%s): guard rejected the draft, refunded",
             job_id, type(exc).__name__,

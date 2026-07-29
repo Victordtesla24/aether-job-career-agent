@@ -743,13 +743,26 @@ def _execute_reserved_run(
     # against the model that actually served it (GAP-P7-MODEL-CHOICE-001).
     _override_model = _user_model_override(user_id, agent_name)
     started = time.monotonic()
+    # QA3-F-05: when the corrective drafting loop's retries make real,
+    # successfully-served LLM calls and the guard only rejects the CONTENT of
+    # the final one, ``get_last_served_model()`` still holds that served id —
+    # but ONLY until this function's ``served_model_capture()`` scope exits,
+    # which resets the observation on unwind. The ``except (FabricationError,
+    # StructuralError)`` handler below runs AFTER that reset (it is attached
+    # to the outer ``try``, outside the ``with``), so the served id must be
+    # captured HERE, inside the scope, the instant the exception is caught.
+    _degraded_served_model: str | None = None
     try:
         # Bind BOTH the credential context and the user's chosen model so the
         # deep LLM path resolves THIS user's key AND model.
         with user_credential_context(user_id, agent_name), user_model_context(
             _override_model
         ), served_model_capture():
-            output = _to_output(fn())
+            try:
+                output = _to_output(fn())
+            except (FabricationError, StructuralError):
+                _degraded_served_model = get_last_served_model()
+                raise
             # OBSERVE (never infer) which model actually served this run, while
             # the observation scope is still open — the LLM client publishes the
             # provider's own ``model`` field on each successful call (ML-W14).
@@ -848,13 +861,63 @@ def _execute_reserved_run(
                 "Letter studio to generate or write one manually."
             ),
         }
-        runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
-        # No letter was produced, so the reserved run is refunded — exactly like
+        # QA3-F-05: the corrective retries that led here made real,
+        # successfully-served LLM calls before the guard rejected the final
+        # draft's CONTENT — only a run whose EVERY attempt failed outright
+        # (``_degraded_served_model`` is None: nothing was ever observed, e.g.
+        # an LLMUnavailableError on the very first draft) genuinely spent
+        # nothing. Cost the served calls with the SAME measured-I/O-size
+        # estimate + published per-token price every other run is costed with
+        # (ML-W14's ``_price_for`` — no new pricing logic invented), instead of
+        # the previous hardcoded zero that hid real spend from the audit row,
+        # GET /agents/stats and the USD spend cap.
+        if _degraded_served_model:
+            price_in, price_out = _price_for(_degraded_served_model)
+            tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
+            tokens_out = max(1, len(json.dumps(honest_output, default=str)) // 4)
+            degraded_cost = round(
+                tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6
+            )
+            honest_output["model"] = _degraded_served_model
+            honest_output["tokensIn"] = tokens_in
+            honest_output["tokensOut"] = tokens_out
+            honest_output["costUsd"] = degraded_cost
+        else:
+            degraded_cost = 0.0
+            honest_output["model"] = None
+            honest_output["tokensIn"] = 0
+            honest_output["tokensOut"] = 0
+            honest_output["costUsd"] = 0.0
+        runs.finish(run_id, "completed", output=honest_output, cost_usd=degraded_cost)
+        # No LETTER was produced, so the reserved RUN is refunded — exactly like
         # the NoChangesApplied no-op above. On the ASYNC path manage_quota=False
         # makes this a no-op and the worker refunds after winning its own atomic
         # first-terminal-wins transition, so the refund happens exactly once on
-        # either path, never twice.
+        # either path, never twice. The run-count refund is a SEPARATE ledger
+        # from the realized USD cost recorded above — a degrade is never billed
+        # against the user's run allowance, but real LLM spend still counts.
         _refund_once()
+        if degraded_cost and manage_quota and quota_repo is not None:
+            # Mirrors the success-tail's spend accumulation further below: the
+            # USD spend cap must see this cost even though the run itself was
+            # refunded, exactly like a genuine success's
+            # ``quota_repo.record_spend`` (QA3-F-05). The async single-agent
+            # worker (manage_quota=False here) instead reads this cost off the
+            # exception attribute below and records it after winning its own
+            # atomic terminal transition (workers/tasks.py).
+            quota_repo.record_spend(user_id, degraded_cost)
+        # Carry the computed usage onto the exception instance so the async
+        # worker's mirrored handler (workers/tasks.py) can record the SAME
+        # figures on the BackgroundJob result without recomputing them.
+        # FabricationError/StructuralError are plain exception subclasses with
+        # no such field, so this is purely additive and never breaks their
+        # existing (``flagged``/``issues``) contract.
+        exc.degradedUsage = {
+            "model": honest_output["model"],
+            "tokensIn": honest_output["tokensIn"],
+            "tokensOut": honest_output["tokensOut"],
+            "costUsd": honest_output["costUsd"],
+        }
         # Re-raise so each caller keeps its own response shape unchanged:
         # ``run_cover_letter`` -> 422, ``_pipeline_core`` -> graceful degrade,
         # the async worker -> its own honest ``coverLetterUnavailable`` result.
