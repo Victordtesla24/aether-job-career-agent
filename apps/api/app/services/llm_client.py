@@ -43,12 +43,47 @@ logger = logging.getLogger(__name__)
 _DEFAULT_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
 
 #: Last-resort model retried once when the primary model 404s / 429s (D-0014).
-FALLBACK_MODEL = "openai/gpt-oss-20b:free"
+#:
+#: This was ``openai/gpt-oss-20b:free`` until a live probe
+#: (``uat/reports/evidence/free-model-fallback/PROBE-REPORT.json``, 2026-07-29)
+#: showed that id emits GARBLED, never-terminating output on realistic prompt
+#: lengths (65 s, corrupted multilingual tokens, no clean stop) even though it
+#: passes a trivial "reply OK" smoke test. Same mechanism, working model: the
+#: id below was verified live on the same probe (clean 119-word draft, 3.0 s,
+#: ``finish_reason=stop``).
+FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 
 
 def get_fallback_model() -> str:
     """Fallback model id, overridable so non-OpenRouter providers can set one."""
     return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
+
+
+#: FREE OpenRouter models used by the ADMIN-ONLY insufficient-credits rescue
+#: (see :func:`get_admin_free_fallback_models` / :meth:`LLMClient._auto`). Both
+#: ids were verified live on the app's own zero-credit key on 2026-07-29 —
+#: HTTP 200 with clean, coherent, correctly-terminated prose — while paid models
+#: 402'd on the SAME key at the same moment (OpenRouter's credit gate is
+#: per-model-price, not account-wide).
+_DEFAULT_ADMIN_FREE_FALLBACK_MODELS = (
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+)
+
+
+def get_admin_free_fallback_models() -> list[str]:
+    """Free model ids the ADMIN account's chain falls through to on an HTTP 402.
+
+    Configured via ``AETHER_ADMIN_FREE_FALLBACK_MODELS`` (comma-separated). The
+    free catalog churns, so the list is env-overridable; it defaults to the
+    live-verified ids above so the rescue works out of the box. Setting the var
+    to an EMPTY value is the kill switch: no rescue for anyone, i.e. exactly the
+    pre-feature behaviour.
+    """
+    raw = os.environ.get("AETHER_ADMIN_FREE_FALLBACK_MODELS")
+    if raw is None:
+        return list(_DEFAULT_ADMIN_FREE_FALLBACK_MODELS)
+    return [model.strip() for model in raw.split(",") if model.strip()]
 
 
 def _extra_headers() -> dict[str, str]:
@@ -330,6 +365,28 @@ class LLMUnavailableError(RuntimeError):
     Routers convert this into a clean HTTP 503 with an honest, secret-free
     user message (:data:`LLM_UNAVAILABLE_USER_MESSAGE`).
     """
+
+
+class InsufficientCreditsError(RuntimeError):
+    """Raised when OPENROUTER returns HTTP 402 — the account is out of credits.
+
+    Deliberately a plain :class:`RuntimeError` subclass carrying the SAME message
+    the generic ``resp.status_code >= 400`` branch used to raise, so every
+    existing handler (``_auto``'s broad ``except Exception``, the routers'
+    503 mapping, the honest-failure/refund path) keeps behaving byte-for-byte as
+    before. The subclass exists only so the chain can DISTINGUISH "we cannot pay
+    for this model" (rescuable with a $0-priced model on the same credential)
+    from "this model/endpoint failed" (404/429/5xx — not rescuable that way).
+
+    It is NOT a :class:`QuotaExhaustedError`: that one means a subscription's
+    provider quota is spent and must surface as an honest 429 with no
+    substitution of any kind. A 402 stays a 503-class failure.
+    """
+
+    def __init__(self, message: str, *, provider: str = "openrouter") -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = 402
 
 
 class QuotaExhaustedError(RuntimeError):
@@ -647,6 +704,50 @@ def _lookup_agent_credential_ref(user_id: str, agent_key: str) -> str | None:
     if rows:
         return rows[0].get("credentialRef")
     return None
+
+
+#: How long an ``isAdmin`` lookup is trusted, in seconds. The flag gates the
+#: admin-only free-model rescue only; being stale by <= this window is
+#: acceptable and saves a DB round-trip on EVERY live LLM call.
+_ADMIN_FLAG_TTL_SECONDS = 60.0
+
+#: ``userId -> (isAdmin, monotonic expiry)``. Process-local; a plain dict is
+#: enough (CPython dict get/set are atomic, so a race costs at most one extra
+#: query, never a wrong answer). Bounded below so a long-lived process with many
+#: users cannot grow it without limit.
+_admin_flag_cache: dict[str, tuple[bool, float]] = {}
+_ADMIN_FLAG_CACHE_MAX = 1000
+
+
+def _user_is_admin(user_id: str) -> bool:
+    """Is this user the ADMIN account? Fresh DB read, cached for a short TTL.
+
+    Mirrors :func:`_lookup_agent_credential_ref`: a raw, self-contained query
+    keyed by the ``_user_cred_context`` user id, so no call-site signature in
+    ``routers/agents.py`` or ``workers/tasks.py`` has to change (the worker path
+    only ever has the bare user id anyway). Fails CLOSED and silently: any DB
+    error means "not admin" and is NOT cached, so an outage can neither grant the
+    rescue nor break a run.
+    """
+    now = time.monotonic()
+    cached = _admin_flag_cache.get(user_id)
+    if cached is not None and now < cached[1]:
+        return cached[0]
+    try:
+        from app.db import get_connection, rows_to_dicts
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "isAdmin" FROM "User" WHERE "id" = %s', (user_id,))
+                rows = rows_to_dicts(cur)
+    except Exception as exc:  # noqa: BLE001 — missing column/table/DB down -> not admin
+        logger.debug("isAdmin lookup failed (treating as non-admin): %s", exc)
+        return False
+    is_admin = bool(rows[0].get("isAdmin")) if rows else False
+    if len(_admin_flag_cache) >= _ADMIN_FLAG_CACHE_MAX:
+        _admin_flag_cache.clear()
+    _admin_flag_cache[user_id] = (is_admin, now + _ADMIN_FLAG_TTL_SECONDS)
+    return is_admin
 
 
 def resolve_user_credential(
@@ -1454,7 +1555,14 @@ class LLMClient:
         has_fallback = len(chain) > 1
         last_error: Exception | None = None
         budget_exhausted = False
-        for idx, attempt_model in enumerate(chain):
+        # NOTE: ``chain`` may GROW during the loop — an OpenRouter 402 on the
+        # ADMIN account appends the free rescue models (see
+        # ``_extend_chain_with_admin_free_models``). Hence an explicit index walk
+        # rather than ``enumerate(chain)``: the growth is part of the contract,
+        # not an accident of iterating a mutating list.
+        idx = 0
+        while idx < len(chain):
+            attempt_model = chain[idx]
             # A validation (malformed-content) failure re-drafts the SAME model a
             # bounded number of times before the outer loop falls through to the
             # next model; a raised call error breaks straight to the next model
@@ -1497,6 +1605,8 @@ class LLMClient:
                         "LLM live call failed (model=%s, prompt=%s): %s",
                         attempt_model, prompt_name, exc,
                     )
+                    if isinstance(exc, InsufficientCreditsError):
+                        self._extend_chain_with_admin_free_models(chain, prompt_name)
                     break  # genuine call error → next model (no same-model retry)
                 if validate is not None:
                     try:
@@ -1515,6 +1625,7 @@ class LLMClient:
                 return content
             if budget_exhausted:
                 break
+            idx += 1
         # Live retry chain exhausted — surface an HONEST failure, never a fixture.
         detail = (
             "budget exhausted before any live attempt could complete"
@@ -1523,6 +1634,63 @@ class LLMClient:
         )
         raise LLMUnavailableError(
             f"LLM backend unavailable: {detail} for '{prompt_name}'"
+        )
+
+    @staticmethod
+    def _extend_chain_with_admin_free_models(
+        chain: list[str], prompt_name: str
+    ) -> None:
+        """ADMIN-ONLY rescue: append FREE models after an OpenRouter HTTP 402.
+
+        An operator mandate (MODELS-LIVE, evidence
+        ``uat/reports/evidence/free-model-fallback/PROBE-REPORT.json``): when the
+        OpenRouter account is out of credits, the OWNER's pipeline must keep
+        producing by continuing the chain with $0-priced models — which the live
+        probe proved still return HTTP 200 on the very same zero-credit key,
+        because OpenRouter's 402 gate is per-model-price, not account-wide.
+
+        Scope, deliberately narrow:
+
+        - ONLY on :class:`InsufficientCreditsError` (OpenRouter 402). A 404 /
+          429 / 5xx / timeout is untouched — those are model failures, and
+          swapping models for them is what ADR-ML-3 forbids.
+        - ONLY when the run carries a user context whose ``User.isAdmin`` is
+          true (today: the owner alone). No user context (background/CLI) or a
+          non-admin user → this is a no-op and the caller's behaviour is
+          byte-for-byte what it was before the feature existed.
+        - ONLY when the configured free list is non-empty (empty = kill switch).
+
+        The extension is *idempotent*: models already in the chain are filtered
+        out, so a 402 from a free model cannot re-extend or re-log.
+
+        ADR-ML-3 interaction (documented, not incidental): when the primary is
+        the user's deliberately CHOSEN model, ``_model_chain`` returns it alone
+        so it is never silently substituted. A 402 is not a failure OF that
+        model — it is a billing impossibility no model choice can satisfy — so
+        for the admin account the rescue still engages. It is not silent: the
+        INFO line below names every substituted model id and is greppable as
+        ``admin-free-fallback``. Nothing changes for any other user.
+
+        The appended models are ordinary chain entries: same ``_call_live``,
+        same prompts, same validator, same downstream entailment/fabrication
+        guards. There is no relaxed path and no silent success on garbage.
+        """
+        free_models = get_admin_free_fallback_models()
+        if not free_models:
+            return
+        ctx = _user_cred_context.get()
+        user_id = ctx[0] if ctx else None
+        if not user_id or not _user_is_admin(user_id):
+            return
+        pending = [m for m in free_models if m not in chain]
+        if not pending:
+            return
+        chain.extend(pending)
+        logger.info(
+            "admin-free-fallback: OpenRouter HTTP 402 (insufficient credits) — "
+            "extending the model chain with free models [%s] for prompt=%s "
+            "userId=%s",
+            ", ".join(pending), prompt_name, user_id,
         )
 
     @staticmethod
@@ -1679,7 +1847,16 @@ class LLMClient:
             # RuntimeError below (the existing single retry may apply). Still
             # NEVER rerouted to a different credential (ADR-PC-2).
         if resp.status_code >= 400:
-            raise RuntimeError(f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}")
+            message = f"LLM provider HTTP {resp.status_code}: {resp.text[:200]}"
+            if provider == "openrouter" and resp.status_code == 402:
+                # Out of OpenRouter credits. Same message and same RuntimeError
+                # taxonomy as before — only the CLASS is narrower, so the chain
+                # can tell "cannot pay for this model" apart from "this model
+                # failed". OpenRouter-only by design: a 402 on the direct
+                # Anthropic transport must never pull OpenRouter models (and
+                # therefore OpenRouter billing) into an Anthropic-billed run.
+                raise InsufficientCreditsError(message, provider=provider)
+            raise RuntimeError(message)
         body = resp.json()
         if provider == "anthropic":
             return parse_anthropic_response(body)
