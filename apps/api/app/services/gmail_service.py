@@ -14,6 +14,7 @@ approvals router — never requires the google packages at import time.
 from __future__ import annotations
 
 import base64
+from datetime import timezone
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -218,16 +219,45 @@ class GmailService:
         self._resolved_account_id = row.get("id")
         from google.oauth2.credentials import Credentials
 
+        # QA-RES-001: google-auth's Credentials.expired treats expiry=None as
+        # "never expires", so omitting it here made creds.valid always True
+        # regardless of the token's real (stored) staleness — the explicit
+        # refresh-and-persist branch below never fired, every request sent a
+        # stale token, and google_auth_httplib2's built-in 401-retry silently
+        # refreshed it in memory only (never persisted). google-auth's
+        # internal .expired check compares against a NAIVE UTC "now"
+        # (google/auth/_helpers.py), so the DB's timezone-aware tokenExpiry
+        # must be normalized to naive UTC or the comparison raises TypeError.
+        expiry = row.get("accessTokenExpiresAt")
+        if expiry is not None and expiry.tzinfo is not None:
+            expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
+
+        client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
+        client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
+
         creds = Credentials(
             token=row.get("accessToken"),
             refresh_token=row["refreshToken"],
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=os.environ.get("GOOGLE_OAUTH_CLIENT_ID"),
-            client_secret=os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"),
+            client_id=client_id,
+            client_secret=client_secret,
             scopes=(row.get("scopes") or "").split() or GOOGLE_SCOPES,
+            expiry=expiry,
         )
         if not creds.valid:
-            from google.auth.exceptions import RefreshError
+            # Missing server OAuth config is OUR fault, not the user's grant
+            # being revoked — google-auth's own RefreshError message for this
+            # case ("credentials do not contain the necessary fields") reads
+            # exactly like a revoked grant, which would wrongly tell every
+            # user to reconnect their (perfectly fine) account. Surface it as
+            # a transient GmailError instead, before ever calling refresh().
+            if not client_id or not client_secret:
+                raise GmailError(
+                    "Gmail email service is temporarily unavailable — server "
+                    "OAuth configuration is missing."
+                )
+
+            from google.auth.exceptions import RefreshError, TransportError
             from google.auth.transport.requests import Request
 
             try:
@@ -237,10 +267,32 @@ class GmailService:
                     "Gmail authorization expired or was revoked — reconnect your "
                     "account."
                 ) from exc
+            except TransportError as exc:
+                # A sibling of RefreshError under GoogleAuthError (NOT a
+                # subclass) — raised by google.auth.transport.requests.Request
+                # on any requests-level failure talking to Google's token
+                # endpoint (DNS, connect timeout, connection reset). This is a
+                # transient infra hiccup, not an auth problem — map it to the
+                # ordinary GmailError taxonomy so callers keep their existing
+                # honest "transient failure" handling instead of wrongly
+                # telling the user to reconnect.
+                raise GmailError(
+                    f"Gmail token refresh failed (transient network error): {exc}"
+                ) from exc
+
+            # google-auth's refresh_grant hands back a NAIVE UTC datetime
+            # (google/auth/_helpers.py); stamp it explicitly aware-UTC before
+            # persisting to the `timestamp with time zone` column so its
+            # meaning is self-describing regardless of Postgres session
+            # TimeZone (symmetric with google_oauth.py's exchange_code).
+            new_expiry = creds.expiry
+            if new_expiry is not None and new_expiry.tzinfo is None:
+                new_expiry = new_expiry.replace(tzinfo=timezone.utc)
+
             self._creds_repo.update_access_token(
                 self._user_id,
                 creds.token,
-                creds.expiry,
+                new_expiry,
                 account_id=self._resolved_account_id,
             )
         return creds
@@ -259,8 +311,13 @@ class GmailService:
         self, query: str | None = None, max_results: int = 25
     ) -> list[dict[str, Any]]:
         """Return normalized recent threads (newest message per thread)."""
-        svc = self._client()
         try:
+            # QA-RES-001 M2: _client() now performs a real (possibly hot)
+            # credential refresh via _credentials() instead of a no-op
+            # construction, so it must live INSIDE this GmailError-wrapping
+            # try — otherwise a token-endpoint hiccup escapes raw past
+            # callers that only catch GmailError/GmailAuthError.
+            svc = self._client()
             resp = (
                 svc.users()
                 .threads()
@@ -358,12 +415,18 @@ class GmailService:
     ) -> dict[str, Any]:
         """Send an email; returns ``{"id", "threadId"}``. Raises
         :class:`GmailNotConnectedError` when the account is not connected."""
-        svc = self._client()
         raw = self._raw_message(to, subject, body, in_reply_to, attachments)
         message: dict[str, Any] = {"raw": raw}
         if thread_id:
             message["threadId"] = thread_id
         try:
+            # QA-RES-001 M2: _client() now performs a real (possibly hot)
+            # credential refresh via _credentials() instead of a no-op
+            # construction, so it must live INSIDE this GmailError-wrapping
+            # try — otherwise a token-endpoint hiccup escapes raw past
+            # approvals.py, turning the honest "no email was sent" 502 into
+            # an unhandled 500.
+            svc = self._client()
             sent = svc.users().messages().send(userId="me", body=message).execute()
             return {"id": sent.get("id"), "threadId": sent.get("threadId")}
         except GmailError:

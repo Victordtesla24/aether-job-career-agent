@@ -45,6 +45,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
+from datetime import timezone
 from typing import Any, NamedTuple
 
 import jwt
@@ -265,11 +266,20 @@ def exchange_code(code: str, state: str) -> dict[str, Any]:
         raise
     except Exception as exc:  # noqa: BLE001 — surface as a clean OAuthError
         raise OAuthError(f"Token exchange failed: {exc}") from exc
+    # QA-RES-001 symmetric hardening: google-auth's refresh_grant/_parse_expiry
+    # hands back a NAIVE UTC datetime (google/auth/_helpers.py), which the
+    # ``timestamp with time zone`` GmailAccount.tokenExpiry column will accept
+    # silently — its meaning then depends on the Postgres session TimeZone
+    # rather than being pinned to UTC. Stamp it explicitly aware-UTC so the
+    # value is self-describing regardless of session settings.
+    expires_at = creds.expiry
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     return {
         "user_id": user_id,
         "google_email": _resolve_email(creds),
         "refresh_token": creds.refresh_token,
         "access_token": creds.token,
-        "expires_at": creds.expiry,
+        "expires_at": expires_at,
         "scopes": " ".join(creds.scopes or GOOGLE_SCOPES),
     }
