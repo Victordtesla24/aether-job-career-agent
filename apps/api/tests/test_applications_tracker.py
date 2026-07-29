@@ -154,6 +154,119 @@ class TestDetailAndSubmit:
         )
         assert resp.status_code == 422
 
+    def test_submit_rejects_when_no_tailored_resume_for_job(
+        self, client, auth_headers, user_id, db_session
+    ):
+        """ml-adjudication-review-verdict.json niceToHave #2: this exact
+        FEAT-SUBMISSION-GATE negative path — a cover letter exists but no
+        Resume row is tailored (sourceJobId) for this job — was previously
+        covered only indirectly via test_rt_009_010_apply_wiring.py's
+        test_submit_rejects_draft_with_base_resume. Adding it directly here
+        so the file that owns the endpoint also owns its full gate contract.
+        """
+        app_id, _ = _seed_application(
+            db_session,
+            user_id,
+            app_status="draft",
+            tailored=False,
+            cover_letter="Dear Hiring Manager,\n\nI am excited to apply.",
+        )
+        resp = client.post(
+            f"/applications/{app_id}/submit", headers=auth_headers, json={}
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "not tailored" in detail.lower()
+        assert "tailor your resume" in detail.lower()
+
+    def test_submit_double_submit_race_second_caller_takes_idempotent_path(
+        self, client, auth_headers, user_id, db_session, monkeypatch
+    ):
+        """Reviewer niceToHave #3 (ml-adjudication-review-verdict.json): the
+        promoting UPDATE had no ``status = 'draft'`` guard, so two concurrent
+        submits that both read the row as 'draft' before either committed
+        could both attempt to promote it — the second racer's UPDATE ran
+        unconditionally and would silently overwrite the first racer's
+        already-committed answers/resumeId (a double-promote), rather than a
+        true compare-and-swap.
+
+        Simulates the race deterministically (no thread-timing flakiness) by
+        injecting a concurrent commit at the exact DB seam between this
+        request's initial draft-check SELECT and its own promoting UPDATE.
+        ``datetime.now(UTC)`` is the ONLY use of that name in
+        submit_application, and it is evaluated immediately before the
+        guarded UPDATE's parameters are built — hooking it lets "the other
+        racer" flip the row to submitted, with ITS OWN answers, right
+        between this request's read and its write.
+        """
+        app_id, job_id = _seed_application(
+            db_session,
+            user_id,
+            app_status="draft",
+            tailored=True,
+            cover_letter="Dear Hiring Manager,\n\nI am excited to apply.",
+        )
+        with db_session.cursor() as cur:
+            cur.execute('SELECT "id" FROM "Resume" WHERE "sourceJobId" = %s', (job_id,))
+            tailored_resume_id = cur.fetchone()[0]
+
+        import app.routers.applications as applications_module
+
+        fired = {"done": False}
+
+        class _RaceInjectingDatetime(applications_module.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                if not fired["done"]:
+                    fired["done"] = True
+                    with db_session.cursor() as race_cur:
+                        race_cur.execute(
+                            """
+                            UPDATE "Application"
+                            SET "status" = 'submitted'::"ApplicationStatus",
+                                "resumeId" = %s,
+                                "answers" = COALESCE("answers", '{}'::jsonb) || %s::jsonb,
+                                "updatedAt" = NOW()
+                            WHERE "id" = %s AND "userId" = %s
+                              AND "status" = 'draft'::"ApplicationStatus"
+                            """,
+                            (
+                                tailored_resume_id,
+                                json.dumps(
+                                    {
+                                        "appliedUrl": "https://race-winner.example.com/apply",
+                                        "submittedAt": "2026-01-01T00:00:00+00:00",
+                                    }
+                                ),
+                                app_id,
+                                user_id,
+                            ),
+                        )
+                    db_session.commit()
+                return super().now(tz)
+
+        monkeypatch.setattr(applications_module, "datetime", _RaceInjectingDatetime)
+
+        resp = client.post(
+            f"/applications/{app_id}/submit",
+            headers=auth_headers,
+            json={"applied_url": "https://race-loser.example.com/apply"},
+        )
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "submitted"
+        # The guarded UPDATE affected 0 rows for THIS call (the row was
+        # already flipped by the "concurrent" racer) — it must fall through
+        # to the idempotent success path and surface the WINNER's committed
+        # answers, never clobber them with its own.
+        assert body["answers"]["appliedUrl"] == "https://race-winner.example.com/apply"
+        assert body["resumeId"] == tailored_resume_id
+
+        with db_session.cursor() as cur:
+            cur.execute('SELECT "status" FROM "Application" WHERE "id" = %s', (app_id,))
+            assert cur.fetchone()[0] == "submitted"
+
 
 class TestFunnelSankey:
     def test_requires_auth(self, client):

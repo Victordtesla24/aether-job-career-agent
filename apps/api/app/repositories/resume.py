@@ -109,6 +109,25 @@ class ResumeRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
+    def get_tailored_for_job(self, user_id: str, job_id: str) -> dict[str, Any] | None:
+        """Newest resume version already tailored for ``job_id`` (its
+        ``sourceJobId``), if one exists — same correlated lookup the
+        promotion paths use (jobs._resume_for_apply /
+        applications.submit_application's resume resolution): newest
+        version for the job wins.
+        """
+        ensure_resume_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_RESUME_COLUMNS} FROM "Resume" '
+                    'WHERE "userId" = %s AND "sourceJobId" = %s '
+                    'ORDER BY "version" DESC LIMIT 1',
+                    (user_id, job_id),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
+
     def list_by_user(self, user_id: str) -> list[dict[str, Any]]:
         ensure_resume_columns()
         with get_connection() as conn:

@@ -285,6 +285,21 @@ class TailoringAgent:
         self._stories = stories or StoryRepository()
         self._approvals = approvals or ApprovalRepository()
 
+    def resume_for_job(self, user_id: str, job_id: str) -> dict[str, Any]:
+        """Resume to attach when drafting for a job (cover_letter_agent's
+        creation-time seam): the newest resume ALREADY tailored for this job
+        if one exists, else the user's base résumé (unchanged degradation).
+
+        Adjudicator follow-up (ml-adjudication-review-verdict.json
+        resumeResolutionAnalysis): drafts previously always attached base
+        and relied on submit_application's promotion-time repair to swap in
+        the tailored version. Checking here too means a draft created AFTER
+        a tailor run carries the real tailored resume from the start;
+        promotion-time repair remains the backstop for legacy drafts.
+        """
+        tailored = self._resumes.get_tailored_for_job(user_id, job_id)
+        return tailored if tailored is not None else self.ensure_base_resume(user_id)
+
     def ensure_base_resume(self, user_id: str) -> dict[str, Any]:
         base = self._resumes.get_base(user_id)
         raw_text = ((base.get("sections") or {}).get("raw_text") if base else "") or ""

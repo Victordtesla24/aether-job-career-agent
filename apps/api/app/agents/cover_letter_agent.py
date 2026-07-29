@@ -1450,8 +1450,13 @@ class CoverLetterAgent:
         if remaining:
             raise StructuralError(remaining)
 
-        base_resume = TailoringAgent().ensure_base_resume(user_id)
-        stored = self._letters.create(user_id, job_id, base_resume["id"], letter)
+        # GAP-COV-RESUME (adjudicator follow-up,
+        # ml-adjudication-review-verdict.json resumeResolutionAnalysis):
+        # attach the job-tailored resume when one already exists at
+        # draft-creation time, instead of always attaching base and relying
+        # solely on submit_application's promotion-time repair.
+        draft_resume = TailoringAgent().resume_for_job(user_id, job_id)
+        stored = self._letters.create(user_id, job_id, draft_resume["id"], letter)
         approval = self._approvals.create(
             user_id,
             "application_submit",

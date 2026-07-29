@@ -156,6 +156,66 @@ class TestCoverLetterAgent:
         assert single.status_code == 200
         assert single.json()["coverLetter"] == body["cover_letter"]
 
+    def test_draft_attaches_tailored_resume_when_one_exists_at_creation(
+        self, client, auth_headers
+    ):
+        """Adjudicator follow-up (ml-adjudication-review-verdict.json
+        resumeResolutionAnalysis): a draft created AFTER a tailor run for the
+        job must attach the TAILORED resume at creation time, not always the
+        base. Promotion-time repair (submit_application's correlated resume
+        lookup) is the backstop for LEGACY drafts, not the only path that
+        ever attaches the real tailored version.
+        """
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+        tailor = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert tailor.status_code == 200, tailor.text
+        tailored_resume_id = tailor.json()["resume_id"]
+
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert resp.status_code == 200, resp.text
+        app_id = resp.json()["cover_letter_id"]
+        application = client.get(
+            f"/applications/{app_id}", headers=auth_headers
+        ).json()
+        assert application["resumeId"] == tailored_resume_id
+
+    def test_draft_keeps_base_resume_when_none_tailored_yet(
+        self, client, auth_headers
+    ):
+        """Pin: when NO tailored resume exists for the job at draft-creation
+        time, the draft still attaches base — unchanged degradation (the
+        promotion-time repair path in submit_application remains the
+        backstop for exactly this case)."""
+        base = seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
+        run = client.post(
+            "/agents/scout/run",
+            json={"query": "python engineer", "location": "Sydney"},
+            headers=auth_headers,
+        )
+        assert run.status_code == 202
+        job = client.get("/jobs", headers=auth_headers).json()[0]
+
+        resp = client.post(
+            "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert resp.status_code == 200, resp.text
+        app_id = resp.json()["cover_letter_id"]
+        application = client.get(
+            f"/applications/{app_id}", headers=auth_headers
+        ).json()
+        assert application["resumeId"] == base["id"]
+
 
 # --- GAP-P4-049: §10.2 structural contract is enforced with real retry/reject ---
 

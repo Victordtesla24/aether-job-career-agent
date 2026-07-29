@@ -558,6 +558,19 @@ def submit_application(
                         "This job already has an active application — this draft "
                         "stays in the letter's version history.",
                     )
+                # Double-submit race guard (reviewer niceToHave #3,
+                # ml-adjudication-review-verdict.json): the WHERE clause below
+                # includes "AND status = 'draft'" as a compare-and-swap — two
+                # concurrent submits can both pass the "row[0] == 'draft'"
+                # check above (both read the row before either committed),
+                # but only the FIRST one's UPDATE can still match a 'draft'
+                # row; by the time the second one's UPDATE runs, the row is
+                # already 'submitted' and RETURNING comes back empty. That
+                # second caller must NOT be treated as a fresh promotion — it
+                # falls through to the same idempotent
+                # ``return get_application(...)`` at the bottom that an
+                # already-submitted application always took, instead of
+                # silently overwriting the winner's answers/resumeId.
                 cur.execute(
                     """
                     UPDATE "Application"
@@ -566,6 +579,8 @@ def submit_application(
                         "answers" = COALESCE("answers", '{}'::jsonb) || %s::jsonb,
                         "updatedAt" = NOW()
                     WHERE "id" = %s AND "userId" = %s
+                      AND "status" = 'draft'::"ApplicationStatus"
+                    RETURNING "id"
                     """,
                     (
                         tailored_resume_id,
@@ -579,7 +594,8 @@ def submit_application(
                         current_user["id"],
                     ),
                 )
-                submitted_job_id = row[2]
+                if cur.fetchone() is not None:
+                    submitted_job_id = row[2]
                 conn.commit()
     # Phase 4: advance the parent job to 'applied' so the card flushes from
     # the active board. Guarded forward-only via advance_status — an
