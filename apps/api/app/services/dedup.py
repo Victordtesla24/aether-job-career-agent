@@ -69,3 +69,38 @@ def compute_null_source_url_hash(
 def compute_description_hash(description: str) -> str:
     normalized = description.strip()[:500]
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def compute_story_content_hash(
+    user_id: str,
+    title: str,
+    situation: str,
+    task: str,
+    action: str,
+    result: str,
+) -> str:
+    """Content-identity hash for a STAR story (G-P4-STORY-DEDUP-004).
+
+    Hashes (userId + the five STAR fields) so re-running story extraction on the
+    same résumé does not create duplicate rows, and a double-submitted REST
+    create returns the existing story instead of a second copy.
+
+    Mirrors ``compute_null_source_url_hash`` for jobs: case- and
+    whitespace-insensitive, and keyed on ``user_id`` FIRST so two different
+    people who happen to write the identical story never collide onto one
+    shared row. ``tags`` and ``metrics`` are deliberately excluded — they are
+    decoration a user may edit freely, not the story's identity.
+
+    This value is INTERNAL: it is an offline-guessable digest of the user's own
+    STAR text, so it must never be selected into an API response (see
+    ``app/routers/stories.py::_INTERNAL_COLUMNS``).
+    """
+    key = (
+        f"{user_id}|"
+        f"{title.strip().lower()}|"
+        f"{situation.strip().lower()}|"
+        f"{task.strip().lower()}|"
+        f"{action.strip().lower()}|"
+        f"{result.strip().lower()}"
+    )
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()

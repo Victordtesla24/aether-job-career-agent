@@ -21,6 +21,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
+from app.agents.cover_letter_agent import FabricationError, StructuralError
 from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
@@ -806,6 +807,52 @@ def _execute_reserved_run(
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, LLM_UNAVAILABLE_USER_MESSAGE
         ) from exc
+    except (FabricationError, StructuralError) as exc:
+        # GAP-P4-002: the cover agent's fabrication / §10.2 structural guard
+        # rejected the draft after every corrective retry. The guard WORKING is
+        # NOT a failure — Aether refuses to ship an ungrounded or non-compliant
+        # letter — so record an honest COMPLETED degrade instead of letting the
+        # generic ``except Exception`` below stamp the owner-visible "Recent
+        # runs" table (and the Agents-screen health classification) with a red
+        # ``failed`` row for a correct refusal. This mirrors the treatment the
+        # async worker (workers/tasks.py) and ``_pipeline_core`` already give
+        # the same two exceptions, so all three paths now agree.
+        #
+        # Placed AFTER every pre-existing handler and before the generic one so
+        # no other clause's reachability changes. The two names are imported at
+        # MODULE scope (top of this file): the reverted WIP referenced them with
+        # no binding at all, which raised ``NameError`` here and made every
+        # handler declared below unreachable — orphaning the AgentRun row in
+        # 'running' and skipping the refund (WIP-BRANCH-AUDIT-2026-07-29 #1).
+        #
+        # ``flagged``/``issues`` are the guard's own entity/issue lists already
+        # rendered into English by the exception constructors — never verbatim
+        # LLM output, so there is no PII or prompt-leak risk in the audit row.
+        reason = getattr(exc, "flagged", None) or getattr(exc, "issues", None)
+        honest_output: dict[str, Any] = {
+            "cover_letter_id": None,
+            "coverLetterUnavailable": True,
+            "reason": str(reason),
+            "message": (
+                "An auto-generated cover letter couldn't be produced without "
+                "unverifiable wording, so it was withheld — open the Cover "
+                "Letter studio to generate or write one manually."
+            ),
+        }
+        runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
+        # No letter was produced, so the reserved run is refunded — exactly like
+        # the NoChangesApplied no-op above. On the ASYNC path manage_quota=False
+        # makes this a no-op and the worker refunds after winning its own atomic
+        # first-terminal-wins transition, so the refund happens exactly once on
+        # either path, never twice.
+        _refund_once()
+        # Re-raise so each caller keeps its own response shape unchanged:
+        # ``run_cover_letter`` -> 422, ``_pipeline_core`` -> graceful degrade,
+        # the async worker -> its own honest ``coverLetterUnavailable`` result.
+        # NOTE: those terminal writes are on the BackgroundJob row, a different
+        # table from the AgentRun row finished here, so there is no double
+        # terminal transition on any single row (open question API-6).
+        raise
     except Exception as exc:
         runs.finish(run_id, "failed", error=str(exc))
         _refund_once()
@@ -1255,6 +1302,34 @@ def _job_stale_thresholds() -> tuple[int, int]:
     return enq, max(60, enq - 180)
 
 
+def _job_age_seconds(anchor: Any) -> float:
+    """Seconds elapsed since a DB-stamped ``anchor``, CLAMPED at zero.
+
+    ``BackgroundJob.createdAt``/``startedAt`` are stamped by the DATABASE clock
+    (``now()``) while this comparison runs on the APP clock. The hosted Postgres
+    was measured ~3s AHEAD of the app server
+    (``uat/reports/evidence/models-live/clock-skew-sweep-2026-07-29.md``,
+    finding #4), so a job polled immediately after enqueue can produce a
+    NEGATIVE age.
+
+    Nothing misbehaves today — a negative age is trivially below every
+    staleness limit, so the watchdog correctly declines to fire — but a
+    negative "age" is a nonsense value to log or reuse, and this is the closest
+    structural sibling to the W-6 freshness bug the sweep was opened for.
+    Clamping at zero keeps it honest AND keeps the watchdog fail-safe;
+    ``abs()`` (the symmetric fix that was right for the 120s email-sync window)
+    would be actively wrong here, turning a future-stamped anchor into a large
+    age and failing a brand-new job.
+
+    A naive timestamp is read as UTC, exactly as the caller did before.
+    """
+    from datetime import datetime, timezone
+
+    if getattr(anchor, "tzinfo", None) is None:
+        anchor = anchor.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - anchor).total_seconds())
+
+
 def _apply_stale_watchdog(
     job: dict[str, Any], repo: "BackgroundJobRepository"
 ) -> dict[str, Any]:
@@ -1265,18 +1340,13 @@ def _apply_stale_watchdog(
     status_v = job.get("status")
     if status_v not in ("enqueued", "processing"):
         return job
-    from datetime import datetime, timezone
-
     enq_secs, proc_secs = _job_stale_thresholds()
     limit = enq_secs if status_v == "enqueued" else proc_secs
     anchor = job.get("startedAt") if status_v == "processing" else None
     anchor = anchor or job.get("createdAt")
     if anchor is None:
         return job
-    if getattr(anchor, "tzinfo", None) is None:
-        anchor = anchor.replace(tzinfo=timezone.utc)
-    age = (datetime.now(timezone.utc) - anchor).total_seconds()
-    if age < limit:
+    if _job_age_seconds(anchor) < limit:
         return job
     # First-terminal-wins (reviewer BLOCKING-1/2): only the caller that atomically
     # transitions the job to failed performs the refund, and the refund itself is
@@ -1742,11 +1812,12 @@ def _pipeline_core(
             # violation survived every corrective retry. That is the guard
             # WORKING (Aether never ships a fabricated cover letter), but it must
             # NOT discard the SUCCESSFUL tailoring that precedes it. The
-            # coverLetter AgentRun is already recorded failed and its reserved
-            # quota refunded inside _dispatch/_record_run, so here we ONLY degrade
-            # gracefully: keep the tailored résumé and complete the pipeline with
-            # the cover marked unavailable + an honest, actionable message —
-            # instead of failing the whole job with a raw guard exception.
+            # coverLetter AgentRun is already recorded as an honest COMPLETED
+            # degrade (GAP-P4-002 — the guard working is not a failure) and its
+            # reserved quota refunded inside _dispatch/_record_run, so here we
+            # ONLY degrade gracefully: keep the tailored résumé and complete the
+            # pipeline with the cover marked unavailable + an honest, actionable
+            # message — instead of failing the whole job with a raw exception.
             reason = getattr(exc, "flagged", None) or getattr(exc, "issues", None)
             steps.append(
                 {

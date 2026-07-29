@@ -328,3 +328,110 @@ def ensure_job_dedup_columns() -> None:
             )
         conn.commit()
     _job_dedup_columns_ready = True
+
+
+#: Guard so the additive ``StoryEntry`` dedup column is only ensured once per
+#: worker process (see ``ensure_story_dedup_column``).
+_story_dedup_column_ready = False
+
+
+def ensure_story_dedup_column() -> None:
+    """Idempotently add the additive ``StoryEntry.contentHash`` column on first use.
+
+    ``contentHash`` (G-P4-STORY-DEDUP-004) is a sha256 of
+    (userId + title + situation + task + action + result). Stories that share
+    the same ``contentHash`` are duplicates; the repository returns the existing
+    row instead of inserting another one.
+
+    ``ADD COLUMN IF NOT EXISTS text`` with no default is a metadata-only change
+    on PostgreSQL (existing rows read ``NULL`` = no hash yet computed), so it is
+    fast, safe on the production table, and backfills the shared test schema.
+    A transaction-scoped advisory lock serializes concurrent first-hit callers
+    so the DDL cannot race; ``TRUNCATE`` never drops columns, so the
+    process-wide latch survives test teardown. Lazy DDL per ADR-TR-1 (there is
+    no migration runner in this repo) — mirrors ``ensure_job_dedup_columns``.
+
+    MUST be called by EVERY repository path that reads or writes the column —
+    both ``StoryRepository.create`` and ``StoryRepository.update``. An update
+    path that skipped it raised ``psycopg2.UndefinedColumn`` -> HTTP 500 on the
+    first ``PUT /stories/{id}`` against a schema that had never run the DDL
+    (WIP-BRANCH-AUDIT-2026-07-29 blocker #2).
+    """
+    global _story_dedup_column_ready
+    if _story_dedup_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'StoryEntry'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'contentHash'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _story_dedup_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (9380710313,))
+            cur.execute(
+                'ALTER TABLE "StoryEntry" '
+                'ADD COLUMN IF NOT EXISTS "contentHash" text'
+            )
+        conn.commit()
+    _story_dedup_column_ready = True
+
+
+#: Guard so the additive ``Job.coverFailureClearedAt`` column is only ensured
+#: once per worker process (see ``ensure_job_cover_suppression_column``).
+_job_cover_suppression_column_ready = False
+
+
+def ensure_job_cover_suppression_column() -> None:
+    """Idempotently add the additive ``Job.coverFailureClearedAt`` column.
+
+    ML-W-12: the board-sweep cover-failure backoff (RT-007,
+    ``app.workers.board_sweep``) permanently excludes a job from
+    ``_next_target`` once it accrues ``max_cover_failures()`` failed
+    coverLetter ``AgentRun`` rows inside ``cover_failure_window_hours()`` —
+    correct for a job whose letter is genuinely unfabricatable, but with no
+    way to clear early. When the failures were actually caused by a pipeline
+    bug that has since been fixed and deployed, every job that failed under
+    the old broken code stays wedged for the rest of the window: it is
+    excluded from selection, so it can never earn the new success that would
+    otherwise clear it.
+
+    ``coverFailureClearedAt`` is the additive escape hatch: ops (via
+    ``scripts/clear_cover_suppression.py``) stamps ``NOW()`` on a currently-
+    suppressed job, and the failure-count queries only count failures AFTER
+    this timestamp (or after the job's own last successful coverLetter
+    completion, whichever is later) — the historical ``AgentRun`` audit trail
+    is never rewritten, only what counts going forward changes.
+
+    ``ADD COLUMN ... timestamptz`` with no default is a metadata-only change
+    on PostgreSQL (existing rows read NULL = never cleared), so it is fast and
+    safe on the production ``Job`` table and backfills the shared test schema.
+    Lazy DDL per ADR-TR-1 (there is no migration runner); mirrors
+    ``ensure_job_dedup_columns``.
+    """
+    global _job_cover_suppression_column_ready
+    if _job_cover_suppression_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Job'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'coverFailureClearedAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _job_cover_suppression_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240740,))
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "coverFailureClearedAt" timestamptz'
+            )
+        conn.commit()
+    _job_cover_suppression_column_ready = True

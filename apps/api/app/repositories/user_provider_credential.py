@@ -20,10 +20,22 @@ lock so concurrent ``CREATE TABLE IF NOT EXISTS`` cannot race on Postgres's
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.services import credential_vault
+
+
+def _utc_now() -> datetime:
+    """This process's wall clock, isolated behind one accessor.
+
+    Named so the clock-skew suite can inject a deliberate app-vs-DB offset and
+    prove that a stored expiry is minted by the DATABASE clock rather than this
+    one (see ``AgentQuotaBlockRepository.set_block``).
+    """
+    return datetime.now(timezone.utc)
+
 
 #: Distinct advisory-lock id for the per-user agent-credentials bundle.
 #: (AgentConfig/AgentProvider 7420240711 … ProviderCredential 7420240716 —
@@ -431,20 +443,52 @@ class AgentQuotaBlockRepository:
     def set_block(
         self, user_id: str, provider: str, *, expires_at: Any, reason: str
     ) -> None:
+        """Record/refresh the cooldown, minting ``expiresAt`` on the DB clock.
+
+        Clock-skew hardening (``clock-skew-sweep-2026-07-29.md`` finding #3 —
+        the ONLY finding in the sweep where the write and read clocks are
+        reversed). Callers hand in an ABSOLUTE instant computed on the APP clock
+        (``llm_client._quota_block_expiry`` = ``app_now + AETHER_QUOTA_BLOCK_HOURS``),
+        but :meth:`get_active` filters it with the DATABASE's own
+        ``"expiresAt" > now()``. Storing the app-clock instant verbatim
+        therefore silently shortens the cooldown when the DB clock runs ahead
+        (measured ~3s on the hosted instance) and lengthens it when it runs
+        behind.
+
+        The caller's INTENT is a duration, so that is what we preserve: convert
+        the instant back to seconds-from-now on the same app clock that
+        produced it (both operands app-side, so the conversion itself is
+        skew-free), then let Postgres apply it to its OWN ``now()``. Write and
+        read are now on one clock and the crossing is gone entirely — matching
+        the OAuth state-token pattern at line ~116 of this module.
+
+        A non-datetime ``expires_at`` is stored verbatim so any caller outside
+        the two known ones keeps its exact previous behaviour rather than being
+        silently reinterpreted.
+        """
         _ensure_user_agent_tables()
+        if isinstance(expires_at, datetime):
+            reference = _utc_now()
+            if expires_at.tzinfo is None:
+                reference = reference.replace(tzinfo=None)
+            expiry_sql = "now() + make_interval(secs => %s)"
+            expiry_param: Any = (expires_at - reference).total_seconds()
+        else:
+            expiry_sql = "%s"
+            expiry_param = expires_at
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    '''
+                    f'''
                     INSERT INTO "AgentQuotaBlock"
                         ("id", "userId", "provider", "expiresAt", "reason", "createdAt")
-                    VALUES (%s, %s, %s, %s, %s, now())
+                    VALUES (%s, %s, %s, {expiry_sql}, %s, now())
                     ON CONFLICT ("userId", "provider") DO UPDATE SET
                         "expiresAt" = EXCLUDED."expiresAt",
                         "reason" = EXCLUDED."reason",
                         "createdAt" = now()
                     ''',
-                    (new_id(), user_id, provider, expires_at, reason),
+                    (new_id(), user_id, provider, expiry_param, reason),
                 )
             conn.commit()
 

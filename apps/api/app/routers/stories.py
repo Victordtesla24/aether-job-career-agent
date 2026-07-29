@@ -24,6 +24,18 @@ router = APIRouter()
 # Reserved keys stored inside ``metrics`` that are control flags, not evidence.
 _RESERVED_METRIC_KEYS = {"__starred"}
 
+#: Row columns that exist for INTERNAL bookkeeping only and must never reach a
+#: client. ``contentHash`` (G-P4-STORY-DEDUP-004) is the sha256 dedup token: an
+#: offline-guessable digest of the user's own STAR text, so exposing it would
+#: both leak an internal identifier and let a client probe or forge dedup
+#: collisions. ``StoryRepository`` already declines to SELECT it; stripping it
+#: here as well is the second, route-level line of defence so a future
+#: repository change that re-adds it to the column list cannot silently leak it
+#: (WIP-BRANCH-AUDIT-2026-07-29 blocker #2, second half — the parked WIP leaked
+#: the hash on the insert path while omitting it on the dedup-hit path, so the
+#: two POST outcomes did not even return the same shape).
+_INTERNAL_COLUMNS = frozenset({"contentHash"})
+
 # Interview themes used to compute the Coverage-Gaps panel from live data.
 _COVERAGE_THEMES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Conflict resolution", ("conflict", "disagree", "resolution", "mediat")),
@@ -111,7 +123,9 @@ def _derive_impact(story: dict[str, Any]) -> str | None:
 def _enrich(story: dict[str, Any]) -> dict[str, Any]:
     metrics = story.get("metrics")
     starred = bool(isinstance(metrics, dict) and metrics.get("__starred"))
-    enriched = dict(story)
+    # Every story-shaped response on this router funnels through here, so this
+    # is the single choke point that guarantees no internal column escapes.
+    enriched = {k: v for k, v in story.items() if k not in _INTERNAL_COLUMNS}
     # Expose only evidence metrics to the client (hide the control flag).
     enriched["metrics"] = _evidence_metrics(metrics)
     enriched["category"] = _derive_category(story)
