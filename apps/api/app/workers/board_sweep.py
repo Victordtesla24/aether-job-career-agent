@@ -46,15 +46,16 @@ MIN_SECONDS_COVER_ONLY = 120.0
 #: Consecutive LLM-unavailable failures that abort the stretch (systemic
 #: outage — retrying more jobs would burn attempts for nothing).
 LLM_OUTAGE_BREAKER = 3
-#: Maximum coverLetter failures per job within the failure window before the
-#: sweep PERMANENTLY skips that job for the rest of the window. Without this,
-#: a job whose cover letter is permanently unfabricatable (FabricationGuard
-#: correctly rejecting every attempt) gets retried every cron tick forever —
-#: 13+ failed attempts over 14h observed in production. The FabricationGuard
-#: is working AS DESIGNED; the bug was the sweep had no persistent backoff
-#: (the per-stretch in-memory ``attempted`` set resets every tick). The window
-#: ensures a transient cause (e.g. a resume update that fixes the grounding)
-#: eventually re-eligibilises the job without code changes.
+#: Maximum LETTERLESS coverLetter runs per job within the failure window
+#: (``_COVER_RUN_PRODUCED_NO_LETTER``) before the sweep PERMANENTLY skips that
+#: job for the rest of the window. Without this, a job whose cover letter is
+#: permanently unfabricatable (FabricationGuard correctly rejecting every
+#: attempt) gets retried every cron tick forever — 13+ failed attempts over
+#: 14h observed in production. The FabricationGuard is working AS DESIGNED;
+#: the bug was the sweep had no persistent backoff (the per-stretch in-memory
+#: ``attempted`` set resets every tick). The window ensures a transient cause
+#: (e.g. a resume update that fixes the grounding) eventually re-eligibilises
+#: the job without code changes.
 MAX_COVER_FAILURES = 3
 COVER_FAILURE_WINDOW_HOURS = 24
 
@@ -236,9 +237,55 @@ def eligible_users(limit: int | None = None) -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
+#: SQL predicate (``{run}`` = the ``AgentRun`` alias) for a coverLetter run
+#: that produced NO LETTER — the thing the backoff must count.
+#:
+#: ML-W-19 (uat/reports/evidence/prod-verify-3/item2-autopilot-ticks.txt): the
+#: DOMINANT letterless outcome is NOT ``status='failed'``. A fabrication /
+#: §10.2-structural guard rejection is deliberately recorded as
+#: ``status='completed'`` with ``output.coverLetterUnavailable = true``
+#: (GAP-P4-002 — the guard WORKING is not a failure, and an owner-visible red
+#: "failed" row for a correct refusal would be dishonest the other way). Every
+#: writer of that shape — ``app/routers/agents.py`` (sync guard-rejection
+#: degrade), ``app/workers/tasks.py`` (async worker) and the
+#: ``CoverLetterResult.cover_letter_unavailable`` dataclass field that
+#: ``asdict()`` surfaces for the LLM-unavailable-on-first-draft degrade
+#: (ML-cover-002) — is matched here, in BOTH the camelCase and snake_case
+#: spellings that actually reach the JSONB column.
+#:
+#: Counting only ``failed`` made the whole backoff dead code for that mode:
+#: measured live, 4 jobs with 76 letterless runs each in the trailing 24h all
+#: reported an effective failure count of ZERO, and the sweep re-attempted the
+#: identical jobs every tick forever (453 letterless runs vs 1 real letter in
+#: 24h), burning real paid tokens.
+#:
+#: Predicate discipline matches the frontend's ``coverLetterDegraded``
+#: (apps/web/src/components/dashboard/feed.ts): ``=== true`` there, jsonb
+#: ``= 'true'::jsonb`` here — an explicit boolean ``true``, never a truthy
+#: coercion, so no unrelated output shape can be misread as a degrade.
+_COVER_RUN_PRODUCED_NO_LETTER = '''
+    ({run}."status" = 'failed'
+     OR ({run}."status" = 'completed'
+         AND ({run}."output"->'coverLetterUnavailable' = 'true'::jsonb
+              OR {run}."output"->'cover_letter_unavailable' = 'true'::jsonb)))
+'''
+
+#: SQL predicate (``{run}`` = the ``AgentRun`` alias) for a coverLetter run
+#: that GENUINELY produced a letter. ML-W-19: a ``completed`` status alone is
+#: no longer proof of success — only a non-null letter id is. ``->>`` yields
+#: SQL NULL both when the key is absent and when its value is JSON ``null``,
+#: which is exactly the honest-degrade shape (``"cover_letter_id": null``), so
+#: a degraded run can never satisfy this. Both spellings are accepted for the
+#: same reason as above.
+_COVER_RUN_PRODUCED_A_LETTER = '''
+    ({run}."status" = 'completed'
+     AND ({run}."output"->>'cover_letter_id' IS NOT NULL
+          OR {run}."output"->>'coverLetterId' IS NOT NULL))
+'''
+
 #: Correlated-subquery fragment (reused verbatim by ``_cover_failure_count``,
 #: ``_saturated_job_ids`` and ``_next_target``) that floors the failure count
-#: at the LATER of the job's own last successful coverLetter completion or
+#: at the LATER of the job's own last GENUINELY SUCCESSFUL coverLetter run or
 #: its own last ops-clear stamp (``Job.coverFailureClearedAt`` — ML-W-12).
 #:
 #: Before this floor, a job's failure count was a flat "failures in the
@@ -250,32 +297,44 @@ def eligible_users(limit: int | None = None) -> list[str]:
 #: success (from ANY path — the sweep itself, a manual retry through the UI,
 #: or an ops clear) immediately un-wedge the job, with NO historical
 #: ``AgentRun`` row ever rewritten.
-_SINCE_LAST_SUCCESS_OR_CLEAR = '''
+#:
+#: ML-W-19: the "last success" term used to be ``status='completed'``, which
+#: after GAP-P4-002 MATCHES the letterless degrades — so every degraded run
+#: also reset the floor past all earlier real failures. It is now the
+#: genuinely-produced-a-letter predicate: a degraded ``completed`` run neither
+#: clears the counter nor is cleared by a later degraded run.
+_SINCE_LAST_SUCCESS_OR_CLEAR = f'''
     GREATEST(
         COALESCE(
             (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
-             WHERE r2."userId" = {user_ref} AND r2."agentName" = 'coverLetter'
-               AND r2."status" = 'completed' AND (r2."input"->>'job_id') = {job_ref}),
+             WHERE r2."userId" = {{user_ref}} AND r2."agentName" = 'coverLetter'
+               AND {_COVER_RUN_PRODUCED_A_LETTER.format(run="r2").strip()}
+               AND (r2."input"->>'job_id') = {{job_ref}}),
             '-infinity'::timestamptz),
         COALESCE(
-            (SELECT j2."coverFailureClearedAt" FROM "Job" j2 WHERE j2."id" = {job_ref}),
+            (SELECT j2."coverFailureClearedAt" FROM "Job" j2 WHERE j2."id" = {{job_ref}}),
             '-infinity'::timestamptz))
 '''
 
 
 def _cover_failure_count(user_id: str, job_id: str) -> int:
-    """Count failed coverLetter AgentRuns for this user+job inside the
-    failure window AND since the job's last success/clear. Used by
+    """Count LETTERLESS coverLetter AgentRuns for this user+job inside the
+    failure window AND since the job's last genuine success/clear. Used by
     ``_next_target``'s SQL (correlated subquery) and exposed standalone for
     observability/tests.
+
+    "Letterless" is ``_COVER_RUN_PRODUCED_NO_LETTER``: a ``failed`` run OR a
+    ``completed`` run carrying the honest ``coverLetterUnavailable`` degrade
+    flag (ML-W-19 — the latter is the dominant mode in production and used to
+    count zero).
 
     A job is PERMANENTLY skipped once this reaches ``max_cover_failures()``
     inside the window — the FabricationGuard is correctly rejecting every
     cover draft (e.g. the resume never proves 'onboarding' experience the
     LLM keeps first-person-claiming from the job title 'Onboarding PM'), and
     retrying every cron tick forever wastes LLM budget and looks like a stuck
-    agent to the user. A subsequent successful coverLetter completion (or an
-    ops clear, ML-W-12) resets this count to 0 — see
+    agent to the user. A subsequent coverLetter run that genuinely produces a
+    letter (or an ops clear, ML-W-12) resets this count to 0 — see
     ``_SINCE_LAST_SUCCESS_OR_CLEAR``.
     """
     from app.db import ensure_job_cover_suppression_column, get_connection
@@ -289,13 +348,13 @@ def _cover_failure_count(user_id: str, job_id: str) -> int:
         with conn.cursor() as cur:
             cur.execute(
                 f'''
-                SELECT count(*) FROM "AgentRun"
-                WHERE "userId" = %s
-                  AND "agentName" = 'coverLetter'
-                  AND "status" = 'failed'
-                  AND "createdAt" >= NOW() - INTERVAL '%s hours'
-                  AND ("input"->>'job_id') = %s
-                  AND "createdAt" > {since_floor}
+                SELECT count(*) FROM "AgentRun" r
+                WHERE r."userId" = %s
+                  AND r."agentName" = 'coverLetter'
+                  AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
+                  AND r."createdAt" >= NOW() - INTERVAL '%s hours'
+                  AND (r."input"->>'job_id') = %s
+                  AND r."createdAt" > {since_floor}
                 ''',
                 (user_id, window, job_id, user_id, job_id, job_id),
             )
@@ -305,8 +364,9 @@ def _cover_failure_count(user_id: str, job_id: str) -> int:
 
 def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
     """Ids of eligible jobs that are CURRENTLY skipped solely due to the cover
-    failure backoff (they have ``max_cover_failures()``+ coverLetter failures
-    since their last success/clear, in the window, but no Application yet).
+    failure backoff (they have ``max_cover_failures()``+ letterless coverLetter
+    runs since their last genuine success/clear, in the window, but no
+    Application yet).
     Used to distinguish "board truly complete" (``board-complete``) from "all
     remaining jobs are failure-saturated" (``skipped-failures``) in the
     stretch summary — the latter tells the operator the sweep is NOT done,
@@ -342,7 +402,7 @@ def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
                         SELECT count(*) FROM "AgentRun" r
                         WHERE r."userId" = %s
                           AND r."agentName" = 'coverLetter'
-                          AND r."status" = 'failed'
+                          AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
                           AND r."createdAt" >= NOW() - INTERVAL '%s hours'
                           AND (r."input"->>'job_id') = j."id"
                           AND r."createdAt" > {since_floor}
@@ -379,14 +439,14 @@ def _job_suppression_expiry(user_id: str, job_id: str) -> Any | None:
         with conn.cursor() as cur:
             cur.execute(
                 f'''
-                SELECT "createdAt" FROM "AgentRun"
-                WHERE "userId" = %s
-                  AND "agentName" = 'coverLetter'
-                  AND "status" = 'failed'
-                  AND "createdAt" >= NOW() - INTERVAL '%s hours'
-                  AND ("input"->>'job_id') = %s
-                  AND "createdAt" > {since_floor}
-                ORDER BY "createdAt" ASC
+                SELECT r."createdAt" FROM "AgentRun" r
+                WHERE r."userId" = %s
+                  AND r."agentName" = 'coverLetter'
+                  AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
+                  AND r."createdAt" >= NOW() - INTERVAL '%s hours'
+                  AND (r."input"->>'job_id') = %s
+                  AND r."createdAt" > {since_floor}
+                ORDER BY r."createdAt" ASC
                 ''',
                 (user_id, window, job_id, user_id, job_id, job_id),
             )
@@ -420,15 +480,18 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     """The next job to process: cover-only completions first (finish work a
     prior stretch started), then full runs by fitScore descending.
 
-    Jobs that have ``max_cover_failures()``+ coverLetter AgentRun failures
-    inside the ``cover_failure_window_hours()`` sliding window, SINCE their
-    last success or ops-clear, are PERMANENTLY excluded — the sweep no longer
-    retries a permanently unfabricatable job every cron tick (13+ failed
-    attempts over 14h observed in production before this fix). The guard's
-    rejections are correct; the bug was the sweep had no persistent backoff
-    (the per-stretch in-memory ``attempted`` set resets every tick). Once the
-    oldest failure ages past the window, OR the job earns a successful
-    coverLetter completion, OR ops clears it (``Job.coverFailureClearedAt``,
+    Jobs that have ``max_cover_failures()``+ LETTERLESS coverLetter AgentRuns
+    (``_COVER_RUN_PRODUCED_NO_LETTER``: failed, or completed-with-the-honest-
+    degrade-flag) inside the ``cover_failure_window_hours()`` sliding window,
+    SINCE their last genuine success or ops-clear, are PERMANENTLY excluded —
+    the sweep no longer retries a permanently unfabricatable job every cron
+    tick (13+ failed attempts over 14h, then 76 letterless attempts per job
+    per 24h after the degrade shape changed, observed in production before
+    this fix). The guard's rejections are correct; the bug was the sweep had
+    no persistent backoff that could see them (the per-stretch in-memory
+    ``attempted`` set resets every tick). Once the oldest letterless run ages
+    past the window, OR the job earns a coverLetter run that genuinely
+    produces a letter, OR ops clears it (``Job.coverFailureClearedAt``,
     ML-W-12), the job re-eligibilises without code changes.
     """
     from app.db import ensure_job_cover_suppression_column, get_connection
@@ -460,7 +523,7 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
                         SELECT count(*) FROM "AgentRun" r
                         WHERE r."userId" = %s
                           AND r."agentName" = 'coverLetter'
-                          AND r."status" = 'failed'
+                          AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
                           AND r."createdAt" >= NOW() - INTERVAL '%s hours'
                           AND (r."input"->>'job_id') = j."id"
                           AND r."createdAt" > {since_floor}
@@ -479,6 +542,25 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
         "job_id": job_id,
         "mode": "cover_only" if job_status == "tailoring" else "full",
     }
+
+
+def _cover_result_degraded(result: Any) -> bool:
+    """Whether a coverLetter run RETURNED an honest "no letter produced"
+    degrade instead of raising (``cover_letter_agent`` ML-cover-002 path).
+
+    The in-memory twin of ``_COVER_RUN_PRODUCED_NO_LETTER``'s degrade half —
+    same two spellings, same ``is True`` / ``=== true`` strictness as the SQL
+    and as ``feed.ts``'s ``coverLetterDegraded``. Without it the stretch
+    summary counts a letterless run as ``covers`` and the tick log claims a
+    cover letter that does not exist, while the DB-backed suppression counts
+    the very same run as a failure (ML-W-19).
+    """
+    if not isinstance(result, dict):
+        return False
+    return (
+        result.get("coverLetterUnavailable") is True
+        or result.get("cover_letter_unavailable") is True
+    )
 
 
 def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -574,10 +656,26 @@ def sweep_user_stretch(
                     # refunded. The cover letter still proceeds from the base
                     # résumé (same degrade the manual pipeline uses).
                     pass
-            _run_agent(user_id, "coverLetter", {"job_id": job_id})
-            summary["covers"] += 1
-            summary["processed"] += 1
-            llm_outages = 0
+            cover_out = _run_agent(user_id, "coverLetter", {"job_id": job_id})
+            if _cover_result_degraded(cover_out):
+                # ML-W-19: the cover agent completed with an honest "no letter
+                # produced" degrade rather than raising. No letter exists, so
+                # this is a failure for counting purposes — exactly what the
+                # DB-backed suppression now records for the same run. Counting
+                # it as a cover would make the tick log claim work that never
+                # shipped. Deliberately does NOT reset ``llm_outages``: this
+                # degrade fires precisely when the writing model was
+                # unavailable, so clearing the outage breaker here would
+                # defeat it.
+                summary["failures"] += 1
+                logger.info(
+                    "board-sweep %s job %s: cover degraded — no letter produced",
+                    user_id, job_id,
+                )
+            else:
+                summary["covers"] += 1
+                summary["processed"] += 1
+                llm_outages = 0
         except MissingResumeError:
             summary["reason"] = "no-resume"
             break
@@ -651,32 +749,68 @@ _CONTINUATION_COOLDOWN_SECONDS = 15.0
 async def board_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
     """ARQ task: run one sweep stretch for one user off the event loop.
 
-    RT-008 continuous-sweep enforcement: when the stretch stops because it
-    hit a SOFT limit (job-cap or deadline — ``needs_continuation`` is True),
-    more board work exists and the operator mandate is "keep working
-    non-stop until the pipeline is not cleared" — so this re-enqueues itself
-    with a short cooldown rather than waiting for the next 10-minute cron
-    tick. A HARD stop (board-complete, quota-exhausted, no-resume,
-    llm-unavailable) does NOT re-enqueue — retrying immediately would just
-    find nothing new or fail again for the same reason.
+    RT-008 continuous-sweep enforcement: when the stretch stops because it hit
+    a SOFT limit (job-cap or deadline — ``needs_continuation`` is True), more
+    board work exists and the operator mandate is "keep working non-stop until
+    the pipeline is cleared" — so this ASKS for an immediate continuation
+    instead of waiting for the next 10-minute cron tick. A HARD stop
+    (board-complete, quota-exhausted, no-resume, llm-unavailable) does NOT
+    ask — retrying immediately would just find nothing new or fail again for
+    the same reason.
+
+    ML-W-20 — the enqueue RESULT is now inspected and reported honestly.
+    ``ArqRedis.enqueue_job`` returns ``None`` (never raises) when a job with
+    that ``_job_id`` already exists: ``arq/connections.py`` checks
+    ``pipe.exists(job_key, result_key_prefix + job_id)`` before queueing. Both
+    keys work against a self-continuation — the job key of the CURRENTLY
+    RUNNING job is still present while this coroutine runs, and after it
+    finishes the result key is retained for ``WorkerSettings.keep_result``
+    (300s). Production therefore refused every continuation while this
+    function logged "re-enqueued continuation" unconditionally: an observed
+    17:07:57Z claim followed by a silent idle window until the 17:20 cron tick
+    (uat/reports/evidence/prod-verify-3/item2-autopilot-ticks.txt). The log
+    now states which of the two actually happened, and the summary carries
+    ``continuation_enqueued`` so callers/tests can assert it.
+
+    The ``_job_id`` deliberately STAYS the canonical ``board-sweep:<user_id>``.
+    A unique per-continuation id would make the enqueue succeed, but it would
+    also leave the 10-minute cron tick (and ``enqueue_user_sweep``) deduping
+    against a different key — stacking a SECOND concurrent stretch for the
+    same user for most of a chain, with two ``_next_target`` selections racing
+    on the same board: duplicate tailoring, duplicate letters, doubled real
+    LLM spend, and duplicate Application rows. Single-flight is worth more
+    than the bounded recovery cost of a refusal, which the same evidence
+    measures at exactly one cron period. So when arq refuses, the cron IS the
+    continuation — and the log says so instead of claiming otherwise.
     """
     import asyncio
 
     summary = await asyncio.to_thread(sweep_user_stretch, user_id)
     if summary.get("needs_continuation") and sweep_enabled():
+        summary["continuation_enqueued"] = False
         try:
-            await ctx["redis"].enqueue_job(
+            job = await ctx["redis"].enqueue_job(
                 "board_sweep_user",
                 user_id,
                 _job_id=f"board-sweep:{user_id}",
                 _defer_by=_CONTINUATION_COOLDOWN_SECONDS,
             )
-            logger.info(
-                "board-sweep %s: re-enqueued continuation (reason=%s, cooldown=%.0fs)",
-                user_id, summary["reason"], _CONTINUATION_COOLDOWN_SECONDS,
-            )
         except Exception:  # noqa: BLE001 — best-effort; next cron tick is the floor
             logger.exception("board-sweep %s: failed to re-enqueue continuation", user_id)
+        else:
+            if job is None:
+                logger.info(
+                    "board-sweep %s: continuation refused (dedup) — next cron "
+                    "tick will resume (reason=%s)",
+                    user_id, summary["reason"],
+                )
+            else:
+                summary["continuation_enqueued"] = True
+                logger.info(
+                    "board-sweep %s: re-enqueued continuation "
+                    "(reason=%s, cooldown=%.0fs)",
+                    user_id, summary["reason"], _CONTINUATION_COOLDOWN_SECONDS,
+                )
     return summary
 
 

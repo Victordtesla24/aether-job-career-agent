@@ -3,17 +3,19 @@
 
 The board-sweep autopilot (``app/workers/board_sweep.py``, RT-007)
 permanently excludes a job from its next-target selection once it accrues
-``AETHER_BOARD_SWEEP_MAX_COVER_FAILURES`` (default 3) failed coverLetter
+``AETHER_BOARD_SWEEP_MAX_COVER_FAILURES`` (default 3) LETTERLESS coverLetter
 ``AgentRun`` rows inside ``AETHER_BOARD_SWEEP_COVER_FAILURE_WINDOW_HOURS``
-(default 24h) since the job's own last success/clear. That backoff is
+(default 24h) since the job's own last genuine success/clear. "Letterless"
+means ``status='failed'`` OR a ``status='completed'`` row carrying the honest
+``output.coverLetterUnavailable`` degrade flag (ML-W-19). That backoff is
 correct for a job whose cover letter is genuinely unfabricatable — but if the
 failures were actually caused by a pipeline BUG that has since been fixed and
 deployed, every job that failed under the old broken code stays wedged for
 the rest of the window: because the job is excluded from selection, the
 sweep can never re-attempt it to earn the new success that would otherwise
-auto-clear it (board_sweep.py only counts failures AFTER a job's own last
-successful coverLetter completion or its own last clear stamp — see
-``Job.coverFailureClearedAt``, added by ``app.db.
+auto-clear it (board_sweep.py only counts letterless runs AFTER a job's own
+last coverLetter run that genuinely produced a letter, or its own last clear
+stamp — see ``Job.coverFailureClearedAt``, added by ``app.db.
 ensure_job_cover_suppression_column``).
 
 This script is the ops escape hatch for exactly that incident: it stamps
@@ -144,9 +146,20 @@ def find_suppressed_jobs(cur, *, user_id: str | None, job_id: str | None) -> lis
     """Jobs currently excluded from board-sweep selection SOLELY by the
     cover-failure backoff: otherwise-eligible board work (tailoring, or
     screening/matched with a fitScore), no Application yet, and
-    ``max_cover_failures()``+ failed coverLetter AgentRuns inside the window
-    since the job's own last success/clear — the EXACT predicate
-    ``app.workers.board_sweep._saturated_job_ids`` uses.
+    ``max_cover_failures()``+ LETTERLESS coverLetter AgentRuns inside the
+    window since the job's own last GENUINE success/clear — the EXACT
+    predicate ``app.workers.board_sweep._saturated_job_ids`` uses.
+
+    ML-W-19 (kept in LOCKSTEP with
+    ``board_sweep._COVER_RUN_PRODUCED_NO_LETTER`` /
+    ``_COVER_RUN_PRODUCED_A_LETTER``): "letterless" is NOT just
+    ``status='failed'``. A fabrication/structural guard rejection is recorded
+    as ``status='completed'`` with ``output.coverLetterUnavailable = true``
+    (GAP-P4-002), and that is the dominant mode in production — counting only
+    ``failed`` made this script blind to exactly the jobs ops needs to clear.
+    Symmetrically, only a run carrying a NON-NULL letter id counts as the
+    success that floors the window; a letterless ``completed`` run must not
+    clear the count it is supposed to contribute to.
     """
     limit = _max_failures()
     window = _window_hours()
@@ -169,7 +182,10 @@ def find_suppressed_jobs(cur, *, user_id: str | None, job_id: str | None) -> lis
                 SELECT count(*) FROM "AgentRun" r
                 WHERE r."userId" = j."userId"
                   AND r."agentName" = 'coverLetter'
-                  AND r."status" = 'failed'
+                  AND (r."status" = 'failed'
+                       OR (r."status" = 'completed'
+                           AND (r."output"->'coverLetterUnavailable' = 'true'::jsonb
+                                OR r."output"->'cover_letter_unavailable' = 'true'::jsonb)))
                   AND r."createdAt" >= NOW() - INTERVAL '%s hours'
                   AND (r."input"->>'job_id') = j."id"
                   AND r."createdAt" > GREATEST(
@@ -177,6 +193,8 @@ def find_suppressed_jobs(cur, *, user_id: str | None, job_id: str | None) -> lis
                             (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
                              WHERE r2."userId" = j."userId" AND r2."agentName" = 'coverLetter'
                                AND r2."status" = 'completed'
+                               AND (r2."output"->>'cover_letter_id' IS NOT NULL
+                                    OR r2."output"->>'coverLetterId' IS NOT NULL)
                                AND (r2."input"->>'job_id') = j."id"),
                             '-infinity'::timestamptz),
                         COALESCE(j."coverFailureClearedAt", '-infinity'::timestamptz))

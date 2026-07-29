@@ -394,19 +394,26 @@ class TestCoverFailureAutoClearAndHonestLogging:
     """
 
     def _seed_cover_run(
-        self, conn, user_id: str, job_id: str, status: str, minutes_ago: float
+        self, conn, user_id: str, job_id: str, status: str, minutes_ago: float,
+        output: dict | None = None,
     ) -> None:
         """Seed one coverLetter AgentRun at an EXPLICIT relative timestamp
         (rather than bare ``NOW()``) so ordering between failures and a later
-        success/clear is deterministic regardless of statement timing."""
+        success/clear is deterministic regardless of statement timing.
+
+        ML-W-19: ``output`` matters now. A ``completed`` status alone is no
+        longer proof a letter was produced — a guard rejection completes with
+        ``output.coverLetterUnavailable = true`` and no letter — so the
+        success case must seed the letter id a real success writes."""
         run_id = "c" + uuid.uuid4().hex[:24]
         with conn.cursor() as cur:
             cur.execute(
                 'INSERT INTO "AgentRun" '
-                '("id","userId","agentName","status","input","createdAt","startedAt") '
-                "VALUES (%s,%s,'coverLetter',%s::\"AgentRunStatus\",%s,"
+                '("id","userId","agentName","status","input","output","createdAt","startedAt") '
+                "VALUES (%s,%s,'coverLetter',%s::\"AgentRunStatus\",%s,%s,"
                 "NOW() - (%s || ' minutes')::interval, NOW())",
-                (run_id, user_id, status, json.dumps({"job_id": job_id}), minutes_ago),
+                (run_id, user_id, status, json.dumps({"job_id": job_id}),
+                 json.dumps(output) if output is not None else None, minutes_ago),
             )
         conn.commit()
 
@@ -419,8 +426,12 @@ class TestCoverFailureAutoClearAndHonestLogging:
         for minutes_ago in (180, 170, 160):
             self._seed_cover_run(db_session, user_id, job, "failed", minutes_ago)
         # A LATER successful completion (e.g. a manual retry after the
-        # underlying pipeline bug was fixed and deployed).
-        self._seed_cover_run(db_session, user_id, job, "completed", 90)
+        # underlying pipeline bug was fixed and deployed) — carrying the
+        # ``cover_letter_id`` a real success always writes (ML-W-19).
+        self._seed_cover_run(
+            db_session, user_id, job, "completed", 90,
+            output={"cover_letter_id": "c" + uuid.uuid4().hex[:24], "flagged": []},
+        )
 
         assert board_sweep._cover_failure_count(user_id, job) == 0
         target = board_sweep._next_target(user_id, set())
