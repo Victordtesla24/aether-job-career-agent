@@ -427,16 +427,20 @@ _CTX_EXPERIENCE = "experience"
 _CTX_ASPIRATION = "aspiration"
 _CTX_NEUTRAL = "neutral"
 
-#: Words that END a noun phrase — prepositions, subordinators, copulas and
-#: auxiliaries. "my interest IN the marketplace" stops at "in", so
-#: 'marketplace' is not part of the candidate's possessed noun phrase, while
-#: "my marketplace instincts" is.
+#: Words that END a noun phrase — prepositions, subordinators, copulas,
+#: auxiliaries, and DETERMINERS (which open a new phrase rather than continue
+#: one). "my interest IN the marketplace" stops at "in", and "my background
+#: matches THE GRC Program Manager posting" stops at "the" — without that
+#: determiner boundary the possessive phrase ran four words past its head and
+#: swallowed the employer's own noun phrase. "my marketplace instincts" is
+#: unaffected: a real possessive phrase contains no determiner.
 _NP_BOUNDARY_WORDS = frozenset(
     """
     in at of for with on to from by as about into across over under through
     during within against between among onto per via after before upon around
     that which who whom whose where when while because since although though
     but or nor if so than
+    a an the this these those
     is are was were be been being am has have had do does did having
     will would shall should can could may might must
     """.split()
@@ -672,6 +676,32 @@ _ROLE_DEICTIC_NOUNS = frozenset(
 )
 
 
+#: Predicates that DESCRIBE or ALIGN something with the advertised job, rather
+#: than assert the candidate occupied it. Only these license the role-naming
+#: exemption: adjacency to a deictic alone let real tenure claims through
+#: ("I served in the GRC Program Manager ROLE for three years" — second
+#: adversarial review of 1be917e).
+_TITLE_DESCRIBING_PREDICATES = frozenset(
+    """
+    align aligns aligned aligning match matches matched matching
+    mirror mirrors mirrored mirroring map maps mapped mapping
+    fit fits fitted fitting suit suits suited correspond corresponds
+    relate relates relevant excite excites excited exciting
+    demand demands demanded require requires required call calls called
+    describe describes described describing advertise advertised advertising
+    list listed outline outlines outlined mention mentions mentioned
+    name named title titled speak speaks about regarding concerning
+    draw draws drawn attract attracts attracted interest interested
+    resonate resonates
+    """.split()
+)
+#: How far back a describing predicate may sit from the title phrase.
+_TITLE_PREDICATE_LOOKBACK = 4
+#: How far after the deictic a first-person relative clause ("… the <title>
+#: role I HELD for three years") may sit and still void the exemption.
+_TITLE_RELATIVE_LOOKAHEAD = 2
+
+
 def _title_runs(title_words: list[str]) -> set[tuple[str, ...]]:
     """Every contiguous ≥2-word run of the advertised job title."""
     return {
@@ -681,21 +711,57 @@ def _title_runs(title_words: list[str]) -> set[tuple[str, ...]]:
     }
 
 
+def _describing_predicate_before(
+    tokens: list[tuple[str, int, int]], sentence: str, start: int
+) -> bool:
+    """True when a describing/aligning predicate governs the phrase beginning at
+    ``tokens[start]`` — "…ALIGNS WITH the GRC Program Manager role"."""
+    i = start - 1
+    seen = 0
+    while i >= 0 and seen < _TITLE_PREDICATE_LOOKBACK:
+        gap = sentence[tokens[i][2] : tokens[i + 1][1]]
+        if any(ch in _NP_BREAK_CHARS for ch in gap):
+            return False
+        if tokens[i][0] in _TITLE_DESCRIBING_PREDICATES:
+            return True
+        i -= 1
+        seen += 1
+    return False
+
+
+def _first_person_relative_after(
+    tokens: list[tuple[str, int, int]], sentence: str, deictic: int
+) -> bool:
+    """True when the role phrase is glossed by a first-person relative clause —
+    "the GRC Program Manager role I HELD for three years". The deictic is then
+    the object of the candidate's own claim, not a reference to the posting."""
+    for j in range(deictic, min(len(tokens), deictic + _TITLE_RELATIVE_LOOKAHEAD + 1)):
+        if sentence[tokens[j][1] : tokens[j][2]] == "I":
+            return True
+    return False
+
+
 def _role_name_indices(
     tokens: list[tuple[str, int, int]],
+    sentence: str,
     runs: set[tuple[str, ...]],
     longest: int,
 ) -> set[int]:
-    """Indices where the sentence NAMES THE ADVERTISED ROLE — a contiguous run
-    of ≥2 job-title words immediately followed by a role deictic ("… the GRC
-    Program Manager ROLE at Deputy").
+    """Indices where the sentence merely NAMES THE ADVERTISED ROLE, e.g.
+    "…aligns with the GRC Program Manager ROLE at Deputy".
 
-    Naming the job you are applying for is not a claim to have held it. Both
-    conditions are required, which is what keeps this from re-opening the
-    bare-tail hole: an attacker's arbitrary pairing ("marketplace onboarding")
-    is not a contiguous run of the real title, and a genuine claim to hold the
-    title ("I have been a GRC Program Manager for five years") has no deictic
-    after the run.
+    Naming the job you are applying for is not a claim to have held it — but
+    OCCUPYING it is, so all of the following are required (adjacency alone let
+    three tenure claims through, second adversarial review of 1be917e):
+
+    - a contiguous ≥2-word run of the real job title — an attacker's arbitrary
+      pairing ("marketplace onboarding") or a reordered paraphrase is not one;
+    - a role deictic immediately after it ("… role", "… posting");
+    - a DESCRIBING/ALIGNING predicate governing the phrase, so "I served in /
+      held / have the <title> role" — where the phrase is the object of the
+      candidate's own assertion — is never exempt;
+    - no first-person relative clause gloss ("the <title> role I held for three
+      years").
     """
     named: set[int] = set()
     if not runs:
@@ -705,7 +771,12 @@ def _role_name_indices(
         for end in range(min(total, start + longest), start + 1, -1):
             if tuple(tok for tok, _, _ in tokens[start:end]) not in runs:
                 continue
-            if end < total and tokens[end][0] in _ROLE_DEICTIC_NOUNS:
+            if (
+                end < total
+                and tokens[end][0] in _ROLE_DEICTIC_NOUNS
+                and _describing_predicate_before(tokens, sentence, start)
+                and not _first_person_relative_after(tokens, sentence, end)
+            ):
                 named.update(range(start, end))
             break
     return named
@@ -829,7 +900,9 @@ def _personal_claim_tokens(
     context = _claim_context(sentence, personal_np, tokens)
     employer_np = _third_party_owned_indices(tokens, sentence)
     asserted_at = _first_person_asserts(tokens, sentence)
-    role_name = _role_name_indices(tokens, title_runs or set(), longest_title_run)
+    role_name = _role_name_indices(
+        tokens, sentence, title_runs or set(), longest_title_run
+    )
     claimed: set[str] = set()
     for index, (word, _, _) in enumerate(tokens):
         if word not in wanted or word in claimed:

@@ -584,12 +584,15 @@ _GRC_EVIDENCE = (
         "My experience directing compliance-focused AI/ML initiatives and "
         "managing program portfolios aligns with the GRC Program Manager role "
         "at Deputy.",
-        "I have followed the GRC Program Manager posting since it opened.",
+        "My delivery record matches the GRC Program Manager role at Deputy.",
+        "My background mirrors the GRC Program Manager position described in "
+        "your posting.",
     ],
 )
 def test_naming_the_advertised_role_is_not_a_claim(sentence: str) -> None:
     """A contiguous run of the JOB TITLE followed by a role deictic ("… role",
-    "… posting") is the posting's own name for the job."""
+    "… position"), GOVERNED BY A DESCRIBING/ALIGNING PREDICATE, is the
+    posting's own name for the job."""
     assert unsupported_claim_tokens(sentence, _GRC_EVIDENCE, "GRC Program Manager") == []
 
 
@@ -610,3 +613,112 @@ def test_claiming_to_hold_the_advertised_title_is_still_a_claim(
     """The exemption requires BOTH a title run AND a role deictic after it, so
     asserting the candidate HOLDS that title never qualifies."""
     assert unsupported_claim_tokens(sentence, evidence, jd_title) != []
+
+
+# ===========================================================================
+# Second adversarial review of 1be917e (wave35-opus-review-verdict.json):
+# the title+deictic exemption fired on ADJACENCY ALONE, so a sentence claiming
+# personal TENURE in the exact advertised title was exempted even though the
+# classifier had correctly detected it as an EXPERIENCE assertion. This is the
+# SOLE guard layer for that claim — FabricationGuard(entities) carries the job
+# title in its own evidence corpus by design and never checks title-holding.
+# Harness: uat/reports/evidence/models-live/wave35-opus-review/
+#          w11-refix-title-deictic-attack.py (11 cases, mirrored below).
+# ===========================================================================
+
+_TENURE_EVIDENCE = (
+    "Senior Software Engineer, Acme Widgets Pty Ltd, 2019-2023. Built internal "
+    "tooling in Python and React for the warehouse team. Reduced deployment "
+    "time by 40% through CI pipeline improvements. Mentored two junior "
+    "engineers on test coverage practices. BSc Computer Science, University of "
+    "Melbourne."
+)
+
+
+@pytest.mark.parametrize(
+    ("bypass", "sentence"),
+    [
+        (
+            "tenure claim: 'served in the <title> role'",
+            "I served in the GRC Program Manager role for three years, leading "
+            "enterprise-wide compliance initiatives.",
+        ),
+        (
+            "tenure claim: 'held the <title> position'",
+            "I held the GRC Program Manager position for over three years, "
+            "owning enterprise-wide compliance programs.",
+        ),
+        (
+            "deictic gamed by a first-person relative clause",
+            "The GRC Program Manager position I excelled in for three years "
+            "shaped my approach to governance.",
+        ),
+        (
+            "participial tenure opener",
+            "Having spent five years in the GRC Program Manager role, I "
+            "understand these compliance demands intimately.",
+        ),
+        (
+            "possessive tenure with the title as object",
+            "My three years as a GRC Program Manager role have taught me to "
+            "move fast.",
+        ),
+        (
+            "two-word title run as the object of 'I have'",
+            "I have the Program Manager role at Deputy.",
+        ),
+        (
+            "relative-clause gloss after a describing predicate",
+            "My work matched the GRC Program Manager role I held for three "
+            "years.",
+        ),
+    ],
+)
+def test_tenure_in_the_advertised_title_is_never_exempt(
+    bypass: str, sentence: str
+) -> None:
+    """Naming the advertised job is not a claim; OCCUPYING it is. The exemption
+    requires a describing/aligning predicate to govern the title phrase and no
+    first-person relative-clause gloss after it, so the title phrase can never
+    be the object of the candidate's own assertion."""
+    flags = unsupported_claim_tokens(sentence, _TENURE_EVIDENCE, "GRC Program Manager")
+    assert "grc" in flags or "manager" in flags, (
+        f"{bypass} still bypasses the guard: {flags}"
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # no deictic after the title run
+        "I have five years as a GRC Program Manager.",
+        # deictic outside the recognised list
+        "I owned the GRC Program Manager gig for three years running "
+        "enterprise compliance.",
+        # reordered / non-contiguous paraphrase of the title
+        "I led the Program Manager, GRC role for three years.",
+    ],
+)
+def test_title_exemption_controls_stay_flagged(sentence: str) -> None:
+    """The reviewer's controls: each necessary condition of the exemption is
+    load-bearing on its own."""
+    assert unsupported_claim_tokens(
+        sentence, _TENURE_EVIDENCE, "GRC Program Manager"
+    ) != []
+
+
+def test_object_of_a_first_person_assertion_is_not_role_naming() -> None:
+    """Deliberate tightening (second review): a title phrase that is the OBJECT
+    of a first-person assertion is no longer exempt, even with a valid deictic.
+    "I have followed the GRC Program Manager posting" previously passed on
+    adjacency alone; the same thought under a describing predicate still does."""
+    assert unsupported_claim_tokens(
+        "I have followed the GRC Program Manager posting since it opened.",
+        _TENURE_EVIDENCE,
+        "GRC Program Manager",
+    ) != []
+    assert unsupported_claim_tokens(
+        "My background matches the GRC Program Manager posting.",
+        _TENURE_EVIDENCE,
+        "GRC Program Manager",
+    ) == []
