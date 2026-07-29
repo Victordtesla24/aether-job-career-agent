@@ -395,6 +395,336 @@ def _first_person_claim_sentences(text: str) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Claim CONTEXT classification (ML-W11).
+#
+# A first-person sentence is not automatically a claim of EXPERIENCE. A cover
+# letter of ordinary craft says both "my litigation experience spans complex
+# disputes" (a claim about the candidate — must be evidence-backed) and "I am
+# drawn to the litigation challenges at Acme" (interest in the ROLE's domain —
+# asserts nothing about the candidate's past). Treating the second as a claim
+# rejected 100% of live drafts for three days (ML-W11, PROD-VERIFY-2.json).
+#
+# Safety design — every rule below can only ever move a token OUT of the
+# flagged set when the sentence asserts no experience, and the defaults lean
+# guarded:
+#   * EXPERIENCE cues are deliberately GENEROUS and always WIN over aspiration
+#     cues, so a mixed sentence ("excited to bring my marketplace instincts")
+#     stays fully checked.
+#   * A token inside a first-person possessive noun phrase ("my <X> …") is a
+#     personal claim REGARDLESS of context — aspiration framing can never
+#     launder it.
+#   * A sentence with neither cue stays CHECKED (unchanged behaviour); only an
+#     explicitly employer-referential noun phrase ("your <X>", "<Company>'s
+#     <X>", "<X> challenges/role/team") is exempt there.
+#   * Inside a sentence that DOES assert experience, an employer-referential
+#     phrase is exempt only under a modal ("my background … could support your
+#     <X> goals" — an offer of future contribution). Over a past or
+#     present-perfect predicate ("I led your <X> expansion") it stays a claim.
+# ---------------------------------------------------------------------------
+
+_CTX_EXPERIENCE = "experience"
+_CTX_ASPIRATION = "aspiration"
+_CTX_NEUTRAL = "neutral"
+
+#: Words that END a noun phrase — prepositions, subordinators, copulas and
+#: auxiliaries. "my interest IN the marketplace" stops at "in", so
+#: 'marketplace' is not part of the candidate's possessed noun phrase, while
+#: "my marketplace instincts" is.
+_NP_BOUNDARY_WORDS = frozenset(
+    """
+    in at of for with on to from by as about into across over under through
+    during within against between among onto per via after before upon around
+    that which who whom whose where when while because since although though
+    but or nor if so than
+    is are was were be been being am has have had do does did having
+    will would shall should can could may might must
+    """.split()
+)
+#: Joiners that CONTINUE a noun phrase ("trust and safety mission").
+_NP_JOINERS = frozenset({"and", "&"})
+#: Punctuation between two surface tokens that closes a noun phrase.
+_NP_BREAK_CHARS = frozenset(",;:.!?()[]\"“”\n—–")
+#: How many content words of a noun phrase are considered. Long enough for
+#: "trust and safety mission", short enough that an unrelated later clause
+#: never gets absorbed.
+_NP_MAX_WORDS = 4
+
+#: Possessive determiners that bind the following noun phrase to the CANDIDATE.
+_PERSONAL_POSSESSIVES = frozenset({"my", "mine", "our"})
+#: …and to the TARGET COMPANY / reader.
+_COMPANY_POSSESSIVES = frozenset({"your", "yours"})
+
+#: Head nouns that make the preceding modifier a description of the ROLE, the
+#: COMPANY or its work rather than the candidate's track record ("the
+#: marketplace CHALLENGES", "your onboarding ROADMAP"). Deliberately excludes
+#: personal-evidence nouns (experience, background, record, work…): those mark
+#: a candidate claim, never a role description.
+_ROLE_REFERENT_NOUNS = frozenset(
+    """
+    role roles position positions opening openings vacancy job posting advert
+    advertisement listing description brief mandate remit appointment
+    mission missions challenge challenges problem problems ambition ambitions
+    agenda goal goals priority priorities strategy roadmap vision values
+    culture principles focus emphasis
+    team teams org orgs organisation organization company business function
+    functions division group department desk unit squad squads
+    platform platforms product products stack ecosystem environment operation
+    operations funnel pipeline space sector industry domain segment scale
+    manager managers lead leads leader leaders director directors head heads
+    engineer engineers analyst analysts specialist specialists counsel officer
+    officers coordinator consultant architect owner principal executive
+    executives partner associate advisor adviser hire hires
+    """.split()
+)
+
+#: Markers that make the following predicate HYPOTHETICAL — a future offer of
+#: contribution, not an assertion of past experience ("… could support your
+#: onboarding goals"). Only these license the employer-referential exemption
+#: inside a sentence that also states real experience; a past/present-perfect
+#: predicate over the same phrase ("I have supported your marketplace team")
+#: stays a claim.
+_HYPOTHETICAL_MARKERS = frozenset(
+    {"could", "can", "would", "will", "shall", "may", "might", "should"}
+)
+#: How far back a hypothetical marker may sit from the referenced token.
+_HYPOTHETICAL_LOOKBACK = 6
+
+#: An assertion that the candidate HAS DONE / HAS something — present-perfect,
+#: past tense, possession of a track record, or a capability adjective. Any
+#: match makes the whole sentence a checked experience claim.
+_EXPERIENCE_CUE_RE = re.compile(
+    r"""
+      \bI\s+(?:have|had|has)\b
+    | \bI['’]ve\b
+    | \bI\s+(?!applied\b)\w+ed\b
+    # A NOMINAL self-description ("I am a marketplace specialist") is a claim
+    # about the candidate. Restricted to a determiner-led predicate so the
+    # ADJECTIVAL form that carries no claim ("I am drawn to …", "I am excited
+    # by …") stays untouched.
+    | \bI\s+(?:am|was|were)\s+(?:an?|the)\s+
+    | \bI['’]m\s+(?:an?|the)\s+
+    | \bI\s+(?:led|ran|built|drove|wrote|spent|grew|won|held|made|took|set|
+              began|chose|brought|taught|sold|kept|met|dealt|left|did|saw|
+              knew|oversaw|rebuilt|sat|stood|gave|went|came|got|put)\b
+    | \bI\s+(?:bring|lead|run|own|manage|build|design|deliver|drive|oversee|
+              handle|advise|represent|write|architect|maintain|specialise|
+              specialize|focus|work|serve|support|coach|mentor|negotiate|
+              prosecute|defend|audit|analyse|analyze|develop|implement|
+              coordinate|ship|scale|launch|operate|know|understand|use)\b
+    | \bhaving\s+\w+\b
+    | \b(?:familiar|comfortable|versed|fluent|experienced|skilled|adept|
+           proficient|seasoned|hands-on)\b
+    | \b(?:return|returning|returned)\s+to\b
+    | \bback\s+(?:to|into)\b
+    | \b(?:years?|decades?)\s+(?:of|in|as|spent)\b
+    """,
+    re.VERBOSE,
+)
+
+#: An expression of INTEREST / ATTRACTION / intent toward the role or company.
+#: Never on its own sufficient — an experience cue in the same sentence wins.
+_ASPIRATION_CUE_RE = re.compile(
+    r"""
+      \b(?:drawn|draws|draw|drew|attracted|attracts|excited|exciting|excites|
+           eager|keen|enthusiastic|thrilled|delighted|intrigued|intriguing|
+           motivated|inspired|energised|energized|compelled|compelling|
+           fascinated|curious|interested|interest|appeal|appeals|appealing|
+           resonate|resonates|impressed|impressive|admire|admiration|
+           welcome|welcomed)\b
+    | \blook(?:ing)?\s+forward\b
+    | \b(?:hope|hoping|want|wanting|wish|aim|aiming|aspire|intend|plan|love|
+           relish|enjoy|jump)\s+to\b
+    | \b(?:chance|opportunity)\s+to\b
+    | \b(?:apply|applying|application)\s+(?:for|to)\b
+    | \bam\s+applying\b
+    | \bcaught\s+my\s+(?:eye|attention)\b
+    | \bstood\s+out\b
+    | \breach(?:ing)?\s+out\b
+    """,
+    re.VERBOSE,
+)
+
+
+def _surface_tokens(sentence: str) -> list[tuple[str, int, int]]:
+    """``(lowercased token, start, end)`` for every surface token — the same
+    tokenization :func:`unsupported_tokens` flags on, so an offset here maps
+    exactly onto a flagged token."""
+    folded = sentence.translate(_UNICODE_FOLD)
+    return [
+        (m.group(0).lower(), m.start(), m.end())
+        for m in _SURFACE_TOKEN_RE.finditer(folded)
+    ]
+
+
+def _noun_phrase_after(
+    tokens: list[tuple[str, int, int]], sentence: str, start: int
+) -> list[int]:
+    """Indices of the noun phrase that begins right after ``tokens[start]``.
+
+    Stops at a boundary word (:data:`_NP_BOUNDARY_WORDS`), at punctuation, or
+    after :data:`_NP_MAX_WORDS` content words; joiners ("and") continue it."""
+    span: list[int] = []
+    i = max(start + 1, 0)
+    while i < len(tokens) and len(span) < _NP_MAX_WORDS:
+        if i > 0:
+            gap = sentence[tokens[i - 1][2] : tokens[i][1]]
+            if any(ch in _NP_BREAK_CHARS for ch in gap):
+                break
+        word = tokens[i][0]
+        if word in _NP_JOINERS:
+            i += 1
+            continue
+        if word in _NP_BOUNDARY_WORDS:
+            break
+        span.append(i)
+        i += 1
+    return span
+
+
+def _possessed_indices(
+    tokens: list[tuple[str, int, int]], sentence: str, determiners: frozenset[str]
+) -> set[int]:
+    """Token indices belonging to a noun phrase possessed by ``determiners``."""
+    owned: set[int] = set()
+    for i, (word, _, _) in enumerate(tokens):
+        if word in determiners:
+            owned.update(_noun_phrase_after(tokens, sentence, i))
+    return owned
+
+
+#: Contraction hosts whose "'s" is a verb ("it's", "that's"), never possession.
+_CONTRACTION_HOSTS = frozenset(
+    {"it", "that", "this", "there", "here", "what", "who", "he", "she", "let"}
+)
+
+
+def _third_party_owned_indices(
+    tokens: list[tuple[str, int, int]], sentence: str
+) -> set[int]:
+    """Indices in a noun phrase owned by the READER or a NAMED third party —
+    "your onboarding roadmap", "Deputy's GRC goals". Such a phrase describes
+    someone else's world; it is the candidate's own ``my …`` phrases and the
+    verbs around them that carry their claims."""
+    owned = _possessed_indices(tokens, sentence, _COMPANY_POSSESSIVES)
+    for i, (word, start, _) in enumerate(tokens):
+        if word != "s" or i == 0:
+            continue
+        host, _, host_end = tokens[i - 1]
+        if "'" not in sentence[host_end:start] and "’" not in sentence[host_end:start]:
+            continue  # plural "s", not a possessive apostrophe-s
+        if host in _STOPWORDS or host in _CONTRACTION_HOSTS:
+            continue
+        owned.update(_noun_phrase_after(tokens, sentence, i))
+    return owned
+
+
+def _hypothetically_governed(
+    tokens: list[tuple[str, int, int]], sentence: str, index: int
+) -> bool:
+    """True when a modal governs ``tokens[index]`` — "…could support Deputy's
+    GRC goals". The phrase is then an offer of FUTURE contribution, never a
+    claim about the candidate's past."""
+    i = index - 1
+    seen = 0
+    while i >= 0 and seen < _HYPOTHETICAL_LOOKBACK:
+        gap = sentence[tokens[i][2] : tokens[i + 1][1]]
+        if any(ch in _NP_BREAK_CHARS for ch in gap):
+            return False
+        if tokens[i][0] in _HYPOTHETICAL_MARKERS:
+            return True
+        i -= 1
+        seen += 1
+    return False
+
+
+def _has_role_referent_head(
+    tokens: list[tuple[str, int, int]], sentence: str, index: int
+) -> bool:
+    """True when ``tokens[index]`` modifies a role/company head noun — "the
+    marketplace CHALLENGES", "your onboarding ROADMAP" — i.e. it describes the
+    employer's world, not the candidate's."""
+    return any(
+        tokens[j][0] in _ROLE_REFERENT_NOUNS
+        for j in _noun_phrase_after(tokens, sentence, index - 1)
+        if j != index
+    )
+
+
+#: Nouns that turn a possessed phrase into an assertion about the candidate's
+#: own track record ("my litigation EXPERTISE", "my record of …").
+_PERSONAL_EVIDENCE_NOUNS = frozenset(
+    """
+    experience experiences background backgrounds expertise record records
+    track history career careers tenure credentials qualifications training
+    specialty speciality specialisation specialization skillset skills skill
+    work leadership ownership delivery practice portfolio resume cv
+    years decades
+    title titles position positions role roles job jobs employer employers
+    team teams remit
+    """.split()
+)
+
+
+def _claim_context(
+    sentence: str, personal_np: set[int], tokens: list[tuple[str, int, int]]
+) -> str:
+    """Classify what a first-person sentence ASSERTS: lived experience, mere
+    aspiration, or neither. Experience always wins over aspiration."""
+    if _EXPERIENCE_CUE_RE.search(sentence):
+        return _CTX_EXPERIENCE
+    # "my <…> experience / background / record" — a possessed track record.
+    if any(tokens[i][0] in _PERSONAL_EVIDENCE_NOUNS for i in personal_np):
+        return _CTX_EXPERIENCE
+    if _ASPIRATION_CUE_RE.search(sentence):
+        return _CTX_ASPIRATION
+    return _CTX_NEUTRAL
+
+
+def _personal_claim_tokens(sentence: str, candidates: list[str]) -> list[str]:
+    """Subset of ``candidates`` that the sentence asserts ABOUT THE CANDIDATE.
+
+    Exempts only what is demonstrably not a claim of personal experience: a
+    JD-domain noun the candidate merely expresses interest in, or one that
+    plainly belongs to the employer ("your <X>", "Deputy's <X> goals", "<X>
+    challenges"). Anything possessed by "my" stays flagged, and inside a
+    sentence that asserts experience the employer-referential exemption applies
+    only under a modal ("… could support your <X> goals") — never over a past or
+    present-perfect predicate."""
+    if not candidates:
+        return []
+    wanted = set(candidates)
+    tokens = _surface_tokens(sentence)
+    personal_np = _possessed_indices(tokens, sentence, _PERSONAL_POSSESSIVES)
+    context = _claim_context(sentence, personal_np, tokens)
+    employer_np = _third_party_owned_indices(tokens, sentence)
+    claimed: set[str] = set()
+    for index, (word, _, _) in enumerate(tokens):
+        if word not in wanted or word in claimed:
+            continue
+        if index in personal_np:
+            claimed.add(word)  # "my <token> …" — a personal attribute, always.
+            continue
+        referential = index in employer_np or _has_role_referent_head(
+            tokens, sentence, index
+        )
+        if context == _CTX_EXPERIENCE:
+            # The sentence asserts lived experience: everything in it is a
+            # claim, EXCEPT an employer-owned phrase under a modal, which is an
+            # offer of future contribution ("my background … could support
+            # Deputy's GRC goals") rather than a claim of past work.
+            if referential and _hypothetically_governed(tokens, sentence, index):
+                continue
+            claimed.add(word)
+            continue
+        if referential:
+            continue  # the employer's domain, not the candidate's record.
+        if context == _CTX_ASPIRATION:
+            continue  # interest in the role's subject matter is not a claim.
+        claimed.add(word)  # neutral first-person sentence — stays guarded.
+    return [tok for tok in candidates if tok in claimed]
+
+
 def unsupported_claim_tokens(
     text: str, evidence: str, jd_risk_terms: str
 ) -> list[str]:
@@ -418,6 +748,14 @@ def unsupported_claim_tokens(
     - **Only first-person claims are checked.** A sentence with no
       ``I``/``my``/``me`` describes the role or company, so echoing the posting
       there is not a fabrication about the candidate.
+    - **Only sentences that ASSERT EXPERIENCE are checked** (ML-W11). A
+      first-person pronoun alone is not a claim: "I am drawn to the marketplace
+      challenges at Acme" expresses interest in the ROLE's subject matter and
+      asserts nothing about the candidate's past, while "my marketplace
+      experience" does. :func:`_personal_claim_tokens` draws that line
+      deterministically — see its module section for the (deliberately
+      guarded-by-default) rules. Flagging the aspirational shape rejected 100%
+      of live drafts for three days; the experience bar itself is unchanged.
 
     Results are restricted to the JD risk vocabulary so the letter's ordinary
     capitalized entities (already policed by the FabricationGuard) are not
@@ -427,8 +765,15 @@ def unsupported_claim_tokens(
     jd_stems, _ = _evidence_index(jd_risk_terms)
     flagged: list[str] = []
     for sentence in _first_person_claim_sentences(text):
-        for tok in unsupported_tokens(sentence, evidence_stems, evidence_numbers, jd_stems):
-            if tok in jd_stems and tok not in flagged:
+        candidates = [
+            tok
+            for tok in unsupported_tokens(
+                sentence, evidence_stems, evidence_numbers, jd_stems
+            )
+            if tok in jd_stems
+        ]
+        for tok in _personal_claim_tokens(sentence, candidates):
+            if tok not in flagged:
                 flagged.append(tok)
     return flagged
 

@@ -1338,13 +1338,28 @@ class CoverLetterAgent:
                         "introduce any other skill, tool, company or figure."
                     )
                 if all_claims:
+                    # ML-W11: enumerate the EXACT flagged terms and state BOTH
+                    # halves of the rule — what is forbidden and what is still
+                    # allowed. The previous wording ("remove every claim to
+                    # personally possess them") gave the model no usable
+                    # alternative, so retries kept re-emitting the same terms
+                    # and every live draft was rejected.
+                    terms = ", ".join(f"'{t}'" for t in all_claims)
                     feedback.append(
-                        f"your previous draft claimed the candidate PERSONALLY has "
-                        f"experience their résumé, story bank and profile do NOT prove: "
-                        f"{all_claims}. These are terms from the job posting, which is "
-                        "NOT evidence the candidate has them. Remove every claim to "
-                        "personally possess them (you may still describe the role); "
-                        "write only what the candidate's own evidence proves."
+                        f"do not claim personal experience with: {terms}. Your "
+                        "previous draft asserted the candidate PERSONALLY has done "
+                        "or possesses these, and their résumé, story bank and "
+                        "profile prove NONE of them — they come from the job "
+                        "posting, which is NOT evidence about the candidate. You "
+                        "MAY still express interest in them or describe them as "
+                        "part of the role or company (e.g. \"I am drawn to the "
+                        "<term> challenges this role owns\"), in a sentence that "
+                        "makes no claim about the candidate's own past. You must "
+                        "NOT write that the candidate has, has done, led, ran, "
+                        "managed, knows or has experience/expertise/a background "
+                        "in them (e.g. never \"my <term> experience\"). Every "
+                        "sentence about the candidate must state only what their "
+                        "own evidence proves."
                     )
                 if issues:
                     feedback.append("fix these format violations: " + "; ".join(issues))
