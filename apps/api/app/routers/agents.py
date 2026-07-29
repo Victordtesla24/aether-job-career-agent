@@ -802,6 +802,14 @@ def _execute_reserved_run(
             # no successful call); the costing below then behaves exactly as it
             # did before this existed.
             _served_model = get_last_served_model()
+            # QA4-F-01 (W-24): the SAME real accumulated char counts the
+            # guard-rejection degrade branch already reads (MF-1) — captured
+            # here, inside the scope, for the genuine-SUCCESS costing tail
+            # below. ``None`` when replay/fixture mode served the run (no
+            # live ``_call_live`` call was ever made) or the agent made no
+            # LLM call at all; the costing below falls back to the legacy
+            # measured-params estimate in exactly that case.
+            _success_usage = get_accumulated_usage()
     except HTTPException:
         runs.finish(run_id, "failed", error="http error")
         _refund_once()  # reserved run produced no output
@@ -1036,8 +1044,23 @@ def _execute_reserved_run(
         output["tokensOut"] = 0
         output["costUsd"] = 0.0
     else:
-        tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
-        tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
+        # QA4-F-01 (W-24, HIGH): a SUCCESSFUL run was still costed off
+        # ``params`` (the tiny run-trigger dict, e.g. ``{"job_id": ...}``) —
+        # near-constant regardless of the real prompt size, while the
+        # guard-rejection degrade branch above already reads REAL accumulated
+        # usage (MF-1). Live A/B proof: a 3-call success and a 4-call degrade
+        # on the SAME build/model/agent recorded tokensIn=414 vs tokensIn
+        # =26263 — a ~16x under-report on the revenue-generating path. Use
+        # the SAME accumulated-usage observation here, falling back to the
+        # legacy params/output estimate ONLY when nothing was accumulated
+        # (replay/fixture-mode tests, where no live ``_call_live`` call is
+        # ever made — those keep recording exactly what they always have).
+        if _success_usage and (_success_usage.get("charsIn") or _success_usage.get("charsOut")):
+            tokens_in = max(1, _success_usage.get("charsIn", 0) // 4)
+            tokens_out = max(1, _success_usage.get("charsOut", 0) // 4)
+        else:
+            tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
+            tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
         # ML-W14 no-silent-down-pricing rail (shared with the guard-rejection
         # degrade branch above via ``_price_guarding_down_pricing`` — MF-2):
         # the direction of error stays conservative, and the served id is
