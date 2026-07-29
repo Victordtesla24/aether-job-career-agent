@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
@@ -358,13 +358,30 @@ def _email_activity_stats(uid: str) -> dict[str, int]:
 
 
 @router.get("/emails/inbox")
-def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
+def email_inbox(
+    current_user: CurrentUser,
+    limit: int = Query(default=50, ge=1, le=200),
+    thread_id: str | None = Query(default=None),
+    full: bool = Query(default=False),
+) -> dict[str, Any]:
     """Email Command Center — real EmailThread records from the database.
 
     When the user has connected Gmail, a best-effort sync pulls the latest
     threads into ``EmailThread`` first so the inbox reflects the real mailbox.
     A Gmail hiccup never 500s the inbox — it degrades to whatever is already
     stored (honest, never fabricated).
+
+    W-13 (QA #2, wave-3.5): this used to return EVERY thread with its FULL
+    latest-message body on every load (measured 723KB / ~148 threads, 5.62s
+    cold). The default LIST response is now bounded to the ``limit`` most
+    recently-updated threads (default 50, max 200) with ``body`` truncated to
+    the same snippet already used for ``preview`` — the list view never
+    rendered the full body anyway. Full, untruncated content for ONE thread
+    (what the detail panel needs) stays reachable via ``?thread_id=<id>``
+    (which also ignores ``limit`` — it targets exactly one thread, still
+    scoped to the calling user), or via the ``?full=1`` escape hatch for the
+    bounded set. No query params -> identical default shape (backward
+    compatible).
     """
     uid = current_user["id"]
 
@@ -412,25 +429,69 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
     ensure_email_thread_gmail_columns()
     ensure_email_thread_ai_columns()
 
+    # A specific thread_id targets exactly one thread (the detail panel's
+    # on-demand full-body fetch) and always gets its full body, regardless of
+    # `full`. Otherwise this is the bounded LIST query (`limit`-capped, most
+    # recently updated first) — `full` toggles whether its bodies stay
+    # truncated to the `preview` snippet (default) or come back untruncated.
+    include_full_body = full or thread_id is not None
+
     with get_connection() as conn:
         with conn.cursor() as cur:
+            if thread_id is not None:
+                cur.execute(
+                    """
+                    SELECT et.id, et.subject, et.messages, et.classification,
+                           et."aiScore",
+                           et."createdAt", et."applicationId", et."gmailAccountId",
+                           c.name AS contact_name, c.company AS contact_company,
+                           c.email AS contact_email,
+                           ga."accountEmail" AS source_account
+                    FROM "EmailThread" et
+                    LEFT JOIN "Contact" c ON et."contactId" = c.id
+                    LEFT JOIN "GmailAccount" ga ON et."gmailAccountId" = ga."id"
+                    WHERE et."userId" = %s AND et.id = %s
+                    """,
+                    (uid, thread_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT et.id, et.subject, et.messages, et.classification,
+                           et."aiScore",
+                           et."createdAt", et."applicationId", et."gmailAccountId",
+                           c.name AS contact_name, c.company AS contact_company,
+                           c.email AS contact_email,
+                           ga."accountEmail" AS source_account
+                    FROM "EmailThread" et
+                    LEFT JOIN "Contact" c ON et."contactId" = c.id
+                    LEFT JOIN "GmailAccount" ga ON et."gmailAccountId" = ga."id"
+                    WHERE et."userId" = %s
+                    ORDER BY et."updatedAt" DESC
+                    LIMIT %s
+                    """,
+                    (uid, limit),
+                )
+            threads = rows_to_dicts(cur)
+
+            # Real totals across the WHOLE mailbox (never just the bounded
+            # page), so "This Week's Stats" stays honest regardless of `limit`
+            # — W-13 must not silently make a large inbox's counters wrong.
             cur.execute(
                 """
-                SELECT et.id, et.subject, et.messages, et.classification,
-                       et."aiScore",
-                       et."createdAt", et."applicationId", et."gmailAccountId",
-                       c.name AS contact_name, c.company AS contact_company,
-                       c.email AS contact_email,
-                       ga."accountEmail" AS source_account
-                FROM "EmailThread" et
-                LEFT JOIN "Contact" c ON et."contactId" = c.id
-                LEFT JOIN "GmailAccount" ga ON et."gmailAccountId" = ga."id"
-                WHERE et."userId" = %s
-                ORDER BY et."updatedAt" DESC
+                SELECT count(*) AS total,
+                       count(*) FILTER (
+                         WHERE classification IN ('priority', 'followup')
+                       ) AS recruiter_emails
+                FROM "EmailThread"
+                WHERE "userId" = %s
                 """,
                 (uid,),
             )
-            threads = rows_to_dicts(cur)
+            totals_row = cur.fetchone()
+
+    total = int((totals_row[0] if totals_row else 0) or 0)
+    recruiter_emails = int((totals_row[1] if totals_row else 0) or 0)
 
     messages = []
     for t in threads:
@@ -439,13 +500,15 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             latest = msgs[-1]
         else:
             latest = {}
+        full_body = latest.get("body") or ""
+        preview = full_body[:120]
         messages.append({
             "id": t["id"],
             "from": t.get("contact_name") or "Unknown",
             "fromEmail": t.get("contact_email") or "",
             "company": t.get("contact_company") or "",
             "subject": t.get("subject") or "(no subject)",
-            "preview": (latest.get("body") or "")[:120],
+            "preview": preview,
             "category": t.get("classification") or "all",
             # REAL per-thread triage score (MV-email-center-001), or null when the
             # thread has never been triaged — never a fabricated 0. Deep
@@ -455,19 +518,16 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             "score": t.get("aiScore"),
             "receivedAt": str(t["createdAt"])[:10] if t.get("createdAt") else "",
             "account": t.get("source_account") or "",
-            "body": latest.get("body") or "",
+            # Truncated to the same `preview` snippet for the bounded LIST
+            # response (W-13 / QA #2: was 723KB / 148 full bodies on every
+            # load) — full, untruncated content is returned only for the
+            # explicit `?thread_id=<id>` detail fetch or the `?full=1` escape
+            # hatch.
+            "body": full_body if include_full_body else preview,
             "intelligence": None,
             "draftReply": "",
         })
 
-    total = len(threads)
-    # Real recruiter-relevant count (MV-email-center-005): priority + follow-up
-    # threads, derived from the already-loaded per-user rows (no extra query).
-    recruiter_emails = sum(
-        1
-        for t in threads
-        if (t.get("classification") or "") in ("priority", "followup")
-    )
     activity = _email_activity_stats(uid)
 
     # One entry per connected inbox (for the account switcher). Falls back to a

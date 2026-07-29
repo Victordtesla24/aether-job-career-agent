@@ -6,7 +6,7 @@
  * stats. Backed by GET /emails/inbox + POST /emails/send
  * (wireframe: email-center.html).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createEmailDraft,
@@ -14,6 +14,7 @@ import {
   emailScoreBadge,
   emailSendErrorMessage,
   fetchEmailInbox,
+  fetchEmailThreadBody,
   linkedInSearchUrl,
   parseEmailDraft,
   parseEmailDraftFlags,
@@ -75,6 +76,13 @@ export default function EmailCenterPage() {
   const [triageBusy, setTriageBusy] = useState(false);
   const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
+  // Real, full thread bodies fetched on demand per thread id (W-13 / QA #2):
+  // the bounded inbox list truncates `body` to a snippet, so the detail
+  // panel fetches the real content for whichever thread is selected and
+  // caches it here — never re-fetched once loaded.
+  const [fullBodies, setFullBodies] = useState<Record<string, string>>({});
+  const fetchedBodyIds = useRef<Set<string>>(new Set());
+
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
@@ -114,6 +122,27 @@ export default function EmailCenterPage() {
     }
     window.history.replaceState(null, "", "/dashboard/email");
   }, []);
+
+  // Load the real, full body for whichever thread is currently selected
+  // (W-13 / QA #2) — the list response only carries a truncated snippet.
+  // Fires once per thread id (fetchedBodyIds guards re-fetching); a failed
+  // fetch is allowed to retry on the next selection change.
+  useEffect(() => {
+    if (!selectedId || fetchedBodyIds.current.has(selectedId)) return;
+    fetchedBodyIds.current.add(selectedId);
+    let cancelled = false;
+    fetchEmailThreadBody(selectedId)
+      .then((body) => {
+        if (cancelled || body === null) return;
+        setFullBodies((prev) => ({ ...prev, [selectedId]: body }));
+      })
+      .catch(() => {
+        fetchedBodyIds.current.delete(selectedId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   const startConnect = useCallback(() => {
     setConnecting(true);
@@ -259,6 +288,14 @@ export default function EmailCenterPage() {
   const selected: EmailMessage | undefined = useMemo(
     () => inbox?.messages.find((m) => m.id === selectedId),
     [inbox, selectedId],
+  );
+
+  // The real, full body for the selected thread once fetched (W-13 / QA #2);
+  // falls back to the list's truncated snippet while that fetch is in flight
+  // so the panel never shows a blank body.
+  const selectedBody = useMemo(
+    () => (selected ? (fullBodies[selected.id] ?? selected.body) : ""),
+    [selected, fullBodies],
   );
 
   // AI-intelligence view — reconciles the on-demand computed intelligence for the
@@ -690,7 +727,7 @@ export default function EmailCenterPage() {
                   })()}
                 </div>
                 <p className="whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted">
-                  {selected.body}
+                  {selectedBody}
                 </p>
 
                 {/* AI intelligence — computed ON DEMAND for the selected thread */}

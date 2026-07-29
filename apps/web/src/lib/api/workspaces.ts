@@ -245,6 +245,27 @@ export interface EmailInbox {
 export const fetchEmailInbox = (options: RequestOptions = {}) =>
   apiRequest<EmailInbox>("/workspaces/emails/inbox", options);
 
+/**
+ * Fetch ONE thread's real, full (untruncated) body on demand (W-13 / QA #2).
+ * The default GET /workspaces/emails/inbox response is now bounded to the
+ * most recent threads with `body` truncated to a snippet, so the list
+ * payload stays small regardless of inbox size (was 723KB/~148 full bodies
+ * on every load). The detail panel calls this when a thread is selected to
+ * get its real content — never the truncated snippet passed off as the
+ * whole email. Returns `null` if the thread doesn't exist (or isn't this
+ * user's), so the caller can fall back to whatever it already has.
+ */
+export async function fetchEmailThreadBody(
+  threadId: string,
+  options: RequestOptions = {},
+): Promise<string | null> {
+  const data = await apiRequest<EmailInbox>(
+    `/workspaces/emails/inbox?thread_id=${encodeURIComponent(threadId)}`,
+    options,
+  );
+  return data.messages.find((m) => m.id === threadId)?.body ?? null;
+}
+
 export const sendEmailReply = (messageId: string, body: string, options: RequestOptions = {}) =>
   apiRequest<{ status: string; messageId: string }>("/workspaces/emails/send", {
     ...options,
