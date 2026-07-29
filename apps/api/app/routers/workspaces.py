@@ -502,6 +502,13 @@ def email_inbox(
             latest = {}
         full_body = latest.get("body") or ""
         preview = full_body[:120]
+        # Honest, explicit marker (MF-1, wave-3.5 adversarial review) — never a
+        # client-side length heuristic. True only when `body` below is
+        # genuinely NOT the complete content: false whenever this response
+        # already carries the full body (?thread_id=/?full=1), and also false
+        # when the real body was <=120 chars to begin with (truncating it
+        # would have been a no-op, so there is nothing missing to hide).
+        is_truncated = (not include_full_body) and len(full_body) > 120
         messages.append({
             "id": t["id"],
             "from": t.get("contact_name") or "Unknown",
@@ -524,6 +531,7 @@ def email_inbox(
             # explicit `?thread_id=<id>` detail fetch or the `?full=1` escape
             # hatch.
             "body": full_body if include_full_body else preview,
+            "bodyTruncated": is_truncated,
             "intelligence": None,
             "draftReply": "",
         })

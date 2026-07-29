@@ -122,6 +122,13 @@ export interface EmailMessage {
   receivedAt: string;
   account: string;
   body: string;
+  // Honest, server-computed marker (MF-1, wave-3.5 adversarial review fix):
+  // true only when `body` above is genuinely NOT the complete content (the
+  // bounded list response truncated it). The client must never guess this
+  // from `body.length` — the server already knows definitively, including
+  // the case where the real body was short enough that truncating it would
+  // have been a no-op (bodyTruncated stays false there too).
+  bodyTruncated: boolean;
   // The inbox API returns `null` here on load; deep intelligence (breakdown +
   // summary) is computed ON DEMAND per thread via POST /agents/email/run so the
   // inbox load never triggers 64 LLM calls.

@@ -174,3 +174,45 @@ def test_inbox_no_params_shape_is_backward_compatible(client, auth_headers):
         assert key in data
     for key in ("received", "recruiterEmails", "autoDrafted", "sentApproved", "followUpsSent", "avgResponseHrs"):
         assert key in data["stats"]
+
+
+# --------------------------------------------------------------------- MF-1
+# wave-3.5 adversarial review (uat/reports/evidence/models-live/
+# wave35-sonnet-review-verdict.json): the FE detail panel used a length
+# heuristic to guess whether `body` was truncated, which meant it could never
+# tell "genuinely truncated" apart from "already complete" and had no honest
+# way to render a loading/error affordance. The server now marks this
+# explicitly and honestly.
+def test_inbox_body_truncated_flag_is_honest_for_long_and_short_bodies(
+    client, auth_headers, test_user_id, db_session
+):
+    long_body = "Recruiter message. " * 30  # > 120 chars
+    short_body = "Thanks!"  # <= 120 chars — truncating would be a no-op
+    long_id = f"w13-mf1-long-{uuid.uuid4().hex[:8]}"
+    short_id = f"w13-mf1-short-{uuid.uuid4().hex[:8]}"
+    with db_session.cursor() as cur:
+        _seed_thread(cur, test_user_id, long_id, body=long_body, seconds_ago=0)
+        _seed_thread(cur, test_user_id, short_id, body=short_body, seconds_ago=5)
+    db_session.commit()
+
+    # Default (bounded) list: the long body is genuinely truncated; the short
+    # one is not (nothing would be lost by sending it as-is).
+    listed = client.get("/workspaces/emails/inbox", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    by_id = {m["id"]: m for m in listed.json()["messages"]}
+    assert by_id[long_id]["bodyTruncated"] is True
+    assert by_id[short_id]["bodyTruncated"] is False
+    assert by_id[short_id]["body"] == short_body
+
+    # ?thread_id= detail fetch: the flag flips to False — this response
+    # genuinely carries the complete body now.
+    detail = client.get(f"/workspaces/emails/inbox?thread_id={long_id}", headers=auth_headers)
+    assert detail.status_code == 200, detail.text
+    detail_msg = detail.json()["messages"][0]
+    assert detail_msg["bodyTruncated"] is False
+    assert detail_msg["body"] == long_body
+
+    # ?full=1 escape hatch: same honesty — no message is marked truncated.
+    full = client.get("/workspaces/emails/inbox?full=1", headers=auth_headers)
+    assert full.status_code == 200, full.text
+    assert all(m["bodyTruncated"] is False for m in full.json()["messages"])

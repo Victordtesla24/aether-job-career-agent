@@ -76,12 +76,45 @@ export default function EmailCenterPage() {
   const [triageBusy, setTriageBusy] = useState(false);
   const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
-  // Real, full thread bodies fetched on demand per thread id (W-13 / QA #2):
-  // the bounded inbox list truncates `body` to a snippet, so the detail
-  // panel fetches the real content for whichever thread is selected and
-  // caches it here — never re-fetched once loaded.
+  // Real, full thread bodies fetched on demand per thread id (W-13 / QA #2).
+  // The bounded inbox list truncates `body` to a snippet (server marks this
+  // honestly via `bodyTruncated`), so the detail panel fetches the real
+  // content for whichever thread is selected and caches it here, keyed by
+  // thread id — never by "current selection", so a fetch that resolves
+  // after the user has switched threads is still recorded correctly instead
+  // of being discarded (MF-1, wave-3.5 adversarial review: the previous
+  // `cancelled` guard discarded an in-flight fetch's result on switch-away
+  // AND permanently marked the id as "already fetched", so re-selecting that
+  // thread later silently rendered the truncated snippet forever with no
+  // indication). `bodyFetchError` is the honest failure state (thread
+  // missing / request failed) that drives a visible retry affordance rather
+  // than a silent snippet. `inFlightBodyIds` only dedupes concurrent
+  // requests for the same id — it is NOT a permanent "done" marker, so a
+  // failed fetch can always be retried.
   const [fullBodies, setFullBodies] = useState<Record<string, string>>({});
-  const fetchedBodyIds = useRef<Set<string>>(new Set());
+  const [bodyFetchError, setBodyFetchError] = useState<Record<string, boolean>>({});
+  const inFlightBodyIds = useRef<Set<string>>(new Set());
+
+  const loadFullBody = useCallback((threadId: string) => {
+    if (inFlightBodyIds.current.has(threadId)) return;
+    inFlightBodyIds.current.add(threadId);
+    setBodyFetchError((prev) => (prev[threadId] ? { ...prev, [threadId]: false } : prev));
+    fetchEmailThreadBody(threadId)
+      .then((body) => {
+        inFlightBodyIds.current.delete(threadId);
+        if (body === null) {
+          // Honest: thread not found / not this user's — never a silent
+          // snippet passed off as complete.
+          setBodyFetchError((prev) => ({ ...prev, [threadId]: true }));
+          return;
+        }
+        setFullBodies((prev) => ({ ...prev, [threadId]: body }));
+      })
+      .catch(() => {
+        inFlightBodyIds.current.delete(threadId);
+        setBodyFetchError((prev) => ({ ...prev, [threadId]: true }));
+      });
+  }, []);
 
   // Compose modal state
   const [composeOpen, setComposeOpen] = useState(false);
@@ -124,25 +157,25 @@ export default function EmailCenterPage() {
   }, []);
 
   // Load the real, full body for whichever thread is currently selected
-  // (W-13 / QA #2) — the list response only carries a truncated snippet.
-  // Fires once per thread id (fetchedBodyIds guards re-fetching); a failed
-  // fetch is allowed to retry on the next selection change.
+  // (W-13 / QA #2 / MF-1) — the list response only carries a truncated
+  // snippet when `bodyTruncated` is true. Nothing to fetch (and nothing
+  // hidden) when it's false — the list body is already the complete email.
+  // A thread whose fetch is still in flight when the user switches away and
+  // later succeeds is picked up correctly on reselection (loadFullBody is
+  // keyed by thread id, not "current selection", so late resolution isn't
+  // discarded). A thread whose fetch already FAILED is not silently
+  // retried here — that waits for the user's explicit "Retry" click below,
+  // so the honest error state stays visible until the user asks again.
   useEffect(() => {
-    if (!selectedId || fetchedBodyIds.current.has(selectedId)) return;
-    fetchedBodyIds.current.add(selectedId);
-    let cancelled = false;
-    fetchEmailThreadBody(selectedId)
-      .then((body) => {
-        if (cancelled || body === null) return;
-        setFullBodies((prev) => ({ ...prev, [selectedId]: body }));
-      })
-      .catch(() => {
-        fetchedBodyIds.current.delete(selectedId);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
+    if (!selectedId || !inbox) return;
+    const msg = inbox.messages.find((m) => m.id === selectedId);
+    if (!msg || !msg.bodyTruncated) return;
+    if (fullBodies[selectedId] !== undefined) return;
+    // A previous attempt already failed for this id — wait for the user's
+    // explicit "Retry" click (below) rather than silently looping forever.
+    if (bodyFetchError[selectedId]) return;
+    loadFullBody(selectedId);
+  }, [selectedId, inbox, fullBodies, bodyFetchError, loadFullBody]);
 
   const startConnect = useCallback(() => {
     setConnecting(true);
@@ -290,13 +323,24 @@ export default function EmailCenterPage() {
     [inbox, selectedId],
   );
 
-  // The real, full body for the selected thread once fetched (W-13 / QA #2);
-  // falls back to the list's truncated snippet while that fetch is in flight
-  // so the panel never shows a blank body.
+  // The real, full body for the selected thread once fetched (W-13 / QA #2).
   const selectedBody = useMemo(
     () => (selected ? (fullBodies[selected.id] ?? selected.body) : ""),
     [selected, fullBodies],
   );
+
+  // Honest tri-state for the detail panel (MF-1, wave-3.5 adversarial
+  // review): "complete" when there is nothing left to fetch (either the
+  // server already sent the full body, or the fetch already succeeded),
+  // "loading" while the full-body fetch is outstanding, "error" when it
+  // failed — the panel must never silently render the truncated snippet as
+  // if it were the whole email in either of the latter two states.
+  const selectedBodyState: "complete" | "loading" | "error" = useMemo(() => {
+    if (!selected || !selected.bodyTruncated) return "complete";
+    if (fullBodies[selected.id] !== undefined) return "complete";
+    if (bodyFetchError[selected.id]) return "error";
+    return "loading";
+  }, [selected, fullBodies, bodyFetchError]);
 
   // AI-intelligence view — reconciles the on-demand computed intelligence for the
   // selected thread with the inbox value (always null on load). The null-guard in
@@ -726,9 +770,54 @@ export default function EmailCenterPage() {
                     );
                   })()}
                 </div>
-                <p className="whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted">
-                  {selectedBody}
-                </p>
+                {selectedBodyState === "loading" ? (
+                  // Honest loading affordance (MF-1): while the real full
+                  // body is being fetched, show a labeled skeleton rather
+                  // than silently rendering the truncated snippet as if it
+                  // were the complete email.
+                  <div
+                    className="rounded-xl border border-white/10 bg-white/5 p-4"
+                    data-testid="email-body-loading"
+                    aria-busy="true"
+                  >
+                    <p className="mb-2 text-[11px] text-aether-muted-dim">Loading full message…</p>
+                    <div className="space-y-2">
+                      <div className="h-3 w-11/12 animate-pulse rounded bg-white/10" />
+                      <div className="h-3 w-full animate-pulse rounded bg-white/10" />
+                      <div className="h-3 w-2/3 animate-pulse rounded bg-white/10" />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p
+                      data-testid="email-body"
+                      className="whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted"
+                    >
+                      {selectedBody}
+                    </p>
+                    {selectedBodyState === "error" ? (
+                      // Honest failure state (MF-1): the snippet is shown
+                      // but clearly labeled as partial, with a working retry
+                      // — never a silent, permanent stand-in for the whole
+                      // email.
+                      <p
+                        role="alert"
+                        data-testid="email-body-error"
+                        className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-[11px] text-aether-amber"
+                      >
+                        Preview only — full message failed to load.
+                        <button
+                          type="button"
+                          data-testid="retry-full-body"
+                          onClick={() => selected && loadFullBody(selected.id)}
+                          className="rounded border border-aether-amber/40 px-2 py-0.5 font-semibold hover:bg-aether-amber/20"
+                        >
+                          Retry
+                        </button>
+                      </p>
+                    ) : null}
+                  </>
+                )}
 
                 {/* AI intelligence — computed ON DEMAND for the selected thread */}
                 {intelligence.available ? (
