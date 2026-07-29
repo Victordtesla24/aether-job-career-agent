@@ -91,6 +91,10 @@ export default function AgentStatsRow({
         </div>
         <p className="mt-1 text-[11px] text-aether-muted-dim">
           last {stats.taskCount.toLocaleString()} tasks
+          {/* QA3-F-03: degraded (letterless coverLetter) runs are excluded
+              from the success-rate numerator above — disclose the count
+              distinctly instead of leaving it invisible. */}
+          {stats.degradedCount ? ` · ${stats.degradedCount} degraded` : ""}
         </p>
       </div>
     </section>

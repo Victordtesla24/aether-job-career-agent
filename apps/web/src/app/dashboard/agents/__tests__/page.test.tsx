@@ -254,3 +254,58 @@ describe("NF-final-closure-002: honest no-résumé refusal surfacing (agents con
     expect(notice.className).toContain("aether-green");
   });
 });
+
+describe("QA3-F-03: Recent runs table never shows a degraded coverLetter run as a plain success", () => {
+  it("renders 'Unavailable' (not green 'completed') for a letterless coverLetter run", async () => {
+    setupDefaultMocks();
+    fetchAgentRuns.mockResolvedValue([
+      {
+        id: "run-degraded",
+        agentName: "coverLetter",
+        status: "completed",
+        input: null,
+        output: {
+          coverLetterUnavailable: true,
+          cover_letter_id: null,
+          message: "The cover letter couldn't be generated because the writing model was temporarily unavailable.",
+        },
+        error: null,
+        costUsd: null,
+        startedAt: "2026-07-29T17:06:12Z",
+        completedAt: "2026-07-29T17:06:20Z",
+        createdAt: "2026-07-29T17:06:12Z",
+      },
+    ]);
+    render(<AgentsPage />);
+    await waitForLoaded();
+
+    const table = await screen.findByTestId("agent-runs-table");
+    await waitFor(() => expect(table.textContent).toContain("coverLetter"));
+    expect(table.textContent).toMatch(/unavailable/i);
+    expect(table.querySelector(".text-aether-green")).toBeNull();
+  });
+
+  it("a genuinely completed run still renders the green 'completed' status", async () => {
+    setupDefaultMocks();
+    fetchAgentRuns.mockResolvedValue([
+      {
+        id: "run-real",
+        agentName: "coverLetter",
+        status: "completed",
+        input: null,
+        output: { cover_letter_id: "cl_1", approval_status: "approved" },
+        error: null,
+        costUsd: 0.01,
+        startedAt: "2026-07-29T17:00:12Z",
+        completedAt: "2026-07-29T17:00:20Z",
+        createdAt: "2026-07-29T17:00:12Z",
+      },
+    ]);
+    render(<AgentsPage />);
+    await waitForLoaded();
+
+    const table = await screen.findByTestId("agent-runs-table");
+    await waitFor(() => expect(table.textContent).toContain("completed"));
+    expect(table.querySelector(".text-aether-green")).not.toBeNull();
+  });
+});

@@ -285,6 +285,64 @@ def test_stats_reflect_a_real_run(client, auth_headers):
     assert s["spendUsd"] >= 0
 
 
+def test_stats_success_rate_excludes_degraded_coverletter_runs(
+    client, auth_headers, test_user_id,
+):
+    """QA3-F-03 (MED): a letterless coverLetter degrade is recorded as
+    status='completed' (GAP-P4-002 — the guard working is not a failure), but
+    it is NOT a genuine success. Before this fix, ``successRate`` counted it as
+    one anyway — three real successes + one degrade reported 100%, not 75%."""
+    from app.repositories.agent_run import AgentRunRepository
+
+    runs = AgentRunRepository()
+    for _ in range(3):
+        r = runs.start(test_user_id, "coverLetter", {})
+        runs.finish(
+            r["id"], "completed",
+            output={"cover_letter_id": "cl_1", "model": "x", "costUsd": 0.01},
+            cost_usd=0.01,
+        )
+    degraded = runs.start(test_user_id, "coverLetter", {})
+    runs.finish(
+        degraded["id"], "completed",
+        output={
+            "cover_letter_id": None,
+            "coverLetterUnavailable": True,
+            "model": "x",
+            "costUsd": 0.02,
+        },
+        cost_usd=0.02,
+    )
+
+    s = client.get("/agents/stats", headers=auth_headers).json()
+    assert s["taskCount"] == 4
+    assert s["degradedCount"] == 1, (
+        "the degraded run must be counted distinctly, not silently absorbed"
+    )
+    assert s["successRate"] == pytest.approx(75.0), (
+        f"expected 3/4 = 75.0% excluding the degrade, got {s['successRate']!r}"
+    )
+
+
+def test_stats_degraded_count_is_zero_with_no_degraded_runs(
+    client, auth_headers, test_user_id,
+):
+    """PIN: a real, successful coverLetter run is unaffected — 100% unchanged."""
+    from app.repositories.agent_run import AgentRunRepository
+
+    runs = AgentRunRepository()
+    r = runs.start(test_user_id, "coverLetter", {})
+    runs.finish(
+        r["id"], "completed",
+        output={"cover_letter_id": "cl_1", "model": "x", "costUsd": 0.01},
+        cost_usd=0.01,
+    )
+
+    s = client.get("/agents/stats", headers=auth_headers).json()
+    assert s["degradedCount"] == 0
+    assert s["successRate"] == pytest.approx(100.0)
+
+
 def test_test_run_estimates_no_charge(client, auth_headers, monkeypatch):
     # Pin a PRICED model: with no env override the test process resolves
     # REASONING to ``FALLBACK_MODEL`` — a ``:free`` id, which honestly estimates

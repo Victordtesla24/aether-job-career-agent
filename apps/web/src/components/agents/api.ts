@@ -150,6 +150,10 @@ export const StatsSchema = z.object({
   tokensOut: z.number(),
   mostActiveAgent: z.object({ name: z.string(), tasks: z.number() }).nullable(),
   successRate: z.number(),
+  // QA3-F-03: letterless coverLetter degrades excluded from the successRate
+  // numerator above are counted here instead of silently absorbed.
+  // `.nullish()` so a legacy/mocked response predating this field still parses.
+  degradedCount: z.number().nullish(),
   taskCount: z.number(),
 });
 export type AgentStats = z.infer<typeof StatsSchema>;

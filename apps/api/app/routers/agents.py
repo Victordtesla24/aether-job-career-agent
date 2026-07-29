@@ -3190,7 +3190,8 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
     """Real aggregate stats derived from AgentRun history (no hardcoded values)."""
     runs = AgentRunRepository().list_recent(current_user["id"], limit=200)
     total = len(runs)
-    completed = sum(1 for r in runs if r["status"] == "completed")
+    completed = 0
+    degraded = 0
     spend = 0.0
     tokens_in = tokens_out = 0
     by_agent: dict[str, int] = {}
@@ -3201,6 +3202,15 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
                 out = json.loads(out)
             except (ValueError, TypeError):
                 out = {}
+        if r["status"] == "completed":
+            completed += 1
+            # QA3-F-03: a letterless coverLetter degrade (guard rejection / LLM
+            # unavailable on the first draft) is recorded as status='completed'
+            # (GAP-P4-002 — the guard working is not a failure), but it is NOT a
+            # successful outcome for the "Success Rate" stat — count it
+            # distinctly instead of silently inflating the success numerator.
+            if r["agentName"] == "coverLetter" and out.get("coverLetterUnavailable") is True:
+                degraded += 1
         cost = r.get("costUsd")
         if cost is None:
             cost = out.get("costUsd", 0)
@@ -3212,7 +3222,7 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
         tokens_out += int(out.get("tokensOut", 0) or 0)
         by_agent[r["agentName"]] = by_agent.get(r["agentName"], 0) + 1
     most_active = max(by_agent.items(), key=lambda kv: kv[1]) if by_agent else None
-    success_rate = round(completed / total * 100, 1) if total else 100.0
+    success_rate = round((completed - degraded) / total * 100, 1) if total else 100.0
     avg_cost = round(spend / total, 4) if total else 0.0
     total_tokens = tokens_in + tokens_out
     return {
@@ -3228,6 +3238,7 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
             else None
         ),
         "successRate": success_rate,
+        "degradedCount": degraded,
         "taskCount": total,
     }
 

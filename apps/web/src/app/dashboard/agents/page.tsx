@@ -28,6 +28,7 @@ import {
   type AgentSummary,
 } from "../../../lib/api/agents";
 import { apiRequest } from "../../../lib/api/client";
+import { coverLetterDegraded } from "../../../components/dashboard/feed";
 import Orchestration from "../../../components/agents/Orchestration";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
 import ModelPicker from "../../../components/agents/ModelPicker";
@@ -505,17 +506,28 @@ export default function AgentsPage() {
                   <tr key={run.id} className="border-b border-white/5 last:border-0">
                     <td className="px-4 py-2.5 font-medium">{run.agentName}</td>
                     <td className="px-4 py-2.5">
-                      <span
-                        className={
-                          run.status === "completed"
-                            ? "text-aether-green"
-                            : run.status === "failed"
-                              ? "text-red-300"
-                              : "text-aether-amber"
-                        }
-                      >
-                        {run.status}
-                      </span>
+                      {coverLetterDegraded(run) ? (
+                        // QA3-F-03: a letterless coverLetter degrade is
+                        // recorded status='completed' (GAP-P4-002 — the
+                        // guard working is not a failure), but rendering it
+                        // as a plain green "completed" is indistinguishable
+                        // from a real letter — match the honest, neutral
+                        // "Unavailable" treatment the dashboard feed already
+                        // uses for this exact run shape.
+                        <span className="text-aether-muted">Unavailable</span>
+                      ) : (
+                        <span
+                          className={
+                            run.status === "completed"
+                              ? "text-aether-green"
+                              : run.status === "failed"
+                                ? "text-red-300"
+                                : "text-aether-amber"
+                          }
+                        >
+                          {run.status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-aether-muted">
                       {run.startedAt ? new Date(run.startedAt).toLocaleString("en-AU") : "—"}

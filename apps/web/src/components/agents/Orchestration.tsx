@@ -6,6 +6,7 @@
  * log rows are derived from the live run history passed in by the Agents page.
  */
 import type { AgentRun, AgentSummary } from "../../lib/api/agents";
+import { coverLetterDegraded } from "../dashboard/feed";
 
 /**
  * The REAL 7-agent topology, in pipeline order (supervisor → scout →
@@ -44,12 +45,23 @@ interface TaskItem {
   label: string;
   progress: number | null;
   active: boolean;
+  // QA3-F-03: true for a letterless coverLetter degrade (GAP-P4-002) — the
+  // run genuinely finished (not still in flight), but produced no letter, so
+  // it must never render with the same green "success" treatment as a real
+  // completion.
+  degraded?: boolean;
 }
 
 function logLevel(run: AgentRun): { tag: string; cls: string } {
   if (run.status === "failed") return { tag: "ERR", cls: "text-red-300" };
   if (run.status === "running" || run.status === "queued")
     return { tag: "RUN", cls: "text-aether-amber" };
+  // QA3-F-03: a letterless coverLetter degrade is recorded status='completed'
+  // (the guard working is not a failure), but tagging it the same green "OK"
+  // as a real success reads as an all-clear when 453/454 runs produced
+  // nothing — use the same neutral treatment the dashboard feed's honest
+  // "Unavailable" badge already applies to this exact run shape.
+  if (coverLetterDegraded(run)) return { tag: "N/A", cls: "text-aether-muted-dim" };
   return { tag: "OK", cls: "text-aether-green" };
 }
 
@@ -62,7 +74,12 @@ export default function Orchestration({
 }) {
   const online = agents.filter((a) => a.status !== "offline").length;
   const queued = runs.filter((r) => r.status === "running" || r.status === "queued").length;
-  const completed = runs.filter((r) => r.status === "completed").length;
+  // QA3-F-03: a letterless coverLetter degrade is recorded status='completed'
+  // (GAP-P4-002 — the guard working is not a failure), but it is NOT a
+  // success — exclude it from the numerator (counted distinctly below)
+  // instead of letting it silently inflate the success rate.
+  const degraded = runs.filter(coverLetterDegraded).length;
+  const completed = runs.filter((r) => r.status === "completed" && !coverLetterDegraded(r)).length;
   const successRate = runs.length > 0 ? ((completed / runs.length) * 100).toFixed(1) : "100.0";
   const durations = runs
     .filter((r) => r.startedAt && r.completedAt)
@@ -93,7 +110,11 @@ export default function Orchestration({
   const recentDone: TaskItem[] = runs
     .filter((r) => r.status === "completed")
     .slice(0, 3 - active.length)
-    .map((r) => ({ key: r.id, label: `${r.agentName} · completed`, progress: 100, active: false }));
+    .map((r) =>
+      coverLetterDegraded(r)
+        ? { key: r.id, label: `${r.agentName} · unavailable`, progress: 100, active: false, degraded: true }
+        : { key: r.id, label: `${r.agentName} · completed`, progress: 100, active: false },
+    );
   const tasks: TaskItem[] = [...active, ...recentDone];
 
   return (
@@ -205,7 +226,9 @@ export default function Orchestration({
                   <div className="h-1.5 rounded-full bg-white/10">
                     {t.progress !== null ? (
                       <div
-                        className={`h-1.5 rounded-full ${t.active ? "bg-aether-coral" : "bg-aether-green"}`}
+                        className={`h-1.5 rounded-full ${
+                          t.degraded ? "bg-white/25" : t.active ? "bg-aether-coral" : "bg-aether-green"
+                        }`}
                         style={{ width: `${t.progress}%` }}
                       />
                     ) : (
@@ -254,6 +277,14 @@ export default function Orchestration({
               <div className="text-[10px] text-aether-muted-dim">success rate</div>
             </div>
           </div>
+          {degraded > 0 ? (
+            // QA3-F-03: degraded (letterless) runs are counted distinctly
+            // rather than silently absorbed into — or dropped from — the
+            // success figure above.
+            <p className="mt-2 text-center text-[10px] text-aether-muted-dim">
+              {degraded} degraded run{degraded === 1 ? "" : "s"} excluded from success
+            </p>
+          ) : null}
         </div>
 
         {/* Error log */}
@@ -277,7 +308,10 @@ export default function Orchestration({
                         : "--:--"}
                     </span>
                     <span className="truncate text-aether-muted">
-                      {run.error ?? `${run.agentName} ${run.status}`}
+                      {run.error ??
+                        (coverLetterDegraded(run)
+                          ? `${run.agentName} unavailable (degraded)`
+                          : `${run.agentName} ${run.status}`)}
                     </span>
                   </p>
                 );

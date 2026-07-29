@@ -56,8 +56,14 @@ export function agentTile(agentName: string): FeedTile {
  * apps/api/app/workers/tasks.py and apps/api/app/routers/agents.py, all of
  * which mark the run `completed` with `output.coverLetterUnavailable = true`
  * and `cover_letter_id: None`. Genuine successes always carry a real
- * `cover_letter_id` and never set this flag. */
-function coverLetterDegraded(run: AgentRun): boolean {
+ * `cover_letter_id` and never set this flag.
+ *
+ * Exported (QA3-F-03) so every other surface that renders AgentRun rows —
+ * the Agents console's Orchestration panel and its "Recent runs" table —
+ * reuses this SAME predicate instead of re-deriving it, so a degraded run
+ * can never read as a plain success on one screen while this one shows it
+ * honestly. */
+export function coverLetterDegraded(run: AgentRun): boolean {
   if (run.agentName !== "coverLetter") return false;
   const out = run.output ?? {};
   return out.coverLetterUnavailable === true;

@@ -126,3 +126,95 @@ describe("Orchestration — ADV-agent-monitor-001 fabricated uptime", () => {
     expect(section.textContent).toMatch(/1 tasks? in queue/i);
   });
 });
+
+// QA3-F-03 (MED, W-21): a letterless coverLetter degrade (guard rejection / LLM
+// unavailable on the first draft) is recorded as status='completed' with
+// output.coverLetterUnavailable=true (GAP-P4-002 — the guard working is not a
+// failure). Before this fix, Orchestration treated it identically to a real
+// success on every one of its three surfaces: the Task Queue showed
+// "coverLetter · completed" at a green 100%, the Error Log printed a green
+// "OK", and the Performance card's success-rate counted it as one of the
+// successes — so 1 real letter + 4 degrades read as "100% success".
+function degradedRun(overrides: Partial<AgentRun> = {}): AgentRun {
+  return run({
+    agentName: "coverLetter",
+    status: "completed",
+    output: {
+      coverLetterUnavailable: true,
+      cover_letter_id: null,
+      message: "The cover letter couldn't be generated because the writing model was temporarily unavailable.",
+    },
+    ...overrides,
+  });
+}
+
+describe("Orchestration — QA3-F-03 degraded coverLetter runs are never a success", () => {
+  it("excludes a degraded run from the success-rate numerator", () => {
+    const runs = [
+      run({ id: "r1", agentName: "tailor", status: "completed" }),
+      degradedRun({ id: "r2" }),
+    ];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const perf = screen.getByTestId("performance-metrics");
+    // Before the fix: 2/2 completed -> "100.0%". After: 1 real success / 2 -> "50.0%".
+    expect(perf.textContent).not.toMatch(/100\.0%/);
+    expect(perf.textContent).toMatch(/50\.0%/);
+  });
+
+  it("still reports an honest 100% success rate when every run is a genuine success", () => {
+    const runs = [run({ id: "r1", agentName: "tailor", status: "completed" })];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const perf = screen.getByTestId("performance-metrics");
+    expect(perf.textContent).toMatch(/100\.0%/);
+  });
+
+  it("surfaces the degraded count distinctly rather than silently absorbing it", () => {
+    const runs = [
+      run({ id: "r1", agentName: "tailor", status: "completed" }),
+      degradedRun({ id: "r2" }),
+      degradedRun({ id: "r3" }),
+    ];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const perf = screen.getByTestId("performance-metrics");
+    expect(perf.textContent).toMatch(/2 degraded/i);
+  });
+
+  it("Task Queue: never labels a degraded run 'completed' at a green 100%", () => {
+    const runs = [degradedRun({ id: "r1" })];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const queue = screen.getByTestId("task-queue");
+    expect(queue.textContent).not.toMatch(/coverletter\s*·\s*completed/i);
+    expect(queue.textContent).toMatch(/unavailable/i);
+    const bar = queue.querySelector(".bg-aether-green");
+    expect(bar).toBeNull();
+  });
+
+  it("Task Queue: a genuinely completed coverLetter run is unaffected", () => {
+    const runs = [
+      run({ id: "r1", agentName: "coverLetter", status: "completed", output: { cover_letter_id: "cl_1" } }),
+    ];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const queue = screen.getByTestId("task-queue");
+    expect(queue.textContent).toMatch(/coverletter\s*·\s*completed/i);
+    expect(queue.querySelector(".bg-aether-green")).not.toBeNull();
+  });
+
+  it("Error Log: never tags a degraded run 'OK' in green", () => {
+    // Sibling DOM nodes' textContent concatenates with no separator (e.g.
+    // "Error LogOK10:00 AM…"), so a word-boundary regex on the whole
+    // container is unreliable — assert on the actual tag element instead.
+    const runs = [degradedRun({ id: "r1" })];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const log = screen.getByTestId("error-log");
+    expect(log.querySelector(".text-aether-green")).toBeNull();
+    expect(log.textContent).toMatch(/unavailable/i);
+  });
+
+  it("Error Log: a genuinely completed run still gets the OK tag", () => {
+    const runs = [run({ id: "r1", agentName: "tailor", status: "completed" })];
+    render(<Orchestration agents={agents} runs={runs} />);
+    const log = screen.getByTestId("error-log");
+    const tag = log.querySelector(".text-aether-green");
+    expect(tag?.textContent).toBe("OK");
+  });
+});
