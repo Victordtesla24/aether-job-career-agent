@@ -1274,3 +1274,83 @@ the capped batch's budget even after this fix — this is a genuine synchronous-
 correctness defect, and is tracked as `BACKLOG-P6-02` (durable fix: asynchronous submit→poll generation,
 out of Phase 6 scope). **Reversible?** Yes — all four env vars are tunable; the batch cap and budget
 formula are config, not architecture, changes.
+
+## D-0040 — Networking workspace: single-page kanban, no UI delete, no LinkedIn import, stage-label mapping
+
+**Date:** 2026-07-29 · **Author:** STAGE-C-FIX (G-P4-NETWORKING-WIREFRAME-005) · **Status:** Adopted
+
+**Context.** The `design/screens/networking.html` wireframe shows a multi-tab workspace (Contacts,
+Outreach, Templates, Analytics tabs) with an "Import from LinkedIn" button, delete controls on
+contact cards, and a 5-column pipeline. The Phase 4 gap analysis (2026-07-26) flagged the
+networking screen as UNVERIFIED and noted it had no ADR coverage. ML-networking-001 (2026-07-22)
+flagged the missing UI delete control as "UNSURE" and deferred adjudication to "Stage-3." The
+screen has since been hardened with 10 Vitest tests (MV-networking-001 through -010) and the
+backend has full CRUD endpoints for contacts and outreach tasks. This ADR documents the
+intentional design decisions that differ from the wireframe.
+
+**Decision.**
+
+1. **Single-page kanban, not multi-tab workspace.** The wireframe's tabbed layout (Contacts /
+   Outreach / Templates / Analytics) is replaced by a single-page layout where the pipeline,
+   outreach queue, and communication log are all visible at once. This is the correct choice for
+   a lightweight CRM: the screen's primary purpose is triaging contacts through pipeline stages,
+   and a tabbed layout would hide the outreach queue and communication log behind clicks that
+   users would rarely make. The kanban-first layout puts the pipeline front and center, with the
+   queue and log as companion panels. No multi-tab workspace is planned.
+
+2. **No UI delete control for contacts (ML-networking-001).** The backend `DELETE
+   /networking/contacts/{contact_id}` endpoint exists and works (returns 204, cascades to
+   dependent outreach tasks). The UI intentionally does not expose a delete control. Rationale:
+   (a) delete is a destructive, irreversible affordance — it needs a confirmation dialog, undo
+   path, and/or trash/recovery pattern that would add complexity out of proportion to the
+   screen's role; (b) contacts are intentionally cumulative — the CRM is a lightweight tracker,
+   not a high-churn list; (c) the existing delete endpoint is available for admin/API cleanup
+   and is tested. A UI delete affordance may be added in a future phase but is explicitly not
+   required for correctness, honesty, or wireframe fidelity.
+
+3. **No LinkedIn import (MV-networking-003).** The wireframe's "Import from LinkedIn" button
+   implied a LinkedIn OAuth integration that does not exist. The implementation honestly
+   relabels the control to "Add contact manually" and removes the LinkedIn branding. Building a
+   LinkedIn OAuth import is a separate product decision (requires LinkedIn API access, OAuth
+   consent flow, contact-mapping logic, and ToS compliance review) and is not committed for any
+   phase. The empty-state copy was updated to remove the "Import your LinkedIn connections"
+   claim (MV-networking-003 test asserts this).
+
+4. **Stage-label mapping: DB enum → UI labels.** The `ContactStage` Postgres enum stores
+   `identified | contacted | responded | meeting | referral`. The UI maps these to wireframe
+   pipeline labels: `identified → New`, `contacted → Warm`, `responded → Active`, `meeting →
+   Scheduled`, `referral → Placed`. The mapping is implemented in
+   `apps/api/app/routers/workspaces.py` `networking_summary()` and is tested by
+   `test_workspaces_networking_summary_buckets_real_contacts_into_pipeline`. The UI labels are
+   simpler and more intuitive than the raw enum values; the enum values are kept as the
+   canonical data model because they accurately describe the outreach lifecycle.
+
+5. **Contact detail panel is read-only.** The detail modal (MV-networking-005, opened by
+   clicking a contact card) displays the stored fields from `GET /networking/contacts/{id}` but
+   does not offer inline editing. The backend `PATCH /networking/contacts/{contact_id}` endpoint
+   exists and works, but wiring a full edit form is deferred. The detail panel satisfies the
+   immediate need (seeing a contact's email, LinkedIn URL, and stage) without the complexity of
+   an edit-save-cancel form.
+
+6. **Outreach tasks are read-only in the UI.** The backend supports full CRUD for outreach
+   tasks (`POST/PATCH/GET /networking/outreach`), but the UI renders the outreach queue and
+   communication log as read-only cards. Creating and editing outreach tasks from the UI is
+   deferred. The existing endpoints are consumed by the backend's own agent-driven workflows
+   (e.g., the networking agent scheduling follow-ups) and are available for API consumers.
+
+**Alternatives.** (a) Build the multi-tab workspace from the wireframe — rejected: adds
+navigation friction for no benefit; the single-page kanban is a better UX for the CRM's
+primary job (pipeline triage). (b) Add a delete button with a confirmation dialog — deferred:
+adds destructive-affordance complexity for a low-priority feature; the backend endpoint
+remains available for programmatic cleanup. (c) Rename the DB enum values to match UI labels —
+rejected: the enum values are semantically accurate (`identified`, `contacted`, etc.) and
+renaming a Postgres enum is a migration with no upside; the mapping is one dict in the router.
+
+**Consequences.** The networking screen is now fully documented with an ADR. The 10
+MV-networking-* Vitest tests pass (all green). The screen's honest states (empty,
+single-contact, populated) are verified. ML-networking-001 is formally adjudicated as
+"intentional-by-design" with this ADR as the authority. GAP-P4-005 (networking-ADR gap) is
+closed. **Reversible?** Yes — every decision above is a UI/UX choice, not a schema or
+architecture constraint. The backend endpoints are complete; the UI can add tabs, delete
+controls, edit forms, or LinkedIn import in a future phase without breaking any contract.
+
