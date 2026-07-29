@@ -697,9 +697,6 @@ _TITLE_DESCRIBING_PREDICATES = frozenset(
 )
 #: How far back a describing predicate may sit from the title phrase.
 _TITLE_PREDICATE_LOOKBACK = 4
-#: How far after the deictic a first-person relative clause ("… the <title>
-#: role I HELD for three years") may sit and still void the exemption.
-_TITLE_RELATIVE_LOOKAHEAD = 2
 
 
 def _title_runs(title_words: list[str]) -> set[tuple[str, ...]]:
@@ -729,16 +726,26 @@ def _describing_predicate_before(
     return False
 
 
-def _first_person_relative_after(
+def _returns_to_first_person_after(
     tokens: list[tuple[str, int, int]], sentence: str, deictic: int
 ) -> bool:
-    """True when the role phrase is glossed by a first-person relative clause —
-    "the GRC Program Manager role I HELD for three years". The deictic is then
-    the object of the candidate's own claim, not a reference to the posting."""
-    for j in range(deictic, min(len(tokens), deictic + _TITLE_RELATIVE_LOOKAHEAD + 1)):
-        if sentence[tokens[j][1] : tokens[j][2]] == "I":
-            return True
-    return False
+    """True when the sentence returns to the FIRST PERSON anywhere after the
+    role phrase — "…the GRC Program Manager role at Deputy, WHERE I spent three
+    years leading it".
+
+    Categorical, with no distance parameter: the scan runs from the deictic to
+    the end of the sentence and crosses clause boundaries, because every
+    distance bound is a bypass waiting to be measured. A fixed 2-token
+    lookahead was exactly that — six graded gloss constructions walked straight
+    past it (third adversarial review of e05bcbd), each one a real tenure claim.
+
+    The rule is safe to make categorical because every legitimate role-naming
+    shape ENDS after naming the job ("…aligns with the GRC Program Manager role
+    at Deputy."). A sentence that names the advertised role and then swings back
+    to the candidate is doing something the guard cannot verify, so it fails
+    closed and the corrective retry re-phrases it.
+    """
+    return bool(_FIRST_PERSON_RE.search(sentence[tokens[deictic][2] :]))
 
 
 def _role_name_indices(
@@ -760,8 +767,10 @@ def _role_name_indices(
     - a DESCRIBING/ALIGNING predicate governing the phrase, so "I served in /
       held / have the <title> role" — where the phrase is the object of the
       candidate's own assertion — is never exempt;
-    - no first-person relative clause gloss ("the <title> role I held for three
-      years").
+    - NO return to the first person anywhere between the role phrase and the
+      end of the sentence, so no gloss can reclaim the role as the candidate's
+      own at any distance ("…the <title> role at Deputy, where I spent three
+      years leading it").
     """
     named: set[int] = set()
     if not runs:
@@ -775,7 +784,7 @@ def _role_name_indices(
                 end < total
                 and tokens[end][0] in _ROLE_DEICTIC_NOUNS
                 and _describing_predicate_before(tokens, sentence, start)
-                and not _first_person_relative_after(tokens, sentence, end)
+                and not _returns_to_first_person_after(tokens, sentence, end)
             ):
                 named.update(range(start, end))
             break

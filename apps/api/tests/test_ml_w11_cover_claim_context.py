@@ -722,3 +722,134 @@ def test_object_of_a_first_person_assertion_is_not_role_naming() -> None:
         _TENURE_EVIDENCE,
         "GRC Program Manager",
     ) == []
+
+
+# ===========================================================================
+# Third adversarial review of e05bcbd: the role-naming exemption's
+# "no first-person gloss after the deictic" condition used a 2-TOKEN
+# lookahead, and six graded gloss constructions simply stepped over it.
+# The fix removes the distance parameter class rather than widening it: the
+# exemption is voided by ANY return to the first person between the role
+# phrase and the end of the sentence. Harness:
+# uat/reports/evidence/models-live/wave35-opus-review/
+#     w11-round3-gloss-distance-attack.py
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    ("bypass", "sentence"),
+    [
+        (
+            "'where' clause 3+ tokens after the deictic",
+            "My background matches the GRC Program Manager role at Deputy, "
+            "where I spent three years leading it.",
+        ),
+        (
+            "appositive gloss further out",
+            "My skill set aligns with the GRC Program Manager role at Deputy, a "
+            "position I held for three years and thrived in.",
+        ),
+        (
+            "'that I' relative clause placed far after the deictic",
+            "This opportunity mirrors the GRC Program Manager position at "
+            "Deputy that I filled for three years.",
+        ),
+        (
+            "sentence-final 'since I' gloss clause",
+            "My track record suits the GRC Program Manager role at Deputy, "
+            "since I handled the exact same governance duties for three years.",
+        ),
+        (
+            "far \"I've\" gloss after a possessive company phrase",
+            "My history relates to the GRC Program Manager role at Deputy's "
+            "finance arm, where I've led compliance teams for three years.",
+        ),
+        (
+            "two filler tokens probing the old lookahead boundary",
+            "My background matches the GRC Program Manager role here at "
+            "Deputy, where I spent three years leading it.",
+        ),
+        # --- my own attempts at the same class, beyond the reviewer's set ---
+        (
+            "em-dash gloss carrying only a possessive",
+            "My background matches the GRC Program Manager role at Deputy — my "
+            "own three years in it were formative.",
+        ),
+        (
+            "'which my … tenure' relative clause",
+            "My background matches the GRC Program Manager role at Deputy, "
+            "which my three years of tenure prepared me for.",
+        ),
+        (
+            "semicolon gloss (not a sentence boundary)",
+            "My background matches the GRC Program Manager role at Deputy; I "
+            "ran it for three years.",
+        ),
+        (
+            "possessive-only gloss with no 'I' pronoun at all",
+            "My background matches the GRC Program Manager role at Deputy, a "
+            "position on my resume for three years.",
+        ),
+        (
+            "gloss at the end of a very long sentence",
+            "My background matches the GRC Program Manager role at Deputy, a "
+            "global SaaS company serving over 1.5 million workers across more "
+            "than one hundred countries worldwide, and I owned exactly that "
+            "remit for three years.",
+        ),
+    ],
+)
+def test_any_first_person_after_the_role_phrase_voids_the_exemption(
+    bypass: str, sentence: str
+) -> None:
+    """Categorical, distance-free: a sentence that names the advertised role and
+    then swings back to the candidate is asserting something the guard cannot
+    verify, at ANY distance and across ANY clause boundary."""
+    flags = unsupported_claim_tokens(sentence, _TENURE_EVIDENCE, "GRC Program Manager")
+    assert "grc" in flags or "manager" in flags, (
+        f"{bypass} still bypasses the guard: {flags}"
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "My background aligns with the GRC Program Manager role at Deputy.",
+        "My delivery record matches the GRC Program Manager role at Deputy.",
+        "My track record suits the GRC Program Manager role at Deputy.",
+        "My background mirrors the GRC Program Manager position described in "
+        "your posting.",
+    ],
+)
+def test_role_naming_that_ends_the_sentence_still_passes(sentence: str) -> None:
+    """The boundary that makes the categorical rule affordable: every
+    legitimate role-naming shape finishes after naming the job, so voiding on
+    any later first person costs nothing here."""
+    assert unsupported_claim_tokens(
+        sentence, _TENURE_EVIDENCE, "GRC Program Manager"
+    ) == []
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The GRC Program Manager role at Deputy is exactly the kind of work I "
+        "want to do.",
+        "I am applying for the GRC Program Manager role because I admire the "
+        "mission.",
+        "I would welcome the chance to take on the GRC Program Manager role at "
+        "Deputy.",
+        "I'm excited about the GRC Program Manager role and what I could learn "
+        "there.",
+    ],
+)
+def test_aspiration_about_the_role_survives_the_categorical_rule(
+    sentence: str,
+) -> None:
+    """These DO return to the first person after naming the role, and must
+    still pass — they are exempt as ASPIRATION, independently of the
+    role-naming rule. This is why the categorical rule does not cost the
+    product its ordinary voice."""
+    assert unsupported_claim_tokens(
+        sentence, _TENURE_EVIDENCE, "GRC Program Manager"
+    ) == []
