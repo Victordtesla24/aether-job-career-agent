@@ -10,8 +10,13 @@ sweep is verified live on production.
 from __future__ import annotations
 
 import json
+import logging
+import os
+import subprocess
+import sys
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -370,3 +375,133 @@ class TestCoverFailureBackoff:
         assert board_sweep.max_cover_failures() == 5
         target = board_sweep._next_target(user_id, set())
         assert target is not None and target["job_id"] == job
+
+
+class TestCoverFailureAutoClearAndHonestLogging:
+    """ML-W-12 (QA #2, uat/reports/evidence/prod-verify-2-wave2/PROD-VERIFY-2.json):
+    the cover-failure suppression above (``TestCoverFailureBackoff``) is
+    DB-backed with NO way to clear early — after the underlying cover-letter
+    defect that CAUSED a batch of failures is fixed and deployed, every job
+    that failed under the old broken code stays wedged for the rest of the
+    24h window: it is excluded from ``_next_target``, so it can never earn
+    the new success that would otherwise auto-clear it, and the tick log
+    reports a healthy-looking ``skipped-failures (processed=0 ...)`` the
+    whole time. Two behaviors are locked here (the third — the ops clear
+    script — has its own end-to-end test below):
+      1. a successful coverLetter completion resets a job's failure count;
+      2. a tick that skips ALL eligible jobs due to suppression says so
+         explicitly, with the earliest suppression-expiry time.
+    """
+
+    def _seed_cover_run(
+        self, conn, user_id: str, job_id: str, status: str, minutes_ago: float
+    ) -> None:
+        """Seed one coverLetter AgentRun at an EXPLICIT relative timestamp
+        (rather than bare ``NOW()``) so ordering between failures and a later
+        success/clear is deterministic regardless of statement timing."""
+        run_id = "c" + uuid.uuid4().hex[:24]
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO "AgentRun" '
+                '("id","userId","agentName","status","input","createdAt","startedAt") '
+                "VALUES (%s,%s,'coverLetter',%s::\"AgentRunStatus\",%s,"
+                "NOW() - (%s || ' minutes')::interval, NOW())",
+                (run_id, user_id, status, json.dumps({"job_id": job_id}), minutes_ago),
+            )
+        conn.commit()
+
+    def test_success_resets_failure_count(self, db_session, user_id):
+        """(1/3) fail-before: today a job that failed MAX_COVER_FAILURES
+        times and THEN got a successful coverLetter completion stays
+        permanently excluded — the count never resets, so a real fix landing
+        and succeeding does not un-wedge the job. One success must."""
+        job = _seed_job(db_session, user_id, fit=80.0)
+        for minutes_ago in (180, 170, 160):
+            self._seed_cover_run(db_session, user_id, job, "failed", minutes_ago)
+        # A LATER successful completion (e.g. a manual retry after the
+        # underlying pipeline bug was fixed and deployed).
+        self._seed_cover_run(db_session, user_id, job, "completed", 90)
+
+        assert board_sweep._cover_failure_count(user_id, job) == 0
+        target = board_sweep._next_target(user_id, set())
+        assert target is not None and target["job_id"] == job
+
+    def test_tick_log_names_all_jobs_suppressed_with_expiry(
+        self, db_session, user_id, monkeypatch, caplog
+    ):
+        """(2/3) fail-before: a tick that skips every eligible job purely due
+        to cover-failure suppression must log an explicit, actionable line —
+        not the old healthy-looking 'skipped-failures (processed=0 ...)' —
+        including the earliest time the suppression naturally clears."""
+        bad = _seed_job(db_session, user_id, fit=95.0)
+        for minutes_ago in (120, 110, 100):
+            self._seed_cover_run(db_session, user_id, bad, "failed", minutes_ago)
+        monkeypatch.setattr(
+            board_sweep, "_run_agent",
+            lambda *a, **k: pytest.fail("saturated job must not be attempted"),
+        )
+        caplog.set_level(logging.INFO, logger="app.workers.board_sweep")
+        summary = board_sweep.sweep_user_stretch(user_id, deadline=_far_deadline())
+
+        assert summary["reason"] == "skipped-failures"
+        assert summary["processed"] == 0
+        expiry = summary.get("suppression_expiry")
+        assert expiry, "summary must carry a computed suppression_expiry"
+        assert "failure-suppressed until" in caplog.text, caplog.text
+        assert expiry in caplog.text, caplog.text
+
+
+class TestOpsClearScript:
+    """ML-W-12 (3/3): ``scripts/clear_cover_suppression.py`` is the ops
+    escape hatch for jobs wedged by a NOW-FIXED pipeline defect. Exercised
+    exactly as ops would invoke it (subprocess, real CLI args) against the
+    live test DB — not just its importable functions — so the dry-run/
+    real-run/idempotency contract is verified end-to-end.
+    """
+
+    def _run_script(self, *args: str) -> subprocess.CompletedProcess:
+        api_dir = Path(__file__).resolve().parent.parent
+        return subprocess.run(
+            [sys.executable, "scripts/clear_cover_suppression.py", *args],
+            cwd=str(api_dir),
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            timeout=30,
+        )
+
+    def test_dry_run_reports_then_real_run_clears_and_reeligibilises(
+        self, db_session, user_id
+    ):
+        job = _seed_job(db_session, user_id, fit=80.0)
+        with db_session.cursor() as cur:
+            for _ in range(board_sweep.MAX_COVER_FAILURES):
+                run_id = "c" + uuid.uuid4().hex[:24]
+                cur.execute(
+                    'INSERT INTO "AgentRun" '
+                    '("id","userId","agentName","status","input","createdAt","startedAt") '
+                    "VALUES (%s,%s,'coverLetter','failed'::\"AgentRunStatus\",%s,NOW(),NOW())",
+                    (run_id, user_id, json.dumps({"job_id": job})),
+                )
+        db_session.commit()
+        # Confirm the job is genuinely wedged before touching the script.
+        assert board_sweep._next_target(user_id, set()) is None
+
+        dry = self._run_script("--dry-run", "--user-id", user_id)
+        assert dry.returncode == 0, dry.stderr
+        assert job in dry.stdout
+        assert "Dry run" in dry.stdout
+        # Dry run must not have modified anything.
+        assert board_sweep._next_target(user_id, set()) is None
+
+        real = self._run_script("--user-id", user_id)
+        assert real.returncode == 0, real.stderr
+        assert "Cleared 1 job" in real.stdout
+
+        target = board_sweep._next_target(user_id, set())
+        assert target is not None and target["job_id"] == job
+
+        # Idempotent: re-running finds nothing left to clear.
+        again = self._run_script("--user-id", user_id)
+        assert again.returncode == 0, again.stderr
+        assert "No currently-suppressed jobs found" in again.stdout

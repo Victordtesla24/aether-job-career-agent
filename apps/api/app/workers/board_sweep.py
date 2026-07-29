@@ -32,6 +32,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import timedelta
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -235,56 +236,96 @@ def eligible_users(limit: int | None = None) -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
+#: Correlated-subquery fragment (reused verbatim by ``_cover_failure_count``,
+#: ``_saturated_job_ids`` and ``_next_target``) that floors the failure count
+#: at the LATER of the job's own last successful coverLetter completion or
+#: its own last ops-clear stamp (``Job.coverFailureClearedAt`` — ML-W-12).
+#:
+#: Before this floor, a job's failure count was a flat "failures in the
+#: trailing window" — so a job that failed 3x and THEN succeeded (or was
+#: ops-cleared) stayed excluded from ``_next_target`` for the rest of the
+#: window even though it no longer needed to be: the sweep never re-attempts
+#: an excluded job, so it could never earn the success that would otherwise
+#: clear it. Flooring the count at the last success/clear timestamp makes a
+#: success (from ANY path — the sweep itself, a manual retry through the UI,
+#: or an ops clear) immediately un-wedge the job, with NO historical
+#: ``AgentRun`` row ever rewritten.
+_SINCE_LAST_SUCCESS_OR_CLEAR = '''
+    GREATEST(
+        COALESCE(
+            (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
+             WHERE r2."userId" = {user_ref} AND r2."agentName" = 'coverLetter'
+               AND r2."status" = 'completed' AND (r2."input"->>'job_id') = {job_ref}),
+            '-infinity'::timestamptz),
+        COALESCE(
+            (SELECT j2."coverFailureClearedAt" FROM "Job" j2 WHERE j2."id" = {job_ref}),
+            '-infinity'::timestamptz))
+'''
+
+
 def _cover_failure_count(user_id: str, job_id: str) -> int:
     """Count failed coverLetter AgentRuns for this user+job inside the
-    failure window. Used by ``_next_target``'s SQL (correlated subquery) and
-    exposed standalone for observability/tests.
+    failure window AND since the job's last success/clear. Used by
+    ``_next_target``'s SQL (correlated subquery) and exposed standalone for
+    observability/tests.
 
     A job is PERMANENTLY skipped once this reaches ``max_cover_failures()``
     inside the window — the FabricationGuard is correctly rejecting every
     cover draft (e.g. the resume never proves 'onboarding' experience the
     LLM keeps first-person-claiming from the job title 'Onboarding PM'), and
     retrying every cron tick forever wastes LLM budget and looks like a stuck
-    agent to the user.
+    agent to the user. A subsequent successful coverLetter completion (or an
+    ops clear, ML-W-12) resets this count to 0 — see
+    ``_SINCE_LAST_SUCCESS_OR_CLEAR``.
     """
-    from app.db import get_connection
+    from app.db import ensure_job_cover_suppression_column, get_connection
 
+    ensure_job_cover_suppression_column()
     window = cover_failure_window_hours()
-    limit = max_cover_failures()
+    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(
+        user_ref="%s", job_ref="%s"
+    )
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''
+                f'''
                 SELECT count(*) FROM "AgentRun"
                 WHERE "userId" = %s
                   AND "agentName" = 'coverLetter'
                   AND "status" = 'failed'
                   AND "createdAt" >= NOW() - INTERVAL '%s hours'
                   AND ("input"->>'job_id') = %s
+                  AND "createdAt" > {since_floor}
                 ''',
-                (user_id, window, job_id),
+                (user_id, window, job_id, user_id, job_id, job_id),
             )
             row = cur.fetchone()
     return row[0] if row else 0
 
 
-def _saturated_job_count(user_id: str, attempted: set[str]) -> int:
-    """Count eligible jobs that are CURRENTLY skipped solely due to the cover
+def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
+    """Ids of eligible jobs that are CURRENTLY skipped solely due to the cover
     failure backoff (they have ``max_cover_failures()``+ coverLetter failures
-    in the window but no Application yet). Used to distinguish "board truly
-    complete" (``board-complete``) from "all remaining jobs are failure-
-    saturated" (``skipped-failures``) in the stretch summary — the latter
-    tells the operator the sweep is NOT done, it's backing off.
+    since their last success/clear, in the window, but no Application yet).
+    Used to distinguish "board truly complete" (``board-complete``) from "all
+    remaining jobs are failure-saturated" (``skipped-failures``) in the
+    stretch summary — the latter tells the operator the sweep is NOT done,
+    it's backing off — and (ML-W-12) to compute the honest tick log's
+    earliest suppression-expiry time via ``_job_suppression_expiry``.
     """
-    from app.db import get_connection
+    from app.db import ensure_job_cover_suppression_column, get_connection
 
+    ensure_job_cover_suppression_column()
     window = cover_failure_window_hours()
     limit = max_cover_failures()
+    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(
+        user_ref='j."userId"', job_ref='j."id"'
+    )
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''
-                SELECT count(*) FROM "Job" j
+                f'''
+                SELECT j."id" FROM "Job" j
                 WHERE j."userId" = %s
                   AND j."id" != ALL(%s)
                   AND (
@@ -304,12 +345,75 @@ def _saturated_job_count(user_id: str, attempted: set[str]) -> int:
                           AND r."status" = 'failed'
                           AND r."createdAt" >= NOW() - INTERVAL '%s hours'
                           AND (r."input"->>'job_id') = j."id"
+                          AND r."createdAt" > {since_floor}
                       ) >= %s
                 ''',
                 (user_id, list(attempted) or ["-"], user_id, window, limit),
             )
-            row = cur.fetchone()
-    return row[0] if row else 0
+            return [row[0] for row in cur.fetchall()]
+
+
+def _saturated_job_count(user_id: str, attempted: set[str]) -> int:
+    """Count variant of ``_saturated_job_ids`` — kept for callers that only
+    need the count."""
+    return len(_saturated_job_ids(user_id, attempted))
+
+
+def _job_suppression_expiry(user_id: str, job_id: str) -> Any | None:
+    """Wall-clock time at which THIS job's cover-failure suppression naturally
+    expires under the CURRENT data (the in-window failure count, counted
+    since the job's last success/clear, drops back below
+    ``max_cover_failures()``). ``None`` if the job is not currently saturated.
+
+    ML-W-12: used only to build the honest tick log's earliest
+    suppression-expiry time — never consulted by ``_next_target``, which
+    re-derives eligibility fresh on every call.
+    """
+    from app.db import ensure_job_cover_suppression_column, get_connection
+
+    ensure_job_cover_suppression_column()
+    window = cover_failure_window_hours()
+    limit = max_cover_failures()
+    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(user_ref="%s", job_ref="%s")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f'''
+                SELECT "createdAt" FROM "AgentRun"
+                WHERE "userId" = %s
+                  AND "agentName" = 'coverLetter'
+                  AND "status" = 'failed'
+                  AND "createdAt" >= NOW() - INTERVAL '%s hours'
+                  AND ("input"->>'job_id') = %s
+                  AND "createdAt" > {since_floor}
+                ORDER BY "createdAt" ASC
+                ''',
+                (user_id, window, job_id, user_id, job_id, job_id),
+            )
+            rows = [r[0] for r in cur.fetchall()]
+    if len(rows) < limit:
+        return None
+    # The run whose exit from the window drops the in-window count below
+    # `limit` — i.e. the oldest of the `limit` most-recent qualifying
+    # failures. Once IT ages past the window, expiry occurs.
+    idx = len(rows) - limit
+    return rows[idx] + timedelta(hours=window)
+
+
+def _earliest_suppression_expiry(user_id: str, job_ids: list[str]) -> str | None:
+    """ISO-8601 (UTC, second precision) timestamp of the EARLIEST time any of
+    ``job_ids`` naturally re-eligibilises. ``None`` if none are computable.
+    Powers the honest "all N eligible jobs failure-suppressed until <time>"
+    tick log (ML-W-12) — replaces the old ``processed=0`` line that gave no
+    indication anything was wrong, let alone when it would resolve.
+    """
+    expiries = [
+        e for e in (_job_suppression_expiry(user_id, jid) for jid in job_ids)
+        if e is not None
+    ]
+    if not expiries:
+        return None
+    return min(expiries).replace(microsecond=0).isoformat()
 
 
 def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
@@ -317,22 +421,28 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     prior stretch started), then full runs by fitScore descending.
 
     Jobs that have ``max_cover_failures()``+ coverLetter AgentRun failures
-    inside the ``cover_failure_window_hours()`` sliding window are PERMANENTLY
-    excluded — the sweep no longer retries a permanently unfabricatable job
-    every cron tick (13+ failed attempts over 14h observed in production before
-    this fix). The guard's rejections are correct; the bug was the sweep had
-    no persistent backoff (the per-stretch in-memory ``attempted`` set resets
-    every tick). Once the oldest failure ages past the window a transient
-    cause (e.g. a resume update) re-eligibilises the job without code changes.
+    inside the ``cover_failure_window_hours()`` sliding window, SINCE their
+    last success or ops-clear, are PERMANENTLY excluded — the sweep no longer
+    retries a permanently unfabricatable job every cron tick (13+ failed
+    attempts over 14h observed in production before this fix). The guard's
+    rejections are correct; the bug was the sweep had no persistent backoff
+    (the per-stretch in-memory ``attempted`` set resets every tick). Once the
+    oldest failure ages past the window, OR the job earns a successful
+    coverLetter completion, OR ops clears it (``Job.coverFailureClearedAt``,
+    ML-W-12), the job re-eligibilises without code changes.
     """
-    from app.db import get_connection
+    from app.db import ensure_job_cover_suppression_column, get_connection
 
+    ensure_job_cover_suppression_column()
     window = cover_failure_window_hours()
     limit = max_cover_failures()
+    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(
+        user_ref='j."userId"', job_ref='j."id"'
+    )
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''
+                f'''
                 SELECT j."id", j."status" FROM "Job" j
                 WHERE j."userId" = %s
                   AND j."id" != ALL(%s)
@@ -353,6 +463,7 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
                           AND r."status" = 'failed'
                           AND r."createdAt" >= NOW() - INTERVAL '%s hours'
                           AND (r."input"->>'job_id') = j."id"
+                          AND r."createdAt" > {since_floor}
                       ) < %s
                 ORDER BY (j."status" = 'tailoring') DESC, j."fitScore" DESC NULLS LAST,
                          j."createdAt" ASC
@@ -430,10 +541,15 @@ def sweep_user_stretch(
             # Distinguish "board truly complete" from "all remaining jobs
             # are failure-saturated" — the latter means the sweep is NOT
             # done, it's backing off on permanently-failing jobs.
-            saturated = _saturated_job_count(user_id, attempted)
-            if saturated > 0:
+            saturated_ids = _saturated_job_ids(user_id, attempted)
+            if saturated_ids:
                 summary["reason"] = "skipped-failures"
-                summary["skipped_failures"] = saturated
+                summary["skipped_failures"] = len(saturated_ids)
+                # ML-W-12: earliest time any saturated job naturally
+                # re-eligibilises, for the honest tick log below.
+                summary["suppression_expiry"] = _earliest_suppression_expiry(
+                    user_id, saturated_ids
+                )
             else:
                 summary["reason"] = "board-complete"
             break
@@ -494,11 +610,26 @@ def sweep_user_stretch(
         except Exception as exc:  # noqa: BLE001 — one bad job never sinks the sweep
             summary["failures"] += 1
             logger.exception("board-sweep %s job %s: unexpected: %s", user_id, job_id, exc)
-    logger.info(
-        "board-sweep %s: %s (processed=%s tailored=%s covers=%s failures=%s)",
-        user_id, summary["reason"], summary["processed"], summary["tailored"],
-        summary["covers"], summary["failures"],
-    )
+    if summary["reason"] == "skipped-failures" and summary["processed"] == 0:
+        # ML-W-12: a tick that skips EVERY eligible job due to cover-failure
+        # suppression must say so explicitly, with the earliest time the
+        # suppression naturally clears — the old
+        # "skipped-failures (processed=0 ...)" line was technically accurate
+        # but read as routine/healthy background noise, hiding that the
+        # sweep was doing NOTHING for potentially the entire failure window
+        # (up to `cover_failure_window_hours()`, default 24h) with no signal
+        # of when or whether it would recover on its own.
+        logger.info(
+            "board-sweep %s: all %d eligible job(s) failure-suppressed until %s",
+            user_id, summary["skipped_failures"],
+            summary.get("suppression_expiry") or "unknown",
+        )
+    else:
+        logger.info(
+            "board-sweep %s: %s (processed=%s tailored=%s covers=%s failures=%s)",
+            user_id, summary["reason"], summary["processed"], summary["tailored"],
+            summary["covers"], summary["failures"],
+        )
     # RT-008: signal the caller (board_sweep_user) whether this stretch was
     # cut off by a soft limit (job-cap or deadline) — more work exists but we
     # hit bounds. board_sweep_user uses this to decide whether to re-enqueue
