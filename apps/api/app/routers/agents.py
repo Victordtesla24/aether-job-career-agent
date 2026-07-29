@@ -49,9 +49,11 @@ from app.services.llm_client import (
     QuotaExhaustedError,
     _infer_anthropic_auth_mode,
     get_active_credential_env_var,
+    get_last_served_model,
     get_quota_block_hours,
     resolve_provider,
     resolve_user_credential,
+    served_model_capture,
     user_credential_context,
     user_model_context,
     verify_provider_credential,
@@ -746,8 +748,15 @@ def _execute_reserved_run(
         # deep LLM path resolves THIS user's key AND model.
         with user_credential_context(user_id, agent_name), user_model_context(
             _override_model
-        ):
+        ), served_model_capture():
             output = _to_output(fn())
+            # OBSERVE (never infer) which model actually served this run, while
+            # the observation scope is still open — the LLM client publishes the
+            # provider's own ``model`` field on each successful call (ML-W14).
+            # ``None`` = nothing observed (deterministic agent, replay mode, or
+            # no successful call); the costing below then behaves exactly as it
+            # did before this existed.
+            _served_model = get_last_served_model()
     except HTTPException:
         runs.finish(run_id, "failed", error="http error")
         _refund_once()  # reserved run produced no output
@@ -886,6 +895,24 @@ def _execute_reserved_run(
     # fabricate the spend/ROI figures GET /agents/stats reports. The user's
     # chosen model (if any) is what actually ran, so cost against IT.
     model = _model_for_agent(agent_name, override=_override_model)
+    # ML-W14: ``_model_for_agent`` is CONFIG-derived INTENT. When the ADMIN
+    # free-chain rescue substitutes a $0 model after an OpenRouter 402
+    # (llm_client._extend_chain_with_admin_free_models), or the un-chosen
+    # system-default chain falls through to its fallback model, the run is
+    # served by a DIFFERENT model than the one intended — and costing it against
+    # the intended model's published price bills a free run at the paid rate,
+    # inflating AgentRun.costUsd, GET /agents/stats ROI and the USD spend cap.
+    # The served id observed above wins; the intent is preserved (never erased)
+    # as ``requestedModel`` so the substitution stays auditable. Only a genuine
+    # difference is recorded, so the ordinary run's output is byte-identical.
+    if model is not None and _served_model and _served_model != model:
+        logger.info(
+            "served-model substitution on run %s (agent=%s): requested=%s "
+            "served=%s — costing against the SERVED model",
+            run_id, agent_name, model, _served_model,
+        )
+        output["requestedModel"] = model
+        model = _served_model
     if model is None or no_llm_call or cover_degraded:
         cost = 0.0
         output["model"] = None
@@ -896,6 +923,21 @@ def _execute_reserved_run(
         tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
         tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
         price_in, price_out = _price_for(model)
+        _requested_model = output.get("requestedModel")
+        if (
+            _requested_model is not None
+            and (price_in, price_out) == _DEFAULT_PRICE
+            and _price_for(_requested_model) != _DEFAULT_PRICE
+        ):
+            # ML-W14 safety rail. The SERVED id has no established price — the
+            # static table, the live catalog cache and the ``:free`` convention
+            # all came up empty — so ``_price_for`` returned its flat default.
+            # Adopting that for a run whose INTENDED model IS priced would
+            # silently DOWN-price it (e.g. a provider echoing a dated snapshot
+            # id for an alias), which is a spend-cap bypass. Keep the intended
+            # model's established price: the direction of error stays
+            # conservative, and the served id is still recorded honestly above.
+            price_in, price_out = _price_for(_requested_model)
         cost = round(tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6)
         output["model"] = model
         output["tokensIn"] = tokens_in

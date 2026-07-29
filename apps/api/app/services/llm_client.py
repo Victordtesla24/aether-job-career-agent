@@ -464,6 +464,76 @@ _user_model_context: contextvars.ContextVar[str | None] = contextvars.ContextVar
 #: Tiers a user's chosen model may override. STRUCTURED is intentionally absent.
 _USER_OVERRIDABLE_TIERS = frozenset({"REASONING", "HEAVY", "FAST", "LIGHT"})
 
+#: The model id that ACTUALLY served the most recent SUCCESSFUL live call in
+#: this context — an OBSERVATION, written by :meth:`LLMClient._call_live`, never
+#: by a caller (the inverse direction of every other ContextVar in this module).
+#:
+#: Why it exists (ML-W14): the model a run is BILLED against was resolved from
+#: config (``routers/agents.py::_model_for_agent``), i.e. it is intent, not
+#: observation. When the ADMIN free-chain rescue substitutes a $0 model after an
+#: OpenRouter 402 (:meth:`_extend_chain_with_admin_free_models`), the id that
+#: served the run existed only as a local in :meth:`_auto` and was discarded, so
+#: a free run was costed at the paid model's published price — inflating
+#: ``AgentRun.costUsd``, ``GET /agents/stats`` ROI and the USD spend cap.
+#:
+#: A ContextVar (rather than a richer return type) keeps ``complete``/
+#: ``complete_json`` returning ``str``/parsed JSON exactly as every existing
+#: caller and every strict-signature test double expects.
+_last_served_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_llm_last_served_model", default=None
+)
+
+
+@contextmanager
+def served_model_capture() -> Iterator[None]:
+    """Open a fresh served-model observation scope for ONE run.
+
+    Contract:
+
+    - Entering RESETS the observation to ``None``, so a value observed by an
+      earlier run in the same thread/task context can never be read as if it
+      belonged to this one.
+    - :func:`get_last_served_model` is valid INSIDE this scope, immediately
+      after a successful call; on exit the previous scope's value is restored.
+    - The value reflects the LAST successful live call made inside the scope.
+      A run that makes several calls therefore reports the model that served
+      its final one — the same granularity as the single model id a run is
+      recorded against today.
+    - ``None`` means "nothing observed": replay/fixture mode, a deterministic
+      agent that never calls the LLM, a run whose every attempt failed, or a
+      call made on a thread this context was not copied into. Callers MUST
+      treat ``None`` as "no observation" and keep their existing behaviour —
+      never as a licence to guess which model served.
+    """
+    token = _last_served_model.set(None)
+    try:
+        yield
+    finally:
+        _last_served_model.reset(token)
+
+
+def get_last_served_model() -> str | None:
+    """The model id the PROVIDER reported as having served the most recent
+    successful live call in the active :func:`served_model_capture` scope, or
+    ``None`` when nothing was observed (see that function's contract)."""
+    return _last_served_model.get()
+
+
+def _publish_served_model(body: object, requested_model_id: str) -> None:
+    """Record which model served the call just completed.
+
+    The provider's own ``model`` field is authoritative — every live OpenRouter
+    200 captured by the free-model probe carries it (evidence:
+    ``uat/reports/evidence/free-model-fallback/free-model-*-response.json``),
+    and the Anthropic Messages API returns it too. When a provider omits it,
+    the id we actually put on the wire is the honest answer; nothing is ever
+    inferred from a log line or a chain candidate.
+    """
+    served = body.get("model") if isinstance(body, dict) else None
+    if not isinstance(served, str) or not served.strip():
+        served = requested_model_id
+    _last_served_model.set(served.strip())
+
 
 @contextmanager
 def user_model_context(model: str | None) -> Iterator[None]:
@@ -1238,12 +1308,28 @@ _MODEL_CATALOG_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _MODEL_CATALOG_TTL = 3600.0  # 1 h — the catalog changes rarely.
 
 
+#: OpenRouter's own suffix for a zero-price variant of a model. VERIFIED
+#: against the 367-model live catalog snapshot
+#: ``uat/reports/evidence/free-model-fallback/models-list-raw.json``
+#: (2026-07-29): all 14 ``:free``-suffixed ids carry
+#: ``pricing.prompt == pricing.completion == 0``. The implication is
+#: one-directional — ``:free`` ⇒ $0; a $0 model need NOT carry the suffix — so
+#: it is only ever used to prove a price is zero, never to prove one is not.
+_FREE_MODEL_ID_SUFFIX = ":free"
+
+
 def cached_model_price(model_id: str) -> "tuple[float, float] | None":
-    """``(prompt, completion)`` price in $/1K-tokens for ``model_id`` from the
-    already-fetched OpenRouter catalog, or ``None`` if the catalog hasn't been
-    loaded or the model isn't in it. Lets the (network-free) cost path price a
-    USER-CHOSEN model accurately instead of a flat default — the catalog is
-    typically warm because the user browsed it before picking a model."""
+    """``(prompt, completion)`` price in $/1K-tokens for ``model_id``, resolved
+    without network I/O, or ``None`` when it cannot be established.
+
+    Sources, in order of authority: the already-fetched OpenRouter catalog, the
+    always-available static catalogs, then OpenRouter's own zero-price ``:free``
+    id convention. Lets the cost path price a USER-CHOSEN model (or a model the
+    ADMIN free-chain rescue substituted, ML-W14) accurately instead of a flat
+    default — the catalog is typically warm because the user browsed it before
+    picking a model, but a rescued run in a cold worker process has no warm
+    catalog and must still cost a $0 model at $0.
+    """
     mid = (model_id or "").strip()
     if not mid:
         return None
@@ -1263,6 +1349,11 @@ def cached_model_price(model_id: str) -> "tuple[float, float] | None":
                     float(m.get("promptPerM") or 0.0) / 1000.0,
                     float(m.get("completionPerM") or 0.0) / 1000.0,
                 )
+    # Catalogs are authoritative and are consulted FIRST; this is the last
+    # resort, and it replaces only the caller's flat non-zero default — which
+    # for a $0 model is spend the user never incurred.
+    if mid.endswith(_FREE_MODEL_ID_SUFFIX):
+        return (0.0, 0.0)
     return None
 
 
@@ -1998,11 +2089,18 @@ class LLMClient:
                 raise InsufficientCreditsError(message, provider=provider)
             raise RuntimeError(message)
         body = resp.json()
+        # The served model is published only on SUCCESS — after the content has
+        # been extracted and accepted — so a failed attempt never leaves an
+        # observation the biller could mistake for the model that served
+        # (ML-W14; see :func:`served_model_capture`).
         if provider == "anthropic":
-            return parse_anthropic_response(body)
+            content = parse_anthropic_response(body)
+            _publish_served_model(body, model_id)
+            return content
         if "error" in body:
             raise RuntimeError(f"LLM provider error: {body['error']}")
         content = body["choices"][0]["message"]["content"]
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("LLM returned empty content")
+        _publish_served_model(body, model_id)
         return content

@@ -285,7 +285,13 @@ def test_stats_reflect_a_real_run(client, auth_headers):
     assert s["spendUsd"] >= 0
 
 
-def test_test_run_estimates_no_charge(client, auth_headers):
+def test_test_run_estimates_no_charge(client, auth_headers, monkeypatch):
+    # Pin a PRICED model: with no env override the test process resolves
+    # REASONING to ``FALLBACK_MODEL`` — a ``:free`` id, which honestly estimates
+    # $0 (ML-W14). The invariant under test is "a priced model yields a real,
+    # non-zero estimate and still charges no credits", so the model is pinned
+    # rather than inherited from whatever the test env happens to default to.
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "openai/gpt-4o")
     res = client.post(
         "/agents/test-run", json={"agent_key": "resumeTailoring"}, headers=auth_headers
     )
@@ -334,9 +340,13 @@ def test_test_run_model_never_null_for_planned_agent(client, auth_headers):
     assert body["creditsCharged"] == 0.0
 
 
-def test_test_run_model_never_null_for_real_llm_agent(client, auth_headers):
+def test_test_run_model_never_null_for_real_llm_agent(client, auth_headers, monkeypatch):
     # A genuine LLM-backed agent keeps returning its REAL resolved model
     # (never the "deterministic" fallback) and a real, non-zero cost estimate.
+    # The model is pinned to a PRICED id for the same reason as above: a
+    # ``:free`` default honestly estimates $0, which would test the price of the
+    # test env's default model rather than this endpoint's behaviour.
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "openai/gpt-4o")
     res = client.post(
         "/agents/test-run", json={"agent_key": "resumeTailoring"}, headers=auth_headers
     )
