@@ -41,6 +41,33 @@ describe("runBadge", () => {
     expect(runBadge(run({ status: "queued" })).label).toBe("Waiting");
     expect(runBadge(run({ status: "failed" })).label).toBe("Failed");
   });
+
+  it("QA-RES-F: never shows the success 'Drafted' badge for a degraded coverLetter run", () => {
+    const degraded = runBadge(
+      run({
+        agentName: "coverLetter",
+        status: "completed",
+        output: {
+          coverLetterUnavailable: true,
+          cover_letter_id: null,
+          message: "The cover letter couldn't be generated because the writing model was temporarily unavailable.",
+        },
+      }),
+    );
+    expect(degraded.label).not.toBe("Drafted");
+    expect(degraded.cls).not.toContain("aether-amber");
+  });
+
+  it("QA-RES-F: a genuinely drafted coverLetter run is unaffected", () => {
+    const drafted = runBadge(
+      run({
+        agentName: "coverLetter",
+        status: "completed",
+        output: { cover_letter_id: "cl_123", approval_status: "approved" },
+      }),
+    );
+    expect(drafted.label).toBe("Drafted");
+  });
 });
 
 describe("describeRun", () => {
@@ -78,6 +105,35 @@ describe("describeRun", () => {
     );
     expect(d.text).toContain("awaiting your approval");
     expect(d.metric).toBe("needs approval");
+  });
+
+  it("QA-RES-F: never claims a drafted cover letter for a completed-but-degraded run", () => {
+    const d = describeRun(
+      run({
+        agentName: "coverLetter",
+        status: "completed",
+        output: {
+          coverLetterUnavailable: true,
+          cover_letter_id: null,
+          tokensOut: 0,
+          costUsd: 0,
+          message: "The cover letter couldn't be generated because the writing model was temporarily unavailable.",
+        },
+      }),
+    );
+    expect(d.text).not.toContain("drafted a cover letter");
+    expect(d.text).toBe("cover letter unavailable (generation degraded)");
+  });
+
+  it("QA-RES-F: a genuinely drafted cover letter is described unchanged", () => {
+    const d = describeRun(
+      run({
+        agentName: "coverLetter",
+        status: "completed",
+        output: { cover_letter_id: "cl_123", approval_status: "approved" },
+      }),
+    );
+    expect(d.text).toBe("drafted a cover letter");
   });
 
   it("handles failed and in-flight runs without fabricating detail", () => {

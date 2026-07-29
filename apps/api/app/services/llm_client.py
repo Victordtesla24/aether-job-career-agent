@@ -65,9 +65,20 @@ def get_fallback_model() -> str:
 #: HTTP 200 with clean, coherent, correctly-terminated prose — while paid models
 #: 402'd on the SAME key at the same moment (OpenRouter's credit gate is
 #: per-model-price, not account-wide).
+#:
+#: ORDER IS EVIDENCE-BASED (QA-FAIL-01, probe artifact
+#: ``uat/reports/evidence/models-live/free-chain-shaping-probe.txt``,
+#: 2026-07-29): under the SHAPED request body (see
+#: :func:`_build_openrouter_request`) the ultra model returned valid strict JSON
+#: in 8 of 9 live attempts on the real deployed cover-letter prompt — its single
+#: miss a transient upstream 502, not a refusal — while the super model managed
+#: 4 of 9 (its misses were prose refusals, not timeouts). The chain therefore
+#: leads with the more RELIABLE model; the faster-but-flakier one still follows
+#: it, because with the shaping in place a whole extra attempt now fits inside
+#: the budget that one unshaped attempt used to consume on its own.
 _DEFAULT_ADMIN_FREE_FALLBACK_MODELS = (
-    "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
 )
 
 
@@ -84,6 +95,30 @@ def get_admin_free_fallback_models() -> list[str]:
     if raw is None:
         return list(_DEFAULT_ADMIN_FREE_FALLBACK_MODELS)
     return [model.strip() for model in raw.split(",") if model.strip()]
+
+
+#: Completion-token cap applied to ADMIN free-chain attempts only. The real
+#: cover-letter JSON measured 93-489 completion tokens live with reasoning off,
+#: so 2000 is ~4x headroom — generous enough that the cap never truncates a
+#: legitimate letter, tight enough to bound a runaway.
+_DEFAULT_ADMIN_FREE_FALLBACK_MAX_TOKENS = 2000
+
+
+def get_admin_free_fallback_max_tokens() -> int:
+    """``max_tokens`` for ADMIN free-chain attempts (env-overridable).
+
+    Configured via ``AETHER_ADMIN_FREE_FALLBACK_MAX_TOKENS``. A malformed or
+    non-positive value falls back to the default rather than taking the rescue
+    path down with a ValueError.
+    """
+    raw = os.environ.get("AETHER_ADMIN_FREE_FALLBACK_MAX_TOKENS")
+    if raw is None:
+        return _DEFAULT_ADMIN_FREE_FALLBACK_MAX_TOKENS
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_ADMIN_FREE_FALLBACK_MAX_TOKENS
+    return value if value > 0 else _DEFAULT_ADMIN_FREE_FALLBACK_MAX_TOKENS
 
 
 def _extra_headers() -> dict[str, str]:
@@ -1025,19 +1060,61 @@ def _build_openrouter_request(
     user: str,
     temperature: float,
     cred: "ProviderCredentialResolution",
+    *,
+    free_chain: bool = False,
 ) -> dict[str, Any]:
-    """Prepare the existing OpenAI-compatible OpenRouter chat request."""
+    """Prepare the existing OpenAI-compatible OpenRouter chat request.
+
+    ``free_chain`` marks an attempt the ADMIN insufficient-credits rescue
+    APPENDED to the chain (:meth:`LLMClient._extend_chain_with_admin_free_models`).
+    Those — and ONLY those — attempts get a latency-shaped body. Every other
+    request (paid, system-default, and any model the user chose themselves,
+    including a ``:free`` one they picked deliberately) keeps the byte-identical
+    body it has always had: the shaping is keyed on chain PROVENANCE, never on
+    the model id.
+
+    Why the shaping exists (QA-FAIL-01, live evidence in
+    ``uat/reports/evidence/models-live/free-chain-shaping-probe.txt``): the
+    rescue models are REASONING models. With the unshaped body they spent
+    3.4k-6.0k unbounded reasoning tokens before emitting any letter — 60.4 s and
+    116.5 s on the real deployed prompt against a ~50 s per-attempt slice — so
+    the first rescue model consumed the entire run budget and the second never
+    got a turn (3 of 3 live production runs produced no letter). Two levers,
+    both verified against the live API before being written:
+
+    - ``max_tokens``: a generous cap (see
+      :func:`get_admin_free_fallback_max_tokens`). Reasoning tokens count
+      against the completion budget, which is exactly why it must be paired
+      with the parameter below rather than used alone.
+    - ``reasoning: {"enabled": False}``: genuinely DISABLES reasoning
+      generation. The obvious-looking ``{"exclude": True}`` was probed first and
+      is actively harmful here — per OpenRouter's contract it only HIDES
+      reasoning (the model still generates it, so no latency is saved), and with
+      the reasoning channel suppressed both rescue models dumped raw
+      chain-of-thought into ``content`` instead of the strict JSON: 2 of 2 live
+      attempts unparseable, one truncated at ``finish_reason=length``. With
+      ``enabled: False`` the same prompt returned 0 reasoning tokens and valid
+      strict JSON in 1.5-23.5 s.
+
+    Nothing else changes: same prompts, same temperature, same strict-JSON
+    contract, same downstream fabrication/entailment guards. The shaping is
+    transport-level only.
+    """
     base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
+    body: dict[str, Any] = {
+        "model": model,
+        "temperature": temperature,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    if free_chain:
+        body["max_tokens"] = get_admin_free_fallback_max_tokens()
+        body["reasoning"] = {"enabled": False}
     return {
         "url": f"{base}/chat/completions",
-        "json": {
-            "model": model,
-            "temperature": temperature,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        },
+        "json": body,
         "headers": {
             "Authorization": f"Bearer {cred.secret}",
             "Content-Type": "application/json",
@@ -1560,6 +1637,12 @@ class LLMClient:
         # ``_extend_chain_with_admin_free_models``). Hence an explicit index walk
         # rather than ``enumerate(chain)``: the growth is part of the contract,
         # not an accident of iterating a mutating list.
+        #
+        # Models the ADMIN rescue APPENDED to this chain. Only these attempts
+        # get the latency-shaped OpenRouter body (QA-FAIL-01) — carrying the
+        # provenance here, rather than sniffing the model id downstream, is what
+        # keeps every other caller's request byte-identical.
+        free_chain_models: set[str] = set()
         idx = 0
         while idx < len(chain):
             attempt_model = chain[idx]
@@ -1589,9 +1672,20 @@ class LLMClient:
                         _MIN_ATTEMPT_SECONDS, remaining * get_primary_budget_fraction()
                     )
                 try:
+                    # ``free_chain`` is passed ONLY for a rescue attempt, so the
+                    # ``_call_live`` seam keeps its exact pre-existing signature
+                    # on every unchanged path (several suites install
+                    # strict-signature doubles there, and this fix must not
+                    # perturb behaviour that has nothing to do with the rescue).
+                    # Semantically identical to passing the False default.
+                    shaping = (
+                        {"free_chain": True}
+                        if attempt_model in free_chain_models
+                        else {}
+                    )
                     content = self._call_live(
                         system, user, model=attempt_model, temperature=temperature,
-                        max_seconds=attempt_seconds,
+                        max_seconds=attempt_seconds, **shaping,
                     )
                 except QuotaExhaustedError:
                     # Subscription quota is exhausted — NEVER fall back to a
@@ -1606,7 +1700,11 @@ class LLMClient:
                         attempt_model, prompt_name, exc,
                     )
                     if isinstance(exc, InsufficientCreditsError):
-                        self._extend_chain_with_admin_free_models(chain, prompt_name)
+                        free_chain_models.update(
+                            self._extend_chain_with_admin_free_models(
+                                chain, prompt_name
+                            )
+                        )
                     break  # genuine call error → next model (no same-model retry)
                 if validate is not None:
                     try:
@@ -1639,7 +1737,7 @@ class LLMClient:
     @staticmethod
     def _extend_chain_with_admin_free_models(
         chain: list[str], prompt_name: str
-    ) -> None:
+    ) -> list[str]:
         """ADMIN-ONLY rescue: append FREE models after an OpenRouter HTTP 402.
 
         An operator mandate (MODELS-LIVE, evidence
@@ -1673,18 +1771,23 @@ class LLMClient:
 
         The appended models are ordinary chain entries: same ``_call_live``,
         same prompts, same validator, same downstream entailment/fabrication
-        guards. There is no relaxed path and no silent success on garbage.
+        guards. There is no relaxed path and no silent success on garbage. Their
+        REQUEST BODY is shaped (token cap + reasoning disabled, QA-FAIL-01) —
+        which is why the appended ids are RETURNED: the caller records them so
+        only these attempts are shaped and every other request stays identical.
+
+        Returns the ids actually appended (empty when the rescue is a no-op).
         """
         free_models = get_admin_free_fallback_models()
         if not free_models:
-            return
+            return []
         ctx = _user_cred_context.get()
         user_id = ctx[0] if ctx else None
         if not user_id or not _user_is_admin(user_id):
-            return
+            return []
         pending = [m for m in free_models if m not in chain]
         if not pending:
-            return
+            return []
         chain.extend(pending)
         logger.info(
             "admin-free-fallback: OpenRouter HTTP 402 (insufficient credits) — "
@@ -1692,6 +1795,7 @@ class LLMClient:
             "userId=%s",
             ", ".join(pending), prompt_name, user_id,
         )
+        return pending
 
     @staticmethod
     def _model_chain(primary: str) -> list[str]:
@@ -1737,6 +1841,7 @@ class LLMClient:
         model: str | None,
         temperature: float,
         max_seconds: float | None = None,
+        free_chain: bool = False,
     ) -> str:
         """Single live call with a HARD wall-clock cap, routed by provider.
 
@@ -1752,6 +1857,12 @@ class LLMClient:
         executed in a worker thread and abandoned outright once ``max_seconds``
         elapses, so the caller can move on to the fallback model / fixture while
         still inside the budget.
+
+        ``free_chain`` marks an attempt the ADMIN insufficient-credits rescue
+        appended to the chain; it shapes the OpenRouter body (token cap +
+        reasoning disabled — see :func:`_build_openrouter_request`) and nothing
+        else. It is a no-op for the Anthropic transport, which never serves the
+        rescue chain.
         """
         import httpx
 
@@ -1785,37 +1896,66 @@ class LLMClient:
                 auth_mode=cred.auth_mode, secret=cred.secret, base_url=cred.base_url,
             )
         else:
-            req = _build_openrouter_request(model_id, system, user, temperature, cred)
-
-        connect = CONNECT_TIMEOUT
-        read = READ_TIMEOUT
-        if max_seconds is not None:
-            connect = max(1.0, min(connect, max_seconds))
-            read = max(1.0, min(read, max_seconds))
-        timeout = httpx.Timeout(connect=connect, read=read, write=10.0, pool=10.0)
-
-        def _do_request() -> httpx.Response:
-            return httpx.post(
-                req["url"], json=req["json"], headers=req["headers"], timeout=timeout
+            req = _build_openrouter_request(
+                model_id, system, user, temperature, cred, free_chain=free_chain
             )
 
-        if max_seconds is None:
-            resp = _do_request()
-        else:
+        def _execute(request: dict[str, Any], seconds: float | None) -> httpx.Response:
+            connect = CONNECT_TIMEOUT
+            read = READ_TIMEOUT
+            if seconds is not None:
+                connect = max(1.0, min(connect, seconds))
+                read = max(1.0, min(read, seconds))
+            timeout = httpx.Timeout(connect=connect, read=read, write=10.0, pool=10.0)
+
+            def _do_request() -> httpx.Response:
+                return httpx.post(
+                    request["url"], json=request["json"],
+                    headers=request["headers"], timeout=timeout,
+                )
+
+            if seconds is None:
+                return _do_request()
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             try:
                 future = executor.submit(_do_request)
                 try:
-                    resp = future.result(timeout=max_seconds)
+                    return future.result(timeout=seconds)
                 except concurrent.futures.TimeoutError as exc:
                     future.cancel()
                     raise RuntimeError(
-                        f"LLM call exceeded hard budget of {max_seconds:.1f}s"
+                        f"LLM call exceeded hard budget of {seconds:.1f}s"
                     ) from exc
             finally:
                 # Don't block on a straggling request thread; let it finish
                 # in the background and be reaped when the response arrives.
                 executor.shutdown(wait=False)
+
+        started = time.monotonic()
+        resp = _execute(req, max_seconds)
+        if free_chain and resp.status_code == 400 and "reasoning" in req["json"]:
+            # The rescue list is env-overridable against a CHURNING free catalog,
+            # so an operator can legitimately point it at a model that rejects
+            # the reasoning parameter. A 400 on a body WE shaped is a
+            # request-shape rejection, so the attempt is re-sent ONCE with that
+            # parameter dropped (the token cap is kept) rather than being spent.
+            # Same model, same prompt, same credential — this is a re-send, not
+            # model substitution, and it is bounded to exactly one extra request.
+            remaining = (
+                None if max_seconds is None
+                else max_seconds - (time.monotonic() - started)
+            )
+            if remaining is None or remaining >= 1.0:
+                logger.warning(
+                    "free-chain model %s rejected the reasoning parameter "
+                    "(HTTP 400: %s); re-sending once without it",
+                    model_id, resp.text[:150],
+                )
+                unshaped = {
+                    **req,
+                    "json": {k: v for k, v in req["json"].items() if k != "reasoning"},
+                }
+                resp = _execute(unshaped, remaining)
         if provider == "anthropic" and resp.status_code == 429:
             # Wire the LIVE 429 → cooldown block (GAP-P7-DEF-A §5.4). A genuine
             # subscription-quota 429 (oauth_token or api_key) records a block and

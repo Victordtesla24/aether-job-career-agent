@@ -381,9 +381,19 @@ def email_inbox(current_user: CurrentUser) -> dict[str, Any]:
             GmailAuthError,
             GmailNotConnectedError,
             GmailService,
+            is_email_sync_fresh,
         )
 
         for acc in account_rows:
+            # W-6 TTL gate: one sync is threads().list() + up to 25
+            # threads().get() round-trips PER account (~11s inline in this
+            # request with 2 accounts connected). Inside the freshness window
+            # the stored EmailThread rows are already current, so this request
+            # makes ZERO Gmail calls and serves them straight from the DB. A
+            # sync that fails never stamps lastSyncedAt, so a broken account is
+            # retried on the next request rather than being cached as "fresh".
+            if is_email_sync_fresh(acc.get("lastSyncedAt")):
+                continue
             try:
                 GmailService(uid, account_id=acc.get("id")).sync_threads_to_db()
             except (GmailAuthError, GmailNotConnectedError):

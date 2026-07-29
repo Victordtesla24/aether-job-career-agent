@@ -97,6 +97,30 @@ def _install_transport(monkeypatch, responder):
     return seen
 
 
+def _install_payload_transport(monkeypatch, responder):
+    """Like :func:`_install_transport` but records the FULL outgoing JSON body.
+
+    ``responder`` receives the whole payload so a test can react to the request
+    SHAPE (e.g. reject a request that carries ``reasoning``), which is what the
+    provider does. Returns the list of payloads actually put on the wire.
+    """
+    import copy
+
+    import httpx
+
+    payloads: list[dict] = []
+
+    def _post(url, **kwargs):  # noqa: ANN001 — httpx.post signature
+        payload = kwargs["json"]
+        # Deep-copy: the client may mutate/rebuild the body for the retry, and
+        # the assertion must see what was sent at THIS moment.
+        payloads.append(copy.deepcopy(payload))
+        return responder(payload)
+
+    monkeypatch.setattr(httpx, "post", _post)
+    return payloads
+
+
 def _set_is_admin(user_id: str, value: bool) -> None:
     from app.db import get_connection
 
@@ -416,11 +440,19 @@ def test_is_admin_lookup_failure_degrades_to_non_admin(monkeypatch):
 def test_free_fallback_defaults_to_the_live_verified_models(monkeypatch):
     """Works out of the box: unset env → the two probe-verified nemotron ids
     (``openai/gpt-oss-20b:free`` is deliberately EXCLUDED — it returned garbled
-    output at realistic prompt length, PROBE-REPORT part 1d)."""
+    output at realistic prompt length, PROBE-REPORT part 1d).
+
+    ORDER IS EVIDENCE-BASED, not arbitrary (QA-FAIL-01, probe artifact
+    ``uat/reports/evidence/models-live/free-chain-shaping-probe.txt``): under the
+    shaped request the ULTRA model returned valid strict JSON in 8 of 9 live
+    attempts (its one miss was a transient upstream 502, not a refusal) while the
+    SUPER model managed 4 of 9. The most RELIABLE model therefore goes first —
+    with the old order the chain's first attempt was the flakier model.
+    """
     from app.services.llm_client import get_admin_free_fallback_models
 
     monkeypatch.delenv("AETHER_ADMIN_FREE_FALLBACK_MODELS", raising=False)
-    assert get_admin_free_fallback_models() == [_FREE_A, _FREE_B]
+    assert get_admin_free_fallback_models() == [_FREE_B, _FREE_A]
 
 
 def test_free_fallback_list_is_env_overridable(monkeypatch):
@@ -477,3 +509,236 @@ def test_admin_user_chosen_model_402_still_rescues_and_logs(
     # No PAID substitute was attempted — only the chosen model, then free.
     assert seen == [_PAID_PRIMARY, _FREE_A], seen
     assert any("admin-free-fallback" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# (f) request SHAPING for free-chain attempts (QA-FAIL-01)
+# ---------------------------------------------------------------------------
+#
+# Live root cause (QA-RES-C + this run's probe, artifact
+# ``uat/reports/evidence/models-live/free-chain-shaping-probe.txt``): the
+# OpenRouter body carried only model/temperature/messages. The nemotron rescue
+# models are REASONING models, so they burned 3.4k-6.0k unbounded reasoning
+# tokens before emitting a character of the letter — 60.4 s and 116.5 s live on
+# the real deployed prompt, against a ~50 s per-attempt wall-clock slice. The
+# first free model therefore ate the whole budget and the second never ran.
+#
+# The fix shapes ONLY the attempts the admin rescue appended: a ``max_tokens``
+# cap plus reasoning DISABLED. Everyone else's request body must stay
+# byte-identical — that is what the negative pins below enforce.
+
+_UNSHAPED_KEYS = {"model", "temperature", "messages"}
+
+
+def _payload_for(payloads: list[dict], model: str) -> dict:
+    matches = [p for p in payloads if p["model"] == model]
+    assert matches, f"no request was sent for {model}: {[p['model'] for p in payloads]}"
+    return matches[0]
+
+
+def test_free_chain_attempt_carries_max_tokens_and_disabled_reasoning(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """FAILS NOW: ``_build_openrouter_request`` sends only model/temperature/
+    messages, so the rescue models reason without bound and blow the per-attempt
+    budget. The chain-extension attempts must carry a token cap AND switch
+    reasoning off.
+
+    ``reasoning: {"enabled": false}`` is the LIVE-VERIFIED parameter. The
+    obvious-looking ``{"exclude": true}`` was tried against the real API first
+    and is actively harmful: OpenRouter's contract is that ``exclude`` only HIDES
+    reasoning — the model still generates it — and with the reasoning channel
+    suppressed both nemotron models dumped raw chain-of-thought into ``content``
+    instead of the strict JSON (2 of 2 live attempts unparseable, one truncated
+    at ``finish_reason=length``). ``enabled: false`` genuinely disables reasoning
+    generation: 0 reasoning tokens, valid JSON, 1.5-23.5 s.
+    """
+
+    def _responder(payload: dict) -> _Resp:
+        if payload["model"].endswith(":free"):
+            return _ok('{"hook_reason": "x", "body": "a\\n\\nb"}')
+        return _402()
+
+    payloads = _install_payload_transport(monkeypatch, _responder)
+    _set_is_admin(test_user_id, True)
+    _clear_admin_cache()
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    free = _payload_for(payloads, _FREE_A)
+    assert free["max_tokens"] == 2000
+    assert free["reasoning"] == {"enabled": False}
+    # The prompt itself is untouched — shaping is transport-level only, so the
+    # strict-JSON contract and every downstream guard still apply verbatim.
+    assert free["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "usr"},
+    ]
+    assert free["temperature"] == 0.0
+
+
+def test_paid_attempt_payload_stays_byte_identical(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """ZERO-REGRESSION PIN: the paid / system-default attempts in the very same
+    run must carry NO ``max_tokens`` and NO ``reasoning`` — the shaping is scoped
+    to the rescue models alone, so no paying user's request shape changes."""
+
+    def _responder(payload: dict) -> _Resp:
+        if payload["model"].endswith(":free"):
+            return _ok('{"hook_reason": "x", "body": "a\\n\\nb"}')
+        return _402()
+
+    payloads = _install_payload_transport(monkeypatch, _responder)
+    _set_is_admin(test_user_id, True)
+    _clear_admin_cache()
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    for model in (_PAID_PRIMARY, _PAID_FALLBACK):
+        paid = _payload_for(payloads, model)
+        assert set(paid) == _UNSHAPED_KEYS, (model, sorted(paid))
+
+
+def test_non_admin_free_model_choice_is_never_shaped(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """The shaping keys on CHAIN PROVENANCE, not on the ``:free`` suffix.
+
+    A user who deliberately picks a free model is making an ordinary model
+    choice: their request must keep today's exact shape (no cap, no reasoning
+    override), or we would be silently degrading a model they chose on purpose.
+    """
+    _clear_admin_cache()
+    payloads = _install_payload_transport(
+        monkeypatch, lambda payload: _ok('{"hook_reason": "x", "body": "a\\n\\nb"}')
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        with user_model_context(_FREE_A):
+            llm.complete("cover_letter", "sys", "usr", model=_FREE_A)
+
+    assert len(payloads) == 1, payloads
+    assert set(payloads[0]) == _UNSHAPED_KEYS, sorted(payloads[0])
+
+
+def test_free_chain_max_tokens_is_env_overridable(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """Operator lever: the cap is generous by default but tunable without a
+    deploy (the letter JSON measured 93-489 completion tokens live)."""
+    monkeypatch.setenv("AETHER_ADMIN_FREE_FALLBACK_MAX_TOKENS", "777")
+
+    def _responder(payload: dict) -> _Resp:
+        if payload["model"].endswith(":free"):
+            return _ok('{"hook_reason": "x", "body": "a\\n\\nb"}')
+        return _402()
+
+    payloads = _install_payload_transport(monkeypatch, _responder)
+    _set_is_admin(test_user_id, True)
+    _clear_admin_cache()
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    assert _payload_for(payloads, _FREE_A)["max_tokens"] == 777
+
+
+def test_free_chain_retries_once_unshaped_when_the_model_rejects_reasoning(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """A model that 400s on the ``reasoning`` parameter must not lose its turn.
+
+    The free catalog churns (the list is env-overridable precisely because of
+    that), so an operator can point the chain at a model that rejects the
+    parameter. That attempt retries ONCE with the parameter removed — same
+    model, same prompt, no substitution — rather than being spent."""
+
+    def _responder(payload: dict) -> _Resp:
+        if not payload["model"].endswith(":free"):
+            return _402()
+        if "reasoning" in payload:
+            return _Resp(
+                400,
+                '{"error":{"message":"reasoning is not a supported parameter",'
+                '"code":400}}',
+            )
+        return _ok('{"hook_reason": "x", "body": "a\\n\\nb"}')
+
+    payloads = _install_payload_transport(monkeypatch, _responder)
+    _set_is_admin(test_user_id, True)
+    _clear_admin_cache()
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        out = llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    assert out == '{"hook_reason": "x", "body": "a\\n\\nb"}'
+    free_payloads = [p for p in payloads if p["model"] == _FREE_A]
+    assert len(free_payloads) == 2, free_payloads
+    assert free_payloads[0]["reasoning"] == {"enabled": False}
+    # The retry drops ONLY the rejected parameter — the token cap (the other half
+    # of the latency fix) is kept.
+    assert "reasoning" not in free_payloads[1]
+    assert free_payloads[1]["max_tokens"] == 2000
+    # The SECOND free model was never needed.
+    assert not [p for p in payloads if p["model"] == _FREE_B], payloads
+
+
+def test_free_chain_unshaped_retry_is_bounded_to_one_per_model(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """A model that 400s on BOTH shapes is honestly spent: exactly two requests,
+    then the chain moves on — no unbounded reshaping loop."""
+    payloads = _install_payload_transport(
+        monkeypatch,
+        lambda payload: (
+            _402() if not payload["model"].endswith(":free")
+            else _Resp(400, '{"error":{"message":"bad request","code":400}}')
+        ),
+    )
+    _set_is_admin(test_user_id, True)
+    _clear_admin_cache()
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        with pytest.raises(LLMUnavailableError):
+            llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    for free in (_FREE_A, _FREE_B):
+        assert len([p for p in payloads if p["model"] == free]) == 2, free
+
+
+def test_non_free_chain_400_is_never_retried(
+    monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
+):
+    """PIN: the unshaped-retry is scoped to shaped rescue attempts. A 400 on a
+    paid/user-chosen model keeps today's behaviour — one request, straight to
+    the next model (a genuine call error is never re-tried on the same model)."""
+    _clear_admin_cache()
+    payloads = _install_payload_transport(
+        monkeypatch, lambda payload: _Resp(400, '{"error":{"code":400}}')
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_credential_context(test_user_id, "coverLetter"):
+        with pytest.raises(LLMUnavailableError):
+            llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
+
+    assert [p["model"] for p in payloads] == [_PAID_PRIMARY, _PAID_FALLBACK], payloads
+
+
+def test_free_chain_max_tokens_falls_back_to_the_default_on_a_bad_value(monkeypatch):
+    """A malformed env value can never take the rescue path down."""
+    from app.services.llm_client import get_admin_free_fallback_max_tokens
+
+    monkeypatch.setenv("AETHER_ADMIN_FREE_FALLBACK_MAX_TOKENS", "not-a-number")
+    assert get_admin_free_fallback_max_tokens() == 2000
+    monkeypatch.setenv("AETHER_ADMIN_FREE_FALLBACK_MAX_TOKENS", "0")
+    assert get_admin_free_fallback_max_tokens() == 2000

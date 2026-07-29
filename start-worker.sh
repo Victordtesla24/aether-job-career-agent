@@ -19,4 +19,12 @@ while IFS= read -r line || [ -n "$line" ]; do
     export "$key"="$value"
 done < /home/ubuntu/github_repos/aether-job-career-agent/.env
 
-exec /opt/abacus-python/bin/arq app.workers.settings.WorkerSettings
+# QA-FAIL-02: arq's own CLI configures ONLY the `arq` logger and leaves the
+# root logger at WARNING with no handler, so application `logger.info(...)`
+# calls (e.g. the admin-free-fallback audit marker in llm_client.py) never
+# reach worker.log even though arq's own INFO lines make the log look
+# healthy. --custom-log-dict wires app/workers/logging_config.py's LOG_CONFIG,
+# which adds an ISO-8601 UTC timestamped INFO root handler (matching
+# apps/api/logging_config.json's MV-system-001 format) while keeping arq's
+# own logging single-emission (see that module's docstring for why).
+exec /opt/abacus-python/bin/arq app.workers.settings.WorkerSettings --custom-log-dict app.workers.logging_config.LOG_CONFIG

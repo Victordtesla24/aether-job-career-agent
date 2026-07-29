@@ -49,6 +49,20 @@ export function agentTile(agentName: string): FeedTile {
   return AGENT_TILES[agentName] ?? DEFAULT_TILE;
 }
 
+/** True when a completed coverLetter run degraded gracefully and produced no
+ * letter (QA-RES-F). The cover-letter agent/worker set this exact flag on
+ * every honest degrade path (LLM unavailable on first draft, fabrication/
+ * structural guard rejection) — see apps/api/app/agents/cover_letter_agent.py,
+ * apps/api/app/workers/tasks.py and apps/api/app/routers/agents.py, all of
+ * which mark the run `completed` with `output.coverLetterUnavailable = true`
+ * and `cover_letter_id: None`. Genuine successes always carry a real
+ * `cover_letter_id` and never set this flag. */
+function coverLetterDegraded(run: AgentRun): boolean {
+  if (run.agentName !== "coverLetter") return false;
+  const out = run.output ?? {};
+  return out.coverLetterUnavailable === true;
+}
+
 /** Badge per run status/agent (wireframe: Discovered/Tailored/Submitted/Waiting). */
 export function runBadge(run: AgentRun): FeedBadge {
   if (run.status === "queued" || run.status === "running") {
@@ -56,6 +70,11 @@ export function runBadge(run: AgentRun): FeedBadge {
   }
   if (run.status === "failed") {
     return { label: "Failed", cls: "bg-red-500/15 text-red-300 border-red-500/20" };
+  }
+  if (coverLetterDegraded(run)) {
+    // Honest neutral badge — never the success "Drafted" amber for a run
+    // that produced no letter.
+    return { label: "Unavailable", cls: "bg-white/8 text-aether-muted border-white/10" };
   }
   const byAgent: Record<string, FeedBadge> = {
     scout: { label: "Discovered", cls: "bg-aether-indigo/15 text-[#818CF8] border-aether-indigo/20" },
@@ -153,6 +172,17 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
       };
     }
     case "coverLetter": {
+      if (coverLetterDegraded(run)) {
+        // QA-RES-F: the writing model was unavailable / the fabrication
+        // guard rejected every draft — no letter exists. Say so instead of
+        // claiming success.
+        const message = str(out.message);
+        return {
+          text: "cover letter unavailable (generation degraded)",
+          highlight: null,
+          metric: message ? message.slice(0, 60) : null,
+        };
+      }
       const waiting = str(out.approval_status) === "pending";
       return {
         text: waiting ? "drafted a cover letter — awaiting your approval" : "drafted a cover letter",

@@ -162,3 +162,118 @@ def test_workspaces_endpoints_require_auth(client):
         elif method == "POST":
             resp = client.post(path, json={})
             assert resp.status_code == 401, f"{path} returned {resp.status_code} instead of 401"
+
+# ===========================================================================
+# W-6 / QA item 4 — GET /workspaces/emails/inbox must not re-sync Gmail on
+# EVERY request. Each sync is threads().list() + up to 25 threads().get()
+# round-trips PER connected account (~11s inline in the request path observed
+# in production). A TTL freshness gate keeps the inbox fast: within the window
+# the DB copy is served with ZERO Gmail I/O.
+# ===========================================================================
+
+
+def _seed_gmail_accounts(user_id: str, emails: list[str]):
+    from app.repositories.gmail_account import GmailAccountRepository
+
+    repo = GmailAccountRepository()
+    for email in emails:
+        repo.upsert_account(
+            user_id,
+            account_email=email,
+            refresh_token=f"refresh-{email}",
+            scopes="gmail.modify",
+        )
+    return repo
+
+
+def _fake_gmail_service(sync_calls: list[str]):
+    """A GmailService stand-in that records every sync and updates the account's
+    lastSyncedAt exactly like the real ``sync_threads_to_db`` does."""
+    from app.repositories.gmail_account import GmailAccountRepository
+
+    class _FakeGmailService:
+        def __init__(self, user_id, account_id=None, creds_repo=None):
+            self._user_id = user_id
+            self._account_id = account_id
+
+        def sync_threads_to_db(self, user_id=None, query=None, max_results=25):
+            sync_calls.append(self._account_id)
+            GmailAccountRepository().mark_synced(self._account_id)
+            return 0
+
+    return _FakeGmailService
+
+
+def test_email_inbox_within_ttl_makes_zero_gmail_calls(
+    client, auth_headers, test_user_id, monkeypatch
+):
+    """A second inbox request inside the freshness window must perform ZERO
+    Gmail work — no ``GmailService`` sync for any connected account.
+
+    Before the fix the endpoint synced EVERY connected account on EVERY request
+    (2 accounts x [1 list + up to 25 sequential thread gets] = ~11s of Gmail
+    round-trips per page load).
+    """
+    sync_calls: list[str] = []
+    repo = _seed_gmail_accounts(test_user_id, ["one@gmail.com", "two@gmail.com"])
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService", _fake_gmail_service(sync_calls)
+    )
+    monkeypatch.setenv("AETHER_EMAIL_SYNC_TTL_SECONDS", "120")
+    try:
+        first = client.get("/workspaces/emails/inbox", headers=auth_headers)
+        assert first.status_code == 200, first.text
+        # Cold: never synced -> both inboxes sync once.
+        assert len(sync_calls) == 2, sync_calls
+        after_cold = list(sync_calls)
+
+        second = client.get("/workspaces/emails/inbox", headers=auth_headers)
+        assert second.status_code == 200, second.text
+        assert sync_calls == after_cold, (
+            "inbox re-synced Gmail inside the TTL window — the freshness gate "
+            f"did not hold (calls: {sync_calls})"
+        )
+        # The fast path still returns the real, complete payload.
+        assert len(second.json()["accounts"]) == 2
+        assert {a["email"] for a in second.json()["accounts"]} == {
+            "one@gmail.com",
+            "two@gmail.com",
+        }
+    finally:
+        repo.disconnect(test_user_id)
+
+
+def test_email_inbox_syncs_again_once_ttl_expires(
+    client, auth_headers, test_user_id, monkeypatch
+):
+    """The gate is a freshness window, NOT a one-shot: once ``lastSyncedAt`` is
+    older than the TTL the inbox syncs again (stale data is never served
+    indefinitely)."""
+    from app.db import get_connection
+
+    sync_calls: list[str] = []
+    repo = _seed_gmail_accounts(test_user_id, ["solo@gmail.com"])
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService", _fake_gmail_service(sync_calls)
+    )
+    monkeypatch.setenv("AETHER_EMAIL_SYNC_TTL_SECONDS", "120")
+    try:
+        assert client.get("/workspaces/emails/inbox", headers=auth_headers).status_code == 200
+        assert len(sync_calls) == 1
+        assert client.get("/workspaces/emails/inbox", headers=auth_headers).status_code == 200
+        assert len(sync_calls) == 1
+
+        # Age the account past the window.
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "GmailAccount" SET "lastSyncedAt" = now() - interval \'10 minutes\''
+                    ' WHERE "userId" = %s',
+                    (test_user_id,),
+                )
+            conn.commit()
+
+        assert client.get("/workspaces/emails/inbox", headers=auth_headers).status_code == 200
+        assert len(sync_calls) == 2, "a stale account must be re-synced"
+    finally:
+        repo.disconnect(test_user_id)

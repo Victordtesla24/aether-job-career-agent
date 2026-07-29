@@ -14,7 +14,11 @@ approvals router — never requires the google packages at import time.
 from __future__ import annotations
 
 import base64
-from datetime import timezone
+import logging
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -23,6 +27,8 @@ from typing import Any, Optional
 from app.db import get_connection, new_id, rows_to_dicts
 from app.repositories.gmail_account import GmailAccountRepository
 from app.services.google_oauth import GOOGLE_SCOPES
+
+logger = logging.getLogger(__name__)
 
 #: Distinct advisory-lock ids for the additive EmailThread DDL. See the lock-id
 #: ledger in app/repositories/background_jobs.py — 717 is taken
@@ -34,8 +40,151 @@ _EMAIL_AI_COLS_LOCK = 7420240723
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
 _MAX_MESSAGE_BYTES = 25 * 1024 * 1024
 
+#: Freshness window (seconds) for the Email Center's best-effort inbox sync.
+#: A sync is threads().list() + up to ``max_results`` threads().get() round-trips
+#: PER connected account, so re-running it on every page load put ~11s of Gmail
+#: I/O inline in the request path (W-6). Within this window the stored
+#: ``EmailThread`` copy is served as-is — no Gmail call at all.
+_DEFAULT_SYNC_TTL_SECONDS = 120
+
+#: Bounded fan-out for the per-thread detail fetch. Small on purpose: Gmail
+#: per-user rate limits are shared across the whole account, and each worker
+#: holds its own TCP/TLS connection.
+_DEFAULT_SYNC_MAX_WORKERS = 5
+_MAX_SYNC_WORKERS = 10
+
+#: Sentinel for "this thread has no result yet" — distinct from any legitimate
+#: (even falsy) Gmail payload.
+_UNFETCHED = object()
+
 _cols_ready = False
 _ai_cols_ready = False
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer knob from the environment, degrading to ``default`` on a
+    missing/malformed value (a typo in a deploy env must never 500 the inbox)."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        logger.warning(
+            "%s=%r is not an integer — falling back to %d", name, raw, default
+        )
+        return default
+
+
+def email_sync_ttl_seconds() -> int:
+    """Freshness window for the inbox sync, from ``AETHER_EMAIL_SYNC_TTL_SECONDS``
+    (default 120). Zero or negative DISABLES the gate — every request syncs, the
+    pre-W-6 behaviour."""
+    return _env_int("AETHER_EMAIL_SYNC_TTL_SECONDS", _DEFAULT_SYNC_TTL_SECONDS)
+
+
+def email_sync_max_workers() -> int:
+    """Worker cap for the parallel thread-detail fetch, from
+    ``AETHER_EMAIL_SYNC_MAX_WORKERS`` (default 5), clamped to
+    ``1.._MAX_SYNC_WORKERS`` so a bad value can neither disable the fetch nor
+    unleash unbounded fan-out at Gmail. ``1`` keeps the fetch strictly
+    sequential."""
+    return max(
+        1,
+        min(
+            _env_int("AETHER_EMAIL_SYNC_MAX_WORKERS", _DEFAULT_SYNC_MAX_WORKERS),
+            _MAX_SYNC_WORKERS,
+        ),
+    )
+
+
+def is_email_sync_fresh(
+    last_synced_at: Optional[datetime], now: Optional[datetime] = None
+) -> bool:
+    """True when an account's last sync is recent enough to serve the stored
+    threads without touching Gmail (W-6 TTL gate).
+
+    Deliberately conservative — it returns False (i.e. "sync") whenever
+    freshness cannot be positively established:
+
+    * never synced (``None``) — there may be nothing in the DB at all;
+    * the TTL is disabled (``<= 0``);
+    * the stamp is implausible (further in the future than one whole TTL),
+      which must never stall the user's inbox indefinitely.
+
+    Small future offsets ARE treated as fresh: ``lastSyncedAt`` is stamped by
+    the DATABASE clock (``mark_synced`` writes ``now()``) and compared here
+    against the API process clock, and the hosted Postgres runs measurably
+    ahead of the app server (~3s observed 2026-07-29). Rejecting every future
+    stamp would disable the gate entirely on this deployment, so the comparison
+    is symmetric: fresh when the two stamps are within one TTL of each other,
+    in either direction.
+
+    A naive stamp is read as UTC — ``GmailAccount.lastSyncedAt`` is
+    ``timestamptz`` (always aware in practice), but a naive value must degrade
+    rather than raise into the inbox request.
+    """
+    ttl = email_sync_ttl_seconds()
+    if ttl <= 0 or not isinstance(last_synced_at, datetime):
+        return False
+    if last_synced_at.tzinfo is None:
+        last_synced_at = last_synced_at.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    age_seconds = (now - last_synced_at).total_seconds()
+    return abs(age_seconds) < ttl
+
+
+class _SerializedCredentials:
+    """Thread-safe façade over ONE shared google-auth ``Credentials`` object.
+
+    The bounded parallel thread fetch gives every worker its own
+    ``AuthorizedHttp`` (httplib2 is not thread-safe) but they all authenticate
+    from the same credentials instance, and google-auth does NOT serialize a
+    refresh: ``Credentials.before_request`` -> ``_blocking_refresh``
+    (google/auth/credentials.py) is a bare ``if not self.valid:
+    self.refresh(request)``, and ``google_auth_httplib2.AuthorizedHttp.request``
+    calls ``credentials.refresh`` on a 401 with no lock either (verified against
+    google-auth 2.55.2 / google-auth-httplib2 0.3.1). Two workers meeting an
+    expired token would therefore run two concurrent refresh grants — and
+    Google's newer token can invalidate the older one mid-flight.
+
+    This wrapper holds one lock across the whole check-then-refresh, and
+    re-checks validity inside :meth:`refresh` so the second caller skips a
+    redundant grant. In practice no refresh happens here at all: the eager
+    refresh in :meth:`GmailService._credentials` (which also PERSISTS the new
+    token) runs on the calling thread before any worker starts. A refresh from a
+    worker is the rare mid-flight-expiry case and stays in memory only —
+    identical to the pre-existing ``AuthorizedHttp`` 401-retry behaviour, so the
+    stored token is simply refreshed-and-persisted on the next request.
+
+    Only the surface ``AuthorizedHttp`` actually uses is exposed
+    (``before_request``/``refresh``, plus read-through ``token``/``valid``).
+    """
+
+    __slots__ = ("_creds", "_lock")
+
+    def __init__(self, credentials: Any, lock: threading.Lock) -> None:
+        self._creds = credentials
+        self._lock = lock
+
+    def before_request(self, request: Any, method: str, url: str, headers: Any) -> None:
+        with self._lock:
+            self._creds.before_request(request, method, url, headers)
+
+    def refresh(self, request: Any) -> None:
+        with self._lock:
+            if getattr(self._creds, "valid", False):
+                # Another worker already refreshed under this same lock.
+                return
+            self._creds.refresh(request)
+
+    @property
+    def token(self) -> Any:
+        return self._creds.token
+
+    @property
+    def valid(self) -> bool:
+        return bool(self._creds.valid)
 
 
 class GmailError(RuntimeError):
@@ -201,11 +350,14 @@ class GmailService:
         #: tag synced threads and to persist refreshed tokens to the right row.
         self._resolved_account_id: str | None = account_id
         self._service: Any = None
+        #: The credentials object backing ``_service`` — reused (never re-read
+        #: from the DB) to mint the per-worker HTTP clients of the parallel
+        #: thread fetch, and guarded by ``_credentials_lock`` there.
+        self._shared_credentials: Any = None
+        self._credentials_lock = threading.Lock()
 
     # ------------------------------------------------------------------ auth
     def _credentials(self) -> Any:
-        import os
-
         # Pass account_id only when targeting a specific inbox so single-account
         # repos/fakes with a one-arg get() keep working (backward compatible).
         if self._account_id is not None:
@@ -295,6 +447,7 @@ class GmailService:
                 new_expiry,
                 account_id=self._resolved_account_id,
             )
+        self._shared_credentials = creds
         return creds
 
     def _client(self) -> Any:
@@ -324,20 +477,122 @@ class GmailService:
                 .list(userId="me", q=query, maxResults=max_results)
                 .execute()
             )
-            out: list[dict[str, Any]] = []
-            for t in resp.get("threads", []):
-                full = (
-                    svc.users()
-                    .threads()
-                    .get(userId="me", id=t["id"], format="full")
-                    .execute()
-                )
-                out.append(self._normalize_thread(full))
-            return out
+            thread_ids = [t["id"] for t in resp.get("threads", [])]
+            return [
+                self._normalize_thread(full)
+                for full in self._fetch_thread_details(svc, thread_ids)
+            ]
         except GmailError:
             raise
         except Exception as exc:  # noqa: BLE001
             raise GmailError(f"Gmail thread list failed: {exc}") from exc
+
+    def _new_authorized_http(self, credentials: Any) -> Any:
+        """A FRESH ``AuthorizedHttp`` (its own ``httplib2.Http`` connection pool)
+        for ONE worker thread.
+
+        ``httplib2.Http`` is NOT thread-safe, so the service's single shared http
+        object must never be used concurrently. ``build_http()`` is the same
+        constructor ``googleapiclient`` uses for the service's own client, so the
+        worker inherits the library's default socket timeout and redirect
+        handling verbatim. The credentials are shared (one token, one refresh)
+        but wrapped so a refresh is serialized."""
+        import google_auth_httplib2
+        from googleapiclient.http import build_http
+
+        return google_auth_httplib2.AuthorizedHttp(
+            _SerializedCredentials(credentials, self._credentials_lock),
+            http=build_http(),
+        )
+
+    def _fetch_thread_details(
+        self, svc: Any, thread_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Full payload for every id in ``thread_ids``, in the SAME order.
+
+        Gmail has no batch "get these N threads" call, so this used to be up to
+        25 SEQUENTIAL round-trips inline in the inbox request (W-6, ~11s
+        observed). They are now issued on a small bounded pool, each worker
+        using its own HTTP client.
+
+        Fail-safe: results are placed by index, so ordering (and therefore the
+        caller's dedup/upsert semantics) is identical to the sequential code. If
+        ANY worker raises, every still-unfetched thread is retried on the
+        sequential path with the shared service client and ONE INFO is logged —
+        a partial result is never returned, and a persistent failure still
+        surfaces as ``GmailError`` exactly as before."""
+        requests = [
+            svc.users().threads().get(userId="me", id=tid, format="full")
+            for tid in thread_ids
+        ]
+        workers = min(email_sync_max_workers(), len(requests))
+
+        credentials = self._shared_credentials
+        if workers > 1 and credentials is None:
+            # A caller that injected a client directly (tests) may never have
+            # resolved credentials; resolve them ONCE here, on this thread.
+            try:
+                credentials = self._credentials()
+            except GmailError:
+                credentials = None
+
+        if workers < 2 or credentials is None:
+            # Sequential: one client, one thread — the pre-W-6 path, kept for a
+            # single thread, an env-disabled pool, or credentials we cannot
+            # duplicate per worker (sharing one httplib2.Http would be unsafe).
+            return [req.execute() for req in requests]
+
+        results: list[Any] = [_UNFETCHED] * len(requests)
+        worker_state = threading.local()
+        opened_https: list[Any] = []
+        opened_lock = threading.Lock()
+        first_error: Exception | None = None
+
+        def _run(index: int) -> None:
+            http = getattr(worker_state, "http", None)
+            if http is None:
+                # ONE client per worker thread (not per request), so this
+                # thread's connections are still reused across its threads.get()
+                # calls while never being touched by another thread.
+                http = self._new_authorized_http(credentials)
+                worker_state.http = http
+                with opened_lock:
+                    opened_https.append(http)
+            results[index] = requests[index].execute(http=http)
+
+        try:
+            with ThreadPoolExecutor(
+                max_workers=workers, thread_name_prefix="gmail-thread-fetch"
+            ) as pool:
+                for future in [pool.submit(_run, i) for i in range(len(requests))]:
+                    try:
+                        future.result()
+                    except Exception as exc:  # noqa: BLE001 — retried sequentially
+                        if first_error is None:
+                            first_error = exc
+        finally:
+            # Release the worker sockets deterministically instead of waiting
+            # for GC (the pool's threads are gone by now, so nothing can be
+            # using them). Never let a close failure mask a real Gmail error.
+            for opened in opened_https:
+                try:
+                    opened.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        if first_error is not None:
+            pending = [i for i, result in enumerate(results) if result is _UNFETCHED]
+            logger.info(
+                "Gmail parallel thread fetch degraded to sequential for %d/%d "
+                "threads (first error: %s)",
+                len(pending),
+                len(requests),
+                first_error,
+            )
+            for index in pending:
+                results[index] = requests[index].execute()
+
+        return results
 
     @staticmethod
     def _normalize_thread(full: dict[str, Any]) -> dict[str, Any]:
