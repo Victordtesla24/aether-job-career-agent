@@ -518,20 +518,16 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return {"job": _public(updated), "applicationId": application_id}
 
 
-@router.delete("/{job_id}")
-def archive_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
-    """Soft delete: jobs are archived, never destroyed."""
-    repository = JobRepository()
-    if repository.get_by_id(job_id, current_user["id"]) is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job = repository.update_status(job_id, "archived")
-    assert job is not None  # existence checked above
-    return _public(job)
-
-
 # ---------------------------------------------------------------------------
 # Clear Pipeline — hard-reset the Discovery + Application pipeline for the
 # signed-in user (FEATURE: Clear Pipeline backend).
+#
+# ROUTE ORDER IS LOAD-BEARING: Starlette matches routes in registration order,
+# so the literal ``/clear-pipeline`` path MUST be declared before the
+# ``/{job_id}`` catch-all below. Declared after it, every
+# ``DELETE /jobs/clear-pipeline`` was swallowed by ``archive_job`` with
+# ``job_id="clear-pipeline"`` and answered 404 "Job not found" — the endpoint
+# was unreachable from its introduction (6981ff0) until this ordering fix.
 # ---------------------------------------------------------------------------
 
 #: The confirmation flag the client MUST echo back. A bare ``DELETE`` would
@@ -663,3 +659,18 @@ def clear_pipeline(
         "applicationsDeleted": int(apps_count),
         "dedupCleared": True,
     }
+
+
+# NOTE: this ``/{job_id}`` catch-all is registered LAST on purpose — it matches
+# any single path segment, so every literal ``/jobs/<literal>`` route (today:
+# ``/clear-pipeline``) has to be declared above it or it never receives a
+# request. Add new literal DELETE routes ABOVE this function, never below.
+@router.delete("/{job_id}")
+def archive_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Soft delete: jobs are archived, never destroyed."""
+    repository = JobRepository()
+    if repository.get_by_id(job_id, current_user["id"]) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = repository.update_status(job_id, "archived")
+    assert job is not None  # existence checked above
+    return _public(job)

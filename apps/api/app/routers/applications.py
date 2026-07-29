@@ -514,18 +514,35 @@ def submit_application(
                         "Cannot submit — this application has no cover letter. "
                         "Generate one from the Cover Letter Studio.",
                     )
+                # FEAT-SUBMISSION-GATE requires a JOB-TAILORED resume to EXIST
+                # before a draft can be submitted. Resolve it the same way the
+                # sibling promotion path does (jobs._resume_for_apply), rather
+                # than trusting the draft's own "resumeId": the only producer of
+                # these drafts (CoverLetterRepository.create, called by
+                # cover_letter_agent with TailoringAgent().ensure_base_resume)
+                # always attaches the BASE resume, so demanding that the ALREADY
+                # attached row be the tailored one made this endpoint
+                # unsatisfiable for every draft the product can actually create.
+                # The tailored-resume requirement itself is unchanged — no
+                # tailored version for this job is still a hard 422. When the
+                # draft already carries a tailored version for the job it wins;
+                # otherwise the newest tailored version is used and stamped onto
+                # the row below, exactly as jobs.apply_to_job does.
                 cur.execute(
-                    'SELECT "sourceJobId" FROM "Resume" WHERE "id" = %s '
-                    'AND "userId" = %s',
-                    (row[4], current_user["id"]),
+                    'SELECT "id" FROM "Resume" '
+                    'WHERE "userId" = %s AND "sourceJobId" = %s '
+                    'ORDER BY ("id" = %s) DESC NULLS LAST, "version" DESC '
+                    'LIMIT 1',
+                    (current_user["id"], row[2], row[4]),
                 )
                 resume = cur.fetchone()
-                if resume is None or resume[0] != row[2]:
+                if resume is None:
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        "Cannot submit — the attached resume is not tailored for this job. "
+                        "Cannot submit — your resume is not tailored for this job. "
                         "Tailor your resume first.",
                     )
+                tailored_resume_id = resume[0]
                 # RT-004 promotion guard — one active application per job (see
                 # move_application): submitting a second letter-version of an
                 # already-applied job would mint a duplicate board card.
@@ -545,11 +562,13 @@ def submit_application(
                     """
                     UPDATE "Application"
                     SET "status" = 'submitted'::"ApplicationStatus",
+                        "resumeId" = %s,
                         "answers" = COALESCE("answers", '{}'::jsonb) || %s::jsonb,
                         "updatedAt" = NOW()
                     WHERE "id" = %s AND "userId" = %s
                     """,
                     (
+                        tailored_resume_id,
                         json.dumps(
                             {
                                 "appliedUrl": body.applied_url,

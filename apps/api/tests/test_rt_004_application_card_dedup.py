@@ -51,20 +51,35 @@ def _seed_job(conn, user_id: str) -> str:
 
 
 def _add_app(
-    conn, user_id: str, job_id: str, *, status: str, age_minutes: int = 0
+    conn,
+    user_id: str,
+    job_id: str,
+    *,
+    status: str,
+    age_minutes: int = 0,
+    tailored: bool = False,
+    cover_letter: str | None = None,
 ) -> str:
+    """Add a letter-version Application row (plus its Resume row).
+
+    ``tailored`` + ``cover_letter`` make the row satisfy the
+    FEAT-SUBMISSION-GATE preconditions (14e30c5) so a draft seeded with them
+    reaches the RT-004 promotion guard instead of being turned away earlier.
+    """
     app_id, resume_id = _uid(), _uid()
     with conn.cursor() as cur:
         cur.execute(
             'INSERT INTO "Resume" ("id","userId","version","sections","formatHash",'
-            '"updatedAt") VALUES (%s,%s,1,%s,%s,NOW())',
-            (resume_id, user_id, json.dumps({"summary": "t"}), "h"),
+            '"sourceJobId","updatedAt") VALUES (%s,%s,1,%s,%s,%s,NOW())',
+            (resume_id, user_id, json.dumps({"summary": "t"}), "h",
+             job_id if tailored else None),
         )
         cur.execute(
             'INSERT INTO "Application" ("id","userId","jobId","resumeId","status",'
-            '"createdAt","updatedAt") VALUES (%s,%s,%s,%s,%s::"ApplicationStatus",'
+            '"coverLetter","createdAt","updatedAt") '
+            'VALUES (%s,%s,%s,%s,%s::"ApplicationStatus",%s,'
             "NOW() - make_interval(mins => %s), NOW())",
-            (app_id, user_id, job_id, resume_id, status, age_minutes),
+            (app_id, user_id, job_id, resume_id, status, cover_letter, age_minutes),
         )
     conn.commit()
     return app_id
@@ -118,7 +133,18 @@ class TestPromotionGuards:
     ):
         job = _seed_job(db_session, user_id)
         _add_app(db_session, user_id, job, status="submitted", age_minutes=10)
-        draft = _add_app(db_session, user_id, job, status="draft", age_minutes=1)
+        # The draft is fully GATE-COMPLIANT (tailored resume + cover letter) so
+        # the 409 below proves the RT-004 dedup guard itself refused it, not the
+        # submission gate short-circuiting on a missing artifact.
+        draft = _add_app(
+            db_session,
+            user_id,
+            job,
+            status="draft",
+            age_minutes=1,
+            tailored=True,
+            cover_letter="Dear hiring team,\n\nI would love to join.",
+        )
         resp = client.post(
             f"/applications/{draft}/submit", json={}, headers=auth_headers
         )
@@ -158,7 +184,15 @@ class TestPromotionGuards:
         self, db_session, user_id, client, auth_headers
     ):
         job = _seed_job(db_session, user_id)
-        draft = _add_app(db_session, user_id, job, status="draft", age_minutes=1)
+        draft = _add_app(
+            db_session,
+            user_id,
+            job,
+            status="draft",
+            age_minutes=1,
+            tailored=True,
+            cover_letter="Dear hiring team,\n\nI would love to join.",
+        )
         resp = client.post(
             f"/applications/{draft}/submit", json={}, headers=auth_headers
         )

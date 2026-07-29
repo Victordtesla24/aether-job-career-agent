@@ -18,8 +18,16 @@ def _seed_application(
     app_status: str = "draft",
     answers: dict | None = None,
     fit_score: float | None = 91.0,
+    tailored: bool = False,
+    cover_letter: str | None = None,
 ) -> tuple[str, str]:
-    """Insert Job + Resume + Application for ``user_id``; return (app_id, job_id)."""
+    """Insert Job + Resume + Application for ``user_id``; return (app_id, job_id).
+
+    ``tailored`` links the seeded Resume to the seeded Job (``sourceJobId``) and
+    ``cover_letter`` stores a letter on the Application — together they satisfy
+    the FEAT-SUBMISSION-GATE preconditions (14e30c5) that
+    ``POST /applications/{id}/submit`` enforces on a draft.
+    """
     job_id, resume_id, app_id = _uid(), _uid(), _uid()
     with conn.cursor() as cur:
         cur.execute(
@@ -31,15 +39,16 @@ def _seed_application(
         )
         cur.execute(
             'INSERT INTO "Resume" ("id","userId","version","sections","formatHash",'
-            '"updatedAt") VALUES (%s,%s,1,%s,%s,NOW())',
-            (resume_id, user_id, json.dumps({"summary": "test"}), "hash-test"),
+            '"sourceJobId","updatedAt") VALUES (%s,%s,1,%s,%s,%s,NOW())',
+            (resume_id, user_id, json.dumps({"summary": "test"}), "hash-test",
+             job_id if tailored else None),
         )
         cur.execute(
             'INSERT INTO "Application" ("id","userId","jobId","resumeId","status",'
-            '"answers","createdAt","updatedAt") '
-            'VALUES (%s,%s,%s,%s,%s::"ApplicationStatus",%s,NOW(),NOW())',
+            '"answers","coverLetter","createdAt","updatedAt") '
+            'VALUES (%s,%s,%s,%s,%s::"ApplicationStatus",%s,%s,NOW(),NOW())',
             (app_id, user_id, job_id, resume_id, app_status,
-             json.dumps(answers) if answers is not None else None),
+             json.dumps(answers) if answers is not None else None, cover_letter),
         )
     conn.commit()
     return app_id, job_id
@@ -106,7 +115,18 @@ class TestDetailAndSubmit:
     def test_submit_moves_draft_and_is_idempotent(
         self, client, auth_headers, user_id, db_session
     ):
-        app_id, _ = _seed_application(db_session, user_id, app_status="draft")
+        # FEAT-SUBMISSION-GATE (14e30c5): a draft is only submittable once a
+        # job-tailored resume and a cover letter exist. The invariant under test
+        # here is unchanged — draft -> submitted records the real apply URL and
+        # a repeat submit is a no-op — it is now exercised through a compliant
+        # draft instead of a bare one.
+        app_id, _ = _seed_application(
+            db_session,
+            user_id,
+            app_status="draft",
+            tailored=True,
+            cover_letter="Dear Hiring Manager,\n\nI am excited to apply.",
+        )
         resp = client.post(
             f"/applications/{app_id}/submit",
             headers=auth_headers,

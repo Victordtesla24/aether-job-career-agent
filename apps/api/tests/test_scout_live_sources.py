@@ -193,13 +193,16 @@ class TestScoutDedupe:
 
 class TestApplicationSubmit:
     def _seed_draft_application(self, client, auth_headers) -> str:
-        # The submit endpoint itself requires NO résumé (it only flips a draft
-        # Application to submitted). This helper uses a cover-letter run purely
-        # to MANUFACTURE the draft application to submit; that OUTBOUND
-        # generation now (correctly) refuses a user with no résumé of their own
-        # (resume_grounding; NF-final-B-001), so seed a real own résumé for the
-        # setup. FIXTURE_LLM_RESUME_TEXT matches the replay generation fixtures'
+        # This helper drives the REAL user journey that produces a submittable
+        # draft: scout -> tailor -> cover letter. The OUTBOUND generation paths
+        # refuse a user with no résumé of their own (resume_grounding;
+        # NF-final-B-001), so seed a real own résumé first —
+        # FIXTURE_LLM_RESUME_TEXT matches the replay generation fixtures'
         # vocabulary.
+        #
+        # FEAT-SUBMISSION-GATE (14e30c5): submitting a draft now requires a
+        # job-tailored resume as well as the cover letter, so the tailor run is
+        # part of the setup rather than optional.
         seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         run = client.post(
             "/agents/scout/run",
@@ -208,6 +211,11 @@ class TestApplicationSubmit:
         )
         assert run.status_code == 202
         job = client.get("/jobs", headers=auth_headers).json()[0]
+        tailor = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert tailor.status_code == 200, tailor.text
+        assert tailor.json()["resume_id"], tailor.text
         resp = client.post(
             "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
         )
