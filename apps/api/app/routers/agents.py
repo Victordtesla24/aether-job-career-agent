@@ -48,6 +48,7 @@ from app.services.llm_client import (
     LLMUnavailableError,
     QuotaExhaustedError,
     _infer_anthropic_auth_mode,
+    get_accumulated_usage,
     get_active_credential_env_var,
     get_last_served_model,
     get_quota_block_hours,
@@ -113,6 +114,30 @@ def _price_for(model: str) -> tuple[float, float]:
 
     cached = cached_model_price(model)
     return cached if cached is not None else _DEFAULT_PRICE
+
+
+def _price_guarding_down_pricing(
+    served_model: str, requested_model: "str | None"
+) -> tuple[float, float]:
+    """The served model's price, EXCEPT when it has no established price
+    (falls through to the flat ``_DEFAULT_PRICE``) while ``requested_model``
+    (the user/config-INTENDED model, only non-``None`` on a genuine
+    substitution) DOES have one. Adopting the flat default there would
+    silently DOWN-price a run whose intended model is properly priced — a
+    spend-cap bypass (ML-W14). Keep the intended model's established price
+    instead; the served id itself is still recorded honestly by the caller.
+
+    Shared by the genuine-success costing tail and the guard-rejection
+    degrade branch (MF-2, wave5-w2122 review) so the two paths cannot drift.
+    """
+    price_in, price_out = _price_for(served_model)
+    if (
+        requested_model is not None
+        and (price_in, price_out) == _DEFAULT_PRICE
+        and _price_for(requested_model) != _DEFAULT_PRICE
+    ):
+        price_in, price_out = _price_for(requested_model)
+    return price_in, price_out
 
 
 #: The product's full agent catalog as shown in the Agent Configuration grid.
@@ -745,13 +770,15 @@ def _execute_reserved_run(
     started = time.monotonic()
     # QA3-F-05: when the corrective drafting loop's retries make real,
     # successfully-served LLM calls and the guard only rejects the CONTENT of
-    # the final one, ``get_last_served_model()`` still holds that served id —
-    # but ONLY until this function's ``served_model_capture()`` scope exits,
-    # which resets the observation on unwind. The ``except (FabricationError,
-    # StructuralError)`` handler below runs AFTER that reset (it is attached
-    # to the outer ``try``, outside the ``with``), so the served id must be
-    # captured HERE, inside the scope, the instant the exception is caught.
+    # the final one, ``get_last_served_model()``/``get_accumulated_usage()``
+    # still hold that observation — but ONLY until this function's
+    # ``served_model_capture()`` scope exits, which resets both on unwind. The
+    # ``except (FabricationError, StructuralError)`` handler below runs AFTER
+    # that reset (it is attached to the outer ``try``, outside the ``with``),
+    # so both must be captured HERE, inside the scope, the instant the
+    # exception is caught.
     _degraded_served_model: str | None = None
+    _degraded_usage: dict[str, int] | None = None
     try:
         # Bind BOTH the credential context and the user's chosen model so the
         # deep LLM path resolves THIS user's key AND model.
@@ -762,6 +789,11 @@ def _execute_reserved_run(
                 output = _to_output(fn())
             except (FabricationError, StructuralError):
                 _degraded_served_model = get_last_served_model()
+                # MF-1 (wave5-w2122 review): the REAL accumulated char counts
+                # of every successful call the corrective loop made before the
+                # guard rejected the final draft's content — never the
+                # locally-authored refusal string built after the fact.
+                _degraded_usage = get_accumulated_usage()
                 raise
             # OBSERVE (never infer) which model actually served this run, while
             # the observation scope is still open — the LLM client publishes the
@@ -872,9 +904,29 @@ def _execute_reserved_run(
         # the previous hardcoded zero that hid real spend from the audit row,
         # GET /agents/stats and the USD spend cap.
         if _degraded_served_model:
-            price_in, price_out = _price_for(_degraded_served_model)
-            tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
-            tokens_out = max(1, len(json.dumps(honest_output, default=str)) // 4)
+            # MF-1 (wave5-w2122 review, HIGH): tokensOut must measure what the
+            # model ACTUALLY emitted across every successful call the
+            # corrective loop made (draft + retry + retry2 all reach this
+            # handler only when a FabricationError/StructuralError survives
+            # every retry — i.e. every one of them ran) — never the
+            # `honest_output` refusal dict, which is an English sentence THIS
+            # handler authors locally and no model ever produced.
+            # ``get_accumulated_usage()`` was captured above, inside the
+            # ``served_model_capture()`` scope, before it could reset.
+            usage = _degraded_usage or {}
+            tokens_in = max(1, usage.get("charsIn", 0) // 4)
+            tokens_out = max(1, usage.get("charsOut", 0) // 4)
+            # MF-2 (wave5-w2122 review, MED): mirror the success path's
+            # no-silent-substitution bookkeeping (agents.py's costing tail
+            # below, ``output["requestedModel"]``) — a degraded run can be
+            # served by a different model than the one intended just like a
+            # successful one, and that must stay auditable here too.
+            _intended_model = _model_for_agent(agent_name, override=_override_model)
+            if _intended_model is not None and _intended_model != _degraded_served_model:
+                honest_output["requestedModel"] = _intended_model
+            price_in, price_out = _price_guarding_down_pricing(
+                _degraded_served_model, honest_output.get("requestedModel")
+            )
             degraded_cost = round(
                 tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6
             )
@@ -914,6 +966,7 @@ def _execute_reserved_run(
         # existing (``flagged``/``issues``) contract.
         exc.degradedUsage = {
             "model": honest_output["model"],
+            "requestedModel": honest_output.get("requestedModel"),
             "tokensIn": honest_output["tokensIn"],
             "tokensOut": honest_output["tokensOut"],
             "costUsd": honest_output["costUsd"],
@@ -985,22 +1038,11 @@ def _execute_reserved_run(
     else:
         tokens_in = max(1, len(json.dumps(params, default=str)) // 4) + 400
         tokens_out = max(1, len(json.dumps(output, default=str)) // 4)
-        price_in, price_out = _price_for(model)
-        _requested_model = output.get("requestedModel")
-        if (
-            _requested_model is not None
-            and (price_in, price_out) == _DEFAULT_PRICE
-            and _price_for(_requested_model) != _DEFAULT_PRICE
-        ):
-            # ML-W14 safety rail. The SERVED id has no established price — the
-            # static table, the live catalog cache and the ``:free`` convention
-            # all came up empty — so ``_price_for`` returned its flat default.
-            # Adopting that for a run whose INTENDED model IS priced would
-            # silently DOWN-price it (e.g. a provider echoing a dated snapshot
-            # id for an alias), which is a spend-cap bypass. Keep the intended
-            # model's established price: the direction of error stays
-            # conservative, and the served id is still recorded honestly above.
-            price_in, price_out = _price_for(_requested_model)
+        # ML-W14 no-silent-down-pricing rail (shared with the guard-rejection
+        # degrade branch above via ``_price_guarding_down_pricing`` — MF-2):
+        # the direction of error stays conservative, and the served id is
+        # still recorded honestly above regardless of which price wins.
+        price_in, price_out = _price_guarding_down_pricing(model, output.get("requestedModel"))
         cost = round(tokens_in / 1000 * price_in + tokens_out / 1000 * price_out, 6)
         output["model"] = model
         output["tokensIn"] = tokens_in

@@ -294,6 +294,10 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         usage = getattr(exc, "degradedUsage", None) or {}
         degraded_cost = float(usage.get("costUsd") or 0)
         honest_result["model"] = usage.get("model")
+        if usage.get("requestedModel") is not None:
+            # MF-2: mirror the AgentRun row's substitution bookkeeping onto
+            # the BackgroundJob result too, so the two stay byte-identical.
+            honest_result["requestedModel"] = usage["requestedModel"]
         honest_result["tokensIn"] = usage.get("tokensIn", 0)
         honest_result["tokensOut"] = usage.get("tokensOut", 0)
         honest_result["costUsd"] = degraded_cost

@@ -483,33 +483,69 @@ _last_served_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "aether_llm_last_served_model", default=None
 )
 
+#: REAL accumulated request/response character counts (+ call count) across
+#: every successful live call in this context — a sibling observation to
+#: ``_last_served_model``, same lifecycle, published at the identical two call
+#: sites (MF-1, wave5-w2122 review of QA3-F-05). Exists because a run can make
+#: SEVERAL successful calls before an outcome is decided (the cover-letter
+#: corrective loop's draft + retry + retry2 — each a real, accepted LLM
+#: response) and a caller costing that run off a single locally-authored
+#: string (e.g. an English refusal message built after every attempt was
+#: rejected) would understate the actual spend by the number of attempts.
+#: ``None`` outside an open :func:`served_model_capture` scope.
+_accumulated_usage: contextvars.ContextVar[dict[str, int] | None] = contextvars.ContextVar(
+    "aether_llm_accumulated_usage", default=None
+)
+
 
 @contextmanager
 def served_model_capture() -> Iterator[None]:
-    """Open a fresh served-model observation scope for ONE run.
+    """Open a fresh served-model + accumulated-usage observation scope for ONE
+    run.
 
     Contract:
 
-    - Entering RESETS the observation to ``None``, so a value observed by an
-      earlier run in the same thread/task context can never be read as if it
+    - Entering RESETS both observations, so a value observed by an earlier
+      run in the same thread/task context can never be read as if it
       belonged to this one.
     - :func:`get_last_served_model` is valid INSIDE this scope, immediately
       after a successful call; on exit the previous scope's value is restored.
-    - The value reflects the LAST successful live call made inside the scope.
-      A run that makes several calls therefore reports the model that served
-      its final one — the same granularity as the single model id a run is
-      recorded against today.
+    - The served-model value reflects the LAST successful live call made
+      inside the scope. A run that makes several calls therefore reports the
+      model that served its final one — the same granularity as the single
+      model id a run is recorded against today.
+    - :func:`get_accumulated_usage` reflects EVERY successful call made so far
+      in the scope (unlike the served-model, which is last-call-only) — see
+      that function.
     - ``None`` means "nothing observed": replay/fixture mode, a deterministic
       agent that never calls the LLM, a run whose every attempt failed, or a
       call made on a thread this context was not copied into. Callers MUST
       treat ``None`` as "no observation" and keep their existing behaviour —
-      never as a licence to guess which model served.
+      never as a licence to guess which model served or invent a usage figure.
     """
-    token = _last_served_model.set(None)
+    model_token = _last_served_model.set(None)
+    usage_token = _accumulated_usage.set(None)
     try:
         yield
     finally:
-        _last_served_model.reset(token)
+        _last_served_model.reset(model_token)
+        _accumulated_usage.reset(usage_token)
+
+
+def _accumulate_usage(chars_in: int, chars_out: int) -> None:
+    """Add one successful call's REAL request/response char counts to the
+    active scope's running total. A no-op outside an open
+    :func:`served_model_capture` scope (mirrors ``_publish_served_model``'s own
+    silent no-op there — this module never raises for an absent scope)."""
+    current = _accumulated_usage.get()
+    base = current or {"charsIn": 0, "charsOut": 0, "calls": 0}
+    _accumulated_usage.set(
+        {
+            "charsIn": base["charsIn"] + max(0, chars_in),
+            "charsOut": base["charsOut"] + max(0, chars_out),
+            "calls": base["calls"] + 1,
+        }
+    )
 
 
 def get_last_served_model() -> str | None:
@@ -517,6 +553,17 @@ def get_last_served_model() -> str | None:
     successful live call in the active :func:`served_model_capture` scope, or
     ``None`` when nothing was observed (see that function's contract)."""
     return _last_served_model.get()
+
+
+def get_accumulated_usage() -> dict[str, int] | None:
+    """The REAL accumulated request/response character counts + call count
+    across every successful live call made so far in the active
+    :func:`served_model_capture` scope (MF-1), or ``None`` when the scope
+    isn't open or no call has yet succeeded in it. Keys: ``charsIn``,
+    ``charsOut``, ``calls``. Must be read INSIDE the scope, before it exits —
+    ``served_model_capture``'s ``finally`` resets it on unwind, same as
+    :func:`get_last_served_model`."""
+    return _accumulated_usage.get()
 
 
 def _publish_served_model(body: object, requested_model_id: str) -> None:
@@ -2089,13 +2136,15 @@ class LLMClient:
                 raise InsufficientCreditsError(message, provider=provider)
             raise RuntimeError(message)
         body = resp.json()
-        # The served model is published only on SUCCESS — after the content has
-        # been extracted and accepted — so a failed attempt never leaves an
-        # observation the biller could mistake for the model that served
-        # (ML-W14; see :func:`served_model_capture`).
+        # The served model (+ accumulated usage, MF-1) is published only on
+        # SUCCESS — after the content has been extracted and accepted — so a
+        # failed attempt never leaves an observation the biller could mistake
+        # for the model/spend that served (ML-W14; see
+        # :func:`served_model_capture`).
         if provider == "anthropic":
             content = parse_anthropic_response(body)
             _publish_served_model(body, model_id)
+            _accumulate_usage(len(system) + len(user), len(content))
             return content
         if "error" in body:
             raise RuntimeError(f"LLM provider error: {body['error']}")
@@ -2103,4 +2152,5 @@ class LLMClient:
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("LLM returned empty content")
         _publish_served_model(body, model_id)
+        _accumulate_usage(len(system) + len(user), len(content))
         return content
