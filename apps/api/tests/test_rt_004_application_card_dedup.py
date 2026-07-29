@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterator
 
 import pytest
 
@@ -34,6 +35,52 @@ def user_id(auth_headers) -> str:
 
     token = auth_headers["Authorization"].removeprefix("Bearer ")
     return decode_access_token(token)["userId"]
+
+
+@pytest.fixture(autouse=True)
+def _no_active_index_leak() -> Iterator[None]:
+    """This file deliberately seeds MULTIPLE active-status Application rows
+    for a single job via raw SQL (``test_most_advanced_status_wins_over_recency``,
+    ``test_funnel_sankey_counts_distinct_jobs``, ``test_canonical_counts_are_per_job``)
+    — modeling the exact live historical duplicate data (11+ cards for one
+    job) this file's board-dedup contract must keep tolerating.
+
+    NTH-R10 (wave35-sonnet-review-verdict.json) added a partial UNIQUE index
+    (``db.ensure_application_unique_active_index``) enforcing that same
+    invariant going forward at the DB layer. Once created in this shared
+    ``aether_test`` schema, it never disappears on its own — ``TRUNCATE``
+    truncates rows, not indexes — so if an earlier test in this class (e.g.
+    ``TestPromotionGuards``, which drives the real ``/submit``+``/move``
+    endpoints and lazily creates the index the first time it sees a clean,
+    non-violating table) already created it, the raw multi-row seeds above
+    would start failing with a real ``UniqueViolation`` instead of exercising
+    the display-layer dedup they're testing.
+
+    Drop the index (test-schema only) and reset the process-wide lazy-DDL
+    guard before AND after every test in this file, so these seeds stay
+    possible regardless of execution order — while ``TestPromotionGuards``
+    still exercises the real check-then-act guard on its own terms (that
+    guard is unchanged by NTH-R10 and works whether or not the physical
+    index exists).
+    """
+    import app.db as db_module
+    from app.db import get_connection
+
+    _index_name = getattr(
+        db_module, "APPLICATION_UNIQUE_ACTIVE_INDEX", "Application_user_job_active_key"
+    )
+
+    def _reset() -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f'DROP INDEX IF EXISTS "{_index_name}"')
+            conn.commit()
+        if hasattr(db_module, "_application_unique_active_index_ready"):
+            db_module._application_unique_active_index_ready = False
+
+    _reset()
+    yield
+    _reset()
 
 
 def _seed_job(conn, user_id: str) -> str:

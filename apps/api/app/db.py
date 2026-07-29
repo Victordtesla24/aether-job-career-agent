@@ -10,6 +10,7 @@ transactions, so connections are short-lived: open, use, close.
 """
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from contextlib import contextmanager
@@ -18,6 +19,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import psycopg2
 import psycopg2.extras
+
+logger = logging.getLogger(__name__)
 
 
 def _translate_prisma_url(url: str) -> tuple[str, str | None]:
@@ -435,3 +438,123 @@ def ensure_job_cover_suppression_column() -> None:
             )
         conn.commit()
     _job_cover_suppression_column_ready = True
+
+
+#: Name of the partial unique index enforcing "one ACTIVE Application per
+#: (userId, jobId)" — see ``ensure_application_unique_active_index``.
+APPLICATION_UNIQUE_ACTIVE_INDEX = "Application_user_job_active_key"
+
+#: Statuses that count as an "active" (currently-being-pursued) application
+#: for the one-per-job invariant below. Mirrors the RT-004 promotion-guard
+#: predicate in ``app.routers.applications`` (``submit_application``,
+#: ``move_application``) exactly — 'draft' rows are letter-version history
+#: (many allowed per job) and 'rejected'/'withdrawn' are terminal (a user may
+#: re-apply after either, so multiple closed rows per job are legitimate).
+APPLICATION_ACTIVE_STATUSES = ("submitted", "screening", "interview", "offer")
+
+#: Guard so the additive Application unique-active-per-job index is only
+#: ensured once per worker process THIS run has actually created it (see
+#: ``ensure_application_unique_active_index``). Deliberately NOT set when
+#: creation is skipped for existing violations, so a later call (once ops
+#: cleans them up) can still succeed without requiring a worker restart.
+_application_unique_active_index_ready = False
+
+
+def ensure_application_unique_active_index() -> None:
+    """Idempotently add a partial UNIQUE index enforcing one ACTIVE
+    ``Application`` per (``userId``, ``jobId``) on first use.
+
+    NTH-R10 (wave35-sonnet-review-verdict.json): the RT-004 promotion guards
+    in ``app.routers.applications`` (``submit_application``,
+    ``move_application``) are check-then-act — each SELECTs for an existing
+    active application for the job, then promotes its OWN draft, with no
+    atomicity between the two. Two concurrent promotions of two DIFFERENT
+    draft rows for the SAME job can both pass the SELECT (each reads before
+    the other commits) and both pass their own single-row compare-and-swap
+    (different rows, both starting 'draft'), minting two active applications
+    for one job — the cross-row version of the bug the per-row CAS closed.
+    Only the database itself can really close this, hence the partial
+    unique index; the callers additionally catch the resulting
+    ``UniqueViolation`` and map it to the identical 409 the check-then-act
+    guard already returns, so the client contract is unchanged.
+
+    LIVE EVIDENCE (2026-07-29, read-only probe against the production
+    ``aether`` schema, ``uat/reports/evidence/models-live/`` — see the
+    ML-W-17 fix commit): 2 (userId, jobId) pairs already violate this
+    invariant (21 extra rows total — the same live "11+ cards for one job"
+    duplication RT-004's board-dedup was built to tolerate). Creating the
+    index unconditionally would raise ``UniqueViolation`` on the very first
+    call in production and 500 an unrelated request. So: before attempting
+    creation, this checks for existing violations and, if any are found,
+    logs an honest WARNING (with the violation count) and returns WITHOUT
+    creating the index or failing the request — the existing check-then-act
+    409 guard remains the only protection for those jobs until ops runs a
+    cleanup (e.g. moving all-but-the-most-advanced duplicate to
+    'withdrawn'), at which point a later call in this (or a fresh) worker
+    process creates the index for real.
+
+    ``CREATE UNIQUE INDEX IF NOT EXISTS`` is additive (ADR-TR-1 lazy DDL, no
+    migration runner in this repo) and a transaction-scoped advisory lock
+    serializes concurrent first-hit callers so the DDL cannot race, mirroring
+    ``ensure_job_dedup_columns``. ``TRUNCATE`` never drops indexes, so this
+    survives test-suite teardown.
+    """
+    global _application_unique_active_index_ready
+    if _application_unique_active_index_ready:
+        return
+    active_statuses_sql = ",".join(f"'{s}'" for s in APPLICATION_ACTIVE_STATUSES)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Lock-free fast path: skip everything below once the index
+            # already exists (production after cleanup, or a warm process).
+            cur.execute(
+                "SELECT 1 FROM pg_indexes"
+                " WHERE schemaname = ANY(current_schemas(false))"
+                " AND tablename = 'Application'"
+                " AND indexname = %s",
+                (APPLICATION_UNIQUE_ACTIVE_INDEX,),
+            )
+            if cur.fetchone() is not None:
+                _application_unique_active_index_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240751,))
+            # Re-check inside the lock — a concurrent first-hit caller may
+            # have already created it while this one waited.
+            cur.execute(
+                "SELECT 1 FROM pg_indexes"
+                " WHERE schemaname = ANY(current_schemas(false))"
+                " AND tablename = 'Application'"
+                " AND indexname = %s",
+                (APPLICATION_UNIQUE_ACTIVE_INDEX,),
+            )
+            if cur.fetchone() is not None:
+                conn.commit()
+                _application_unique_active_index_ready = True
+                return
+            cur.execute(
+                f'SELECT count(*) FROM ('
+                f'  SELECT 1 FROM "Application"'
+                f'  WHERE "status" IN ({active_statuses_sql})'
+                f'  GROUP BY "userId", "jobId" HAVING count(*) > 1'
+                f") violations"
+            )
+            violation_groups = cur.fetchone()[0]
+            if violation_groups:
+                logger.warning(
+                    "ensure_application_unique_active_index: %d (userId, jobId) "
+                    "pair(s) already violate the one-active-application-per-job "
+                    "invariant -- SKIPPING index creation so this request does "
+                    "not fail. The check-then-act 409 guard in "
+                    "app.routers.applications remains the only protection for "
+                    "those jobs until the duplicates are cleaned up (NTH-R10).",
+                    violation_groups,
+                )
+                conn.commit()
+                return
+            cur.execute(
+                f'CREATE UNIQUE INDEX IF NOT EXISTS "{APPLICATION_UNIQUE_ACTIVE_INDEX}"'
+                f' ON "Application" ("userId", "jobId")'
+                f'  WHERE "status" IN ({active_statuses_sql})'
+            )
+        conn.commit()
+    _application_unique_active_index_ready = True

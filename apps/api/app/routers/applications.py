@@ -6,10 +6,11 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import psycopg2
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.db import get_connection, rows_to_dicts
+from app.db import ensure_application_unique_active_index, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.routers.analytics import get_application_counts
 
@@ -335,6 +336,7 @@ def move_application(
     """
     uid = current_user["id"]
     new_status = _validate_stage(body.to_stage, _APP_STAGE_TO_STATUS, "application")
+    ensure_application_unique_active_index()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -372,12 +374,30 @@ def move_application(
                         "history.",
                     )
             if from_status != new_status:
-                cur.execute(
-                    'UPDATE "Application" '
-                    'SET "status" = %s::"ApplicationStatus", "updatedAt" = NOW() '
-                    'WHERE "id" = %s AND "userId" = %s',
-                    (new_status, application_id, uid),
-                )
+                # NTH-R10 (wave35-sonnet-review-verdict.json): the guard just
+                # above is check-then-act -- a concurrent promotion of a
+                # DIFFERENT draft for the SAME job can commit between this
+                # request's SELECT and its own UPDATE below, so the guard
+                # alone cannot stop a cross-row duplicate. The partial unique
+                # index (ensure_application_unique_active_index) is the real
+                # backstop; map its violation to the IDENTICAL 409 the guard
+                # above returns, so the client contract is unchanged whether
+                # the race is caught here or up there.
+                try:
+                    cur.execute(
+                        'UPDATE "Application" '
+                        'SET "status" = %s::"ApplicationStatus", "updatedAt" = NOW() '
+                        'WHERE "id" = %s AND "userId" = %s',
+                        (new_status, application_id, uid),
+                    )
+                except psycopg2.errors.UniqueViolation:
+                    conn.rollback()
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "This job already has an active application — move that "
+                        "card instead; this draft stays in the letter's version "
+                        "history.",
+                    )
                 from app.repositories.admin import write_audit
 
                 write_audit(
@@ -497,6 +517,7 @@ def submit_application(
     the active pipeline board and moves to the Applied view (phase4).
     """
     submitted_job_id: str | None = None
+    ensure_application_unique_active_index()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -571,29 +592,48 @@ def submit_application(
                 # ``return get_application(...)`` at the bottom that an
                 # already-submitted application always took, instead of
                 # silently overwriting the winner's answers/resumeId.
-                cur.execute(
-                    """
-                    UPDATE "Application"
-                    SET "status" = 'submitted'::"ApplicationStatus",
-                        "resumeId" = %s,
-                        "answers" = COALESCE("answers", '{}'::jsonb) || %s::jsonb,
-                        "updatedAt" = NOW()
-                    WHERE "id" = %s AND "userId" = %s
-                      AND "status" = 'draft'::"ApplicationStatus"
-                    RETURNING "id"
-                    """,
-                    (
-                        tailored_resume_id,
-                        json.dumps(
-                            {
-                                "appliedUrl": body.applied_url,
-                                "submittedAt": datetime.now(UTC).isoformat(),
-                            }
+                #
+                # NTH-R10 (wave35-sonnet-review-verdict.json): the CAS above
+                # only protects THIS row — it cannot stop a concurrent
+                # promotion of a DIFFERENT draft for the SAME job, which can
+                # commit between this request's guard SELECT (above) and
+                # this UPDATE. The partial unique index
+                # (ensure_application_unique_active_index) is the real
+                # backstop for that cross-row race; map its violation to the
+                # IDENTICAL 409 the guard above returns, so the client
+                # contract is unchanged whether the race is caught there or
+                # here.
+                try:
+                    cur.execute(
+                        """
+                        UPDATE "Application"
+                        SET "status" = 'submitted'::"ApplicationStatus",
+                            "resumeId" = %s,
+                            "answers" = COALESCE("answers", '{}'::jsonb) || %s::jsonb,
+                            "updatedAt" = NOW()
+                        WHERE "id" = %s AND "userId" = %s
+                          AND "status" = 'draft'::"ApplicationStatus"
+                        RETURNING "id"
+                        """,
+                        (
+                            tailored_resume_id,
+                            json.dumps(
+                                {
+                                    "appliedUrl": body.applied_url,
+                                    "submittedAt": datetime.now(UTC).isoformat(),
+                                }
+                            ),
+                            application_id,
+                            current_user["id"],
                         ),
-                        application_id,
-                        current_user["id"],
-                    ),
-                )
+                    )
+                except psycopg2.errors.UniqueViolation:
+                    conn.rollback()
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "This job already has an active application — this draft "
+                        "stays in the letter's version history.",
+                    )
                 if cur.fetchone() is not None:
                     submitted_job_id = row[2]
                 conn.commit()
