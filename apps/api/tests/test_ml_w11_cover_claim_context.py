@@ -98,18 +98,36 @@ def test_full_aspirational_letter_body_produces_no_claim_flags() -> None:
     assert unsupported_claim_tokens(model_text, _EVIDENCE, _JD_TITLE) == []
 
 
-def test_role_referential_noun_phrase_in_a_neutral_sentence_passes() -> None:
-    """A JD noun modifying a ROLE/COMPANY head noun ("the marketplace
-    challenges", "your onboarding roadmap") describes the employer's world, not
-    the candidate's track record — even with no explicit aspiration verb."""
+def test_employer_possessed_noun_phrase_passes() -> None:
+    """A JD noun GENUINELY possessed by the employer ("your onboarding funnel")
+    describes their world, not the candidate's track record — including when it
+    is the topic of a sentence that goes on to state an opinion."""
+    assert unsupported_claim_tokens(
+        "Your onboarding funnel is where I see the sharpest leverage.",
+        _EVIDENCE,
+        _JD_TITLE,
+    ) == []
+
+
+def test_bare_role_noun_tail_without_a_possessor_stays_guarded() -> None:
+    """Deliberate tightening after adversarial review of 66747b6
+    (wave35-opus-review-verdict.json): an earlier revision exempted any token
+    followed by a role-ish noun ("the marketplace CHALLENGES"), with NO
+    requirement that the phrase belong to the employer. That tail reads
+    identically when the candidate is claiming the work, so real fabrications
+    escaped through it. Exemption now REQUIRES a possessor, and this
+    unpossessed phrasing — honest but ambiguous — stays guarded; the corrective
+    retry re-phrases it."""
     assert unsupported_claim_tokens(
         "The marketplace challenges in this role are the kind of problem that "
         "gets me out of bed.",
         _EVIDENCE,
         _JD_TITLE,
-    ) == []
+    ) == ["marketplace"]
+    # …and the possessed phrasing of the same thought passes.
     assert unsupported_claim_tokens(
-        "Your onboarding funnel is where I see the sharpest leverage.",
+        "Your marketplace challenges are the kind of problem that gets me out "
+        "of bed.",
         _EVIDENCE,
         _JD_TITLE,
     ) == []
@@ -404,3 +422,191 @@ def test_hypothetical_offer_survives_the_possessed_role_rule() -> None:
         _EVIDENCE,
         _JD_TITLE,
     ) == []
+
+
+# ===========================================================================
+# Adversarial-review regressions (wave35-opus-review-verdict.json, commit
+# 66747b6 FAILED). Four REAL fabrications passed the first classifier because
+# it recognised experience from a verb WHITELIST and exempted any token
+# followed by a role-ish noun. Reproduction harness:
+# uat/reports/evidence/models-live/wave35-opus-review/w11-adversarial-attack.py
+# ===========================================================================
+
+#: The reviewer's corpus: proves NOTHING about marketplace/onboarding.
+_ATTACK_EVIDENCE = (
+    "Software Engineer, Acme Widgets Pty Ltd, 2019-2023. Built internal tooling "
+    "in Python and React for the warehouse team. Reduced deployment time by 40% "
+    "through CI pipeline improvements. Mentored two junior engineers on test "
+    "coverage practices. BSc Computer Science, University of Melbourne."
+)
+_ATTACK_JD = "Senior Marketplace Trust and Safety Onboarding Manager"
+
+
+@pytest.mark.parametrize(
+    ("bypass", "sentence"),
+    [
+        # 1. 'drew' (drew up = built) matched only the ASPIRATION cue list.
+        (
+            "aspiration-verb-disguised past tense",
+            "I drew up the marketplace onboarding roadmap for my last three "
+            "enterprise clients.",
+        ),
+        # 2. present continuous was in no cue list at all.
+        (
+            "present continuous",
+            "I'm currently managing the marketplace onboarding pipeline for two "
+            "major enterprise clients.",
+        ),
+        # 3. an ordinary irregular past tense missing from the whitelist.
+        (
+            "irregular past tense outside the whitelist",
+            "I spoke daily with enterprise clients about the marketplace "
+            "onboarding roadmap for two years.",
+        ),
+        # 4. determiner-less nominal self-description.
+        (
+            "determiner-less nominal self-description",
+            "I'm marketplace onboarding lead for enterprise clients.",
+        ),
+    ],
+)
+def test_adversarial_review_bypasses_are_closed(bypass: str, sentence: str) -> None:
+    """Each of these asserts real, unevidenced experience with a JD-domain noun
+    and MUST be flagged. Experience detection now fails CLOSED — any verb after
+    "I" is an assertion unless it is a modal or a verb of wanting — so no verb
+    the author failed to enumerate can slip through."""
+    flags = unsupported_claim_tokens(sentence, _ATTACK_EVIDENCE, _ATTACK_JD)
+    assert "marketplace" in flags, f"{bypass} still bypasses the guard: {flags}"
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # present-continuous ASPIRATION counterpart of bypass 2
+        "I'm excited to be learning about your marketplace onboarding model.",
+        "I'm looking forward to the onboarding problems your team is solving.",
+        # nominal-shaped ASPIRATION counterpart of bypass 4
+        "I am keen on the marketplace onboarding work your team does.",
+        "I'd love to help with your marketplace onboarding roadmap.",
+    ],
+)
+def test_aspiration_counterparts_of_the_closed_bypasses_still_pass(
+    sentence: str,
+) -> None:
+    """The boundary the fix must hold: the same grammatical shapes carrying
+    INTEREST rather than experience are not claims. "I'm <-ing>" is a claim only
+    when the participle describes work ("managing"), never when it carries
+    intent ("looking", "learning"); "I'm <noun phrase>" is a claim only when the
+    phrase names a job title."""
+    assert unsupported_claim_tokens(sentence, _ATTACK_EVIDENCE, _ATTACK_JD) == []
+
+
+# --- the produced live letters must keep passing ---------------------------
+
+#: Model-authored text of the two letters this fix produced live against the
+#: production-configured model (deepseek/deepseek-v4-pro, 2026-07-29T12:33Z,
+#: uat/reports/evidence/models-live/ML-W11/live-proof.json), excluding the
+#: deterministic role/company hook the guard never checks. Grounded solely in
+#: FIXTURE_LLM_RESUME_TEXT — every one of these sentences is honest, so any
+#: future flag here is a false positive that would zero out the product again.
+_LIVE_LETTER_GRC = (
+    "Deputy's global SaaS platform, serving over 1.5 million workers across "
+    "100+ countries, requires rigorous governance and compliance frameworks, "
+    "and my track record of delivering fully compliant, high-stakes program "
+    "portfolios aligns with that need.\n"
+    "The GRC Program Manager role at Deputy involves driving governance, risk "
+    "management, and regulatory adherence for a platform of this scale. I "
+    "directed AI/ML and MLOps CI/CD initiatives across a program portfolio "
+    "valued at over $5M, maintaining 100% regulatory compliance for data "
+    "initiatives. My collaboration with engineering and delivery squads, "
+    "including leading 6 engineers and owning sprint cadence and PI Planning, "
+    "ensures I can embed governance practices directly into development "
+    "workflows.\n"
+    "I would welcome the opportunity to discuss how my program leadership and "
+    "compliance delivery can support Deputy's GRC objectives. I am available "
+    "for a call at your convenience."
+)
+_LIVE_LETTER_MARKETPLACE = (
+    "My background leading a six-engineer payments platform that handled 2 "
+    "million requests per day, paired with direct experience driving executive "
+    "status reporting and PI planning, mirrors this role's need to run "
+    "high-volume operations and report risk metrics.\n"
+    "At Canvatech, I led a payments platform that processed 2 million requests "
+    "per day, improving throughput by 40 percent after migrating services to "
+    "Kubernetes and Docker. I owned sprint cadence, capacity management, and "
+    "executive status reporting for delivery squads.\n"
+    "I would welcome a conversation about how my experience leading engineering "
+    "initiatives and delivering clear operational metrics could support Culture "
+    "Amp's marketplace trust work. I am available for a call this week or next."
+)
+
+
+@pytest.mark.parametrize(
+    ("letter", "jd_title", "company"),
+    [
+        (_LIVE_LETTER_GRC, "GRC Program Manager", "Deputy"),
+        (_LIVE_LETTER_MARKETPLACE, "Marketplace Trust & Safety Lead", "Culture Amp"),
+    ],
+)
+def test_live_produced_letters_do_not_regress(
+    letter: str, jd_title: str, company: str
+) -> None:
+    """Regression floor: the real letters this fix shipped must keep passing the
+    guard as the classifier is hardened."""
+    from conftest import FIXTURE_LLM_RESUME_TEXT
+
+    flags = unsupported_claim_tokens(
+        letter, f"{FIXTURE_LLM_RESUME_TEXT} {company}", jd_title
+    )
+    assert flags == [], f"a letter produced live is now rejected: {flags}"
+
+
+# ===========================================================================
+# Naming the advertised role vs. claiming to have held it.
+# Live evidence (live-proof-hardened.json, 2026-07-29T13:27Z): after the
+# referential exemption was tightened to require a possessor, the model's
+# perfectly honest "…aligns with the GRC Program Manager role at Deputy" was
+# flagged on all three attempts and the Deputy letter died — the original
+# zero-letters catastrophe, reproduced. Naming the job you are applying for is
+# not a claim to have done it; claiming the TITLE is.
+# ===========================================================================
+
+_GRC_EVIDENCE = (
+    "Senior Software Engineer. Directed a $5M AI/ML program portfolio. "
+    "100% regulatory compliance for data initiatives. Deputy"
+)
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # verbatim live model output that was wrongly rejected
+        "My experience directing compliance-focused AI/ML initiatives and "
+        "managing program portfolios aligns with the GRC Program Manager role "
+        "at Deputy.",
+        "I have followed the GRC Program Manager posting since it opened.",
+    ],
+)
+def test_naming_the_advertised_role_is_not_a_claim(sentence: str) -> None:
+    """A contiguous run of the JOB TITLE followed by a role deictic ("… role",
+    "… posting") is the posting's own name for the job."""
+    assert unsupported_claim_tokens(sentence, _GRC_EVIDENCE, "GRC Program Manager") == []
+
+
+@pytest.mark.parametrize(
+    ("sentence", "evidence", "jd_title"),
+    [
+        ("I have been a GRC Program Manager for five years.",
+         _GRC_EVIDENCE, "GRC Program Manager"),
+        ("I was the GRC Program Manager at my last employer.",
+         _GRC_EVIDENCE, "GRC Program Manager"),
+        ("I'm a Marketplace Trust and Safety Lead by trade.",
+         _EVIDENCE, "Marketplace Trust & Safety Lead"),
+    ],
+)
+def test_claiming_to_hold_the_advertised_title_is_still_a_claim(
+    sentence: str, evidence: str, jd_title: str
+) -> None:
+    """The exemption requires BOTH a title run AND a role deictic after it, so
+    asserting the candidate HOLDS that title never qualifies."""
+    assert unsupported_claim_tokens(sentence, evidence, jd_title) != []
