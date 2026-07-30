@@ -97,3 +97,16 @@ QA #4: autopilot suppression LIVE-VERIFIED (honest suppressed-until line firing,
 
 ## Deploy #6 (@ 37aae18): W-24 closed — billing accuracy complete both paths
 Reviewer closure: success & degrade branches produce IDENTICAL figures from the same observation (0.9997 of ground truth; live A/B 15.6× under-report eliminated). Replay-fallback + deterministic-zero pins verified. api+worker restarted (web unchanged since #5). Carried follow-ups: NTH-9 (pin exact legacy value in replay test), NTH-10 (cover_degraded hard-zero asserted-not-observed), NTH-1 (unprotected record_spend), DEPLOY-NOTE-1 (operator: spend-cap thresholds were tuned against ~16×-understated basis — re-check the $15 cap). NEXT: wave-4 agents build (4A-4D per AGENTS-IMPLEMENTATION-MATRIX) + W-23/W-18 guard round + in-app suppression visibility.
+
+## Operator directive 2026-07-30 ~04:45Z (binding)
+Verify EVERY agent card on the Agents screen is configured, functional, operational, configurable and working IN PRODUCTION — 0 regression, 0 quality drop; same orchestration/swarm/3rd-party adversarial review discipline; NO user validation gates; opus/fable orchestrator + cheaper high-quality coders; deploy after every pass with prod verification; main branch ONLY (no PRs/branches). => QA #5 (post wave-4 deploys) must live-run ALL 22 catalog cards per-agent on production (active agents: real run each; honest-degradation paths verified where deps missing).
+Status at directive: guard F5/F6 final cycle + companyResearch re-fix + wave-4B resume (all 3 interrupted by session limit 4:30Z, resumed 04:46Z with WIP intact). Then: 4A closure verdict, 4C outreach family, 4D submission, gates, deploy #7+, QA #5 all-22 sweep.
+
+## Deploy #7 (@ 4a9cd6c + in-flight 4B hunk) + QA #5a: 5 agents LIVE-VERIFIED, 5 findings
+Items 1/3 PASS (all five new agents active/runnable/honest vs independent SQL replays; deterministic runs free; companyResearch narrative grounded-or-withheld; suppression hints exact on 3 suppressed + 19 clean jobs). Adjudications:
+- **F-2 HIGH (dispatched):** cold price cache after restart bills flat default = 2.3× real until catalog browse. Fix: warm/persist/on-demand price load.
+- **F-1 MED (queued behind 4B):** generic /agents/{name}/run lacks FabricationError handler → 500 for raw API clients (in-app safe via AGENT_ROUTE).
+- **F-3 MED (queued behind 4B):** hardcoded AGENT_NAMES=8 vs 16 active cards → sidebar "8 agents ready" contradiction; Orchestration blind to new agents.
+- **F-4 MED (→ guard hygiene round):** 2 paid attempts no letter; one rejection on generic ['demonstrating','ability'] — R-family over-flag residual biting live; bounded by suppression but costs real money. Hygiene round scope: idiomatic tenure verbs + stance nouns + generic-word channel + this.
+- **F-5 GOVERNANCE:** deploy #7 restart picked up wave-4B's UNCOMMITTED agents.py billing hunk from the shared tree (behavior confirmed correct live; 4B committing ASAP). LESSON: pre-restart `git status` check on apps/api must be added to deploy discipline.
+- QA disclosure: its first DB helper's read-only rail was ineffective (DSN options overrode PGOPTIONS); proved via a nil-damage self-assignment UPDATE on prod, then hardened (BEGIN READ ONLY + DSN-pinned). Noted.

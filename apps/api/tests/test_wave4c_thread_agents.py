@@ -30,10 +30,9 @@ import json
 import uuid
 
 import pytest
+from conftest import JORDAN_RESUME_TEXT, seed_own_resume
 
 from app.db import get_connection, new_id, rows_to_dicts
-
-from conftest import JORDAN_RESUME_TEXT, seed_own_resume
 
 THREAD_SUBJECT = "Interview for Senior Software Engineer"
 THREAD_BODY = (
