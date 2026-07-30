@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { submitApplication } from "../../../lib/api/applications";
-import { fetchApprovals, type Approval } from "../../../lib/api/approvals";
+import { createApproval, fetchApprovals, type Approval } from "../../../lib/api/approvals";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
@@ -235,7 +235,21 @@ function MoveMenu({
 }
 
 /** Stage-specific card footer line/badge (wireframe card-at13..at25). */
-function CardMeta({ card, stageKey }: { card: StageCard; stageKey: StageKey }) {
+function CardMeta({
+  card,
+  stageKey,
+  hasPendingApproval,
+  onRequestApproval,
+  requestingApproval,
+}: {
+  card: StageCard;
+  stageKey: StageKey;
+  /** P0-3: whether a LIVE pending approval exists for this draft. */
+  hasPendingApproval?: boolean;
+  /** P0-3: re-request handler (existing POST /approvals path). */
+  onRequestApproval?: () => void;
+  requestingApproval?: boolean;
+}) {
   const { meta } = card;
   switch (stageKey) {
     case "evaluating":
@@ -250,9 +264,40 @@ function CardMeta({ card, stageKey }: { card: StageCard; stageKey: StageKey }) {
     case "tailoring":
       return <p className="mono mt-2 text-[10px] text-aether-coral">tailoring resume…</p>;
     case "ready":
-      return (
-        <span className="mt-2 inline-block rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow">
+      // P0-3 deadlock fix: the old static "needs approval" badge lied when the
+      // approval had expired/been purged (48h window) — the draft then had NO
+      // route back into the queue. Show the badge only for a LIVE pending
+      // approval; otherwise surface the EXISTING re-request path
+      // (POST /approvals, idempotent per job+kind).
+      return hasPendingApproval ? (
+        <span
+          data-testid="needs-approval-badge"
+          className="mt-2 inline-block rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow"
+        >
           needs approval
+        </span>
+      ) : (
+        <span className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span
+            data-testid="approval-expired-badge"
+            className="inline-block rounded-md bg-aether-coral/15 px-2 py-0.5 text-[10px] text-aether-coral"
+          >
+            no pending approval
+          </span>
+          {onRequestApproval ? (
+            <button
+              type="button"
+              data-testid="request-approval-button"
+              disabled={requestingApproval}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestApproval();
+              }}
+              className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted transition hover:border-white/30 hover:text-white disabled:opacity-50"
+            >
+              {requestingApproval ? "Requesting..." : "Request approval"}
+            </button>
+          ) : null}
         </span>
       );
     case "submitted":
@@ -333,6 +378,8 @@ export default function ApplicationsPage() {
       .map((a) => a.applicationId)
       .filter((id): id is string => Boolean(id)),
   );
+  // P0-3: per-card busy flag while re-requesting an approval.
+  const [requestingApprovalId, setRequestingApprovalId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TrackerApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -496,6 +543,33 @@ export default function ApplicationsPage() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [clearGateOpen, closeClearGate]);
+
+  // P0-3: re-request an approval for a draft stuck in "Ready to Apply" with
+  // no live pending approval (expired/purged). Uses the EXISTING
+  // POST /approvals path — idempotent server-side per (job, kind, pending).
+  const requestApproval = async (card: StageCard) => {
+    const app = card.app;
+    if (!app || requestingApprovalId) return;
+    setRequestingApprovalId(app.id);
+    try {
+      await createApproval({
+        type: "application_submit",
+        application_id: app.id,
+        payload: {
+          job_id: app.jobId,
+          job_title: card.title,
+          company: card.company,
+          agent: "tracker",
+          action: "submit_application",
+        },
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to request approval");
+    } finally {
+      setRequestingApprovalId(null);
+    }
+  };
 
   /**
    * FEAT-B2: move a card to another stage — optimistic local update, honest
@@ -870,7 +944,19 @@ export default function ApplicationsPage() {
                               )}
                             </h3>
                             <p className="text-[11px] text-aether-muted-dim">{card.company}</p>
-                            <CardMeta card={card} stageKey={stage.key} />
+                            <CardMeta
+                              card={card}
+                              stageKey={stage.key}
+                              hasPendingApproval={
+                                card.app != null && pendingApprovalIds.has(card.app.id)
+                              }
+                              onRequestApproval={
+                                card.app ? () => void requestApproval(card) : undefined
+                              }
+                              requestingApproval={
+                                card.app != null && requestingApprovalId === card.app.id
+                              }
+                            />
                             <CardLink stageKey={stage.key} />
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <p className="mono text-[10px] text-aether-muted-dim">

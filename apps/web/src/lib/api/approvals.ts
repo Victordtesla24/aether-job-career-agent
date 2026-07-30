@@ -24,6 +24,30 @@ export async function fetchApprovals(
   return z.array(ApprovalSchema).parse(data);
 }
 
+/** Re-request an approval via the EXISTING backend path (P0-3).
+ *
+ *  POST /approvals is the documented re-request capability: the repository's
+ *  create() is idempotent per (job_id, kind, pending) — it refreshes an
+ *  existing pending row instead of duplicating it. Used by the tracker's
+ *  "Request approval" affordance for drafts whose approval expired/was purged,
+ *  so they are not deadlocked outside the approval queue. */
+export async function createApproval(
+  body: {
+    type: Approval["type"];
+    application_id?: string | null;
+    payload: Record<string, unknown>;
+  },
+  options: RequestOptions = {},
+): Promise<Approval> {
+  return ApprovalSchema.parse(
+    await apiRequest<unknown>("/approvals", {
+      ...options,
+      method: "POST",
+      body,
+    }),
+  );
+}
+
 /** Remove one stale (expired or resolved) approval request (FEAT-B1). */
 export async function deleteApproval(
   id: string,

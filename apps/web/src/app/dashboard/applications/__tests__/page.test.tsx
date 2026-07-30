@@ -399,3 +399,113 @@ describe("Clear Pipeline confirmation gate (FEAT-CLEAR)", () => {
     expect(screen.getByText("Senior Product Owner")).not.toBeNull();
   });
 });
+
+
+/**
+ * P0-3 approvals deadlock fix: a draft card in "Ready to Apply" must only
+ * claim "needs approval" when a LIVE pending approval exists. When the
+ * approval expired / was purged (48h window), the card previously showed a
+ * static badge with NO route back into the queue — a deadlock. The fix
+ * surfaces the EXISTING re-request path (POST /approvals, idempotent
+ * server-side per job+kind).
+ */
+describe("Ready-column approval re-request (P0-3)", () => {
+  const DRAFT_APP = {
+    ...APP_FIXTURE,
+    id: "app-draft-1",
+    jobId: "job-draft-1",
+    status: "draft",
+    jobTitle: "Staff Engineer",
+    company: "Peloton",
+  };
+
+  const PENDING_APPROVAL = {
+    id: "appr-1",
+    userId: "user-1",
+    applicationId: "app-draft-1",
+    type: "application_submit",
+    status: "pending",
+    payload: { job_id: "job-draft-1", job_title: "Staff Engineer", company: "Peloton" },
+    createdAt: "2026-07-30T00:00:00Z",
+    resolvedAt: null,
+  };
+
+  function mockWith(approvals: unknown[], onCreate?: (options: unknown) => unknown) {
+    apiRequest.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === "/approvals" && options?.method === "POST") {
+        if (onCreate) return onCreate(options);
+        return PENDING_APPROVAL;
+      }
+      if (path === "/applications") return [DRAFT_APP];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return approvals;
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+  }
+
+  it("shows 'needs approval' ONLY when a live pending approval exists", async () => {
+    mockWith([PENDING_APPROVAL]);
+    render(<ApplicationsPage />);
+    await screen.findByText("Staff Engineer");
+
+    expect(await screen.findByTestId("needs-approval-badge")).not.toBeNull();
+    expect(screen.queryByTestId("approval-expired-badge")).toBeNull();
+    expect(screen.queryByTestId("request-approval-button")).toBeNull();
+  });
+
+  it("shows the re-request affordance instead of a false badge when no pending approval exists", async () => {
+    mockWith([]); // approval expired / purged — nothing pending
+    render(<ApplicationsPage />);
+    await screen.findByText("Staff Engineer");
+
+    // FAILS before the fix: the old code rendered a static "needs approval"
+    // badge here regardless of the approval queue's actual state.
+    expect(await screen.findByTestId("approval-expired-badge")).not.toBeNull();
+    expect(screen.queryByTestId("needs-approval-badge")).toBeNull();
+    expect(screen.getByTestId("request-approval-button")).not.toBeNull();
+  });
+
+  it("POSTs /approvals with the application context and reconciles on click", async () => {
+    let created = false;
+    apiRequest.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === "/approvals" && options?.method === "POST") {
+        created = true;
+        return PENDING_APPROVAL;
+      }
+      if (path === "/applications") return [DRAFT_APP];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return created ? [PENDING_APPROVAL] : [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+
+    render(<ApplicationsPage />);
+    fireEvent.click(await screen.findByTestId("request-approval-button"));
+
+    // The badge flips to the live "needs approval" state after the reload —
+    // the card is back inside the approval queue, deadlock broken.
+    expect(await screen.findByTestId("needs-approval-badge")).not.toBeNull();
+    expect(screen.queryByTestId("request-approval-button")).toBeNull();
+
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/approvals",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.objectContaining({
+          type: "application_submit",
+          application_id: "app-draft-1",
+          payload: expect.objectContaining({
+            job_id: "job-draft-1",
+            job_title: "Staff Engineer",
+            company: "Peloton",
+          }),
+        }),
+      }),
+    );
+  });
+});
