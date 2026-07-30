@@ -1354,3 +1354,70 @@ closed. **Reversible?** Yes — every decision above is a UI/UX choice, not a sc
 architecture constraint. The backend endpoints are complete; the UI can add tabs, delete
 controls, edit forms, or LinkedIn import in a future phase without breaking any contract.
 
+
+
+## D-0041 — Part-2 remediation: approvals re-request affordance, networking delete UI, Market Pulse scope, admin CRON status source
+
+**Date:** 2026-07-30 · **Author:** PART2-REMEDIATION (adversarial production review 2026-07-30) · **Status:** Adopted
+
+**Context.** The 2026-07-30 adversarial production review
+(`/home/ubuntu/aether_review_2026-07-30/ADVERSARIAL-PRODUCTION-REVIEW-2026-07-30.md`) identified four
+items requiring a documented decision: (C-4) the approvals deadlock — applications flagged
+*needs approval* on the board while `/dashboard/approvals` shows "Queue clear" because requests
+expire after 48h with no recovery affordance; (ML-networking-001) the deferred contact-delete UI;
+(GAP-P4-004) Market Pulse "not connected"; and (C-6) the admin panel reporting CRON
+`not_configured` while a systemd discovery timer demonstrably fires every 30 minutes.
+
+**Decisions.**
+
+1. **Approvals re-request affordance (closes C-4 recovery gap).** The Applications board's
+   "ready" column now distinguishes two states per card: a live pending approval renders the
+   existing *needs approval* badge; a card whose approval has expired (or was never created)
+   renders a *no pending approval* badge plus a **Request approval** button. The button POSTs
+   the existing `POST /approvals` endpoint (`type: application_submit`, `application_id`,
+   payload `job_id/job_title/company`), which is idempotent per `(job_id, kind, pending)` —
+   double-clicks and races return the same pending approval rather than duplicates. Approving
+   the re-requested item transitions the draft application to `submitted` via the existing
+   `_sync_application` path. No auto-approval is introduced: the human stays in the loop; the
+   fix only restores a path forward after expiry. Alternatives rejected: (a) non-expiring
+   approvals — expiry is a deliberate safety property for an agent allowed to submit
+   applications on the user's behalf; (b) auto-transitioning the application state on expiry —
+   destroys user intent silently. Tests: `apps/web/src/app/dashboard/applications/__tests__/page.test.tsx`
+   (badge/button/POST cases), `apps/api/tests/test_part2_remediation.py::TestApprovalReRequestMigration`
+   (orphaned draft → re-request → idempotency → approve → submitted).
+
+2. **Networking contact-delete UI (closes the D-0040 §2 deferral / ML-networking-001).**
+   D-0040 §2 intentionally deferred a UI delete control. That deferral is now closed: the
+   contact detail modal exposes a two-click-confirm **Delete contact** button (first click arms,
+   second click calls the existing `DELETE /networking/contacts/{id}`; arming resets when the
+   modal switches contacts). This satisfies D-0040's own stated precondition for adding the
+   affordance ("needs a confirmation dialog") with the minimal proportional pattern. Backend is
+   unchanged (endpoint existed and was tested since 2026-07-22). D-0040 §2 is superseded on this
+   point only; all other D-0040 decisions stand. Tests:
+   `apps/web/src/app/dashboard/networking/__tests__/page.test.tsx` (arm/confirm/delete/refetch cases).
+
+3. **GAP-P4-004 Market Pulse: declared out of scope for the current phase.** Wiring a real
+   market-data source (salary benchmarks, demand indices) requires a paid external data
+   provider (procurement/human-gated) and is not committed for any current phase. The Analytics
+   screen keeps the honest "Market Pulse not connected" state — no synthetic or placeholder
+   market data will be rendered. This ADR is the adjudication the review asked for
+   ("wire a real market-data source or write the ADR declaring it out of scope").
+   **Reversible?** Yes — the panel and its honest empty state remain; a data source can be wired
+   in a future phase without contract changes.
+
+4. **Admin CRON status derived from scout run recency (fixes C-6).** The deployment's scheduler
+   is a host-level systemd timer (`aether-discovery.timer`), invisible to the API process, so
+   the previous hardcoded `not_configured` was false. The admin health endpoint now derives CRON
+   status from the observable effect of the scheduler: `MAX("startedAt")` of `AgentRun` rows for
+   the `scout` agent — `ok` if within 90 minutes (3× the 30-minute cadence), `stale` if older,
+   `not_configured` if no runs exist, `error` on DB failure, with `lastRunAt` and a detail
+   string. Alternatives rejected: (a) shelling out to `systemctl` from the API — couples the app
+   to the host init system and fails in containers/tests; (b) an env flag declaring cron
+   configured — reintroduces the exact class of asserted-not-observed status the review flagged.
+   Tests: `apps/api/tests/test_part2_remediation.py::TestAdminCronStatus` (not_configured/ok/stale).
+
+**Consequences.** The approvals pipeline no longer dead-ends after expiry; ML-networking-001 is
+closed as implemented (superseding its "intentional-by-design without UI delete" adjudication);
+GAP-P4-004 is formally out of scope with the honest banner retained; the admin panel reports
+scheduler health from evidence rather than assertion. All four changes are covered by
+fails-before/passes-after tests (evidence: `uat/reports/evidence/phase4/`).
