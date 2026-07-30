@@ -1122,14 +1122,15 @@ def _execute_reserved_run(
         output["tokensIn"] = tokens_in
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
-    # Backstop for an OPT-IN-LLM backend (``_OPTIONAL_LLM_BY_BACKEND``): the
+    # Backstop for a backend registered in ``_OPTIONAL_LLM_BY_BACKEND``: the
     # pre-execution predicate said this call WOULD reach the model, so a run was
     # reserved — but the agent then honestly reported it made no LLM call (e.g.
-    # companyResearch asked for a narrative with no postings to ground one in).
+    # companyResearch asked for a narrative with no postings to ground one in;
+    # interviewPrep asked to prep with no job and no interview-stage application).
     # Refund it: a reserved run that never touched a model must not be billed, and
     # end-state ``runsUsed`` must be unchanged. Scoped to those backends so the
     # existing per-backend metering of tailor / coverLetter / storyExtractor /
-    # emailAgent / interviewPrep is not silently re-priced by this change.
+    # emailAgent is not silently re-priced by this change.
     optional_llm_noop = no_llm_call and agent_name in _OPTIONAL_LLM_BY_BACKEND
     if optional_llm_noop:
         # Durable, honest marker (same camelCase convention as
@@ -1196,8 +1197,30 @@ def _company_research_wants_narrative(params: dict[str, Any]) -> bool:
     return bool(params.get("narrative"))
 
 
-#: Metered backends whose LLM use is OPT-IN PER CALL: backend -> predicate over
-#: the run params, True only when this call will really reach the LLM.
+def _interview_prep_will_call_llm(params: dict[str, Any]) -> bool:
+    """Whether an interviewPrep run will make an LLM call — unknowable from the
+    params, so conservatively True (ML-W4B, applying the ruling above).
+
+    Unlike companyResearch, whose opt-in is literally a param, interviewPrep's
+    ONE no-LLM-call path depends on DB STATE: no ``job_id`` was supplied AND no
+    application of the caller's sits at the interview stage, i.e. there is
+    nothing to prep for. Deciding that here would mean re-running the agent's own
+    job-resolution query inside the metering predicate — a second source of truth
+    that could drift from what the agent actually does, plus an extra query on
+    every run. So the atomic reserve-BEFORE-the-LLM-call rail is kept for EVERY
+    call, and the honest ``llm_called=False`` the agent reports AFTERWARDS is what
+    triggers the refund backstop in ``_execute_reserved_run``. Registering this
+    backend below is therefore about the BACKSTOP, never about skipping a
+    reserve — a metered call can still never reach a model unreserved.
+    """
+    return True
+
+
+#: Metered backends eligible for the no-LLM-call accounting above: backend ->
+#: predicate over the run params, True when this call will really reach the LLM.
+#: A backend listed here is ALSO covered by ``_execute_reserved_run``'s
+#: post-execution refund backstop, which is the only mechanism available when
+#: whether a model is reached depends on DB state rather than on params.
 #:
 #: ``_record_run``'s metering is otherwise per-BACKEND, which is correct for every
 #: agent whose whole purpose is an LLM call. companyResearch is different: its
@@ -1209,13 +1232,20 @@ def _company_research_wants_narrative(params: dict[str, Any]) -> bool:
 #: the predicate says makes no LLM call is treated as UNMETERED — no reserve, no
 #: spend, end-state ``runsUsed`` unchanged.
 #:
+#: interviewPrep (ML-W4B) has the same class of path — a run with nothing to prep
+#: for never reaches a model — but cannot detect it from params, so its predicate
+#: is unconditionally True and only the post-execution backstop applies (see
+#: :func:`_interview_prep_will_call_llm`). Measured pre-fix: a nothing-to-prep-for
+#: run moved runsUsed 0 -> 1 at $0 cost.
+#:
 #: Deliberately scoped to the backends listed here: tailor / coverLetter /
-#: storyExtractor / emailAgent / interviewPrep keep their existing per-backend
-#: metering exactly as-is, so this closes the reported defect without silently
-#: re-pricing any other agent. The atomic reserve-BEFORE-LLM-call rail is
-#: untouched for every call that DOES reach the model.
+#: storyExtractor / emailAgent keep their existing per-backend metering exactly
+#: as-is, so this closes the reported defects without silently re-pricing any
+#: other agent. The atomic reserve-BEFORE-LLM-call rail is untouched for every
+#: call that DOES reach the model.
 _OPTIONAL_LLM_BY_BACKEND: dict[str, Callable[[dict[str, Any]], bool]] = {
     "companyResearch": _company_research_wants_narrative,
+    "interviewPrep": _interview_prep_will_call_llm,
 }
 
 

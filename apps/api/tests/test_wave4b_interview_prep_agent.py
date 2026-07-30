@@ -703,6 +703,126 @@ def test_a_malformed_question_payload_is_dropped_not_guessed(
 
 
 # ---------------------------------------------------------------------------
+# Quota honesty (ML-W4A-REVIEW pattern, applied to this backend)
+#
+# interviewPrep is metered per-BACKEND, which is right: whether a call reaches
+# the model depends on DB state (is there a job to prep for?), NOT on params, so
+# the pre-execution predicate must keep reserving atomically BEFORE every call.
+# The question the 4A review raised is what happens on the ONE path that
+# completes WITHOUT an LLM call — nothing to prep for. A reserved run that never
+# touched a model must not be billed.
+# ---------------------------------------------------------------------------
+
+
+def _runs_used(user_id: str) -> int:
+    from app.repositories.billing import UsageQuotaRepository
+
+    row = UsageQuotaRepository().get_by_user(user_id)
+    return int(row["runsUsed"]) if row else 0
+
+
+@pytest.fixture()
+def billing_seeded(user_id):
+    """Materialise the quota row so runsUsed is a real number, not an absent row
+    that would make the assertions vacuous."""
+    from app.repositories.billing import ensure_user_billing
+
+    ensure_user_billing(user_id)
+    return user_id
+
+
+def test_a_run_with_nothing_to_prep_for_does_not_consume_plan_quota(
+    client, auth_headers, user_id, db_session, billing_seeded
+):
+    """The honest no-op path: no job requested and no interview-stage
+    application, so the agent never reaches a model. The run is reserved up front
+    (the params cannot tell us in advance) and must then be REFUNDED — end-state
+    runsUsed unchanged, exactly the ruling 4a9cd6c applied to companyResearch."""
+    _seed_job(db_session, user_id)  # discovered only — no interview-stage application
+    before = _runs_used(user_id)
+
+    for _ in range(2):
+        resp = _run(client, auth_headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["jobSelection"] == "none"
+        assert body["predictedQuestions"] == []
+        assert body["model"] is None and body["costUsd"] == 0.0
+        # The durable marker the async worker reads to make the same refund.
+        assert body["noLlmCall"] is True
+
+    assert _runs_used(user_id) == before, (
+        "a prep run that had nothing to prep for made no LLM call and cost $0, so "
+        "it must not consume a run from the user's paid plan allowance"
+    )
+
+
+def test_a_real_prep_run_consumes_exactly_one_run(
+    client, auth_headers, user_id, db_session, billing_seeded, monkeypatch
+):
+    """The other direction — the reserve-before-call rail is NOT weakened: a call
+    that really reaches the model reserves exactly one run and records spend."""
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "openai/gpt-4o")
+    job_id = _seed_job(db_session, user_id)
+    _seed_fixture_stories(client, auth_headers)
+    before = _runs_used(user_id)
+
+    body = _run(client, auth_headers, {"job_id": job_id}).json()
+    assert body["predictedQuestions"]
+    assert body.get("noLlmCall") is None  # it DID call the model
+    assert _runs_used(user_id) == before + 1
+
+    from app.repositories.billing import UsageQuotaRepository
+
+    assert float(UsageQuotaRepository().get_by_user(user_id)["spendUsedUsd"]) > 0
+
+
+def test_the_empty_story_bank_path_still_calls_the_llm_and_is_metered(
+    client, auth_headers, user_id, db_session, billing_seeded, monkeypatch
+):
+    """Pins the answer to the 4A-review question for THIS agent: the
+    zero-stories path is NOT a deterministic shortcut — it really does ask the
+    model for generic role questions grounded in the posting, so it is correctly
+    metered and must keep consuming its one reserved run."""
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "openai/gpt-4o")
+    job_id = _seed_job(db_session, user_id)
+    before = _runs_used(user_id)
+
+    body = _run(client, auth_headers, {"job_id": job_id}).json()
+    assert body["storyBankEmpty"] is True
+    assert body["predictedQuestions"], "the LLM is still asked for generic questions"
+    assert body["model"] is not None
+    assert body["tokensIn"] > 0 and body["tokensOut"] > 0
+    assert body["costUsd"] > 0
+    assert body.get("noLlmCall") is None
+    assert _runs_used(user_id) == before + 1
+
+
+def test_a_404_on_an_unknown_job_refunds_its_reservation(
+    client, auth_headers, user_id, billing_seeded
+):
+    """A rejected caller error must not bill either: the reservation taken before
+    execution is refunded on the failure path."""
+    before = _runs_used(user_id)
+    assert _run(client, auth_headers, {"job_id": "nope"}).status_code == 404
+    assert _runs_used(user_id) == before
+
+
+def test_the_backend_is_registered_for_the_no_llm_call_refund_backstop():
+    """Contract: interviewPrep participates in the OPT-IN-LLM refund backstop, and
+    its predicate is unconditionally True — every call is reserved BEFORE
+    execution (the atomic rail is untouched) because params alone cannot tell
+    whether a job exists to prep for; the post-execution ``llm_called=False``
+    report is what triggers the refund."""
+    from app.routers.agents import _OPTIONAL_LLM_BY_BACKEND, _call_is_metered
+
+    assert "interviewPrep" in _OPTIONAL_LLM_BY_BACKEND
+    assert _OPTIONAL_LLM_BY_BACKEND["interviewPrep"]({}) is True
+    assert _call_is_metered("interviewPrep", {}) is True
+    assert _call_is_metered("interviewPrep", {"job_id": "x"}) is True
+
+
+# ---------------------------------------------------------------------------
 # Screen-alive proof — GET /workspaces/interviews/prep
 # ---------------------------------------------------------------------------
 
