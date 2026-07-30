@@ -22,7 +22,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir apps/web lint
       - run: pnpm --dir apps/web type-check
-      - run: pnpm --dir apps/web vitest run
+      - run: pnpm --dir apps/web test
 
   api:
     name: API — lint, types (+ DB tests when secret set)
