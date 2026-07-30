@@ -1086,6 +1086,43 @@ _CLAIM_SPAN_TERMINATORS = (
 )
 
 
+def _predicate_is_own_claim(
+    tokens: list[tuple[str, int, int]], sentence: str, index: int, start: int
+) -> bool:
+    """True when a describing/aligning word at ``index`` belongs to the
+    CANDIDATE's own claim rather than pivoting to the posting, so the personal
+    claim span must continue through it.
+
+    A describing predicate normally ends a claim span, because "my background
+    ALIGNS WITH <the posting's X>" hands what follows to the employer. Two
+    shapes invert that, and both require the word to sit directly after one of
+    the candidate's own track-record nouns ("my EXPERIENCE mapping …"):
+
+    - a PARTICIPLE ("my experience MAPPING a central repository …") is the
+      complement of that track-record noun — grammatically the candidate's own
+      action, never a pivot; and
+    - a finite predicate whose sentence RETURNS TO THE FIRST PERSON afterwards
+      ("my background MATCHES a central repository of audit evidence artifacts
+      I BUILT") — the candidate reclaims the object as their own.
+
+    A plain fit statement is therefore left alone: "my delivery background
+    MATCHES the audit evidence artifacts this position tracks" describes the
+    ROLE's requirement and never returns to the candidate, so the span closes
+    and nothing in it is flagged. This is the same three-part test the title
+    channel already applies to a title run in :func:`_role_name_indices`
+    (describing predicate + no first-person return), so the identical grammar
+    is now treated identically whether its object is the advertised TITLE or a
+    JD-BODY phrase — ML-W23 F3, w23-w18-review-verdict.json.
+    """
+    if index <= start or tokens[index][0] not in _TITLE_DESCRIBING_PREDICATES:
+        return False
+    if tokens[index - 1][0] not in _PERSONAL_EVIDENCE_NOUNS:
+        return False
+    if tokens[index][0].endswith("ing"):
+        return True
+    return _returns_to_first_person_after(tokens, sentence, index)
+
+
 def _claim_spans(
     tokens: list[tuple[str, int, int]], sentence: str
 ) -> list[tuple[int, int]]:
@@ -1111,16 +1148,8 @@ def _claim_spans(
     for start in sorted(set(starts)):
         end = start
         while end < len(tokens):
-            if tokens[end][0] in _CLAIM_SPAN_TERMINATORS and not (
-                # …unless the describing/aligning word is the COMPLEMENT of the
-                # candidate's own track-record noun rather than a pivot to the
-                # posting: "my experience MAPPING a central repository …", "my
-                # background MATCHES a central repository …". Without this, an
-                # ordinary draft that happens to use a describing verb as its
-                # own claim verb collapsed the span to one word and escaped.
-                end > start
-                and tokens[end - 1][0] in _PERSONAL_EVIDENCE_NOUNS
-                and tokens[end][0] in _TITLE_DESCRIBING_PREDICATES
+            if tokens[end][0] in _CLAIM_SPAN_TERMINATORS and not _predicate_is_own_claim(
+                tokens, sentence, end, start
             ):
                 break
             if end > 0 and tokens[end][0] == "s" and any(
@@ -1175,14 +1204,23 @@ def _imported_jd_phrase_tokens(
     """JD-DESCRIPTION noun-phrase words the sentence claims as the candidate's
     own experience while their evidence never proves them (ML-W23)."""
     tokens = _surface_tokens(sentence)
-    personal_np = _possessed_indices(tokens, sentence, _PERSONAL_POSSESSIVES)
-    # Same polarity as the title channel: only ASPIRATION is exempt. A NEUTRAL
-    # first-person sentence ("My central repository of audit evidence artifacts
-    # covered eight squads.") stays guarded — it has no aspiration cue, and its
-    # only anchor is a "my …" possessive, which is a personal attribute
-    # regardless of context.
-    if _claim_context(sentence, personal_np, tokens) == _CTX_ASPIRATION:
-        return []
+    # NO sentence-wide context gate here (ML-W23 F1, w23-w18-review-verdict.json).
+    # An earlier revision short-circuited to [] whenever _claim_context() read the
+    # WHOLE sentence as ASPIRATION, which a single co-located ordinary clause
+    # defeated outright: "I'm excited about this opportunity, and my central
+    # repository of audit evidence artifacts cut costs by 92%" flagged nothing,
+    # while the same two clauses as separate sentences flagged correctly. That is
+    # standard LLM opener/closer style, so it re-opened QA3-F-04 wholesale.
+    #
+    # The unit of judgement is the SPAN, exactly as in the title channel, which
+    # claims a "my <X>" token at :916-921 BEFORE it ever consults ``context``.
+    # Dropping the gate loses nothing: :func:`_claim_context` returns EXPERIENCE
+    # whenever :func:`_first_person_asserts` finds an asserting ``I``, and
+    # :func:`_claim_spans` opens an ``I``-anchored span under exactly that same
+    # condition — so an ASPIRATION sentence can only ever carry POSSESSIVE-anchored
+    # spans, and a "my …" possessive is a personal attribute that aspiration
+    # framing can never launder. A sentence of pure aspiration has no possessive
+    # anchor, so it still yields no spans and no flags.
     unsupported = set(
         unsupported_tokens(sentence, evidence_stems, evidence_numbers, jd_body_stems)
     )
@@ -1253,14 +1291,69 @@ _ASSERTION_AUXILIARIES = frozenset(
     {"have", "has", "had", "was", "were", "am", "is", "been", "being",
      "do", "does", "did", "ve", "d", "m"}
 )
+#: Prepositions that can carry the anaphor as an INDIRECT object — "I served IN
+#: it", "I worked IN that role", "I thrived IN this position". Without these the
+#: rule only ever saw a direct object and 4 of 5 natural tenure phrasings walked
+#: past it (ML-W23 F2, w23-w18-review-verdict.json).
+_ANAPHOR_PREPOSITIONS = frozenset(
+    {"in", "at", "on", "within", "into", "under", "through", "throughout",
+     "during", "across", "for", "with", "as", "to", "from", "of"}
+)
+#: Verbs of OCCUPYING or PERFORMING a role. The anaphora rule fires only on
+#: these, which is what keeps it off ordinary reference to the advertised job:
+#: "I have applied FOR it", "I read THAT ROLE description", "I asked about it"
+#: are all first-person assertions taking an anaphoric object, and none of them
+#: claims tenure.
+#:
+#: A whitelist is the SAFE polarity *here*, unlike in
+#: :func:`_first_person_asserts` where the wave35 review rightly rejected one: a
+#: verb missing from this list simply leaves the sentence at the pre-ML-W18
+#: behaviour — the orchestrator-adjudicated accepted residual — whereas a verb
+#: missing from an experience whitelist would have waved a fabrication through.
+_TENURE_VERB_STEMS = frozenset(
+    _stem(word)
+    for word in """
+    hold held holding
+    serve served serving
+    work worked working
+    run ran running
+    lead led leading
+    own owned owning
+    manage managed managing
+    occupy occupied occupying
+    fill filled filling
+    perform performed performing
+    thrive thrived thriving
+    excel excelled excelling
+    spend spent spending
+    deliver delivered delivering
+    execute executed executing
+    drive drove driven driving
+    oversee oversaw overseen overseeing
+    head headed heading
+    direct directed directing
+    build built building
+    create created creating
+    establish established establishing
+    do did done doing
+    handle handled handling
+    support supported supporting
+    """.split()
+)
 
 
 def _asserts_on_bare_anaphor(
     tokens: list[tuple[str, int, int]], sentence: str
 ) -> bool:
-    """True when the sentence's first-person experience assertion takes a bare
-    anaphor as its direct object — "I held IT for three years", "I ran THAT
-    ROLE", "I have done IT before"."""
+    """True when the sentence claims to have OCCUPIED something referred to only
+    by an anaphor — "I held IT for three years", "I ran THAT ROLE", "I served IN
+    it", "I worked IN THAT ROLE", "I held SUCH A role", "I thrived IN THIS
+    POSITION".
+
+    The object may be direct or carried by a preposition, and an anaphoric noun
+    phrase may be gapped by an ordinary article ("such A role"). Only
+    :data:`_TENURE_VERB_STEMS` qualify, so ordinary reference to the advertised
+    job ("I have applied for it") is not a tenure claim."""
     asserted_at = _first_person_asserts(tokens, sentence)
     if asserted_at is None:
         return False
@@ -1272,9 +1365,11 @@ def _asserts_on_bare_anaphor(
         or tokens[i][0].endswith("ly")
     ):
         i += 1
-    if i >= len(tokens):
+    if i >= len(tokens) or _stem(tokens[i][0]) not in _TENURE_VERB_STEMS:
         return False
-    i += 1  # the verb itself
+    i += 1  # past the verb itself
+    if i < len(tokens) and tokens[i][0] in _ANAPHOR_PREPOSITIONS:
+        i += 1  # …and past a preposition carrying an indirect object
     while i < len(tokens) and tokens[i][0] in _ANAPHORIC_FILLERS:
         i += 1
     if i >= len(tokens):
@@ -1285,7 +1380,9 @@ def _asserts_on_bare_anaphor(
     if word not in _ANAPHORIC_DETERMINERS:
         return False
     j = i + 1
-    while j < len(tokens) and tokens[j][0] in _ANAPHORIC_FILLERS:
+    while j < len(tokens) and (
+        tokens[j][0] in _ANAPHORIC_FILLERS or tokens[j][0] in _PREDICATE_DETERMINERS
+    ):
         j += 1
     return j < len(tokens) and tokens[j][0] in _ROLE_DEICTIC_NOUNS
 

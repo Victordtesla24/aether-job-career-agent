@@ -484,6 +484,147 @@ def test_cross_sentence_anaphoric_tenure_claim_is_flagged(
     assert "grc" in flags or "manager" in flags, f"{shape} bypasses the guard: {flags}"
 
 
+# ===========================================================================
+# Adversarial review of 1373f82 (w23-w18-review-verdict.json, verdict FAIL).
+# Harness: uat/reports/evidence/models-live/w23-w18/qa-reviewer-adversarial-attack.py
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    ("bypass", "sentence"),
+    [
+        (
+            "F1 aspiration OPENER co-located with the claim",
+            "I'm excited about this opportunity, and my central repository of "
+            "audit evidence artifacts cut costs by 92%.",
+        ),
+        (
+            "F1 aspiration CLOSER co-located with the claim",
+            "My central repository of audit evidence artifacts cut costs by 92%; "
+            "I am thrilled by the chance to bring this to Stripe.",
+        ),
+        (
+            "F1 'drawn to' opener across a semicolon",
+            "I am drawn to this domain; my central repository of audit evidence "
+            "artifacts reduced review time by 92%.",
+        ),
+    ],
+)
+def test_co_located_aspiration_cannot_blind_the_phrase_channel(
+    bypass: str, sentence: str
+) -> None:
+    """F1 (BLOCKING). The channel used to classify the WHOLE sentence and
+    short-circuit to [] on any aspiration cue, so joining an ordinary
+    excitement clause to the claim with 'and'/';' re-opened QA3-F-04 outright —
+    the identical two clauses as SEPARATE sentences flagged correctly, which is
+    what proved it was the sentence-wide gate and not the claim logic.
+
+    Aspiration framing can never launder a "my <X>" possessive; that is already
+    how the title channel behaves (resume_tailor.py:916-921, which claims a
+    possessed token before it ever consults context). The unit of judgement is
+    now the SPAN."""
+    flags = unsupported_claim_tokens(
+        sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+    )
+    assert "repository" in flags, f"{bypass} still blinds the channel: {flags}"
+
+
+@pytest.mark.parametrize(
+    ("bypass", "text"),
+    [
+        (
+            "F2 prepositional object 'in it'",
+            "My background matches the GRC Program Manager role at Deputy. I "
+            "served in it for three years.",
+        ),
+        (
+            "F2 prepositional object 'in that role'",
+            "My background aligns with the GRC Program Manager role at Deputy. "
+            "I worked in that role for three years.",
+        ),
+        (
+            "F2 determiner-gapped 'such a role'",
+            "My background matches the GRC Program Manager role at Deputy. I "
+            "held such a role for three years.",
+        ),
+        (
+            "F2 prepositional object 'in this position'",
+            "My background aligns with the GRC Program Manager role at Deputy. "
+            "I thrived in this position for three years.",
+        ),
+    ],
+)
+def test_anaphoric_tenure_via_preposition_or_determiner_gap(
+    bypass: str, text: str
+) -> None:
+    """F2 (BLOCKING). The rule required the anaphor to be the verb's IMMEDIATE
+    direct object, so 4 of 5 natural tenure phrasings bypassed it — "served in
+    it", "worked in that role", "held such a role", "thrived in this position".
+    An indirect object behind a preposition, and an anaphoric noun phrase gapped
+    by an ordinary article, are now both recognised."""
+    flags = unsupported_claim_tokens(text, _GRC_TENURE_EVIDENCE, "GRC Program Manager")
+    assert "grc" in flags or "manager" in flags, (
+        f"{bypass} still bypasses the guard: {flags}"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # ordinary reference to the advertised job — not a tenure claim
+        "My background matches the GRC Program Manager role at Deputy. I have "
+        "applied for it through your careers page.",
+        "My background matches the GRC Program Manager role at Deputy. I read "
+        "that role description carefully before writing.",
+        "My background matches the GRC Program Manager role at Deputy. I asked "
+        "about it at the meetup.",
+    ],
+)
+def test_tenure_verb_requirement_keeps_ordinary_reference_clean(text: str) -> None:
+    """The false-positive control that makes F2's widening affordable: widening
+    the object slot without also requiring a verb of OCCUPYING would have turned
+    every ordinary back-reference to the posting into a tenure claim. Note the
+    polarity — a verb missing from the tenure list leaves the sentence at the
+    pre-ML-W18 behaviour (the adjudicated residual), never at a false flag."""
+    assert (
+        unsupported_claim_tokens(text, _GRC_TENURE_EVIDENCE, "GRC Program Manager")
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "My delivery background matches the audit evidence artifacts this "
+        "position tracks.",
+        "My program management background suits the security assessments this "
+        "role demands.",
+        "My delivery record aligns with the central repository of audit evidence "
+        "artifacts this role owns.",
+    ],
+)
+def test_plain_fit_statement_gains_no_body_phrase_flags(sentence: str) -> None:
+    """F3 (SHOULD-FIX). A describing predicate ends a claim span because it
+    pivots to the posting. The exception added to close the A1/A2 span bypasses
+    was unconditional, so a plain fit statement whose object is a JD-BODY phrase
+    over-flagged — while the identical grammar with a TITLE-run object stayed
+    correctly exempt via ``_role_name_indices``. The exception now requires the
+    same evidence the title channel does: either the predicate is a participle
+    (the track-record noun's own complement) or the sentence returns to the
+    first person and reclaims the object.
+
+    Asserted as "adds nothing over the title channel" rather than "== []": the
+    job TITLE contains 'Security', so ``_personal_claim_tokens`` flags 'security'
+    in the second sentence. That is PRE-EXISTING behaviour — verified identical
+    on the original guard at 37aae18 — and this fix must neither weaken nor
+    extend it."""
+    before = unsupported_claim_tokens(sentence, _VIK_EVIDENCE, _STRIPE_TITLE)
+    after = unsupported_claim_tokens(
+        sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+    )
+    assert after == before, f"the phrase channel over-fired on a fit statement: {after}"
+
+
 def test_writer_side_rails_forbid_relabelling_and_pronoun_tenure() -> None:
     """W-18's two remaining sub-families (a collective "our team ran it", a
     "which I did for three years" gloss of a preceding assertion) cannot be
