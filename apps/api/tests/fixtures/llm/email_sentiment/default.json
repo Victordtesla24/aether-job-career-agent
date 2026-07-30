@@ -1,0 +1,3 @@
+{
+  "content": "{\n  \"tone\": \"positive\",\n  \"score\": 78,\n  \"signals\": [\n    \"The sender invites the candidate to interview\",\n    \"The sender asks which times suit the candidate\"\n  ],\n  \"rationale\": \"The sender is moving the conversation forward and asks the candidate which times suit them.\"\n}"
+}

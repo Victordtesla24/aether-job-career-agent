@@ -264,12 +264,27 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "postings per week by discovery date. No external market-data feed. "
             "Says \"not enough data\" below the sample threshold instead of "
             "reporting a flat trend. Deterministic, no LLM cost."},
+    # ADR-AG-1 (wave-4C): "calendar coordination" claimed a calendar integration
+    # that does not exist (no Calendar OAuth, no free/busy read, no event write).
+    # The honest scope is DRAFT reply text on a real interview-stage thread.
     {"key": "scheduling", "name": "Scheduling Agent", "icon": "fa-calendar-check",
-     "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — lightweight scheduling & calendar coordination."},
+     "accent": "green", "backend": "scheduling", "recommended": "gpt-4o-mini",
+     "tip": "Drafts your reply on an email thread attached to an application that "
+            "is really at the Interview stage. Aether reads and writes NO calendar, "
+            "so it proposes only the availability you pass it and otherwise asks the "
+            "sender for windows — it never invents a time, never books anything and "
+            "never sends. Send the draft from the Email Center when you are happy "
+            "with it."},
+    # ADR-AG-1 (wave-4C): the scope was real, but the tip described a capability
+    # ("scoring of replies") without saying what it reads or how it degrades.
     {"key": "sentimentAnalysis", "name": "Sentiment Analysis Agent", "icon": "fa-face-smile",
-     "accent": "coral", "backend": None, "recommended": "claude-3.5-haiku",
-     "tip": "Best with claude-3.5-haiku for tone & sentiment scoring of replies."},
+     "accent": "coral", "backend": "sentimentAnalysis", "recommended": "claude-3.5-haiku",
+     "tip": "Reads the tone of ONE of your real synced email threads per run — a "
+            "tone from a fixed set, a 0-100 positivity score, the phrases that drove "
+            "the call, and a short explanation withheld if the fabrication guard "
+            "flags it. Reports which thread it read, says so honestly when you have "
+            "no threads or the message is empty, and never changes the Email Agent's "
+            "own triage labels."},
     # ADR-AG-1 (wave-4C): "& reminders" claimed a reminder scheduler that does not
     # exist. The real half — drafting the reference REQUEST itself — ships here.
     {"key": "reference", "name": "Reference Agent", "icon": "fa-user-check",
@@ -1248,6 +1263,8 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     # calls no model at all.
     "recruiterOutreach": "REASONING",
     "reference": "REASONING",
+    "sentimentAnalysis": "REASONING",
+    "scheduling": "REASONING",
 }
 
 
@@ -1379,6 +1396,8 @@ _OPTIONAL_LLM_BY_BACKEND: dict[str, Callable[[dict[str, Any]], bool]] = {
     # résumé) reach no model and must not cost a paid run.
     "recruiterOutreach": _outreach_will_call_llm,
     "reference": _outreach_will_call_llm,
+    "sentimentAnalysis": _outreach_will_call_llm,
+    "scheduling": _outreach_will_call_llm,
 }
 
 
@@ -1670,6 +1689,30 @@ def _agent_callable(
                 user_id, contact_id=str(contact_id) if contact_id else None
             )
         )
+    if name in ("sentimentAnalysis", "sentiment-analysis"):
+        from app.agents.sentiment_analysis_agent import SentimentAnalysisAgent
+
+        thread_id = params.get("thread_id")
+        return "sentimentAnalysis", (
+            lambda: SentimentAnalysisAgent().run(
+                user_id, thread_id=str(thread_id) if thread_id else None
+            )
+        )
+    if name in ("scheduling", "scheduling-agent"):
+        from app.agents.scheduling_agent import SchedulingAgent
+
+        thread_id = params.get("thread_id")
+        # ``proposed_times`` are the CALLER'S OWN availability windows. Aether reads
+        # no calendar, so this is the only source of a concrete time — the agent
+        # bounds/de-duplicates them and proposes nothing else.
+        proposed = params.get("proposed_times")
+        return "scheduling", (
+            lambda: SchedulingAgent().run(
+                user_id,
+                thread_id=str(thread_id) if thread_id else None,
+                proposed_times=list(proposed) if isinstance(proposed, list) else None,
+            )
+        )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
@@ -1685,7 +1728,7 @@ _RUNNABLE_BACKENDS = frozenset(
         "compliance", "salaryIntelligence", "marketTrends", "companyResearch",
         "learningFeedback",
         "interviewPrep",
-        "recruiterOutreach", "reference",
+        "recruiterOutreach", "reference", "sentimentAnalysis", "scheduling",
     }
 )
 
