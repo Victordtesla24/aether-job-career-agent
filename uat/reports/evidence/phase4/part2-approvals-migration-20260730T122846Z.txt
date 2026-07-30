@@ -1,0 +1,56 @@
+=== Part 2 prod migration: create pending approvals for 3 stuck draft applications — 20260730T122846Z ===
+--- BEFORE: pending approvals ---
+[]
+--- POST /approvals app=cb5049ff049f7a17a8d9d2496 ---
+HTTP 201
+{
+    "id": "cb22245a9d8df5646d0cf85cb",
+    "userId": "c6c8d0163d973a8048e7e33b8",
+    "applicationId": "cb5049ff049f7a17a8d9d2496",
+    "type": "application_submit",
+    "status": "pending",
+    "payload": {
+        "job_id": "c7ccd0437bbe6ff278b656427",
+        "company": "Samsara",
+        "job_title": "Principal Business Technology Product Manager"
+    },
+    "createdAt": "2026-07-30T12:28:48.825000",
+--- POST /approvals app=c4865aeb927b498aedafabc50 ---
+HTTP 201
+{
+    "id": "c9ce037d6c48bee1c2d1b0cbf",
+    "userId": "c6c8d0163d973a8048e7e33b8",
+    "applicationId": "c4865aeb927b498aedafabc50",
+    "type": "application_submit",
+    "status": "pending",
+    "payload": {
+        "job_id": "cc579363bd39cbe064a634267",
+        "company": "Peloton",
+        "job_title": "Program Manager, Sales Operations and Training"
+    },
+    "createdAt": "2026-07-30T12:28:49.042000",
+--- POST /approvals app=cad12f9a9dfdb50833c3a27db ---
+HTTP 201
+{
+    "id": "cc0097fbabf261f40aca14cbc",
+    "userId": "c6c8d0163d973a8048e7e33b8",
+    "applicationId": "cad12f9a9dfdb50833c3a27db",
+    "type": "application_submit",
+    "status": "pending",
+    "payload": {
+        "job_id": "c40090ef033bb2408e524bcdb",
+        "company": "Plenti",
+        "job_title": "Senior Product Manager, Strategic Origination Platforms"
+    },
+    "createdAt": "2026-07-30T12:28:49.254000",
+--- AFTER: pending approvals ---
+pending count: 3
+cc0097fbabf261f40aca14cbc application_submit pending Plenti
+c9ce037d6c48bee1c2d1b0cbf application_submit pending Peloton
+cb22245a9d8df5646d0cf85cb application_submit pending Samsara
+--- idempotency re-POST (Samsara) ---
+{"id":"cb22245a9d8df5646d0cf85cb","userId":"c6c8d0163d973a8048e7e33b8","applicationId":"cb5049ff049f7a17a8d9d2496","type":"application_submit","status":"pending","payload":{"job_id":"c7ccd0437bbe6ff278b656427","company":"Samsara","job_title":"Principal Business Technology Product Manager"},"createdAt":"2026-07-30T12:28:48.825000","resolvedAt":null}
+HTTP 201
+
+--- pending count after re-POST ---
+3

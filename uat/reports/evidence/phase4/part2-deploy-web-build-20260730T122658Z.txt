@@ -1,0 +1,57 @@
+$ next build
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/32) ...
+   Generating static pages (8/32) 
+   Generating static pages (16/32) 
+   Generating static pages (24/32) 
+ ✓ Generating static pages (32/32)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /_not-found                          872 B          88.2 kB
+├ ○ /admin                               1.41 kB         115 kB
+├ ○ /admin/audit-log                     1.43 kB         115 kB
+├ ○ /admin/health                        1.18 kB         114 kB
+├ ○ /admin/settings                      1.14 kB         114 kB
+├ ○ /admin/spend                         1.03 kB         114 kB
+├ ○ /admin/users                         1.8 kB          115 kB
+├ ƒ /admin/users/[id]                    2.17 kB         115 kB
+├ ƒ /api/auth/[...nextauth]              0 B                0 B
+├ ○ /apple-icon.png                      0 B                0 B
+├ ○ /dashboard                           6.62 kB         125 kB
+├ ƒ /dashboard/[...slug]                 183 B          96.2 kB
+├ ○ /dashboard/agents                    20.5 kB         134 kB
+├ ○ /dashboard/analytics                 4.17 kB         110 kB
+├ ○ /dashboard/applications              11.3 kB         121 kB
+├ ○ /dashboard/approvals                 7.64 kB         109 kB
+├ ○ /dashboard/cover-letters             8.97 kB         119 kB
+├ ○ /dashboard/email                     9.82 kB         111 kB
+├ ○ /dashboard/interviews                7.1 kB          117 kB
+├ ○ /dashboard/jobs                      12.9 kB         126 kB
+├ ○ /dashboard/networking                6.89 kB        94.2 kB
+├ ○ /dashboard/offers                    8.13 kB        95.5 kB
+├ ○ /dashboard/resume                    7.48 kB         108 kB
+├ ƒ /dashboard/settings                  11.6 kB         121 kB
+├ ○ /dashboard/stories                   7.02 kB         108 kB
+├ ƒ /forgot-password                     183 B          96.2 kB
+├ ○ /icon.png                            0 B                0 B
+├ ○ /login                               4.44 kB         100 kB
+├ ○ /pricing                             5.46 kB         115 kB
+├ ƒ /privacy-policy                      183 B          96.2 kB
+├ ○ /signup                              4.84 kB         101 kB
+└ ƒ /terms                               183 B          96.2 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/86-4acc831081004760.js        31.8 kB
+  ├ chunks/ed95e382-1b44a3312b0fe1ed.js  53.6 kB
+  └ other shared chunks (total)          1.95 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
