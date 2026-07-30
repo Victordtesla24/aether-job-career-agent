@@ -582,10 +582,17 @@ def email_inbox(
         # when the real body was <=120 chars to begin with (truncating it
         # would have been a no-op, so there is nothing missing to hide).
         is_truncated = (not include_full_body) and len(full_body) > 120
+        # P1-7 residual (QA-RES-001): the CRM Contact join is the preferred
+        # sender identity, but threads synced straight from Gmail have no
+        # contactId — their REAL sender lives in the latest synced message
+        # (gmail_service._normalize_thread stores "from"/"fromEmail"). Fall
+        # back to that before ever admitting "Unknown".
+        msg_from = latest.get("from") or ""
+        msg_from_email = latest.get("fromEmail") or ""
         messages.append({
             "id": t["id"],
-            "from": t.get("contact_name") or "Unknown",
-            "fromEmail": t.get("contact_email") or "",
+            "from": t.get("contact_name") or msg_from or msg_from_email or "Unknown",
+            "fromEmail": t.get("contact_email") or msg_from_email,
             "company": t.get("contact_company") or "",
             "subject": t.get("subject") or "(no subject)",
             "preview": preview,
