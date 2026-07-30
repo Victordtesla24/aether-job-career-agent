@@ -72,9 +72,11 @@ class EmailAgentResult:
     degraded: bool = False
     #: Whether this run actually invoked the LLM. Defaults True (the metered
     #: modes — triage-classify / draft / insights — all reach the model), and is
-    #: set False ONLY by a genuine zero-LLM-call no-op (an early-return triage
-    #: with nothing to classify) so the router prices it at zero rather than off
-    #: request payload size (ML-email-001). The router reads + strips this flag.
+    #: set False by a genuine zero-LLM-call path so the router prices it at zero
+    #: rather than off request payload size (ML-email-001): an early-return triage
+    #: with nothing to classify, and the two modes that never construct an LLM
+    #: call at all (``send`` queues an approval, ``apply_labels`` mutates Gmail
+    #: labels — ML-W4C). The router reads + strips this flag.
     llm_called: bool = True
     message: str = ""
     synced: int = 0
@@ -397,6 +399,7 @@ class EmailAgent:
                 mode="apply_labels",
                 connected=False,
                 degraded=True,
+                llm_called=False,
                 message="Connect Gmail to manage labels.",
             )
         thread_id = params.get("thread_id")
@@ -412,6 +415,7 @@ class EmailAgent:
         return EmailAgentResult(
             mode="apply_labels",
             connected=True,
+            llm_called=False,  # a Gmail label mutation — no model involved
             thread_id=thread_id,
             labels_applied=list(add_names),
             message=f"Applied {len(add_names)} label(s).",
@@ -442,6 +446,8 @@ class EmailAgent:
         return EmailAgentResult(
             mode="send",
             connected=self._is_connected(user_id),
+            llm_called=False,  # queuing an approval reaches no model
+
             thread_id=params.get("thread_id"),
             approval_id=approval["id"],
             approval_status=approval["status"],

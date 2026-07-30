@@ -1252,6 +1252,38 @@ def _interview_prep_will_call_llm(params: dict[str, Any]) -> bool:
     return True
 
 
+#: ``emailAgent`` modes that provably construct NO LLM call at all: ``send``
+#: creates a pending ``email_send`` ApprovalRequest and ``apply_labels`` mutates
+#: Gmail labels (or degrades honestly when Gmail is not connected). Both are
+#: decidable from the params alone, so they are never even reserved.
+_EMAIL_AGENT_NO_LLM_MODES = frozenset({"send", "apply_labels"})
+
+
+def _email_agent_will_call_llm(params: dict[str, Any]) -> bool:
+    """Whether an emailAgent run will make an LLM call (ML-W4C).
+
+    ``emailAgent`` was metered PER BACKEND, so every mode reserved a run from the
+    user's paid plan allowance — including the modes that reach no model. Two
+    distinct paths existed and both are covered:
+
+    * PARAMS-DECIDABLE (``send`` / ``apply_labels``): no model is constructed
+      whatever the DB holds, so this returns False and no run is reserved at all.
+    * DB-STATE-DEPENDENT (``triage`` with nothing to classify — the agent's own
+      documented ``llm_called=False`` early return): unknowable from the params
+      without re-running the agent's own thread query here (a second source of
+      truth), so it stays conservatively metered and the post-execution refund
+      backstop in :func:`_execute_reserved_run` restores the reserved run. The
+      atomic reserve-BEFORE-the-LLM-call rail therefore still covers every call
+      that DOES reach a model.
+
+    An unrecognised mode is metered conservatively: the agent raises
+    ``EmailAgentError`` after dispatch, which the standard failure path refunds —
+    an unknown name never buys a free pass around the reserve.
+    """
+    mode = str(params.get("mode") or "triage").strip()
+    return mode not in _EMAIL_AGENT_NO_LLM_MODES
+
+
 #: Metered backends eligible for the no-LLM-call accounting above: backend ->
 #: predicate over the run params, True when this call will really reach the LLM.
 #: A backend listed here is ALSO covered by ``_execute_reserved_run``'s
@@ -1274,14 +1306,22 @@ def _interview_prep_will_call_llm(params: dict[str, Any]) -> bool:
 #: :func:`_interview_prep_will_call_llm`). Measured pre-fix: a nothing-to-prep-for
 #: run moved runsUsed 0 -> 1 at $0 cost.
 #:
+#: emailAgent (ML-W4C, authorized by the wave-4C ruling — deliberately deferred
+#: by 4a9cd6c as another wave's agent) has BOTH shapes at once: two modes are
+#: params-decidable free paths and its triage no-op is DB-state-dependent, so it
+#: gets a mode-aware predicate plus the same backstop. Measured pre-fix: a
+#: ``mode=send`` run moved ``runsUsed`` 0 -> 1 AND recorded a non-zero ``costUsd``
+#: priced off request payload size for a run that called no model.
+#:
 #: Deliberately scoped to the backends listed here: tailor / coverLetter /
-#: storyExtractor / emailAgent keep their existing per-backend metering exactly
-#: as-is, so this closes the reported defects without silently re-pricing any
-#: other agent. The atomic reserve-BEFORE-LLM-call rail is untouched for every
-#: call that DOES reach the model.
+#: storyExtractor keep their existing per-backend metering exactly as-is, so this
+#: closes the reported defects without silently re-pricing any other agent. The
+#: atomic reserve-BEFORE-LLM-call rail is untouched for every call that DOES
+#: reach the model.
 _OPTIONAL_LLM_BY_BACKEND: dict[str, Callable[[dict[str, Any]], bool]] = {
     "companyResearch": _company_research_wants_narrative,
     "interviewPrep": _interview_prep_will_call_llm,
+    "emailAgent": _email_agent_will_call_llm,
 }
 
 
