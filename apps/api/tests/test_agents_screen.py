@@ -388,8 +388,16 @@ def test_test_run_model_never_null_for_deterministic_agent(client, auth_headers)
 def test_test_run_model_never_null_for_planned_agent(client, auth_headers):
     # A "planned" catalog entry has no backend implementation at all
     # (entry["backend"] is None) — same null-model bug applied here too.
+    # The planned key is read from the LIVE catalog rather than hardcoded: cards
+    # graduate from planned to active as agents ship (wave-4A moved `compliance`,
+    # which this test used to name), and this contract is about the *planned*
+    # state, not about any particular card.
+    catalog = client.get("/agents/catalog", headers=auth_headers).json()
+    planned = sorted(a["key"] for a in catalog["agents"] if a["backend"] is None)
+    if not planned:
+        pytest.skip("no planned cards remain in the catalog")
     res = client.post(
-        "/agents/test-run", json={"agent_key": "compliance"}, headers=auth_headers
+        "/agents/test-run", json={"agent_key": planned[0]}, headers=auth_headers
     )
     assert res.status_code == 200
     body = res.json()

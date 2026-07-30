@@ -162,10 +162,17 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "tip": "The semantic ATS engine that runs inside Match Scoring — embeds each resume "
             "against the job description (deterministic, no chat cost). Already shipped; "
             "runs as part of fit scoring."},
+    # ADR-AG-1 (wave-4A): the old tip promised "careful reasoning about
+    # truthfulness and evidence verification" — a second-opinion LLM verifier
+    # that does not exist. The ONLY truthfulness authority is the generation-time
+    # fabrication/entailment guard, so this card surfaces ITS verdicts.
     {"key": "compliance", "name": "Compliance Agent", "icon": "fa-shield-halved",
-     "accent": "green", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 for careful reasoning about truthfulness and "
-            "evidence verification."},
+     "accent": "green", "backend": "compliance", "recommended": "deterministic",
+     "tip": "Per-artifact compliance report over the fabrication/entailment guard "
+            "verdicts your own tailoring and cover-letter runs already recorded — "
+            "which claims were rejected, flagged or withheld, and which artifacts "
+            "came back clean. Runs that never reached a verdict are excluded, never "
+            "passed. Deterministic, no LLM cost."},
     {"key": "submission", "name": "Submission Agent", "icon": "fa-paper-plane",
      "accent": "green", "backend": None, "recommended": "gpt-4o",
      "tip": "Best with GPT-4o for reliable form-filling and browser automation reasoning."},
@@ -178,15 +185,30 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "tip": "Ranks every fit-scored job and selects the best-fit target for tailoring — "
             "the matcher node of the live pipeline, now runnable on its own. "
             "Deterministic, no LLM cost."},
+    # ADR-AG-1 (wave-4A): "aggregates salary data at scale" implied a salary
+    # data source. There is none — the only pay data Aether holds is what each
+    # discovered posting disclosed, so that is exactly what this aggregates.
     {"key": "salaryIntelligence", "name": "Salary Intelligence Agent", "icon": "fa-sack-dollar",
-     "accent": "amber", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — aggregates salary data at scale affordably."},
+     "accent": "amber", "backend": "salaryIntelligence", "recommended": "deterministic",
+     "tip": "Aggregates the salary ranges your own discovered postings actually "
+            "disclosed, grouped by role family, location and currency, and always "
+            "reports how many of them disclosed pay at all. A missing bound is left "
+            "empty — never imputed, never benchmarked against outside data, and "
+            "currencies are never merged. Deterministic, no LLM cost."},
     {"key": "interviewPrep", "name": "Interview Prep Agent", "icon": "fa-comments",
      "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
      "tip": "Best with Claude claude-sonnet-4 for realistic mock interviews and deep reasoning."},
+    # ADR-AG-1 (wave-4A): there is no web-research integration, so "from web
+    # sources" was unachievable. The honest scope is synthesis over the user's
+    # OWN postings, with an opt-in, guard-checked LLM narrative.
     {"key": "companyResearch", "name": "Company Research Agent", "icon": "fa-building",
-     "accent": "indigo", "backend": None, "recommended": "gpt-4o",
-     "tip": "Best with GPT-4o for synthesizing company research from web sources."},
+     "accent": "indigo", "backend": "companyResearch", "recommended": "gpt-4o",
+     "tip": "Synthesises what your own discovered postings say about a company — "
+            "roles, locations, remote mix, disclosed pay, boards, first/last seen — "
+            "and flags low confidence when only one posting exists. No external web "
+            "research. An optional LLM narrative (opt-in per run, metered) is "
+            "grounded in those same postings and withheld if the fabrication guard "
+            "flags it."},
     {"key": "skillGap", "name": "Skill Gap Agent", "icon": "fa-code-compare",
      "accent": "green", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Surfaces the job's missing keywords from the ATS engine "
@@ -202,9 +224,16 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "tip": "Real Gmail-backed inbox triage, evidence-grounded reply and follow-up drafting, "
             "label management and per-thread insights. Sends are approval-gated. Best with "
             "Claude claude-sonnet-4. Connect Gmail (Email Center) to activate live send/sync."},
+    # ADR-AG-1 (wave-4A): Aether subscribes to no market-data feed, so
+    # "market & hiring trend signals" claimed a source that does not exist. The
+    # honest scope is trends WITHIN the user's own discovery feed.
     {"key": "marketTrends", "name": "Market Trends Agent", "icon": "fa-arrow-trend-up",
-     "accent": "indigo", "backend": None, "recommended": "gpt-4o",
-     "tip": "Best with GPT-4o — synthesizes market & hiring trend signals."},
+     "accent": "indigo", "backend": "marketTrends", "recommended": "deterministic",
+     "tip": "Trends inside your own discovery feed — keyword shifts between the "
+            "earlier and recent half of your postings, the remote/onsite mix, and "
+            "postings per week by discovery date. No external market-data feed. "
+            "Says \"not enough data\" below the sample threshold instead of "
+            "reporting a flat trend. Deterministic, no LLM cost."},
     {"key": "scheduling", "name": "Scheduling Agent", "icon": "fa-calendar-check",
      "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
      "tip": "Best with GPT-4o-mini — lightweight scheduling & calendar coordination."},
@@ -218,9 +247,16 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "accent": "coral", "backend": "storyExtractor", "recommended": "claude-haiku-4-5-20251001",
      "tip": "Mines the base resume into STAR+R evidence stories for the Story Bank — "
             "runs on the STRUCTURED model tier."},
+    # ADR-AG-1 (wave-4A): nothing in Aether adapts or retrains from outcomes, so
+    # "learns from application outcomes to refine future tailoring" described a
+    # feedback loop that does not exist. Ships as a read-only outcomes report.
     {"key": "learningFeedback", "name": "Learning / Feedback Agent", "icon": "fa-graduation-cap",
-     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Planned: learns from application outcomes to refine future tailoring."},
+     "accent": "coral", "backend": "learningFeedback", "recommended": "deterministic",
+     "tip": "Read-only outcomes report: your application statuses cross-referenced "
+            "with fit score, whether the résumé was tailored for that job, and "
+            "whether a cover letter was attached. Reports observed association only "
+            "— it never adapts, retrains or re-weights anything — and withholds "
+            "every rate below the sample threshold. Deterministic, no LLM cost."},
     {"key": "orchestration", "name": "Orchestration Agent", "icon": "fa-sitemap",
      "accent": "indigo", "backend": "supervisor", "recommended": "deterministic",
      "tip": "Plans and sequences the live pipeline (supervisor node): scout → fitScorer → "
@@ -1093,13 +1129,21 @@ def _execute_reserved_run(
 
 #: LLM tier each backend agent actually calls through ``llm_client`` — kept in
 #: sync with the ``get_model(...)`` calls in the agent implementations.
-#: Backends absent here (scout, fitScorer, matcher, supervisor) are
-#: deterministic: scraping, embeddings, and plain code — no LLM spend.
+#: Backends absent here (scout, fitScorer, matcher, supervisor, and the wave-4A
+#: report agents compliance/salaryIntelligence/marketTrends/learningFeedback) are
+#: deterministic: scraping, embeddings, aggregation and plain code — no LLM spend.
 _LLM_TIER_BY_BACKEND: dict[str, str] = {
     "tailor": "REASONING",
     "coverLetter": "REASONING",
     "storyExtractor": "STRUCTURED",
     "emailAgent": "REASONING",
+    # companyResearch's deterministic synthesis is free, but its OPT-IN narrative
+    # calls the LLM — and metering is per-backend, so the backend must be metered
+    # for that call to go through the standard atomic reserve-before-call /
+    # refund-on-failure path. A run that makes no call reports ``llm_called
+    # =False`` and is stamped zero-cost (same convention as emailAgent's
+    # nothing-to-triage no-op).
+    "companyResearch": "REASONING",
 }
 
 
@@ -1298,7 +1342,57 @@ def _agent_callable(
         from app.agents.email_agent import EmailAgent
 
         return "emailAgent", (lambda: EmailAgent().run(user_id, **params))
+    # --- wave-4A report agents (ADR-AG-1) ---------------------------------
+    # All four deterministic ones take no required params, so the Agents-screen
+    # Run button works with the FE's default empty body and needs no
+    # RUN_PARAMS/AGENT_ROUTE entry (``AGENT_ROUTE[backend] ?? backend``).
+    if name in ("compliance", "compliance-agent"):
+        from app.agents.compliance_agent import ComplianceAgent
+
+        return "compliance", (lambda: ComplianceAgent().run(user_id))
+    if name in ("salaryIntelligence", "salary-intelligence"):
+        from app.agents.salary_intelligence_agent import SalaryIntelligenceAgent
+
+        return "salaryIntelligence", (lambda: SalaryIntelligenceAgent().run(user_id))
+    if name in ("marketTrends", "market-trends"):
+        from app.agents.market_trends_agent import MarketTrendsAgent
+
+        return "marketTrends", (lambda: MarketTrendsAgent().run(user_id))
+    if name in ("learningFeedback", "learning-feedback"):
+        from app.agents.learning_feedback_agent import LearningFeedbackAgent
+
+        return "learningFeedback", (lambda: LearningFeedbackAgent().run(user_id))
+    if name in ("companyResearch", "company-research"):
+        from app.agents.company_research_agent import CompanyResearchAgent
+
+        # ``company`` is optional: with none supplied the agent picks the company
+        # the user has the most postings for (and reports which). ``narrative``
+        # is opt-in — the default run makes no LLM call at all.
+        company = params.get("company")
+        narrative = bool(params.get("narrative"))
+        return "companyResearch", (
+            lambda: CompanyResearchAgent().run(
+                user_id,
+                company=str(company) if company else None,
+                narrative=narrative,
+            )
+        )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
+
+
+#: Backends the Agents-screen card exposes a working Run button for — i.e. every
+#: name ``_agent_callable`` above resolves. Kept adjacent to that mapping (and
+#: read by ``GET /agents/catalog``'s ``runnable`` flag) so a newly wired agent
+#: cannot be dispatchable while its card still renders as un-runnable, or vice
+#: versa.
+_RUNNABLE_BACKENDS = frozenset(
+    {
+        "scout", "fitScorer", "matcher", "tailor", "coverLetter",
+        "storyExtractor", "emailAgent",
+        "compliance", "salaryIntelligence", "marketTrends", "companyResearch",
+        "learningFeedback",
+    }
+)
 
 
 def _dispatch(
@@ -2281,8 +2375,7 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "model": model,
                 "recommended": entry["recommended"],
                 "tip": entry["tip"],
-                "runnable": backend in ("scout", "fitScorer", "matcher", "tailor",
-                                        "coverLetter", "storyExtractor", "emailAgent"),
+                "runnable": backend in _RUNNABLE_BACKENDS,
                 "backend": backend,
                 "enabled": enabled,
                 "status": state,
@@ -2318,8 +2411,15 @@ class AgentConfigUpdate(BaseModel):
 
 
 #: Deterministic (non-LLM) agents — their config panel disables temperature.
+#: The wave-4A report agents belong here: they aggregate the user's OWN persisted
+#: data and never call a model, so a per-agent model pick would be a no-op.
+#: ``companyResearch`` is deliberately NOT here — its opt-in narrative really
+#: does run on the picked model.
 _DETERMINISTIC_BACKENDS = frozenset(
-    {"scout", "fitScorer", "matcher", "supervisor"}
+    {
+        "scout", "fitScorer", "matcher", "supervisor",
+        "compliance", "salaryIntelligence", "marketTrends", "learningFeedback",
+    }
 )
 
 #: Non-catalog ``model`` values that must always remain valid: the literal
