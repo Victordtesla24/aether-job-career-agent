@@ -189,7 +189,13 @@ class TestEnforceFirstPersonHookGrammar:
             "I would welcome the opportunity to discuss this further in an "
             "interview at your convenience."
         )
-        seed_own_resume(client, auth_headers)
+        # ML-W23: this body claims "sprint cadence and PI Planning" — JD
+        # vocabulary that JORDAN_RESUME_TEXT does not prove, so with the JD BODY
+        # now part of the §9 claim guard's risk vocabulary it is (correctly) an
+        # unsupported claim and run() died on FabricationError before reaching the
+        # hook-grammar assertion under test. Seed the grounded résumé this file
+        # already uses elsewhere for exactly this reason.
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         me = client.get("/auth/me", headers=auth_headers).json()
         user_id = me["id"]
         job_id = _seed_job(user_id, "admin-collision", job)

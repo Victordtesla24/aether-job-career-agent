@@ -951,8 +951,408 @@ def _personal_claim_tokens(
     return [tok for tok in candidates if tok in claimed]
 
 
+# ---------------------------------------------------------------------------
+# JD-BODY phrase import (ML-W23).
+#
+# The risk vocabulary above is the job TITLE. That is far too narrow: the live
+# leak (QA3-F-04, uat/reports/evidence/prod-verify-3/item1e-confirm-run2.txt)
+# re-labelled a real COBOL *test*-evidence automation as a "central
+# test-evidence REPOSITORY … cutting AUDIT EVIDENCE effort by 92%", lifting
+# every one of those words from the job DESCRIPTION. Against the four-word
+# title "Program Manager, Security GRC" none of them was ever a candidate
+# token, so the ML-W11 classifier — which correctly read all three offending
+# sentences as EXPERIENCE — was never given anything to judge.
+#
+# Widening the risk vocabulary to every JD-body WORD is not an option: measured
+# on that same letter it also flags 'create', 'maintain', 'global',
+# 'obligations' and 'represent' — the ordinary words the letter uses to QUOTE
+# the requirement — and over-flagging honest drafts is exactly what zeroed the
+# product for three days (ML-W11).
+#
+# So the body enters as a PHRASE channel, scoped to personal-claim spans:
+#   * the unit is a JD NOUN PHRASE (a run of >=2 content words, :func:`_jd_phrase_index`),
+#     never a lone word — one incidental shared word is not a re-labelling;
+#   * it is only read inside a :func:`_claim_spans` region, and never in a
+#     sentence the ML-W11 classifier reads as ASPIRATION, so JD-referential and
+#     aspirational usage of the identical phrase is untouched;
+#   * and truthful terminology MIRRORING is preserved: an import fires only
+#     when >=2 of the reproduced words are unevidenced (the phrase's substance
+#     is not in the resume at all), or exactly one is and deleting it leaves a
+#     phrase the resume DOES contain (the resume's "cutting evidence effort"
+#     became "cutting AUDIT evidence effort" — a JD word grafted onto the
+#     candidate's real artifact, which is the re-labelling shape itself).
+#
+# The channel is purely ADDITIVE — it can only ever add flags, never remove
+# one — so every existing exemption, test and attack harness keeps its exact
+# prior behaviour, and an empty ``jd_body`` reproduces the pre-W23 guard byte
+# for byte.
+# ---------------------------------------------------------------------------
+
+#: Words that terminate a JD noun phrase when indexing the description.
+_JD_PHRASE_SPLITTERS = _NP_BOUNDARY_WORDS | _STOPWORDS | _NP_JOINERS
+
+#: Generic ACTION and MANNER vocabulary — how someone works, not a checkable
+#: qualification. Scoped to THIS channel only: it is never consulted by
+#: :func:`unsupported_tokens`, so the tailor guard and the title channel keep
+#: their exact behaviour (adding these to :data:`_GENERIC_PROFESSIONAL` would
+#: have exempted them everywhere, including as capitalized entities — a real
+#: weakening).
+#:
+#: Needed because the channel's unit is a phrase, and a JD's soft-skill register
+#: forms phrases too. Measured: "We need a designer who ships fast and
+#: communicates clearly with engineering" made the honest letter clause "I ship
+#: fast and communicate clearly with engineering teams" flag
+#: ['communicate', 'clearly', 'ship', 'fast']
+#: (tests/test_mv_cluster_a_cover_letter.py). That is ordinary cover-letter
+#: register, not a re-labelling, and over-flagging it is precisely the ML-W11
+#: zero-letters failure mode. "audit evidence", "central repository", "PI
+#: Planning", "SOC 2" — the things this channel exists to catch — are NOUNS and
+#: are unaffected.
+_JD_PHRASE_MANNER_STEMS = frozenset(
+    _stem(word)
+    for word in """
+    communicate communicates communication clear clearly fast quick quickly
+    slow well hard easy easily simple simply direct directly
+    ship ships shipped shipping build builds building move moves moving
+    think thinks work works working act acts speak speaks write writes
+    listen listens learn learns grow grows help helps
+    partner partners iterate iterates own owns run runs drive drives
+    deliver delivers ensure ensures support supports serve serves
+    manage manages lead leads create creates maintain maintains perform
+    performs track tracks report reports translate translates
+    """.split()
+)
+
+
+def _jd_phrase_index(jd_body: str) -> set[frozenset[str]]:
+    """Multi-word noun phrases of the job description, as stem sets.
+
+    Runs of >=2 content words bounded by punctuation, stopwords, determiners
+    and prepositions. "Create and maintain a central repository of audit
+    evidence artifacts required for compliance with SOC 2, PCI DSS, SOX, and
+    other global regulatory standards" yields {central, repositor},
+    {audit, evidenc, artifact, requir}, {soc, 2}, {pci, dss} and
+    {global, regulator, standard}. A one-word run is dropped ("SOX" here): a
+    single shared word is ordinary vocabulary overlap, not a lifted phrase.
+    """
+    folded = jd_body.translate(_UNICODE_FOLD)
+    phrases: set[frozenset[str]] = set()
+    run: list[str] = []
+    prev_end = 0
+    for match in _SURFACE_TOKEN_RE.finditer(folded):
+        broke = any(ch in _NP_BREAK_CHARS for ch in folded[prev_end : match.start()])
+        prev_end = match.end()
+        token = match.group(0).lower()
+        if broke or token in _JD_PHRASE_SPLITTERS:
+            if len(run) >= 2:
+                phrases.add(frozenset(run))
+            run = [] if token in _JD_PHRASE_SPLITTERS else [_stem(token)]
+            continue
+        stem = _stem(token)
+        # An -ly adverb modifies a VERB; it is never part of a checkable noun
+        # phrase, so it is skipped without breaking the run ("clearly
+        # documented processes" still yields {document, process}).
+        if token.endswith("ly") or stem in _JD_PHRASE_MANNER_STEMS:
+            continue
+        run.append(stem)
+    if len(run) >= 2:
+        phrases.add(frozenset(run))
+    return {
+        phrase
+        for phrase in phrases
+        if len(phrase) >= 2 and not phrase <= _JD_PHRASE_MANNER_STEMS
+    }
+
+
+#: Words that END a personal-claim span — the point where a sentence stops
+#: talking about the candidate and starts talking about the job. A
+#: describing/aligning predicate pivots to the posting ("…, aligns directly
+#: with the need to create and maintain a central repository …"), a modal makes
+#: what follows a future offer, a company possessive hands the phrase to the
+#: employer, and a role deictic or requirement noun introduces the posting's
+#: own description of itself.
+_REQUIREMENT_NOUNS = frozenset(
+    """
+    need needs requirement requirements responsibility responsibilities
+    duties mandate brief criteria qualifications must
+    """.split()
+)
+_CLAIM_SPAN_TERMINATORS = (
+    _TITLE_DESCRIBING_PREDICATES
+    | _HYPOTHETICAL_MARKERS
+    | _COMPANY_POSSESSIVES
+    | _ROLE_DEICTIC_NOUNS
+    | _REQUIREMENT_NOUNS
+)
+
+
+def _claim_spans(
+    tokens: list[tuple[str, int, int]], sentence: str
+) -> list[tuple[int, int]]:
+    """Half-open index ranges the sentence asserts about the CANDIDATE.
+
+    A span opens at a first-person possessive ("MY experience architecting …")
+    or at the pronoun ``I`` that :func:`_first_person_asserts` identified, and
+    closes at the first :data:`_CLAIM_SPAN_TERMINATORS` word or third-party
+    possessive-'s — or at the end of the sentence.
+
+    This is a POSITIVE requirement, not an exemption: a construction it fails
+    to recognise simply keeps the pre-W23 behaviour. It is what lets the
+    QA3-F-04 sentence flag its first half (the candidate's re-labelled
+    artifact) while the second half — the verbatim requirement it aligns
+    itself with — contributes nothing.
+    """
+    starts = [i + 1 for i, (word, _, _) in enumerate(tokens)
+              if word in _PERSONAL_POSSESSIVES]
+    asserted_at = _first_person_asserts(tokens, sentence)
+    if asserted_at is not None:
+        starts.append(asserted_at + 1)
+    spans: list[tuple[int, int]] = []
+    for start in sorted(set(starts)):
+        end = start
+        while end < len(tokens):
+            if tokens[end][0] in _CLAIM_SPAN_TERMINATORS and not (
+                # …unless the describing/aligning word is the COMPLEMENT of the
+                # candidate's own track-record noun rather than a pivot to the
+                # posting: "my experience MAPPING a central repository …", "my
+                # background MATCHES a central repository …". Without this, an
+                # ordinary draft that happens to use a describing verb as its
+                # own claim verb collapsed the span to one word and escaped.
+                end > start
+                and tokens[end - 1][0] in _PERSONAL_EVIDENCE_NOUNS
+                and tokens[end][0] in _TITLE_DESCRIBING_PREDICATES
+            ):
+                break
+            if end > 0 and tokens[end][0] == "s" and any(
+                quote in sentence[tokens[end - 1][2] : tokens[end][1]]
+                for quote in ("'", "’")
+            ):
+                break
+            end += 1
+        if end > start:
+            spans.append((start, end))
+    return spans
+
+
+def _grafted_onto_evidence(
+    stems: list[str],
+    window: list[int],
+    absent: set[int],
+    present: set[str],
+    evidence_bigrams: set[tuple[str, ...]],
+) -> bool:
+    """True when deleting the single unevidenced word from the run leaves a
+    two-word phrase the candidate's evidence actually contains.
+
+    This is the re-labelling signature: the resume says "cutting EVIDENCE
+    EFFORT"; the letter says "cutting AUDIT evidence effort". Remove 'audit'
+    and the candidate's own phrase is still there, which is what makes the
+    inserted JD word a rename of a real artifact rather than a fresh claim.
+    The search is confined to the run itself (one token either side) and the
+    matching bigram must contain one of the phrase's evidenced words, so an
+    unrelated bigram elsewhere in the sentence can never license a flag.
+    """
+    lo = max(window[0] - 1, 0)
+    hi = min(window[-1] + 2, len(stems))
+    reduced = [stems[i] for i in range(lo, hi) if i not in absent]
+    return any(
+        (reduced[i], reduced[i + 1]) in evidence_bigrams
+        and (reduced[i] in present or reduced[i + 1] in present)
+        for i in range(len(reduced) - 1)
+    )
+
+
+def _imported_jd_phrase_tokens(
+    sentence: str,
+    evidence_stems: set[str],
+    evidence_numbers: set[str],
+    evidence_bigrams: set[tuple[str, ...]],
+    jd_body_stems: set[str],
+    jd_phrases: set[frozenset[str]],
+    title_runs: set[tuple[str, ...]] | None,
+    longest_title_run: int,
+) -> list[str]:
+    """JD-DESCRIPTION noun-phrase words the sentence claims as the candidate's
+    own experience while their evidence never proves them (ML-W23)."""
+    tokens = _surface_tokens(sentence)
+    personal_np = _possessed_indices(tokens, sentence, _PERSONAL_POSSESSIVES)
+    # Same polarity as the title channel: only ASPIRATION is exempt. A NEUTRAL
+    # first-person sentence ("My central repository of audit evidence artifacts
+    # covered eight squads.") stays guarded — it has no aspiration cue, and its
+    # only anchor is a "my …" possessive, which is a personal attribute
+    # regardless of context.
+    if _claim_context(sentence, personal_np, tokens) == _CTX_ASPIRATION:
+        return []
+    unsupported = set(
+        unsupported_tokens(sentence, evidence_stems, evidence_numbers, jd_body_stems)
+    )
+    if not unsupported:
+        return []
+    exempt = _third_party_owned_indices(tokens, sentence) | _role_name_indices(
+        tokens, sentence, title_runs or set(), longest_title_run
+    )
+    flagged: list[str] = []
+    for span_start, span_end in _claim_spans(tokens, sentence):
+        indices = [
+            i
+            for i in range(span_start, span_end)
+            if i not in exempt and tokens[i][0] not in _STOPWORDS
+        ]
+        stems = [_stem(tokens[i][0]) for i in indices]
+        for phrase in jd_phrases:
+            matched = [k for k, stem in enumerate(stems) if stem in phrase]
+            for anchor in matched:
+                window = [k for k in matched if 0 <= k - anchor < _NP_MAX_WORDS]
+                window_stems = {stems[k] for k in window}
+                if len(window_stems) < 2:
+                    continue
+                absent = {k for k in window if tokens[indices[k]][0] in unsupported}
+                absent_stems = {stems[k] for k in absent}
+                if not absent_stems:
+                    continue
+                if len(absent_stems) == 1 and not _grafted_onto_evidence(
+                    stems, window, absent, window_stems - absent_stems, evidence_bigrams
+                ):
+                    continue
+                for k in absent:
+                    word = tokens[indices[k]][0]
+                    if word not in flagged:
+                        flagged.append(word)
+    return flagged
+
+
+# ---------------------------------------------------------------------------
+# Cross-sentence anaphoric tenure claims (ML-W18).
+#
+# Orchestrator-adjudicated residual of the ML-W11 chain
+# (wave35-opus-review-verdict.json): "My background matches the X role. I held
+# IT for three years." Sentence 1 legitimately NAMES the advertised job and is
+# exempt; sentence 2 claims to have HELD it through a pronoun and carries no JD
+# token of its own, so neither sentence alone ever contained both signals.
+#
+# The approximation is deliberately narrow, because the whole class cannot be
+# resolved lexically: it fires only when the immediately PRECEDING sentence
+# names the advertised title AND the current sentence's first-person
+# EXPERIENCE assertion takes a bare anaphor as its DIRECT OBJECT. That last
+# condition is the false-positive control — "I have spent my career in
+# delivery and it shows" has an 'it', but not as the object of the assertion,
+# and "I am excited about it" asserts no experience at all, so neither fires.
+# ---------------------------------------------------------------------------
+
+#: Bare anaphors that can stand in for a previously named role.
+_BARE_ANAPHORS = frozenset({"it", "them", "one", "both"})
+#: Determiners that open an anaphoric role phrase ("THAT role", "THIS
+#: position"). Deliberately excludes the plain definite article: "I read THE
+#: ROLE description carefully" is ordinary reference, not a tenure claim, and
+#: "the <deictic>" is far too common to treat as anaphora.
+_ANAPHORIC_DETERMINERS = frozenset({"this", "that", "these", "those", "such"})
+#: Words that may pad an anaphoric role phrase ("that SAME role").
+_ANAPHORIC_FILLERS = frozenset({"same", "very", "exact", "identical", "latter"})
+#: Auxiliaries / contraction remnants that sit between ``I`` and its verb.
+_ASSERTION_AUXILIARIES = frozenset(
+    {"have", "has", "had", "was", "were", "am", "is", "been", "being",
+     "do", "does", "did", "ve", "d", "m"}
+)
+
+
+def _asserts_on_bare_anaphor(
+    tokens: list[tuple[str, int, int]], sentence: str
+) -> bool:
+    """True when the sentence's first-person experience assertion takes a bare
+    anaphor as its direct object — "I held IT for three years", "I ran THAT
+    ROLE", "I have done IT before"."""
+    asserted_at = _first_person_asserts(tokens, sentence)
+    if asserted_at is None:
+        return False
+    i = asserted_at + 1
+    # skip auxiliaries / contraction remnants and adverbs to reach the verb
+    while i < len(tokens) and (
+        tokens[i][0] in _ASSERTION_AUXILIARIES
+        or tokens[i][0] in _PREDICATE_ADVERBS
+        or tokens[i][0].endswith("ly")
+    ):
+        i += 1
+    if i >= len(tokens):
+        return False
+    i += 1  # the verb itself
+    while i < len(tokens) and tokens[i][0] in _ANAPHORIC_FILLERS:
+        i += 1
+    if i >= len(tokens):
+        return False
+    word = tokens[i][0]
+    if word in _BARE_ANAPHORS:
+        return True
+    if word not in _ANAPHORIC_DETERMINERS:
+        return False
+    j = i + 1
+    while j < len(tokens) and tokens[j][0] in _ANAPHORIC_FILLERS:
+        j += 1
+    return j < len(tokens) and tokens[j][0] in _ROLE_DEICTIC_NOUNS
+
+
+def _named_role_tokens(
+    sentence: str, runs: set[tuple[str, ...]], longest: int
+) -> set[str]:
+    """Words of a sentence that NAME the advertised job — a contiguous run of
+    the real job title followed by a role deictic ("the GRC Program Manager
+    ROLE at Deputy"). These are the antecedent an anaphor in the next sentence
+    reaches back to."""
+    if not runs:
+        return set()
+    tokens = _surface_tokens(sentence)
+    total = len(tokens)
+    named: set[str] = set()
+    for start in range(total):
+        for end in range(min(total, start + longest), start + 1, -1):
+            if tuple(tok for tok, _, _ in tokens[start:end]) not in runs:
+                continue
+            if end < total and tokens[end][0] in _ROLE_DEICTIC_NOUNS:
+                named.update(tok for tok, _, _ in tokens[start:end])
+            break
+    return named
+
+
+def _sentences(text: str) -> list[str]:
+    """Every sentence of ``text``, first-person or not."""
+    return [
+        s.strip() for s in _SENTENCE_SPLIT_RE.split(text.replace("\n", " ")) if s.strip()
+    ]
+
+
+def _anaphoric_antecedent_tokens(
+    text: str,
+    evidence_stems: set[str],
+    evidence_numbers: set[str],
+    jd_stems: set[str],
+    title_runs: set[tuple[str, ...]],
+    longest_title_run: int,
+) -> list[str]:
+    """Advertised-title words a LATER sentence claims tenure in by pronoun
+    (ML-W18)."""
+    if not title_runs:
+        return []
+    sentences = _sentences(text)
+    flagged: list[str] = []
+    for index in range(1, len(sentences)):
+        current = sentences[index]
+        if not _FIRST_PERSON_RE.search(current):
+            continue
+        if not _asserts_on_bare_anaphor(_surface_tokens(current), current):
+            continue
+        antecedent = sentences[index - 1]
+        named = _named_role_tokens(antecedent, title_runs, longest_title_run)
+        if not named:
+            continue
+        for token in unsupported_tokens(
+            antecedent, evidence_stems, evidence_numbers, jd_stems
+        ):
+            if token in named and token in jd_stems and token not in flagged:
+                flagged.append(token)
+    return flagged
+
+
 def unsupported_claim_tokens(
-    text: str, evidence: str, jd_risk_terms: str
+    text: str, evidence: str, jd_risk_terms: str, jd_body: str = ""
 ) -> list[str]:
     """JD-sourced role terms the candidate CLAIMS as their own experience while
     their evidence never proves them (GAP-P6-COV-001).
@@ -986,7 +1386,14 @@ def unsupported_claim_tokens(
     Results are restricted to the JD risk vocabulary so the letter's ordinary
     capitalized entities (already policed by the FabricationGuard) are not
     double-flagged here. Empty ``jd_risk_terms`` → no lowercase flags (backward
-    compatible)."""
+    compatible).
+
+    ``jd_body`` (ML-W23) adds the job DESCRIPTION as a second, PHRASE-level risk
+    channel — see the "JD-BODY phrase import" section above for why the title
+    alone let a whole re-labelling class through and why the body cannot simply
+    be poured into ``jd_risk_terms``. Both extra channels are additive: with the
+    default empty ``jd_body`` and a single-sentence text the result is
+    identical to the pre-ML-W23 guard."""
     evidence_stems, evidence_numbers = _evidence_index(evidence)
     jd_stems, _ = _evidence_index(jd_risk_terms)
     title_words = [
@@ -994,6 +1401,11 @@ def unsupported_claim_tokens(
         for m in _SURFACE_TOKEN_RE.finditer(jd_risk_terms.translate(_UNICODE_FOLD))
     ]
     title_runs = _title_runs(title_words)
+    jd_body_stems, _ = _evidence_index(jd_body) if jd_body else (set(), set())
+    jd_phrases = _jd_phrase_index(jd_body) if jd_body else set()
+    evidence_bigrams = (
+        _ngram_set(_content_stems(evidence), 2) if jd_phrases else set()
+    )
     flagged: list[str] = []
     for sentence in _first_person_claim_sentences(text):
         candidates = [
@@ -1008,6 +1420,24 @@ def unsupported_claim_tokens(
         ):
             if tok not in flagged:
                 flagged.append(tok)
+        if jd_phrases:
+            for tok in _imported_jd_phrase_tokens(
+                sentence,
+                evidence_stems,
+                evidence_numbers,
+                evidence_bigrams,
+                jd_body_stems,
+                jd_phrases,
+                title_runs,
+                len(title_words),
+            ):
+                if tok not in flagged:
+                    flagged.append(tok)
+    for tok in _anaphoric_antecedent_tokens(
+        text, evidence_stems, evidence_numbers, jd_stems, title_runs, len(title_words)
+    ):
+        if tok not in flagged:
+            flagged.append(tok)
     return flagged
 
 

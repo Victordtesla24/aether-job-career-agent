@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from conftest import seed_own_resume
+from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
 
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
@@ -120,7 +120,18 @@ class _StubLLM:
 
 
 def _run(client, auth_headers, job: dict, suffix: str, llm) -> str:
-    seed_own_resume(client, auth_headers)
+    # ML-W23: seed the résumé that actually GROUNDS the fixture bodies below.
+    # They claim "sprint cadence and PI Planning" and "analytics with
+    # Next.js and Supabase" — vocabulary this suite took from the JD, which is
+    # NEVER evidence about the candidate. JORDAN_RESUME_TEXT proves none of it,
+    # so once the §9 claim guard gained the JD BODY as risk vocabulary these
+    # bodies became (correctly) unsupported claims and every case here died on
+    # FabricationError(['pi', 'planning']) before reaching its own assertion.
+    # FIXTURE_LLM_RESUME_TEXT documents exactly this purpose and proves all of
+    # it, so the properties under test (hook, CTA, voice, structure, injection)
+    # are what gets exercised — not the guard. Same pattern as
+    # test_mv_cluster_a_cover_letter.py's own grounded seeding.
+    seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
     user_id, name = _real_user(client, auth_headers)
     job_id = _seed_job(user_id, suffix, job)
     agent = CoverLetterAgent(
