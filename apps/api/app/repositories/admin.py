@@ -460,6 +460,57 @@ def ensure_user_billing_backfill() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _cron_status() -> dict[str, Any]:
+    """P1-9: honest scheduler status derived from the scout run ledger.
+
+    The discovery scheduler is a systemd timer (``aether-discovery.timer``,
+    fires every 30 min) whose runs land in ``AgentRun`` as ``agentName='scout'``.
+    Rather than hardcoding "not configured", report from that ledger:
+    - no scout runs at all      → not_configured
+    - last run within 90 min    → ok (3 missed 30-min fires is the alarm line)
+    - older than 90 min         → stale
+    - ledger unreadable         → error
+    """
+    from datetime import datetime, timezone
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT MAX("startedAt") FROM "AgentRun" WHERE "agentName" = %s',
+                    ("scout",),
+                )
+                row = cur.fetchone()
+        last = row[0] if row else None
+    except Exception:  # noqa: BLE001 — DB probe failure is itself the signal
+        return {"status": "error", "detail": "Could not read the scheduler run ledger."}
+    if last is None:
+        return {
+            "status": "not_configured",
+            "detail": "No discovery (scout) runs recorded yet.",
+        }
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    age_min = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
+    if age_min <= 90:
+        return {
+            "status": "ok",
+            "detail": (
+                f"Discovery scheduler live — last scout run {age_min} min ago "
+                "(systemd timer fires every 30 min)."
+            ),
+            "lastRunAt": last.isoformat(),
+        }
+    return {
+        "status": "stale",
+        "detail": (
+            f"Discovery scheduler has not run in {age_min} min "
+            "(expected every 30 min)."
+        ),
+        "lastRunAt": last.isoformat(),
+    }
+
+
 def health_overview() -> dict[str, Any]:
     """Genuine service / agent / LLM status snapshot (no fabricated metrics)."""
     _ensure_admin_schema()
@@ -505,10 +556,7 @@ def health_overview() -> dict[str, Any]:
             "successRate": success_rate,
         },
         "llm": {"mode": get_mode()},
-        "cron": {
-            "status": "not_configured",
-            "detail": "No scheduled jobs are configured in this deployment.",
-        },
+        "cron": _cron_status(),
         "providers": {"configuredTiers": configured_tiers, "count": len(configured_tiers)},
     }
 
