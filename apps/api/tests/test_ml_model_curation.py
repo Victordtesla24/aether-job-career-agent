@@ -30,8 +30,6 @@ every id in ``raw`` (proven-broken or not) passes straight through.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.services.llm_client import _curate_openrouter_models
 
 # The 5 ids ADR-ML-4 requires excluded, seeded from the §3.4 run-sweep evidence.

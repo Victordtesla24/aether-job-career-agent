@@ -28,9 +28,15 @@ from __future__ import annotations
 
 import asyncio
 
+from test_gap_p7_async_001 import (  # noqa: F401
+    _get_bg_job,
+    _seed_bg_job,
+    _set_paid_plan,
+    bg_table,
+)
+
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.billing import UsageQuotaRepository
-from test_gap_p7_async_001 import _get_bg_job, _seed_bg_job, _set_paid_plan, bg_table  # noqa: F401
 
 
 def _stub_cover_letter(monkeypatch, *, raises: Exception):
@@ -44,7 +50,7 @@ def _stub_cover_letter(monkeypatch, *, raises: Exception):
 
 class TestAsyncCoverLetterGracefulDegrade:
     def test_fabrication_error_completes_not_failed(
-        self, client, auth_headers, test_user_id, bg_table, monkeypatch
+        self, client, auth_headers, test_user_id, bg_table, monkeypatch  # noqa: F811
     ):
         """FAILS TODAY: the job ends up status='failed' with a raw
         'FabricationError: ...' message instead of status='completed' with
@@ -85,7 +91,7 @@ class TestAsyncCoverLetterGracefulDegrade:
         assert int(UsageQuotaRepository().get_by_user(test_user_id)["runsUsed"]) == 0
 
     def test_structural_error_completes_not_failed(
-        self, client, auth_headers, test_user_id, bg_table, monkeypatch
+        self, client, auth_headers, test_user_id, bg_table, monkeypatch  # noqa: F811
     ):
         """Same contract for the §10.2 structural-contract rejection."""
         from app.agents.cover_letter_agent import StructuralError

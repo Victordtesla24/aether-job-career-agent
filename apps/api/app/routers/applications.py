@@ -469,7 +469,7 @@ def clear_pipeline(
                 SELECT j."id" FROM "Job" j
                 WHERE j."userId" = %s
                   AND j."status" IN ({",".join(
-                      f"%s::\"JobStatus\"" for _ in _PIPELINE_JOB_STATUSES
+                      "%s::\"JobStatus\"" for _ in _PIPELINE_JOB_STATUSES
                   )})
                   AND NOT EXISTS (
                       SELECT 1 FROM "Application" a
@@ -481,7 +481,7 @@ def clear_pipeline(
             ids = [r[0] for r in cur.fetchall()]
             if ids:
                 cur.execute(
-                    f'''
+                    '''
                     UPDATE "Job"
                     SET "status" = 'archived'::"JobStatus", "updatedAt" = NOW()
                     WHERE "userId" = %s AND "id" = ANY(%s)

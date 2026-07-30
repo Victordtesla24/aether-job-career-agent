@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.discovery.base_adapter import AdapterFetchError, SourceBlockedError
 from app.agents import scout_agent as scout_module
 from app.agents.scout_agent import ScoutAgent
+from app.services.discovery.base_adapter import AdapterFetchError, SourceBlockedError
 
 
 class _BlockedAdapter:

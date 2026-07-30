@@ -932,7 +932,7 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
     company = (job or {}).get("company") or "the team"
 
     regular, bold = _pdf_fonts()
-    ink, muted, rule = HexColor(_PDF_INK), HexColor(_PDF_MUTED), HexColor(_PDF_RULE)
+    ink, muted = HexColor(_PDF_INK), HexColor(_PDF_MUTED)
     panel, accent = HexColor(_PDF_PANEL), HexColor(_PDF_ACCENT)
 
     buf = io.BytesIO()

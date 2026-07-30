@@ -57,7 +57,6 @@ import uuid
 from typing import Any
 
 import psycopg2
-import pytest
 from starlette.testclient import TestClient
 
 from app.db import _translate_prisma_url, get_database_url, new_id

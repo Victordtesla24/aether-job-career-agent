@@ -23,13 +23,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import uuid
 
 import pytest
 
 from app.db import get_connection, new_id
 from app.repositories.billing import UsageQuotaRepository, ensure_user_billing
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

@@ -28,7 +28,6 @@ from datetime import datetime
 
 import pytest
 
-from app.db import get_connection, new_id
 from app.workers import board_sweep
 
 

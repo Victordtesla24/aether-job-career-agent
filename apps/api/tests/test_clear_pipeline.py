@@ -13,8 +13,6 @@ from __future__ import annotations
 import json
 import uuid
 
-import pytest
-
 
 def _uid() -> str:
     return "c" + uuid.uuid4().hex[:24]

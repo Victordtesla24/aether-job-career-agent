@@ -27,10 +27,6 @@ import asyncio
 
 import pytest
 
-from app.repositories.agent_run import AgentRunRepository
-from app.repositories.billing import UsageQuotaRepository, ensure_user_billing
-from app.routers.agents import _price_for, _price_guarding_down_pricing, _record_run
-
 # ``bg_table`` must be imported at MODULE scope (not inside a test function) for
 # pytest to register it as a usable fixture — mirrors
 # test_ml_cover002_async_degrade.py's identical top-level import.
@@ -40,6 +36,10 @@ from test_gap_p7_async_001 import (  # noqa: E402,F401 pylint: disable=wrong-imp
     _set_paid_plan,
     bg_table,
 )
+
+from app.repositories.agent_run import AgentRunRepository
+from app.repositories.billing import UsageQuotaRepository, ensure_user_billing
+from app.routers.agents import _price_for, _price_guarding_down_pricing, _record_run
 
 
 @pytest.fixture(autouse=True)
@@ -386,7 +386,7 @@ class TestMF2DownPricingRailAndSubstitutionBookkeeping:
     def test_unpriceable_served_id_does_not_down_price_a_priced_intended_model(
         self, client, auth_headers, test_user_id, monkeypatch, tmp_path,
     ):
-        from app.routers.agents import _DEFAULT_PRICE, _price_for
+        from app.routers.agents import _DEFAULT_PRICE
 
         FabricationError, _ = _guard_errors()
         ensure_user_billing(test_user_id)

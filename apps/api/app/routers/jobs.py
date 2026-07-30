@@ -470,7 +470,10 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
         if not _cover_letter_for_apply(user_id, job_id):
             raise HTTPException(
                 status_code=422,
-                detail="A cover letter is required before applying. Generate one in the Cover Letter Studio first.",
+                detail=(
+                    "A cover letter is required before applying. "
+                    "Generate one in the Cover Letter Studio first."
+                ),
             )
 
         application_id = existing_application[0] if existing_application is not None else None

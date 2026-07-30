@@ -34,7 +34,7 @@ import pytest
 
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.billing import UsageQuotaRepository, ensure_user_billing
-from app.routers.agents import _price_for, _price_guarding_down_pricing, _record_run
+from app.routers.agents import _price_guarding_down_pricing, _record_run
 
 
 @pytest.fixture(autouse=True)

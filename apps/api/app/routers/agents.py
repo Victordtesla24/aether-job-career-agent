@@ -27,12 +27,12 @@ from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.background_jobs import BackgroundJobRepository
-from app.repositories.job import JobRepository
 from app.repositories.billing import (
     SubscriptionRepository,
     UsageQuotaRepository,
     subscription_gate_enabled,
 )
+from app.repositories.job import JobRepository
 from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import (
     AgentQuotaBlockRepository,

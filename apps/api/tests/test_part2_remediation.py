@@ -232,7 +232,7 @@ class TestCoverLetterJobLabels:
                           cover_letter="Dear team, …")
 
         letters = client.get("/cover-letters", headers=auth_headers).json()
-        mine = [l for l in letters if l["jobId"] == job_id]
+        mine = [le for le in letters if le["jobId"] == job_id]
         assert mine, "seeded letter missing from /cover-letters"
         assert mine[0]["jobTitle"] == "Growth PM"
         assert mine[0]["jobCompany"] == "Canva"
@@ -252,7 +252,7 @@ class TestCoverLetterJobLabels:
         db_session.commit()
 
         letters = client.get("/cover-letters", headers=auth_headers).json()
-        mine = [l for l in letters if l["jobId"] == job_id]
+        mine = [le for le in letters if le["jobId"] == job_id]
         # If the schema's FK cascade removed the application too, the letter
         # is legitimately gone; when it survives, labels must be null-safe.
         for letter in mine:

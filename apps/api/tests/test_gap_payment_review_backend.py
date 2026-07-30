@@ -38,7 +38,6 @@ import time
 import uuid
 
 import pytest
-from fastapi import HTTPException
 
 from app.db import get_connection, new_id
 from app.repositories.billing import (

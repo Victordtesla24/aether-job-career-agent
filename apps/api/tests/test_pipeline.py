@@ -93,8 +93,8 @@ def test_pipeline_degrades_gracefully_on_cover_fabrication(monkeypatch):
     survived every retry) must NOT discard the successful tailoring nor fail the
     whole job. The pipeline completes with the tailored résumé preserved and the
     cover marked unavailable + an honest message (never a raw guard exception)."""
-    from app.routers import agents as agents_mod
     from app.agents.cover_letter_agent import FabricationError
+    from app.routers import agents as agents_mod
 
     # Bypass quota/DB: run the wrapped fn directly for every _record_run node.
     monkeypatch.setattr(
@@ -175,9 +175,9 @@ def test_pipeline_degradation_message_honest_when_tailor_also_noops(monkeypatch)
     """Adversarial-review fix: in the COMPOUND case (tailor no-op AND cover
     guard-rejects) the degraded message must NOT claim 'your résumé was tailored'
     — no résumé version was persisted, so that would be a false success claim."""
-    from app.routers import agents as agents_mod
     from app.agents.cover_letter_agent import FabricationError
     from app.agents.tailor_agent import NoChangesApplied
+    from app.routers import agents as agents_mod
 
     monkeypatch.setattr(
         agents_mod, "_record_run", lambda uid, name, params, fn, **kw: fn()

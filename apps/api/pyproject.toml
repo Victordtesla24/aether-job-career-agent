@@ -28,11 +28,29 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+# Accumulated long doc-comment / literal-data lines in tests; app/ stays strict.
+"tests/**" = ["E501"]
+
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = true
+
+# Pre-existing type-annotation debt (24 errors accumulated before 2026-07-30) is
+# contained to the six legacy modules below so CI can enforce mypy on everything
+# else. Burn-down tracked in docs/delivery/PART2 report; do NOT add modules here.
+[[tool.mypy.overrides]]
+module = [
+    "app.workers.tasks",
+    "app.routers.agents",
+    "app.routers.billing",
+    "app.routers.jobs",
+    "app.agents.compliance_agent",
+    "app.services.career_data",
+]
+ignore_errors = true

@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
-
 from app.db import get_connection
 from app.repositories.billing import ensure_user_billing
 

@@ -355,7 +355,8 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY}, '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
+                    f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
                     f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE {" AND ".join(clauses)} '
                     f"ORDER BY {order_column} DESC NULLS LAST",
@@ -368,7 +369,8 @@ class JobRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, {_TAILORED_RESUME_STATUS_SUBQUERY}, '
+                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
+                    f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
                     f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),

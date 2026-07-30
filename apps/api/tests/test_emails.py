@@ -1,8 +1,6 @@
 """P3 — email draft and reply endpoints."""
 from __future__ import annotations
 
-import json
-
 
 def test_create_draft(client, auth_headers):
     """POST /emails/draft creates a new email thread."""

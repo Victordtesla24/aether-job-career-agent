@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import uuid
 
-
 VALID = {
     "company": "Persisted Co",
     "role": "Staff Engineer",

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 from test_applications_move import _seed_job
-from test_applications_tracker import _seed_application, _uid
+from test_applications_tracker import _seed_application
 
 
 @pytest.fixture()

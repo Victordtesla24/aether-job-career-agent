@@ -226,7 +226,7 @@ class TestFitScorerAutoTrigger:
 
         # Patch the FitScorerAgent.run to return a scored result without
         # calling the LLM or requiring a resume.
-        from app.agents.fit_scorer import FitScoreResult, FitScorerAgent
+        from app.agents.fit_scorer import FitScorerAgent, FitScoreResult
 
         monkeypatch.setattr(
             FitScorerAgent, "run",
@@ -254,7 +254,7 @@ class TestFitScorerAutoTrigger:
     ):
         """When the fit-scorer scores zero jobs (nothing new), no sweep is
         enqueued — there's no new board work to consume."""
-        from app.agents.fit_scorer import FitScoreResult, FitScorerAgent
+        from app.agents.fit_scorer import FitScorerAgent, FitScoreResult
 
         monkeypatch.setattr(
             FitScorerAgent, "run",
@@ -275,11 +275,11 @@ class TestFitScorerAutoTrigger:
     ):
         """A transient enqueue failure inside the auto-trigger must NOT crash
         the fit-scorer response — the cron is the floor."""
-        from app.agents.fit_scorer import FitScoreResult, FitScorerAgent
+        from app.agents.fit_scorer import FitScorerAgent, FitScoreResult
         from app.security import decode_access_token
 
         token = auth_headers["Authorization"].removeprefix("Bearer ")
-        uid = decode_access_token(token)["userId"]
+        decode_access_token(token)["userId"]  # validity check only
 
         monkeypatch.setattr(
             FitScorerAgent, "run",

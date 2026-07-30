@@ -18,7 +18,6 @@ Contract locked here (forward-only, never demoting a manual move):
 from __future__ import annotations
 
 import pytest
-
 from conftest import seed_own_resume
 
 from app.agents.fit_scorer import get_base_resume_path
