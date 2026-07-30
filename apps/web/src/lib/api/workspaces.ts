@@ -99,6 +99,12 @@ export const createNetworkingContact = (
 export const fetchNetworkingContact = (contactId: string, options: RequestOptions = {}) =>
   apiRequest<NetworkingContactRecord>(`/networking/contacts/${contactId}`, options);
 
+/** DELETE /networking/contacts/{id} (ML-networking-001) — the backend delete
+ * endpoint existed but had NO UI affordance; the contact-detail panel now
+ * wires it up. Returns 204 (no body). */
+export const deleteNetworkingContact = (contactId: string, options: RequestOptions = {}) =>
+  apiRequest<void>(`/networking/contacts/${contactId}`, { ...options, method: "DELETE" });
+
 /* ------------------------------- Email Center ------------------------------ */
 
 export interface EmailIntelligence {

@@ -38,6 +38,7 @@ import type { NetworkingContactRecord, NetworkingSummary } from "../../../../lib
 const fetchNetworkingSummaryMock = vi.fn();
 const createNetworkingContactMock = vi.fn();
 const fetchNetworkingContactMock = vi.fn();
+const deleteNetworkingContactMock = vi.fn();
 
 vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../lib/api/workspaces")>();
@@ -46,6 +47,7 @@ vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
     fetchNetworkingSummary: (...args: unknown[]) => fetchNetworkingSummaryMock(...args),
     createNetworkingContact: (...args: unknown[]) => createNetworkingContactMock(...args),
     fetchNetworkingContact: (...args: unknown[]) => fetchNetworkingContactMock(...args),
+    deleteNetworkingContact: (...args: unknown[]) => deleteNetworkingContactMock(...args),
   };
 });
 
@@ -115,6 +117,7 @@ afterEach(() => {
   fetchNetworkingSummaryMock.mockReset();
   createNetworkingContactMock.mockReset();
   fetchNetworkingContactMock.mockReset();
+  deleteNetworkingContactMock.mockReset();
 });
 
 describe("NetworkingPage — Add Contact wiring (MV-networking-001)", () => {
@@ -315,5 +318,61 @@ describe("NetworkingPage — Add Contact modal UX (MV-networking-009, MV-network
     await waitFor(() => {
       expect(screen.queryByTestId("add-contact-modal")).toBeNull();
     });
+  });
+});
+
+
+describe("NetworkingPage — contact delete wiring (ML-networking-001)", () => {
+  it("arms on first click, calls DELETE on confirm, closes the panel and refetches", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    deleteNetworkingContactMock.mockResolvedValue(undefined);
+
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getAllByTestId("contact-card")[0]);
+    await waitFor(() => screen.getByTestId("contact-detail-modal"));
+
+    // FAILED before the fix: no delete affordance existed anywhere in the UI
+    // even though DELETE /networking/contacts/{id} shipped on the backend.
+    const btn = screen.getByTestId("delete-contact-btn");
+    expect(btn.textContent).toContain("Delete contact");
+
+    // First click only ARMS — no API call yet (two-click confirm).
+    fireEvent.click(btn);
+    expect(deleteNetworkingContactMock).not.toHaveBeenCalled();
+    expect(btn.textContent).toContain("confirm");
+
+    // Second click deletes, closes the panel, and refetches the summary.
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(deleteNetworkingContactMock).toHaveBeenCalledWith("c-1");
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("contact-detail-modal")).toBeNull();
+    });
+    // Initial load + post-delete reconcile.
+    expect(fetchNetworkingSummaryMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("surfaces the error and keeps the panel open when the delete fails", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    deleteNetworkingContactMock.mockRejectedValue(
+      new ApiError("DELETE /networking/contacts/c-1 failed (500): boom", 500),
+    );
+
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getAllByTestId("contact-card")[0]);
+    await waitFor(() => screen.getByTestId("contact-detail-modal"));
+
+    const btn = screen.getByTestId("delete-contact-btn");
+    fireEvent.click(btn); // arm
+    fireEvent.click(btn); // confirm → fails
+
+    await waitFor(() => screen.getByTestId("contact-detail-error"));
+    expect(screen.getByTestId("contact-detail-error").textContent).toContain("failed (500)");
+    expect(screen.getByTestId("contact-detail-modal")).toBeTruthy();
   });
 });

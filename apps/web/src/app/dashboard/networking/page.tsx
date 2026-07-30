@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   createNetworkingContact,
+  deleteNetworkingContact,
   fetchNetworkingContact,
   fetchNetworkingSummary,
   type NetworkingContactRecord,
@@ -50,6 +51,11 @@ export default function NetworkingPage() {
   const [contactDetail, setContactDetail] = useState<NetworkingContactRecord | null>(null);
   const [contactDetailLoading, setContactDetailLoading] = useState(false);
   const [contactDetailError, setContactDetailError] = useState<string | null>(null);
+  // ML-networking-001: delete affordance for the EXISTING backend
+  // DELETE /networking/contacts/{id} endpoint. Two-click confirm — the first
+  // click arms the button, the second actually deletes.
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // ?demo=empty → render the real empty-state branch (state variant preview).
   useEffect(() => {
@@ -75,6 +81,7 @@ export default function NetworkingPage() {
     let cancelled = false;
     setContactDetailLoading(true);
     setContactDetailError(null);
+    setDeleteArmed(false);
     fetchNetworkingContact(selectedContactId)
       .then((c) => {
         if (!cancelled) setContactDetail(c);
@@ -424,6 +431,48 @@ export default function NetworkingPage() {
                 <DetailRow label="Email" value={contactDetail.email || "Not provided"} />
                 <DetailRow label="LinkedIn" value={contactDetail.linkedinUrl || "Not provided"} />
               </dl>
+            ) : null}
+            {contactDetail ? (
+              /* ML-networking-001: the backend DELETE endpoint existed with no
+                 UI path. Two-click confirm, then refetch the summary so the
+                 board reflects exactly what the server persisted. */
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  data-testid="delete-contact-btn"
+                  disabled={deleting}
+                  onClick={async () => {
+                    if (!deleteArmed) {
+                      setDeleteArmed(true);
+                      return;
+                    }
+                    setDeleting(true);
+                    try {
+                      await deleteNetworkingContact(contactDetail.id);
+                      setSelectedContactId(null);
+                      setData(await fetchNetworkingSummary());
+                    } catch (e) {
+                      setContactDetailError(
+                        e instanceof Error ? e.message : "Failed to delete contact",
+                      );
+                    } finally {
+                      setDeleting(false);
+                      setDeleteArmed(false);
+                    }
+                  }}
+                  className={`rounded-lg border px-4 py-2 text-sm transition disabled:opacity-60 ${
+                    deleteArmed
+                      ? "border-red-400/60 bg-red-500/20 text-red-200"
+                      : "border-white/15 text-aether-muted hover:border-red-400/40 hover:text-red-200"
+                  }`}
+                >
+                  {deleting
+                    ? "Deleting..."
+                    : deleteArmed
+                      ? "Click again to confirm delete"
+                      : "Delete contact"}
+                </button>
+              </div>
             ) : null}
           </div>
         </div>
