@@ -116,6 +116,21 @@ os.environ.setdefault(
     "AETHER_CREDENTIAL_KEY", "htOwdaXn8QwZE8LSvZF1oCdgVBisuJnJHrgxBGvVrEU="
 )
 
+# F-2 fix (uat/reports/evidence/prod-verify-5a/PROD-VERIFY-5A.json):
+# ``llm_client._MODEL_PRICE_CACHE_FILE`` persists the last-known live
+# OpenRouter catalog to disk so a freshly restarted API process warms its
+# price cache from real data instead of the flat default. That file must
+# never be the real production path during tests — reading a stale prod
+# catalog would leak real model ids into "cold cache" test premises, and a
+# test writing to it would corrupt the real production cache. Point it at a
+# PID-scoped, not-yet-existing path (this module is imported before
+# ``app.services.llm_client``, so the env var is set in time) so every
+# pytest process starts genuinely cold and never leaks state across runs.
+os.environ.setdefault(
+    "AETHER_MODEL_PRICE_CACHE_FILE",
+    f"/tmp/aether-pytest-model-price-cache-{os.getpid()}.json",
+)
+
 # ---------------------------------------------------------------------------
 # MV-system-003 — fail-closed guard against truncating the PRODUCTION schema.
 #

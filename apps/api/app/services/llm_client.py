@@ -1354,6 +1354,81 @@ _STATIC_MODEL_CATALOG: dict[str, list[dict[str, Any]]] = {
 _MODEL_CATALOG_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _MODEL_CATALOG_TTL = 3600.0  # 1 h — the catalog changes rarely.
 
+#: F-2 (HIGH, uat/reports/evidence/prod-verify-5a/PROD-VERIFY-5A.json) —
+#: ``_MODEL_CATALOG_CACHE`` above is in-process memory only, so it reopens
+#: COLD on every API restart/deploy. Until something happens to browse the
+#: catalog in that fresh process, every metered run on an id absent from
+#: ``MODEL_PRICING``/``_STATIC_MODEL_CATALOG`` (e.g. the deployment's own
+#: configured ``deepseek/deepseek-v4-pro``) falls through to the flat
+#: ``_DEFAULT_PRICE`` — live A/B proof: $0.006355 (cold, flat default) vs the
+#: real $0.002759 catalog price for the identical call, a ~2.3x over-charge
+#: against the customer's spend cap. This file persists the last successfully
+#: fetched catalog to disk so a fresh process starts from REAL last-known
+#: prices instead of the flat default — env-overridable so the test suite
+#: never touches (or is touched by) the real production file.
+_MODEL_PRICE_CACHE_FILE = Path(
+    os.environ.get("AETHER_MODEL_PRICE_CACHE_FILE", "/tmp/aether_model_price_cache.json")
+)
+
+#: Set True after this process's ONE lazy disk-cache load attempt (success,
+#: absence, or corruption) so a later in-memory cache clear (e.g. a test
+#: popping ``_MODEL_CATALOG_CACHE["openrouter"]``) never re-triggers a reload
+#: mid-run — disk persistence only ever warms a genuinely COLD start.
+_disk_price_cache_load_attempted = False
+
+
+def _persist_model_catalog_to_disk(
+    provider: str, fetched_at_monotonic: float, models: list[dict[str, Any]]
+) -> None:
+    """Best-effort write of a freshly-fetched catalog to disk (F-2 fix).
+
+    Never raises: disk persistence is a cold-start optimisation, not a
+    correctness requirement, so a write failure (read-only FS, disk full, …)
+    must never break the catalog fetch that triggered it.
+    """
+    if provider != "openrouter" or not models:
+        return
+    try:
+        elapsed = max(0.0, time.monotonic() - fetched_at_monotonic)
+        fetched_at_utc = (datetime.now(timezone.utc) - timedelta(seconds=elapsed)).isoformat()
+        payload = {"provider": provider, "fetchedAtUtc": fetched_at_utc, "models": models}
+        _MODEL_PRICE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = _MODEL_PRICE_CACHE_FILE.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload))
+        tmp_path.replace(_MODEL_PRICE_CACHE_FILE)  # atomic on the same filesystem
+    except OSError:
+        pass
+
+
+def _load_model_catalog_from_disk() -> None:
+    """Lazy, at-most-once-per-process load of the last persisted catalog into
+    ``_MODEL_CATALOG_CACHE`` (F-2 fix). Runs on the first cold price lookup so
+    a freshly restarted process prices a metered run at the real last-known
+    catalog price instead of the flat default — with NO network I/O added to
+    the pricing path. The reconstructed entry ages normally: ``catalog_
+    freshness`` honestly reports it ``stale`` once its real fetch time is past
+    the usual TTL, same as any other cache entry.
+    """
+    global _disk_price_cache_load_attempted
+    if _disk_price_cache_load_attempted:
+        return
+    _disk_price_cache_load_attempted = True
+    if "openrouter" in _MODEL_CATALOG_CACHE:
+        return  # already warm in-memory — persisted data can only be staler
+    try:
+        payload = json.loads(_MODEL_PRICE_CACHE_FILE.read_text())
+        models = payload.get("models")
+        fetched_at_utc = payload.get("fetchedAtUtc")
+        if not isinstance(models, list) or not models or not isinstance(fetched_at_utc, str):
+            return
+        fetched_dt = datetime.fromisoformat(fetched_at_utc)
+        elapsed = max(0.0, (datetime.now(timezone.utc) - fetched_dt).total_seconds())
+        _MODEL_CATALOG_CACHE["openrouter"] = (time.monotonic() - elapsed, models)
+    except (OSError, ValueError, TypeError):
+        # No persisted cache yet, or it's unreadable/corrupt — an honestly
+        # cold start proceeds to the flat default exactly as before this fix.
+        return
+
 
 #: OpenRouter's own suffix for a zero-price variant of a model. VERIFIED
 #: against the 367-model live catalog snapshot
@@ -1369,17 +1444,20 @@ def cached_model_price(model_id: str) -> "tuple[float, float] | None":
     """``(prompt, completion)`` price in $/1K-tokens for ``model_id``, resolved
     without network I/O, or ``None`` when it cannot be established.
 
-    Sources, in order of authority: the already-fetched OpenRouter catalog, the
-    always-available static catalogs, then OpenRouter's own zero-price ``:free``
-    id convention. Lets the cost path price a USER-CHOSEN model (or a model the
-    ADMIN free-chain rescue substituted, ML-W14) accurately instead of a flat
-    default — the catalog is typically warm because the user browsed it before
-    picking a model, but a rescued run in a cold worker process has no warm
-    catalog and must still cost a $0 model at $0.
+    Sources, in order of authority: the already-fetched OpenRouter catalog
+    (F-2 fix: lazily seeded from the on-disk persisted catalog — see
+    ``_load_model_catalog_from_disk`` — the FIRST time this process sees a
+    cold cache, so a fresh restart prices off the real last-known catalog
+    instead of nothing), the always-available static catalogs, then
+    OpenRouter's own zero-price ``:free`` id convention. Lets the cost path
+    price a USER-CHOSEN model (or a model the ADMIN free-chain rescue
+    substituted, ML-W14) accurately instead of a flat default.
     """
     mid = (model_id or "").strip()
     if not mid:
         return None
+    if "openrouter" not in _MODEL_CATALOG_CACHE:
+        _load_model_catalog_from_disk()
     # Fetched (OpenRouter) catalogs first, then the always-available STATIC
     # catalogs (anthropic, …). Without the static scan a premium anthropic pick
     # like ``claude-opus-4-8`` fell through to the flat default and was costed
@@ -1586,6 +1664,8 @@ def list_provider_models(
         if 200 <= resp.status_code < 300:
             curated = _curate_openrouter_models(resp.json().get("data") or [])
             _MODEL_CATALOG_CACHE[provider] = (now, curated)
+            # F-2 fix: persist so the NEXT process restart starts warm too.
+            _persist_model_catalog_to_disk(provider, now, curated)
             return curated
         last_err = f"HTTP {resp.status_code}"
     # Every refresh attempt failed. Serve the last-good cache (flagged stale by
