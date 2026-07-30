@@ -90,7 +90,7 @@ _PIPELINE_AGENT_NAMES = (
 #: here — the gate marks a pending outbound side-effect, not "produced text".
 _APPROVAL_GATED = {
     "tailor", "coverLetter", "emailAgent",
-    "recruiterOutreach", "reference",
+    "recruiterOutreach", "reference", "notification",
 }
 
 # ---------------------------------------------------------------------------
@@ -313,9 +313,18 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "accent": "indigo", "backend": "supervisor", "recommended": "deterministic",
      "tip": "Plans and sequences the live pipeline (supervisor node): scout → fitScorer → "
             "matcher → tailor → coverLetter. Deterministic, no LLM cost."},
+    # ADR-AG-1 (wave-4C): "pushes timely alerts" claimed a push channel that does
+    # not exist (no web-push, no SMS, no mobile app). The channel that DOES exist
+    # is the user's own connected Gmail, so that is what this now says.
     {"key": "notification", "name": "Notification Agent", "icon": "fa-bell",
-     "accent": "green", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — monitors status changes and pushes timely alerts."},
+     "accent": "green", "backend": "notification", "recommended": "deterministic",
+     "tip": "Emails you a digest of your OWN activity — applications whose record "
+            "changed and newly scored matches — to your connected Gmail, and only "
+            "after you approve it. \"Since last digest\" means the last digest you "
+            "actually sent, so a digest you reject is never lost. With nothing new "
+            "it queues nothing rather than sending an empty update, and with no "
+            "Gmail connected it says so instead of pretending to send. Deterministic, "
+            "no LLM cost."},
 ]
 
 _CATALOG_BY_KEY = {a["key"]: a for a in AGENT_CATALOG}
@@ -1713,6 +1722,12 @@ def _agent_callable(
                 proposed_times=list(proposed) if isinstance(proposed, list) else None,
             )
         )
+    if name in ("notification", "notification-agent"):
+        from app.agents.notification_agent import NotificationAgent
+
+        # Takes NO params: the digest window is derived from the last digest the
+        # user actually sent, never from caller input.
+        return "notification", (lambda: NotificationAgent().run(user_id))
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
@@ -1729,6 +1744,7 @@ _RUNNABLE_BACKENDS = frozenset(
         "learningFeedback",
         "interviewPrep",
         "recruiterOutreach", "reference", "sentimentAnalysis", "scheduling",
+        "notification",
     }
 )
 
@@ -2795,6 +2811,10 @@ _DETERMINISTIC_BACKENDS = frozenset(
     {
         "scout", "fitScorer", "matcher", "supervisor",
         "compliance", "salaryIntelligence", "marketTrends", "learningFeedback",
+        # wave-4C: the notification digest is a deterministic composition of the
+        # user's own rows — no model is ever called, so a per-agent model pick
+        # would be a no-op and the picker is honestly locked.
+        "notification",
     }
 )
 
