@@ -70,11 +70,16 @@ logger = logging.getLogger(__name__)
 _DEFAULT_QUERY = ROLE_FAMILY_QUERY
 _DEFAULT_LOCATION = "Melbourne, Australia"
 
-#: Canonical agent registry (mirrors the LangGraph node names in
-#: packages/agents/src/graph/aether-graph.ts).
-AGENT_NAMES = (
+#: The LIVE PIPELINE nodes, in pipeline order (mirrors the LangGraph node names
+#: in packages/agents/src/graph/aether-graph.ts, and the ``NODES`` array the
+#: Orchestration workflow graph renders in
+#: apps/web/src/components/agents/Orchestration.tsx, which looks each one up BY
+#: NAME in ``GET /agents``). This is the pipeline TOPOLOGY, not the full agent
+#: registry: :data:`AGENT_NAMES` below extends it with every other implemented
+#: catalog agent, derived so it can never fall behind again (F-3).
+_PIPELINE_AGENT_NAMES = (
     "supervisor", "scout", "matcher", "fitScorer", "tailor", "coverLetter",
-    "storyExtractor", "emailAgent"
+    "storyExtractor", "emailAgent",
 )
 
 #: Agents whose output is gated behind a human approval.
@@ -283,6 +288,37 @@ _BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]
 #: Scoring plus its ATS-optimization / skill-gap facets); pin the canonical card
 #: so stat displays name the primary agent, not whichever facet sorted last.
 _BACKEND_TO_KEY["fitScorer"] = "matchScoring"
+
+#: Canonical agent registry — every DISTINCT implemented agent, DERIVED from the
+#: catalog rather than hardcoded (F-3, PROD-VERIFY-5A).
+#:
+#: This was an 8-name literal while ``GET /agents/catalog`` reported 16 active
+#: cards, so ``GET /agents`` — read by the sidebar Agent Pulse ("N agents
+#: ready", rendered on EVERY dashboard screen), the topbar search index and the
+#: Orchestration view — silently omitted all six wave-4A/4B agents and the
+#: product contradicted itself on screen. Deriving the set means wiring a new
+#: agent into :data:`AGENT_CATALOG` cannot leave this list (or those counts)
+#: stale again.
+#:
+#: Ordering is deliberate and load-bearing: the pipeline nodes come FIRST, in
+#: pipeline order, because the Orchestration workflow graph renders that
+#: topology and reads each node's health out of this list by name. The remaining
+#: implemented agents follow in catalog order.
+#:
+#: One row per AGENT, not per card: ``fitScorer`` powers three catalog facets
+#: (Match Scoring, ATS Optimization, Skill Gap) but is one agent, so ``len()``
+#: here is legitimately lower than the catalog's ``counts.active`` card total —
+#: the two numbers count different things and stay reconcilable, unlike the
+#: 8-vs-16 disagreement about the agent SET that this replaces. Catalog entries
+#: with no ``backend`` are roadmap cards ("planned") and are deliberately absent:
+#: an agent that cannot run is never reported as ready.
+AGENT_NAMES: tuple[str, ...] = _PIPELINE_AGENT_NAMES + tuple(
+    backend
+    for backend in dict.fromkeys(
+        e["backend"] for e in AGENT_CATALOG if e.get("backend")
+    )
+    if backend not in _PIPELINE_AGENT_NAMES
+)
 
 #: The 6 AI providers offered by the Agents screen. This is a static catalog
 #: of identity/branding only — connection status, active model, and detail
@@ -1551,6 +1587,40 @@ def _dispatch(
     )
 
 
+def _guard_rejection_http_error(
+    subject: str, exc: "FabricationError | StructuralError"
+) -> HTTPException:
+    """The ONE honest HTTP translation of a generation-guard rejection, shared by
+    every route that dispatches an agent (F-1, PROD-VERIFY-5A).
+
+    A ``FabricationError``/``StructuralError`` escaping :func:`_dispatch` is a
+    NORMAL product outcome — the guard WORKING, i.e. Aether refusing to ship
+    ungrounded or non-compliant text after every corrective retry — never a
+    server fault. ``_record_run``'s guard-rejection handler has ALREADY recorded
+    the honest ``completed`` degrade and refunded the reserved run by the time
+    the exception reaches a route, so this is purely the HTTP translation.
+
+    Only ``run_cover_letter`` translated it before, so the generic
+    ``POST /agents/{name}/run`` returned a bare ``Internal Server Error`` plus a
+    full ASGI traceback for a correct refusal (reproduced live:
+    ``FabricationError: Fabricated entities detected: ['prm']``) — and every
+    occurrence wrote a traceback that masks real incidents in the log.
+
+    The ``fabrication guard: [...]`` and ``format contract not met: [...]``
+    anchors are a CONTRACT with the frontend's rejection parser
+    (apps/web/src/components/cover-letters/rejection.ts), which reads the guard's
+    flagged items straight out of ``detail`` to render the honest rejection panel
+    instead of a generic error banner. They are preserved verbatim in both
+    messages; only the ``subject`` varies, so a caller of the generic route
+    learns WHICH agent refused.
+    """
+    if isinstance(exc, FabricationError):
+        detail = f"{subject} rejected by fabrication guard: {exc.flagged}"
+    else:
+        detail = f"{subject} rejected — §10.2 format contract not met: {exc.issues}"
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
+
+
 def _require_job_id(params: dict[str, Any]) -> str:
     job_id = params.get("job_id")
     if not job_id:
@@ -1789,6 +1859,14 @@ def _job_status_payload(job: dict[str, Any]) -> dict[str, Any]:
 @router.get("")
 def list_agents(current_user: CurrentUser) -> list[dict[str, Any]]:
     """All known agents with their most recent run (P2-S08).
+
+    The SET is :data:`AGENT_NAMES`, derived from :data:`AGENT_CATALOG` — every
+    distinct implemented agent, pipeline nodes first (F-3). It was a hardcoded
+    8-tuple, so this list omitted all six wave-4A/4B agents while the catalog
+    reported them active: the sidebar Agent Pulse said "8 agents ready" on every
+    dashboard screen next to an Agents screen showing 16 active cards, and the
+    Orchestration view — which reads ``AgentSummary.status`` from THIS list —
+    could not surface the new agents at all.
 
     ``status`` is transient-tolerant and SEMANTICALLY CONSISTENT with
     ``GET /agents/catalog`` (ML-agents-err-001 OBS-B): both endpoints classify
@@ -2062,16 +2140,11 @@ def run_cover_letter(
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except FabricationError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Cover letter rejected by fabrication guard: {exc.flagged}",
-        ) from exc
-    except StructuralError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Cover letter rejected — §10.2 format contract not met: {exc.issues}",
-        ) from exc
+    except (FabricationError, StructuralError) as exc:
+        # Unified with the generic /{name}/run route on ONE translation (F-1) so
+        # the two cannot drift again. The subject stays the studio's established
+        # wording — the rejection panel's documented detail shape.
+        raise _guard_rejection_http_error("Cover letter", exc) from exc
     if output.get("coverLetterUnavailable"):
         # cover _draft() resilience (ML-cover-002/003): the writing model was
         # unavailable on the FIRST draft, so the agent degraded honestly rather
@@ -3630,8 +3703,23 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
 def run_named_agent(
     name: str, current_user: CurrentUser, params: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Trigger any registered agent by name with free-form params (P2-S08)."""
+    """Trigger any registered agent by name with free-form params (P2-S08).
+
+    A fabrication/structural guard rejection gets the SAME honest 422 the
+    dedicated cover-letter route returns (F-1 — see
+    :func:`_guard_rejection_http_error`); it used to escape as an unhandled 500 +
+    traceback. This route is not a back door: the Agents-screen Run button
+    reaches every agent WITHOUT a dedicated route through here
+    (``runAgent(AGENT_ROUTE[backend] ?? backend)``,
+    apps/web/src/app/dashboard/agents/page.tsx), so the bare 500 was
+    customer-reachable, not merely a scripting inconvenience.
+    """
     try:
         return _dispatch(current_user["id"], name, params or {})
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except (FabricationError, StructuralError) as exc:
+        # ``name`` is already a REGISTERED alias here — _agent_callable raises its
+        # own 404 for anything else — so the subject echoes a known agent's
+        # display name, never arbitrary caller input.
+        raise _guard_rejection_http_error(_display_for_backend(name), exc) from exc
