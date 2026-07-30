@@ -67,7 +67,11 @@ def test_catalog_decomposition_email_matcher_and_outreach(client, auth_headers):
     """P4 decomposition contract:
 
     - the Email Agent has its OWN card (key ``emailAgent``, backend ``emailAgent``);
-    - ``recruiterOutreach`` stays a planned card with NO backend (no SR collision);
+    - ``recruiterOutreach`` is a SEPARATE agent from the Email Agent (no SR
+      collision). It shipped in wave-4C as the dedicated OutreachAgent the P4
+      ruling reserved it for, so it now carries its own DISTINCT backend rather
+      than ``None`` — what this contract protects is the SEPARATION, never the
+      card staying planned forever;
     - the previously-invisible ``matcher`` is now a runnable ``jobMatching`` card;
     - the standalone ``followUp`` card is retired (subsumed by the Email Agent).
     """
@@ -80,10 +84,10 @@ def test_catalog_decomposition_email_matcher_and_outreach(client, auth_headers):
     assert email["status"] == "active" and email["runnable"] is True
 
     outreach = by_key["recruiterOutreach"]
-    assert outreach["backend"] is None
-    assert outreach["status"] == "planned"
-    # The outreach card must NOT masquerade as the Email Agent.
+    # The outreach card must NOT masquerade as, or be powered by, the Email Agent.
     assert outreach["name"] != "Email Agent"
+    assert outreach["backend"] != email["backend"]
+    assert outreach["backend"] == "recruiterOutreach"
 
     matching = by_key["jobMatching"]
     assert matching["backend"] == "matcher"

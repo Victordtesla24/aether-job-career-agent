@@ -82,8 +82,16 @@ _PIPELINE_AGENT_NAMES = (
     "storyExtractor", "emailAgent",
 )
 
-#: Agents whose output is gated behind a human approval.
-_APPROVAL_GATED = {"tailor", "coverLetter", "emailAgent"}
+#: Agents whose output is gated behind a human approval. The wave-4C outreach
+#: agents that produce an OUTBOUND email belong here: like ``emailAgent``, their
+#: terminal act is a pending ``email_send`` ApprovalRequest and the single point
+#: where a real email leaves the system stays ``POST /approvals/{id}/execute``.
+#: An agent that only classifies or drafts text and sends nothing does NOT belong
+#: here — the gate marks a pending outbound side-effect, not "produced text".
+_APPROVAL_GATED = {
+    "tailor", "coverLetter", "emailAgent",
+    "recruiterOutreach", "reference",
+}
 
 # ---------------------------------------------------------------------------
 # Agents-screen catalog, provider seeds and model pricing (design/screens/agents.html)
@@ -229,11 +237,18 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "tip": "Surfaces the job's missing keywords from the ATS engine "
             "(ATSScore.missing_keywords) — the skill-gap facet of Match Scoring. "
             "Already shipped; deterministic, no LLM cost."},
+    # ADR-AG-1 (wave-4C): the promised "future dedicated OutreachAgent" now
+    # exists, at exactly the scope the old tip reserved for it — no enrichment,
+    # no external research, no auto-send.
     {"key": "recruiterOutreach", "name": "Recruiter Outreach Agent", "icon": "fa-handshake",
-     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Planned: first-touch outbound to a recruiter/contact with no existing thread "
-            "(a future dedicated OutreachAgent). Inbox triage and reply/follow-up drafting "
-            "already live in the Email Agent."},
+     "accent": "coral", "backend": "recruiterOutreach", "recommended": "claude-sonnet-4",
+     "tip": "Drafts the FIRST outbound email to a contact of yours who has no email "
+            "thread yet — grounded only in your own résumé and that contact's "
+            "recorded details, with no enrichment and no external research. Blocks "
+            "honestly when the contact has no email address, and points you at the "
+            "Email Agent when a thread already exists. The send is approval-gated: "
+            "nothing leaves until you approve it, and approving needs a connected "
+            "Gmail."},
     {"key": "emailAgent", "name": "Email Agent", "icon": "fa-envelope",
      "accent": "coral", "backend": "emailAgent", "recommended": "claude-sonnet-4",
      "tip": "Real Gmail-backed inbox triage, evidence-grounded reply and follow-up drafting, "
@@ -255,9 +270,16 @@ AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "sentimentAnalysis", "name": "Sentiment Analysis Agent", "icon": "fa-face-smile",
      "accent": "coral", "backend": None, "recommended": "claude-3.5-haiku",
      "tip": "Best with claude-3.5-haiku for tone & sentiment scoring of replies."},
+    # ADR-AG-1 (wave-4C): "& reminders" claimed a reminder scheduler that does not
+    # exist. The real half — drafting the reference REQUEST itself — ships here.
     {"key": "reference", "name": "Reference Agent", "icon": "fa-user-check",
-     "accent": "indigo", "backend": None, "recommended": "gpt-4o-mini",
-     "tip": "Best with GPT-4o-mini — manages reference requests & reminders."},
+     "accent": "indigo", "backend": "reference", "recommended": "gpt-4o-mini",
+     "tip": "Drafts the reference REQUEST to one of your contacts, grounded only in "
+            "your own résumé and that contact's recorded details, and reports the "
+            "requests it already raised for them so a repeat run is a visible "
+            "re-draft. No reminder scheduling exists, so none is claimed. The send "
+            "is approval-gated — nothing leaves until you approve it, and approving "
+            "needs a connected Gmail."},
     {"key": "storyExtraction", "name": "Story Extraction Agent", "icon": "fa-book-bookmark",
      "accent": "coral", "backend": "storyExtractor", "recommended": "claude-haiku-4-5-20251001",
      "tip": "Mines the base resume into STAR+R evidence stories for the Story Bank — "
@@ -1217,6 +1239,15 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     # stories on every run that has a job to prep for; a run with nothing to prep
     # for reports ``llm_called=False`` and is stamped zero-cost.
     "interviewPrep": "REASONING",
+    # wave-4C outreach family. Each drafts or classifies with the model on a run
+    # that has real data to work from, and each has honest refusal paths that
+    # reach NO model (no eligible contact/thread, a contact with no email address,
+    # no résumé) — those report ``llm_called=False`` and are refunded by the
+    # backstop, see ``_OPTIONAL_LLM_BY_BACKEND``. ``notification`` is deliberately
+    # ABSENT: its digest is a deterministic composition of the user's own rows and
+    # calls no model at all.
+    "recruiterOutreach": "REASONING",
+    "reference": "REASONING",
 }
 
 
@@ -1284,6 +1315,28 @@ def _email_agent_will_call_llm(params: dict[str, Any]) -> bool:
     return mode not in _EMAIL_AGENT_NO_LLM_MODES
 
 
+def _outreach_will_call_llm(params: dict[str, Any]) -> bool:  # noqa: ARG001
+    """Whether a wave-4C outreach run will make an LLM call — unknowable from the
+    params, so conservatively True (the ``_interview_prep_will_call_llm`` ruling,
+    applied to the four LLM agents of this family).
+
+    Every agent of this family has honest refusal paths that reach no model, but
+    every one of them depends on DB STATE (is there an eligible contact? does it
+    have an email address? is there a thread? does the caller have a résumé?),
+    never on the params. Deciding it here would mean re-running each agent's own
+    resolution queries inside the metering predicate — a second source of truth
+    that could drift from what the agent actually does, plus extra queries on
+    every run.
+
+    So the atomic reserve-BEFORE-the-LLM-call rail is kept for EVERY call, and the
+    honest ``llm_called=False`` these agents report AFTERWARDS is what triggers the
+    refund backstop in :func:`_execute_reserved_run`. Registering these backends is
+    therefore about the BACKSTOP, never about skipping a reserve: a metered call
+    can still never reach a model unreserved.
+    """
+    return True
+
+
 #: Metered backends eligible for the no-LLM-call accounting above: backend ->
 #: predicate over the run params, True when this call will really reach the LLM.
 #: A backend listed here is ALSO covered by ``_execute_reserved_run``'s
@@ -1322,6 +1375,10 @@ _OPTIONAL_LLM_BY_BACKEND: dict[str, Callable[[dict[str, Any]], bool]] = {
     "companyResearch": _company_research_wants_narrative,
     "interviewPrep": _interview_prep_will_call_llm,
     "emailAgent": _email_agent_will_call_llm,
+    # wave-4C: honest refusals (no eligible contact/thread, no email address, no
+    # résumé) reach no model and must not cost a paid run.
+    "recruiterOutreach": _outreach_will_call_llm,
+    "reference": _outreach_will_call_llm,
 }
 
 
@@ -1589,6 +1646,30 @@ def _agent_callable(
                 user_id, job_id=str(job_id) if job_id else None
             )
         )
+    # --- wave-4C outreach family (ADR-AG-1) --------------------------------
+    # Every param is OPTIONAL so the Agents-screen Run button works with the FE's
+    # default empty body (no AGENT_ROUTE/RUN_PARAMS entry needed): each agent
+    # resolves its own subject from the caller's own data and REPORTS that choice
+    # back (the wave-4A/4B convention). An EXPLICIT id that is not the caller's
+    # own raises LookupError -> honest 404, never a substituted row.
+    if name in ("recruiterOutreach", "recruiter-outreach"):
+        from app.agents.recruiter_outreach_agent import RecruiterOutreachAgent
+
+        contact_id = params.get("contact_id")
+        return "recruiterOutreach", (
+            lambda: RecruiterOutreachAgent().run(
+                user_id, contact_id=str(contact_id) if contact_id else None
+            )
+        )
+    if name in ("reference", "reference-agent"):
+        from app.agents.reference_agent import ReferenceAgent
+
+        contact_id = params.get("contact_id")
+        return "reference", (
+            lambda: ReferenceAgent().run(
+                user_id, contact_id=str(contact_id) if contact_id else None
+            )
+        )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
@@ -1604,6 +1685,7 @@ _RUNNABLE_BACKENDS = frozenset(
         "compliance", "salaryIntelligence", "marketTrends", "companyResearch",
         "learningFeedback",
         "interviewPrep",
+        "recruiterOutreach", "reference",
     }
 )
 

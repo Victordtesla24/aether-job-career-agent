@@ -61,6 +61,43 @@ class ApprovalRepository:
                     if rows:
                         conn.commit()
                         return rows[0]
+                # Same idempotency for a request that is NOT job-scoped: the
+                # wave-4C outreach agents raise ``email_send`` requests scoped to a
+                # CONTACT (first-touch outreach, a reference request) or to the
+                # user themselves (a notification digest), where re-running the
+                # agent must REFRESH the still-pending card with the newest draft
+                # rather than stack duplicate pending sends to the same recipient.
+                # ``dedupe_key`` is supplied by the caller
+                # (``outreach_support.queue_email_approval``) and is scoped by
+                # ``kind`` exactly like the job-scoped branch above. Purely
+                # additive: no pre-existing payload carries ``dedupe_key``, so
+                # every existing caller (including ``EmailAgent._send``, whose ad-hoc
+                # sends legitimately stack) is byte-for-byte unchanged.
+                dedupe_key = payload.get("dedupe_key")
+                if dedupe_key:
+                    cur.execute(
+                        f'''
+                        UPDATE "ApprovalRequest"
+                        SET "payload" = %s, "applicationId" = %s
+                        WHERE "id" = (
+                            SELECT "id" FROM "ApprovalRequest"
+                            WHERE "userId" = %s AND "type" = %s::"ApprovalType"
+                              AND "status" = 'pending'
+                              AND "payload"->>'dedupe_key' = %s
+                              AND "payload"->>'kind' IS NOT DISTINCT FROM %s
+                            ORDER BY "createdAt" DESC LIMIT 1
+                        )
+                        RETURNING {_COLUMNS}
+                        ''',
+                        (
+                            json.dumps(payload), application_id, user_id, type_,
+                            dedupe_key, payload.get("kind"),
+                        ),
+                    )
+                    rows = rows_to_dicts(cur)
+                    if rows:
+                        conn.commit()
+                        return rows[0]
                 cur.execute(
                     f'''
                     INSERT INTO "ApprovalRequest"
