@@ -176,3 +176,208 @@ describe("Interview Center — real backend wiring (MV-interview-center-001/003)
     );
   });
 });
+
+// ===========================================================================
+// Interview Prep panel (ML-W4B-OBS-1, orchestrator-ruled: wave-4B incomplete
+// until user-visible).
+//
+// FACT: GET /workspaces/interviews/prep works end-to-end on the backend (real
+// per-job question briefs with story-grounded STAR+R answer sketches, plus a
+// questionsNote when the only brief on file belongs to another job — see
+// apps/api/app/routers/workspaces.py and
+// apps/api/tests/test_ml_w4b_interview_panel_attribution.py) but NO shipped
+// frontend file ever requested it. These tests fail against the pre-fix page
+// (it never calls the endpoint, so the panel never appears) and pass once the
+// panel is wired to fetch when an application is at the interview stage.
+// ===========================================================================
+
+interface PrepFixtureOverrides {
+  questions?: unknown[];
+  questionsNote?: string | null;
+}
+
+function makePrepFixture(overrides: PrepFixtureOverrides = {}) {
+  return {
+    session: {
+      role: "Senior Product Owner",
+      company: "Acme Corp",
+      round: "Active Interview",
+      scheduledFor: null,
+      format: "Check your calendar for details",
+    },
+    compliance: {
+      message: "Live Assist is disabled by default during interviews.",
+      level: "warning",
+    },
+    brief: {
+      columns: [{ title: "Company", items: ["Acme Corp"] }],
+      insight:
+        "Fit score: 88%. Review the job description and your application " +
+        "answers for key talking points.",
+    },
+    questions: overrides.questions ?? [],
+    questionsNote: overrides.questionsNote ?? null,
+    liveAssist: {
+      enabled: false,
+      fillerWordsPerMin: 0,
+      wordsPerMin: 0,
+      talkListenRatio: { talk: 50, listen: 50 },
+      coachingCue: null,
+    },
+    debrief: null,
+  };
+}
+
+const GROUNDED_QUESTION = {
+  question: "How did you scale delivery across multiple squads?",
+  category: "behavioural",
+  whyAsked: "The posting asks for delivery at scale.",
+  suggestedStoryId: "story-1",
+  suggestedStoryTitle: "ANZ 30% delivery efficiency",
+  answerSketch: {
+    situation: "The ANZ platform team had a 6-week release cadence.",
+    task: "I owned cutting that to weekly releases.",
+    action: "I introduced trunk-based development and automated canary rollouts.",
+    result: "Release cadence dropped to weekly with 30% fewer rollback incidents.",
+    reflection: "I'd invest in the canary tooling even earlier next time.",
+  },
+  preparationNote: null,
+  guardActions: [],
+};
+
+let applicationsFixture: Record<string, unknown>[] = [APP_FIXTURE];
+let prepFixture: ReturnType<typeof makePrepFixture> = makePrepFixture();
+
+describe("Interview Prep panel (ML-W4B-OBS-1)", () => {
+  beforeEach(() => {
+    applicationsFixture = [APP_FIXTURE];
+    prepFixture = makePrepFixture();
+    interviews = [
+      makeInterview({
+        application_id: "app-1",
+        type: "onsite",
+        scheduled_at: "2026-08-02T09:30:00.000Z",
+      }),
+    ];
+    apiRequest.mockReset();
+    apiRequest.mockImplementation(
+      async (path: string, options: { method?: string; body?: unknown } = {}) => {
+        const method = options.method ?? "GET";
+        if (path === "/applications") return applicationsFixture;
+        if (path === "/interviews" && method === "GET") return [...interviews];
+        if (path === "/workspaces/interviews/prep" && method === "GET") return prepFixture;
+        if (path === "/agents/interviewPrep/run" && method === "POST") {
+          prepFixture = makePrepFixture({ questions: [GROUNDED_QUESTION] });
+          return {
+            jobId: "job-1",
+            predictedQuestions: prepFixture.questions,
+            message: "1 predicted question(s) for Senior Product Owner at Acme Corp.",
+          };
+        }
+        throw new Error(`unexpected apiRequest(${method} ${path})`);
+      },
+    );
+  });
+
+  it("fetches the prep brief when an application is at the interview stage and shows the honest empty state with a Run affordance", async () => {
+    render(<InterviewCenterPage />);
+
+    await screen.findByTestId("interview-prep-panel");
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/workspaces/interviews/prep",
+      expect.anything(),
+    );
+    const empty = await screen.findByTestId("interview-prep-empty");
+    expect(empty.textContent).toMatch(/No prep brief yet — run the Interview Prep agent/);
+    expect(screen.getByTestId("interview-prep-run-btn")).not.toBeNull();
+  });
+
+  it("does not fetch the prep brief when no application is at the interview stage", async () => {
+    applicationsFixture = [{ ...APP_FIXTURE, status: "screening" }];
+
+    render(<InterviewCenterPage />);
+
+    await screen.findByTestId("interview-card");
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/workspaces/interviews/prep",
+      expect.anything(),
+    );
+    expect(screen.queryByTestId("interview-prep-panel")).toBeNull();
+  });
+
+  it("renders a question with whyAsked and a story-grounded STAR+R answer sketch, linked to the suggested story", async () => {
+    prepFixture = makePrepFixture({ questions: [GROUNDED_QUESTION] });
+
+    render(<InterviewCenterPage />);
+
+    const card = await screen.findByTestId("interview-prep-question");
+    expect(within(card).getByText(/How did you scale delivery/)).not.toBeNull();
+    expect(within(card).getByText(/The posting asks for delivery at scale\./)).not.toBeNull();
+
+    const sketch = within(card).getByTestId("interview-prep-answer-sketch");
+    expect(within(sketch).getByText(/6-week release cadence/)).not.toBeNull();
+    expect(within(sketch).getByText(/30% fewer rollback incidents/)).not.toBeNull();
+
+    const storyLink = within(card).getByTestId("interview-prep-story-link");
+    expect(storyLink.textContent).toMatch(/ANZ 30% delivery efficiency/);
+    expect(storyLink.getAttribute("href")).toBe("/dashboard/stories");
+  });
+
+  it('renders the honest "no matching story" state when a question has no answer sketch', async () => {
+    prepFixture = makePrepFixture({
+      questions: [
+        {
+          question: "Describe a time you managed regulatory risk.",
+          category: "behavioural",
+          whyAsked: "The posting mentions compliance obligations.",
+          suggestedStoryId: null,
+          suggestedStoryTitle: null,
+          answerSketch: null,
+          preparationNote:
+            "No story in your Story Bank supports an answer here yet — prepare " +
+            "one (situation, task, action, result, then what you would do " +
+            "differently) before the interview.",
+          guardActions: [],
+        },
+      ],
+    });
+
+    render(<InterviewCenterPage />);
+
+    const card = await screen.findByTestId("interview-prep-question");
+    expect(within(card).queryByTestId("interview-prep-answer-sketch")).toBeNull();
+    const noStory = within(card).getByTestId("interview-prep-no-story");
+    expect(noStory.textContent).toMatch(/prepare one/i);
+  });
+
+  it("renders questionsNote when the only brief on file belongs to another job", async () => {
+    prepFixture = makePrepFixture({
+      questions: [],
+      questionsNote:
+        "Your most recent interview prep was generated for a different job " +
+        "(Staff Data Engineer) — those questions were predicted from another " +
+        "posting, so they are not shown as this interview's prep. Run " +
+        "Interview Prep for this role to get questions for it.",
+    });
+
+    render(<InterviewCenterPage />);
+
+    const note = await screen.findByTestId("interview-prep-questions-note");
+    expect(note.textContent).toMatch(/Staff Data Engineer/);
+  });
+
+  it("running Interview Prep from the empty state calls the agent then refetches the brief", async () => {
+    render(<InterviewCenterPage />);
+    await screen.findByTestId("interview-prep-empty");
+
+    fireEvent.click(screen.getByTestId("interview-prep-run-btn"));
+
+    const card = await screen.findByTestId("interview-prep-question");
+    expect(within(card).getByText(/How did you scale delivery/)).not.toBeNull();
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/agents/interviewPrep/run",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.queryByTestId("interview-prep-empty")).toBeNull();
+  });
+});

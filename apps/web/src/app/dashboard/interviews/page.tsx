@@ -14,21 +14,33 @@
  * scheduled" placeholder over a fully-working backend and there was no UI
  * anywhere to schedule an interview. This is the honest, functional
  * replacement — real data in, a real create affordance, real status changes.
+ *
+ * ML-W4B-OBS-1: also renders the Interview Prep brief
+ * (GET /workspaces/interviews/prep) whenever an application is at the
+ * interview stage — real predicted questions with story-grounded STAR+R
+ * answer sketches, the honest "no matching story" state, the questionsNote
+ * when the only brief on file belongs to another job, and an honest empty
+ * state with a Run affordance (POST /agents/interviewPrep/run) when no prep
+ * brief exists yet. That backend endpoint has worked end-to-end since
+ * wave-4B, but until this fix no shipped frontend file ever requested it.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchApplications, type Application } from "../../../lib/api/applications";
+import { runAgent } from "../../../lib/api/agents";
 import {
   ACTIVE_INTERVIEW_STATUSES,
   cancelInterview,
   completeInterview,
   createInterview,
   deleteInterview,
+  fetchInterviewPrep,
   fetchInterviews,
   INTERVIEW_TYPES,
   type Interview,
   type InterviewInput,
+  type InterviewPrepBrief,
   type InterviewStatus,
 } from "../../../lib/api/interviews";
 
@@ -108,6 +120,27 @@ export default function InterviewCenterPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // Interview Prep brief (ML-W4B-OBS-1) — only fetched/rendered while an
+  // application is at the interview stage (see `atInterviewStage` below).
+  const [prep, setPrep] = useState<InterviewPrepBrief | null>(null);
+  const [prepLoading, setPrepLoading] = useState(false);
+  const [prepError, setPrepError] = useState<string | null>(null);
+  const [prepRunning, setPrepRunning] = useState(false);
+  const [prepRunError, setPrepRunError] = useState<string | null>(null);
+
+  const loadPrep = useCallback(async () => {
+    setPrepLoading(true);
+    setPrepError(null);
+    try {
+      setPrep(await fetchInterviewPrep());
+    } catch (e) {
+      setPrepError(e instanceof Error ? e.message : "Failed to load interview prep");
+      setPrep(null);
+    } finally {
+      setPrepLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     try {
       setInterviews(await fetchInterviews());
@@ -116,14 +149,23 @@ export default function InterviewCenterPage() {
       setError(e instanceof Error ? e.message : "Failed to load interviews");
       setInterviews([]);
     }
-    // Applications feed the "which application" picker and the role/company
-    // labels — non-fatal if it fails (the list still renders with ids).
+    // Applications feed the "which application" picker, the role/company
+    // labels, AND whether an interview-stage prep brief should be fetched —
+    // non-fatal if it fails (the list still renders with ids, prep state
+    // holds whatever it last was).
     try {
-      setApps(await fetchApplications());
+      const fetchedApps = await fetchApplications();
+      setApps(fetchedApps);
+      if (fetchedApps.some((a) => a.status === "interview")) {
+        await loadPrep();
+      } else {
+        setPrep(null);
+        setPrepError(null);
+      }
     } catch {
-      /* keep last-known apps */
+      /* keep last-known apps and prep state */
     }
-  }, []);
+  }, [loadPrep]);
 
   useEffect(() => {
     void load();
@@ -134,6 +176,28 @@ export default function InterviewCenterPage() {
     for (const a of apps) map.set(a.id, { title: a.jobTitle, company: a.company });
     return map;
   }, [apps]);
+
+  // Same signal `load()` uses to decide whether to fetch the prep brief —
+  // gates whether the panel renders at all.
+  const atInterviewStage = useMemo(
+    () => apps.some((a) => a.status === "interview"),
+    [apps],
+  );
+
+  const runPrep = useCallback(async () => {
+    setPrepRunning(true);
+    setPrepRunError(null);
+    try {
+      // No job_id: the agent preps for the caller's most recent
+      // interview-stage application, exactly the one this panel renders.
+      await runAgent("interviewPrep", {});
+      await loadPrep();
+    } catch (e) {
+      setPrepRunError(e instanceof Error ? e.message : "Failed to run Interview Prep");
+    } finally {
+      setPrepRunning(false);
+    }
+  }, [loadPrep]);
 
   const setField = (key: keyof FormState, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -232,6 +296,188 @@ export default function InterviewCenterPage() {
             Retry
           </button>
         </div>
+      ) : null}
+
+      {atInterviewStage ? (
+        <section
+          className="glass rounded-2xl border border-white/10 p-5"
+          data-testid="interview-prep-panel"
+        >
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
+                Interview Prep
+              </h2>
+              {prep?.session ? (
+                <p className="mt-1 text-base font-semibold text-white">
+                  {prep.session.role}{" "}
+                  <span className="text-aether-muted">@ {prep.session.company}</span>
+                </p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              data-testid="interview-prep-run-btn"
+              onClick={() => void runPrep()}
+              disabled={prepRunning}
+              className="flex min-h-[36px] items-center gap-2 rounded-lg border border-aether-coral/40 px-3 py-1.5 text-xs font-semibold text-aether-coral transition hover:bg-aether-coral/10 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles" aria-hidden="true" />
+              {prepRunning ? "Running…" : "Run Interview Prep"}
+            </button>
+          </div>
+
+          {prepRunError ? (
+            <p
+              role="alert"
+              data-testid="interview-prep-run-error"
+              className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+            >
+              {prepRunError}
+            </p>
+          ) : null}
+
+          {prepLoading && prep === null ? (
+            <div
+              className="glass h-24 animate-pulse rounded-xl border border-white/10"
+              aria-busy="true"
+              data-testid="interview-prep-loading"
+            />
+          ) : prepError ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+              <p role="alert" className="text-sm text-red-300" data-testid="interview-prep-error">
+                {prepError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadPrep()}
+                className="rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 max-sm:min-h-[44px]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : prep ? (
+            <>
+              {prep.questionsNote ? (
+                <p
+                  data-testid="interview-prep-questions-note"
+                  className="mb-4 rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+                >
+                  {prep.questionsNote}
+                </p>
+              ) : null}
+
+              {prep.questions.length === 0 ? (
+                <div
+                  className="rounded-xl border border-white/10 bg-white/5 p-6 text-center"
+                  data-testid="interview-prep-empty"
+                >
+                  <i
+                    className="fa-solid fa-comments text-2xl text-aether-muted-dim"
+                    aria-hidden="true"
+                  />
+                  <p className="mt-2 text-sm text-aether-muted">
+                    {prep.questionsNote
+                      ? "Run Interview Prep for this job to get its own predicted questions and answer sketches."
+                      : "No prep brief yet — run the Interview Prep agent to get predicted questions and STAR+R answer sketches for this interview."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3" data-testid="interview-prep-questions">
+                  {prep.questions.map((q, i) => (
+                    <article
+                      key={i}
+                      data-testid="interview-prep-question"
+                      className="rounded-xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-medium text-white">{q.question}</p>
+                        {q.category ? (
+                          <span className="shrink-0 rounded-md bg-white/10 px-2 py-0.5 text-[11px] font-medium capitalize text-aether-muted">
+                            {q.category}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {q.whyAsked ? (
+                        <p className="mt-2 text-xs text-aether-muted-dim">
+                          <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
+                          {q.whyAsked}
+                        </p>
+                      ) : null}
+
+                      {q.answerSketch ? (
+                        <div
+                          className="mt-3 rounded-lg border border-aether-green/20 bg-aether-green/5 p-3"
+                          data-testid="interview-prep-answer-sketch"
+                        >
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-aether-green">
+                              STAR+R answer sketch
+                            </span>
+                            {q.suggestedStoryTitle ? (
+                              <Link
+                                href="/dashboard/stories"
+                                data-testid="interview-prep-story-link"
+                                className="text-[11px] text-aether-coral underline"
+                              >
+                                From: {q.suggestedStoryTitle}
+                              </Link>
+                            ) : null}
+                          </div>
+                          <dl className="space-y-1.5 text-xs text-aether-muted">
+                            <div>
+                              <dt className="inline font-semibold text-aether-muted-dim">
+                                Situation:{" "}
+                              </dt>
+                              <dd className="m-0 inline">{q.answerSketch.situation}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold text-aether-muted-dim">
+                                Task:{" "}
+                              </dt>
+                              <dd className="m-0 inline">{q.answerSketch.task}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold text-aether-muted-dim">
+                                Action:{" "}
+                              </dt>
+                              <dd className="m-0 inline">{q.answerSketch.action}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold text-aether-muted-dim">
+                                Result:{" "}
+                              </dt>
+                              <dd className="m-0 inline">{q.answerSketch.result}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline font-semibold text-aether-muted-dim">
+                                Reflection:{" "}
+                              </dt>
+                              <dd className="m-0 inline">{q.answerSketch.reflection}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      ) : (
+                        <p
+                          className="mt-3 rounded-lg border border-aether-amber/20 bg-aether-amber/5 p-3 text-xs text-aether-amber"
+                          data-testid="interview-prep-no-story"
+                        >
+                          <i
+                            className="fa-solid fa-triangle-exclamation mr-1.5"
+                            aria-hidden="true"
+                          />
+                          {q.preparationNote ??
+                            "No matching story — prepare one before the interview."}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+        </section>
       ) : null}
 
       {creating ? (
