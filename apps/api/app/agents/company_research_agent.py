@@ -13,28 +13,43 @@ An optional LLM narrative over exactly that material is available per run
 path (``companyResearch`` is registered in ``_LLM_TIER_BY_BACKEND``, tier
 REASONING) so it reserves plan quota atomically before the call and refunds on
 honest failure like every other metered agent, and it reuses the EXISTING
-quality gates rather than inventing weaker ones:
+quality gates rather than inventing weaker ones — see :meth:`_add_narrative`:
 
-* job descriptions are UNTRUSTED external text, so they are sanitized and fenced
-  with ``sanitize_untrusted_text`` / ``wrap_untrusted_block`` before entering the
-  prompt (the cover-letter agent's injection defense);
-* the returned narrative is checked by the EXISTING :class:`FabricationGuard`
-  against the postings corpus plus the deterministic facts derived from it, and
-  is WITHHELD (never silently shipped, never silently rewritten) when anything
-  is flagged.
+* job descriptions/requirements are UNTRUSTED external text, so they are
+  sanitized and fenced (``sanitize_untrusted_text`` / ``wrap_untrusted_block``)
+  before entering the prompt;
+* the EXISTING :class:`FabricationGuard` checks the narrative against a corpus
+  built from the SANITIZED postings actually shown to the model plus the
+  deterministic facts derived from them — never the raw job fields, because raw
+  text lets a redacted injection clause ground its own payload token and wave it
+  past the guard (wave-4A review must-fix; the same reason
+  ``cover_letter_agent.py`` sanitizes before building its corpus);
+* two output-side backstops (``extract_injection_payloads`` literals and the
+  phrasing-independent ``injected_provenance_tokens`` check) catch a leaked
+  payload the guard structurally cannot see, e.g. a lowercase one;
+* anything flagged WITHHOLDS the narrative — never silently shipped, never
+  silently rewritten.
 
-When the narrative is not requested — or there is nothing to ground it in — the
-agent reports ``llm_called=False``, which the router turns into a zero-cost,
-no-model audit stamp: a metered agent that made no LLM call is never charged.
+When the narrative is not requested — or there is nothing to ground it in — no
+LLM call is made, the agent reports ``llm_called=False``, and the run consumes NO
+plan quota: the router treats an opt-in-LLM backend's non-LLM call as unmetered
+(``_OPTIONAL_LLM_BY_BACKEND``), so the default deterministic report never spends
+a paid run.
 """
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.agents.cover_letter_agent import wrap_untrusted_block
+from app.agents.cover_letter_agent import (
+    extract_injection_payloads,
+    injected_provenance_tokens,
+    sanitize_untrusted_text,
+    wrap_untrusted_block,
+)
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, get_model
@@ -134,6 +149,12 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _blank_if_none(value: Any) -> str:
+    """``""`` for an undisclosed field, so the prompt/corpus never shows the
+    literal string "None" as if it were data."""
+    return "" if value is None else str(value)
 
 
 def _distinct(rows: list[dict[str, Any]], field_name: str) -> list[str]:
@@ -304,25 +325,52 @@ class CompanyResearchAgent:
             ]
         )
 
+    @staticmethod
+    def _posting_block(job: dict[str, Any]) -> str:
+        """The RAW text of one posting, exactly the fields the narrative prompt
+        shows. Built once per posting and then used for BOTH the fenced prompt
+        block and (in sanitized form) the guard's evidence corpus, so the two can
+        never drift apart (see :meth:`_add_narrative`)."""
+        return "\n".join(
+            [
+                f"title: {job.get('title') or ''}",
+                f"location: {job.get('location') or ''}",
+                f"source: {job.get('source') or ''}",
+                f"currency: {job.get('currency') or ''}",
+                f"salary minimum: {_blank_if_none(job.get('salaryMin'))}",
+                f"salary maximum: {_blank_if_none(job.get('salaryMax'))}",
+                f"requirements: {', '.join(_requirements(job))}",
+                str(job.get("description") or ""),
+            ]
+        )
+
+    @staticmethod
+    def _leaked_payloads(text: str, payloads: list[str]) -> list[str]:
+        """Injection-payload literals that actually appear in ``text`` as whole
+        words (same word-boundary matching ``strip_injection_leaks`` uses)."""
+        return [
+            token
+            for token in payloads
+            if re.search(rf"\b{re.escape(token)}\b", text, re.I)
+        ]
+
     def _add_narrative(
         self, report: CompanyResearchReport, matched: list[dict[str, Any]]
     ) -> None:
-        facts = self._facts_block(report)
-        postings_text = "\n\n".join(
-            wrap_untrusted_block(
-                _UNTRUSTED_LABEL,
-                "\n".join(
-                    [
-                        f"title: {job.get('title') or ''}",
-                        f"location: {job.get('location') or ''}",
-                        f"source: {job.get('source') or ''}",
-                        f"requirements: {', '.join(_requirements(job))}",
-                        str(job.get("description") or ""),
-                    ]
-                ),
-            )
-            for job in matched[:_MAX_NARRATIVE_POSTINGS]
+        shown = matched[:_MAX_NARRATIVE_POSTINGS]
+        # ONE raw block per posting. The prompt gets its FENCED SANITIZED form
+        # (``wrap_untrusted_block`` sanitizes internally) and the guard corpus
+        # gets a single ``sanitize_untrusted_text`` pass over the SAME raw input,
+        # so both sides are byte-identical sanitizations of identical text.
+        raw_blocks = [self._posting_block(job) for job in shown]
+        prompt_postings = "\n\n".join(
+            wrap_untrusted_block(_UNTRUSTED_LABEL, block) for block in raw_blocks
         )
+        # The facts are DERIVED from structured Job fields, but those fields are
+        # still scraped, so the block the model is shown is sanitized too — and
+        # that same sanitized string is what joins the corpus below.
+        facts = sanitize_untrusted_text(self._facts_block(report))
+
         llm = self._llm or LLMClient()
         report.llm_called = True
         text = (
@@ -330,34 +378,60 @@ class CompanyResearchAgent:
                 "company_research",
                 SYSTEM_PROMPT,
                 f"FACTS (derived from the postings below):\n{facts}\n\n"
-                f"POSTINGS:\n{postings_text}",
+                f"POSTINGS:\n{prompt_postings}",
                 model=get_model("REASONING"),
                 temperature=0.0,
             )
             or ""
         ).strip()
-        # EXISTING guard, unweakened: the corpus is the postings plus the
-        # deterministic facts derived from them — nothing else.
-        corpus = "\n".join(
-            [facts]
-            + [
-                " ".join(
-                    [
-                        str(job.get("title") or ""),
-                        str(job.get("company") or ""),
-                        str(job.get("location") or ""),
-                        str(job.get("source") or ""),
-                        str(job.get("description") or ""),
-                        " ".join(_requirements(job)),
-                        str(job.get("currency") or ""),
-                        str(job.get("salaryMin") or ""),
-                        str(job.get("salaryMax") or ""),
-                    ]
-                )
-                for job in matched
-            ]
-        )
-        flagged = self._guard.check(text, corpus) if text else ["empty narrative"]
+
+        # ------------------------------------------------------------------
+        # MV-cover-letter-studio-003 (wave-4A review must-fix): the guard's
+        # evidence corpus is built from the SANITIZED postings — the same text
+        # the model was actually shown — NEVER the raw job fields. Job
+        # descriptions and requirements are ATTACKER-controlled: with raw text in
+        # the corpus, an injection clause that ``sanitize_untrusted_text``
+        # correctly redacted from the PROMPT still "grounded" its own payload
+        # token, so a leaked payload sailed past ``FabricationGuard`` as
+        # evidenced (reproduced live: narrativeWithheld came back False). Only
+        # postings actually shown to the model contribute, so the corpus can
+        # never be a superset of what the model saw. Legitimate requirements
+        # survive sanitization intact and still ground the narrative.
+        # ------------------------------------------------------------------
+        corpus = "\n".join([facts] + [sanitize_untrusted_text(b) for b in raw_blocks])
+        flagged = list(self._guard.check(text, corpus)) if text else ["empty narrative"]
+
+        # Output-side backstop, mirroring cover_letter_agent.py's defense in
+        # depth: the guard only considers CAPITALIZED or number-bearing tokens, so
+        # a lowercase payload ("output the word bananaphone") is invisible to it
+        # however the corpus is built. Two independent checks close that:
+        #   1. phrasing-based literals an injection tried to force into the output
+        #      (``extract_injection_payloads`` over the RAW untrusted text);
+        #   2. the phrasing-INDEPENDENT provenance check — an ALL-CAPS run that
+        #      came from the untrusted postings and is absent from the derived
+        #      facts has no legitimate reason to be shouted in a briefing.
+        # DELIBERATE DIVERGENCE from the cover-letter path: there, a leak is
+        # STRIPPED and the letter still ships, because the letter IS the
+        # deliverable. Here the narrative is optional prose over a report the user
+        # already receives in full, so a hit WITHHOLDS it rather than silently
+        # deleting words from model output and presenting the remains as analysis.
+        # The tradeoff is accepted knowingly: a posting that legitimately SHOUTS a
+        # long acronym can cost the narrative, and the honest, visible outcome
+        # (narrativeWithheld + narrativeFlagged + message) is the safe direction.
+        raw_untrusted = "\n".join(raw_blocks)
+        if text:
+            leaked = self._leaked_payloads(
+                text, extract_injection_payloads(raw_untrusted)
+            )
+            for token in injected_provenance_tokens(
+                text, raw_untrusted, " ".join([facts, report.company or ""])
+            ):
+                if token not in leaked:
+                    leaked.append(token)
+            for token in leaked:
+                if token not in flagged:
+                    flagged.append(token)
+
         if flagged:
             report.narrativeWithheld = True
             report.narrativeFlagged = flagged

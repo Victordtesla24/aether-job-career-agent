@@ -84,9 +84,9 @@ def _run_single_agent_body(job: dict[str, Any]) -> dict[str, Any]:
     reserved and the AgentRun row created at enqueue; here we only execute."""
     from app.repositories.agent_run import AgentRunRepository
     from app.routers.agents import (
-        _LLM_TIER_BY_BACKEND,
         _agent_callable,
         _billing_audit,
+        _call_is_metered,
         _execute_reserved_run,
     )
 
@@ -94,7 +94,10 @@ def _run_single_agent_body(job: dict[str, Any]) -> dict[str, Any]:
     agent_key = job["agentKey"]
     run_id = job.get("runId")
     params = job.get("params") or {}
-    metered = agent_key in _LLM_TIER_BY_BACKEND
+    # ``_call_is_metered`` (shared with the sync path and the enqueue seam): a
+    # backend whose LLM use is opt-in per call is unmetered on a call that makes
+    # no LLM call, so the worker never treats such a job as billable either.
+    metered = _call_is_metered(agent_key, params)
     quota_repo = UsageQuotaRepository() if metered else None
     audit = _billing_audit(user_id, agent_key)[0]
     try:
@@ -324,12 +327,21 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     # watchdog already failed+refunded this job, mark_completed is a no-op and we
     # skip spend — the job stays failed and the user is not billed (no free run).
     if repo.mark_completed(job_id, result):
-        if isinstance(result, dict) and result.get("coverLetterUnavailable"):
+        if isinstance(result, dict) and (
+            result.get("coverLetterUnavailable") or result.get("noLlmCall")
+        ):
             # The cover agent degraded honestly (LLM unavailable on the FIRST
             # draft — cover _draft() resilience; returned coverLetterUnavailable
             # rather than raising). No letter was produced, so refund the
             # reservation exactly once and accrue NO spend — the same "never bill
             # a degrade" discipline as the guard-rejection except block above.
+            #
+            # ``noLlmCall`` is the same discipline for an OPT-IN-LLM backend
+            # (``_OPTIONAL_LLM_BY_BACKEND``) whose call was reserved because the
+            # params asked for the LLM, but which honestly reported it never
+            # reached a model — stamped by ``_execute_reserved_run``. Refunding
+            # here (after winning the atomic terminal transition) keeps the async
+            # path's end-state ``runsUsed`` identical to the sync path's.
             repo.refund_single_reservation(job_id)
         elif job.get("quotaReserved"):
             try:

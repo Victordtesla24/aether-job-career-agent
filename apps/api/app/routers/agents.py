@@ -737,7 +737,12 @@ def _record_run(
     # sweep), the plan-quota reserve / spend-cap gates are skipped entirely so
     # system work cannot exhaust the user's paid plan quota. The cooldown block
     # above still applies — a blocked user gets no system ops either.
-    metered = agent_name in _LLM_TIER_BY_BACKEND
+    # ``_call_is_metered`` (not bare ``in _LLM_TIER_BY_BACKEND``): a backend whose
+    # LLM use is OPT-IN per call is unmetered on a call that makes no LLM call, so
+    # a $0 deterministic run never reserves a paid run (see
+    # ``_OPTIONAL_LLM_BY_BACKEND``). Every call that does reach the model still
+    # reserves atomically here, BEFORE execution, exactly as before.
+    metered = _call_is_metered(agent_name, params)
     quota_repo = (
         UsageQuotaRepository() if (metered and not skip_quota) else None
     )
@@ -1117,8 +1122,25 @@ def _execute_reserved_run(
         output["tokensIn"] = tokens_in
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
+    # Backstop for an OPT-IN-LLM backend (``_OPTIONAL_LLM_BY_BACKEND``): the
+    # pre-execution predicate said this call WOULD reach the model, so a run was
+    # reserved — but the agent then honestly reported it made no LLM call (e.g.
+    # companyResearch asked for a narrative with no postings to ground one in).
+    # Refund it: a reserved run that never touched a model must not be billed, and
+    # end-state ``runsUsed`` must be unchanged. Scoped to those backends so the
+    # existing per-backend metering of tailor / coverLetter / storyExtractor /
+    # emailAgent / interviewPrep is not silently re-priced by this change.
+    optional_llm_noop = no_llm_call and agent_name in _OPTIONAL_LLM_BY_BACKEND
+    if optional_llm_noop:
+        # Durable, honest marker (same camelCase convention as
+        # ``noChangesApplied`` / ``coverLetterUnavailable`` / ``missingResume``):
+        # it records on the audit row that no model was called, and it is the
+        # signal the ASYNC worker reads to perform the same refund after winning
+        # its own atomic terminal transition. Set only for the scoped backends, so
+        # no other agent's output shape changes.
+        output["noLlmCall"] = True
     finished = runs.finish(run_id, "completed", output=output, cost_usd=cost)
-    if cover_degraded:
+    if cover_degraded or optional_llm_noop:
         # No letter produced — refund the reserved run (sync path). The async
         # worker refunds via its own atomic first-terminal-wins transition
         # (manage_quota=False makes _refund_once a no-op here), mirroring the
@@ -1150,15 +1172,66 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     # companyResearch's deterministic synthesis is free, but its OPT-IN narrative
     # calls the LLM — and metering is per-backend, so the backend must be metered
     # for that call to go through the standard atomic reserve-before-call /
-    # refund-on-failure path. A run that makes no call reports ``llm_called
-    # =False`` and is stamped zero-cost (same convention as emailAgent's
-    # nothing-to-triage no-op).
+    # refund-on-failure path. Its DEFAULT (narrative-off) call makes no LLM call
+    # at all and is therefore not metered either — see
+    # ``_OPTIONAL_LLM_BY_BACKEND`` below.
     "companyResearch": "REASONING",
     # wave-4B: interviewPrep reasons over the posting + the user's own STAR
     # stories on every run that has a job to prep for; a run with nothing to prep
     # for reports ``llm_called=False`` and is stamped zero-cost.
     "interviewPrep": "REASONING",
 }
+
+
+def _company_research_wants_narrative(params: dict[str, Any]) -> bool:
+    """Whether a companyResearch run will make an LLM call.
+
+    SINGLE source of that decision: ``_agent_callable`` passes this same value to
+    :class:`CompanyResearchAgent` as its ``narrative`` argument, and
+    :data:`_OPTIONAL_LLM_BY_BACKEND` reads it to decide whether to meter the call.
+    Because both sides read ONE function, the metering decision can never
+    disagree with what the agent actually does — an unmetered LLM call (a quota
+    bypass) is structurally impossible rather than merely unlikely.
+    """
+    return bool(params.get("narrative"))
+
+
+#: Metered backends whose LLM use is OPT-IN PER CALL: backend -> predicate over
+#: the run params, True only when this call will really reach the LLM.
+#:
+#: ``_record_run``'s metering is otherwise per-BACKEND, which is correct for every
+#: agent whose whole purpose is an LLM call. companyResearch is different: its
+#: DEFAULT call (no params) is a purely deterministic aggregation that makes no
+#: LLM call and costs $0, yet membership in ``_LLM_TIER_BY_BACKEND`` alone made it
+#: reserve a run from the user's paid plan allowance anyway (wave-4A review,
+#: reproduced live: two narrative-off calls moved runsUsed 1 -> 2). Charging a
+#: paid run for work that never touched a model is not honest metering, so a call
+#: the predicate says makes no LLM call is treated as UNMETERED — no reserve, no
+#: spend, end-state ``runsUsed`` unchanged.
+#:
+#: Deliberately scoped to the backends listed here: tailor / coverLetter /
+#: storyExtractor / emailAgent / interviewPrep keep their existing per-backend
+#: metering exactly as-is, so this closes the reported defect without silently
+#: re-pricing any other agent. The atomic reserve-BEFORE-LLM-call rail is
+#: untouched for every call that DOES reach the model.
+_OPTIONAL_LLM_BY_BACKEND: dict[str, Callable[[dict[str, Any]], bool]] = {
+    "companyResearch": _company_research_wants_narrative,
+}
+
+
+def _call_is_metered(agent_name: str, params: dict[str, Any]) -> bool:
+    """Whether THIS call consumes plan quota (reserve + spend).
+
+    True for every backend in :data:`_LLM_TIER_BY_BACKEND`, EXCEPT a backend in
+    :data:`_OPTIONAL_LLM_BY_BACKEND` whose predicate says this particular call
+    makes no LLM call. Shared by the sync path (``_record_run``), the async
+    reserve-at-enqueue seam (``_enqueue_single_agent``) and the worker
+    (``workers.tasks._run_single_agent_body``) so all three always agree.
+    """
+    if agent_name not in _LLM_TIER_BY_BACKEND:
+        return False
+    predicate = _OPTIONAL_LLM_BY_BACKEND.get(agent_name)
+    return True if predicate is None else predicate(params)
 
 
 def _model_for_agent(agent_name: str, override: "str | None" = None) -> str | None:
@@ -1381,9 +1454,11 @@ def _agent_callable(
 
         # ``company`` is optional: with none supplied the agent picks the company
         # the user has the most postings for (and reports which). ``narrative``
-        # is opt-in — the default run makes no LLM call at all.
+        # is opt-in — the default run makes no LLM call at all. The flag is read
+        # through the SAME helper the metering decision uses, so "will this call
+        # the LLM?" has exactly one answer on both sides.
         company = params.get("company")
-        narrative = bool(params.get("narrative"))
+        narrative = _company_research_wants_narrative(params)
         return "companyResearch", (
             lambda: CompanyResearchAgent().run(
                 user_id,
@@ -1523,8 +1598,9 @@ def _enqueue_single_agent(
             block = None
         if block is not None:
             raise _quota_429(provider, block.get("expiresAt"))
-    # 3) Atomic reserve AT ENQUEUE (metered agents only).
-    metered = agent_key in _LLM_TIER_BY_BACKEND
+    # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
+    #    keeps this seam in step with the sync path for opt-in-LLM backends).
+    metered = _call_is_metered(agent_key, params)
     quota_repo = UsageQuotaRepository() if metered else None
     reserved_flag = False
     if quota_repo is not None:
