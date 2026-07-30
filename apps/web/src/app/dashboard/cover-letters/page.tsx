@@ -360,9 +360,13 @@ export default function CoverLettersPage() {
             {letters.map((letter) => {
               const job = jobFor(letter.jobId);
               const isOpen = expanded === letter.id;
+              // P1-10b: fall back to the server-joined title/company when the
+              // job is no longer in the /jobs list (applied/archived).
               const jobLabel = job
                 ? `${job.title} · ${job.company}`
-                : `Job ${letter.jobId.slice(0, 8)}`;
+                : letter.jobTitle
+                  ? `${letter.jobTitle}${letter.jobCompany ? ` · ${letter.jobCompany}` : ""}`
+                  : `Job ${letter.jobId.slice(0, 8)}`;
               const segments =
                 isOpen && letter.coverLetter
                   ? highlightSegments(letter.coverLetter, selectedInsights?.evidence ?? [])

@@ -16,6 +16,14 @@ _COLUMNS = (
     '"createdAt", "updatedAt"'
 )
 
+# Read paths join the Job row so cards can always show a real title/company —
+# the /jobs list excludes applied/archived jobs, so the web app cannot resolve
+# every letter's job client-side (P1-10b).
+_READ_COLUMNS = (
+    'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
+    'a."createdAt", a."updatedAt", j."title" AS "jobTitle", j."company" AS "jobCompany"'
+)
+
 
 class CoverLetterRepository:
     def create(
@@ -45,8 +53,10 @@ class CoverLetterRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_COLUMNS} FROM "Application" '
-                    'WHERE "id" = %s AND "userId" = %s AND "coverLetter" IS NOT NULL',
+                    f'SELECT {_READ_COLUMNS} FROM "Application" a '
+                    'LEFT JOIN "Job" j ON j."id" = a."jobId" '
+                    'WHERE a."id" = %s AND a."userId" = %s '
+                    'AND a."coverLetter" IS NOT NULL',
                     (letter_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
@@ -56,9 +66,10 @@ class CoverLetterRepository:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_COLUMNS} FROM "Application" '
-                    'WHERE "userId" = %s AND "coverLetter" IS NOT NULL '
-                    'ORDER BY "createdAt" DESC',
+                    f'SELECT {_READ_COLUMNS} FROM "Application" a '
+                    'LEFT JOIN "Job" j ON j."id" = a."jobId" '
+                    'WHERE a."userId" = %s AND a."coverLetter" IS NOT NULL '
+                    'ORDER BY a."createdAt" DESC',
                     (user_id,),
                 )
                 return rows_to_dicts(cur)

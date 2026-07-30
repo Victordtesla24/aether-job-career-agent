@@ -12,6 +12,11 @@ export const CoverLetterSchema = z.object({
   coverLetter: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // P1-10b: joined from the Job row server-side so cards resolve a real
+  // title/company even when the job is no longer in the /jobs list
+  // (applied/archived jobs are excluded there).
+  jobTitle: z.string().nullish(),
+  jobCompany: z.string().nullish(),
 });
 
 export type CoverLetter = z.infer<typeof CoverLetterSchema>;
