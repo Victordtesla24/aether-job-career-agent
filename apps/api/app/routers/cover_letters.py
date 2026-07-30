@@ -28,6 +28,7 @@ from app.agents.cover_letter_agent import (
     build_body,
     compose_letter,
     current_position,
+    enforce_first_person,
     extract_injection_payloads,
     injected_provenance_tokens,
     letter_date,
@@ -37,12 +38,14 @@ from app.agents.cover_letter_agent import (
     strip_letter_scaffolding,
     wrap_untrusted_block,
 )
+from app.agents.tailor_agent import build_story_evidence
 from app.middleware.auth import CurrentUser
 from app.repositories.approval import ApprovalRepository
 from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
+from app.services.career_data import build_career_corpus
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLM_UNAVAILABLE_USER_MESSAGE,
@@ -56,6 +59,7 @@ from app.services.resume_grounding import (
     resolve_user_resume_contact,
     resolve_user_resume_text,
 )
+from app.services.resume_tailor import unsupported_claim_tokens
 
 router = APIRouter()
 
@@ -677,17 +681,42 @@ def refine_cover_letter(
     injection_payloads = extract_injection_payloads(raw_description)
     # The letter date, signer and current position are system/profile ground
     # truth, so they join the guard's evidence corpus (mirrors the agent).
+    sanitized_description = sanitize_untrusted_text(raw_description)
     corpus = " ".join(
         [
             resume_text,
             job["title"],
             job["company"],
-            sanitize_untrusted_text(raw_description),
+            sanitized_description,
             letter_date(),
             signer,
             position,
         ]
     )
+    # ML-W26: the refine path's own draft loop ran ONLY the FabricationGuard
+    # above — never the §9 claim guard (``unsupported_claim_tokens``) the main
+    # generation path wires through ``CoverLetterAgent._draft``/``run()``. The
+    # FabricationGuard's evidence corpus (just above) INCLUDES the sanitized
+    # job description, so a JD-sourced noun phrase is already "in evidence"
+    # and never flagged there — even when the model claims it as the
+    # candidate's OWN experience with zero résumé support. Mirror the main
+    # path's call shape and evidence semantics exactly (never fork them): the
+    # claim-guard evidence corpus is the candidate's OWN evidence only —
+    # résumé + Story Bank + consolidated career evidence + profile identity +
+    # target company — and the job description/title are risk vocabulary
+    # only, never evidence (GAP-P6-COV-001 / ML-W23).
+    career_corpus = build_career_corpus(user_id)
+    story_evidence = build_story_evidence(user_id)
+    claim_evidence = " ".join(
+        p
+        for p in (resume_text, career_corpus, story_evidence, signer, position, job["company"])
+        if p
+    )
+    jd_risk = job["title"]
+    # ML-W23: the job DESCRIPTION is the second, phrase-level risk channel —
+    # sanitized like the FabricationGuard corpus above, so a redacted
+    # injection clause can't become risk vocabulary either.
+    jd_body = sanitized_description
     # MV-cover-letter-studio-003: evidence the phrasing-independent provenance
     # check treats as legitimately allowed in the revised letter (résumé +
     # profile identity + the named role/company). An all-caps token from the
@@ -711,7 +740,7 @@ def refine_cover_letter(
 
     llm = LLMClient()
 
-    def _draft(prompt: str, fixture_key: str) -> tuple[str, list[str]]:
+    def _draft(prompt: str, fixture_key: str) -> tuple[str, list[str], list[str]]:
         raw = llm.complete_json(
             "cover_letter_refine",
             _REFINE_SYSTEM_PROMPT,
@@ -745,7 +774,14 @@ def refine_cover_letter(
         # Re:, salutation, role/company hook, revised body, sign-off) — never the
         # banned generic opener the studio previously hardcoded (D-0021, GAP-P4-049).
         full = compose_letter(build_body(text, job, position), job, signer)
-        return full, guard.check(full, corpus)
+        # ML-W26: the §9 claim guard, wired the SAME way the main generation
+        # path calls it (CoverLetterAgent._draft) — first-person-normalised
+        # model-authored text against the candidate's OWN evidence, with the
+        # JD title/body as risk-only vocabulary (jd_body is the W-23 phrase
+        # channel). Never fork this call's semantics from the agent's.
+        model_text = enforce_first_person(text, signer)
+        claim_flags = unsupported_claim_tokens(model_text, claim_evidence, jd_risk, jd_body)
+        return full, guard.check(full, corpus), claim_flags
 
     try:
         # GAP-P6-COV-002: the cover-letter refine path is generation-only (no
@@ -753,15 +789,35 @@ def refine_cover_letter(
         # dedicated cover-budget window rather than the tailoring-tuned global
         # budget that chronically 503'd it. One window covers both drafts.
         with shared_budget(get_cover_budget_seconds(), not_below_active=True):
-            revised, flagged = _draft(base_prompt, "default")
-            if flagged:
-                retry_prompt = (
-                    f"{base_prompt}\n\nIMPORTANT: your previous draft mentioned terms "
-                    f"with no evidence in the resume or job description: {flagged}. "
-                    "Rewrite WITHOUT those terms, using ONLY words that appear "
-                    "verbatim in the resume or job description above."
-                )
-                revised, flagged = _draft(retry_prompt, "retry")
+            revised, flagged, claim_flags = _draft(base_prompt, "default")
+            if flagged or claim_flags:
+                feedback: list[str] = []
+                if flagged:
+                    feedback.append(
+                        f"your previous draft mentioned terms with no evidence "
+                        f"in the resume or job description: {flagged}. Rewrite "
+                        "WITHOUT those terms, using ONLY words that appear "
+                        "verbatim in the resume or job description above."
+                    )
+                if claim_flags:
+                    # ML-W26 / ML-W11: same rule the main generation path's
+                    # retry feedback states — the JD is NOT evidence about the
+                    # candidate, so a term claimed as personal experience with
+                    # no résumé/story-bank/career support must be dropped or
+                    # reframed as interest in the role, never possession.
+                    terms = ", ".join(f"'{t}'" for t in claim_flags)
+                    feedback.append(
+                        f"do not claim personal experience with: {terms}. Your "
+                        "previous draft asserted the candidate PERSONALLY has "
+                        "done or possesses these, and their résumé, story bank "
+                        "and profile prove NONE of them — they come from the "
+                        "job posting, which is NOT evidence about the "
+                        "candidate. You MAY still describe them as part of the "
+                        "role or company, in a sentence that makes no claim "
+                        "about the candidate's own past."
+                    )
+                retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
+                revised, flagged, claim_flags = _draft(retry_prompt, "retry")
     except LLMUnavailableError:
         # MV-cover-letter-studio-005: surface an honest, secret-free message —
         # the raw exception's internals ('hard budget', prompt name) never reach
@@ -773,6 +829,15 @@ def refine_cover_letter(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Revision blocked by fabrication guard: {flagged}",
+        )
+    if claim_flags:
+        # §9 zero-tolerance: a JD-sourced claim the candidate's evidence never
+        # proves survived the retry — reject rather than ship a fabrication
+        # about the candidate (mirrors CoverLetterAgent.run()'s FabricationError
+        # on claim_flags).
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Revision blocked by fabrication guard: {claim_flags}",
         )
 
     stored = CoverLetterRepository().create(
