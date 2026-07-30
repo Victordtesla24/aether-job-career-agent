@@ -707,6 +707,133 @@ def test_abstraction_head_cannot_disarm_a_phrase_inside_the_possessive(
     assert "repository" in flags, f"abstraction head disarmed the guard: {flags}"
 
 
+_JDP = "a central repository of audit evidence artifacts"
+
+
+@pytest.mark.parametrize(
+    ("bypass", "sentence"),
+    [
+        ("F5 'vision for' + figure", f"My vision for {_JDP} cut costs by 92%."),
+        ("F5 'plan for' + marker + figure",
+         f"My plan for {_JDP} already cut evidence effort by 92%."),
+        ("F5 'approach to' + figure",
+         f"My approach to {_JDP} delivered a 92% reduction in audit costs."),
+        ("F5 'understanding of' + figure",
+         f"My understanding of {_JDP} cut costs by 92% last quarter."),
+        ("F5 appositive instead of a preposition",
+         f"My vision, {_JDP}, cut costs by 92%."),
+        # my own permutations — no digit anywhere
+        ("spelled quantity, no digit", f"My vision for {_JDP} saved eight squads weeks of effort."),
+        ("spelled PLURAL quantity", f"My plan for {_JDP} saved hundreds of hours."),
+        ("achievement marker, no quantity at all",
+         f"My plan for {_JDP} already eliminated the manual step."),
+        ("'previously' marker", f"My approach to {_JDP} previously replaced the legacy process."),
+        ("'successfully' marker", f"My understanding of {_JDP} successfully drove the rollout."),
+    ],
+)
+def test_abstraction_before_preposition_cannot_drop_the_predicate(
+    bypass: str, sentence: str
+) -> None:
+    """F5 (BLOCKING). ``_noun_phrase_after`` stops at the first preposition, so a
+    lone abstraction possessive clamped the span to ONE word and dropped the
+    entire rest of the sentence — including its own predicate. The clamp defended
+    only the postposed order ("my central repository APPROACH"); the far more
+    idiomatic "my VISION FOR <JD phrase>" order was unprotected, and 5/5
+    sentences pairing it with a quantified achievement bypassed.
+
+    The clamp may now only suppress downstream material when the predicate does
+    NOT assert a concrete outcome. Note the polarity that makes a forward scan
+    acceptable here where F1's sentence-wide gate was not: this test DISABLES a
+    suppression, so a missed signal leaves the clamp in place (the pre-F5
+    behaviour) and can never hide a claim that was already caught."""
+    flags = unsupported_claim_tokens(
+        sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+    )
+    assert "repository" in flags, f"{bypass} still bypasses the guard: {flags}"
+
+
+@pytest.mark.parametrize(
+    ("decoy", "sentence"),
+    [
+        ("F6 'background-informed'", f"My background-informed vision for {_JDP} is ambitious."),
+        ("F6 'experience-driven'", f"My experience-driven approach to {_JDP} would be iterative."),
+        ("'record-keeping'", f"My record-keeping instinct about {_JDP} is cautious."),
+        ("'career-long'", f"My career-long interest in {_JDP} is genuine."),
+        ("'portfolio-wide'", f"My portfolio-wide perspective on {_JDP} is broad."),
+        ("'skills-based'", f"My skills-based view of {_JDP} is optimistic."),
+        ("'delivery-focused'", f"My delivery-focused plan for {_JDP} is pragmatic."),
+        ("'team-oriented'", f"My team-oriented approach to {_JDP} would be collaborative."),
+    ],
+)
+def test_hyphenated_track_record_decoy_does_not_disable_the_clamp(
+    decoy: str, sentence: str
+) -> None:
+    """F6. The precedence override was a stem-set intersection over the whole
+    4-word window, so gluing a track-record word into an unrelated hyphenated
+    modifier flipped an honest hedge into a false flag — an ASCII hyphen is not
+    in ``_NP_BREAK_CHARS``, so it tokenizes as two ordinary words. Precedence now
+    requires the track-record word to BE the possessed head."""
+    assert (
+        unsupported_claim_tokens(
+            sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+        )
+        == []
+    ), decoy
+
+
+@pytest.mark.parametrize(
+    ("shape", "sentence"),
+    [
+        ("'is to' + figure", f"My vision for {_JDP} is to cut costs by 92%."),
+        ("'is a' + figure", f"My goal for {_JDP} is a 92% reduction."),
+        ("modal copula + figure", f"My ambition for {_JDP} would be a 92% saving."),
+        ("'is to' + spelled quantity", f"My plan for {_JDP} is to save eight squads time."),
+    ],
+)
+def test_prospective_target_over_a_figure_is_not_an_achievement(
+    shape: str, sentence: str
+) -> None:
+    """A false-positive class MY OWN adversarial pass over the F5 fix found: all
+    four of these over-flagged once any figure voided the clamp. A COPULA reached
+    before the outcome signal makes the predicate DESCRIPTIVE — an intended
+    target, not a delivered result — so the hedge reading is kept. The same
+    figure under a non-copula predicate ("… cut costs by 92%") still flags."""
+    assert (
+        unsupported_claim_tokens(
+            sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+        )
+        == []
+    ), shape
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        f"My fascination with {_JDP} brought me here.",
+        f"My appetite for {_JDP} is real.",
+        f"My expectation of {_JDP} is realistic.",
+        f"My willingness to own {_JDP} is total.",
+        f"My eagerness for {_JDP} is obvious.",
+        f"My readiness for {_JDP} is high.",
+        f"My commitment to {_JDP} would be complete.",
+        f"My dedication to {_JDP} is serious.",
+    ],
+)
+def test_stance_nouns_are_not_claims(sentence: str) -> None:
+    """Eight over-flags my own adversarial pass found by sweeping non-claim
+    synonyms ABSENT from the abstraction set. This is the dangerous direction —
+    a miss here rejects an honest hedge, the ML-W11 zero-letters failure mode —
+    so the stance/disposition family is now enumerated. A word still missing from
+    it over-flags rather than under-flags, which is why this list is pinned by
+    test rather than left to future guesswork."""
+    assert (
+        unsupported_claim_tokens(
+            sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+        )
+        == []
+    )
+
+
 def test_writer_side_rails_forbid_relabelling_and_pronoun_tenure() -> None:
     """W-18's two remaining sub-families (a collective "our team ran it", a
     "which I did for three years" gloss of a preceding assertion) cannot be

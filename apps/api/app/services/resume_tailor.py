@@ -1113,6 +1113,10 @@ _NON_CLAIM_POSSESSED = frozenset(
     proposal proposals suggestion suggestions vision
     approach approaches philosophy style mindset attitude
     version versions variant variants rendition
+    fascination appetite intuition hunch inclination disposition stance
+    expectation expectations willingness eagerness readiness keenness
+    commitment commitments dedication determination resolve conviction
+    optimism confidence affinity attraction leaning regard fondness zeal
     """.split()
 )
 _NON_CLAIM_POSSESSED_STEMS = frozenset(
@@ -1120,6 +1124,71 @@ _NON_CLAIM_POSSESSED_STEMS = frozenset(
     for word in _NON_CLAIM_POSSESSED
     for token in (word, _stem(word))
 )
+
+
+#: Spelled-out quantities that make a predicate a QUANTIFIED outcome even with no
+#: digit in the sentence. 'one' is deliberately absent — "…one day" is idiom, not
+#: a measurement, and it appears in an honest hedge this guard must not flag.
+_SPELLED_QUANTITIES = frozenset(
+    """
+    two three four five six seven eight nine ten eleven twelve dozen fifteen
+    twenty thirty forty fifty sixty seventy eighty ninety
+    hundred thousand million billion percent half double triple quadruple
+    """.split()
+)
+_SPELLED_QUANTITY_STEMS = frozenset(
+    token for word in _SPELLED_QUANTITIES for token in (word, _stem(word))
+)
+#: Markers that place a predicate in the completed PAST — an outcome already
+#: achieved rather than one intended. 'since' is deliberately absent: it is far
+#: more often an ordinary conjunction ("…has grown since I read the posting").
+_ACHIEVEMENT_MARKERS = frozenset(
+    {"already", "previously", "formerly", "historically", "successfully", "ago"}
+)
+
+
+def _asserts_concrete_outcome(
+    tokens: list[tuple[str, int, int]], start: int
+) -> bool:
+    """True when what FOLLOWS a possessive attaches a CONCRETE, quantified or
+    completed outcome to it — the signal that the possessive is claiming a
+    result, not hedging (ML-W23 F5, w23-w18-review-verdict.json).
+
+    "My vision for <JD phrase> IS AMBITIOUS" hedges; "My vision for <JD phrase>
+    CUT COSTS BY 92%" claims a delivered result, and 5/5 such sentences bypassed
+    because the one-word clamp dropped the predicate along with everything else.
+    This is the reviewer's own suggested direction — decide whether the
+    SENTENCE's predicate asserts a concrete outcome before letting the clamp
+    suppress anything downstream.
+
+    A COPULA reached before any outcome signal ends the scan as a hedge, which is
+    what keeps a PROSPECTIVE target from reading as an achievement: "my vision
+    for <JD phrase> IS TO cut costs by 92%" and "my goal … IS A 92% reduction"
+    are things the candidate intends, and my own adversarial pass over this
+    function found all four such shapes over-flagging without this rule. A
+    non-copula predicate over the same figure ("… CUT costs by 92%") is an
+    assertion and still voids the clamp.
+
+    Note the POLARITY, which is what makes a forward-scanning test acceptable
+    here where F1's sentence-wide gate was not: F1's gate SUPPRESSED flagging, so
+    a missed case failed OPEN and hid a fabrication. This one DISABLES a
+    suppression, so a missed case merely leaves the clamp in place — the pre-F5
+    behaviour — and can never hide a claim that was already caught. Keying on
+    figures is consistent with the rest of the guard, where
+    :func:`unsupported_tokens` already treats every numeric literal as strict.
+    """
+    for index in range(start, len(tokens)):
+        word = tokens[index][0]
+        if word in _COPULAS:
+            return False
+        if (
+            any(char.isdigit() for char in word)
+            or word in _SPELLED_QUANTITY_STEMS
+            or _stem(word) in _SPELLED_QUANTITY_STEMS
+            or word in _ACHIEVEMENT_MARKERS
+        ):
+            return True
+    return False
 
 
 def _non_claim_possessive_limit(
@@ -1151,11 +1220,27 @@ def _non_claim_possessive_limit(
     phrase = _noun_phrase_after(tokens, sentence, possessive)
     if not phrase:
         return None
+    # F5: the clamp may only suppress downstream material when the predicate
+    # does NOT assert a concrete outcome. Scanned from the end of the possessed
+    # phrase so a prospective target ("…is to cut costs by 92%") is separated
+    # from a delivered one ("…cut costs by 92%").
+    if _asserts_concrete_outcome(tokens, phrase[-1] + 1):
+        return None
     words = {tokens[i][0] for i in phrase}
     words |= {_stem(word) for word in words}
     if not words & _NON_CLAIM_POSSESSED_STEMS:
         return None
-    if words & _PERSONAL_EVIDENCE_NOUNS:
+    # PRECEDENCE is scoped to the possessed HEAD NOUN (ML-W23 F6). A stem-set
+    # intersection over the whole 4-word window let an unrelated hyphenated
+    # modifier flip an honest hedge into a false flag: "my BACKGROUND-informed
+    # vision for <JD phrase> is ambitious" and "my EXPERIENCE-driven approach to
+    # <JD phrase> would be iterative" tokenize as two ordinary words with no
+    # boundary, so 'background'/'experience' hit the window and disabled the
+    # clamp. A track-record word only makes the possessive a claim when it is
+    # what is actually POSSESSED ("my future EXPERTISE in …"), not when it is
+    # glued onto an adjective describing something else.
+    head = tokens[phrase[-1]][0]
+    if head in _PERSONAL_EVIDENCE_NOUNS or _stem(head) in _PERSONAL_EVIDENCE_NOUNS:
         return None
     return phrase[-1] + 1
 
