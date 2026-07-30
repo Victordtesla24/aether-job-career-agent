@@ -1086,6 +1086,80 @@ _CLAIM_SPAN_TERMINATORS = (
 )
 
 
+#: Possessed nouns that denote a MENTAL STATE, an INTENTION, or a
+#: REPRESENTATION — a relationship to something rather than possession of it.
+#: "my UNDERSTANDING of a central repository", "my POTENTIAL CONTRIBUTION to
+#: one", "my OWN VERSION of one" assert nothing the candidate has built, held or
+#: done; the noun itself negates the claim reading, so the object it governs is
+#: not the candidate's track record (ML-W23 F4, w23-w18-review-verdict.json).
+#:
+#: Deliberately EXCLUDED, because each is a real claim: 'contribution' ("my
+#: contribution TO the redesign" — the hypothetical reading comes from
+#: 'potential', not from 'contribution'), 'recommendation' and 'instincts' (real
+#: artifacts/attributes a letter may legitimately claim), and every
+#: :data:`_PERSONAL_EVIDENCE_NOUNS` word.
+_NON_CLAIM_POSSESSED = frozenset(
+    """
+    potential possible prospective future eventual hypothetical
+    intended proposed planned
+    understanding comprehension grasp interpretation reading sense
+    view views viewpoint opinion opinions take perspective perspectives
+    impression impressions belief beliefs assumption assumptions
+    thinking thought thoughts curiosity enthusiasm excitement
+    interest interests motivation passion admiration appreciation
+    hope hopes wish wishes desire ambition ambitions aspiration aspirations
+    intention intentions intent goal goals aim aims plan plans
+    preference preferences idea ideas concept sketch draft
+    proposal proposals suggestion suggestions vision
+    approach approaches philosophy style mindset attitude
+    version versions variant variants rendition
+    """.split()
+)
+_NON_CLAIM_POSSESSED_STEMS = frozenset(
+    token
+    for word in _NON_CLAIM_POSSESSED
+    for token in (word, _stem(word))
+)
+
+
+def _non_claim_possessive_limit(
+    tokens: list[tuple[str, int, int]], sentence: str, possessive: int
+) -> int | None:
+    """The index at which a possessive's claim span must STOP, or ``None`` when
+    it may run normally.
+
+    When the possessed noun phrase is a non-claim abstraction ("my potential
+    contribution", "my understanding") the span is clamped to that phrase
+    instead of being suppressed outright, which is what keeps this from becoming
+    a bypass: the JD phrase in "my UNDERSTANDING **of** a central repository of
+    audit evidence artifacts" sits OUTSIDE the possessed phrase and is therefore
+    dropped, while "my audit evidence APPROACH cut costs by 92%" keeps its JD
+    words INSIDE the possessed phrase and still flags.
+
+    An :data:`_PERSONAL_EVIDENCE_NOUNS` word anywhere in the phrase wins and the
+    span runs normally ("my future EXPERTISE in …" is a track-record claim
+    however it is framed) — the same polarity as the rest of this module, where
+    an experience reading always beats an aspiration reading.
+
+    Note this is deliberately NOT the reviewer's suggested positional test (an
+    :data:`_ASPIRATION_CUE_RE` match governing the possessive): that would have
+    re-broken F1, whose whole point is that "I'm excited about this opportunity,
+    and my central repository of audit evidence artifacts cut costs by 92%" is a
+    real claim sitting downstream of an aspiration cue. The signal is the
+    possessed NOUN, not its neighbourhood.
+    """
+    phrase = _noun_phrase_after(tokens, sentence, possessive)
+    if not phrase:
+        return None
+    words = {tokens[i][0] for i in phrase}
+    words |= {_stem(word) for word in words}
+    if not words & _NON_CLAIM_POSSESSED_STEMS:
+        return None
+    if words & _PERSONAL_EVIDENCE_NOUNS:
+        return None
+    return phrase[-1] + 1
+
+
 def _predicate_is_own_claim(
     tokens: list[tuple[str, int, int]], sentence: str, index: int, start: int
 ) -> bool:
@@ -1139,13 +1213,22 @@ def _claim_spans(
     artifact) while the second half — the verbatim requirement it aligns
     itself with — contributes nothing.
     """
-    starts = [i + 1 for i, (word, _, _) in enumerate(tokens)
-              if word in _PERSONAL_POSSESSIVES]
+    # start -> hard end limit (None = run to a terminator / end of sentence).
+    # A non-claim possessive ("my understanding of …") is clamped to its own
+    # noun phrase rather than dropped — see :func:`_non_claim_possessive_limit`.
+    limits: dict[int, int | None] = {}
+    for i, (word, _, _) in enumerate(tokens):
+        if word not in _PERSONAL_POSSESSIVES:
+            continue
+        limit = _non_claim_possessive_limit(tokens, sentence, i)
+        if i + 1 in limits and limits[i + 1] is None:
+            continue
+        limits[i + 1] = limit
     asserted_at = _first_person_asserts(tokens, sentence)
     if asserted_at is not None:
-        starts.append(asserted_at + 1)
+        limits[asserted_at + 1] = None
     spans: list[tuple[int, int]] = []
-    for start in sorted(set(starts)):
+    for start in sorted(limits):
         end = start
         while end < len(tokens):
             if tokens[end][0] in _CLAIM_SPAN_TERMINATORS and not _predicate_is_own_claim(
@@ -1158,6 +1241,9 @@ def _claim_spans(
             ):
                 break
             end += 1
+        limit = limits[start]
+        if limit is not None:
+            end = min(end, limit)
         if end > start:
             spans.append((start, end))
     return spans

@@ -625,6 +625,88 @@ def test_plain_fit_statement_gains_no_body_phrase_flags(sentence: str) -> None:
     assert after == before, f"the phrase channel over-fired on a fit statement: {after}"
 
 
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # the reviewer's three round-2 regression cases, verbatim
+        "I am excited about my potential contribution to a central repository of "
+        "audit evidence artifacts.",
+        "I would love the chance to build my own version of a central repository "
+        "of audit evidence artifacts.",
+        "I would welcome the opportunity to develop my understanding of a central "
+        "repository of audit evidence artifacts.",
+        # …and my own extensions of the same family
+        "My plan to build a central repository of audit evidence artifacts is "
+        "straightforward.",
+        "My interest in a central repository of audit evidence artifacts drew me "
+        "to this role.",
+        "My vision for a central repository of audit evidence artifacts is "
+        "ambitious.",
+        "My take on audit evidence artifacts differs from the norm.",
+        "My approach to a central repository of audit evidence artifacts would be "
+        "iterative.",
+    ],
+)
+def test_non_claim_possessive_asserts_no_experience(sentence: str) -> None:
+    """F4 (BLOCKING regression introduced by F1's gate deletion). F1's safety
+    argument — "a sentence of pure aspiration has no possessive anchor" — was an
+    over-generalisation: a possessed noun can itself denote a FUTURE or
+    HYPOTHETICAL relationship rather than possession. "my POTENTIAL CONTRIBUTION
+    to X", "my OWN VERSION of X", "my UNDERSTANDING of X" claim nothing, yet the
+    span walked straight through the preposition and swept X in.
+
+    The signal is the possessed NOUN, not its neighbourhood — deliberately NOT
+    the positional test (an aspiration cue governing the possessive) the reviewer
+    suggested, which would have re-broken F1: its whole point is that "I'm
+    excited about this opportunity, and my central repository … cut costs by 92%"
+    IS a claim sitting downstream of an aspiration cue."""
+    assert (
+        unsupported_claim_tokens(
+            sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+        )
+        == []
+    )
+
+
+def test_non_claim_possessive_does_not_pre_empt_a_track_record_noun() -> None:
+    """The reviewer's own round-2 control, and the precedence rule that makes F4
+    safe: an experience reading always beats an aspiration reading, so a
+    :data:`_PERSONAL_EVIDENCE_NOUNS` word anywhere in the possessed phrase keeps
+    the span running. "my FUTURE EXPERTISE in …" is a track-record claim however
+    it is framed, and flagged identically before and after this fix."""
+    flags = unsupported_claim_tokens(
+        "I am drawn to the idea of growing my future expertise in a central "
+        "repository of audit evidence artifacts.",
+        _VIK_EVIDENCE,
+        _STRIPE_TITLE,
+        jd_body=_STRIPE_JD_BODY,
+    )
+    assert "repository" in flags, flags
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "My central repository approach cut costs by 92% across eight squads.",
+        "My central repository plan cut costs by 92%.",
+        "I am excited to say my central repository vision cut costs by 92%.",
+    ],
+)
+def test_abstraction_head_cannot_disarm_a_phrase_inside_the_possessive(
+    sentence: str,
+) -> None:
+    """The anti-bypass that made F4 fixable without opening a hole. Suppressing
+    the span outright whenever the possessed phrase held an abstraction would
+    have handed anyone a one-word disarm: appending 'approach' / 'plan' /
+    'vision' to a real re-labelled claim. Instead the span is CLAMPED to the
+    possessed phrase, so a JD phrase INSIDE it still flags while one reached only
+    by walking past a preposition ("my understanding OF …") does not."""
+    flags = unsupported_claim_tokens(
+        sentence, _VIK_EVIDENCE, _STRIPE_TITLE, jd_body=_STRIPE_JD_BODY
+    )
+    assert "repository" in flags, f"abstraction head disarmed the guard: {flags}"
+
+
 def test_writer_side_rails_forbid_relabelling_and_pronoun_tenure() -> None:
     """W-18's two remaining sub-families (a collective "our team ran it", a
     "which I did for three years" gloss of a preceding assertion) cannot be
