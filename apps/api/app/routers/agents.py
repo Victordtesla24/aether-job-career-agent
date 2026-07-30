@@ -195,9 +195,19 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "reports how many of them disclosed pay at all. A missing bound is left "
             "empty — never imputed, never benchmarked against outside data, and "
             "currencies are never merged. Deterministic, no LLM cost."},
+    # ADR-AG-1 (wave-4B): "realistic mock interviews" described an interactive
+    # session (turn-taking, speech analysis) that does not exist. What does exist
+    # is a prep brief: questions predicted from the real posting, answered from
+    # the user's own Story Bank in STAR + Reflection form, and an honest "prepare
+    # one" wherever no real story fits.
     {"key": "interviewPrep", "name": "Interview Prep Agent", "icon": "fa-comments",
-     "accent": "coral", "backend": None, "recommended": "claude-sonnet-4",
-     "tip": "Best with Claude claude-sonnet-4 for realistic mock interviews and deep reasoning."},
+     "accent": "coral", "backend": "interviewPrep", "recommended": "claude-sonnet-4",
+     "tip": "Predicts the questions this employer is likely to ask from the real "
+            "job description and requirements, then answers each one from YOUR "
+            "Story Bank as a STAR + reflection sketch. A suggested story is "
+            "always one of your real stories and an answer only uses what that "
+            "story says — where nothing fits, it says so and tells you to "
+            "prepare one. Feeds the Interview Center's prep panel."},
     # ADR-AG-1 (wave-4A): there is no web-research integration, so "from web
     # sources" was unachievable. The honest scope is synthesis over the user's
     # OWN postings, with an opt-in, guard-checked LLM narrative.
@@ -1144,6 +1154,10 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     # =False`` and is stamped zero-cost (same convention as emailAgent's
     # nothing-to-triage no-op).
     "companyResearch": "REASONING",
+    # wave-4B: interviewPrep reasons over the posting + the user's own STAR
+    # stories on every run that has a job to prep for; a run with nothing to prep
+    # for reports ``llm_called=False`` and is stamped zero-cost.
+    "interviewPrep": "REASONING",
 }
 
 
@@ -1377,6 +1391,23 @@ def _agent_callable(
                 narrative=narrative,
             )
         )
+    # --- wave-4B (ADR-AG-1) -----------------------------------------------
+    if name in ("interviewPrep", "interview-prep"):
+        from app.agents.interview_prep_agent import InterviewPrepAgent
+
+        # ``job_id`` is OPTIONAL so the Agents-screen Run button works with the
+        # FE's default empty body (no RUN_PARAMS/AGENT_ROUTE entry needed): with
+        # none supplied the agent preps for the job of the caller's most recent
+        # interview-stage application and REPORTS that choice back in
+        # ``jobSelection`` (the wave-4A ``companyResearch`` convention). An
+        # EXPLICIT id that is not the caller's own still raises LookupError ->
+        # honest 404, never a substituted job.
+        job_id = params.get("job_id")
+        return "interviewPrep", (
+            lambda: InterviewPrepAgent().run(
+                user_id, job_id=str(job_id) if job_id else None
+            )
+        )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
@@ -1391,6 +1422,7 @@ _RUNNABLE_BACKENDS = frozenset(
         "storyExtractor", "emailAgent",
         "compliance", "salaryIntelligence", "marketTrends", "companyResearch",
         "learningFeedback",
+        "interviewPrep",
     }
 )
 
