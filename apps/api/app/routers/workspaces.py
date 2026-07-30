@@ -55,7 +55,7 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             # Most-recent active interview application
             cur.execute(
                 """
-                SELECT a.id, a.status, a."createdAt",
+                SELECT a.id, a.status, a."createdAt", a."jobId",
                        j.title, j.company, j.location, j."fitScore"
                 FROM "Application" a
                 JOIN "Job" j ON a."jobId" = j.id
@@ -67,18 +67,61 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             )
             interview_rows = rows_to_dicts(cur)
 
-            # Last interview-related agent run for coaching signals
-            cur.execute(
-                """
-                SELECT id, "agentName", status, output, "startedAt", "completedAt"
-                FROM "AgentRun"
-                WHERE "userId" = %s AND "agentName" ILIKE %s
-                ORDER BY "startedAt" DESC
-                LIMIT 1
-                """,
-                (uid, "%interview%"),
-            )
-            run_rows = rows_to_dicts(cur)
+            # The prep brief this panel may render (ML-W4B verification of
+            # 25ccabe). Two defects sat in this read, unreachable for as long as
+            # NOTHING wrote an ``%interview%`` AgentRun row, and became reachable
+            # the moment the interviewPrep agent started writing them:
+            #
+            #  * it took the newest matching row of ANY status, so a later FAILED
+            #    run — the honest 503 when the LLM is unavailable, whose row
+            #    carries no usable output — silently WIPED a good brief from an
+            #    earlier successful run. Hence ``status = 'completed'``, which the
+            #    sibling debrief query below already had.
+            #  * it took that run's questions regardless of WHICH job they were
+            #    predicted for. ``job_id`` is an OPTIONAL parameter of the agent,
+            #    so a run for another job is a normal thing to have — and its
+            #    questions, predicted from a DIFFERENT posting, were rendered as
+            #    the prep for THIS interview. That is a misattribution of
+            #    generated content. Hence the ``output->>'jobId'`` match against
+            #    the job actually being rendered.
+            #
+            # A run that makes no job claim at all (no ``jobId`` key — the
+            # pre-4B output shape) cannot be misattributed, so it still renders.
+            prep_rows: list[dict[str, Any]] = []
+            unrelated_prep_rows: list[dict[str, Any]] = []
+            if interview_rows:
+                cur.execute(
+                    """
+                    SELECT id, "agentName", status, output, "startedAt",
+                           "completedAt"
+                    FROM "AgentRun"
+                    WHERE "userId" = %s AND "agentName" ILIKE %s
+                          AND status = 'completed'
+                          AND jsonb_typeof(output) = 'object'
+                          AND (output->>'jobId' IS NULL OR output->>'jobId' = %s)
+                    ORDER BY "startedAt" DESC
+                    LIMIT 1
+                    """,
+                    (uid, "%interview%", str(interview_rows[0]["jobId"])),
+                )
+                prep_rows = rows_to_dicts(cur)
+                if not prep_rows:
+                    # Nothing for THIS job. Is there a brief at all? If so the
+                    # panel must say why it is withholding it, rather than look
+                    # identical to "you have never run interview prep".
+                    cur.execute(
+                        """
+                        SELECT output
+                        FROM "AgentRun"
+                        WHERE "userId" = %s AND "agentName" ILIKE %s
+                              AND status = 'completed'
+                              AND jsonb_typeof(output) = 'object'
+                        ORDER BY "startedAt" DESC
+                        LIMIT 1
+                        """,
+                        (uid, "%interview%"),
+                    )
+                    unrelated_prep_rows = rows_to_dicts(cur)
 
             # Last completed debrief run (for the debrief panel)
             cur.execute(
@@ -107,6 +150,9 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             },
             "brief": None,
             "questions": [],
+            # Same key on both branches so the payload shape never varies; there
+            # is no interview to attribute a brief to, so nothing to explain.
+            "questionsNote": None,
             "liveAssist": {
                 "enabled": False,
                 "fillerWordsPerMin": 0,
@@ -118,8 +164,27 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
         }
 
     app = interview_rows[0]
-    run = run_rows[0] if run_rows else None
     debrief_run = debrief_rows[0] if debrief_rows else None
+
+    # The brief selected above, plus — when the only brief on file belongs to
+    # another job — an honest note naming that withholding instead of serving
+    # someone else's questions or looking like "never run".
+    prep_run = prep_rows[0] if prep_rows else None
+    questions_note: str | None = None
+    if prep_run is None and unrelated_prep_rows:
+        unrelated_output = unrelated_prep_rows[0].get("output") or {}
+        other_title = (
+            unrelated_output.get("jobTitle")
+            if isinstance(unrelated_output, dict)
+            else None
+        )
+        questions_note = (
+            "Your most recent interview prep was generated for a different job"
+            + (f" ({other_title})" if other_title else "")
+            + " — those questions were predicted from another posting, so they "
+            "are not shown as this interview's prep. Run Interview Prep for this "
+            "role to get questions for it."
+        )
 
     # Derive debrief from the last completed agent run output
     debrief = None
@@ -134,10 +199,15 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
                 "warnings": out.get("warnings", []),
             }
 
-    # Live-assist signals from the most recent run output
-    live_assist_output = {}
-    if run and run.get("output") and isinstance(run["output"], dict):
-        live_assist_output = run["output"]
+    # The selected brief's own output — the questions this panel renders, plus
+    # whatever live-assist signals a run recorded. ``jsonb_typeof(output) =
+    # 'object'`` in the query already guarantees a dict; the isinstance check
+    # stays as a cheap belt-and-braces against a shape change.
+    live_assist_output: dict[str, Any] = (
+        prep_run["output"]
+        if prep_run is not None and isinstance(prep_run.get("output"), dict)
+        else {}
+    )
 
     return {
         "session": {
@@ -175,6 +245,9 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             ),
         },
         "questions": live_assist_output.get("predictedQuestions", []),
+        #: Non-null ONLY when a real prep brief exists but belongs to another job
+        #: — the withholding is reported instead of looking like "never run".
+        "questionsNote": questions_note,
         "liveAssist": {
             "enabled": False,
             "fillerWordsPerMin": live_assist_output.get("fillerWordsPerMin", 0),
