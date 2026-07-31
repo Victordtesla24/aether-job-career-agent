@@ -159,18 +159,37 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
 
     Reclaims the reserved demo username, demotes the seeded demo credential to
-    non-admin and, when ``AETHER_ADMIN_EMAIL``/``AETHER_ADMIN_PASSWORD_HASH``
-    are set, grants the configured operator admin.
+    non-admin and then either grants the configured operator admin
+    (``AETHER_ADMIN_EMAIL``/``AETHER_ADMIN_PASSWORD_HASH``) or, if that
+    credential is known-weak, malformed or self-cancelling, REVOKES ``isAdmin``
+    from it and keeps serving.
 
-    Failure handling is deliberately split (BLOCKER-001). An INFRASTRUCTURE
-    failure (e.g. the DB is briefly unavailable at boot) is still best-effort:
-    it logs a warning and never blocks startup. A SECURITY failure —
-    ``AdminCredentialSecurityError`` (known-weak/malformed operator password
-    hash) or ``AdminRotationConfigError`` (the demote/regrant pair would
-    self-cancel and leave the demo identity privileged) — propagates and aborts
-    boot, exactly like ``_guard_production_replay_mode`` above. Before this
-    split, the blanket ``except Exception`` here would have downgraded those
-    guards to a single stderr line and served traffic anyway.
+    STARTUP MUST NOT FAIL FOR A CREDENTIAL PROBLEM (BLOCKER-001; binding ruling
+    in ``docs/delivery/ADR-BLOCKER-001-ADMIN-CREDENTIAL.md``, condition C1).
+    An earlier draft re-raised ``AdminCredentialSecurityError`` here. Because
+    ``aether-api.service`` sets ``Restart=on-failure``/``RestartSec=5`` and the
+    check is deterministic, that turned an unrotated production credential into
+    a permanent crash loop on the next restart — converting a confidentiality
+    problem into a total availability loss (ADR §2).
+
+    WHY THIS DIFFERS FROM ``_guard_production_replay_mode`` ABOVE — do not
+    "helpfully" make it fail-closed again. That guard aborts on a
+    MISCONFIGURATION the operator sets deliberately in the deploy environment
+    (``AETHER_LLM_MODE=replay``): refusing to start costs nothing, because a
+    deploy in that state should never go live at all. This one reacts to a LIVE
+    CREDENTIAL the operator has not rotated YET — a condition that is already
+    true of the running production environment, that only a human can clear,
+    and that is re-evaluated on EVERY start. Aborting would take the site down
+    for every paying customer to punish a state the restart cannot fix, while
+    achieving nothing extra: by the time rotation returns, the privilege has
+    already been revoked in the database (and ``isAdmin`` is re-read per
+    request, so live sessions lose admin immediately too).
+
+    The two admin exceptions are therefore caught and logged, never re-raised.
+    ``apply_admin_rotation`` no longer raises them at all; the handler is kept
+    as a standing guarantee that a future edit which reintroduces a raise still
+    cannot crash-loop production. Any other exception is an INFRASTRUCTURE
+    failure (e.g. the DB is briefly unavailable at boot) and stays best-effort.
     """
     from app.repositories.admin import (
         AdminCredentialSecurityError,
@@ -180,15 +199,19 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     try:
         apply_admin_rotation()
-    except (AdminCredentialSecurityError, AdminRotationConfigError):
-        # Never swallow: booting anyway means serving behind an admin login
-        # that is known to be compromised or self-cancelling.
+    except (AdminCredentialSecurityError, AdminRotationConfigError) as exc:
+        # Loud, unmissable, and NOT fatal (condition C1). The detail line (which
+        # may name the matched denylist entry) goes to the process log only —
+        # never to an HTTP response. GET /admin/health carries a value-free
+        # boolean + remediation string for the same condition.
         print(
-            "FATAL: §14.7 admin credential rotation refused the configured "
-            "operator admin — refusing to start. See the error below.",
+            "CRITICAL: §14.7 admin credential rotation refused the configured "
+            "operator admin and did not complete — the API is starting anyway "
+            "(availability). Administrator privilege must be assumed NOT "
+            f"applied. Operator action required: {exc}",
             file=sys.stderr,
+            flush=True,
         )
-        raise
     except Exception as exc:  # noqa: BLE001 — infra hiccups must not break boot
         print(
             f"WARNING: §14.7 admin credential rotation skipped at startup: {exc}",

@@ -19,6 +19,7 @@ are USD (LLM providers bill USD) — never AUD.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from typing import Any, Optional
@@ -32,6 +33,8 @@ from app.db import (
 )
 from app.repositories.billing import _ensure_billing_tables, ensure_user_billing
 from app.security import verify_password
+
+logger = logging.getLogger(__name__)
 
 #: Distinct advisory-lock id for the admin schema (next free after billing's 719).
 _ADMIN_LOCK = 7420240721
@@ -85,38 +88,60 @@ _BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2x$", "$2y$")
 _WEAK_HASH_AUDIT_CACHE: dict[str, Optional[str]] = {}
 _WEAK_HASH_AUDIT_CACHE_MAX = 64
 
+#: DEGRADED-ADMIN-CREDENTIAL state (BLOCKER-001 restart safety). Set by
+#: :func:`apply_admin_rotation` on every run: the full operator-facing
+#: explanation when the configured ``AETHER_ADMIN_PASSWORD_HASH`` is unsafe,
+#: ``None`` when it is fine. Recomputed from scratch each rotation, so it can
+#: never latch on stale state. It is read by:
+#:   * :func:`weak_operator_credential_refused` — fail-CLOSED at auth, and
+#:   * :func:`health_overview` — so an operator sees the condition in the UI.
+#: NOTE: this message names the matched denylist entry, which on a degraded
+#: deploy IS the live password. It is written to the process log ONLY (an
+#: operator-only channel) and must never be returned over HTTP — see
+#: ``_DEGRADED_ADMIN_REMEDIATION`` for the safe, value-free public string.
+_ADMIN_CREDENTIAL_DEGRADED: Optional[str] = None
+
+#: Public, value-free remediation text for the ``/admin/health`` payload.
+#: Deliberately contains NO credential material and no denylist entry — it
+#: names the variable to rotate and points at the log for the detail.
+_DEGRADED_ADMIN_REMEDIATION = (
+    "The configured operator admin credential was refused, so the §14.7 "
+    "rotation REVOKED administrator privilege instead of granting it, and the "
+    "reserved demo login identifier is rejected. Account passwords were not "
+    "changed. Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, "
+    "unique password and restart aether-api; privilege is restored "
+    "automatically on the next boot. Full detail is in the API log (search: "
+    "BLOCKER-001)."
+)
+
 _admin_ready = False
 
 
 class AdminCredentialSecurityError(RuntimeError):
     """The configured operator-admin credential is unsafe to grant.
 
-    Raised by :func:`apply_admin_rotation`. A distinct type (rather than a bare
-    ``RuntimeError``) so ``app.main._lifespan`` can let it propagate and abort
-    boot while still tolerating a transient DB failure — see the ``except``
-    ladder there. Never catch this to "keep the app up": booting anyway would
-    mean serving with a known-compromised administrator login.
+    NO LONGER RAISED by :func:`apply_admin_rotation`. An earlier draft raised
+    this in production and ``app.main._lifespan`` re-raised it, which under
+    ``Restart=on-failure``/``RestartSec=5`` turned an unrotated credential into
+    a permanent crash loop — REFUSED by the binding ruling in
+    ``docs/delivery/ADR-BLOCKER-001-ADMIN-CREDENTIAL.md`` §2 (condition C1).
+    The approved disposition de-privileges instead of de-booting.
+
+    Retained deliberately, not vestigially: ``app.main._lifespan`` still
+    *catches* it (so any future edit that reintroduces the raise still cannot
+    abort boot), and the BLOCKER-001 test module imports it.
     """
 
 
 class AdminRotationConfigError(RuntimeError):
     """The §14.7 rotation is configured to demote and regrant the SAME row.
 
-    Raised by :func:`apply_admin_rotation` when ``AETHER_ADMIN_EMAIL`` names the
-    seeded demo admin identity. Step 1 demotes that identity and step 2 would
-    immediately regrant it, so the two writes cancel out and the net effect is
-    ``isAdmin=true`` for the seeded credential — the exact condition that made
-    BLOCKER-001 exploitable. Fail loudly instead of silently netting to admin.
+    NO LONGER RAISED, for the same reason and under the same ruling as
+    :class:`AdminCredentialSecurityError` (ADR §3 R3: "REFUSED as currently
+    written; APPROVED in de-privilege form" — a single operator typo in
+    ``AETHER_ADMIN_EMAIL`` must not crash-loop production). See that class for
+    why it is still defined and still caught.
     """
-
-
-def _is_production() -> bool:
-    """Whether this process is running as production (``AETHER_ENV``).
-
-    Mirrors ``app.main._guard_production_replay_mode`` verbatim so every
-    fail-fast guard in the codebase agrees on what "production" means.
-    """
-    return os.environ.get("AETHER_ENV", "development").strip().lower() == "production"
 
 
 def _weak_password_matching(pw_hash: str) -> Optional[str]:
@@ -140,23 +165,21 @@ def _weak_password_matching(pw_hash: str) -> Optional[str]:
     return match
 
 
-def _guard_admin_credential_strength(email: str, pw_hash: str) -> None:
-    """Fail fast if the configured operator admin uses a known-weak password.
+def _audit_admin_credential(email: str, pw_hash: str) -> Optional[str]:
+    """Operator-facing explanation of why ``pw_hash`` is unsafe, else ``None``.
 
-    BLOCKER-001 / D1. ``apply_admin_rotation`` grants ``isAdmin=true`` — full
-    access to every user's PII, spend caps and refunds — to whatever
-    ``AETHER_ADMIN_PASSWORD_HASH`` the environment supplies. Production was
-    found serving that grant behind a bcrypt hash of ``admin123``. This guard
-    refuses the grant.
+    Pure and side-effect-free apart from the memoized bcrypt audit: it decides
+    NOTHING about boot or privilege, it only describes the condition. The
+    policy built on top of it lives in :func:`apply_admin_rotation`
+    (de-privilege instead of grant), so the "what is wrong" and the "what do we
+    do about it" halves can be reasoned about — and tested — separately.
 
-    Same idiom as ``app.main._guard_production_replay_mode``: a production
-    deploy RAISES (the app must not come up behind a compromised admin login);
-    outside production it prints a loud stderr warning and continues, so local
-    dev and the test-suite stay usable. The secret itself is never logged —
-    only the denylist entry it matched, which is public by construction.
+    ADR condition C4: the returned text names ``AETHER_ADMIN_PASSWORD_HASH``
+    and, at most, the matched denylist entry (public by construction). It never
+    contains the configured hash value itself.
     """
     if not pw_hash.startswith(_BCRYPT_PREFIXES):
-        message = (
+        return (
             "BLOCKER-001: AETHER_ADMIN_PASSWORD_HASH is not a bcrypt hash "
             f"(expected one of {', '.join(_BCRYPT_PREFIXES)}). It looks like a "
             "PLAINTEXT password was pasted into the hash variable — that would "
@@ -165,15 +188,10 @@ def _guard_admin_credential_strength(email: str, pw_hash: str) -> None:
             "CryptContext; print(CryptContext(schemes=['bcrypt']).hash('<your "
             'password>\'))"'
         )
-        if _is_production():
-            raise AdminCredentialSecurityError(message)
-        print(f"WARNING: {message}", file=sys.stderr)
-        return
-
     weak = _weak_password_matching(pw_hash)
     if weak is None:
-        return
-    message = (
+        return None
+    return (
         "BLOCKER-001: refusing to grant admin privilege to "
         f"{email!r} — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak "
         f"password {weak!r}. An admin account can read every user's email "
@@ -182,13 +200,124 @@ def _guard_admin_credential_strength(email: str, pw_hash: str) -> None:
         "AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique "
         "password and restart."
     )
-    if _is_production():
-        raise AdminCredentialSecurityError(message)
-    print(
-        f"WARNING: {message} (AETHER_ENV is not 'production', so rotation "
-        "continues — this WOULD abort a production boot.)",
-        file=sys.stderr,
+
+
+def _self_cancel_problem(email: str) -> str:
+    """Explanation for the ``AETHER_ADMIN_EMAIL == seeded demo identity`` case.
+
+    ADR §3 R3. The §14.7 demote (keyed on the seed email) and the regrant
+    (keyed on ``AETHER_ADMIN_EMAIL``) would select the SAME row and net out to
+    ``isAdmin=true`` for the seeded demo credential. Because email is UNIQUE,
+    that collision happens if and only if the two addresses are equal — which
+    is decidable here, BEFORE any write (condition C6).
+    """
+    return (
+        "BLOCKER-001: AETHER_ADMIN_EMAIL is set to the seeded demo admin "
+        f"identity ({email!r}). The §14.7 rotation demotes that identity and "
+        "would immediately regrant it, so the two writes cancel out and the "
+        "seeded demo credential ends up with isAdmin=true. The grant is "
+        "refused and the identity is de-privileged instead. Point "
+        "AETHER_ADMIN_EMAIL at a real operator mailbox that is not the demo "
+        "account, and restart."
     )
+
+
+def _record_admin_credential_state(problem: Optional[str]) -> None:
+    """Publish (or clear) the degraded-admin-credential state for this process.
+
+    Called on EVERY :func:`apply_admin_rotation`, with the freshly computed
+    audit result, so the flag is a recomputation rather than a latch: fixing
+    the environment and restarting clears it, and nothing else can set it.
+
+    When the state is bad this logs at CRITICAL *and* writes the same line to
+    stderr. Both, deliberately: the API is started by systemd through
+    ``scripts/start-api.sh`` (see docs/delivery/DEPLOYMENT-RUNBOOK.md), so
+    stderr is guaranteed to reach ``journalctl``/the log file even if nothing
+    has configured a logging handler for this process, while the ``logging``
+    call is what any future structured-log shipper will pick up.
+    """
+    global _ADMIN_CREDENTIAL_DEGRADED
+    _ADMIN_CREDENTIAL_DEGRADED = problem
+    if problem is None:
+        return
+    banner = (
+        "CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, "
+        "but administrator privilege has been REVOKED from the configured "
+        "operator row and the reserved demo login identifier is REJECTED, "
+        "until an operator fixes this. Every /admin/* route will return 403. "
+        "The account's password is NOT changed: ordinary login, the scheduled "
+        "discovery cron and all normal users are unaffected. " + problem
+    )
+    logger.critical(banner)
+    print(banner, file=sys.stderr, flush=True)
+
+
+def admin_credential_degraded() -> bool:
+    """Whether this process is running with a known-unsafe operator credential."""
+    return _ADMIN_CREDENTIAL_DEGRADED is not None
+
+
+def _reset_admin_credential_state_for_tests() -> None:
+    """Test hook: clear the degraded-credential flag between tests."""
+    global _ADMIN_CREDENTIAL_DEGRADED
+    _ADMIN_CREDENTIAL_DEGRADED = None
+
+
+def weak_operator_credential_refused(identifier: str, password: str) -> bool:
+    """Whether this login attempt must be refused as a weak operator credential.
+
+    Defence in depth ON TOP OF the ADR-approved set (which closes the
+    *privilege* hole by de-privileging, not by refusing logins). While the
+    process is in the degraded state, the reserved demo/operator identifier
+    ``admin`` may not authenticate with any password on the known-weak
+    denylist, even if that password verifies against the stored hash. That
+    makes the *published* ``admin``/``admin123`` credential dead on arrival
+    rather than merely un-privileged, and it holds even if a future edit drops
+    the username reclaim in ``apply_admin_rotation``.
+
+    SCOPE — read before widening. The check keys on the reserved IDENTIFIER,
+    not on the password value alone, and deliberately does NOT cover the
+    ``AETHER_ADMIN_EMAIL`` address itself. ``AETHER_CRON_EMAIL`` is the SAME
+    identity as ``AETHER_ADMIN_EMAIL`` and ``AETHER_CRON_PASSWORD`` is the same
+    weak value (ADR §1 F3), so the every-30-minutes discovery timer
+    (``scripts/discovery_cron.sh`` -> ``POST /auth/login``) authenticates as
+    that address with that password. Refusing by password value, or by the
+    operator email, would silently kill production job sourcing — trading one
+    defect for another, and it is also what ADR condition C2 forbids in spirit
+    (do not break the owner's ordinary login or cron). Closing the
+    email-identifier path is the operator's credential rotation (ADR §4
+    O1/O2), not a code change.
+
+    The caller MUST fold the result into the existing constant-shaped 401 (and
+    the same failed-attempt counter) so a refusal is indistinguishable from any
+    other bad password — no user-enumeration signal.
+    """
+    if _ADMIN_CREDENTIAL_DEGRADED is None:
+        return False
+    if identifier.strip().lower() != _SEED_ADMIN_USERNAME:
+        return False
+    return password in _KNOWN_WEAK_ADMIN_PASSWORDS
+
+
+def _admin_credential_problem(email: str, pw_hash: str) -> Optional[str]:
+    """The single reason the configured operator admin must NOT be granted.
+
+    Combines every disposition-changing condition the ADR approved
+    (R1 known-weak password, R2 malformed/non-bcrypt hash, R3 self-cancelling
+    ``AETHER_ADMIN_EMAIL``) into one value, evaluated entirely from the
+    environment BEFORE any database write (condition C6).
+
+    Deliberately NOT gated on ``AETHER_ENV``. The disposition is "no admin"
+    rather than "no service" in every environment, so there is no environment
+    in which a weak operator credential silently keeps its privileges — and no
+    ``_is_production()`` branch that could relocate a failure instead of
+    removing it (ADR §3 R3).
+    """
+    if email and email.lower() == _SEED_ADMIN_EMAIL:
+        return _self_cancel_problem(email)
+    if email and pw_hash:
+        return _audit_admin_credential(email, pw_hash)
+    return None
 
 
 def _reset_admin_ready_for_tests() -> None:
@@ -703,6 +832,27 @@ def health_overview() -> dict[str, Any]:
         "llm": {"mode": get_mode()},
         "cron": _cron_status(),
         "providers": {"configuredTiers": configured_tiers, "count": len(configured_tiers)},
+        # BLOCKER-001 restart safety: a degraded admin credential no longer
+        # aborts boot, so it would otherwise be invisible outside the API log.
+        # Surfaced here as a boolean plus a fixed, value-free remediation
+        # string — never the matched denylist entry, which on a degraded deploy
+        # is the live password.
+        #
+        # HONEST LIMITATION: /admin/health is AdminUser-gated, and the degraded
+        # disposition revokes isAdmin — so on a deployment whose only admin was
+        # the configured operator (ADR §1 F5: production has exactly one), this
+        # field is unreachable precisely when it is true. It is useful to a
+        # second, independently-privileged admin and as a post-rotation
+        # confirmation; the operative channel while degraded is the CRITICAL
+        # line in the API log. Do NOT "fix" this by exposing the flag on the
+        # unauthenticated /health endpoint — that would advertise to the
+        # internet that this host has a weak admin credential.
+        "security": {
+            "adminCredentialDegraded": admin_credential_degraded(),
+            "remediation": (
+                _DEGRADED_ADMIN_REMEDIATION if admin_credential_degraded() else None
+            ),
+        },
     }
 
 
@@ -714,60 +864,73 @@ def health_overview() -> dict[str, Any]:
 def apply_admin_rotation() -> dict[str, Any]:
     """Apply §14.7 admin-credential rotation. Idempotent; safe on every load.
 
-    0. VALIDATE the configured operator credential BEFORE touching any row, so
-       a misconfigured deploy changes nothing (BLOCKER-001):
-       * ``_guard_admin_credential_strength`` refuses a known-weak password;
-       * ``AETHER_ADMIN_EMAIL`` may not name the seeded demo identity, because
-         that would make steps 2 and 3 write to the SAME row.
+    0. EVALUATE the configured operator credential (``_admin_credential_problem``)
+       and publish the result as this process's degraded-state flag. Everything
+       that can change the disposition is decided HERE, from the environment
+       alone, before any write (ADR condition C6).
     1. RECLAIM the reserved demo username ``admin`` from every row that is not
        the seeded demo account, so the bare identifier ``admin`` can never
        resolve to a real operator/owner account through
-       ``UserRepository.get_by_username_or_email`` (BLOCKER-001 / D2).
+       ``UserRepository.get_by_username_or_email`` (BLOCKER-001 / D2, ADR R4).
     2. DEMOTE the seeded demo account (``admin@aether.local``) to
        ``isAdmin=false`` — the seeded demo credential must never hold
        privileges (GATE-31).
-    3. If ``AETHER_ADMIN_EMAIL`` + ``AETHER_ADMIN_PASSWORD_HASH`` are set,
-       create/update that user with ``isAdmin=true`` and the given (already
-       hashed) password. Secrets come from ``os.environ`` only — never a
-       plaintext literal in source.
+    3. Then EITHER:
+       * no problem — create/update ``AETHER_ADMIN_EMAIL`` with ``isAdmin=true``
+         and the given (already hashed) password; or
+       * a problem — **de-privilege**: force ``isAdmin=false`` on that row and
+         leave ``passwordHash`` untouched.
+       Secrets come from ``os.environ`` only — never a plaintext literal here.
 
-    Steps 2 and 3 now select on mutually exclusive predicates (``email`` equal
-    to the seed address vs. ``email`` equal to a configured address proven NOT
-    to be the seed address), so the demote can never be silently undone by the
-    regrant. The pre-BLOCKER-001 code demoted on ``lower(username)='admin' OR
-    email='admin@aether.local'`` and regranted on ``email=<env>``; on production
-    both predicates selected the same row and the pair netted out to
-    ``isAdmin=true`` for a row reachable as ``admin``.
+    DISPOSITION: DE-PRIVILEGE, NOT DE-BOOT (binding ruling,
+    ``docs/delivery/ADR-BLOCKER-001-ADMIN-CREDENTIAL.md``). This function never
+    raises for a credential problem, in any environment. An earlier draft
+    raised in production and ``app.main._lifespan`` re-raised, which under
+    ``Restart=on-failure``/``RestartSec=5`` converted an unrotated credential
+    into a permanent crash loop (ADR §2). Two details are load-bearing and must
+    not be "simplified" away:
 
-    Raises:
-        AdminCredentialSecurityError: production boot with a known-weak or
-            malformed ``AETHER_ADMIN_PASSWORD_HASH``.
-        AdminRotationConfigError: ``AETHER_ADMIN_EMAIL`` names the seeded demo
-            identity (demote/regrant self-cancel).
+    * Step 3's de-privilege is an EXPLICIT ``isAdmin=false`` write, not an
+      early return. Production's operator row is ALREADY ``isAdmin=true`` from
+      previous boots, so merely skipping the grant would leave the hole wide
+      open while reporting success (ADR condition C3 — "the single most likely
+      way to get R1 wrong").
+    * It must NEVER touch ``passwordHash`` (condition C2). Changing it would
+      lock the owner out of their own product account and break
+      ``scripts/discovery_cron.sh``, which authenticates as that same identity
+      every 30 minutes. The de-privilege removes privilege only; ordinary
+      login, agent runs and scheduled discovery are unaffected.
+
+    Recovery is automatic and needs no code change: rotation runs on every app
+    construction, so the first restart after the operator rotates
+    ``AETHER_ADMIN_PASSWORD_HASH`` to a strong, well-formed hash re-grants
+    ``isAdmin`` (ADR operator step O5).
+
+    Steps 2 and 3 select on mutually exclusive predicates (``email`` equal to
+    the seed address vs. ``email`` equal to a configured address proven NOT to
+    be the seed address — step 0 routes the equal case to de-privilege), so the
+    demote can never be silently undone by the regrant. Because ``email`` is
+    UNIQUE, equality of the two addresses is the ONLY way both predicates can
+    select one row; deciding it at step 0 is therefore a complete
+    pre-condition, and no post-commit check is needed (ADR §2.1 / C6).
     """
     _ensure_admin_schema()
 
     email = (os.environ.get("AETHER_ADMIN_EMAIL") or "").strip()
     pw_hash = (os.environ.get("AETHER_ADMIN_PASSWORD_HASH") or "").strip()
 
-    # --- step 0: validate before mutating anything -------------------------- #
-    if email and pw_hash:
-        _guard_admin_credential_strength(email, pw_hash)
-    if email and email.lower() == _SEED_ADMIN_EMAIL:
-        raise AdminRotationConfigError(
-            "BLOCKER-001: AETHER_ADMIN_EMAIL is set to the seeded demo admin "
-            f"identity ({_SEED_ADMIN_EMAIL!r}). The §14.7 rotation demotes that "
-            "identity and would immediately regrant it, so the two writes "
-            "cancel out and the seeded demo credential ends up with "
-            "isAdmin=true. Point AETHER_ADMIN_EMAIL at a real operator mailbox "
-            "that is not the demo account."
-        )
+    # --- step 0: decide the disposition, before any write ------------------- #
+    # Recomputed every run (never latched), so a rotation + restart clears it.
+    problem = _admin_credential_problem(email, pw_hash)
+    _record_admin_credential_state(problem)
 
     result: dict[str, Any] = {
         "reclaimed_usernames": [],
         "demoted_seed": False,
         "env_admin": None,
+        "deprivileged": None,
     }
+    granted_id: Optional[str] = None
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -799,7 +962,51 @@ def apply_admin_rotation() -> dict[str, Any]:
             )
             demoted_ids = [row[0] for row in cur.fetchall()]
             result["demoted_seed"] = bool(demoted_ids)
+
+            # --- step 3: grant, or de-privilege ----------------------------- #
+            # Same transaction as steps 1-2 so a mid-rotation failure can never
+            # leave the reserved alias cleared but the privilege untouched (or
+            # vice versa), and so no post-condition has to be evaluated after a
+            # commit (ADR §2.1 / condition C6).
+            if email and pw_hash and problem is None:
+                cur.execute(
+                    'INSERT INTO "User" ("id","email","passwordHash","isAdmin",'
+                    '"suspended","updatedAt") VALUES (%s,%s,%s,true,false,now()) '
+                    'ON CONFLICT ("email") DO UPDATE SET '
+                    '"passwordHash"=EXCLUDED."passwordHash","isAdmin"=true,'
+                    '"suspended"=false,"updatedAt"=now() RETURNING "id"',
+                    (new_id(), email, pw_hash),
+                )
+                granted_id = cur.fetchone()[0]
+                result["env_admin"] = email
+            elif problem is not None and email:
+                # DE-PRIVILEGE (ADR R1/R2/R3, condition C3). An explicit write,
+                # because the row is already isAdmin=true from earlier boots —
+                # skipping the grant would be a no-op that reports success.
+                # ``isAdmin`` is re-read from the DB on every request
+                # (middleware/auth.py), so this revokes admin power from tokens
+                # ALREADY issued, immediately. Only this one column changes:
+                # ``passwordHash`` is untouched (condition C2), and no row is
+                # created if the configured address has never signed up.
+                cur.execute(
+                    'UPDATE "User" SET "isAdmin"=false,"updatedAt"=now() '
+                    'WHERE lower("email")=lower(%s) RETURNING "id"',
+                    (email,),
+                )
+                result["deprivileged"] = [row[0] for row in cur.fetchall()]
         conn.commit()
+
+    if result["deprivileged"]:
+        print(
+            "CRITICAL: §14.7 rotation REVOKED isAdmin from "
+            f"{len(result['deprivileged'])} account(s) configured via "
+            "AETHER_ADMIN_EMAIL because the configured credential was refused "
+            "(see the diagnostic above). Their password was NOT changed. "
+            "/admin/* will return 403 until AETHER_ADMIN_PASSWORD_HASH is "
+            "rotated and the API restarted.",
+            file=sys.stderr,
+            flush=True,
+        )
 
     if reclaimed:
         print(
@@ -811,32 +1018,6 @@ def apply_admin_rotation() -> dict[str, Any]:
             file=sys.stderr,
         )
 
-    # --- step 3: grant the configured operator admin ------------------------ #
-    if email and pw_hash:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'INSERT INTO "User" ("id","email","passwordHash","isAdmin",'
-                    '"suspended","updatedAt") VALUES (%s,%s,%s,true,false,now()) '
-                    'ON CONFLICT ("email") DO UPDATE SET '
-                    '"passwordHash"=EXCLUDED."passwordHash","isAdmin"=true,'
-                    '"suspended"=false,"updatedAt"=now() RETURNING "id"',
-                    (new_id(), email, pw_hash),
-                )
-                admin_id = cur.fetchone()[0]
-            conn.commit()
-        # Post-condition, defence in depth: the row we just granted must not be
-        # a row we demoted a moment ago. Step 0 already makes that impossible
-        # via the email predicates; if it ever happens anyway (e.g. a future
-        # edit to either predicate) the net effect would be a silently
-        # re-privileged demo account, so refuse rather than return success.
-        if admin_id in demoted_ids:
-            raise AdminRotationConfigError(
-                "BLOCKER-001: §14.7 rotation demoted and then regranted the "
-                f"same user row ({admin_id!r}) — the demote/regrant pair "
-                "self-cancelled and left the seeded demo identity with "
-                "isAdmin=true. Refusing to report success."
-            )
-        ensure_user_billing(admin_id)  # give the env admin a Free plan + quota
-        result["env_admin"] = email
+    if granted_id is not None:
+        ensure_user_billing(granted_id)  # give the env admin a Free plan + quota
     return result

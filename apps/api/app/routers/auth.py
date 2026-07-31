@@ -114,15 +114,49 @@ def login(request: Request, body: LoginRequest) -> TokenResponse:
     # login limiter is keyed on the normalized identifier (never client IP):
     # too many failures for one account -> 429 before we even check the
     # password. Different identifiers are independent.
+    from app.repositories.admin import (
+        EMAIL_VERIFICATION_KEY,
+        get_setting,
+        weak_operator_credential_refused,
+    )
+
+    # INC-B-002 / FE-D-002: mirrors the ``signupEnabled`` gate above
+    # (register()) EXACTLY — a plain, unconditional platform-level toggle
+    # checked before anything else, same shape (403, explicit detail),
+    # same position (before the rate limiter). No per-user "verified"
+    # column or verification flow exists anywhere in this schema, so ON
+    # means every account is permanently unverified by construction: this
+    # is a deliberate stopgap kill-switch on login, not a nuanced per-user
+    # check, until a real verification flow exists. Previously the flag
+    # was persisted by POST /admin/settings but never read here — inert.
+    if bool(get_setting(EMAIL_VERIFICATION_KEY, False)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Email verification is currently required by the operator "
+                "and no account can satisfy it yet — login is temporarily "
+                "disabled. Contact support."
+            ),
+        )
+
     guard_login_attempt(request, body.email)
     user = UserRepository().get_by_username_or_email(body.email)
     # Constant-shaped failure: never reveal whether the identifier exists. Any
-    # failed attempt (unknown identifier, no hash, or wrong password) counts
-    # toward this identifier's lockout.
+    # failed attempt (unknown identifier, no hash, wrong password, or a
+    # refused weak operator credential) counts toward this identifier's
+    # lockout and returns the SAME 401 body — no user-enumeration signal.
+    #
+    # BLOCKER-001: the last clause is the fail-closed half of the degraded
+    # admin-credential handling. It is evaluated only after the password has
+    # already verified, so it refuses exactly those weak operator credentials
+    # that WOULD otherwise have authenticated. See
+    # ``admin.weak_operator_credential_refused`` for its (deliberately narrow)
+    # scope and why it must not key on the password value alone.
     if (
         user is None
         or not user.get("passwordHash")
         or not verify_password(body.password, user["passwordHash"])
+        or weak_operator_credential_refused(body.email, body.password)
     ):
         record_login_failure(request, body.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
