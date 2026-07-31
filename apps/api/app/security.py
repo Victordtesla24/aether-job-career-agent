@@ -34,6 +34,18 @@ def get_jwt_secret() -> str:
 
 
 def hash_password(password: str) -> str:
+    # Defense-in-depth for GOLD-MASTER-V2 §15 (signup-nul-500-fix), mirroring
+    # the BCRYPT_MAX_PASSWORD_BYTES precedent below: ``validate_password_policy``
+    # already refuses a NUL byte (\x00) at the ``RegisterRequest`` validation
+    # layer, so this call should never see one via the register endpoint — but
+    # ``hash_password`` is a shared library seam with callers outside that
+    # boundary (e.g. scripts/seed_demo.py, or any future caller). Without this
+    # check, passlib's bcrypt backend raises a bare
+    # ``passlib.exc.PasswordValueError`` here, which is exactly what turned
+    # into the unhandled 500 on production: raise a clear, documented error
+    # instead of letting that internal exception surface uncaught.
+    if "\x00" in password:
+        raise ValueError("password must not contain a NUL byte")
     return _pwd_context.hash(password)
 
 
@@ -49,6 +61,13 @@ def verify_password(password: str, password_hash: str) -> bool:
         return _pwd_context.verify(password, password_hash)
     except ValueError:
         # Malformed/legacy hash — treat as a failed verification, not a 500.
+        # This ALSO already covers a NUL byte in the candidate password (GOLD-
+        # MASTER-V2 §15): passlib's bcrypt backend raises
+        # ``passlib.exc.PasswordValueError`` (a ``ValueError`` subclass) for a
+        # NUL byte at verify time too, so it lands in this same branch and a
+        # login attempt with a NUL byte is treated as an ordinary wrong
+        # password (401) rather than crashing — no code change was needed
+        # here, only this explicit test-pinned documentation of why.
         return False
 
 

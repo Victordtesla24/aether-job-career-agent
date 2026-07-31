@@ -32,6 +32,17 @@ class DuplicateEmailError(Exception):
 def validate_password_policy(password: str) -> list[str]:
     """Return a list of human-readable policy violations (empty == valid)."""
     problems: list[str] = []
+    # GOLD-MASTER-V2 §15 / signup-nul-500-fix: bcrypt's C extension refuses a
+    # NUL byte (\x00) with a raw ``passlib.exc.PasswordValueError`` at HASH
+    # TIME, not at the DB layer — a password never reaches the DB cursor as a
+    # raw string, so the blanket ``_NulByteGuardCursor`` in app/db.py never
+    # sees it and ``POST /auth/register`` 500'd. Checked here, at the SAME
+    # validation layer already used for the length/digit/max-byte checks
+    # below, so the contract matches how ``EmailStr`` already rejects a NUL
+    # byte in the email field: a clean 422 before the handler ever runs, never
+    # a 500 from an uncaught bcrypt exception.
+    if "\x00" in password:
+        problems.append("password must not contain a NUL byte")
     if len(password) < MIN_PASSWORD_LENGTH:
         problems.append(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
     if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
