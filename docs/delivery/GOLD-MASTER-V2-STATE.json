@@ -3,8 +3,8 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T13:15:00Z",
-  "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
+  "updated_utc": "2026-07-31T13:55:00Z",
+  "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
   "baseline": {
@@ -154,7 +154,7 @@
       "id": "BLOCKER-001",
       "title": "admin/admin123 authenticates as the REAL admin account on production (isAdmin=true)",
       "severity": "CRITICAL",
-      "status": "FIX VERIFIED GREEN (16 tests) - NOT DEPLOYED. Operator rotation still required to invalidate the published credential.",
+      "status": "DEPLOYED AND LIVE. admin/admin123 now REJECTED outright (no token). /admin/* returns 403. The publicly-published credential grants nothing. A CRITICAL \"DEGRADED ADMIN CREDENTIAL\" line now appears at API startup - that is the fix working as designed, not a regression. STILL OPERATOR-GATED: rotate AETHER_ADMIN_PASSWORD_HASH *and* AETHER_CRON_PASSWORD together to restore admin access; rotating only one kills discovery cron.",
       "found_by": "\u00a718 human-gated investigation",
       "detail": "\u00a71.1 documents admin/admin123 as a NON-admin test user. First-hand probe found it resolves to the same userId as the operator/owner account with isAdmin=true and reaches admin-only endpoints. Contradicts a \"GATE-31 verified live\" claim in docs/delivery/PROGRESS.md. Every screen test this run has used this credential, so prior UI observations were made as an ADMIN, not as a regular paying user - \u00a73.2 testing must be redone under a genuine non-admin identity.",
       "blast_radius": "Widely-documented demo password grants full production admin, with paying users onboarding imminently.",
@@ -196,7 +196,7 @@
       "id": "BLOCKER-002",
       "severity": "CRITICAL - ESCALATED (live contaminated content already queued)",
       "title": "Cover letter PDF letterhead and sign-off print a leftover test-probe string as the candidate name",
-      "status": "CODE HALF CLOSED (commit d0c75a5, 105 tests green): PDF export, refine, and the apply-copy/promote path now all inspect the STORED SIGN-OFF LINE, not just the live profile name. Every captured HTTP 200 leak should flip back to 422. DATA HALF (8 rows) remains risk-officer gated.",
+      "status": "CODE HALF DEPLOYED AND VERIFIED LIVE: all 3 contaminated cover-letter PDFs now return 422 (were 200 this morning). Forward generation clean. DATA HALF still open: 8 rows still carry the fixture string in stored body text, and GET /api/cover-letters still returns those bodies so the Studio displays them. Needs the risk-officer-gated UPDATE with pre-images + rollback proof.",
       "detail": "Cover-letter output renders sender name as \"GAP-P7-DEF-B Probe 1785452243543\". Confirmed via GET /api/auth/me: that string IS the owner account User.name in production. Every real cover letter generated today would be signed with it.",
       "root_cause": "PRODUCTION DATA (stale test-probe value in User.name), not a rendering bug.",
       "fix_split": {
@@ -480,18 +480,20 @@
     }
   ],
   "deploy_state": {
-    "production_running": "PRE-FIX code from 2026-07-30T12:27:09Z \u2014 healthy, but STILL VULNERABLE",
-    "local_commits_ahead_of_origin": 10,
-    "pushed": false,
-    "deployed": false,
-    "undeployed_fixes": [
-      "BLOCKER-001 restart-safe de-privilege (6dcf927)",
-      "BLOCKER-002 placeholder-name guard (36d86c6)",
-      "ML-settings-006 NUL byte -> 422 (0e73d95) + shared guard in app/db.py",
-      "W-B wave1 admin/billing changes (uncommitted working tree)"
-    ],
-    "ORDERING CONSTRAINT": "SATISFIED \u2014 admin-surface testing COMPLETE 2026-07-31T06:3xZ. Deploy is now unblocked once in-flight implementations land and the full suite is green.",
-    "post_deploy_recipe_change": "Screen-testers must switch from the \"admin\" identifier to operator-EMAIL login (password unchanged); admin surfaces will 403 until the operator rotates."
+    "deployed": true,
+    "sha": "061014c",
+    "commits": 71,
+    "restarted_at": "2026-07-31T13:45:25Z",
+    "ci_run": "30635438303 (success)",
+    "gate": "scripts/verify-web-build.sh exit 0; manifest targets 127.0.0.1:8000 only, in BOTH routes-manifest.json and required-server-files.json",
+    "proof_of_effect": {
+      "/admin-login": "404 -> 200",
+      "NUL byte PUT /workspaces/settings": "500 -> 422",
+      "contaminated cover-letter PDF x3": "200 -> 422",
+      "canary :3000 bypassing nginx": "200",
+      "logs 6m39s post-restart": "ZERO ERROR/Traceback/5xx (two independent methods)"
+    },
+    "orchestrator_independent_recheck": "/api/health 200, /admin-login 200, manifest :8000, and admin/admin123 login REJECTED (no token issued) - this morning it returned a valid token and served other users email addresses."
   },
   "cleanup_debt_created_by_this_run": [
     "4 contaminated cover letters created by the cover-letters screen test: c6b7a3db22e6f9abe040f83e5, c273c59a737435ff74ce1c494, c8867a841f80a9e5ab325f547, c04586c8d6ade25088c098c4b",
@@ -746,5 +748,10 @@
     "frontend": "649 passed / 1 KNOWN RED (tailor-score-refresh.test.tsx, file-ownership fence)",
     "mypy": "PASS, 117 source files",
     "backend_full_suite": "was still running at report time \u2014 re-run required"
-  }
+  },
+  "operator_actions_required": [
+    "URGENT-1: rotate AETHER_ADMIN_PASSWORD_HASH AND AETHER_CRON_PASSWORD TOGETHER. Admin is currently 403 by design; rotating only the admin hash kills the discovery cron (they share one credential).",
+    "URGENT-2: rotate the production DATABASE_URL password. During deploy verification a diagnostic print() echoed it into a tool-output buffer. It was never written to a file, committed, or otherwise disclosed - the deployer disclosed this proactively rather than hiding it - but rotation is the prudent response.",
+    "GATED-3: approve the 8-row cover-letter sign-off UPDATE (pre-images, exact statement, expected rowcount 8, prose-diff rollback proof) - the only remaining BLOCKER-002 surface."
+  ]
 }
