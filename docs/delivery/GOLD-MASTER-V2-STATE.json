@@ -3,8 +3,8 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T06:45:00Z",
-  "phase_step": "W-A \u00a73.2 screen sweep in progress (2 of ~20 routes); W-B inventory CANONICAL; BLOCKER-001 tests queued",
+  "updated_utc": "2026-07-31T01:20:00Z",
+  "phase_step": "PAUSED \u2014 session usage limit hit 2026-07-31T01:15Z, resets 04:10Z. Fully checkpointed; resume per resume_recipe.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
   "baseline": {
@@ -185,7 +185,8 @@
       "escalation": "ML-APP-001: the \"GAP-P7-DEF-B Probe\" fixture string is the signature on a REAL, LIVE, PENDING cover-letter approval reachable from the /dashboard/applications approvals banner. Contaminated customer-facing content is ALREADY QUEUED in production, not merely possible on the next generation. If that approval is actioned it goes out signed with a test string. Remediation therefore needs THREE parts: (1) code guard [in flight]; (2) correct the owner User.name [operator-gated]; (3) identify and purge/regenerate every already-queued approval carrying the fixture signature.",
       "scope_expanded": "ML-CL-002: the PDF EXPORT LETTERHEAD renders current_user.name LIVE at render time, regardless of the letter body's own sign-off. Letters with a clean sign-off (\"Vikram Deshpande\") still export with the fixture string in the letterhead - internally contradictory documents. So the defect is injected at RENDER, not merely stored in content. ML-CL-003: fresh generation still contaminated across 3 independent code paths with real LLM calls, because the placeholder guard exists ONLY in the local working tree and is NOT DEPLOYED.",
       "blast_radius": "8 contaminated cover letters; 3 attached to pending approvals",
-      "real_name_evidence": "The owner's real name appears as \"Vikram Deshpande\" in clean sign-offs within their own existing letters - so the data correction is knowable from the account's own content."
+      "real_name_evidence": "The owner's real name appears as \"Vikram Deshpande\" in clean sign-offs within their own existing letters - so the data correction is knowable from the account's own content.",
+      "data_half_status": "CLOSED ON PRODUCTION 2026-07-31T01:1xZ \u2014 VERIFIED independently: GET /api/auth/me now returns name=\"Vikram Deshpande\" (was \"GAP-P7-DEF-B Probe 1785452243543\"). Because the PDF letterhead renders current_user.name at EXPORT time, all FUTURE exports and all NEW generation are now correctly signed. REMAINING: 8 stored letters whose BODY sign-off still carries the old string (3 attached to pending approvals) need regeneration or purge; and the code-level placeholder guard (commit 36d86c6) is still UNDEPLOYED."
     }
   ],
   "human_gated": {
@@ -356,5 +357,37 @@
     "4 near-duplicate stories from the AI-quality probe",
     "throwaway Stripe-probe account",
     "canonical non-admin test account gm2-nonadmin-1785454990@example.com"
+  ],
+  "session_limit_pause": {
+    "hit_at": "2026-07-31T01:15Z",
+    "resets_at": "2026-07-31T04:10Z",
+    "agents_killed_mid_flight": [
+      "W-C tailoring tests (files WRITTEN, unverified)",
+      "W-E dedup/ADV-ENT-001 tests (files WRITTEN, unverified)",
+      "BLOCKER-002 data correction (COMPLETED on prod \u2014 verified independently)",
+      "analytics screen test (INCOMPLETE \u2014 no artifact)",
+      "admin portal screen test (INCOMPLETE \u2014 no artifact, TIME-CRITICAL)",
+      "W-B wave-1 fixes (code WRITTEN + committed, UNVERIFIED)"
+    ],
+    "tree_state": "CLEAN \u2014 all work committed (10e3e41 tests+review, e78f51d wave-1 partial). Stray temp files removed."
+  },
+  "resume_recipe": [
+    "1. Cheap re-probes first (\u00a72.3.3): git log/status, systemctl is-active aether-api aether-web aether-worker, curl /api/health, and CONFIRM the monitor is capturing SIGNAL (wc -l on uat/reports/evidence/gold-master-v2/runtime/monitor-alltraffic-CORRECTED.log must be growing \u2014 a silent capture means a broken monitor, never a clean system; see GOV-012).",
+    "2. READ uat/reports/evidence/gold-master-v2/waves/combined-verify-*.log \u2014 a single combined run of ALL 11 new test files was queued behind the full suite. It tells you which fixes are genuinely green. Do NOT trust commit e78f51d until you have read it.",
+    "3. TIME-CRITICAL: re-dispatch the ADMIN PORTAL screen test (W-G/G-G) BEFORE any deploy \u2014 deploying BLOCKER-001 (6dcf927) revokes owner isAdmin and makes the \"admin\" identifier 401, making admin surfaces untestable until the operator rotates (scheduled AFTER the run).",
+    "4. Re-dispatch the analytics screen test (no artifact was produced).",
+    "5. Implement against the now-written failing tests: W-C TailoringLoop, W-E dedup+relevance, ADV-ENT-001 gate.",
+    "6. Continue the \u00a73.2 sweep \u2014 6 of 27 routes deep-tested. Remaining incl. approvals, agents, email, interviews, offers, networking, dashboard, pricing, login, signup.",
+    "7. Regenerate/purge the 8 contaminated cover letters (3 on pending approvals) \u2014 needs risk-officer approval.",
+    "8. Adjudicate all 12 red Playwright specs real-vs-stale (3 already failed to reproduce on prod).",
+    "9. W-K cleanup manifest, then W-L: CI green, push, deploy, 60-min clean window, final report."
+  ],
+  "do_not_repeat": [
+    "Do NOT weaken scripts/run-tests.sh schema=aether_test guard or the pytest flock for throughput \u2014 it prevents a repeat of the 2026-07-18 production DB wipe.",
+    "Do NOT enable AETHER_ENABLE_SEEK (binding risk-officer REFUSAL, GOV-008).",
+    "Do NOT remove the Jobs \"(unavailable)\" Seek label \u2014 truthful and backend-served.",
+    "Do NOT make the BLOCKER-001 guard fail-closed at boot \u2014 it would abort production on the live weak hash.",
+    "Do NOT trust a monitoring window whose capture contains no routine traffic (GOV-012).",
+    "Do NOT assume the 12 red Playwright specs are real defects \u2014 3 of 3 checked did not reproduce on prod."
   ]
 }
