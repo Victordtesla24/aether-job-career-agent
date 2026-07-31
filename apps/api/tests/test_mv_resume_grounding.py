@@ -107,11 +107,15 @@ def test_cover_letter_agent_grounds_on_user_resume_not_operator_pdf(test_user_id
 
     class _StubUsers:
         def get_by_id(self, user_id):  # noqa: ANN001
-            # BLOCKER-002: an ordinary human name — "MV Tester" matches the
-            # placeholder-signer rule ("test"), so CoverLetterAgent.run() now
-            # refuses before reaching the résumé-grounding call this test
-            # asserts on.
-            return {"id": user_id, "name": "Morgan Ellis"}
+            # GOLD-MASTER-V2 §15: "MV Tester" is a real-name-shaped fixture,
+            # not a test-probe/placeholder identity — the BLOCKER-002 guard's
+            # OLD substring-anywhere rule wrongly refused it (it contains
+            # "test"), which is exactly the false-positive class §15 fixes.
+            # Restored to the original fixture value now that
+            # ``_looks_like_placeholder_name`` discriminates on whole-word
+            # tokens instead of naive substrings (see
+            # tests/test_gm2_s15_placeholder_name_false_positives.py).
+            return {"id": user_id, "name": "MV Tester"}
 
         def get_target_role(self, user_id):  # noqa: ANN001
             return ""

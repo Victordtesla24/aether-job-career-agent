@@ -1068,26 +1068,53 @@ class StructuralError(RuntimeError):
         self.issues = issues
 
 
-#: BLOCKER-002: a signer name is placeholder-looking if it contains the
-#: case-insensitive substrings "probe" or "test", OR the literal marker
-#: "GAP-", OR a run of 8+ consecutive digits (a strong signal of an
-#: auto-generated/timestamped test identity — no real human name contains an
-#: 8+ digit run). Test-author's detection rule
-#: (tests/test_wb1_blocker002_placeholder_signer_name.py module docstring) —
-#: implemented verbatim so the false-positive guard
-#: (``test_cover_letter_accepts_normal_human_name``) stays green.
-_PLACEHOLDER_NAME_SUBSTRINGS = ("probe", "test")
-_PLACEHOLDER_NAME_MARKER = "gap-"
+#: GOLD-MASTER-V2 §15: the original BLOCKER-002 rule matched the substrings
+#: "probe"/"test"/"gap-" ANYWHERE in the (lowercased) name. Substring-anywhere
+#: matching has false positives on real surnames that merely CONTAIN one of
+#: those words, e.g. "Tester", "Testa", "Testard" (contain "test"); "Probert"
+#: (starts with "probe") — see
+#: tests/test_gm2_s15_placeholder_name_false_positives.py for the proof (a
+#: prior agent papered over exactly this by renaming a "MV Tester" fixture to
+#: "Morgan Ellis" in commit 1b655ec instead of fixing the guard).
+#:
+#: This rule instead discriminates on STRUCTURE: a name is placeholder-
+#: looking only if "probe"/"test"/"gap" appears as a WHOLE token (split on
+#: whitespace/hyphens/underscores/punctuation and on camelCase boundaries),
+#: not merely as a substring inside a longer word — a real name is never
+#: composed of a standalone "Test"/"Probe"/"Gap" token, but every known
+#: test-artefact identity (GAP-P7-DEF-B, QA Probe, QA Test Runner,
+#: probe_user_...) uses exactly one of those as a delimited token. The
+#: separate 8+ consecutive digit run signal (a timestamp/auto-generated-id
+#: marker no real human name carries) is unchanged and independently catches
+#: the timestamped variants even when the word-token check misses (e.g.
+#: "probe_user_20260731093000" is one unbroken \\w+ run under \\b semantics,
+#: so it relies on the digit run here — belt and suspenders).
+#:
+#: Residual false-positive risk: a real first/last name that IS exactly the
+#: bare token "Test", "Probe", or "Gap" (vanishingly rare — none observed in
+#: any real user data) would still be refused.
+#: Residual false-negative risk: inflected/compound forms that are not a
+#: bare token — "Testing", "Tested", "Probing", or a camelCase-free
+#: concatenation like "TestUser" with no separator and no digit run — no
+#: longer trip the guard. This is an intentional narrowing (the finding
+#: requires tightening the true-positive surface, not preserving every
+#: possible match of the old over-broad rule) and is justified because
+#: `_PLACEHOLDER_DIGIT_RUN_RE` still covers the timestamped/auto-generated
+#: shapes that motivated the guard in the first place.
+_PLACEHOLDER_NAME_TOKENS = frozenset({"test", "probe", "gap"})
 _PLACEHOLDER_DIGIT_RUN_RE = re.compile(r"\d{8,}")
+#: Split on runs of non-alphanumeric characters (space/hyphen/underscore/
+#: punctuation) OR at a camelCase boundary (lowercase-or-digit immediately
+#: followed by an uppercase letter), so "GAP-P7-DEF-B", "probe_user", and
+#: "TestUser" all tokenize the way a human reading them would expect.
+_PLACEHOLDER_TOKEN_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
 def _looks_like_placeholder_name(name: str) -> bool:
-    lowered = name.lower()
-    if any(token in lowered for token in _PLACEHOLDER_NAME_SUBSTRINGS):
+    if _PLACEHOLDER_DIGIT_RUN_RE.search(name):
         return True
-    if _PLACEHOLDER_NAME_MARKER in lowered:
-        return True
-    return bool(_PLACEHOLDER_DIGIT_RUN_RE.search(name))
+    tokens = (tok.lower() for tok in _PLACEHOLDER_TOKEN_SPLIT_RE.split(name) if tok)
+    return any(tok in _PLACEHOLDER_NAME_TOKENS for tok in tokens)
 
 
 class PlaceholderSignerError(StructuralError):
