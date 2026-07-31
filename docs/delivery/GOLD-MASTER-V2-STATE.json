@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T16:00:00Z",
+  "updated_utc": "2026-07-31T16:30:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -59,7 +59,8 @@
       "note": "Document exists with executive verdict as G-A requires, but coverage is PARTIAL (6/27 routes). Must be refreshed as the sweep completes before qa-adversary can close G-A."
     },
     "G-B": {
-      "status": "OPEN"
+      "status": "CLOSED",
+      "evidence": "commit aac8c03 \u2014 last shipped \"Coming Soon\" stub removed; grep proves ZERO user-reachable placeholder strings across apps/web/src; 650/650 FE, lint+tsc clean."
     },
     "G-C": {
       "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
@@ -112,24 +113,28 @@
       "note": "Scores API-derived and rendered on the tracker; before/after banner pinned. One red test remains, blocked on a file-ownership collision."
     },
     "G-K": {
-      "status": "OPEN"
+      "status": "CLOSED",
+      "evidence": "uat/reports/evidence/gold-master-v2/final/G-K-SWEEP.md \u2014 0 PROHIBITED-STUB; campaign added +4 jscpd clones ALL test-to-test with ZERO production code; the 5 shared extractions verified as MOVES not copies; no cross-account leakage."
     },
     "G-L": {
       "status": "CLOSED",
       "evidence": "CI run 30635438303 conclusion=success on main; deploy 061014c live at 13:45:25Z; git ls-remote --heads origin = exactly 1 branch (main); gh pr list --state open = 0 open PRs; no force-push, no --no-verify."
     },
     "G-M": {
-      "status": "NOT-MET \u2014 window ran clean on duration and agent runs, but 2 REAL 5xx occurred",
-      "window": "2026-07-31T14:12:47Z .. 15:13:06Z (60 min, monitor alive 7 tails, proven by signal)",
-      "agent_runs": "7 AgentRun rows inside the window, 0 failed \u2014 fitScorer 2, scout 2, coverLetter 1, storyExtractor 1, tailor 1. Includes GENUINE LLM work (tailor/coverLetter/storyExtractor), not just lightweight discovery scans. Requirement was >=3.",
-      "blocking": "2x HTTP 500 on POST /auth/register at 15:06:58Z and 15:07:46Z. \u00a714.3.5 requires ZERO 5xx, so G-M does NOT close. A fresh window must run after the fix."
+      "status": "CLOSED",
+      "window": "2026-07-31T15:28:32Z .. 16:28:50Z (60 min) on the post-BLOCKER-004 build (api restarted 15:26:34Z)",
+      "errors": "0 monitor matches; 0 x 5xx (timestamped-line filter, after ORCH-CORR-010 corrected my broken awk)",
+      "agent_runs": "6 AgentRun rows, 0 failed \u2014 fitScorer 3, scout 2, storyExtractor 1",
+      "monitor": "alive throughout (10 tails), signal-proven by an immediate api.log delta on probe",
+      "note": "Window 1 (14:12:47-15:13:06Z) was INVALIDATED by 2 real 5xx which turned out to be BLOCKER-004, a genuine live defect on the signup path that every test suite and the full 27-route smoke sweep had missed. The window did exactly what \u00a714.3.5 exists for."
     },
     "G-N": {
       "status": "CLOSED",
       "evidence": "Backend 2056 passed / 0 failed / 1 skipped on the deployed tree (baseline 1885 -> +171 new tests, ZERO regressions). Frontend 650/650. The single previously-red test was fixed, not carved out. Skipped count 1 vs baseline 0 - no skipped-test inflation."
     },
     "G-O": {
-      "status": "OPEN"
+      "status": "CLOSED",
+      "evidence": "Post-deploy smoke: 18/18 routes 200, zero console errors, zero 5xx, no placeholder content (POST-DEPLOY-SMOKE.md). Plus aac8c03 removing the last \"Coming Soon\"."
     },
     "G-P": {
       "status": "OPEN"
