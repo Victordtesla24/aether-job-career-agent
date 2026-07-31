@@ -1,0 +1,586 @@
+START 2026-07-30T22:55:21Z
+NOTE: LOGIN_EMAIL/LOGIN_PASSWORD overridden to orchestrator-provided admin/admin123 test login for this run -- repo .env LOGIN_EMAIL=sarkar.vikram@gmail.com / LOGIN_PASSWORD failed live production auth (Invalid email or password) in the first attempt, see playwright-baseline-attempt1-stale-cred.log
+[TEST] Preparing to capture 0 authenticated routes
+[BASELINE-SWEEP] Preparing to capture 0 authenticated routes
+
+Running 52 tests using 1 worker
+
+  ✓   1 [setup] › e2e/auth.setup.ts:26:1 › authenticate (1.2s)
+  ✓   2 [chromium] › e2e/agents.spec.ts:8:3 › Agents page › renders the agents grid from the API (2.2s)
+  ✓   3 [chromium] › e2e/agents.spec.ts:21:3 › Agents page › recent runs log resolves (table or empty state) (865ms)
+  ✓   4 [chromium] › e2e/analytics.spec.ts:8:3 › Analytics page › renders the funnel with live numbers from the API (1.3s)
+  ✓   5 [chromium] › e2e/analytics.spec.ts:29:3 › Analytics page › period selector switches the funnel period (1.0s)
+  ✓   6 [chromium] › e2e/analytics.spec.ts:41:3 › Analytics page › renders the ATS distribution and agent ROI sections (873ms)
+  ✓   7 [chromium] › e2e/applications.spec.ts:8:3 › Applications page › renders the kanban board with pipeline columns (1.0s)
+  ✓   8 [chromium] › e2e/applications.spec.ts:19:3 › Applications page › columns resolve application cards or render empty (1.3s)
+  ✓   9 [chromium] › e2e/approvals.spec.ts:8:3 › Approvals page › renders the approval queue or its empty state (975ms)
+  ✓  10 [chromium] › e2e/approvals.spec.ts:17:3 › Approvals page › pending approvals expose approve/reject actions (1.3s)
+[1] Navigating to login page...
+[1] Screenshot saved: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/AUTH-RECIPE-PROOF-step1-login-form.png
+[2] Current URL: https://5cb5f0620.abacusai.cloud/login
+[2] Form fields verified: email, password, submit
+[3] Filling in credentials...
+[3] Clicking submit button...
+[4] Navigation response status: undefined
+[5] Final URL: https://5cb5f0620.abacusai.cloud/dashboard
+[6] localStorage.aether_token: FOUND
+[6] Token sample: eyJhbGci...
+[7] Taking authenticated dashboard screenshot...
+[7] Screenshot saved: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/AUTH-RECIPE-PROOF-step2-authenticated-dashboard.png
+[8] Looking for authenticated UI elements...
+[8] Main content visible: true
+[8] Topbar visible: false
+[8] Main heading: Agent Activity
+[8] Authenticated dashboard elements confirmed!
+[9] Console errors: 0
+
+=== AUTH RECIPE PROOF SUCCESS ===
+
+Proof artifact written to: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/AUTH-RECIPE-PROOF.json
+  ✓  11 [chromium] › e2e/auth-recipe-proof.spec.ts:20:1 › Auth Recipe Proof: Login and reach authenticated dashboard (3.6s)
+  ✘  12 [chromium] › e2e/baseline-manual-verification.spec.ts:212:1 › baseline capture sweep (2ms)
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+
+[PROOF] Login result:
+  Final URL: https://5cb5f0620.abacusai.cloud/dashboard
+  Token present: true
+  Is authenticated: true
+  ✓  13 [chromium] › e2e/capture-authenticated-baselines.spec.ts:185:3 › AUTHENTICATED BASELINE CAPTURE › STEP 1: Prove login recipe works (1.9s)
+
+========== CAPTURING SCREENS ==========
+
+[1/24] Capturing: dashboard
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /dashboard
+  [CAPTURE]
+  [SUCCESS]
+
+[2/24] Capturing: mobile-dashboard
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /dashboard
+  [CAPTURE]
+  [SUCCESS]
+
+[3/24] Capturing: job-discovery
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /job-discovery
+  [CAPTURE]
+  [SUCCESS]
+
+[4/24] Capturing: resume-studio
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /resume-studio
+  [CAPTURE]
+  [SUCCESS]
+
+[5/24] Capturing: story-bank
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /story-bank
+  [CAPTURE]
+  [SUCCESS]
+
+[6/24] Capturing: cover-letter-studio
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /cover-letter-studio
+  [CAPTURE]
+  [SUCCESS]
+
+[7/24] Capturing: application-tracker
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /application-tracker
+  [CAPTURE]
+  [SUCCESS]
+
+[8/24] Capturing: approval-modal
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /approval-modal
+  [CAPTURE]
+  [SUCCESS]
+
+[9/24] Capturing: mobile-approval
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /approval-modal
+  [CAPTURE]
+  [SUCCESS]
+
+[10/24] Capturing: interview-center
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /interview-center
+  [CAPTURE]
+  [SUCCESS]
+
+[11/24] Capturing: networking
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /networking
+  [CAPTURE]
+  [SUCCESS]
+
+[12/24] Capturing: email-center
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /email-center
+  [CAPTURE]
+  [SUCCESS]
+
+[13/24] Capturing: analytics
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /analytics
+  [CAPTURE]
+  [SUCCESS]
+
+[14/24] Capturing: offer-comparison
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /offer-comparison
+  [CAPTURE]
+  [SUCCESS]
+
+[15/24] Capturing: settings
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /settings
+  [CAPTURE]
+  [SUCCESS]
+
+[16/24] Capturing: agent-monitor
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /agent-monitor
+  [CAPTURE]
+  [SUCCESS]
+
+[17/24] Capturing: agents
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /agents
+  [CAPTURE]
+  [SUCCESS]
+
+[18/24] Capturing: admin-audit-log_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin/audit-log
+  [CAPTURE]
+  [SUCCESS]
+
+[19/24] Capturing: admin-health_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin/health
+  [CAPTURE]
+  [SUCCESS]
+
+[20/24] Capturing: admin-root_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin
+  [CAPTURE]
+  [SUCCESS]
+
+[21/24] Capturing: admin-settings_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin/settings
+  [CAPTURE]
+  [SUCCESS]
+
+[22/24] Capturing: admin-spend_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin/spend
+  [CAPTURE]
+  [SUCCESS]
+
+[23/24] Capturing: admin-users_auth
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /admin/users
+  [CAPTURE]
+  [SUCCESS]
+
+[24/24] Capturing: dashboard_catchall
+  [LOGIN]
+  [LOGIN] Navigating to login page...
+  [LOGIN] Filling credentials...
+  [LOGIN] Submitting form...
+  [NAVIGATE] /dashboard/nonexistent-xyz
+  [CAPTURE]
+  [SUCCESS]
+
+========== MANIFEST CREATION ==========
+
+========== MARK OLD BASELINES ==========
+
+========== FINAL REPORT ==========
+Captured: 24/24
+Failed: 0
+Manifest: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/BASELINE-AUTHED-SWEEP.json
+  ✓  14 [chromium] › e2e/capture-authenticated-baselines.spec.ts:207:3 › AUTHENTICATED BASELINE CAPTURE › STEP 2: Capture all authenticated baselines (1.6m)
+  ✓  15 [chromium] › e2e/cover-letters.spec.ts:7:3 › Cover Letters page › renders the list or empty state from the API (1.1s)
+  ✓  16 [chromium] › e2e/cover-letters.spec.ts:18:3 › Cover Letters page › exposes the job selector and generate button (1.2s)
+  ✓  17 [chromium] › e2e/dashboard.spec.ts:26:1 › dashboard renders the 13-item primary sidebar (651ms)
+  ✓  18 [chromium] › e2e/dashboard.spec.ts:40:1 › root route redirects to the dashboard (371ms)
+  ✓  19 [chromium] › e2e/dashboard.spec.ts:45:1 › nav sections render real workspaces; unknown routes get a graceful panel (P1-S12) (920ms)
+  ✘  20 [chromium] › e2e/gap_p7_def_b.spec.ts:93:3 › GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings › settings_save_with_existing_aether_local_email_succeeds (2.6s)
+  ✓  21 [chromium] › e2e/gap_p7_def_b.spec.ts:117:3 › GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings › settings_save_with_invalid_email_shows_validation_error (2.8s)
+  ✓  22 [chromium] › e2e/jobs.spec.ts:9:3 › Jobs page › renders job cards from the API (1.2s)
+  ✓  23 [chromium] › e2e/jobs.spec.ts:18:3 › Jobs page › exposes the run-discovery button and filter bar (1.1s)
+  ✓  24 [chromium] › e2e/jobs.spec.ts:25:3 › Jobs page › detail-panel save button toggles the selected job's saved state (2.0s)
+  ✓  25 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:25:3 › FEAT-B1: remove approval requests › resolved approval card exposes Remove; removal persists across reload (2.8s)
+  ✓  26 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:81:3 › FEAT-B1: remove approval requests › live pending approvals cannot be removed (409) and show no Remove button (2.1s)
+  ✓  27 [chromium] › e2e/launch-b1-approvals-remove.spec.ts:122:3 › FEAT-B1: remove approval requests › bulk Clear expired control matches the server-side expired count (1.5s)
+  ✓  28 [chromium] › e2e/launch-b2-move-stage.spec.ts:48:3 › FEAT-B2: stage moves › every card exposes an accessible Move to… menu with only legal targets (1.3s)
+  ✓  29 [chromium] › e2e/launch-b2-move-stage.spec.ts:75:3 › FEAT-B2: stage moves › menu move persists across reload, then moves back (state restored) (3.2s)
+  ✓  30 [chromium] › e2e/launch-b2-move-stage.spec.ts:131:3 › FEAT-B2: stage moves › drag-and-drop moves a card between columns, then drags it back (2.2s)
+  ✓  31 [chromium] › e2e/launch-b2-move-stage.spec.ts:179:3 › FEAT-B2: stage moves › illegal cross-split move is rejected with an honest 422 (866ms)
+  ✓  32 [chromium] › e2e/login.spec.ts:16:3 › Login page › renders the sign-in form with empty fields (424ms)
+  ✓  33 [chromium] › e2e/login.spec.ts:25:3 › Login page › filling the form and submitting signs in and redirects to the dashboard (1.0s)
+  ✓  34 [chromium] › e2e/login.spec.ts:41:3 › Login page › shows an error for wrong credentials (1.3s)
+  ✘  35 [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:87:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/settings at 390px (1.2s)
+  ✘  36 [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:91:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/users at 390px (1.3s)
+  ✘  37 [chromium] › e2e/ml-agents-refix.spec.ts:76:3 › ML-agents-002: saved per-agent model survives reload › selecting a model for resumeTailoring and reloading still shows THAT model, not the default (1.3s)
+  ✘  38 [chromium] › e2e/ml-agents-refix.spec.ts:143:3 › ML-agents-005: no horizontal overflow at 390px on the Agents screen › agent model picker price badges do not overflow the 390px viewport (1.4s)
+  ✘  39 [chromium] › e2e/ml-fe-polish.spec.ts:98:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 390px mobile after the oversized-field 422 (1.3s)
+  ✘  40 [chromium] › e2e/ml-fe-polish.spec.ts:102:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 1440px desktop after the oversized-field 422 (1.5s)
+  ✘  41 [chromium] › e2e/ml-fe-polish.spec.ts:108:3 › ML-resume-002: no horizontal overflow at 390px on /dashboard/resume › document.scrollWidth does not exceed the 390px viewport (1.4s)
+  ✘  42 [chromium] › e2e/ml-fe-polish.spec.ts:249:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › document.scrollWidth does not exceed the 390px viewport after a real run populates the Orchestration panel (455ms)
+  ✘  43 [chromium] › e2e/ml-fe-polish.spec.ts:266:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › component contract: the Orchestration 3-column row's children never exceed their own section's width (445ms)
+  ✓  44 [chromium] › e2e/phase7-route-sweep.spec.ts:157:3 › Phase-7 route sweep (PROBE-P7-12) › sweeps every dashboard + top-level route for console/HTTP errors and screenshots (1.1m)
+  ✓  45 [chromium] › e2e/resume.spec.ts:8:3 › Resume studio › renders the versions panel and tailor controls (863ms)
+  ✓  46 [chromium] › e2e/resume.spec.ts:17:3 › Resume studio › version list resolves from the API (cards or empty state) (1.3s)
+  ✓  47 [chromium] › e2e/stories.spec.ts:8:3 › Story Bank page › renders story cards or the empty state (1.1s)
+  ✓  48 [chromium] › e2e/stories.spec.ts:19:3 › Story Bank page › exposes a story creation or extraction entry point (744ms)
+Test viewport: 390x844
+  ✓  49 [chromium] › e2e/mobile-regression.spec.ts:76:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-dash: dashboard loads at mobile viewport with valid layout (3.0s)
+Test viewport: 390x844
+  ✓  50 [chromium] › e2e/mobile-regression.spec.ts:176:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-dash: verify mobile navigation and sections (1.7s)
+Test viewport: 390x844
+
+=== Mobile Regression Smoke Test Summary ===
+Total tests: 2
+Passed: 1
+Failed: 1
+Console errors: 0
+Request failures: 0
+Summary saved to: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/phase4/rg-mob__summary__post__20260730T225954Z.json
+  ✘  51 [chromium] › e2e/mobile-regression.spec.ts:199:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-appr: approvals page loads at mobile viewport with valid layout (30.0s)
+Test viewport: 390x844
+
+=== Mobile Regression Smoke Test Summary ===
+Total tests: 0
+Passed: 0
+Failed: 0
+Console errors: 0
+Request failures: 0
+Summary saved to: /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/phase4/rg-mob__summary__post__20260730T225956Z.json
+  ✓  52 [chromium] › e2e/mobile-regression.spec.ts:306:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-appr: verify mobile approval card layout and interactions (1.6s)
+
+
+  1) [chromium] › e2e/baseline-manual-verification.spec.ts:212:1 › baseline capture sweep ──────────
+
+    Error: ENOENT: no such file or directory, open '/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens/SCREEN-MATRIX.json'
+
+      34 | // Load screen matrix
+      35 | function loadScreenMatrix() {
+    > 36 |   const raw = fs.readFileSync(SCREEN_MATRIX_PATH, "utf8");
+         |                  ^
+      37 |   return JSON.parse(raw);
+      38 | }
+      39 |
+        at loadScreenMatrix (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/baseline-manual-verification.spec.ts:36:18)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/baseline-manual-verification.spec.ts:216:18
+
+    Error Context: test-results/baseline-manual-verification-baseline-capture-sweep-chromium/error-context.md
+
+  2) [chromium] › e2e/gap_p7_def_b.spec.ts:93:3 › GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings › settings_save_with_existing_aether_local_email_succeeds 
+
+    Error: expected a stored @aether.local email, got "sarkar.vikram@gmail.com"
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      100 |     // still exercises the save path.
+      101 |     const emailValue = await page.getByTestId("settings-email").inputValue();
+    > 102 |     expect.soft(emailValue.endsWith("@aether.local"), `expected a stored @aether.local email, got "${emailValue}"`).toBe(true);
+          |                                                                                                                     ^
+      103 |
+      104 |     // Change an unrelated field only — the email itself is left untouched,
+      105 |     // matching the backend's test_email_not_changed_unrelated_field_save_succeeds.
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/gap_p7_def_b.spec.ts:102:117
+
+    Error Context: test-results/gap_p7_def_b-GAP-P7-DEF-B--3b3b7-aether-local-email-succeeds-chromium/error-context.md
+
+  3) [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:87:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/settings at 390px 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3010/login
+    Call log:
+      - navigating to "http://127.0.0.1:3010/login", waiting until "load"
+
+
+      39 |
+      40 | async function login(page: import("@playwright/test").Page) {
+    > 41 |   await page.goto("/login");
+         |              ^
+      42 |   await page.getByLabel("Email").fill(ADMIN_EMAIL);
+      43 |   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+      44 |   await page.getByRole("button", { name: /sign in/i }).click();
+        at login (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-admin-002-mobile-overflow.spec.ts:41:14)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-admin-002-mobile-overflow.spec.ts:84:11
+
+    Error Context: test-results/ml-admin-002-mobile-overfl-91609--on-admin-settings-at-390px-chromium/error-context.md
+
+  4) [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:91:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/users at 390px 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3010/login
+    Call log:
+      - navigating to "http://127.0.0.1:3010/login", waiting until "load"
+
+
+      39 |
+      40 | async function login(page: import("@playwright/test").Page) {
+    > 41 |   await page.goto("/login");
+         |              ^
+      42 |   await page.getByLabel("Email").fill(ADMIN_EMAIL);
+      43 |   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+      44 |   await page.getByRole("button", { name: /sign in/i }).click();
+        at login (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-admin-002-mobile-overflow.spec.ts:41:14)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-admin-002-mobile-overflow.spec.ts:84:11
+
+    Error Context: test-results/ml-admin-002-mobile-overfl-92f2d-low-on-admin-users-at-390px-chromium/error-context.md
+
+  5) [chromium] › e2e/ml-agents-refix.spec.ts:76:3 › ML-agents-002: saved per-agent model survives reload › selecting a model for resumeTailoring and reloading still shows THAT model, not the default 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3012/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3012/signup", waiting until "load"
+
+
+      65 |   const email = uniqueEmail(tag);
+      66 |   const password = "Sup3rSecret1";
+    > 67 |   await page.goto("/signup");
+         |              ^
+      68 |   await page.getByLabel("Email").fill(email);
+      69 |   await page.getByLabel("Password").fill(password);
+      70 |   await page.locator("#signup-consent").check();
+        at signupAndLogin (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-agents-refix.spec.ts:67:14)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-agents-refix.spec.ts:79:11
+
+    Error Context: test-results/ml-agents-refix-ML-agents--5d4a2--THAT-model-not-the-default-chromium/error-context.md
+
+  6) [chromium] › e2e/ml-agents-refix.spec.ts:143:3 › ML-agents-005: no horizontal overflow at 390px on the Agents screen › agent model picker price badges do not overflow the 390px viewport 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3012/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3012/signup", waiting until "load"
+
+
+      65 |   const email = uniqueEmail(tag);
+      66 |   const password = "Sup3rSecret1";
+    > 67 |   await page.goto("/signup");
+         |              ^
+      68 |   await page.getByLabel("Email").fill(email);
+      69 |   await page.getByLabel("Password").fill(password);
+      70 |   await page.locator("#signup-consent").check();
+        at signupAndLogin (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-agents-refix.spec.ts:67:14)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-agents-refix.spec.ts:144:11
+
+    Error Context: test-results/ml-agents-refix-ML-agents--2a5c0-overflow-the-390px-viewport-chromium/error-context.md
+
+  7) [chromium] › e2e/ml-fe-polish.spec.ts:98:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 390px mobile after the oversized-field 422 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3091/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3091/signup", waiting until "load"
+
+
+      30 |   const email = uniqueEmail(tag);
+      31 |   const password = "Sup3rSecret1";
+    > 32 |   await page.goto("/signup");
+         |              ^
+      33 |   await page.getByLabel("Email").fill(email);
+      34 |   await page.getByLabel("Password").fill(password);
+      35 |   await page.locator("#signup-consent").check();
+        at signupAndLogin (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:32:14)
+        at reproOversizedFieldOverflow (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:59:11)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:99:5
+
+    Error Context: test-results/ml-fe-polish-ML-settings-0-01fd1-ter-the-oversized-field-422-chromium/error-context.md
+
+  8) [chromium] › e2e/ml-fe-polish.spec.ts:102:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 1440px desktop after the oversized-field 422 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3091/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3091/signup", waiting until "load"
+
+
+      30 |   const email = uniqueEmail(tag);
+      31 |   const password = "Sup3rSecret1";
+    > 32 |   await page.goto("/signup");
+         |              ^
+      33 |   await page.getByLabel("Email").fill(email);
+      34 |   await page.getByLabel("Password").fill(password);
+      35 |   await page.locator("#signup-consent").check();
+        at signupAndLogin (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:32:14)
+        at reproOversizedFieldOverflow (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:59:11)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:103:5
+
+    Error Context: test-results/ml-fe-polish-ML-settings-0-30f8f-ter-the-oversized-field-422-chromium/error-context.md
+
+  9) [chromium] › e2e/ml-fe-polish.spec.ts:108:3 › ML-resume-002: no horizontal overflow at 390px on /dashboard/resume › document.scrollWidth does not exceed the 390px viewport 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3091/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3091/signup", waiting until "load"
+
+
+      30 |   const email = uniqueEmail(tag);
+      31 |   const password = "Sup3rSecret1";
+    > 32 |   await page.goto("/signup");
+         |              ^
+      33 |   await page.getByLabel("Email").fill(email);
+      34 |   await page.getByLabel("Password").fill(password);
+      35 |   await page.locator("#signup-consent").check();
+        at signupAndLogin (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:32:14)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:110:11
+
+    Error Context: test-results/ml-fe-polish-ML-resume-002-8662b-t-exceed-the-390px-viewport-chromium/error-context.md
+
+  10) [chromium] › e2e/ml-fe-polish.spec.ts:249:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › document.scrollWidth does not exceed the 390px viewport after a real run populates the Orchestration panel 
+
+    Error: setupAgentsWithRealErrorLogEntry: gave up after 3 attempts — last error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3091/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3091/signup", waiting until "load"
+
+
+      239 |     }
+      240 |   }
+    > 241 |   throw new Error(
+          |         ^
+      242 |     `setupAgentsWithRealErrorLogEntry: gave up after ${MAX_ATTEMPTS} attempts — last error: ${
+      243 |       lastError instanceof Error ? lastError.message : String(lastError)
+      244 |     }`,
+        at setupAgentsWithRealErrorLogEntry (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:241:9)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:253:5
+
+    Error Context: test-results/ml-fe-polish-ML-agents-006-64130-tes-the-Orchestration-panel-chromium/error-context.md
+
+  11) [chromium] › e2e/ml-fe-polish.spec.ts:266:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › component contract: the Orchestration 3-column row's children never exceed their own section's width 
+
+    Error: setupAgentsWithRealErrorLogEntry: gave up after 3 attempts — last error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3091/signup
+    Call log:
+      - navigating to "http://127.0.0.1:3091/signup", waiting until "load"
+
+
+      239 |     }
+      240 |   }
+    > 241 |   throw new Error(
+          |         ^
+      242 |     `setupAgentsWithRealErrorLogEntry: gave up after ${MAX_ATTEMPTS} attempts — last error: ${
+      243 |       lastError instanceof Error ? lastError.message : String(lastError)
+      244 |     }`,
+        at setupAgentsWithRealErrorLogEntry (/home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:241:9)
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/ml-fe-polish.spec.ts:270:5
+
+    Error Context: test-results/ml-fe-polish-ML-agents-006-cab01-d-their-own-section-s-width-chromium/error-context.md
+
+  12) [chromium] › e2e/mobile-regression.spec.ts:199:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-appr: approvals page loads at mobile viewport with valid layout 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "PASS"
+    Received: "FAIL"
+
+      298 |
+      299 |     // Assert no failures
+    > 300 |     expect(result.status).toBe("PASS");
+          |                           ^
+      301 |     expect(result.console_errors).toHaveLength(0);
+      302 |     expect(result.request_failures).toHaveLength(0);
+      303 |     expect(result.layout_valid).toBe(true);
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/mobile-regression.spec.ts:300:27
+
+    Error Context: test-results/mobile-regression-Mobile-R-d47ac--viewport-with-valid-layout-chromium/error-context.md
+
+    Error Context: test-results/mobile-regression-Mobile-R-d47ac--viewport-with-valid-layout-chromium/error-context.md
+
+  12 failed
+    [chromium] › e2e/baseline-manual-verification.spec.ts:212:1 › baseline capture sweep ───────────
+    [chromium] › e2e/gap_p7_def_b.spec.ts:93:3 › GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings › settings_save_with_existing_aether_local_email_succeeds 
+    [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:87:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/settings at 390px 
+    [chromium] › e2e/ml-admin-002-mobile-overflow.spec.ts:91:3 › ML-admin-002: admin panel mobile (390px) horizontal overflow › no horizontal overflow on /admin/users at 390px 
+    [chromium] › e2e/ml-agents-refix.spec.ts:76:3 › ML-agents-002: saved per-agent model survives reload › selecting a model for resumeTailoring and reloading still shows THAT model, not the default 
+    [chromium] › e2e/ml-agents-refix.spec.ts:143:3 › ML-agents-005: no horizontal overflow at 390px on the Agents screen › agent model picker price badges do not overflow the 390px viewport 
+    [chromium] › e2e/ml-fe-polish.spec.ts:98:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 390px mobile after the oversized-field 422 
+    [chromium] › e2e/ml-fe-polish.spec.ts:102:3 › ML-settings-001: oversized-field 422 causes horizontal overflow (live repro) › no horizontal overflow at 1440px desktop after the oversized-field 422 
+    [chromium] › e2e/ml-fe-polish.spec.ts:108:3 › ML-resume-002: no horizontal overflow at 390px on /dashboard/resume › document.scrollWidth does not exceed the 390px viewport 
+    [chromium] › e2e/ml-fe-polish.spec.ts:249:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › document.scrollWidth does not exceed the 390px viewport after a real run populates the Orchestration panel 
+    [chromium] › e2e/ml-fe-polish.spec.ts:266:3 › ML-agents-006: no horizontal overflow at 390px on /dashboard/agents (Orchestration panel) › component contract: the Orchestration 3-column row's children never exceed their own section's width 
+    [chromium] › e2e/mobile-regression.spec.ts:199:3 › Mobile Regression Smoke Test (T3) - 390x844 Viewport › rg-mob-appr: approvals page loads at mobile viewport with valid layout 
+  40 passed (4.6m)
+EXIT_CODE=1
+DURATION_SECONDS=275
+END 2026-07-30T22:59:56Z

@@ -1,0 +1,207 @@
+{
+  "progressSnapshots": [
+    {
+      "i": 0,
+      "elapsedApproxMs": 8000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 1,
+      "elapsedApproxMs": 16000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 2,
+      "elapsedApproxMs": 24000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 3,
+      "elapsedApproxMs": 32000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 4,
+      "elapsedApproxMs": 40000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 5,
+      "elapsedApproxMs": 48000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 6,
+      "elapsedApproxMs": 56000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 7,
+      "elapsedApproxMs": 64000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    },
+    {
+      "i": 8,
+      "elapsedApproxMs": 72000,
+      "btnText": "Tailoring...",
+      "disabled": true
+    }
+  ],
+  "noticeVisible": false,
+  "errorBannerVisible": false,
+  "conversionVisibleOnNoOp": false,
+  "tailorNetCalls": [
+    {
+      "method": "POST",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+      "status": 202,
+      "ts": "2026-07-31T00:26:55.026Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:26:58.157Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:01.299Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:04.437Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:07.571Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:10.715Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:13.870Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:17.025Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:20.176Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:23.318Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:26.454Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:29.609Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:32.750Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:35.886Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:39.030Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:42.178Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:45.317Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:48.454Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:51.605Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:54.739Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:27:57.884Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:28:01.030Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:28:04.176Z"
+    },
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/ccb1721b67ed49d70a694ac7a",
+      "status": 200,
+      "ts": "2026-07-31T00:28:07.314Z"
+    }
+  ]
+}

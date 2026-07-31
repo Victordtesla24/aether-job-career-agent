@@ -1,0 +1,200 @@
+{
+  "probe_metadata": {
+    "date": "2026-07-30",
+    "timestamp_utc": "2026-07-30T09:30:00Z",
+    "environment": "production",
+    "probe_authority": "evidence-sub-agent",
+    "access_mode": "read-only",
+    "database": "aether schema at db-fdc4e11da.db005.hosteddb.reai.io"
+  },
+  "schema_inventory": {
+    "total_tables": 31,
+    "tables": [
+      {"name": "AdminAuditLog", "row_count": 129},
+      {"name": "AdminSetting", "row_count": 2},
+      {"name": "AgentConfig", "row_count": 12},
+      {"name": "AgentProvider", "row_count": 2},
+      {"name": "AgentQuotaBlock", "row_count": 0},
+      {"name": "AgentRun", "row_count": 3523},
+      {"name": "AnthropicOAuthState", "row_count": 1},
+      {"name": "AnthropicOAuthToken", "row_count": 1},
+      {"name": "Application", "row_count": 74},
+      {"name": "ApprovalRequest", "row_count": 102},
+      {"name": "BackgroundJob", "row_count": 173},
+      {"name": "CareerProfile", "row_count": 3},
+      {"name": "Contact", "row_count": 0},
+      {"name": "EmailThread", "row_count": 223},
+      {"name": "GmailAccount", "row_count": 2},
+      {"name": "GoogleCredential", "row_count": 0},
+      {"name": "InterviewSchedule", "row_count": 0},
+      {"name": "Job", "row_count": 51},
+      {"name": "JobEmbedding", "row_count": 0},
+      {"name": "JobSourceStatus", "row_count": 10},
+      {"name": "Offer", "row_count": 0},
+      {"name": "OutreachTask", "row_count": 0},
+      {"name": "Plan", "row_count": 4},
+      {"name": "ProviderCredential", "row_count": 5},
+      {"name": "Resume", "row_count": 69},
+      {"name": "StoryEntry", "row_count": 32},
+      {"name": "StripeEvent", "row_count": 8},
+      {"name": "Subscription", "row_count": 5},
+      {"name": "UsageQuota", "row_count": 5},
+      {"name": "User", "row_count": 5},
+      {"name": "UserProviderCredential", "row_count": 0}
+    ]
+  },
+  "users": {
+    "total": 5,
+    "real_users": 1,
+    "demo_test_accounts": 4,
+    "admin_users": 1,
+    "demo_accounts": [
+      {
+        "id_hash": "c097be69c...",
+        "email": "qa-deepsweep-20260729@example.com",
+        "isAdmin": false,
+        "created": "2026-07-29T04:14:05.368Z",
+        "account_type": "test"
+      },
+      {
+        "id_hash": "c08d643531...",
+        "email": "test-phase7a@example.com",
+        "isAdmin": false,
+        "created": "2026-07-24T23:36:05.406Z",
+        "account_type": "test"
+      },
+      {
+        "id_hash": "cccd35dcf1...",
+        "email": "ml-adv-storyleak-20260723051146@example.com",
+        "isAdmin": false,
+        "created": "2026-07-23T05:11:48.873Z",
+        "account_type": "test"
+      },
+      {
+        "id_hash": "c08c4e7416...",
+        "email": "mltest+001@example.com",
+        "isAdmin": false,
+        "created": "2026-07-22T12:30:49.154Z",
+        "account_type": "test"
+      }
+    ]
+  },
+  "stories": {
+    "total_entries": 32,
+    "duplicate_groups_by_title": 0,
+    "duplicate_groups_by_content": 0,
+    "total_redundant_rows": 0,
+    "near_duplicates_with_jira_dashboard": {
+      "count": 5,
+      "sample_titles": [
+        "JIRA Analytics Dashboard for Sprint Velocity & Retrospective Insights",
+        "JIRA Analytics Dashboard for Agile Team Insights",
+        "JIRA Analytics Dashboard for Agile Team Visibility",
+        "JIRA Analytics Dashboard for Sprint Velocity & LLM-Powered Retrospectives",
+        "JIRA Analytics Dashboard for Agile Insight Generation"
+      ],
+      "note": "5 distinct stories, not exact duplicates; variations from repeated agent generation"
+    },
+    "assessment": "CLEAN - no duplicate rows or corrupted data"
+  },
+  "jobs": {
+    "total": 51,
+    "by_source": {
+      "ashby": 16,
+      "greenhouse": 21,
+      "lever": 10,
+      "remoteok": 3,
+      "remotive": 1
+    },
+    "seek_source_rows": 0,
+    "assessment": "CLEAN - no Seek.com jobs, diverse source coverage"
+  },
+  "applications": {
+    "total": 74,
+    "by_status": {
+      "submitted": 72,
+      "screening": 2
+    },
+    "assessment": "CLEAN - expected distribution"
+  },
+  "interviews": {
+    "total_scheduled": 0,
+    "total_applications_submitted": 72,
+    "interview_conversion_rate": 0.0,
+    "conversion_rate_percent": "0.00%",
+    "assessment": "BASELINE - no conversions yet in current production state"
+  },
+  "score_columns": {
+    "job": {
+      "fitScore": {
+        "present": true,
+        "non_null_count": 51,
+        "min": 24.89,
+        "max": 50.05,
+        "avg": 39.63,
+        "stale_rows": 0
+      },
+      "atsScore": {
+        "present": true,
+        "non_null_count": 51,
+        "min": 24.89,
+        "max": 50.05,
+        "avg": 39.63,
+        "stale_rows": 0
+      },
+      "tailoring_iteration": {"present": false},
+      "score_updated_at": {"present": false}
+    },
+    "application": {
+      "note": "No score columns on Application table"
+    },
+    "resume": {
+      "note": "No score columns on Resume table"
+    },
+    "score_columns_present": ["fitScore", "atsScore"],
+    "assessment": "COMPLETE - fitScore and atsScore both present on Job, 100% coverage"
+  },
+  "approvals": {
+    "total": 102,
+    "by_status": {
+      "approved": 102,
+      "pending": 0
+    },
+    "expired_pending": 0,
+    "assessment": "CLEAN - all approvals processed, no pending or expired"
+  },
+  "fixture_data": {
+    "suspected_fixture_rows": 4,
+    "breakdown": {
+      "User_demo_accounts": 4,
+      "StoryEntry_from_demo_users": 0,
+      "Job_from_demo_users": 0,
+      "Application_from_demo_users": 0
+    },
+    "assessment": "ISOLATED - fixture data confined to User table only, no spillover to operational tables"
+  },
+  "gates": {
+    "W-E_stories": {
+      "duplicate_groups": 0,
+      "redundant_rows": 0,
+      "status": "VERIFIED-CLOSED"
+    },
+    "W-J_ats_scoring": {
+      "score_columns_present": ["fitScore", "atsScore"],
+      "status": "VERIFIED-CLOSED"
+    },
+    "W-K_fixture_data": {
+      "fixture_rows": 4,
+      "spillover_to_app_data": false,
+      "status": "VERIFIED-CLOSED"
+    },
+    "W-C_interview_conversion": {
+      "interviews": 0,
+      "submitted_applications": 72,
+      "conversion_rate": 0.0,
+      "status": "BASELINE-VERIFIED"
+    }
+  },
+  "redaction_notice": "User IDs, emails truncated where PII present. Database host/credentials redacted.",
+  "safety_verification": "Read-only probes only: SELECT, EXPLAIN, \\d, information_schema. No DDL or DML."
+}

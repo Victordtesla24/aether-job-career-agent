@@ -1,0 +1,99 @@
+{
+  "status": "COMPLETE",
+  "generated_start": "2026-07-30T23:31:00Z",
+  "generated_end": "2026-07-31T00:20:00Z",
+  "repo_head": "297946d7dea3d01207586a4c9ef4a8e8bb91f6ef",
+  "production": "https://5cb5f0620.abacusai.cloud",
+  "production_health_probe": {"status": "ok", "version": "0.2.0", "http": 200, "timestamp": "2026-07-30T23:31:13Z"},
+  "artifact_md": "docs/delivery/GOLD-MASTER-V2-FEATURE-COMPLETENESS-MATRIX.md",
+  "method_note": "Single serial agent, no sub-agents/forks. No authenticated app session established (documented owner login credential in .env is stale/401; admin/admin123 forbidden per task binding). Evidence order: fresh curl probe > fresh source file:line > same-day Phase-0 evidence reuse (authorized).",
+  "counts_by_verdict": {
+    "CONFIRMED": 29,
+    "OVERSTATED": 5,
+    "FALSE": 8,
+    "UNVERIFIABLE-HERE": 4,
+    "total_rows": 46
+  },
+  "counts_by_source": {
+    "README.md": {"rows": 32, "CONFIRMED": 19, "OVERSTATED": 4, "FALSE": 6, "UNVERIFIABLE-HERE": 3},
+    "REQUIREMENTS-TRACEABILITY-PRODUCTION.md": {"rows": 14, "CONFIRMED": 10, "OVERSTATED": 1, "FALSE": 2, "UNVERIFIABLE-HERE": 1}
+  },
+  "false_claims": [
+    {
+      "id": "R-13",
+      "claim": "Pending operator action item 1: Stripe TEST-MODE keys needed before live checkout/webhook/entitlement will work",
+      "source": "README.md:58",
+      "reality": "STRIPE_SECRET_KEY is already a LIVE key (sk_liv... prefix, confirmed this run) and the full non-payment API surface (plans, checkout session creation, webhook signature enforcement, entitlement, portal) is already configured and testable today; only one real-money purchase click remains human-gated",
+      "evidence": "grep STRIPE_SECRET_KEY .env prefix sk_liv (this run); curl POST /api/billing/webhooks/stripe -d '{}' -> 400 Missing stripe-signature header (this run); uat/reports/evidence/gold-master-v2/phase0/GOLD-MASTER-V2-BLOCKED-ON-HUMAN.md (same-day)"
+    },
+    {
+      "id": "R-14",
+      "claim": "Pending operator action item 2: 'The demo admin/admin123 account already carries zero admin privilege in production.'",
+      "source": "README.md:59",
+      "reality": "admin/admin123 currently authenticates as the real owner account with isAdmin:true and reaches 5/5 admin-only endpoints including other users' emails -- a CRITICAL live security exposure, not a resolved/zero-privilege state",
+      "evidence": "uat/reports/evidence/gold-master-v2/phase0/BLOCKER-admin-overpermission-verification.md §1 login probe 2026-07-30T23:28:13Z returns isAdmin:true; §2 five admin endpoints return HTTP 200"
+    },
+    {
+      "id": "R-17",
+      "claim": "'8 agents actually execute in production (confirmed via GET /api/agents; uat/reports/evidence/phase6/probe-16-agent-keys.json)'",
+      "source": "README.md:103",
+      "reality": "AGENT_NAMES (what GET /api/agents returns) is dynamically derived from the 22-entry AGENT_CATALOG, not the hardcoded 8-tuple. The code's own docstring documents the 8-tuple as a fixed bug that under-reported. 19 distinct non-None backends counted this run.",
+      "evidence": "apps/api/app/routers/agents.py:80-83 (_PIPELINE_AGENT_NAMES, the literal 8), :361-368 (AGENT_NAMES extends it), :2043-2049 (docstring documents the 8-tuple as a fixed under-reporting bug)"
+    },
+    {
+      "id": "R-18",
+      "claim": "'The AgentConfig table holds 22 configured agent keys -- a superset of the 8 runtime agents plus disabled/catalog entries'",
+      "source": "README.md:116",
+      "reality": "AGENT_CATALOG (Python code constant) has 22 entries; the AgentConfig DATABASE TABLE has 12 rows today. The claim conflates a code constant with a DB table row count.",
+      "evidence": "apps/api/app/routers/agents.py:159-355 (22-entry catalog, counted programmatically this run); uat/reports/evidence/gold-master-v2/phase0/PROD-DB-STATE.md PROBE 1, AgentConfig row count = 12, fresh 2026-07-30 09:30 UTC"
+    },
+    {
+      "id": "R-19",
+      "claim": "'Only the 8 above are wired to orchestration and run today.'",
+      "source": "README.md:116",
+      "reality": "19 agents are wired per AGENT_NAMES, not 8 -- same defect as R-17",
+      "evidence": "same as R-17"
+    },
+    {
+      "id": "R-30",
+      "claim": "7 Delivery History links point to docs/delivery/EXECUTION-REPORT.md, MANUAL-VERIFICATION-FINAL-REPORT.md, PHASE6-EXECUTION-SUMMARY.md, PHASE7-BLOCKED-ON-HUMAN.md, PHASE7-CLAIM-LEDGER.md, PHASE7-GAP-ANALYSIS.md, phase7-gap-analysis.json",
+      "source": "README.md:37,39,56,219-222",
+      "reality": "All 7 paths are dead; all 7 files exist verbatim under docs/delivery/archive/ instead",
+      "evidence": "programmatic link-extraction + os.path.isfile check against every docs/ and design/ link in README.md this run; find docs/delivery -iname <name> resolved all 7 to archive/"
+    },
+    {
+      "id": "T-03-seek",
+      "claim": "'Real seek.com.au data | apps/api/app/services/discovery/seek_adapter.py -- Seek adapter with live HTTP | ✅ WIRED'",
+      "source": "docs/delivery/REQUIREMENTS-TRACEABILITY-PRODUCTION.md REQ-3 row 12 (2026-07-12)",
+      "reality": "SeekAdapter code exists but is excluded from the live adapter registry by a binding risk-officer ruling (AETHER_ENABLE_SEEK unset); 0 Seek jobs in production DB. This is the settled, non-relitigated binding from this run's own risk-officer ADR.",
+      "evidence": "docs/delivery/ADR-SEEK-FIRECRAWL.md STATUS: REFUSED; uat/reports/evidence/gold-master-v2/phase0/PROD-DB-STATE.md seek job count = 0; uat/reports/evidence/gold-master-v2/phase0/REFERENCE-GRAPH.md Feature 1"
+    },
+    {
+      "id": "T-11",
+      "claim": "'DEFERRED SCREENS (Out-of-Phase per docs)': Interview Center, Networking CRM, Offers, Email Center, Settings, Mobile all listed deferred",
+      "source": "docs/delivery/REQUIREMENTS-TRACEABILITY-PRODUCTION.md:165-174 (2026-07-12)",
+      "reality": "All 5 non-mobile screens exist as substantial live page.tsx files today: interviews (833 lines), networking (525 lines), offers (144 lines), email (1158 lines), settings (thin wrapper + settings-client.tsx). Built in phases subsequent to this 2026-07-12 document.",
+      "evidence": "find/wc -l on apps/web/src/app/dashboard/{interviews,networking,offers,email,settings}/page.tsx this run, 2026-07-30"
+    }
+  ],
+  "readme_corrections": [
+    "README.md:37,39,219 -- replace docs/delivery/EXECUTION-REPORT.md and docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md links with the docs/delivery/archive/ prefix",
+    "README.md:56,222 -- replace docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md link with docs/delivery/archive/PHASE7-BLOCKED-ON-HUMAN.md",
+    "README.md:219,221 -- replace docs/delivery/PHASE7-GAP-ANALYSIS.md, phase7-gap-analysis.json, docs/delivery/PHASE7-CLAIM-LEDGER.md links with the docs/delivery/archive/ prefix",
+    "README.md:223 -- replace docs/delivery/PHASE6-EXECUTION-SUMMARY.md link with docs/delivery/archive/PHASE6-EXECUTION-SUMMARY.md",
+    "README.md:59 -- replace the 'admin credential formally closes the gate, admin/admin123 carries zero privilege' claim with an URGENT CRITICAL-security-exposure notice per the exact replacement text in the matrix §3 item 5",
+    "README.md:58 -- replace 'Stripe test-mode keys needed' framing with 'Stripe live keys already configured and tested; only one real-money purchase click remains' per matrix §3 item 6",
+    "README.md:103 -- replace '8 agents actually execute' with '19 agents actually execute', naming the 11 additional standalone agents, per matrix §3 item 7",
+    "README.md:116 -- replace 'AgentConfig table holds 22 configured agent keys... only 8 wired' with the corrected 22-catalog/12-DB-rows/19-wired framing per matrix §3 item 8",
+    "README.md:48 -- refresh the stale '33 jobs' count (actual 51 as of 2026-07-30) or remove the exact number from prose per matrix §3 item 9"
+  ],
+  "subscription_readiness_verdict": "CONFIRMED for the entire non-payment chain (pricing page, plan catalog, checkout session creation, webhook signature enforcement, entitlement/quota gating, billing portal session creation) -- all live and either freshly re-probed this run or already tested end-to-end with real Stripe objects per same-day reused evidence. The sole remaining gap is a single human action: completing one real-money Stripe Checkout purchase to observe the checkout.session.completed webhook flip a plan live. README's own framing overstates this gap as needing 'test-mode keys' when live keys are already configured (see false_claims R-13).",
+  "unverifiable_deferred_to_screen_testing": [
+    {"id": "R-02", "claim": "Delivered through Phases 1-7 + MANUAL-VERIFICATION + MODELS-LIVE with gate-verified QA throughout", "reason": "process/testimony claim about prior runs, not independently re-provable from this run's read-only probes"},
+    {"id": "R-07", "claim": "Specific ATS lift numbers (30.81->32.97 one-time; ~14/19 recent runs +0.0% lift) and 'zero fabrication survivors across all sampled completions'", "reason": "requires actually running the tailoring agent end-to-end on a live authenticated session; guard code presence confirmed, but the numeric outcome was not reproduced"},
+    {"id": "R-24", "claim": "No-silent-substitution: a failed user-chosen model never gets silently replaced and reported as success", "reason": "requires forcing a live model failure through an authenticated agent run; not exercised this run"},
+    {"id": "T-13", "claim": "Quality gates (pytest/vitest/Playwright/ruff/mypy/eslint/tsc counts)", "reason": "explicitly out of scope this run (pytest lock file held); README's own later 2026-07-20 figures (967 pytest/477 vitest) already show this 2026-07-12 row is stale regardless"}
+  ],
+  "coverage_complete": true,
+  "coverage_note": "Coverage is complete at REQ-group granularity for REQUIREMENTS-TRACEABILITY-PRODUCTION.md (14 rows covering all 10 REQ groups + deferred-screens + defects-fixed + quality-gates + code-map tables, aggregating ~74 source element rows with every element-level exception called out inline) and at representative-claim granularity for README.md (32 rows covering every shipped-capability table row, every pending-operator-action item, every AI-agent/model-catalog behavioral claim, design-system counts, and every doc link). Not covered: non-falsifiable marketing prose and the Local Development instructions block (not production-state claims). No authenticated session was available this run (owner credential stale, admin/admin123 forbidden), capping 4 rows at UNVERIFIABLE-HERE."
+}

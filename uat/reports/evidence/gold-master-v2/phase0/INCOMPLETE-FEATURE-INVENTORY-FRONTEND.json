@@ -1,0 +1,949 @@
+{
+  "status": "TRIAGE_COMPLETE",
+  "scope": "apps/web/src/**",
+  "source_input": "uat/reports/evidence/gold-master-v2/phase0/INCOMPLETE-GREP.json",
+  "frontend_files": 36,
+  "frontend_hits": 128,
+  "generated_utc": "2026-07-30T23:59:00Z",
+  "method_notes": "Static code reading only. No source modified, no pytest/vitest/Playwright run, no headless browser launched, no sub-agents spawned.",
+  "settled_rulings": [
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 854,
+      "topic": "Seek (unavailable) label",
+      "disposition": "B",
+      "note": "Truthful, backend-served via GET /agents/scout/sources/availability; risk-officer REFUSED enabling Seek this run. Not a defect."
+    }
+  ],
+  "counts_by_disposition": {
+    "A": 0,
+    "B": 24,
+    "C": 101,
+    "D": 2,
+    "UNSURE": 1
+  },
+  "items": [
+    {
+      "file": "apps/web/src/app/admin/settings/page.tsx",
+      "line": 9,
+      "disposition": "C",
+      "justification": "doc comment; the actual INERT toggle is filed separately as a D item below"
+    },
+    {
+      "file": "apps/web/src/app/admin/users/page.tsx",
+      "line": 71,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/admin/users/page.tsx",
+      "line": 72,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/agents/page.tsx",
+      "line": 15,
+      "disposition": "C",
+      "justification": "doc comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/agents/page.tsx",
+      "line": 149,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/agents/page.tsx",
+      "line": 515,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/agents/page.tsx",
+      "line": 517,
+      "disposition": "B",
+      "justification": "honest 'Unavailable' treatment for a degraded coverLetter run in the runs table"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/cover-letters/page.tsx",
+      "line": 122,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/cover-letters/page.tsx",
+      "line": 123,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/cover-letters/page.tsx",
+      "line": 133,
+      "disposition": "B",
+      "justification": "honest check of missingResume/coverLetterUnavailable/cover_letter_id before treating a run as a real success"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 40,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1090,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1092,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1104,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1106,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1118,
+      "disposition": "C",
+      "justification": "textarea placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/email/page.tsx",
+      "line": 1120,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/interviews/page.tsx",
+      "line": 14,
+      "disposition": "C",
+      "justification": "doc comment describing historical MV-interview-center fix, real backend now wired"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/interviews/page.tsx",
+      "line": 585,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/interviews/page.tsx",
+      "line": 598,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/interviews/page.tsx",
+      "line": 636,
+      "disposition": "C",
+      "justification": "textarea placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 6,
+      "disposition": "C",
+      "justification": "doc comment, header"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 448,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 450,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 473,
+      "disposition": "B",
+      "justification": "isSourceUnavailable() derives availability from backend GET /agents/scout/sources/availability (settled Seek ruling context)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 731,
+      "disposition": "B",
+      "justification": "honest 'Sync time unavailable' fallback text when lastSync is null"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 784,
+      "disposition": "B",
+      "justification": "honest 'Sync status unavailable' fallback text when scoutSources empty"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 834,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 837,
+      "disposition": "C",
+      "justification": "CSS class (placeholder: text color utility)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 850,
+      "disposition": "B",
+      "justification": "disables option via backend-derived isSourceUnavailable (settled Seek ruling)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 854,
+      "disposition": "B",
+      "justification": "SETTLED: truthful Seek '(unavailable)' label, backend-served, risk-officer REFUSED enabling Seek"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 862,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "line": 865,
+      "disposition": "C",
+      "justification": "CSS class (placeholder: text color utility)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/networking/lib.ts",
+      "line": 8,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/networking/lib.ts",
+      "line": 43,
+      "disposition": "C",
+      "justification": "comment documenting honest empty-column behavior (never fabricated cards)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/page.tsx",
+      "line": 9,
+      "disposition": "C",
+      "justification": "comment asserting no hardcoding (funnel is data-driven)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/resume/page.tsx",
+      "line": 44,
+      "disposition": "C",
+      "justification": "comment (type doc: never a hardcoded third party)"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 149,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 384,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 774,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 797,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 823,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 923,
+      "disposition": "C",
+      "justification": "data-testid identifier"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 928,
+      "disposition": "D",
+      "justification": "Notifications panel: honestly disclosed 'notification delivery isn't built yet ... Coming soon' - real feature not built"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 1049,
+      "disposition": "B",
+      "justification": "honest 'Price unavailable' fallback when plan/price not found in catalog"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "line": 1222,
+      "disposition": "D",
+      "justification": "shared Toggle component's 'Coming soon' badge, rendered for the not-yet-built notification toggles"
+    },
+    {
+      "file": "apps/web/src/app/login/page.tsx",
+      "line": 114,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/login/page.tsx",
+      "line": 128,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/signup/page.tsx",
+      "line": 126,
+      "disposition": "C",
+      "justification": "CSS class (placeholder: text color utility)"
+    },
+    {
+      "file": "apps/web/src/app/signup/page.tsx",
+      "line": 141,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/app/signup/page.tsx",
+      "line": 161,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 42,
+      "disposition": "C",
+      "justification": "CSS class value in status->style map"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 49,
+      "disposition": "C",
+      "justification": "CSS class value in status->style map"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 56,
+      "disposition": "C",
+      "justification": "CSS class value in status->style map"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 63,
+      "disposition": "B",
+      "justification": "honest 'Planned' status label, backend-derived (AGENT_CATALOG entries with backend=None)"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 143,
+      "disposition": "B",
+      "justification": "hides run/toggle controls for planned (not-yet-backed) agent cards - honest gating"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 191,
+      "disposition": "B",
+      "justification": "hides model picker for planned agent cards - honest gating"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 212,
+      "disposition": "B",
+      "justification": "hides settings panel for planned agent cards - honest gating"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 242,
+      "disposition": "C",
+      "justification": "TS optional type field"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "line": 283,
+      "disposition": "B",
+      "justification": "honest 'N Planned' count label, backend-derived"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentModelPicker.tsx",
+      "line": 5,
+      "disposition": "C",
+      "justification": "doc comment"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentModelPicker.tsx",
+      "line": 172,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentModelPicker.tsx",
+      "line": 173,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/components/agents/AgentStats.tsx",
+      "line": 5,
+      "disposition": "C",
+      "justification": "comment (real GET /agents/stats derivation, no hardcoded numbers)"
+    },
+    {
+      "file": "apps/web/src/components/agents/ModelPicker.tsx",
+      "line": 12,
+      "disposition": "C",
+      "justification": "comment documenting real click-time catalog derivation, no hardcoded id"
+    },
+    {
+      "file": "apps/web/src/components/agents/ModelPicker.tsx",
+      "line": 221,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/agents/ModelPicker.tsx",
+      "line": 222,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/components/agents/Orchestration.tsx",
+      "line": 63,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/agents/Orchestration.tsx",
+      "line": 115,
+      "disposition": "B",
+      "justification": "honest 'unavailable' task label for a degraded coverLetter run"
+    },
+    {
+      "file": "apps/web/src/components/agents/Orchestration.tsx",
+      "line": 313,
+      "disposition": "B",
+      "justification": "honest 'unavailable (degraded)' task label"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 38,
+      "disposition": "C",
+      "justification": "type field 'placeholder'"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 52,
+      "disposition": "C",
+      "justification": "input placeholder attribute value"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 58,
+      "disposition": "C",
+      "justification": "input placeholder attribute value"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 67,
+      "disposition": "C",
+      "justification": "input placeholder attribute value"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 490,
+      "disposition": "C",
+      "justification": "input placeholder attribute value"
+    },
+    {
+      "file": "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "line": 558,
+      "disposition": "C",
+      "justification": "input placeholder attribute (dynamic from options)"
+    },
+    {
+      "file": "apps/web/src/components/agents/api.ts",
+      "line": 21,
+      "disposition": "C",
+      "justification": "zod enum type incl. 'planned' literal"
+    },
+    {
+      "file": "apps/web/src/components/agents/api.ts",
+      "line": 40,
+      "disposition": "C",
+      "justification": "zod optional number field"
+    },
+    {
+      "file": "apps/web/src/components/agents/api.ts",
+      "line": 97,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/agents/api.ts",
+      "line": 165,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/agents/api.ts",
+      "line": 235,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/agents/logic.ts",
+      "line": 60,
+      "disposition": "C",
+      "justification": "TS union type incl. 'planned' literal"
+    },
+    {
+      "file": "apps/web/src/components/agents/logic.ts",
+      "line": 62,
+      "disposition": "B",
+      "justification": "status->label lookup incl. honest 'Planned' label, backend-derived"
+    },
+    {
+      "file": "apps/web/src/components/agents/logic.ts",
+      "line": 163,
+      "disposition": "C",
+      "justification": "comment documenting real click-time catalog derivation"
+    },
+    {
+      "file": "apps/web/src/components/analytics/MarketPulse.tsx",
+      "line": 303,
+      "disposition": "B",
+      "justification": "honest 'External market benchmark unavailable' disclosure when no provider configured"
+    },
+    {
+      "file": "apps/web/src/components/cover-letters/ActionsPanel.tsx",
+      "line": 122,
+      "disposition": "C",
+      "justification": "textarea placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/cover-letters/ActionsPanel.tsx",
+      "line": 123,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 54,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 57,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 69,
+      "disposition": "B",
+      "justification": "coverLetterDegraded(): implements honest degrade detection from real backend flag"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 83,
+      "disposition": "B",
+      "justification": "honest 'Unavailable' badge for a degraded coverLetter run (never shown as success)"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 182,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 187,
+      "disposition": "B",
+      "justification": "honest text for degraded cover-letter generation"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/feed.ts",
+      "line": 202,
+      "disposition": "C",
+      "justification": "unrelated use of word 'planned' - describes supervisor agent's pipeline-planning action, not an incomplete-feature status"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/sourceStatus.ts",
+      "line": 36,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/dashboard/sourceStatus.ts",
+      "line": 45,
+      "disposition": "B",
+      "justification": "honest 'unavailable (blocked by source)' badge label for a permanently-blocked source"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 142,
+      "disposition": "C",
+      "justification": "opts type field 'placeholder'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 163,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 166,
+      "disposition": "C",
+      "justification": "CSS class (placeholder: text color utility)"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 210,
+      "disposition": "C",
+      "justification": "input placeholder attribute value 'e.g. Figma'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 211,
+      "disposition": "C",
+      "justification": "input placeholder attribute value 'e.g. Senior TPM'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 213,
+      "disposition": "C",
+      "justification": "input placeholder attribute value '185000'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 214,
+      "disposition": "C",
+      "justification": "input placeholder attribute value '0'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 215,
+      "disposition": "C",
+      "justification": "input placeholder attribute value '0'"
+    },
+    {
+      "file": "apps/web/src/components/offers/AddOfferModal.tsx",
+      "line": 218,
+      "disposition": "C",
+      "justification": "input placeholder attribute value 'e.g. Sydney - Hybrid'"
+    },
+    {
+      "file": "apps/web/src/components/sidebar.tsx",
+      "line": 22,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/components/sidebar.tsx",
+      "line": 122,
+      "disposition": "B",
+      "justification": "honest 'Plan unavailable' fallback when subscription plan fetch fails"
+    },
+    {
+      "file": "apps/web/src/components/sidebar.tsx",
+      "line": 162,
+      "disposition": "B",
+      "justification": "honest 'Agent status unavailable' fallback"
+    },
+    {
+      "file": "apps/web/src/components/stories/story-form.tsx",
+      "line": 24,
+      "disposition": "C",
+      "justification": "CSS class (placeholder: text color utility)"
+    },
+    {
+      "file": "apps/web/src/components/stories/story-form.tsx",
+      "line": 73,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/stories/story-form.tsx",
+      "line": 96,
+      "disposition": "C",
+      "justification": "input placeholder attribute (dynamic from label)"
+    },
+    {
+      "file": "apps/web/src/components/stories/story-form.tsx",
+      "line": 112,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/topbar.tsx",
+      "line": 255,
+      "disposition": "C",
+      "justification": "input placeholder attribute"
+    },
+    {
+      "file": "apps/web/src/components/topbar.tsx",
+      "line": 270,
+      "disposition": "C",
+      "justification": "CSS class"
+    },
+    {
+      "file": "apps/web/src/lib/agents-feedback.ts",
+      "line": 88,
+      "disposition": "B",
+      "justification": "honest handling of response.coverLetterUnavailable flag"
+    },
+    {
+      "file": "apps/web/src/lib/agents-feedback.ts",
+      "line": 215,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/lib/agents-feedback.ts",
+      "line": 239,
+      "disposition": "C",
+      "justification": "comment (documents a real regression fix NF-final-closure-002)"
+    },
+    {
+      "file": "apps/web/src/lib/agents-feedback.ts",
+      "line": 297,
+      "disposition": "C",
+      "justification": "comment (documents the same regression fix)"
+    },
+    {
+      "file": "apps/web/src/lib/api/client.ts",
+      "line": 9,
+      "disposition": "C",
+      "justification": "comment documenting removal of unused hardcoded DEMO_CREDENTIALS (GAP-P4-068)"
+    },
+    {
+      "file": "apps/web/src/lib/api/coverLetters.ts",
+      "line": 40,
+      "disposition": "C",
+      "justification": "comment"
+    },
+    {
+      "file": "apps/web/src/lib/api/coverLetters.ts",
+      "line": 43,
+      "disposition": "C",
+      "justification": "TS optional boolean type field"
+    },
+    {
+      "file": "apps/web/src/lib/api/workspaces.ts",
+      "line": 14,
+      "disposition": "C",
+      "justification": "comment (fixture-compat note on a type field)"
+    },
+    {
+      "file": "apps/web/src/lib/api/workspaces.ts",
+      "line": 374,
+      "disposition": "C",
+      "justification": "comment noting a mock was already replaced by a real backend write"
+    },
+    {
+      "file": "apps/web/src/lib/auth/next-auth-options.ts",
+      "line": 19,
+      "disposition": "UNSURE",
+      "justification": "NextAuth credentials provider is live-mounted at /api/auth/[...nextauth] but lookupUser/verifyPassword are permanent stubs (always null/false) since Phase 2 persistence was never wired; however no UI anywhere calls next-auth/react signIn() or posts to /api/auth/* - the real login flow uses POST /auth/login (FastAPI) + localStorage JWT. Reading 1 (D): dead/incomplete parallel auth path deployed to prod, should be finished or removed. Reading 2 (C): not reachable via any UI path a real user would take, so practically inert."
+    },
+    {
+      "file": "apps/web/src/lib/config/legal.ts",
+      "line": 13,
+      "disposition": "C",
+      "justification": "comment documenting anti-fabrication policy for business name default"
+    },
+    {
+      "file": "apps/web/src/lib/config/legal.ts",
+      "line": 17,
+      "disposition": "C",
+      "justification": "comment documenting anti-fabrication policy for ABN"
+    },
+    {
+      "file": "apps/web/src/lib/config/legal.ts",
+      "line": 40,
+      "disposition": "C",
+      "justification": "comment documenting ABN format-validation fallback"
+    },
+    {
+      "file": "apps/web/src/lib/navigation.ts",
+      "line": 49,
+      "disposition": "C",
+      "justification": "comment referencing an unused helper (findNavItemByHref is exported but never called anywhere in app code); dead code, zero runtime effect"
+    }
+  ],
+  "blockers_and_incomplete_features": [
+    {
+      "id": "FE-D-001",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "lines": "918-938 (hits at 928, 1222)",
+      "description": "Notifications tab: 3 toggles honestly disabled with 'Coming soon' banner; no backend delivery mechanism exists",
+      "severity": "MEDIUM",
+      "screen": "/dashboard/settings",
+      "workstream": "NOT MAPPED (no current W-A..W-L covers notification delivery)",
+      "grep_hit": true,
+      "proposed_fix": "Build real notification delivery (candidate: reuse existing Notification Agent Gmail-digest path, apps/api/app/routers/agents.py:319-327) and wire the 3 toggles to persist + gate delivery."
+    },
+    {
+      "id": "FE-D-002",
+      "file": "apps/web/src/app/admin/settings/page.tsx",
+      "lines": "4-116 (hit at 9)",
+      "description": "Email-verification toggle permanently disabled, honestly labeled no-op (ML-audit-emailverify-toggle-001)",
+      "severity": "MEDIUM",
+      "screen": "/admin/settings",
+      "workstream": "W-G",
+      "grep_hit": true,
+      "proposed_fix": "Implement backend enforcement of emailVerificationEnabled on signup/login, then remove disabled from the toggle."
+    },
+    {
+      "id": "FE-D-003",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "lines": "848-869 (INERT-CONFIG-001)",
+      "description": "Auto-apply preference persisted but not enforced by any backend agent code (board_sweep.py always gates regardless)",
+      "severity": "MEDIUM",
+      "screen": "/dashboard/settings (Agent Configuration tab); behavior surfaces on /dashboard/jobs",
+      "workstream": "NOT MAPPED",
+      "grep_hit": false,
+      "proposed_fix": "Wire agentConfig.autoApply into board_sweep.py's gate logic once real unattended auto-apply ships, or remove the toggle until then."
+    },
+    {
+      "id": "FE-D-004",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "lines": "890-912 (INERT-CONFIG-001)",
+      "description": "Match-threshold slider persisted but not read by any backend job-surfacing logic",
+      "severity": "MEDIUM",
+      "screen": "/dashboard/settings (Agent Configuration tab); behavior surfaces on /dashboard/jobs",
+      "workstream": "NOT MAPPED",
+      "grep_hit": false,
+      "proposed_fix": "Wire agentConfig.matchThreshold into the scout/matcher job-surfacing filter, or remove the slider until it does something."
+    },
+    {
+      "id": "FE-D-005",
+      "file": "apps/web/src/components/agents/Orchestration.tsx",
+      "lines": "136-162",
+      "description": "'Pause All' / 'Manual Override' buttons permanently disabled, title='Not yet available'; no bulk-pause/manual-override backend endpoint exists (MV-agent-monitor-001)",
+      "severity": "LOW",
+      "screen": "/dashboard/agents",
+      "workstream": "NOT MAPPED (closest: W-I, not exact fit)",
+      "grep_hit": false,
+      "proposed_fix": "Implement bulk-pause/manual-override backend endpoints, or remove the two dead buttons entirely."
+    }
+  ],
+  "unsure": [
+    {
+      "file": "apps/web/src/lib/auth/next-auth-options.ts",
+      "line": 19,
+      "reading_1": "D - dead/incomplete parallel NextAuth auth path deployed to prod (lookupUser/verifyPassword permanent stubs, Phase 2 persistence never wired); should be finished or removed",
+      "reading_2": "C - not reachable via any UI path a real user would take (no signIn() call site anywhere in apps/web/src; real login flow is POST /auth/login + localStorage JWT), so practically inert",
+      "recommendation": "Architecture-owner decision needed: confirm whether NextAuth is still on roadmap; if not, delete route + next-auth-options.ts + dependency (W-K cleanup candidate); if so, this becomes a real D item."
+    }
+  ],
+  "planned_or_disabled_ui": [
+    {
+      "item": "Notifications tab 3 toggles + Coming soon banner",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx:918-938",
+      "disposition": "D",
+      "table_id": "FE-D-001"
+    },
+    {
+      "item": "Email-verification admin toggle",
+      "file": "apps/web/src/app/admin/settings/page.tsx:108-116",
+      "disposition": "D",
+      "table_id": "FE-D-002"
+    },
+    {
+      "item": "Auto-apply preference (inert)",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx:852-869",
+      "disposition": "D",
+      "table_id": "FE-D-003"
+    },
+    {
+      "item": "Match-threshold slider (inert)",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx:890-912",
+      "disposition": "D",
+      "table_id": "FE-D-004"
+    },
+    {
+      "item": "Pause All / Manual Override buttons",
+      "file": "apps/web/src/components/agents/Orchestration.tsx:144-162",
+      "disposition": "D",
+      "table_id": "FE-D-005"
+    },
+    {
+      "item": "Approval-gate toggle (fail-safe stricter-than-toggle, NOT a defect)",
+      "file": "apps/web/src/app/dashboard/settings/settings-client.tsx:871-888",
+      "disposition": "B",
+      "table_id": null
+    },
+    {
+      "item": "Submission Agent 'Planned' roadmap card",
+      "file": "apps/web/src/components/agents/AgentConfigGrid.tsx (AGENT_CATALOG backend=None entry, apps/api/app/routers/agents.py:189-191)",
+      "disposition": "B",
+      "table_id": null
+    }
+  ],
+  "coverage": {
+    "complete": true,
+    "files_covered": [
+      "apps/web/src/app/admin/settings/page.tsx",
+      "apps/web/src/app/admin/users/page.tsx",
+      "apps/web/src/app/dashboard/agents/page.tsx",
+      "apps/web/src/app/dashboard/cover-letters/page.tsx",
+      "apps/web/src/app/dashboard/email/page.tsx",
+      "apps/web/src/app/dashboard/interviews/page.tsx",
+      "apps/web/src/app/dashboard/jobs/page.tsx",
+      "apps/web/src/app/dashboard/networking/lib.ts",
+      "apps/web/src/app/dashboard/page.tsx",
+      "apps/web/src/app/dashboard/resume/page.tsx",
+      "apps/web/src/app/dashboard/settings/settings-client.tsx",
+      "apps/web/src/app/login/page.tsx",
+      "apps/web/src/app/signup/page.tsx",
+      "apps/web/src/components/agents/AgentConfigGrid.tsx",
+      "apps/web/src/components/agents/AgentModelPicker.tsx",
+      "apps/web/src/components/agents/AgentStats.tsx",
+      "apps/web/src/components/agents/ModelPicker.tsx",
+      "apps/web/src/components/agents/Orchestration.tsx",
+      "apps/web/src/components/agents/ProviderConfigModal.tsx",
+      "apps/web/src/components/agents/api.ts",
+      "apps/web/src/components/agents/logic.ts",
+      "apps/web/src/components/analytics/MarketPulse.tsx",
+      "apps/web/src/components/cover-letters/ActionsPanel.tsx",
+      "apps/web/src/components/dashboard/feed.ts",
+      "apps/web/src/components/dashboard/sourceStatus.ts",
+      "apps/web/src/components/offers/AddOfferModal.tsx",
+      "apps/web/src/components/sidebar.tsx",
+      "apps/web/src/components/stories/story-form.tsx",
+      "apps/web/src/components/topbar.tsx",
+      "apps/web/src/lib/agents-feedback.ts",
+      "apps/web/src/lib/api/client.ts",
+      "apps/web/src/lib/api/coverLetters.ts",
+      "apps/web/src/lib/api/workspaces.ts",
+      "apps/web/src/lib/auth/next-auth-options.ts",
+      "apps/web/src/lib/config/legal.ts",
+      "apps/web/src/lib/navigation.ts"
+    ],
+    "grep_hits_classified": 128,
+    "additional_item2_finds": 5,
+    "note": "All 36 frontend files / 128 grep hits classified. Item-2 sweep for disabled/Coming-Soon/planned UI performed separately and folded into blockers_and_incomplete_features (FE-D-003/004/005) plus planned_or_disabled_ui."
+  }
+}

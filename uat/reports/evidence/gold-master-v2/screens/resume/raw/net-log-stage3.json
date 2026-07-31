@@ -1,0 +1,80 @@
+[
+  {
+    "method": "POST",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "ts": "2026-07-31T00:24:57.572Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:24:57.832Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "ts": "2026-07-31T00:24:57.842Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "ts": "2026-07-31T00:24:58.003Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "ts": "2026-07-31T00:24:58.014Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:24:58.015Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+    "status": 200,
+    "ts": "2026-07-31T00:24:58.093Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.330Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.338Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.483Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.501Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.515Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+    "status": 200,
+    "ts": "2026-07-31T00:24:59.570Z"
+  }
+]

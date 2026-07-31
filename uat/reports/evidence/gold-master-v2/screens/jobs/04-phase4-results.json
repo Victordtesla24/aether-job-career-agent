@@ -1,0 +1,23 @@
+{
+  "apply_step2_visible_initially": true,
+  "review_apply_btn_exists": 1,
+  "gate_visible": true,
+  "gate_text": "\u26a0\ufe0fSubmit application to Twilio?Your application for Staff Impartner Product Owner, PRM will be recorded as Applied with your tailored resume attached. Complete the submission on Greenhouse \u2014 open the job posting \u2197.\u2715RoleStaff Impartner Product Owner, PRMCompanyTwilioMatch score44How well this posting matches your resume \u2014 a 0\u2013100 blend of keyword, semantic and experience fit.Cancel\u2708 Submit Application",
+  "apply_post_fired_on_cancel": false,
+  "gate_visible_after_cancel": 0,
+  "selected_count_after_select_all": "6 selected",
+  "bulk_apply_disabled": null,
+  "bulk_gate_visible": true,
+  "bulk_gate_text": "\u26a0\ufe0fSubmit 6 applications without tailoring?These jobs will be recorded as Applied using your current, untailored resume \u2014 bulk submission does not run per-job tailoring. This action cannot be undone.\u2715Staff Impartner Product Owner, PRMTwilioOnboarding Project ManagerBlockLead Product ManagerCareers at EucalyptusProgram Manager, Sales Operations and TrainingPelotonInnovation Product Manager, AustraliaharveyEnablement Program Manager, APACOktaCancel\u2708 Submit 6 Applications",
+  "bulk_apply_post_fired_on_cancel": false,
+  "save_initial_pressed": "false",
+  "save_post_requests": [],
+  "save_pressed_after_click": "true",
+  "save_pressed_after_reload": "true",
+  "save_restored_state": "false",
+  "detail_source_link_exists": 1,
+  "detail_source_link_href": "https://job-boards.greenhouse.io/twilio/jobs/8088442",
+  "detail_source_link_target": "_blank",
+  "card_source_link_exists": 6,
+  "card_source_link_href": "https://job-boards.greenhouse.io/twilio/jobs/8088442"
+}

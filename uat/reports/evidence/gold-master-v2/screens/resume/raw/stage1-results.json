@@ -1,0 +1,316 @@
+{
+  "loginUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+  "tokenFirst8": "eyJhbGci",
+  "resumeUrl": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+  "elementInventory": [
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Dashboard",
+      "href": "/dashboard",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Jobs",
+      "href": "/dashboard/jobs",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Resume Studio",
+      "href": "/dashboard/resume",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Cover Letter Studio",
+      "href": "/dashboard/cover-letters",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Story Bank",
+      "href": "/dashboard/stories",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Applications",
+      "href": "/dashboard/applications",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Interview Center",
+      "href": "/dashboard/interviews",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Networking",
+      "href": "/dashboard/networking",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Email Center",
+      "href": "/dashboard/email",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Agents",
+      "href": "/dashboard/agents",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Analytics",
+      "href": "/dashboard/analytics",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Offers",
+      "href": "/dashboard/offers",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Settings",
+      "href": "/dashboard/settings",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Manage Agents",
+      "href": "/dashboard/agents",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Privacy Policy",
+      "href": "/privacy-policy",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Terms",
+      "href": "/terms",
+      "disabled": false
+    },
+    {
+      "tag": "INPUT",
+      "testid": null,
+      "designid": null,
+      "text": "",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": "m-notif-md02",
+      "text": "",
+      "href": "/dashboard/approvals",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": null,
+      "designid": null,
+      "text": "PRProbeBA/Project Manager/Sc…",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "SELECT",
+      "testid": "tailor-job-select",
+      "designid": null,
+      "text": "Select a job to tailor for…Staff Impartner Product Owner, PR",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "run-tailor-btn",
+      "designid": null,
+      "text": "Tailor Resume",
+      "href": null,
+      "disabled": true
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6930/07/2026Tailored — Senior Product Manager @ Deputy",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6829/07/2026Tailored — Staff Impartner Product Owner, PRM @",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6729/07/2026Tailored — Senior Product Manager, Strategic Or",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6626/07/2026Tailored — Product Manager - Marketplace @ supa",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6526/07/2026Tailored — Senior Legal Analyst & Litigation Pr",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6426/07/2026Tailored — Product Manager, Credit Automation @",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6326/07/2026Tailored — Onboarding Project Manager @ BlockPe",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "resume-version-card",
+      "designid": null,
+      "text": "v6225/07/2026Tailored — Creative Project Manager @ MUSEUM OF",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "testid": "versions-show-more",
+      "designid": null,
+      "text": "Show more (61 older)",
+      "href": null,
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Home",
+      "href": "/dashboard",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Jobs",
+      "href": "/dashboard/jobs",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Apps",
+      "href": "/dashboard/applications",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Agents",
+      "href": "/dashboard/agents",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "testid": null,
+      "designid": null,
+      "text": "Profile",
+      "href": "/dashboard/settings",
+      "disabled": false
+    }
+  ],
+  "versionCardCount": 8,
+  "atsPanelVisibleOnFirstVersion": true,
+  "atsOverallTextFirstVersion": "40.7",
+  "downloadFilename": "resume-c91562a8.pdf",
+  "downloadSavedSize": 189227,
+  "netCallsDuringDownload": [
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c91562a854d0eb44bd070acdd/download",
+      "status": 200,
+      "ts": "2026-07-31T00:15:47.080Z"
+    }
+  ],
+  "showMoreButtonPresent": true,
+  "versionCardCountAfterShowMore": 16,
+  "jobOptionsCount": 21,
+  "jobOptionsSample": [
+    "Select a job to tailor for…",
+    "Staff Impartner Product Owner, PRM · Twilio",
+    "Principal Business Technology Product Manager · Samsara",
+    "Program Manager, Sales Operations and Training · Peloton",
+    "Enablement Program Manager, APAC · Okta",
+    "Product Manager - Marketplace · supabase",
+    "Program Manager, Security GRC · Stripe",
+    "Innovation Product Manager, Australia · harvey",
+    "Senior Professional Services Project Manager · GitLab",
+    "Product Manager · 360Dialog"
+  ],
+  "tailorBtnDisabledWhenEmpty": true
+}

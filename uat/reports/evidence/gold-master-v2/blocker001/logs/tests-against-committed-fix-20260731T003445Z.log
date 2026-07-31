@@ -1,0 +1,266 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/abacus-python/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.2
+collecting ... collected 12 items
+
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[admin123] PASSED [  8%]
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[admin] PASSED [ 16%]
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[password] PASSED [ 25%]
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[changeme] PASSED [ 33%]
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash FAILED [ 41%]
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_logs_critical_diagnostic_naming_env_var_only FAILED [ 50%]
+tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[not-a-bcrypt-hash-at-all] FAILED [ 58%]
+tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[$1$abcdefgh$abcdefghijklmnopqrstuv] FAILED [ 66%]
+tests/test_blocker001_admin_overpermission.py::test_self_cancel_config_deprivileges_instead_of_raising FAILED [ 75%]
+tests/test_blocker001_admin_overpermission.py::test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation FAILED [ 83%]
+tests/test_blocker001_admin_overpermission.py::test_healthy_credential_still_grants_admin_and_boot_succeeds FAILED [ 91%]
+tests/test_blocker001_admin_overpermission.py::test_non_admin_gets_403_on_every_admin_route_pin PASSED [100%]
+
+=================================== FAILURES ===================================
+_ test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash _
+tests/test_blocker001_admin_overpermission.py:266: in test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash
+    apply_admin_rotation()
+app/repositories/admin.py:971: in apply_admin_rotation
+    _guard_admin_credential_strength(email, pw_hash)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   NameError: name '_guard_admin_credential_strength' is not defined
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+----------------------------- Captured stderr call -----------------------------
+CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: refusing to grant admin privilege to 'owner-34c24c54@aether.io' — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'. An admin account can read every user's email address, change spend caps and issue real refunds; a guessable password on it is a full compromise of the platform. Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique password and restart.
+------------------------------ Captured log call -------------------------------
+CRITICAL app.repositories.admin:admin.py:249 CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: refusing to grant admin privilege to 'owner-34c24c54@aether.io' — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'. An admin account can read every user's email address, change spend caps and issue real refunds; a guessable password on it is a full compromise of the platform. Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique password and restart.
+______ test_weak_credential_logs_critical_diagnostic_naming_env_var_only _______
+tests/test_blocker001_admin_overpermission.py:316: in test_weak_credential_logs_critical_diagnostic_naming_env_var_only
+    apply_admin_rotation()
+app/repositories/admin.py:971: in apply_admin_rotation
+    ???
+E   NameError: name '_guard_admin_credential_strength' is not defined
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+----------------------------- Captured stderr call -----------------------------
+CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: refusing to grant admin privilege to 'owner-e8ff8122@aether.io' — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'. An admin account can read every user's email address, change spend caps and issue real refunds; a guessable password on it is a full compromise of the platform. Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique password and restart.
+------------------------------ Captured log call -------------------------------
+CRITICAL app.repositories.admin:admin.py:249 CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: refusing to grant admin privilege to 'owner-e8ff8122@aether.io' — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'. An admin account can read every user's email address, change spend caps and issue real refunds; a guessable password on it is a full compromise of the platform. Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique password and restart.
+_ test_malformed_hash_does_not_abort_boot_and_deprivileges[not-a-bcrypt-hash-at-all] _
+tests/test_blocker001_admin_overpermission.py:370: in test_malformed_hash_does_not_abort_boot_and_deprivileges
+    assert row is not None and row["isAdmin"] is False, (
+E   AssertionError: R2/C3 VIOLATION: malformed-hash config did not de-privilege the configured admin row (already isAdmin=true from a previous boot): {'id': 'c329b188a4390aea59b08540d', 'email': 'owner-308566bc@aether.io', 'username': None, 'isAdmin': True, 'passwordHash': '$2b$12$vq0UFuXgm1RjB0iRBfeyceK2QYlA6zAu.SKFYHdCoGKXbSdlz6ZXK'}
+E   assert ({'id': 'c329b188a4390aea59b08540d', 'email': 'owner-308566bc@aether.io', 'username': None, 'isAdmin': True, ...} is not None and True is False)
+----------------------------- Captured stderr call -----------------------------
+CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: AETHER_ADMIN_PASSWORD_HASH is not a bcrypt hash (expected one of $2a$, $2b$, $2x$, $2y$). It looks like a PLAINTEXT password was pasted into the hash variable — that would both break admin login and bypass the known-weak-password check. Generate it with: python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('<your password>'))"
+WARNING: §14.7 admin credential rotation skipped at startup: name '_guard_admin_credential_strength' is not defined
+------------------------------ Captured log call -------------------------------
+CRITICAL app.repositories.admin:admin.py:249 CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: AETHER_ADMIN_PASSWORD_HASH is not a bcrypt hash (expected one of $2a$, $2b$, $2x$, $2y$). It looks like a PLAINTEXT password was pasted into the hash variable — that would both break admin login and bypass the known-weak-password check. Generate it with: python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('<your password>'))"
+_ test_malformed_hash_does_not_abort_boot_and_deprivileges[$1$abcdefgh$abcdefghijklmnopqrstuv] _
+tests/test_blocker001_admin_overpermission.py:370: in test_malformed_hash_does_not_abort_boot_and_deprivileges
+    assert row is not None and row["isAdmin"] is False, (
+E   AssertionError: R2/C3 VIOLATION: malformed-hash config did not de-privilege the configured admin row (already isAdmin=true from a previous boot): {'id': 'cbabd6ce61b38c83e86479ede', 'email': 'owner-496de04b@aether.io', 'username': None, 'isAdmin': True, 'passwordHash': '$2b$12$QB3xw.LuUaY1CDDkiBWPfetEnf5MNdDffFM.HwaUIF7eTiTYnnpJ.'}
+E   assert ({'id': 'cbabd6ce61b38c83e86479ede', 'email': 'owner-496de04b@aether.io', 'username': None, 'isAdmin': True, ...} is not None and True is False)
+----------------------------- Captured stderr call -----------------------------
+CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: AETHER_ADMIN_PASSWORD_HASH is not a bcrypt hash (expected one of $2a$, $2b$, $2x$, $2y$). It looks like a PLAINTEXT password was pasted into the hash variable — that would both break admin login and bypass the known-weak-password check. Generate it with: python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('<your password>'))"
+WARNING: §14.7 admin credential rotation skipped at startup: name '_guard_admin_credential_strength' is not defined
+------------------------------ Captured log call -------------------------------
+CRITICAL app.repositories.admin:admin.py:249 CRITICAL: DEGRADED ADMIN CREDENTIAL — the API is starting NORMALLY, but administrator privilege has been REVOKED from the configured operator row and the reserved demo login identifier is REJECTED, until an operator fixes this. Every /admin/* route will return 403. The account's password is NOT changed: ordinary login, the scheduled discovery cron and all normal users are unaffected. BLOCKER-001: AETHER_ADMIN_PASSWORD_HASH is not a bcrypt hash (expected one of $2a$, $2b$, $2x$, $2y$). It looks like a PLAINTEXT password was pasted into the hash variable — that would both break admin login and bypass the known-weak-password check. Generate it with: python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('<your password>'))"
+___________ test_self_cancel_config_deprivileges_instead_of_raising ____________
+tests/test_blocker001_admin_overpermission.py:176: in _assert_boot_succeeds
+    with TestClient(app) as booted:
+/opt/abacus-python/lib/python3.12/site-packages/starlette/testclient.py:688: in __enter__
+    portal.call(self.wait_startup)
+/opt/abacus-python/lib/python3.12/site-packages/anyio/from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/abacus-python/lib/python3.12/site-packages/anyio/from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/starlette/testclient.py:723: in wait_startup
+    await receive()
+/opt/abacus-python/lib/python3.12/site-packages/starlette/testclient.py:714: in receive
+    self.task.result()
+/usr/lib/python3.12/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/abacus-python/lib/python3.12/site-packages/anyio/from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/starlette/testclient.py:704: in lifespan
+    await self.app(scope, self.stream_receive.receive, self.stream_send.send)
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py:151: in __call__
+    await self.app(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/cors.py:80: in __call__
+    await self.app(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/exceptions.py:49: in __call__
+    await self.app(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:2677: in app
+    await self.lifespan(scope, receive, send)
+/opt/abacus-python/lib/python3.12/site-packages/starlette/routing.py:638: in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:233: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+/usr/lib/python3.12/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+app/main.py:205: in _lifespan
+    apply_admin_rotation()
+app/repositories/admin.py:908: in apply_admin_rotation
+    ???
+E   app.repositories.admin.AdminRotationConfigError: BLOCKER-001: AETHER_ADMIN_EMAIL is set to the seeded demo admin identity ('admin@aether.local'). The §14.7 rotation demotes that identity and would immediately regrant it, so the two writes cancel out and the seeded demo credential ends up with isAdmin=true. Point AETHER_ADMIN_EMAIL at a real operator mailbox that is not the demo account.
+
+During handling of the above exception, another exception occurred:
+tests/test_blocker001_admin_overpermission.py:425: in test_self_cancel_config_deprivileges_instead_of_raising
+    _assert_boot_succeeds(app)
+tests/test_blocker001_admin_overpermission.py:179: in _assert_boot_succeeds
+    pytest.fail(
+E   Failed: C1/R1-R3 VIOLATION: app startup raised AdminRotationConfigError: BLOCKER-001: AETHER_ADMIN_EMAIL is set to the seeded demo admin identity ('admin@aether.local'). The §14.7 rotation demotes that identity and would immediately regrant it, so the two writes cancel out and the seeded demo credential ends up with isAdmin=true. Point AETHER_ADMIN_EMAIL at a real operator mailbox that is not the demo account. — production would crash-loop (ADR-BLOCKER-001 §2 decisive finding).
+----------------------------- Captured stderr call -----------------------------
+FATAL: §14.7 admin credential rotation is configured to demote and regrant the same identity — refusing to start. See below.
+__ test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation ___
+tests/test_blocker001_admin_overpermission.py:493: in test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation
+    assert not offending, (
+E   AssertionError: D VIOLATION (ADR §2.1 / condition C6): apply_admin_rotation() contains a `raise` statement at source-line offset(s) [141] AFTER its last `conn.commit()` at offset 134 — a code path exists where privilege is durably written to the database and the caller is then told the operation failed. Evaluate every post-condition BEFORE committing, not after.
+E     --- offending lines ---
+E     141:             raise AdminRotationConfigError(
+E   assert not [141]
+_________ test_healthy_credential_still_grants_admin_and_boot_succeeds _________
+tests/test_blocker001_admin_overpermission.py:536: in test_healthy_credential_still_grants_admin_and_boot_succeeds
+    assert row is not None and row["isAdmin"] is True, (
+E   AssertionError: E VIOLATION: healthy, strong credential did not grant isAdmin=true — None
+E   assert (None is not None)
+----------------------------- Captured stderr call -----------------------------
+WARNING: §14.7 admin credential rotation skipped at startup: name '_guard_admin_credential_strength' is not defined
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_blocker001_admin_overpermission.py::test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash
+FAILED tests/test_blocker001_admin_overpermission.py::test_weak_credential_logs_critical_diagnostic_naming_env_var_only
+FAILED tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[not-a-bcrypt-hash-at-all]
+FAILED tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[$1$abcdefgh$abcdefghijklmnopqrstuv]
+FAILED tests/test_blocker001_admin_overpermission.py::test_self_cancel_config_deprivileges_instead_of_raising
+FAILED tests/test_blocker001_admin_overpermission.py::test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation
+FAILED tests/test_blocker001_admin_overpermission.py::test_healthy_credential_still_grants_admin_and_boot_succeeds
+=================== 7 failed, 5 passed, 6 warnings in 17.61s ===================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

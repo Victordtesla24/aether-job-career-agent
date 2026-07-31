@@ -1,0 +1,52 @@
+{
+  "steps": [
+    {
+      "step": "adversarial-save",
+      "apiCalls": [
+        {
+          "method": "PUT",
+          "url": "/api/workspaces/settings",
+          "status": 422,
+          "ts": "2026-07-31T00:56:34.390Z"
+        }
+      ],
+      "bodySnippet": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nFree\n\n0/5 runs this period\n\nAgents Idle\n\n19 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood morning, Gold\n\nFri, 31 July\n\nGU\nGold U.\nQA Tester Probe\nSettings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\n\nFull name must be 120 characters or fewer. Location must be 120 cha"
+    }
+  ],
+  "afterReloadInputs": [
+    {
+      "value": ""
+    },
+    {
+      "value": "Gold Master V2 Test User",
+      "name": "GMGold Master V2 Test UserQA Tester Probe"
+    },
+    {
+      "value": "gm2-nonadmin-1785454990@example.com",
+      "name": "GMGold Master V2 Test UserQA Tester Probe"
+    },
+    {
+      "value": "QA Tester Probe",
+      "name": "GMGold Master V2 Test UserQA Tester Probe"
+    },
+    {
+      "value": "Sydney, AU",
+      "name": "GMGold Master V2 Test UserQA Tester Probe"
+    },
+    {
+      "value": "",
+      "name": "ProfileGMGold Master V2 Test UserQA Tester ProbeFull nameEmailTarget roleLocation"
+    },
+    {
+      "value": ""
+    },
+    {
+      "value": "",
+      "name": "GitHub usernameNot configured"
+    },
+    {
+      "value": "80",
+      "name": "Approval gateRequire explicit approval for anything that leaves the systemAlways enforced today for tailor, cover letter and email-agent runs, regardless of this preference."
+    }
+  ]
+}

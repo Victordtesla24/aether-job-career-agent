@@ -1,0 +1,55 @@
+{
+  "v2_card_buttons_all": [
+    "Staff Impartner Product Owner, PRM",
+    "Onboarding Project Manager",
+    "Lead Product Manager",
+    "Program Manager, Sales Operations and Training",
+    "Innovation Product Manager, Australia",
+    "Enablement Program Manager, APAC"
+  ],
+  "v2_per_card_apply_present": false,
+  "v2_source_filter_options": [
+    {
+      "text": "All sources",
+      "disabled": false
+    },
+    {
+      "text": "Greenhouse",
+      "disabled": false
+    },
+    {
+      "text": "Lever",
+      "disabled": false
+    },
+    {
+      "text": "Remotive",
+      "disabled": false
+    },
+    {
+      "text": "RemoteOK",
+      "disabled": false
+    },
+    {
+      "text": "Seek.com.au (unavailable)",
+      "disabled": true
+    },
+    {
+      "text": "LinkedIn AU (unavailable)",
+      "disabled": true
+    },
+    {
+      "text": "Indeed AU (unavailable)",
+      "disabled": true
+    }
+  ],
+  "v2_scores": [
+    44,
+    43,
+    38,
+    36,
+    34,
+    33
+  ],
+  "v2_all_scores_below_85": true,
+  "v2_nonadmin_paywall_shown": true
+}

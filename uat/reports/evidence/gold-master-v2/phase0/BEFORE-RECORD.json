@@ -1,0 +1,313 @@
+[
+  {
+    "route": "/login",
+    "slug": "login",
+    "screenshot": "before/login.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve",
+        "failure": "net::ERR_ABORTED"
+      }
+    ],
+    "description": "A"
+  },
+  {
+    "route": "/signup",
+    "slug": "signup",
+    "screenshot": "before/signup.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "A"
+  },
+  {
+    "route": "/forgot-password",
+    "slug": "forgot-password",
+    "screenshot": "before/forgot-password.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1at5c",
+        "failure": "net::ERR_ABORTED"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1at5c",
+        "failure": "net::ERR_ABORTED"
+      }
+    ],
+    "description": "A"
+  },
+  {
+    "route": "/pricing",
+    "slug": "pricing",
+    "screenshot": "before/pricing.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=6i8d7",
+        "failure": "net::ERR_ABORTED"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=6i8d7",
+        "failure": "net::ERR_ABORTED"
+      }
+    ],
+    "description": "A"
+  },
+  {
+    "route": "/terms",
+    "slug": "terms",
+    "screenshot": "before/terms.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/privacy-policy",
+    "slug": "privacy-policy",
+    "screenshot": "before/privacy-policy.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard",
+    "slug": "dashboard",
+    "screenshot": "before/dashboard.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/agents",
+    "slug": "dashboard-agents",
+    "screenshot": "before/dashboard-agents.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/jobs",
+    "slug": "dashboard-jobs",
+    "screenshot": "before/dashboard-jobs.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/applications",
+    "slug": "dashboard-applications",
+    "screenshot": "before/dashboard-applications.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/approvals",
+    "slug": "dashboard-approvals",
+    "screenshot": "before/dashboard-approvals.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/cover-letters",
+    "slug": "dashboard-cover-letters",
+    "screenshot": "before/dashboard-cover-letters.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/resume",
+    "slug": "dashboard-resume",
+    "screenshot": "before/dashboard-resume.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/stories",
+    "slug": "dashboard-stories",
+    "screenshot": "before/dashboard-stories.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/email",
+    "slug": "dashboard-email",
+    "screenshot": "before/dashboard-email.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/interviews",
+    "slug": "dashboard-interviews",
+    "screenshot": "before/dashboard-interviews.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/offers",
+    "slug": "dashboard-offers",
+    "screenshot": "before/dashboard-offers.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/networking",
+    "slug": "dashboard-networking",
+    "screenshot": "before/dashboard-networking.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/analytics",
+    "slug": "dashboard-analytics",
+    "screenshot": "before/dashboard-analytics.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/dashboard/settings",
+    "slug": "dashboard-settings",
+    "screenshot": "before/dashboard-settings.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether"
+  },
+  {
+    "route": "/admin",
+    "slug": "admin",
+    "screenshot": "before/admin.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/health",
+    "slug": "admin-health",
+    "screenshot": "before/admin-health.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/settings",
+    "slug": "admin-settings",
+    "screenshot": "before/admin-settings.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/users",
+    "slug": "admin-users",
+    "screenshot": "before/admin-users.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/admin/users/cccd35dcf1f2a57e715bf821b?_rsc=12ojy",
+        "failure": "net::ERR_ABORTED"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/admin/users/c6c8d0163d973a8048e7e33b8?_rsc=12ojy",
+        "failure": "net::ERR_ABORTED"
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/admin/users/c08c4e7416692b70e268170fd?_rsc=12ojy",
+        "failure": "net::ERR_ABORTED"
+      }
+    ],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/users/1",
+    "slug": "admin-users-id",
+    "screenshot": "before/admin-users-id.png",
+    "status": 200,
+    "consoleMessages": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 404 ()"
+      }
+    ],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/spend",
+    "slug": "admin-spend",
+    "screenshot": "before/admin-spend.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  },
+  {
+    "route": "/admin/audit-log",
+    "slug": "admin-audit-log",
+    "screenshot": "before/admin-audit-log.png",
+    "status": 200,
+    "consoleMessages": [],
+    "pageErrors": [],
+    "networkErrors": [],
+    "description": "Aether Admin"
+  }
+]

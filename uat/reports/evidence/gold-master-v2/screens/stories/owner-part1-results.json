@@ -1,0 +1,310 @@
+{
+  "consoleErrors": [],
+  "pageErrors": [],
+  "networkFailures": [],
+  "networkLog": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+      "status": 200,
+      "method": "POST",
+      "time": "2026-07-31T00:39:02.073Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.394Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.429Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.518Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.555Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.600Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.600Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.688Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:02.690Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories?category=Leadership",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:10.137Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:10.137Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:11.624Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories?category=Delivery",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:11.625Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories?category=Technical",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:12.449Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:12.449Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories?category=Risk%20%26%20Compliance",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:13.974Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:13.974Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:15.477Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:15.480Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/c4923cf666dd909e4c22f02ba",
+      "status": 200,
+      "method": "PUT",
+      "time": "2026-07-31T00:39:16.053Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.448Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.459Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.589Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.601Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.618Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.659Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.764Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:17.788Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/c4923cf666dd909e4c22f02ba",
+      "status": 200,
+      "method": "PUT",
+      "time": "2026-07-31T00:39:19.564Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:20.842Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:20.865Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:20.975Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:20.987Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:21.018Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:21.042Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories/stats",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:21.137Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+      "status": 200,
+      "method": "GET",
+      "time": "2026-07-31T00:39:21.147Z"
+    }
+  ],
+  "notes": {
+    "postLoginUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "cardCountOnPage": 36,
+    "cardsSample": [
+      {
+        "category": "Technical",
+        "title": "Analytics Dashboard for Sprint Velocity & LLM-Retrospectives"
+      },
+      {
+        "category": "Leadership",
+        "title": "Cloud-Native Core Banking Transformation – 30% Faster Delivery"
+      },
+      {
+        "category": "Risk & Compliance",
+        "title": "Executive Re-Baselining of Test Capacity for Payday Super"
+      },
+      {
+        "category": "Leadership",
+        "title": "Recovery of Infeasible SIT Window for Payday Super Reform"
+      },
+      {
+        "category": "Risk & Compliance",
+        "title": "Architecting COBOL/Mainframe Test Evidence Automation for 8 Squads"
+      },
+      {
+        "category": "Technical",
+        "title": "JIRA Analytics Dashboard for Sprint Velocity & Retrospective Insights"
+      },
+      {
+        "category": "Leadership",
+        "title": "JIRA Analytics Dashboard for Agile Team Insights"
+      },
+      {
+        "category": "Technical",
+        "title": "COBOL/Mainframe Test Evidence Automation at ATO"
+      },
+      {
+        "category": "Risk & Compliance",
+        "title": "Executive Re-baselining of Test Capacity for Payday Super Program"
+      },
+      {
+        "category": "Leadership",
+        "title": "JIRA Analytics Dashboard for Agile Team Visibility"
+      }
+    ],
+    "statStripText": "Total Stories\n36\nQuantified w/ Metrics\n34\nStarred\n6\nCategories Covered\n3",
+    "filter_all": {
+      "ariaPressed": "true",
+      "visibleCount": 36
+    },
+    "filter_leadership": {
+      "ariaPressed": "true",
+      "visibleCount": 11
+    },
+    "filter_delivery": {
+      "ariaPressed": "true",
+      "visibleCount": 0
+    },
+    "filter_technical": {
+      "ariaPressed": "true",
+      "visibleCount": 14
+    },
+    "filter_risk-compliance": {
+      "ariaPressed": "true",
+      "visibleCount": 11
+    },
+    "starToggleTest": {
+      "beforeState": "false",
+      "afterState": "true",
+      "afterReload": "true",
+      "finalStateAfterRevert": "false"
+    },
+    "insertButtonTest": {
+      "btnTextAfter": "Copied",
+      "clipboardTextSnippet": "Analytics Dashboard for Sprint Velocity & LLM-Retrospectives\nSituation: Delivery teams lacked visibility into sprint vel"
+    },
+    "emptyFormSubmit": {
+      "stillOnForm": true,
+      "validationMessage": "Please fill out this field."
+    }
+  }
+}

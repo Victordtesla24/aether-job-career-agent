@@ -1,0 +1,321 @@
+{
+  "timestamp": "2026-07-30T00:00:00Z",
+  "repository": "/home/ubuntu/github_repos/aether-job-career-agent",
+  "branch": "main",
+  "production_url": "https://5cb5f0620.abacusai.cloud",
+  "phase": "0",
+  "step": "5d",
+  "features": [
+    {
+      "id": 1,
+      "name": "Seek.com.au Sourcing",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "discovery.service/.timer not deployed",
+        "AETHER_ENABLE_SEEK default OFF (ToS compliance gate)"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/services/discovery/seek_adapter.py",
+          "line": 286,
+          "description": "SeekAdapter class — Firecrawl scraper"
+        },
+        {
+          "path": "apps/api/app/services/discovery/adapter_registry.py",
+          "line": 38,
+          "description": "COMPLIANCE_GATED mapping for Seek"
+        },
+        {
+          "path": "apps/api/app/services/discovery/adapter_registry.py",
+          "line": 72,
+          "description": "build_live_registry() — conditional inclusion"
+        },
+        {
+          "path": "apps/api/app/services/discovery/adapter_registry.py",
+          "line": 101,
+          "description": "source_availability() — API endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/jobs.py",
+          "line": 35,
+          "description": "_validate_source_filter() — validation logic"
+        },
+        {
+          "path": "scripts/discovery_cron.sh",
+          "line": 1,
+          "description": "Discovery cron script (exists but service/timer not deployed)"
+        }
+      ],
+      "tests": [
+        "apps/api/tests/test_gap_p6_sourcing.py",
+        "apps/api/tests/test_source_availability.py",
+        "apps/api/tests/test_job_discovery.py"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "ATS Scoring",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "API response exposure incomplete",
+        "No UI rendering of score chip"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/services/ats_engine.py",
+          "line": 140,
+          "description": "ATSEngine class — score() method"
+        },
+        {
+          "path": "apps/api/app/services/ats_engine.py",
+          "line": 92,
+          "description": "ATSScore dataclass definition"
+        },
+        {
+          "path": "apps/api/app/services/ats_engine.py",
+          "line": 29,
+          "description": "REVIEW_THRESHOLD = 60.0"
+        }
+      ],
+      "tests": [
+        "apps/api/tests/test_ats_engine.py",
+        "apps/api/tests/test_gap_p6_tailoring_ats.py"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Story Bank",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "No relevance scoring computed",
+        "Dedup fingerprinting present but not verified in tests"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/routers/stories.py",
+          "line": 138,
+          "description": "list_stories() endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/stories.py",
+          "line": 159,
+          "description": "create_story() with contentHash dedup"
+        },
+        {
+          "path": "apps/api/app/routers/stories.py",
+          "line": 28,
+          "description": "contentHash field — G-P4-STORY-DEDUP-004"
+        },
+        {
+          "path": "apps/api/app/routers/stories.py",
+          "line": 79,
+          "description": "_derive_category() — story categorization"
+        }
+      ],
+      "tests": [
+        "apps/api/tests/test_story_bank.py",
+        "apps/api/tests/test_story_bank_enrichment.py",
+        "apps/api/tests/test_story_dedup.py"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Applications Stage-Move",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "UI drag affordance incomplete",
+        "No React DnD library calls verified"
+      ],
+      "key_files": [
+        {
+          "path": "apps/web/src/components/applications/tracker-lib.ts",
+          "line": 44,
+          "description": "STAGE_DEFS — 8-stage pipeline definition"
+        },
+        {
+          "path": "apps/web/src/components/applications/tracker-lib.ts",
+          "line": 104,
+          "description": "APP_STAGE mapping"
+        },
+        {
+          "path": "apps/api/app/routers/applications.py",
+          "line": 255,
+          "description": "move_pipeline_job() endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/applications.py",
+          "line": 238,
+          "description": "_validate_stage() — stage key validation"
+        }
+      ],
+      "tests": [
+        "apps/web/src/components/applications/__tests__/tracker-api.test.ts"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Approvals",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "UI components not exhaustively verified",
+        "Delete affordance present but not fully tested"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/routers/approvals.py",
+          "line": 80,
+          "description": "list_approvals() endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/approvals.py",
+          "line": 113,
+          "description": "purge_expired_approvals() — 48h expiry window"
+        },
+        {
+          "path": "apps/api/app/routers/approvals.py",
+          "line": 140,
+          "description": "delete_approval() — hard delete, not soft"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "id": 6,
+      "name": "Admin",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "Admin login button absent from main UI navigation",
+        "Admin pages URL-accessible but not discoverable"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/routers/admin.py",
+          "line": 40,
+          "description": "admin_health() endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/admin.py",
+          "line": 51,
+          "description": "admin_list_users() endpoint"
+        },
+        {
+          "path": "apps/api/app/routers/admin.py",
+          "line": 104,
+          "description": "admin_set_spend_cap() endpoint"
+        },
+        {
+          "path": "apps/web/src/app/admin/page.tsx",
+          "line": 1,
+          "description": "Admin home page"
+        }
+      ],
+      "tests": [
+        "apps/web/src/app/admin/users/[id]/__tests__/ML-admindetail-001.test.tsx"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Jobs Apply",
+      "verdict": "COMPLETE",
+      "gaps": [],
+      "key_files": [
+        {
+          "path": "apps/api/app/routers/jobs.py",
+          "line": 446,
+          "description": "apply_to_job() endpoint"
+        },
+        {
+          "path": "apps/web/src/app/dashboard/jobs/page.tsx",
+          "line": 558,
+          "description": "Apply button click handler"
+        },
+        {
+          "path": "apps/web/src/app/dashboard/jobs/page.tsx",
+          "line": 266,
+          "description": "Bulk apply confirmation gate (MV-job-discovery-002)"
+        },
+        {
+          "path": "apps/web/src/app/dashboard/jobs/page.tsx",
+          "line": 1087,
+          "description": "View on source link (job.sourceUrl)"
+        }
+      ],
+      "tests": [
+        "apps/web/src/app/dashboard/jobs/__tests__/page.test.tsx:146",
+        "apps/web/src/app/dashboard/jobs/__tests__/page.test.tsx:283"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Realtime (Polling)",
+      "verdict": "COMPLETE",
+      "gaps": [],
+      "key_files": [
+        {
+          "path": "apps/web/src/components/sidebar.tsx",
+          "line": 45,
+          "description": "Sidebar polling interval: 30,000 ms"
+        },
+        {
+          "path": "apps/web/src/components/topbar.tsx",
+          "line": 212,
+          "description": "Topbar polling interval: 60,000 ms"
+        },
+        {
+          "path": "apps/web/src/app/dashboard/applications/page.tsx",
+          "line": 452,
+          "description": "Applications board polling: 20,000 ms"
+        },
+        {
+          "path": "apps/web/src/app/dashboard/jobs/page.tsx",
+          "line": 331,
+          "description": "Jobs board polling: 20,000 ms"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "id": 9,
+      "name": "Analytics",
+      "verdict": "PARTIAL",
+      "gaps": [
+        "interview_conversion_rate not computed",
+        "No per-interview conversion percentage"
+      ],
+      "key_files": [
+        {
+          "path": "apps/api/app/routers/analytics.py",
+          "line": 85,
+          "description": "funnel() — stage counts"
+        },
+        {
+          "path": "apps/api/app/routers/analytics.py",
+          "line": 123,
+          "description": "ats_distribution() — ATS score histogram"
+        },
+        {
+          "path": "apps/api/app/routers/analytics.py",
+          "line": 148,
+          "description": "agent_roi() — cost and time metrics"
+        },
+        {
+          "path": "apps/api/app/routers/analytics.py",
+          "line": 173,
+          "description": "conversion() — stage-to-stage rates (NO interview_conversion_rate)"
+        },
+        {
+          "path": "apps/api/app/routers/analytics.py",
+          "line": 31,
+          "description": "get_application_counts() — canonical counts"
+        }
+      ],
+      "tests": []
+    }
+  ],
+  "summary": {
+    "complete": 2,
+    "partial": 7,
+    "absent": 0,
+    "total": 9
+  }
+}

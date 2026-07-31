@@ -1,0 +1,192 @@
+{
+  "console": [],
+  "errors": [],
+  "requests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+      "method": "POST",
+      "status": 200,
+      "ts": 1785455277.4684737
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4706013
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4715466
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4720612
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.472238
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4723911
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4733512
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4804614
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4807367
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4829412
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4831553
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.49112
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4961581
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.4999413
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455277.5002882
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.4453688
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.4638584
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.5761216
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.5878618
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.635881
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.65355
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/scout/sources/availability",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.7300665
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/scout/sources",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.7755828
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.7957947
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455278.8326132
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/c90eb4a8d3a8f239f3a29ca9f/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1058795
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/ca18ac952343701fabb668795/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1716647
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/c6265cf48f1b03021317370a2/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1741664
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/ca661ce62b1ec594062f98844/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1743608
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/c1baca90e8823b85fc605198f/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1745574
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs/c4c33686999824dfcf31377a3/insights",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455279.1752195
+    }
+  ]
+}

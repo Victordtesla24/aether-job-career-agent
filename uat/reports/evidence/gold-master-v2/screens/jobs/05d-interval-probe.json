@@ -1,0 +1,17 @@
+[
+  {
+    "delay": 30000,
+    "stack": "Error\n    at window.setInterval (<anonymous>:6:56)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-9ebc64883eda47ce.js:1:3474\n    at aW (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:73241)\n    at oe (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:84682)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85320)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:86265)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85300)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)",
+    "t": 1785455770218
+  },
+  {
+    "delay": 60000,
+    "stack": "Error\n    at window.setInterval (<anonymous>:6:56)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-9ebc64883eda47ce.js:1:16301\n    at aW (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:73241)\n    at oe (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:84682)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85320)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:86265)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:86265)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)",
+    "t": 1785455770219
+  },
+  {
+    "delay": 20000,
+    "stack": "Error\n    at window.setInterval (<anonymous>:6:56)\n    at https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/jobs/page-ff2dd4e2ee5e0a23.js:1:5177\n    at aW (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:73241)\n    at oe (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:84682)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85320)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85300)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)\n    at ol (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:86265)\n    at or (https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js:1:85204)",
+    "t": 1785455770556
+  }
+]

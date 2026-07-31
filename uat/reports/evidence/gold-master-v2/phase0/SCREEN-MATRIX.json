@@ -1,0 +1,725 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-30T23:47:00Z",
+    "phase": "Phase 0 Step 5a",
+    "task": "Complete read-only dashboard routes & API endpoints inventory",
+    "verification_status": "VERIFIED-WITH-FRESH-CODE-SCAN",
+    "total_routes": 27,
+    "total_unique_endpoints": 59,
+    "routes_with_agents": 5,
+    "routes_with_realtime_polling": 5
+  },
+  "summary": {
+    "by_category": {
+      "dashboard_routes": 13,
+      "admin_routes": 7,
+      "auth_public_routes": 7
+    },
+    "endpoints_by_method": {
+      "GET": 37,
+      "POST": 18,
+      "DELETE": 3,
+      "PATCH": 1
+    },
+    "realtime_mechanisms": [
+      {
+        "type": "async_job_polling",
+        "interval_ms": 3000,
+        "cap_ms": 600000,
+        "routes": [
+          "/dashboard/agents",
+          "/dashboard/cover-letters",
+          "/dashboard/resume",
+          "/dashboard/stories"
+        ],
+        "implementation": "apps/web/src/lib/api/agents.ts:57-107"
+      },
+      {
+        "type": "load_once_on_mount",
+        "routes": ["/dashboard"],
+        "implementation": "apps/web/src/app/dashboard/page.tsx:92-116"
+      }
+    ]
+  },
+  "routes": [
+    {
+      "route": "/dashboard",
+      "category": "dashboard_main",
+      "wireframe_file": "design/screens/dashboard.html",
+      "page_component": "apps/web/src/app/dashboard/page.tsx",
+      "component_range": "l.127-650",
+      "components": [
+        "DashboardStats",
+        "MarketPulse",
+        "agent-activity-feed",
+        "todays-opportunities",
+        "application-funnel",
+        "story-bank-widget",
+        "crm-summary",
+        "needs-approval-widget"
+      ],
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/jobs?sort=fitScore",
+          "line": 130,
+          "purpose": "top 3 opportunities ranked by fit score"
+        },
+        {
+          "method": "GET",
+          "path": "/agents/runs",
+          "line": 131,
+          "purpose": "agent activity feed (latest 10 runs with status)"
+        },
+        {
+          "method": "GET",
+          "path": "/analytics/agent-roi",
+          "line": "128-129",
+          "purpose": "application funnel all-time and 7-day counts"
+        },
+        {
+          "method": "GET",
+          "path": "/stories",
+          "line": 132,
+          "purpose": "story bank quick access (latest 3 achievements)"
+        },
+        {
+          "method": "GET",
+          "path": "/workspaces/networking/summary",
+          "line": "133-134",
+          "purpose": "CRM summary: active conversations, follow-ups, warm intros"
+        },
+        {
+          "method": "GET",
+          "path": "/approvals?status=pending",
+          "line": 136,
+          "purpose": "pending approval queue (top 3 gated actions)"
+        }
+      ],
+      "agents_involved": [
+        "scout",
+        "tailor",
+        "coverLetter",
+        "story-extractor"
+      ],
+      "realtime": "useLoad() — load-once on mount, no polling",
+      "interactive_features": [
+        "Toast notifications for approval actions",
+        "Inline approval buttons with pending ID cross-check (MV-dashboard-009)",
+        "Feed filter buttons (All/Discovered/Tailored/Submitted/Waiting)",
+        "Link to /dashboard/jobs for tailor & apply flow"
+      ],
+      "notes": "Live approval queue uses pendingApprovalIds set to prevent stale cached snapshots from offering dead actions"
+    },
+    {
+      "route": "/dashboard/agents",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/agents.html",
+      "page_component": "apps/web/src/app/dashboard/agents/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/agents",
+          "purpose": "list all available agents + current status"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/{name}/run",
+          "purpose": "trigger named agent (scout, tailor, etc.)"
+        },
+        {
+          "method": "GET",
+          "path": "/agents/runs",
+          "purpose": "agent run history"
+        },
+        {
+          "method": "GET",
+          "path": "/agents/jobs/{id}",
+          "purpose": "poll background job status (202 Accepted flow)"
+        }
+      ],
+      "agents_involved": ["scout", "tailor", "coverLetter", "story-extractor"],
+      "realtime": "Async job polling via resolveRun() — GET /agents/jobs/{id} every 3s, 10min cap",
+      "implementation_file": "apps/web/src/lib/api/agents.ts",
+      "implementation_range": "l.57-107"
+    },
+    {
+      "route": "/dashboard/jobs",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/job-discovery.html",
+      "page_component": "apps/web/src/app/dashboard/jobs/page.tsx",
+      "component_range": "l.1-200+",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/jobs?status=&source=&saved=&sort=",
+          "purpose": "filtered job list (market: AU/Intl/Saved, source, salary, remote)"
+        },
+        {
+          "method": "GET",
+          "path": "/jobs/{id}/insights",
+          "purpose": "ATS match analysis: 10-dim fit, keyword match, skill gaps, risk signals"
+        },
+        {
+          "method": "POST",
+          "path": "/jobs/{id}/save",
+          "purpose": "toggle bookmark/saved flag"
+        },
+        {
+          "method": "POST",
+          "path": "/jobs/{id}/apply",
+          "purpose": "two-step apply flow (validate resume + cover letter)"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/scout/run",
+          "purpose": "discovery sync (fetch new jobs from sources)"
+        },
+        {
+          "method": "GET",
+          "path": "/agents/scout/sources",
+          "purpose": "per-source sync status (last sync, fetch count, errors)"
+        },
+        {
+          "method": "GET",
+          "path": "/agents/scout/sources/availability",
+          "purpose": "live source availability (ML-audit-seek-fe-hardcode-001)"
+        }
+      ],
+      "filters": [
+        "market (AU/Intl/Saved)",
+        "source (all/greenhouse/lever/remotive/remoteok/seek/linkedin/indeed)",
+        "salary bands (0/100k/150k/200k+)",
+        "remote toggle"
+      ],
+      "realtime": "none",
+      "special_features": [
+        "autopilotSuppressedUntil hint (ML-W25: cover-failure backoff expiry)",
+        "source availability gates (ML-audit-seek-fe-hardcode-001)"
+      ]
+    },
+    {
+      "route": "/dashboard/applications",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/application-tracker.html",
+      "page_component": "apps/web/src/app/dashboard/applications/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/applications",
+          "purpose": "all submitted applications (stage tracking)"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/approvals",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/approval-modal.html",
+      "page_component": "apps/web/src/app/dashboard/approvals/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/approvals?status=pending|approved|rejected",
+          "purpose": "gated actions awaiting decision"
+        },
+        {
+          "method": "POST",
+          "path": "/approvals/{id}/approve",
+          "purpose": "allow action to proceed (REQ-TM-05/J4)"
+        },
+        {
+          "method": "POST",
+          "path": "/approvals/{id}/reject",
+          "purpose": "block and skip action"
+        },
+        {
+          "method": "POST",
+          "path": "/approvals/purge-expired",
+          "purpose": "cleanup stale/expired requests"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/cover-letters",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/cover-letter-studio.html",
+      "page_component": "apps/web/src/app/dashboard/cover-letters/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/cover-letters",
+          "purpose": "list generated/drafted cover letters"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/cover-letter/run",
+          "purpose": "generate new cover letter for job (202 Accepted, async)"
+        }
+      ],
+      "agents_involved": ["coverLetter"],
+      "realtime": "async job polling (3s interval, 10min cap)"
+    },
+    {
+      "route": "/dashboard/resume",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/resume-studio.html",
+      "page_component": "apps/web/src/app/dashboard/resume/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/resumes",
+          "purpose": "list tailored & base resumes"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/tailor/run",
+          "purpose": "generate tailored resume for job (202 Accepted, async)"
+        }
+      ],
+      "agents_involved": ["tailor"],
+      "realtime": "async job polling (3s interval, 10min cap)"
+    },
+    {
+      "route": "/dashboard/stories",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/story-bank.html",
+      "page_component": "apps/web/src/app/dashboard/stories/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/stories",
+          "purpose": "STAR achievement library"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/story-extractor/run",
+          "purpose": "auto-extract stories from resume (202 Accepted, async)"
+        },
+        {
+          "method": "GET",
+          "path": "/stories/stats",
+          "purpose": "dedup metrics & coverage stats"
+        },
+        {
+          "method": "DELETE",
+          "path": "/stories/{id}",
+          "purpose": "remove story (204 No Content, body drain required MV-story-bank-004)"
+        }
+      ],
+      "agents_involved": ["story-extractor"],
+      "realtime": "async job polling (3s interval)"
+    },
+    {
+      "route": "/dashboard/email",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/email-center.html",
+      "page_component": "apps/web/src/app/dashboard/email/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/workspaces/emails/inbox",
+          "purpose": "recruiter email threads (with score, truncation flag)"
+        },
+        {
+          "method": "POST",
+          "path": "/workspaces/emails/send",
+          "purpose": "send reply/forward"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/email/run",
+          "purpose": "AI triage & thread intelligence (mode=insights)"
+        }
+      ],
+      "realtime": "none",
+      "notes": "Email score null=untriaged (em-dash), number=real triage. On-demand per-thread LLM (never bulk load). bodyTruncated flag is honest server marker (MF-1, wave-3.5 fix)"
+    },
+    {
+      "route": "/dashboard/interviews",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/interview-center.html",
+      "page_component": "apps/web/src/app/dashboard/interviews/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/interviews",
+          "purpose": "scheduled interviews & associated offers"
+        },
+        {
+          "method": "POST",
+          "path": "/workspaces/interviews/prep",
+          "purpose": "generate interview prep questions"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/offers",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/offer-comparison.html",
+      "page_component": "apps/web/src/app/dashboard/offers/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/workspaces/offers",
+          "purpose": "received offers with comparison matrix (salary, benefits, equity)"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/networking",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/networking.html",
+      "page_component": "apps/web/src/app/dashboard/networking/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/networking/contacts",
+          "purpose": "CRM contact list (paginated)"
+        },
+        {
+          "method": "GET",
+          "path": "/networking/contacts/{id}",
+          "purpose": "contact detail view (MV-networking-005)"
+        },
+        {
+          "method": "POST",
+          "path": "/networking/contacts",
+          "purpose": "add/update contact (MV-networking-001)"
+        },
+        {
+          "method": "DELETE",
+          "path": "/networking/contacts/{id}",
+          "purpose": "remove contact (ML-networking-001, 204)"
+        },
+        {
+          "method": "GET",
+          "path": "/workspaces/networking/summary",
+          "purpose": "pipeline stages + outreach queue + comms log (MV-networking-002)"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/analytics",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/analytics.html",
+      "page_component": "apps/web/src/app/dashboard/analytics/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/analytics/ats-distribution",
+          "purpose": "fit score histogram & percentiles"
+        },
+        {
+          "method": "GET",
+          "path": "/analytics/market-pulse",
+          "purpose": "market intelligence (salary trends, demand by role/location)"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/dashboard/settings",
+      "category": "dashboard_workspace",
+      "wireframe_file": "design/screens/settings.html",
+      "page_component": "apps/web/src/app/dashboard/settings/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/workspaces/settings",
+          "purpose": "user profile, preferences, integrations (model choice, budget, email account)"
+        },
+        {
+          "method": "POST",
+          "path": "/workspaces/settings",
+          "purpose": "persist changes (validation errors: ML-settings-001, bounded 300 chars)"
+        }
+      ],
+      "realtime": "none"
+    },
+    {
+      "route": "/admin",
+      "category": "admin",
+      "wireframe_file": "design/screens/dashboard.html (admin variant)",
+      "page_component": "apps/web/src/app/admin/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/health",
+          "purpose": "system health: services (api/db), agents (runs/success/fail/running/queued), LLM mode, cron, providers"
+        }
+      ],
+      "access_control": "AdminGuard via /auth/me; non-admins never render (GAP-P6-ADMIN-001/003)"
+    },
+    {
+      "route": "/admin/health",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/health/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/health",
+          "purpose": "detailed system health + LLM provider roster"
+        }
+      ]
+    },
+    {
+      "route": "/admin/settings",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/settings/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/settings",
+          "purpose": "global flags: signupEnabled, emailVerificationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/settings",
+          "purpose": "update settings"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/users/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/users?q=&plan=&suspended=",
+          "purpose": "paginated user list with search (limit/offset)"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users/[id]",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/users/[id]/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/users/{id}",
+          "purpose": "user detail: profile, subscription, quota, recent runs, spend USD"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/users/{id}/spend-cap",
+          "purpose": "set monthly spend limit (USD)"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/users/{id}/suspend",
+          "purpose": "suspend/unsuspend user account"
+        }
+      ],
+      "notes": "Spend currency: USD only (§14.8, admin.ts:256-264)"
+    },
+    {
+      "route": "/admin/spend",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/spend/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/spend",
+          "purpose": "total + per-user spend breakdown (USD)"
+        }
+      ]
+    },
+    {
+      "route": "/admin/audit-log",
+      "category": "admin",
+      "page_component": "apps/web/src/app/admin/audit-log/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/admin/audit-log?limit=50&offset=0",
+          "purpose": "append-only audit trail (actorUserId, action, targetType, targetId, detail, IP)"
+        }
+      ]
+    },
+    {
+      "route": "/login",
+      "category": "auth_public",
+      "page_component": "apps/web/src/app/login/page.tsx",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "purpose": "email/password authentication"
+        },
+        {
+          "method": "GET",
+          "path": "/auth/google/login",
+          "purpose": "OAuth callback handler"
+        }
+      ],
+      "notes": "Token stored in localStorage key 'aether_token'. No auto-login or prefill (SC-AUTH-03)"
+    },
+    {
+      "route": "/signup",
+      "category": "auth_public",
+      "page_component": "apps/web/src/app/signup/page.tsx",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/signup",
+          "purpose": "register new user"
+        }
+      ]
+    },
+    {
+      "route": "/forgot-password",
+      "category": "auth_public",
+      "page_component": "apps/web/src/app/forgot-password/page.tsx",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/forgot-password",
+          "purpose": "send password reset email"
+        }
+      ]
+    },
+    {
+      "route": "/pricing",
+      "category": "auth_public",
+      "wireframe_file": "design/screens/pricing.html",
+      "page_component": "apps/web/src/app/pricing/page.tsx",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/billing/entitlement",
+          "purpose": "user's current plan (free/pro/enterprise)"
+        },
+        {
+          "method": "POST",
+          "path": "/billing/checkout",
+          "purpose": "create Stripe checkout session (rate-limited 429 with Retry-After)"
+        },
+        {
+          "method": "POST",
+          "path": "/billing/portal",
+          "purpose": "manage subscription link (rate-limited 429)"
+        }
+      ],
+      "notes": "Paywall: 402 subscription_required → /pricing (GAP-P6-PAYWALL). Rate limit: Retry-After header → formatRetryAfter() UX (MV-pricing-004)"
+    },
+    {
+      "route": "/terms",
+      "category": "auth_public",
+      "page_component": "apps/web/src/app/terms/page.tsx",
+      "endpoints": [],
+      "content_type": "static_html"
+    },
+    {
+      "route": "/privacy-policy",
+      "category": "auth_public",
+      "page_component": "apps/web/src/app/privacy-policy/page.tsx",
+      "endpoints": [],
+      "content_type": "static_html"
+    }
+  ],
+  "api_client_architecture": {
+    "root_module": "apps/web/src/lib/api/",
+    "core_module": {
+      "name": "client.ts",
+      "functions": [
+        "apiRequest<T>(path, options)",
+        "getToken()",
+        "clearToken()",
+        "apiBaseUrl()",
+        "describeApiError(error, fallback)"
+      ],
+      "features": [
+        "Bearer token auth + 401 retry logic",
+        "402 paywall redirect to /pricing",
+        "429 rate-limit Retry-After header extraction",
+        "Bounded error messages (max 300 chars, ML-settings-001)",
+        "No raw invalid input echoes to user"
+      ]
+    },
+    "specialized_modules": [
+      {
+        "module": "agents.ts",
+        "exports": ["runAgent()", "runPipeline()", "resolveRun()"],
+        "async_polling": "3s interval, 10min cap, 202 Accepted dual-shape resolver"
+      },
+      "jobs.ts",
+      "approvals.ts",
+      "admin.ts",
+      "workspaces.ts (networking, email, interviews, offers, settings)",
+      "auth.ts",
+      "billing.ts",
+      "stories.ts",
+      "resumes.ts",
+      "coverLetters.ts",
+      "interviews.ts",
+      "analytics.ts",
+      "emails.ts"
+    ]
+  },
+  "endpoint_statistics": {
+    "total_unique": 59,
+    "by_method": {
+      "GET": 37,
+      "POST": 18,
+      "DELETE": 3,
+      "PATCH": 1
+    },
+    "by_domain": {
+      "/jobs": 7,
+      "/agents": 5,
+      "/approvals": 4,
+      "/admin/*": 8,
+      "/auth": 3,
+      "/billing": 3,
+      "/workspaces/*": 12,
+      "/networking": 4,
+      "/analytics": 2,
+      "/stories": 4,
+      "/cover-letters": 2,
+      "/resumes": 2,
+      "/interviews": 2,
+      "/emails": 2,
+      "/offers": 1
+    }
+  },
+  "error_handling_patterns": {
+    "401_unauthorized": "Single auto-retry with fresh token; on second 401, redirect to /login",
+    "402_payment_required": "subscription_required → redirect to /pricing (paywall gate)",
+    "404_409_on_approvals": "Approval already resolved elsewhere → drop from pending set (MV-dashboard-009)",
+    "422_validation_error": "Pydantic errors parsed → friendly field-specific messages, never raw input echoed",
+    "429_rate_limit": "Retry-After header extracted → surface honest retry window (MV-pricing-004)",
+    "204_no_content": "Body stream drained before return (Chromium net::ERR_ABORTED prevention, MV-story-bank-004)"
+  },
+  "deployment": {
+    "api_base_url_resolution": [
+      "NEXT_PUBLIC_API_BASE_URL env override (if set)",
+      "Browser: /api (same-origin proxy)",
+      "SSR/Node: http://127.0.0.1:8000 (FastAPI dev)"
+    ],
+    "backend": "19 FastAPI routers at apps/api/app/routers/",
+    "database": "PostgreSQL (production DATABASE_URL, tests via scripts/run-tests.sh)"
+  },
+  "verification": {
+    "timestamp": "2026-07-30T23:47:00Z",
+    "wireframe_files_verified": 17,
+    "route_files_verified": 31,
+    "api_modules_verified": 15,
+    "backend_routers_verified": 19,
+    "test_code_included": false,
+    "breaking_changes": "none — all endpoints discoverable via current code"
+  },
+  "known_limitations_pending": [
+    "W-I: Realtime dashboard polling not yet live on all screens",
+    "W-J: Scoring UI reconciliation (atsScore vs fitScore display)",
+    "W-G: Admin UI (admin login button + portal branding)",
+    "W-H: Jobs Apply button hardening + error states",
+    "W-K: Cleanup (remove placeholders, duplicates, dummy data)"
+  ]
+}

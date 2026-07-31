@@ -1,0 +1,699 @@
+{
+  "steps": [
+    {
+      "step": "click-notification-bell",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals"
+    },
+    {
+      "step": "search-xss-enter",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "step": "user-menu-open",
+      "menuText": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nFree\n\n0/5 runs this period\n\nAgents Idle\n\n19 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood morning, Gold\n\nFri, 31 July\n\nGU\nGold U.\nQA Tester Probe\nSign out\n✦\nSubscribe to unlock Aether\n\nAether is in limited beta. An active subscription is required to run the AI agents that power your job search — discovery, tailoring, cover letters, and the inbox agent.\n\n✓\nAutonomous job discovery across live sources, scored to your profile\n✓\nResume tailoring + ATS optimization, with a fabrication guard\n✓\nCover letters, STAR story bank, and an inbox agent — human-approved\nView plans & subscribe\n\nYou can still browse pricing and manage your account."
+    },
+    {
+      "step": "click-view-plans",
+      "url": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "step": "click-manage-account",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/settings"
+    },
+    {
+      "step": "click-manage-agents",
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/agents"
+    }
+  ],
+  "sidebarProbe": [
+    {
+      "route": "/dashboard/jobs",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/jobs",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/applications",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/applications",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/resume",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/cover-letters",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/cover-letters",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/stories",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/stories",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/approvals",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/approvals",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/analytics",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/analytics",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/agents",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/agents",
+      "title": "Aether Career Agent"
+    },
+    {
+      "route": "/dashboard/settings",
+      "finalUrl": "https://5cb5f0620.abacusai.cloud/dashboard/settings",
+      "title": "Aether Career Agent"
+    }
+  ],
+  "console": [],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/settings?_rsc=hi3jv",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=6i8d7",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=6i8d7",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/settings?_rsc=hi3jv",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/dashboard"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/settings?_rsc=1r70j",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/dashboard/applications"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/settings?_rsc=1m8pp",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/dashboard/stories"
+    }
+  ],
+  "apiRequests": [
+    {
+      "method": "POST",
+      "url": "/api/auth/login",
+      "status": 200,
+      "ts": "2026-07-31T00:45:34.653Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:34.934Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:34.937Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.074Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.092Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.093Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.130Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.911Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:35.926Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:36.072Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:36.074Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:36.080Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:36.135Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:39.430Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/applications",
+      "status": 200,
+      "ts": "2026-07-31T00:45:39.434Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/jobs?",
+      "status": 200,
+      "ts": "2026-07-31T00:45:39.437Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.423Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.425Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.549Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.553Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.568Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:40.611Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/plans",
+      "status": 200,
+      "ts": "2026-07-31T00:45:43.179Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:43.433Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.150Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.150Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.273Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.290Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.305Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:44.347Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/plans",
+      "status": 200,
+      "ts": "2026-07-31T00:45:45.647Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/career-data",
+      "status": 200,
+      "ts": "2026-07-31T00:45:45.720Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:45.905Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:45.936Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.564Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.573Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.726Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.726Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.727Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:46.795Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.039Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.045Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.172Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.184Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.184Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:49.260Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.394Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.401Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.538Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.540Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.557Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:50.597Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.695Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.701Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.835Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.846Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.847Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:51.911Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.030Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.033Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.173Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.175Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.189Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:53.242Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.384Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.387Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.525Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.529Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.529Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:54.589Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.695Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.707Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.836Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.845Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.854Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:55.900Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.021Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.041Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.167Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.180Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.181Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:57.237Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.352Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.353Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/entitlement",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.486Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.488Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.505Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:45:58.564Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/plans",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.649Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.730Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/career-data",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.733Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/approvals?status=pending",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.733Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/agents",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.905Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:45:59.906Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:46:00.012Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/workspaces/settings",
+      "status": 200,
+      "ts": "2026-07-31T00:46:00.231Z"
+    },
+    {
+      "method": "GET",
+      "url": "/api/billing/subscription",
+      "status": 200,
+      "ts": "2026-07-31T00:46:00.377Z"
+    }
+  ]
+}

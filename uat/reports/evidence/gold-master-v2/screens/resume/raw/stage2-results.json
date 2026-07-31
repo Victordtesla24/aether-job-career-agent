@@ -1,0 +1,26 @@
+{
+  "selectedJobId": "ca18ac952343701fabb668795",
+  "loadingButtonText": "Tailoring...",
+  "tailorRunDurationMs": null,
+  "noticeText": null,
+  "errorText": null,
+  "conversionMetricsVisible": true,
+  "conversionBeforeAfter": "Before: 35.82% → After: 35.92%",
+  "conversionLift": "Estimated interview conversion improvement+0.0%Like-for-like ATS delta (shared context) × population baseline (2.5%) This is an illustrative estimate, not a measured outcome.",
+  "tailorNetworkCalls": [
+    {
+      "method": "POST",
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+      "status": 202,
+      "ts": "2026-07-31T00:19:45.035Z",
+      "postData": "{\"job_id\":\"ca18ac952343701fabb668795\"}"
+    }
+  ],
+  "fetchLogDuringRunCount": 41,
+  "firstVersionCardAfterRun": "v7131/07/2026Uploaded — valid-resume",
+  "atsVisibleAfterRun": false,
+  "diffVisibleAfterRun": false,
+  "firstVersionCardAfterReload": "v7131/07/2026Uploaded — valid-resume",
+  "persistenceMatch": true,
+  "conversionVisibleAfterReload": false
+}

@@ -1,0 +1,207 @@
+[
+  {
+    "url": "/api/agents",
+    "t": 1785457181392,
+    "method": "GET"
+  },
+  {
+    "url": "/api/billing/subscription",
+    "t": 1785457181398,
+    "method": "GET"
+  },
+  {
+    "url": "/api/workspaces/settings",
+    "t": 1785457181398,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents",
+    "t": 1785457181398,
+    "method": "GET"
+  },
+  {
+    "url": "/api/approvals?status=pending",
+    "t": 1785457181398,
+    "method": "GET"
+  },
+  {
+    "url": "/api/billing/entitlement",
+    "t": 1785457181398,
+    "method": "GET"
+  },
+  {
+    "url": "",
+    "t": 1785457181414,
+    "method": "GET"
+  },
+  {
+    "url": "/api/resumes",
+    "t": 1785457181694,
+    "method": "GET"
+  },
+  {
+    "url": "/api/jobs",
+    "t": 1785457181695,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/tailor/run",
+    "t": 1785457184139,
+    "method": "POST"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457188035,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457191175,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457194317,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457197456,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457200590,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457203740,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457206886,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457210025,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents",
+    "t": 1785457211392,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457213162,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457216315,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457219447,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457222586,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457225723,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457228870,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457232018,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457235154,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457238292,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents",
+    "t": 1785457241392,
+    "method": "GET"
+  },
+  {
+    "url": "/api/approvals?status=pending",
+    "t": 1785457241395,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457241426,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457244570,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457247711,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457250857,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457253991,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents/jobs/c7f38d22434b605a60c217965",
+    "t": 1785457257157,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents",
+    "t": 1785457271392,
+    "method": "GET"
+  },
+  {
+    "url": "/api/resumes",
+    "t": 1785457272180,
+    "method": "GET"
+  },
+  {
+    "url": "/api/jobs",
+    "t": 1785457272181,
+    "method": "GET"
+  },
+  {
+    "url": "/api/agents",
+    "t": 1785457301392,
+    "method": "GET"
+  },
+  {
+    "url": "/api/approvals?status=pending",
+    "t": 1785457301395,
+    "method": "GET"
+  }
+]

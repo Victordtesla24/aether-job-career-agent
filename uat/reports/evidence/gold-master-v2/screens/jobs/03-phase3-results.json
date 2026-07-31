@@ -1,0 +1,38 @@
+{
+  "role_filter_xss_emptystate": 1,
+  "role_filter_value_after": "<script>alert(1)</script>",
+  "role_filter_long_value_len": 2000,
+  "role_filter_unicode_value": "h\u00e9llo w\u00f6rld \u65e5\u672c\u8a9e \ud83d\ude80",
+  "location_filter_sqli_value": "'; DROP TABLE jobs; --",
+  "salary_filter_options": [
+    {
+      "text": "Any salary",
+      "value": "0"
+    },
+    {
+      "text": "$100k+",
+      "value": "100"
+    },
+    {
+      "text": "$150k+",
+      "value": "150"
+    },
+    {
+      "text": "$200k+",
+      "value": "200"
+    }
+  ],
+  "cards_after_salary200_filter": 0,
+  "remote_pressed_after_click": "true",
+  "cards_after_remote_filter": 2,
+  "match_min_value_after": "80%",
+  "cards_after_match80_filter": 0,
+  "sort_changed": true,
+  "clear_all_clicked": true,
+  "seek_select_succeeded": false,
+  "seek_select_error": "Page.select_option: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-testid='job-source-filter']\")\n    - locator resolved to <select aria-label=\"Filter by source\" data-testid=\"job-source-filter\" class=\"glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs\">\u2026</sel",
+  "cards_after_greenhouse_filter": 5,
+  "intl_cards": 14,
+  "saved_cards": 0,
+  "saved_empty_state": 1
+}

@@ -1,0 +1,77 @@
+Reconstructed, verbatim-quoted evidence from this authoring session's own
+tool-call transcript (pytest was run multiple times against commit 7f82105
+before a THIRD, unrelated, concurrent, uncommitted WIP edit to
+apps/api/app/repositories/admin.py / apps/api/app/main.py by another agent
+made the working tree transiently un-importable — see TESTS-FAIL-BEFORE.md
+"Environment instability" section). Every run below was executed via:
+  flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_blocker001_admin_overpermission.py ...
+against a working tree that was IDENTICAL to `git show 7f82105` for
+apps/api/app/repositories/admin.py and apps/api/app/main.py (confirmed via
+`git status --short` showing no modifications to those two files at the time
+these runs were captured).
+
+=== Full-file run summary (repeated 3x for stability check; identical each time) ===
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[admin123] PASSED
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[admin] PASSED
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[password] PASSED
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_does_not_abort_boot[changeme] PASSED
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash FAILED
+tests/test_blocker001_admin_overpermission.py::test_weak_credential_logs_critical_diagnostic_naming_env_var_only PASSED
+tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[not-a-bcrypt-hash-at-all] FAILED
+tests/test_blocker001_admin_overpermission.py::test_malformed_hash_does_not_abort_boot_and_deprivileges[$1$abcdefgh$abcdefghijklmnopqrstuv] FAILED
+tests/test_blocker001_admin_overpermission.py::test_self_cancel_config_deprivileges_instead_of_raising FAILED
+tests/test_blocker001_admin_overpermission.py::test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation FAILED
+tests/test_blocker001_admin_overpermission.py::test_healthy_credential_still_grants_admin_and_boot_succeeds PASSED
+tests/test_blocker001_admin_overpermission.py::test_non_admin_gets_403_on_every_admin_route_pin PASSED
+=== 5 failed, 7 passed ===
+
+=== test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash — full traceback ===
+tests/test_blocker001_admin_overpermission.py:231: in test_weak_credential_forces_explicit_deprivilege_without_touching_password_hash
+    assert after["isAdmin"] is False, (
+E   AssertionError: C3 VIOLATION: configured admin row started isAdmin=true and did NOT end isAdmin=false after rotation with a denylisted password — before={'id': 'cb5d9da18e908383994545987', 'email': 'owner-b3a8be9e@aether.io', 'username': None, 'isAdmin': True, 'passwordHash': '$2b$12$T7/oWhdfX9yYNlkAqlmNbuyhH209O1Azg2l4WJowXc0MKp9Gpb.62'} after={'id': 'cb5d9da18e908383994545987', 'email': 'owner-b3a8be9e@aether.io', 'username': None, 'isAdmin': True, 'passwordHash': '$2b$12$T7/oWhdfX9yYNlkAqlmNbuyhH209O1Azg2l4WJowXc0MKp9Gpb.62'}. Merely skipping the grant is a no-op against a row already privileged from a previous boot (ADR §3 R1 condition C3).
+E   assert True is False
+Captured stderr call:
+CRITICAL: DEGRADED ADMIN CREDENTIAL — the API has started, but admin privilege is being WITHHELD and the reserved 'admin' login identifier is being REJECTED until an operator fixes this. BLOCKER-001: refusing to grant admin privilege to 'owner-b3a8be9e@aether.io' — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'. ...
+
+=== test_malformed_hash_does_not_abort_boot_and_deprivileges[not-a-bcrypt-hash-at-all] — full traceback ===
+tests/test_blocker001_admin_overpermission.py:323: in test_malformed_hash_does_not_abort_boot_and_deprivileges
+    assert row is not None and row["isAdmin"] is False, (
+E   AssertionError: R2/C3 VIOLATION: malformed-hash config did not de-privilege the configured admin row (already isAdmin=true from a previous boot): {'id': 'cf2cfe2f2ee66783c6919671a', 'email': 'owner-bc1399ff@aether.io', 'username': None, 'isAdmin': True, 'passwordHash': '$2b$12$MeoplDxCTMfB.hT5EPeU8uiOwgsqJNCHqn3ucYPSw7pSkNYmVXHoK'}
+
+=== test_self_cancel_config_deprivileges_instead_of_raising — full traceback (tail) ===
+app/main.py:182: in _lifespan
+    apply_admin_rotation()
+app/repositories/admin.py:897: in apply_admin_rotation
+    raise AdminRotationConfigError(
+E   app.repositories.admin.AdminRotationConfigError: BLOCKER-001: AETHER_ADMIN_EMAIL is set to the seeded demo admin identity ('admin@aether.local'). The §14.7 rotation demotes that identity and would immediately regrant it, so the two writes cancel out and the seeded demo credential ends up with isAdmin=true. Point AETHER_ADMIN_EMAIL at a real operator mailbox that is not the demo account.
+tests/test_blocker001_admin_overpermission.py:366: in test_self_cancel_config_deprivileges_instead_of_raising
+    _assert_boot_succeeds(app)
+tests/test_blocker001_admin_overpermission.py:153: in _assert_boot_succeeds
+    pytest.fail(
+E   Failed: C1/R1-R3 VIOLATION: app startup raised AdminRotationConfigError: ... — production would crash-loop (ADR-BLOCKER-001 §2 decisive finding).
+Captured stderr: "FATAL: §14.7 admin credential rotation is configured to demote and regrant the same identity — refusing to start. See below."
+
+=== test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation — full traceback ===
+tests/test_blocker001_admin_overpermission.py:433: in test_no_raise_statement_follows_a_database_commit_in_apply_admin_rotation
+    assert not offending, (
+E   AssertionError: D VIOLATION (ADR §2.1 / condition C6): apply_admin_rotation() contains a `raise` statement at source-line offset(s) [142] AFTER its last `conn.commit()` at offset 135 — a code path exists where privilege is durably written to the database and the caller is then told the operation failed. Evaluate every post-condition BEFORE committing, not after.
+--- offending lines ---
+142:             raise AdminRotationConfigError(
+
+=== Live end-to-end exploit reproduction (ad hoc verification script, NOT part of the committed suite — run once, standalone, to confirm the C3 gap above is genuinely exploitable via HTTP login and not merely a DB-column artifact) ===
+Setup: operator row created with isAdmin=true (simulating ADR F5 "already isAdmin=true from a previous boot"), then apply_admin_rotation() run with AETHER_ADMIN_EMAIL=<that operator's email>, AETHER_ADMIN_PASSWORD_HASH=bcrypt('admin123'), AETHER_ENV=production.
+Result:
+  apply_admin_rotation raised: AdminCredentialSecurityError BLOCKER-001: refusing to grant admin privilege to 'owner-79693da8@aether.io' ...
+  LOGIN STATUS: 200
+  LOGIN BODY: {"access_token":"eyJ...","token_type":"bearer","userId":"c6e975b89eef0a35f4f64780e","email":"owner-79693da8@aether.io"}
+  ME STATUS: 200 BODY: {"id":"c6e975b89eef0a35f4f64780e","email":"owner-79693da8@aether.io","name":"","targetRole":"","location":"","isAdmin":true}
+  ADMIN/USERS STATUS: 200
+Interpretation: POST /auth/login with the OPERATOR'S EMAIL (not the reserved
+"admin" username — commit 7f82105's compensating weak_operator_credential_refused
+login guard only checks the literal "admin" identifier, per its own documented
+SCOPE comment) and the literal password "admin123" succeeds with isAdmin:true,
+and GET /admin/users (full user PII listing) returns 200. This is BLOCKER-001's
+original exploit, reproduced against commit 7f82105, via the email vector the
+ADR's own severity-escalation section (§1.2) specifically anticipated
+("the attacker simply substitutes the email address printed in the public
+repo").

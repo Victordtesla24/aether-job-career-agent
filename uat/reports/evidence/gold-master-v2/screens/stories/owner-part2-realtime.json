@@ -1,0 +1,17 @@
+{
+  "notes": {
+    "realtimeFetchLog": [
+      {
+        "url": "/api/stories",
+        "t": 1785458414797
+      },
+      {
+        "url": "/api/stories/stats",
+        "t": 1785458414798
+      }
+    ],
+    "realtimeDeltasMs": [
+      1
+    ]
+  }
+}

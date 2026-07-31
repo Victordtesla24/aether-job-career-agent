@@ -1,0 +1,14 @@
+{
+  "postLoginUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+  "resumeUrl": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+  "bodyTextSnippet": "Aether\nCareer Agent\nDashboard\nJobs\nResume Studio\nCover Letter Studio\nStory Bank\nApplications\nInterview Center\nNetworking\nEmail Center\nAgents\nAnalytics\nOffers\nSettings\n\nFree\n\n0/5 runs this period\n\nAgents Idle\n\n19 agents ready · none running\n\nManage Agents\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether\nGood morning, Gold\n\nFri, 31 July\n\nGU\nGold U.\nQA Tester Probe\n✦\nSubscribe to unlock Aether\n\nAether is in limited beta. An active subscription is required to run the AI agents that power your job search — discovery, tailoring, cover letters, and the inbox agent.\n\n✓\nAutonomous job discovery across live sources, scored to your profile\n✓\nResume tailoring + ATS optimization, with a fabrication guard\n✓\nCover letters, STAR story bank, and an inbox agent — human-approved\nView plans & subscribe\n\nYou can still browse pricing and manage your account.",
+  "hasPaywallText": true,
+  "jobSelectOptionsCount": 0,
+  "versionCardCount": 0,
+  "tailorBtnPresent": false,
+  "tokenFirst8": "eyJhbGci",
+  "directTailorProbe": {
+    "status": 402,
+    "body": "{\"detail\":{\"error\":\"subscription_required\",\"message\":\"An active subscription is required to use Aether. Subscribe to unlock.\",\"upgradeUrl\":\"/pricing\"}}"
+  }
+}

@@ -1,0 +1,500 @@
+[
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/login",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.413Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/7d752fb5f013fb4b.css",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.414Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.432Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.437Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-2b2db3119ff09c77.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.438Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.438Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-4acc831081004760.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.438Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.443Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.491Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.552Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.661Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.664Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1obve",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.664Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1obve",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.664Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-75eb23bb442de606.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.669Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.760Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:35.778Z"
+  },
+  {
+    "method": "POST",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.948Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=urzlp",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.968Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/290-aca3a6622a04b793.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.980Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.988Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-9ebc64883eda47ce.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.990Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-c1711821870f59ee.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:36.995Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-68b9e681dd9e4550.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.002Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.084Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.114Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.132Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.134Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.224Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.238Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.347Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.356Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/agents?_rsc=hi3jv",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.405Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.409Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/agents/page-afac6fe1bfabbfd3.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.414Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.419Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/jobs?_rsc=hi3jv",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.439Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/networking?_rsc=hi3jv",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.447Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/jobs/page-ff2dd4e2ee5e0a23.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.456Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/networking/page-537fd4c6c843d116.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.456Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/stories?_rsc=hi3jv",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.476Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/stories/page-7ea69729b3862d3b.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.485Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.566Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.570Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.588Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.592Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.601Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.665Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.665Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+    "status": 200,
+    "ts": "2026-07-31T00:15:37.665Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/7d752fb5f013fb4b.css",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-4acc831081004760.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-9ebc64883eda47ce.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.099Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.104Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/resume",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.106Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.125Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.125Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.125Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.125Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/resume/page-57c5fedc9416df5a.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.125Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1vqz9",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.195Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.195Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.306Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.318Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.443Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.445Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.474Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.486Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/jobs",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.651Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes",
+    "status": 200,
+    "ts": "2026-07-31T00:15:39.689Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c9fb993e8b9749c0ced5e8b77/diff",
+    "status": 200,
+    "ts": "2026-07-31T00:15:42.201Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c9fb993e8b9749c0ced5e8b77/ats",
+    "status": 200,
+    "ts": "2026-07-31T00:15:42.430Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c2b64e20c8ff4e5b5a06b6745/diff",
+    "status": 200,
+    "ts": "2026-07-31T00:15:43.967Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c2b64e20c8ff4e5b5a06b6745/ats",
+    "status": 200,
+    "ts": "2026-07-31T00:15:44.188Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c91562a854d0eb44bd070acdd/diff",
+    "status": 200,
+    "ts": "2026-07-31T00:15:45.429Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c91562a854d0eb44bd070acdd/ats",
+    "status": 200,
+    "ts": "2026-07-31T00:15:45.645Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c91562a854d0eb44bd070acdd/download",
+    "status": 200,
+    "ts": "2026-07-31T00:15:47.080Z"
+  }
+]

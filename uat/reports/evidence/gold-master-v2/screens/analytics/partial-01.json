@@ -1,0 +1,31 @@
+{
+  "login": {
+    "t": "2026-07-31T01:06:32.786Z",
+    "afterUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "localStorage": [
+      "aether_token"
+    ]
+  },
+  "analyticsUrl": "https://5cb5f0620.abacusai.cloud/dashboard/analytics",
+  "hasPaywall": 0,
+  "hasGateError": 0,
+  "dom": {
+    "h1": "Good morning, Probe",
+    "dashboardSummary": "DASHBOARD SUMMARY (ALL)\nApplications\n47\nInterviews\n0\nOffers\n0\nJobs Found\n51\nAvg Fit Score\n39.6%\nAgent Runs\n3547\nAgent Spend (USD)\n$0.58",
+    "funnelChart": "APPLICATION FUNNEL (ALL)\nJobs Found\n51\nApplied\n47\nScreened\n2\nInterviewed\n0\nOffers\n0",
+    "conversionRates": "STAGE CONVERSION (ALL)\n92.16%\nFound → Applied\n4.26%\nApplied → Screened\n0%\nScreened → Interview\n0%\nInterview → Offer",
+    "atsDistribution": "ATS SCORE DISTRIBUTION\n(all time — not affected by the period selector)\n0\n10\n20\n30\n40\n50\n60\n70\n80\n90\n\n51 scored jobs",
+    "agentRoi": "AGENT ROI\n(all time — not affected by the period selector)\n$0.58\nTotal spend\n3547\nAgent runs\n12.9s\nAvg duration",
+    "marketPulse": "Real-Time Market Pulse\nhiring & recruitment trends · AU\nTREND INDICATORS\nYour application velocity\n-78%\nAgent automation spend\n+80%\nAvg job fit score\n+10%\nJOBS BY SOURCE\n51\njobs sourced\nGreenhouse\n41%\nAshby\n31%\nLever\n20%\nRemoteok\n6%\nRemotive\n2%\nTOP SKILLS IN DEMAND\n\nNot enough job data yet to surface top skills — matched jobs with recognized skill keywords will populate this.\n\nYOUR JOB PROBABILITY SCORE\n60%\nApplication volume\n100\nInterview conversion\n0\nMarket demand\n100\nSkill match\n40\n\nLikelihood of landing an offer in the next 60 days\n\nWEEKLY ACTIVITY\nless\nmore\nEMPLOYER HIRING ACTIVITY\n\nSamsara Application in progress\n\n6m ago\n\nPlenti Application in progress\n\n10m ago\n\nGrafana Labs Application in progress\n\n14m ago\n\nPlenti Application in progress\n\n15m ago\n\nPeloton Received your application\n\n47m ago\n\nRECRUITER ACTIVITY\nAgent runs (last 12 wks)\n3547 total\nAvg runs / week\n295.6 · +101%\nMARKET VS. YOUR PERFORMANCE\n\nExternal market benchmark unavailable\n\nProvider: none configured — your figures are derived from your saved jobs and applications.\n\nApplications / month\n\nMarket data: not connected\n\nyou 47\n\nInterview rate\n\nMarket data: not connected\n\nyou 0%\n\nNo market data source connected — showing your own figures only.",
+    "probabilityScore": "YOUR JOB PROBABILITY SCORE\n60%\nApplication volume\n100\nInterview conversion\n0\nMarket demand\n100\nSkill match\n40\n\nLikelihood of landing an offer in the next 60 days",
+    "marketVsYou": "MARKET VS. YOUR PERFORMANCE\n\nExternal market benchmark unavailable\n\nProvider: none configured — your figures are derived from your saved jobs and applications.\n\nApplications / month\n\nMarket data: not connected\n\nyou 47\n\nInterview rate\n\nMarket data: not connected\n\nyou 0%\n\nNo market data source connected — showing your own figures only.",
+    "trendIndicators": "TREND INDICATORS\nYour application velocity\n-78%\nAgent automation spend\n+80%\nAvg job fit score\n+10%",
+    "employerActivity": "EMPLOYER HIRING ACTIVITY\n\nSamsara Application in progress\n\n6m ago\n\nPlenti Application in progress\n\n10m ago\n\nGrafana Labs Application in progress\n\n14m ago\n\nPlenti Application in progress\n\n15m ago\n\nPeloton Received your application\n\n47m ago",
+    "recruiterTrends": "RECRUITER ACTIVITY\nAgent runs (last 12 wks)\n3547 total\nAvg runs / week\n295.6 · +101%",
+    "sourcesDonut": "JOBS BY SOURCE\n51\njobs sourced\nGreenhouse\n41%\nAshby\n31%\nLever\n20%\nRemoteok\n6%\nRemotive\n2%",
+    "topSkills": "TOP SKILLS IN DEMAND\n\nNot enough job data yet to surface top skills — matched jobs with recognized skill keywords will populate this.",
+    "activityHeatmap": "WEEKLY ACTIVITY\nless\nmore",
+    "exportButtonCount": 0,
+    "rangePillsAnyCount": 3
+  }
+}

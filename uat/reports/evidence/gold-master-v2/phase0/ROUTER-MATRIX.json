@@ -1,0 +1,2732 @@
+{
+  "metadata": {
+    "report_date": "2026-07-30",
+    "extraction_timestamp": "2026-07-30T22:43:22.066706",
+    "total_endpoints": 144,
+    "repo_path": "/home/ubuntu/github_repos/aether-job-career-agent",
+    "api_app_path": "apps/api/app/routers",
+    "main_router_file": "app/main.py",
+    "main_router_lines": "248-265"
+  },
+  "summary": {
+    "auth_requirements": {
+      "current_user": 127,
+      "admin_user": 11,
+      "none": 6
+    },
+    "http_methods": {
+      "GET": 71,
+      "POST": 52,
+      "PUT": 6,
+      "DELETE": 11,
+      "PATCH": 4
+    },
+    "state_mutation": {
+      "reads_only": 71,
+      "mutates_state": 73
+    }
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/admin/audit-log",
+      "handler": "admin_audit_log",
+      "router_file": "admin.py",
+      "line": 239,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/health",
+      "handler": "admin_health",
+      "router_file": "admin.py",
+      "line": 40,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/settings",
+      "handler": "admin_get_settings",
+      "router_file": "admin.py",
+      "line": 204,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/admin/settings",
+      "handler": "admin_update_settings",
+      "router_file": "admin.py",
+      "line": 209,
+      "auth": "AdminUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/spend",
+      "handler": "admin_spend",
+      "router_file": "admin.py",
+      "line": 165,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users",
+      "handler": "admin_list_users",
+      "router_file": "admin.py",
+      "line": 51,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{user_id}",
+      "handler": "admin_user_detail",
+      "router_file": "admin.py",
+      "line": 66,
+      "auth": "AdminUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/spend-cap",
+      "handler": "admin_set_spend_cap",
+      "router_file": "admin.py",
+      "line": 104,
+      "auth": "AdminUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/suspend",
+      "handler": "admin_suspend_user",
+      "router_file": "admin.py",
+      "line": 124,
+      "auth": "AdminUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/unsuspend",
+      "handler": "admin_unsuspend_user",
+      "router_file": "admin.py",
+      "line": 141,
+      "auth": "AdminUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents",
+      "handler": "list_agents",
+      "router_file": "agents.py",
+      "line": 2040,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/board-sweep/trigger",
+      "handler": "trigger_board_sweep",
+      "router_file": "agents.py",
+      "line": 2205,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/catalog",
+      "handler": "agent_catalog",
+      "router_file": "agents.py",
+      "line": 2707,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/agents/config",
+      "handler": "list_agent_config",
+      "router_file": "agents.py",
+      "line": 2873,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/agents/config/{agent_key}",
+      "handler": "get_agent_config",
+      "router_file": "agents.py",
+      "line": 2880,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "PUT",
+      "path": "/agents/config/{agent_key}",
+      "handler": "update_agent_config",
+      "router_file": "agents.py",
+      "line": 2889,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/cover-letter/run",
+      "handler": "run_cover_letter",
+      "router_file": "agents.py",
+      "line": 2300,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/email/run",
+      "handler": "run_email_agent",
+      "router_file": "agents.py",
+      "line": 2367,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/fit-scorer/run",
+      "handler": "run_fit_scorer",
+      "router_file": "agents.py",
+      "line": 2180,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/jobs/{job_id}",
+      "handler": "get_background_job",
+      "router_file": "agents.py",
+      "line": 2111,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/pipeline/run",
+      "handler": "run_pipeline",
+      "router_file": "agents.py",
+      "line": 2522,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/providers",
+      "handler": "list_providers",
+      "router_file": "agents.py",
+      "line": 3161,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/providers/anthropic/oauth/exchange",
+      "handler": "anthropic_oauth_exchange",
+      "router_file": "agents.py",
+      "line": 3668,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/providers/anthropic/oauth/refresh",
+      "handler": "anthropic_oauth_refresh",
+      "router_file": "agents.py",
+      "line": 3727,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/providers/anthropic/oauth/start",
+      "handler": "anthropic_oauth_start",
+      "router_file": "agents.py",
+      "line": 3634,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "PUT",
+      "path": "/agents/providers/{provider}",
+      "handler": "update_provider",
+      "router_file": "agents.py",
+      "line": 3184,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/agents/providers/{provider}/credential",
+      "handler": "delete_provider_credential",
+      "router_file": "agents.py",
+      "line": 3394,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "PUT",
+      "path": "/agents/providers/{provider}/credential",
+      "handler": "put_provider_credential",
+      "router_file": "agents.py",
+      "line": 3352,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/providers/{provider}/models",
+      "handler": "list_provider_models_endpoint",
+      "router_file": "agents.py",
+      "line": 3426,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/providers/{provider}/models/refresh",
+      "handler": "refresh_provider_models_endpoint",
+      "router_file": "agents.py",
+      "line": 3461,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/providers/{provider}/verify",
+      "handler": "verify_provider",
+      "router_file": "agents.py",
+      "line": 3408,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/runs",
+      "handler": "list_runs",
+      "router_file": "agents.py",
+      "line": 2093,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/agents/runs/{run_id}",
+      "handler": "get_run",
+      "router_file": "agents.py",
+      "line": 2103,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/scout/run",
+      "handler": "run_scout",
+      "router_file": "agents.py",
+      "line": 2138,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/scout/sources",
+      "handler": "scout_sources",
+      "router_file": "agents.py",
+      "line": 2159,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/agents/scout/sources/availability",
+      "handler": "scout_source_availability",
+      "router_file": "agents.py",
+      "line": 2167,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/agents/stats",
+      "handler": "agent_stats",
+      "router_file": "agents.py",
+      "line": 3749,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/agents/story-extractor/run",
+      "handler": "run_story_extractor",
+      "router_file": "agents.py",
+      "line": 2349,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/tailor/run",
+      "handler": "run_tailor",
+      "router_file": "agents.py",
+      "line": 2245,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/test-run",
+      "handler": "test_run",
+      "router_file": "agents.py",
+      "line": 3818,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/agents/user/providers",
+      "handler": "list_user_credentials",
+      "router_file": "agents.py",
+      "line": 3500,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/agents/user/providers/{provider}/credential",
+      "handler": "delete_user_credential",
+      "router_file": "agents.py",
+      "line": 3576,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "PUT",
+      "path": "/agents/user/providers/{provider}/credential",
+      "handler": "put_user_credential",
+      "router_file": "agents.py",
+      "line": 3527,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/user/providers/{provider}/verify",
+      "handler": "verify_user_provider",
+      "router_file": "agents.py",
+      "line": 3590,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/agents/{name}/run",
+      "handler": "run_named_agent",
+      "router_file": "agents.py",
+      "line": 3887,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/analytics",
+      "handler": "dashboard_root",
+      "router_file": "analytics.py",
+      "line": 680,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/agent-roi",
+      "handler": "agent_roi",
+      "router_file": "analytics.py",
+      "line": 147,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/ats-distribution",
+      "handler": "ats_distribution",
+      "router_file": "analytics.py",
+      "line": 122,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/conversion",
+      "handler": "conversion",
+      "router_file": "analytics.py",
+      "line": 172,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/dashboard",
+      "handler": "dashboard",
+      "router_file": "analytics.py",
+      "line": 686,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/funnel",
+      "handler": "funnel",
+      "router_file": "analytics.py",
+      "line": 84,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/analytics/market-pulse",
+      "handler": "market_pulse",
+      "router_file": "analytics.py",
+      "line": 291,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/applications",
+      "handler": "list_applications",
+      "router_file": "applications.py",
+      "line": 103,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/applications/funnel/sankey",
+      "handler": "funnel_sankey",
+      "router_file": "applications.py",
+      "line": 35,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/applications/pipeline/clear",
+      "handler": "clear_pipeline",
+      "router_file": "applications.py",
+      "line": 443,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/applications/pipeline/{job_id}/move",
+      "handler": "move_pipeline_job",
+      "router_file": "applications.py",
+      "line": 255,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/applications/{application_id}",
+      "handler": "get_application",
+      "router_file": "applications.py",
+      "line": 177,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/applications/{application_id}/move",
+      "handler": "move_application",
+      "router_file": "applications.py",
+      "line": 323,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/applications/{application_id}/submit",
+      "handler": "submit_application",
+      "router_file": "applications.py",
+      "line": 506,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/approvals",
+      "handler": "list_approvals",
+      "router_file": "approvals.py",
+      "line": 79,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/approvals",
+      "handler": "create_approval",
+      "router_file": "approvals.py",
+      "line": 95,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/approvals/purge-expired",
+      "handler": "purge_expired_approvals",
+      "router_file": "approvals.py",
+      "line": 112,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/approvals/{approval_id}",
+      "handler": "delete_approval",
+      "router_file": "approvals.py",
+      "line": 139,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/approvals/{approval_id}",
+      "handler": "get_approval",
+      "router_file": "approvals.py",
+      "line": 134,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/approvals/{approval_id}/approve",
+      "handler": "approve",
+      "router_file": "approvals.py",
+      "line": 177,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/approvals/{approval_id}/execute",
+      "handler": "execute_gated_action",
+      "router_file": "approvals.py",
+      "line": 193,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/approvals/{approval_id}/reject",
+      "handler": "reject",
+      "router_file": "approvals.py",
+      "line": 185,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google/callback",
+      "handler": "google_callback",
+      "router_file": "google_oauth.py",
+      "line": 65,
+      "auth": "none",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google/login",
+      "handler": "google_login",
+      "router_file": "google_oauth.py",
+      "line": 51,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "handler": "login",
+      "router_file": "auth.py",
+      "line": 108,
+      "auth": "none",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "handler": "me",
+      "router_file": "auth.py",
+      "line": 142,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/register",
+      "handler": "register",
+      "router_file": "auth.py",
+      "line": 76,
+      "auth": "none",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/billing/admin/refund",
+      "handler": "admin_refund",
+      "router_file": "billing.py",
+      "line": 845,
+      "auth": "AdminUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/billing/checkout",
+      "handler": "create_checkout",
+      "router_file": "billing.py",
+      "line": 121,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/billing/entitlement",
+      "handler": "get_entitlement",
+      "router_file": "billing.py",
+      "line": 772,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/billing/plans",
+      "handler": "list_plans",
+      "router_file": "billing.py",
+      "line": 81,
+      "auth": "none",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/billing/portal",
+      "handler": "create_portal",
+      "router_file": "billing.py",
+      "line": 797,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/billing/subscription",
+      "handler": "get_subscription",
+      "router_file": "billing.py",
+      "line": 732,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/billing/webhooks/stripe",
+      "handler": "stripe_webhook",
+      "router_file": "billing.py",
+      "line": 210,
+      "auth": "none",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/cover-letters",
+      "handler": "list_cover_letters",
+      "router_file": "cover_letters.py",
+      "line": 563,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/cover-letters/{letter_id}",
+      "handler": "get_cover_letter",
+      "router_file": "cover_letters.py",
+      "line": 568,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/cover-letters/{letter_id}/insights",
+      "handler": "cover_letter_insights",
+      "router_file": "cover_letters.py",
+      "line": 573,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/cover-letters/{letter_id}/pdf",
+      "handler": "export_cover_letter_pdf",
+      "router_file": "cover_letters.py",
+      "line": 922,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/cover-letters/{letter_id}/refine",
+      "handler": "refine_cover_letter",
+      "router_file": "cover_letters.py",
+      "line": 651,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/emails",
+      "handler": "list_threads",
+      "router_file": "emails.py",
+      "line": 54,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/emails/accounts",
+      "handler": "list_accounts",
+      "router_file": "emails.py",
+      "line": 117,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/emails/accounts/connect",
+      "handler": "connect_account",
+      "router_file": "emails.py",
+      "line": 123,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/emails/accounts/{account_id}",
+      "handler": "disconnect_account",
+      "router_file": "emails.py",
+      "line": 139,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/emails/accounts/{account_id}/set-primary",
+      "handler": "set_primary_account",
+      "router_file": "emails.py",
+      "line": 151,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/emails/accounts/{account_id}/sync-status",
+      "handler": "account_sync_status",
+      "router_file": "emails.py",
+      "line": 159,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/emails/draft",
+      "handler": "create_draft",
+      "router_file": "emails.py",
+      "line": 205,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/emails/oauth/status",
+      "handler": "oauth_status",
+      "router_file": "emails.py",
+      "line": 104,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/emails/{thread_id}",
+      "handler": "get_thread",
+      "router_file": "emails.py",
+      "line": 189,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/emails/{thread_id}/reply",
+      "handler": "reply_to_thread",
+      "router_file": "emails.py",
+      "line": 242,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "health",
+      "router_file": "health.py",
+      "line": 24,
+      "auth": "none",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/interviews",
+      "handler": "list_interviews",
+      "router_file": "interviews.py",
+      "line": 204,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/interviews",
+      "handler": "create_interview",
+      "router_file": "interviews.py",
+      "line": 258,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/interviews/{interview_id}",
+      "handler": "delete_interview",
+      "router_file": "interviews.py",
+      "line": 378,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/interviews/{interview_id}",
+      "handler": "get_interview",
+      "router_file": "interviews.py",
+      "line": 248,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/interviews/{interview_id}",
+      "handler": "update_interview",
+      "router_file": "interviews.py",
+      "line": 309,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/interviews/{interview_id}/cancel",
+      "handler": "cancel_interview",
+      "router_file": "interviews.py",
+      "line": 413,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/interviews/{interview_id}/complete",
+      "handler": "complete_interview",
+      "router_file": "interviews.py",
+      "line": 393,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/jobs",
+      "handler": "list_jobs",
+      "router_file": "jobs.py",
+      "line": 68,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/jobs/clear-pipeline",
+      "handler": "clear_pipeline",
+      "router_file": "jobs.py",
+      "line": 551,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/jobs/{job_id}",
+      "handler": "archive_job",
+      "router_file": "jobs.py",
+      "line": 671,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/jobs/{job_id}",
+      "handler": "get_job",
+      "router_file": "jobs.py",
+      "line": 97,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/jobs/{job_id}/apply",
+      "handler": "apply_to_job",
+      "router_file": "jobs.py",
+      "line": 445,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/jobs/{job_id}/insights",
+      "handler": "job_insights",
+      "router_file": "jobs.py",
+      "line": 377,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/jobs/{job_id}/save",
+      "handler": "toggle_save",
+      "router_file": "jobs.py",
+      "line": 386,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/networking",
+      "handler": "networking_summary",
+      "router_file": "networking.py",
+      "line": 105,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/networking/contacts",
+      "handler": "list_contacts",
+      "router_file": "networking.py",
+      "line": 183,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/networking/contacts",
+      "handler": "create_contact",
+      "router_file": "networking.py",
+      "line": 238,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/networking/contacts/{contact_id}",
+      "handler": "delete_contact",
+      "router_file": "networking.py",
+      "line": 329,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/networking/contacts/{contact_id}",
+      "handler": "get_contact",
+      "router_file": "networking.py",
+      "line": 220,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/networking/contacts/{contact_id}",
+      "handler": "update_contact",
+      "router_file": "networking.py",
+      "line": 278,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/networking/outreach",
+      "handler": "list_outreach_tasks",
+      "router_file": "networking.py",
+      "line": 356,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/networking/outreach",
+      "handler": "create_outreach_task",
+      "router_file": "networking.py",
+      "line": 413,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/networking/outreach/{task_id}",
+      "handler": "delete_outreach_task",
+      "router_file": "networking.py",
+      "line": 511,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/networking/outreach/{task_id}",
+      "handler": "get_outreach_task",
+      "router_file": "networking.py",
+      "line": 394,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/networking/outreach/{task_id}",
+      "handler": "update_outreach_task",
+      "router_file": "networking.py",
+      "line": 457,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/offers",
+      "handler": "get_offers",
+      "router_file": "offers.py",
+      "line": 25,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/resumes",
+      "handler": "list_resumes",
+      "router_file": "resumes.py",
+      "line": 16,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/resumes",
+      "handler": "create_resume",
+      "router_file": "resumes.py",
+      "line": 37,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "POST",
+      "path": "/resumes/upload",
+      "handler": "upload_resume",
+      "router_file": "resumes.py",
+      "line": 61,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/resumes/{resume_id}",
+      "handler": "get_resume",
+      "router_file": "resumes.py",
+      "line": 128,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/resumes/{resume_id}/ats",
+      "handler": "ats_score",
+      "router_file": "resumes.py",
+      "line": 136,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/resumes/{resume_id}/diff",
+      "handler": "diff_resume",
+      "router_file": "resumes.py",
+      "line": 187,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/resumes/{resume_id}/download",
+      "handler": "download_resume",
+      "router_file": "resumes.py",
+      "line": 247,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/stories",
+      "handler": "list_stories",
+      "router_file": "stories.py",
+      "line": 137,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/stories",
+      "handler": "create_story",
+      "router_file": "stories.py",
+      "line": 158,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/stories/stats",
+      "handler": "story_stats",
+      "router_file": "stories.py",
+      "line": 143,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/stories/{story_id}",
+      "handler": "delete_story",
+      "router_file": "stories.py",
+      "line": 173,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "PUT",
+      "path": "/stories/{story_id}",
+      "handler": "update_story",
+      "router_file": "stories.py",
+      "line": 163,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/career-data",
+      "handler": "get_career_data",
+      "router_file": "workspaces.py",
+      "line": 1173,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/workspaces/career-data/refresh",
+      "handler": "refresh_career_data_endpoint",
+      "router_file": "workspaces.py",
+      "line": 1183,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/emails/inbox",
+      "handler": "email_inbox",
+      "router_file": "workspaces.py",
+      "line": 433,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/workspaces/emails/send",
+      "handler": "send_reply",
+      "router_file": "workspaces.py",
+      "line": 670,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/interviews/prep",
+      "handler": "interview_prep",
+      "router_file": "workspaces.py",
+      "line": 48,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/networking/summary",
+      "handler": "networking_summary",
+      "router_file": "workspaces.py",
+      "line": 268,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/offers",
+      "handler": "offers",
+      "router_file": "workspaces.py",
+      "line": 790,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "POST",
+      "path": "/workspaces/offers",
+      "handler": "add_offer",
+      "router_file": "workspaces.py",
+      "line": 797,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/workspaces/offers/{offer_id}",
+      "handler": "remove_offer",
+      "router_file": "workspaces.py",
+      "line": 829,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    },
+    {
+      "method": "GET",
+      "path": "/workspaces/settings",
+      "handler": "get_settings",
+      "router_file": "workspaces.py",
+      "line": 974,
+      "auth": "CurrentUser",
+      "mutates_state": false
+    },
+    {
+      "method": "PUT",
+      "path": "/workspaces/settings",
+      "handler": "update_settings",
+      "router_file": "workspaces.py",
+      "line": 1071,
+      "auth": "CurrentUser",
+      "mutates_state": true
+    }
+  ],
+  "task_verification": {
+    "required_endpoints": {
+      "PATCH /applications/{id}/stage": {
+        "status": "ABSENT",
+        "note": "Use POST /applications/{application_id}/move instead",
+        "alternative_path": "/applications/{application_id}/move",
+        "alternative_method": "POST",
+        "alternative_handler": "move_application",
+        "alternative_line": 323
+      },
+      "DELETE /approvals/{id}": {
+        "status": "PRESENT",
+        "path": "/approvals/{approval_id}",
+        "method": "DELETE",
+        "handler": "delete_approval",
+        "line": 139,
+        "auth": "CurrentUser",
+        "mutates": true
+      },
+      "POST /approvals/purge-expired": {
+        "status": "PRESENT",
+        "path": "/approvals/purge-expired",
+        "method": "POST",
+        "handler": "purge_expired_approvals",
+        "line": 112,
+        "auth": "CurrentUser",
+        "mutates": true
+      },
+      "GET /agents/runs/{run_id}/stream": {
+        "status": "ABSENT",
+        "note": "No SSE/streaming endpoint; only polling via GET /agents/runs/{run_id}",
+        "alternative_path": "/agents/runs/{run_id}",
+        "alternative_method": "GET",
+        "alternative_handler": "get_run",
+        "alternative_line": 2103
+      },
+      "GET /agents/scout/sources/availability": {
+        "status": "PRESENT",
+        "path": "/agents/scout/sources/availability",
+        "method": "GET",
+        "handler": "scout_source_availability",
+        "line": 2167,
+        "auth": "CurrentUser",
+        "mutates": false
+      },
+      "POST /jobs/{id}/apply": {
+        "status": "PRESENT",
+        "path": "/jobs/{job_id}/apply",
+        "method": "POST",
+        "handler": "apply_to_job",
+        "line": 445,
+        "auth": "CurrentUser",
+        "mutates": true
+      },
+      "GET /stories with job_id relevance param": {
+        "status": "ABSENT",
+        "path": "/stories",
+        "method": "GET",
+        "handler": "list_stories",
+        "line": 137,
+        "note": "No job_id query parameter; returns all user stories",
+        "auth": "CurrentUser",
+        "mutates": false
+      }
+    },
+    "summary": {
+      "required": 7,
+      "present": 4,
+      "absent": 3
+    }
+  },
+  "routers_by_file": {
+    "admin.py": [
+      {
+        "method": "GET",
+        "path": "/admin/audit-log",
+        "handler": "admin_audit_log",
+        "router_file": "admin.py",
+        "line": 239,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/admin/health",
+        "handler": "admin_health",
+        "router_file": "admin.py",
+        "line": 40,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/admin/settings",
+        "handler": "admin_get_settings",
+        "router_file": "admin.py",
+        "line": 204,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/admin/settings",
+        "handler": "admin_update_settings",
+        "router_file": "admin.py",
+        "line": 209,
+        "auth": "AdminUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/admin/spend",
+        "handler": "admin_spend",
+        "router_file": "admin.py",
+        "line": 165,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/admin/users",
+        "handler": "admin_list_users",
+        "router_file": "admin.py",
+        "line": 51,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/admin/users/{user_id}",
+        "handler": "admin_user_detail",
+        "router_file": "admin.py",
+        "line": 66,
+        "auth": "AdminUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/admin/users/{user_id}/spend-cap",
+        "handler": "admin_set_spend_cap",
+        "router_file": "admin.py",
+        "line": 104,
+        "auth": "AdminUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/admin/users/{user_id}/suspend",
+        "handler": "admin_suspend_user",
+        "router_file": "admin.py",
+        "line": 124,
+        "auth": "AdminUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/admin/users/{user_id}/unsuspend",
+        "handler": "admin_unsuspend_user",
+        "router_file": "admin.py",
+        "line": 141,
+        "auth": "AdminUser",
+        "mutates_state": true
+      }
+    ],
+    "agents.py": [
+      {
+        "method": "GET",
+        "path": "/agents",
+        "handler": "list_agents",
+        "router_file": "agents.py",
+        "line": 2040,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/board-sweep/trigger",
+        "handler": "trigger_board_sweep",
+        "router_file": "agents.py",
+        "line": 2205,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/catalog",
+        "handler": "agent_catalog",
+        "router_file": "agents.py",
+        "line": 2707,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/agents/config",
+        "handler": "list_agent_config",
+        "router_file": "agents.py",
+        "line": 2873,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/agents/config/{agent_key}",
+        "handler": "get_agent_config",
+        "router_file": "agents.py",
+        "line": 2880,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "PUT",
+        "path": "/agents/config/{agent_key}",
+        "handler": "update_agent_config",
+        "router_file": "agents.py",
+        "line": 2889,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/cover-letter/run",
+        "handler": "run_cover_letter",
+        "router_file": "agents.py",
+        "line": 2300,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/email/run",
+        "handler": "run_email_agent",
+        "router_file": "agents.py",
+        "line": 2367,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/fit-scorer/run",
+        "handler": "run_fit_scorer",
+        "router_file": "agents.py",
+        "line": 2180,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/jobs/{job_id}",
+        "handler": "get_background_job",
+        "router_file": "agents.py",
+        "line": 2111,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/pipeline/run",
+        "handler": "run_pipeline",
+        "router_file": "agents.py",
+        "line": 2522,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/providers",
+        "handler": "list_providers",
+        "router_file": "agents.py",
+        "line": 3161,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/providers/anthropic/oauth/exchange",
+        "handler": "anthropic_oauth_exchange",
+        "router_file": "agents.py",
+        "line": 3668,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/providers/anthropic/oauth/refresh",
+        "handler": "anthropic_oauth_refresh",
+        "router_file": "agents.py",
+        "line": 3727,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/providers/anthropic/oauth/start",
+        "handler": "anthropic_oauth_start",
+        "router_file": "agents.py",
+        "line": 3634,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "PUT",
+        "path": "/agents/providers/{provider}",
+        "handler": "update_provider",
+        "router_file": "agents.py",
+        "line": 3184,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/agents/providers/{provider}/credential",
+        "handler": "delete_provider_credential",
+        "router_file": "agents.py",
+        "line": 3394,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "PUT",
+        "path": "/agents/providers/{provider}/credential",
+        "handler": "put_provider_credential",
+        "router_file": "agents.py",
+        "line": 3352,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/providers/{provider}/models",
+        "handler": "list_provider_models_endpoint",
+        "router_file": "agents.py",
+        "line": 3426,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/providers/{provider}/models/refresh",
+        "handler": "refresh_provider_models_endpoint",
+        "router_file": "agents.py",
+        "line": 3461,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/providers/{provider}/verify",
+        "handler": "verify_provider",
+        "router_file": "agents.py",
+        "line": 3408,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/runs",
+        "handler": "list_runs",
+        "router_file": "agents.py",
+        "line": 2093,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/agents/runs/{run_id}",
+        "handler": "get_run",
+        "router_file": "agents.py",
+        "line": 2103,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/scout/run",
+        "handler": "run_scout",
+        "router_file": "agents.py",
+        "line": 2138,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/scout/sources",
+        "handler": "scout_sources",
+        "router_file": "agents.py",
+        "line": 2159,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/agents/scout/sources/availability",
+        "handler": "scout_source_availability",
+        "router_file": "agents.py",
+        "line": 2167,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/agents/stats",
+        "handler": "agent_stats",
+        "router_file": "agents.py",
+        "line": 3749,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/agents/story-extractor/run",
+        "handler": "run_story_extractor",
+        "router_file": "agents.py",
+        "line": 2349,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/tailor/run",
+        "handler": "run_tailor",
+        "router_file": "agents.py",
+        "line": 2245,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/test-run",
+        "handler": "test_run",
+        "router_file": "agents.py",
+        "line": 3818,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/agents/user/providers",
+        "handler": "list_user_credentials",
+        "router_file": "agents.py",
+        "line": 3500,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "DELETE",
+        "path": "/agents/user/providers/{provider}/credential",
+        "handler": "delete_user_credential",
+        "router_file": "agents.py",
+        "line": 3576,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "PUT",
+        "path": "/agents/user/providers/{provider}/credential",
+        "handler": "put_user_credential",
+        "router_file": "agents.py",
+        "line": 3527,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/user/providers/{provider}/verify",
+        "handler": "verify_user_provider",
+        "router_file": "agents.py",
+        "line": 3590,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/agents/{name}/run",
+        "handler": "run_named_agent",
+        "router_file": "agents.py",
+        "line": 3887,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "analytics.py": [
+      {
+        "method": "GET",
+        "path": "/analytics",
+        "handler": "dashboard_root",
+        "router_file": "analytics.py",
+        "line": 680,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/agent-roi",
+        "handler": "agent_roi",
+        "router_file": "analytics.py",
+        "line": 147,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/ats-distribution",
+        "handler": "ats_distribution",
+        "router_file": "analytics.py",
+        "line": 122,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/conversion",
+        "handler": "conversion",
+        "router_file": "analytics.py",
+        "line": 172,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/dashboard",
+        "handler": "dashboard",
+        "router_file": "analytics.py",
+        "line": 686,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/funnel",
+        "handler": "funnel",
+        "router_file": "analytics.py",
+        "line": 84,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/market-pulse",
+        "handler": "market_pulse",
+        "router_file": "analytics.py",
+        "line": 291,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      }
+    ],
+    "applications.py": [
+      {
+        "method": "GET",
+        "path": "/applications",
+        "handler": "list_applications",
+        "router_file": "applications.py",
+        "line": 103,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/applications/funnel/sankey",
+        "handler": "funnel_sankey",
+        "router_file": "applications.py",
+        "line": 35,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/applications/pipeline/clear",
+        "handler": "clear_pipeline",
+        "router_file": "applications.py",
+        "line": 443,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/applications/pipeline/{job_id}/move",
+        "handler": "move_pipeline_job",
+        "router_file": "applications.py",
+        "line": 255,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/applications/{application_id}",
+        "handler": "get_application",
+        "router_file": "applications.py",
+        "line": 177,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/applications/{application_id}/move",
+        "handler": "move_application",
+        "router_file": "applications.py",
+        "line": 323,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/applications/{application_id}/submit",
+        "handler": "submit_application",
+        "router_file": "applications.py",
+        "line": 506,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "approvals.py": [
+      {
+        "method": "GET",
+        "path": "/approvals",
+        "handler": "list_approvals",
+        "router_file": "approvals.py",
+        "line": 79,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/approvals",
+        "handler": "create_approval",
+        "router_file": "approvals.py",
+        "line": 95,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/purge-expired",
+        "handler": "purge_expired_approvals",
+        "router_file": "approvals.py",
+        "line": 112,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/approvals/{approval_id}",
+        "handler": "delete_approval",
+        "router_file": "approvals.py",
+        "line": 139,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/approvals/{approval_id}",
+        "handler": "get_approval",
+        "router_file": "approvals.py",
+        "line": 134,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{approval_id}/approve",
+        "handler": "approve",
+        "router_file": "approvals.py",
+        "line": 177,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{approval_id}/execute",
+        "handler": "execute_gated_action",
+        "router_file": "approvals.py",
+        "line": 193,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{approval_id}/reject",
+        "handler": "reject",
+        "router_file": "approvals.py",
+        "line": 185,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "google_oauth.py": [
+      {
+        "method": "GET",
+        "path": "/auth/google/callback",
+        "handler": "google_callback",
+        "router_file": "google_oauth.py",
+        "line": 65,
+        "auth": "none",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/auth/google/login",
+        "handler": "google_login",
+        "router_file": "google_oauth.py",
+        "line": 51,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      }
+    ],
+    "auth.py": [
+      {
+        "method": "POST",
+        "path": "/auth/login",
+        "handler": "login",
+        "router_file": "auth.py",
+        "line": 108,
+        "auth": "none",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/auth/me",
+        "handler": "me",
+        "router_file": "auth.py",
+        "line": 142,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/auth/register",
+        "handler": "register",
+        "router_file": "auth.py",
+        "line": 76,
+        "auth": "none",
+        "mutates_state": true
+      }
+    ],
+    "billing.py": [
+      {
+        "method": "POST",
+        "path": "/billing/admin/refund",
+        "handler": "admin_refund",
+        "router_file": "billing.py",
+        "line": 845,
+        "auth": "AdminUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/billing/checkout",
+        "handler": "create_checkout",
+        "router_file": "billing.py",
+        "line": 121,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/billing/entitlement",
+        "handler": "get_entitlement",
+        "router_file": "billing.py",
+        "line": 772,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/billing/plans",
+        "handler": "list_plans",
+        "router_file": "billing.py",
+        "line": 81,
+        "auth": "none",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/billing/portal",
+        "handler": "create_portal",
+        "router_file": "billing.py",
+        "line": 797,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/billing/subscription",
+        "handler": "get_subscription",
+        "router_file": "billing.py",
+        "line": 732,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/billing/webhooks/stripe",
+        "handler": "stripe_webhook",
+        "router_file": "billing.py",
+        "line": 210,
+        "auth": "none",
+        "mutates_state": true
+      }
+    ],
+    "cover_letters.py": [
+      {
+        "method": "GET",
+        "path": "/cover-letters",
+        "handler": "list_cover_letters",
+        "router_file": "cover_letters.py",
+        "line": 563,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/cover-letters/{letter_id}",
+        "handler": "get_cover_letter",
+        "router_file": "cover_letters.py",
+        "line": 568,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/cover-letters/{letter_id}/insights",
+        "handler": "cover_letter_insights",
+        "router_file": "cover_letters.py",
+        "line": 573,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/cover-letters/{letter_id}/pdf",
+        "handler": "export_cover_letter_pdf",
+        "router_file": "cover_letters.py",
+        "line": 922,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/cover-letters/{letter_id}/refine",
+        "handler": "refine_cover_letter",
+        "router_file": "cover_letters.py",
+        "line": 651,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "emails.py": [
+      {
+        "method": "GET",
+        "path": "/emails",
+        "handler": "list_threads",
+        "router_file": "emails.py",
+        "line": 54,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/emails/accounts",
+        "handler": "list_accounts",
+        "router_file": "emails.py",
+        "line": 117,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/emails/accounts/connect",
+        "handler": "connect_account",
+        "router_file": "emails.py",
+        "line": 123,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/emails/accounts/{account_id}",
+        "handler": "disconnect_account",
+        "router_file": "emails.py",
+        "line": 139,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "PATCH",
+        "path": "/emails/accounts/{account_id}/set-primary",
+        "handler": "set_primary_account",
+        "router_file": "emails.py",
+        "line": 151,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/emails/accounts/{account_id}/sync-status",
+        "handler": "account_sync_status",
+        "router_file": "emails.py",
+        "line": 159,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/emails/draft",
+        "handler": "create_draft",
+        "router_file": "emails.py",
+        "line": 205,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/emails/oauth/status",
+        "handler": "oauth_status",
+        "router_file": "emails.py",
+        "line": 104,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/emails/{thread_id}",
+        "handler": "get_thread",
+        "router_file": "emails.py",
+        "line": 189,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/emails/{thread_id}/reply",
+        "handler": "reply_to_thread",
+        "router_file": "emails.py",
+        "line": 242,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "health.py": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "handler": "health",
+        "router_file": "health.py",
+        "line": 24,
+        "auth": "none",
+        "mutates_state": false
+      }
+    ],
+    "interviews.py": [
+      {
+        "method": "GET",
+        "path": "/interviews",
+        "handler": "list_interviews",
+        "router_file": "interviews.py",
+        "line": 204,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/interviews",
+        "handler": "create_interview",
+        "router_file": "interviews.py",
+        "line": 258,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/interviews/{interview_id}",
+        "handler": "delete_interview",
+        "router_file": "interviews.py",
+        "line": 378,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/interviews/{interview_id}",
+        "handler": "get_interview",
+        "router_file": "interviews.py",
+        "line": 248,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "PATCH",
+        "path": "/interviews/{interview_id}",
+        "handler": "update_interview",
+        "router_file": "interviews.py",
+        "line": 309,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/interviews/{interview_id}/cancel",
+        "handler": "cancel_interview",
+        "router_file": "interviews.py",
+        "line": 413,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/interviews/{interview_id}/complete",
+        "handler": "complete_interview",
+        "router_file": "interviews.py",
+        "line": 393,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "jobs.py": [
+      {
+        "method": "GET",
+        "path": "/jobs",
+        "handler": "list_jobs",
+        "router_file": "jobs.py",
+        "line": 68,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "DELETE",
+        "path": "/jobs/clear-pipeline",
+        "handler": "clear_pipeline",
+        "router_file": "jobs.py",
+        "line": 551,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/jobs/{job_id}",
+        "handler": "archive_job",
+        "router_file": "jobs.py",
+        "line": 671,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/jobs/{job_id}",
+        "handler": "get_job",
+        "router_file": "jobs.py",
+        "line": 97,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/jobs/{job_id}/apply",
+        "handler": "apply_to_job",
+        "router_file": "jobs.py",
+        "line": 445,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/jobs/{job_id}/insights",
+        "handler": "job_insights",
+        "router_file": "jobs.py",
+        "line": 377,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/jobs/{job_id}/save",
+        "handler": "toggle_save",
+        "router_file": "jobs.py",
+        "line": 386,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "networking.py": [
+      {
+        "method": "GET",
+        "path": "/networking",
+        "handler": "networking_summary",
+        "router_file": "networking.py",
+        "line": 105,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/networking/contacts",
+        "handler": "list_contacts",
+        "router_file": "networking.py",
+        "line": 183,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/networking/contacts",
+        "handler": "create_contact",
+        "router_file": "networking.py",
+        "line": 238,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/networking/contacts/{contact_id}",
+        "handler": "delete_contact",
+        "router_file": "networking.py",
+        "line": 329,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/networking/contacts/{contact_id}",
+        "handler": "get_contact",
+        "router_file": "networking.py",
+        "line": 220,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "PATCH",
+        "path": "/networking/contacts/{contact_id}",
+        "handler": "update_contact",
+        "router_file": "networking.py",
+        "line": 278,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/networking/outreach",
+        "handler": "list_outreach_tasks",
+        "router_file": "networking.py",
+        "line": 356,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/networking/outreach",
+        "handler": "create_outreach_task",
+        "router_file": "networking.py",
+        "line": 413,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/networking/outreach/{task_id}",
+        "handler": "delete_outreach_task",
+        "router_file": "networking.py",
+        "line": 511,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/networking/outreach/{task_id}",
+        "handler": "get_outreach_task",
+        "router_file": "networking.py",
+        "line": 394,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "PATCH",
+        "path": "/networking/outreach/{task_id}",
+        "handler": "update_outreach_task",
+        "router_file": "networking.py",
+        "line": 457,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "offers.py": [
+      {
+        "method": "GET",
+        "path": "/offers",
+        "handler": "get_offers",
+        "router_file": "offers.py",
+        "line": 25,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      }
+    ],
+    "resumes.py": [
+      {
+        "method": "GET",
+        "path": "/resumes",
+        "handler": "list_resumes",
+        "router_file": "resumes.py",
+        "line": 16,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/resumes",
+        "handler": "create_resume",
+        "router_file": "resumes.py",
+        "line": 37,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "POST",
+        "path": "/resumes/upload",
+        "handler": "upload_resume",
+        "router_file": "resumes.py",
+        "line": 61,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/resumes/{resume_id}",
+        "handler": "get_resume",
+        "router_file": "resumes.py",
+        "line": 128,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/resumes/{resume_id}/ats",
+        "handler": "ats_score",
+        "router_file": "resumes.py",
+        "line": 136,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/resumes/{resume_id}/diff",
+        "handler": "diff_resume",
+        "router_file": "resumes.py",
+        "line": 187,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/resumes/{resume_id}/download",
+        "handler": "download_resume",
+        "router_file": "resumes.py",
+        "line": 247,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      }
+    ],
+    "stories.py": [
+      {
+        "method": "GET",
+        "path": "/stories",
+        "handler": "list_stories",
+        "router_file": "stories.py",
+        "line": 137,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/stories",
+        "handler": "create_story",
+        "router_file": "stories.py",
+        "line": 158,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/stories/stats",
+        "handler": "story_stats",
+        "router_file": "stories.py",
+        "line": 143,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "DELETE",
+        "path": "/stories/{story_id}",
+        "handler": "delete_story",
+        "router_file": "stories.py",
+        "line": 173,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "PUT",
+        "path": "/stories/{story_id}",
+        "handler": "update_story",
+        "router_file": "stories.py",
+        "line": 163,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ],
+    "workspaces.py": [
+      {
+        "method": "GET",
+        "path": "/workspaces/career-data",
+        "handler": "get_career_data",
+        "router_file": "workspaces.py",
+        "line": 1173,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/workspaces/career-data/refresh",
+        "handler": "refresh_career_data_endpoint",
+        "router_file": "workspaces.py",
+        "line": 1183,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/workspaces/emails/inbox",
+        "handler": "email_inbox",
+        "router_file": "workspaces.py",
+        "line": 433,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/workspaces/emails/send",
+        "handler": "send_reply",
+        "router_file": "workspaces.py",
+        "line": 670,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/workspaces/interviews/prep",
+        "handler": "interview_prep",
+        "router_file": "workspaces.py",
+        "line": 48,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/workspaces/networking/summary",
+        "handler": "networking_summary",
+        "router_file": "workspaces.py",
+        "line": 268,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "GET",
+        "path": "/workspaces/offers",
+        "handler": "offers",
+        "router_file": "workspaces.py",
+        "line": 790,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "POST",
+        "path": "/workspaces/offers",
+        "handler": "add_offer",
+        "router_file": "workspaces.py",
+        "line": 797,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "DELETE",
+        "path": "/workspaces/offers/{offer_id}",
+        "handler": "remove_offer",
+        "router_file": "workspaces.py",
+        "line": 829,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      },
+      {
+        "method": "GET",
+        "path": "/workspaces/settings",
+        "handler": "get_settings",
+        "router_file": "workspaces.py",
+        "line": 974,
+        "auth": "CurrentUser",
+        "mutates_state": false
+      },
+      {
+        "method": "PUT",
+        "path": "/workspaces/settings",
+        "handler": "update_settings",
+        "router_file": "workspaces.py",
+        "line": 1071,
+        "auth": "CurrentUser",
+        "mutates_state": true
+      }
+    ]
+  }
+}

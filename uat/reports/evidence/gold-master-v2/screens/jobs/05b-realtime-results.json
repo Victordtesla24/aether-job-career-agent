@@ -1,0 +1,11 @@
+{
+  "nav_start": 1785455584.700199,
+  "matching_requests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785455585.4114184
+    }
+  ]
+}

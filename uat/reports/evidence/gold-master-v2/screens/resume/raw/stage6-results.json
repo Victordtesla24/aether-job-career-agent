@@ -1,0 +1,26 @@
+{
+  "unauthFinalUrl2": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fresume",
+  "originalNameDesktop2ndCheck": "Jane Doe Test Resume",
+  "tailoredNameDesktop2ndCheck": "VIKRAM",
+  "cardCountNow": 8,
+  "uiAtsOverall2nd": "42.5",
+  "atsNetCalls2nd": [
+    {
+      "method": "GET",
+      "url": "https://5cb5f0620.abacusai.cloud/api/resumes/c2b64e20c8ff4e5b5a06b6745/ats",
+      "status": 200,
+      "ts": "2026-07-31T00:29:53.729Z"
+    }
+  ],
+  "mobileOverflow2ndCheck": {
+    "docWidth": 390,
+    "winWidth": 390,
+    "hasOverflow": false
+  },
+  "runFinishedWithinWindow": true,
+  "finalNoticeVisible": true,
+  "finalNoticeText": "No verifiable changes could be applied — every suggested edit was unsupported by your evidence, so your résumé is unchanged and you were not charged.",
+  "finalNoticeClass": "rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber",
+  "finalConversionVisible": false,
+  "finalErrorVisible": false
+}

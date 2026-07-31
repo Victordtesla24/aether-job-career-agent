@@ -1,0 +1,51 @@
+START 2026-07-30T22:53:58Z
+[TEST] Preparing to capture 0 authenticated routes
+[BASELINE-SWEEP] Preparing to capture 0 authenticated routes
+
+Running 52 tests using 1 worker
+
+  ✘   1 [setup] › e2e/auth.setup.ts:26:1 › authenticate (21.0s)
+
+
+  1) [setup] › e2e/auth.setup.ts:26:1 › authenticate ───────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "**/dashboard" until "load"
+    ============================================================
+
+      33 |   await page.getByRole("button", { name: /sign in/i }).click();
+      34 |
+    > 35 |   await page.waitForURL("**/dashboard", { timeout: 20_000 });
+         |              ^
+      36 |
+      37 |   const token = await page.evaluate(() => window.localStorage.getItem("aether_token"));
+      38 |   expect(token, "JWT stored under the shared aether_token key after a real login").toBeTruthy();
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/auth.setup.ts:35:14
+
+    Error Context: test-results/auth.setup.ts-authenticate-setup/error-context.md
+
+  1 failed
+    [setup] › e2e/auth.setup.ts:26:1 › authenticate ────────────────────────────────────────────────
+  51 did not run
+EXIT_CODE=1
+DURATION_SECONDS=25
+END 2026-07-30T22:54:23Z
+
+# TESTER NOTE (reconstructed verbatim from the live run's captured tool output --
+# the file above was overwritten in-place by the retry run before this copy was
+# saved, so this is a manual re-save, not a fresh execution):
+#
+# Command run: LOGIN_EMAIL/LOGIN_PASSWORD sourced from repo-root .env
+# (LOGIN_EMAIL=sarkar.vikram@gmail.com, LOGIN_PASSWORD=AetherDemo1) via
+# `pnpm exec playwright test --reporter=list`.
+#
+# Root cause (apps/web/test-results/auth.setup.ts-authenticate-setup/error-context.md,
+# page snapshot at time of timeout): the live production /login form rendered
+# `alert: "Invalid email or password."` for that exact email/password pair.
+# The repo .env's LOGIN_PASSWORD for the real account is stale relative to the
+# live production password -- this is an environment/credential drift, not an
+# application regression. The orchestrator-provided test login (admin /
+# admin123) was verified to authenticate successfully in a scoped
+# --project=setup check, then used for the full baseline run captured in
+# playwright-baseline.log.

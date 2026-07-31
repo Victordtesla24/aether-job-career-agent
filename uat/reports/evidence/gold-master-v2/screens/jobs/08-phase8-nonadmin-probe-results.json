@@ -1,0 +1,19 @@
+{
+  "has_subscribe_gate": true,
+  "subscribe_btn_exists": 1,
+  "after_subscribe_click_url": "https://5cb5f0620.abacusai.cloud/pricing",
+  "backend_probe": {
+    "get_jobs": {
+      "status": 200,
+      "body": "[]"
+    },
+    "scout_run": {
+      "status": 402,
+      "body": "{\"detail\":{\"error\":\"subscription_required\",\"message\":\"An active subscription is required to use Aether. Subscribe to unlock.\",\"upgradeUrl\":\"/pricing\"}}"
+    },
+    "apply_fakejob": {
+      "status": 404,
+      "body": "{\"detail\":\"Job not found\"}"
+    }
+  }
+}

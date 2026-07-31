@@ -1,0 +1,1418 @@
+==> /var/log/aether/api.log <==
+2026-07-31T00:45:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:45:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:19Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:45:22Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:40:00Z INFO     arq.worker:   0.09s ← cron:sweep_stale_jobs ● 0
+2026-07-31T00:40:00Z INFO     arq.worker:   0.43s → board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user('c6c8d0163d973a8048e7e33b8')
+2026-07-31T00:40:01Z INFO     app.workers.board_sweep: board-sweep c6c8d0163d973a8048e7e33b8: all 4 eligible job(s) failure-suppressed until 2026-07-31T05:52:17
+2026-07-31T00:40:01Z INFO     arq.worker:   0.43s ← board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user ● {'user_id': 'c6c8d0163d973a8048e7e33b8', 'processed': 0, 'tailored': 0, 'covers…
+2026-07-31T00:43:28Z INFO     arq.worker:   0.46s → bf4623b475f949da9eb74702958738c0:run_agent_job('c60c60d505ef5a2a950bb65be')
+2026-07-31T00:43:32Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:44:12Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:44:52Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:45:00Z INFO     arq.worker:   1.00s → cron:sweep_stale_jobs()
+2026-07-31T00:45:00Z INFO     arq.worker:   0.08s ← cron:sweep_stale_jobs ● 0
+
+==> /var/log/aether/discovery.log <==
+[discovery-cron 2026-07-30T23:01:07Z] fit-scorer: {"status":"completed","scored":0,"errors":[]}
+[discovery-cron 2026-07-30T23:30:51Z] scout run: query='Business Analyst/Project Manager/Scrum Master' location='Melbourne'
+[discovery-cron 2026-07-30T23:31:21Z] scout: {"status":"accepted","persisted":0,"updated":35,"errors":[],"per_source":[{"source":"greenhouse","fetched":14,"persisted":0,"updated":14,"error":null,"status":"ok"},{"source":"lever","fetched":8,"persisted":0,"updated":8,"error":null,"status":"ok"},{"source":"ashby","fetched":13,"persisted":0,"updated":13,"error":null,"status":"ok"},{"source":"workable","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"adzuna","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"remotive","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"remoteok","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"wellfound","fetched":0,"persisted":0,"updated":0,"error":"SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden","status":"blocked"},{"source":"linkedin","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"indeed","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"}]}
+[discovery-cron 2026-07-30T23:31:25Z] fit-scorer: {"status":"completed","scored":0,"errors":[]}
+[discovery-cron 2026-07-31T00:00:25Z] scout run: query='Business Analyst/Project Manager/Scrum Master' location='Melbourne'
+[discovery-cron 2026-07-31T00:00:41Z] scout: {"status":"accepted","persisted":0,"updated":35,"errors":[],"per_source":[{"source":"greenhouse","fetched":14,"persisted":0,"updated":14,"error":null,"status":"ok"},{"source":"lever","fetched":8,"persisted":0,"updated":8,"error":null,"status":"ok"},{"source":"ashby","fetched":13,"persisted":0,"updated":13,"error":null,"status":"ok"},{"source":"workable","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"adzuna","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"remotive","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"remoteok","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"wellfound","fetched":0,"persisted":0,"updated":0,"error":"SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden","status":"blocked"},{"source":"linkedin","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"indeed","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"}]}
+[discovery-cron 2026-07-31T00:00:45Z] fit-scorer: {"status":"completed","scored":0,"errors":[]}
+[discovery-cron 2026-07-31T00:30:51Z] scout run: query='Business Analyst/Project Manager/Scrum Master' location='Melbourne'
+[discovery-cron 2026-07-31T00:31:09Z] scout: {"status":"accepted","persisted":0,"updated":35,"errors":[],"per_source":[{"source":"greenhouse","fetched":14,"persisted":0,"updated":14,"error":null,"status":"ok"},{"source":"lever","fetched":8,"persisted":0,"updated":8,"error":null,"status":"ok"},{"source":"ashby","fetched":13,"persisted":0,"updated":13,"error":null,"status":"ok"},{"source":"workable","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"adzuna","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"remotive","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"remoteok","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"wellfound","fetched":0,"persisted":0,"updated":0,"error":"SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden","status":"blocked"},{"source":"linkedin","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"indeed","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"}]}
+[discovery-cron 2026-07-31T00:31:13Z] fit-scorer: {"status":"completed","scored":0,"errors":[]}
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:45:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:45:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:38Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:45:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:45:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:43Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:45:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:45:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:45:58Z INFO     aether.worker: job c60c60d505ef5a2a950bb65be cover degraded (FabricationError): guard rejected the draft, refunded
+2026-07-31T00:45:58Z INFO     arq.worker: 149.20s ← bf4623b475f949da9eb74702958738c0:run_agent_job ● 
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     208.122.8.11:0 - "GET /agents/jobs/c60c60d505ef5a2a950bb65be HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:45:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:46:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:46:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:46:10Z INFO:     208.122.8.11:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:46:22Z INFO:     208.122.8.11:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:46:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:46:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:46:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 202 Accepted
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:46:27Z INFO     arq.worker:   0.23s → cdb0bc4620e045778c8379fec5b1ad2a:run_agent_job('cb8b62d5e341de52b222923a1')
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:46:28Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:46:28Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:28Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:46:28Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:46:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:46:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:46:30Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:46:36Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:46:41Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:46:47Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:46:52Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:46:52Z INFO:     208.122.8.11:0 - "POST /stories HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:46:52Z INFO:     208.122.8.11:0 - "POST /stories HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:46:53Z INFO:     208.122.8.11:0 - "POST /stories HTTP/1.1" 201 Created
+2026-07-31T00:46:57Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:46:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:46:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:46:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:47:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:47:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:47:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:47:01Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:01Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:47:01Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:47:02Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:07Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:13Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:47:13Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:47:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:47:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:47:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:47:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:47:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:47:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:47:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories/stats HTTP/1.1" 200 OK
+2026-07-31T00:47:18Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "DELETE /stories/c818e79ac2b6b241eabc916e0 HTTP/1.1" 204 No Content
+2026-07-31T00:47:23Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:28Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:34Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:34Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:47:39Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:44Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:49Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:47:54Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:47:54Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:47:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:47:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:47:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:47:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:48:02Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:48:02Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:02Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:48:05Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:10Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:15Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:48:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:48:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:48:21Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:26Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:31Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+2026-07-31T00:48:39Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:48:41Z INFO     aether.worker: job cb8b62d5e341de52b222923a1 cover degraded (FabricationError): guard rejected the draft, refunded
+2026-07-31T00:48:41Z INFO     arq.worker: 133.57s ← cdb0bc4620e045778c8379fec5b1ad2a:run_agent_job ● 
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:48:44Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cb8b62d5e341de52b222923a1 HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:48:52Z INFO     arq.worker:   0.06s → 105a89398d5c442b8d929fb2f7c31d98:run_agent_job('cbb44517a98c88c9cb7e80a11')
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:48:52Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 202 Accepted
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:48:55Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:49:03Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:09Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:14Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:19Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:24Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:49:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:35Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:40Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:45Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T00:49:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T00:49:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:49:51Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c15369eafaad7210d65151a6d/insights HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:49:51Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:49:56Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:49:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c15369eafaad7210d65151a6d/pdf HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:50:00Z INFO     arq.worker:   1.00s → cron:board_sweep_cron()
+2026-07-31T00:50:00Z INFO     arq.worker:   1.09s → cron:sweep_stale_jobs()
+2026-07-31T00:50:00Z INFO     arq.worker:   0.07s ← cron:sweep_stale_jobs ● 0
+2026-07-31T00:50:00Z INFO     app.workers.board_sweep: board-sweep cron: 1 user(s) eligible, 1 enqueued
+2026-07-31T00:50:00Z INFO     arq.worker:   0.16s ← cron:board_sweep_cron ● 1
+2026-07-31T00:50:00Z INFO     arq.worker:   0.34s → board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user('c6c8d0163d973a8048e7e33b8')
+2026-07-31T00:50:01Z INFO     app.workers.board_sweep: board-sweep c6c8d0163d973a8048e7e33b8: all 4 eligible job(s) failure-suppressed until 2026-07-31T05:55:20
+2026-07-31T00:50:01Z INFO     arq.worker:   0.52s ← board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user ● {'user_id': 'c6c8d0163d973a8048e7e33b8', 'processed': 0, 'tailored': 0, 'covers…
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:50:01Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:03Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:50:03Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:03Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:04Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:07Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:08Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:50:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:09Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:09Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:11Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:12Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:17Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:18Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:22Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:25Z INFO:     208.122.8.11:0 - "GET /cover-letters/c15369eafaad7210d65151a6d/pdf HTTP/1.1" 200 OK
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:50:26Z INFO     httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:50:27Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:33Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:50:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:39Z INFO:     208.122.8.11:0 - "GET /cover-letters/cc4358ec0213aedf01ab786c3/pdf HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:43Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:50:48Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:50:49Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:50:50Z INFO     arq.worker: 117.78s ← 105a89398d5c442b8d929fb2f7c31d98:run_agent_job ● 
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:50:54Z INFO:     208.122.8.11:0 - "GET /agents/jobs/cbb44517a98c88c9cb7e80a11 HTTP/1.1" 200 OK
+2026-07-31T00:51:01Z INFO:     208.122.8.11:0 - "GET /cover-letters/cd10762c6b48c2ae21808da3f/pdf HTTP/1.1" 200 OK
+2026-07-31T00:51:30Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:51:30Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:51:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:39Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:42Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:42Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:49Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/cors.py", line 96, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/cors.py", line 154, in simple_response
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2685, in app
+    await route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1766, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2740, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1786, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1265, in handle
+    await app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 151, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 137, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 691, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 347, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2641, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1033, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/cover_letters.py", line 846, in refine_cover_letter
+    user_id, letter["jobId"], letter["resumeId"], revised
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/approval.py", line 41, in create
+    cur.execute(
+psycopg2.errors.UntranslatableCharacter: unsupported Unicode escape sequence
+LINE 3:                         SET "payload" = '{"kind": "cover_let...
+                                                ^
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: ..."instructions": "Adversarial NUL byte test \u0000...
+
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:51:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:51:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:51:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:51:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:51:53Z INFO:     208.122.8.11:0 - "GET /cover-letters/c15369eafaad7210d65151a6d/insights HTTP/1.1" 401 Unauthorized
+2026-07-31T00:51:53Z INFO:     208.122.8.11:0 - "GET /cover-letters/c6b7a3db22e6f9abe040f83e5/insights HTTP/1.1" 401 Unauthorized
+2026-07-31T00:52:05Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:52:06Z INFO:     208.122.8.11:0 - "GET /cover-letters/c15369eafaad7210d65151a6d/insights HTTP/1.1" 200 OK
+2026-07-31T00:52:06Z INFO:     208.122.8.11:0 - "GET /cover-letters/c6b7a3db22e6f9abe040f83e5/insights HTTP/1.1" 200 OK
+2026-07-31T00:52:07Z INFO:     208.122.8.11:0 - "GET /cover-letters/cc4358ec0213aedf01ab786c3/insights HTTP/1.1" 200 OK
+2026-07-31T00:52:14Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:52:14Z INFO:     208.122.8.11:0 - "POST /agents/scout/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:52:14Z INFO:     208.122.8.11:0 - "POST /agents/tailor/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:52:14Z INFO:     208.122.8.11:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:52:14Z INFO:     208.122.8.11:0 - "POST /agents/story-extractor/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:52:24Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:52:24Z INFO:     208.122.8.11:0 - "POST /agents/scout/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:52:24Z INFO:     208.122.8.11:0 - "POST /agents/tailor/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:52:24Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:52:25Z INFO:     208.122.8.11:0 - "POST /approvals/fake-id/approve HTTP/1.1" 404 Not Found
+2026-07-31T00:52:32Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:52:32Z INFO:     208.122.8.11:0 - "POST /agents/scout/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:52:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:52:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:52:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:52:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:53:00Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:53:49Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:54:27Z INFO:     208.122.8.11:0 - "POST /cover-letters/cc4358ec0213aedf01ab786c3/refine HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:54:29Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:54:38Z INFO:     208.122.8.11:0 - "GET /auth/me HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /stories/stats HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:54:39Z INFO:     208.122.8.11:0 - "GET /resumes HTTP/1.1" 200 OK
+2026-07-31T00:54:40Z INFO:     208.122.8.11:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T00:54:40Z INFO:     208.122.8.11:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:54:40Z INFO:     208.122.8.11:0 - "GET /analytics/overview HTTP/1.1" 404 Not Found
+2026-07-31T00:54:49Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:54:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:54:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:54:52Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/worker.log <==
+2026-07-31T00:55:00Z INFO     arq.worker:   1.00s → cron:sweep_stale_jobs()
+2026-07-31T00:55:00Z INFO     arq.worker:   0.06s ← cron:sweep_stale_jobs ● 0
+
+==> /var/log/aether/api.log <==
+2026-07-31T00:55:19Z INFO:     208.122.8.11:0 - "POST /agents/scout/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:55:19Z INFO:     208.122.8.11:0 - "POST /agents/tailor/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:55:19Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:55:19Z INFO:     208.122.8.11:0 - "POST /agents/story-extractor/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:20Z INFO:     208.122.8.11:0 - "POST /agents/pipeline/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:20Z INFO:     208.122.8.11:0 - "POST /agents/matcher/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:29Z INFO:     208.122.8.11:0 - "POST /agents/scout/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:29Z INFO:     208.122.8.11:0 - "POST /agents/tailor/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:30Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:30Z INFO:     208.122.8.11:0 - "POST /agents/fit-scorer/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:30Z INFO:     208.122.8.11:0 - "POST /agents/email/run HTTP/1.1" 402 Payment Required
+2026-07-31T00:55:30Z INFO:     208.122.8.11:0 - "POST /agents/board-sweep/trigger HTTP/1.1" 202 Accepted
+2026-07-31T00:55:44Z INFO:     208.122.8.11:0 - "POST /cover-letters/cc4358ec0213aedf01ab786c3/refine HTTP/1.1" 500 Internal Server Error
+2026-07-31T00:55:44Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2685, in app
+    await route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1766, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2740, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1786, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1265, in handle
+    await app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 151, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 137, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 691, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 347, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2641, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1033, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/cover_letters.py", line 846, in refine_cover_letter
+    user_id, letter["jobId"], letter["resumeId"], revised
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/approval.py", line 41, in create
+    cur.execute(
+psycopg2.errors.UntranslatableCharacter: unsupported Unicode escape sequence
+LINE 3:                         SET "payload" = '{"kind": "cover_let...
+                                                ^
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: ...4358ec0213aedf01ab786c3", "instructions": "\u0000...
+
+2026-07-31T00:55:53Z INFO:     208.122.8.11:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T00:55:54Z INFO:     208.122.8.11:0 - "POST /stories HTTP/1.1" 201 Created
+2026-07-31T00:55:54Z INFO:     208.122.8.11:0 - "POST /cover-letters/bogus-adv-id/refine HTTP/1.1" 404 Not Found
+2026-07-31T00:56:11Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:56:12Z INFO:     208.122.8.11:0 - "GET /stories/stats HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:56:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:56:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:56:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:56:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:56:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "PUT /workspaces/settings HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:56:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:08Z INFO:     208.122.8.11:0 - "POST /resumes HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:57:08Z INFO:     208.122.8.11:0 - "GET /approvals?status=all HTTP/1.1" 200 OK
+2026-07-31T00:57:08Z INFO:     208.122.8.11:0 - "GET /agents/catalog HTTP/1.1" 200 OK
+2026-07-31T00:57:09Z INFO:     208.122.8.11:0 - "POST /agents/test-run HTTP/1.1" 200 OK
+2026-07-31T00:57:09Z INFO:     208.122.8.11:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:28Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T00:57:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:31Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T00:57:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "PUT /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:57:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:57:40Z INFO:     208.122.8.11:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:57:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "PUT /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:58:02Z INFO:     208.122.8.11:0 - "DELETE /stories/c74af947836a209d9d98b9eba HTTP/1.1" 204 No Content
+2026-07-31T00:58:02Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T00:58:06Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:58:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:58:41Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:58:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T00:58:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:58:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:58:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T00:58:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T00:58:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:58:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:58:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T00:58:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:58:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T00:58:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T00:59:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /workspaces/career-data/refresh HTTP/1.1" 200 OK
+2026-07-31T00:59:01Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /workspaces/career-data/refresh HTTP/1.1" 200 OK
+2026-07-31T00:59:03Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /billing/portal HTTP/1.1" 409 Conflict
+2026-07-31T00:59:08Z INFO:     208.122.8.11:0 - "POST /cover-letters/cc4358ec0213aedf01ab786c3/refine HTTP/1.1" 422 Unprocessable Entity
+2026-07-31T00:59:17Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-31T00:59:49Z INFO:     HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+==> /var/log/aether/worker.log <==
+2026-07-31T01:00:00Z INFO     arq.worker:   1.00s → cron:board_sweep_cron()
+2026-07-31T01:00:00Z INFO     app.workers.board_sweep: board-sweep cron: 1 user(s) eligible, 1 enqueued
+2026-07-31T01:00:00Z INFO     arq.worker:   0.15s ← cron:board_sweep_cron ● 1
+2026-07-31T01:00:00Z INFO     arq.worker:   1.15s → cron:sweep_stale_jobs()
+2026-07-31T01:00:00Z INFO     arq.worker:   0.11s ← cron:sweep_stale_jobs ● 0
+2026-07-31T01:00:00Z INFO     arq.worker:   0.36s → board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user('c6c8d0163d973a8048e7e33b8')
+2026-07-31T01:00:01Z INFO     app.workers.board_sweep: board-sweep c6c8d0163d973a8048e7e33b8: all 4 eligible job(s) failure-suppressed until 2026-07-31T05:55:20
+2026-07-31T01:00:01Z INFO     arq.worker:   0.48s ← board-sweep:c6c8d0163d973a8048e7e33b8:board_sweep_user ● {'user_id': 'c6c8d0163d973a8048e7e33b8', 'processed': 0, 'tailored': 0, 'covers…
+
+==> /var/log/aether/api.log <==
+2026-07-31T01:00:23Z INFO:     208.122.8.11:0 - "POST /cover-letters/cd10762c6b48c2ae21808da3f/refine HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:00:45Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:00:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T01:00:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:00:49Z INFO:     127.0.0.1:46546 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:00:49Z INFO:     127.0.0.1:46548 - "GET /auth/me HTTP/1.1" 200 OK
+
+==> /var/log/aether/discovery.log <==
+[discovery-cron 2026-07-31T01:00:49Z] scout run: query='Business Analyst/Project Manager/Scrum Master' location='Melbourne'
+
+==> /var/log/aether/api.log <==
+2026-07-31T01:01:04Z INFO:     scout: skipping adzuna (no live mode: Adzuna AU live mode requires ADZUNA_APP_ID and ADZUNA_APP_KEY (free-tier developer credentials); absent — source skipped, volume relies on the keyless ATS + public-API sources.)
+2026-07-31T01:01:05Z INFO:     scout: wellfound blocked upstream: SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden
+2026-07-31T01:01:05Z INFO:     scout: skipping linkedin (no live mode: Live HTTP discovery for 'linkedin' is not implemented yet; run in fixture mode (pass fixture= or set AETHER_DISCOVERY_FIXTURE_DIR).)
+2026-07-31T01:01:06Z INFO:     scout: skipping indeed (no live mode: Live HTTP discovery for 'indeed' is not implemented yet; run in fixture mode (pass fixture= or set AETHER_DISCOVERY_FIXTURE_DIR).)
+2026-07-31T01:01:06Z INFO:     127.0.0.1:46564 - "POST /agents/scout/run HTTP/1.1" 202 Accepted
+
+==> /var/log/aether/discovery.log <==
+[discovery-cron 2026-07-31T01:01:06Z] scout: {"status":"accepted","persisted":0,"updated":35,"errors":[],"per_source":[{"source":"greenhouse","fetched":14,"persisted":0,"updated":14,"error":null,"status":"ok"},{"source":"lever","fetched":8,"persisted":0,"updated":8,"error":null,"status":"ok"},{"source":"ashby","fetched":13,"persisted":0,"updated":13,"error":null,"status":"ok"},{"source":"workable","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"adzuna","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"remotive","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"remoteok","fetched":0,"persisted":0,"updated":0,"error":null,"status":"ok"},{"source":"wellfound","fetched":0,"persisted":0,"updated":0,"error":"SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden","status":"blocked"},{"source":"linkedin","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"},{"source":"indeed","fetched":0,"persisted":0,"updated":0,"error":null,"status":"skipped"}]}
+
+==> /var/log/aether/api.log <==
+2026-07-31T01:01:10Z INFO:     127.0.0.1:38898 - "POST /agents/fit-scorer/run HTTP/1.1" 200 OK
+
+==> /var/log/aether/discovery.log <==
+[discovery-cron 2026-07-31T01:01:10Z] fit-scorer: {"status":"completed","scored":0,"errors":[]}
+
+==> /var/log/aether/api.log <==
+2026-07-31T01:01:17Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:01:20Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:01:21Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T01:01:21Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:01:25Z INFO:     message='Request to Stripe api' method=post url=https://api.stripe.com/v1/customers
+2026-07-31T01:01:25Z INFO:     message='Stripe API response' path=https://api.stripe.com/v1/customers response_code=200
+2026-07-31T01:01:25Z INFO:     message='Request to Stripe api' method=post url=https://api.stripe.com/v1/checkout/sessions
+2026-07-31T01:01:26Z INFO:     message='Stripe API response' path=https://api.stripe.com/v1/checkout/sessions response_code=200
+2026-07-31T01:01:26Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /billing/checkout HTTP/1.1" 200 OK
+2026-07-31T01:01:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:01:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:01:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:01:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c04586c8d6ade25088c098c4b/insights HTTP/1.1" 200 OK
+2026-07-31T01:02:06Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:13Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:02:14Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:02:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:02:16Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c04586c8d6ade25088c098c4b/insights HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:02:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:02:24Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:24Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:24Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:24Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:02:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:02:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c04586c8d6ade25088c098c4b/insights HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:02:27Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /resumes HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:02:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:02:30Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c04586c8d6ade25088c098c4b/insights HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:32Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:02:33Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /resumes HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:02:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     208.122.8.11:0 - "GET /health HTTP/1.1" 200 OK
+2026-07-31T01:03:07Z INFO:     208.122.8.11:0 - "GET /health HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:03:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:12Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:14Z INFO:     message='Request to Stripe api' method=post url=https://api.stripe.com/v1/billing_portal/sessions
+2026-07-31T01:03:15Z INFO:     message='Stripe API response' path=https://api.stripe.com/v1/billing_portal/sessions response_code=200
+2026-07-31T01:03:15Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /billing/portal HTTP/1.1" 200 OK
+2026-07-31T01:03:50Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:03:50Z INFO:     208.122.8.11:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:03:51Z INFO:     208.122.8.11:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:03:51Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 402 Payment Required
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:03:53Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/plans HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/career-data HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:03:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:03:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:03:57Z INFO:     message='Request to Stripe api' method=post url=https://api.stripe.com/v1/billing_portal/sessions
+2026-07-31T01:03:57Z INFO:     message='Stripe API response' path=https://api.stripe.com/v1/billing_portal/sessions response_code=200
+2026-07-31T01:03:57Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /billing/portal HTTP/1.1" 200 OK
+2026-07-31T01:04:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:04:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:04:34Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:04:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:04:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:04:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c04586c8d6ade25088c098c4b/insights HTTP/1.1" 200 OK
+2026-07-31T01:04:40Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /cover-letters/c273c59a737435ff74ce1c494/insights HTTP/1.1" 200 OK
+2026-07-31T01:04:54Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 500 Internal Server Error
+2026-07-31T01:04:54Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2685, in app
+    await route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1766, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 2740, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1786, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 1265, in handle
+    await app(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 151, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 137, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 691, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py", line 347, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2641, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1033, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py", line 2313, in run_cover_letter
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py", line 1896, in _enqueue_single_agent
+    raise _quota_429(provider, block.get("expiresAt"))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/agent_run.py", line 21, in start
+    cur.execute(
+psycopg2.errors.UntranslatableCharacter: unsupported Unicode escape sequence
+LINE 4: ...3b8', 'coverLetter', 'running'::"AgentRunStatus", '{"job_id"...
+                                                             ^
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: {"job_id": "c0642f2dc8cbc53209d95421d\u0000...
+
+
+==> /var/log/aether/worker.log <==
+2026-07-31T01:05:00Z INFO     arq.worker:   1.00s → cron:sweep_stale_jobs()
+2026-07-31T01:05:00Z INFO     arq.worker:   0.06s ← cron:sweep_stale_jobs ● 0
+
+==> /var/log/aether/api.log <==
+2026-07-31T01:05:05Z INFO:     208.122.8.11:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:06:09Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:06:09Z INFO:     208.122.8.11:0 - "GET /auth/me HTTP/1.1" 200 OK
+2026-07-31T01:06:09Z INFO:     208.122.8.11:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:09Z INFO:     208.122.8.11:0 - "GET /jobs HTTP/1.1" 200 OK
+2026-07-31T01:06:09Z INFO:     208.122.8.11:0 - "GET /applications HTTP/1.1" 200 OK
+2026-07-31T01:06:10Z INFO:     208.122.8.11:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:06:10Z INFO:     208.122.8.11:0 - "GET /resumes HTTP/1.1" 200 OK
+2026-07-31T01:06:10Z INFO:     208.122.8.11:0 - "GET /cover-letters HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:06:35Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:36Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:37Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:41Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=30d HTTP/1.1" 200 OK
+2026-07-31T01:06:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=30d HTTP/1.1" 200 OK
+2026-07-31T01:06:43Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=30d HTTP/1.1" 200 OK
+2026-07-31T01:06:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:46Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:48Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=90d HTTP/1.1" 200 OK
+2026-07-31T01:06:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:51Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:52Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:54Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:06:55Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:56Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:06:58Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents/runs HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=7d HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /stories HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /jobs?sort=fitScore HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/networking/summary HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:06:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/entitlement HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /workspaces/settings HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /billing/subscription HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/ats-distribution HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/conversion?period=all HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/agent-roi HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/funnel?period=all HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/market-pulse HTTP/1.1" 200 OK
+2026-07-31T01:07:00Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /analytics/dashboard?period=all HTTP/1.1" 200 OK
+2026-07-31T01:07:29Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK
+2026-07-31T01:07:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /approvals?status=pending HTTP/1.1" 200 OK
+2026-07-31T01:07:59Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "GET /agents HTTP/1.1" 200 OK

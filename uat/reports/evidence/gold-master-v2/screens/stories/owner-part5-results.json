@@ -1,0 +1,13 @@
+{
+  "notes": {
+    "reverifyTotalCards": 36,
+    "reverifyJiraFamilyCount": 6,
+    "reverifyAnzFamilyCount": 5,
+    "reverifyConsoleErrors": [],
+    "reverifyPageErrors": [],
+    "newUserPostLoginUrl": "https://5cb5f0620.abacusai.cloud/dashboard",
+    "newUserStoriesUrl": "https://5cb5f0620.abacusai.cloud/dashboard/stories",
+    "newUserImportBtnFound": false,
+    "pricingPageFreeSnippet": "agent-run quota and feature access, not model quality.\n\nMonthly\nAnnualsave more\nFree\n$0\nNo card required\n\n5 agent runs / month\n\n5 tailored agent runs / month\nResume tailoring + ATS scoring\nCommunity support\nGet started free\nStarter\n$19\n/ month\nIncl. $1.73 GST\n\n30 agent runs / mon"
+  }
+}

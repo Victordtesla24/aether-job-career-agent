@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T01:45:00Z",
+  "updated_utc": "2026-07-31T05:40:00Z",
   "phase_step": "W-A \u00a73.2 screen sweep in progress (2 of ~20 routes); W-B inventory CANONICAL; BLOCKER-001 tests queued",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -40,15 +40,15 @@
   "workstream_status": {
     "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
     "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod).",
-    "W-C": "PENDING - MEASURED baseline: resume tailoring produces 0 changes; baselineATSScore == tailoredATSScore exactly (+0.0% lift) even on runs reporting changes:1. NO score-aware iterative loop exists in resume_tailor.py (single LLM pass + non-regression guard). Craft 2/10. KEY TENSION: 0 changes occurs because the anti-fabrication guard CORRECTLY refuses to inject JD keywords the resume genuinely lacks. >=85 is therefore not honestly reachable for every job; \u00a75.3.1(5) governs - iterate genuinely, never fabricate, surface an honest best-achieved-score warning. Zero fabrication detected in any output - honesty holds, usefulness fails.",
+    "W-C": "PENDING - SCOPE NARROWED by live verification. ALREADY BUILT and working: before/after score banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change messaging, ATS matches API. GENUINELY MISSING: (1) the score-aware ITERATIVE loop (\u00a75.3.1) - currently a single pass; (2) surfacing the existing backend requires_review signal as the honest sub-85 warning (\u00a75.3.1 pt5) - signal exists, UI absent; (3) gap_keywords quality - chips carry tokenization noise (re/ll/use/about) which would poison loop convergence; (4) per-iteration progress display; (5) interview_conversion_rate metric (\u00a75.3.5) - 0/72 today. CORRECTION: earlier \"+0.0% lift\" was imprecise - real delta is +0.10 that ROUNDS to +0.0% in display.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
-    "W-E": "PENDING - CONFIRMED REAL: re-running story extraction on an UNCHANGED resume created 4 more near-duplicate rows (32->36) during this run. Dedup catches only byte-identical repeats, not paraphrases. NOTE: the Phase-0 PROD-DB-STATE probe concluded \"0 duplicates / CLEAN\" - it measured exact and full-content equality only and MISSED the paraphrase class. Superseded by this fresh evidence.",
+    "W-E": "PENDING - MEASURED: 34/36 stories are paraphrase duplicates of 8 real achievements. Dedup in apps/api/app/repositories/story.py hashes byte-identical content only. \u00a77.4 relevance scoring entirely absent. No merge affordance. Scope = content fingerprint (normalized title + achievement prefix), bulk de-dup migration for the existing 36 rows, story_relevance_score(), relevance exposed on GET /stories?job_id=, UI badge.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
     "W-G": "PENDING - NOT human-gated: admin auth confirmed possible via AETHER_CRON_EMAIL/PASSWORD (live login isAdmin=true). G-G fully testable.",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
-    "W-I": "PENDING - SCREEN-MATRIX contradicts \u00a711.1 (GOV-007): most routes are static one-time fetch, no periodic refresh",
+    "W-I": "PENDING - MEASURED per screen by fetch instrumentation, NOT assumed: /dashboard/jobs 20.00s, /dashboard/applications 20s, /dashboard/resume ~3.1s, /dashboard/stories NONE. So polling is real on some screens and genuinely absent on others - GOV-007 corrected. Scope = add the shared hook to screens measured as having no refresh, plus SSE agent-run progress, plus optimistic mutations.",
     "W-J": "PENDING - Job has fitScore+atsScore; tailoring_iteration and score_updated_at columns ABSENT; Application/Resume/CoverLetter carry no score columns",
-    "W-K": "PENDING - build/cache residue already clean+gitignored; 4 stale @example.com test users in prod DB with 0 spillover; PLUS a throwaway test account created in the production DB by the \u00a718 Stripe checkout probe - add to the purge manifest.; PLUS 4 near-duplicate story rows created by this run's own story-extraction probe (32->36).",
+    "W-K": "PENDING - build/cache residue already clean+gitignored; 4 stale @example.com test users in prod DB with 0 spillover; PLUS a throwaway test account created in the production DB by the \u00a718 Stripe checkout probe - add to the purge manifest.; PLUS 4 near-duplicate story rows created by this run's own story-extraction probe (32->36).; PLUS 4 resume rows (v70-73) left on OWNER by the resume screen test - NO DELETE endpoint exists in the API, needs operator DB-level cleanup.",
     "W-L": "PENDING"
   },
   "gates": {
@@ -70,7 +70,8 @@
       "status": "OPEN"
     },
     "G-F": {
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "note": "Keyboard-operable Move-to menu VERIFIED + server-side 422 on illegal transitions VERIFIED. OUTSTANDING: stage counts do NOT reconcile with the funnel (ML-APP-003); no one-click \"Mark as In Review\" quick action (\u00a78.1.2); approvals purge FE affordances unverified."
     },
     "G-G": {
       "status": "OPEN",
@@ -128,7 +129,7 @@
       "id": "BLOCKER-001",
       "title": "admin/admin123 authenticates as the REAL admin account on production (isAdmin=true)",
       "severity": "CRITICAL",
-      "status": "CONFIRMED; tests red for right reasons; \u00a715 step 3 implementation IN FLIGHT",
+      "status": "FIX IMPLEMENTED (commit 7f82105, LOCAL ONLY - not pushed, not deployed); restart-safety rework IN FLIGHT",
       "found_by": "\u00a718 human-gated investigation",
       "detail": "\u00a71.1 documents admin/admin123 as a NON-admin test user. First-hand probe found it resolves to the same userId as the operator/owner account with isAdmin=true and reaches admin-only endpoints. Contradicts a \"GATE-31 verified live\" claim in docs/delivery/PROGRESS.md. Every screen test this run has used this credential, so prior UI observations were made as an ADMIN, not as a regular paying user - \u00a73.2 testing must be redone under a genuine non-admin identity.",
       "blast_radius": "Widely-documented demo password grants full production admin, with paying users onboarding imminently.",
@@ -157,11 +158,18 @@
         ],
         "rate_limit_pin": "PASSES - characterization test, must stay green",
         "log": "uat/reports/evidence/gold-master-v2/phase0/logs/blocker001-fail-20260730T234803Z.log"
-      }
+      },
+      "deploy_hazard": "systemd runs directly from the working tree, so the guard is already on disk. Commit 7f82105 as written aborts boot against production's live weak hash. DO NOT deploy or restart aether-api until the restart-safety rework lands. Production currently runs pre-fix code from 12:27:09Z and is healthy.",
+      "test_contradiction": "test_admin_users_endpoint_never_leaks_pii_via_demo_credential fails on its SETUP PRECONDITION, not its security assertion: it asserts login==200 on the very request that a sibling test asserts must be 401. Unsatisfiable by construction once D2 is fixed. Its real assertion (victim_email not in response) IS satisfied. Referred to test-author - the fixer correctly refused to edit a test it did not author (\u00a70.4).",
+      "operator_gated_remainder": [
+        "Rotate AETHER_ADMIN_PASSWORD_HASH (scheduled by operator for AFTER this run)",
+        "Rotate AETHER_CRON_PASSWORD at the SAME time - it holds the same value; rotating one alone silently kills hourly sourcing",
+        "Git history on the PUBLIC repo retains the credential; only rotation makes it worthless. History NOT rewritten (destructive, operator call)."
+      ]
     },
     {
       "id": "BLOCKER-002",
-      "severity": "CRITICAL (customer-facing output)",
+      "severity": "CRITICAL - ESCALATED (live contaminated content already queued)",
       "title": "Cover letter PDF letterhead and sign-off print a leftover test-probe string as the candidate name",
       "status": "CONFIRMED - fix not yet started",
       "detail": "Cover-letter output renders sender name as \"GAP-P7-DEF-B Probe 1785452243543\". Confirmed via GET /api/auth/me: that string IS the owner account User.name in production. Every real cover letter generated today would be signed with it.",
@@ -170,7 +178,8 @@
         "code": "Cover-letter generation must refuse with an honest error when the profile name looks like a placeholder/test artefact, instead of emitting it onto a customer-facing document. Consistent with the codebase anti-fabrication/honesty policy.",
         "data": "Owner account User.name must be set to the real candidate name. Operator-visible; also settable through the normal Settings UI."
       },
-      "artifact": "uat/reports/evidence/gold-master-v2/adversarial/AI-AGENT-QUALITY-ASSESSMENT.md"
+      "artifact": "uat/reports/evidence/gold-master-v2/adversarial/AI-AGENT-QUALITY-ASSESSMENT.md",
+      "escalation": "ML-APP-001: the \"GAP-P7-DEF-B Probe\" fixture string is the signature on a REAL, LIVE, PENDING cover-letter approval reachable from the /dashboard/applications approvals banner. Contaminated customer-facing content is ALREADY QUEUED in production, not merely possible on the next generation. If that approval is actioned it goes out signed with a test string. Remediation therefore needs THREE parts: (1) code guard [in flight]; (2) correct the owner User.name [operator-gated]; (3) identify and purge/regenerate every already-queued approval carrying the fixture signature."
     }
   ],
   "human_gated": {
@@ -205,5 +214,106 @@
     "Repo-wide PROHIBITED-STUB count = 0 across all 432 grep hits (both halves, 100% coverage).",
     "Runtime: 1488 requests, zero 5xx, zero tracebacks over a 72-minute exercised window.",
     "Runbook: 99 claims verified, 0 code-impacting drifts."
+  ],
+  "operator_decisions": [
+    {
+      "date": "2026-07-31",
+      "decision": "Admin password will be rotated AFTER this run completes, not before.",
+      "source": "user, mid-run",
+      "consequences": [
+        "Production keeps the weak AETHER_ADMIN_PASSWORD_HASH for the whole run.",
+        "The BLOCKER-001 guard MUST be fail-SAFE at boot (log CRITICAL, keep serving) and fail-CLOSED at auth (published credential cannot obtain admin or the owner session). Fail-closed-at-boot is FORBIDDEN - it would abort the API on the next restart and take production down for paying customers.",
+        "COLLATERAL RISK: AETHER_CRON_PASSWORD reportedly holds the SAME value (MODELS-LIVE-GAPS.json:1179) and the discovery timer uses it every 30 min (2 successful cycles VERIFIED this run). The auth rejection must be scoped to the OPERATOR/ADMIN identity only, never to the password value alone, or production job sourcing dies silently.",
+        "Screen-testers currently authenticate with admin/admin123 for data-rich UI testing; their login recipe may need re-issuing before the fix deploys."
+      ]
+    }
+  ],
+  "findings": {
+    "screens": {
+      "jobs": [
+        "ML-JOBS-003 HIGH pricing/entitlement mismatch (raised from MEDIUM, GOV-011)",
+        "ML-JOBS-006 LOW market-tab resets on back-nav",
+        "ML-JOBS-007 LOW benign RSC prefetch warning",
+        "per-card Apply ABSENT but matches wireframe - GOV-010 rules BUILD it + update wireframe",
+        "POSITIVE: 20.00s realtime CONFIRMED by fetch instrumentation"
+      ],
+      "settings": [
+        "ML-settings-002/003 MEDIUM auto-apply + match-threshold persisted-not-enforced BUT honestly disclosed in UI",
+        "ML-settings-004 MEDIUM Notifications \"Coming soon\" - \u00a74 forbids at exit",
+        "ML-settings-005 LOW approval-gate toggle same pattern, fails safe",
+        "ML-settings-006 MEDIUM NUL byte -> 500 not 422 (root-caused workspaces.py:1092) - FIX IN FLIGHT",
+        "ML-settings-001 baseline failure did NOT reproduce - 0px overflow, stale localhost-targeted spec",
+        "POSITIVE: Sync Now/Sync All/Manage Subscription all genuinely wired; XSS/SQLi safely escaped"
+      ],
+      "applications": [
+        "ML-APP-001 BLOCKER fixture signature on a LIVE PENDING cover-letter approval",
+        "ML-APP-002 HIGH superseded drafts with live pending approval unreachable though banner counts them",
+        "ML-APP-003 HIGH board \"In Review\"=0 vs Applied tab vs Sankey \"Screened:2\" - three answers, same 2 rows",
+        "ML-APP-004 MEDIUM kanban columns flex-stretch to 4382px, ~4700px empty scroll",
+        "ML-APP-005 LOW/UNSURE native drag-and-drop did not fire in automation (headless limitation?)",
+        "ML-APP-006 LOW \"Match >= 85\" filter structurally empty for real score range 24.89-45.54",
+        "POSITIVE: per-card Move-to menu FULLY KEYBOARD OPERABLE - \u00a78.1 drag-only BLOCKER does NOT apply",
+        "POSITIVE: illegal transitions server-rejected 422, verified twice; audit rows both directions",
+        "rg-mob-appr baseline failure did NOT reproduce - no 390px overflow"
+      ],
+      "resume": [
+        "ML-RESUME-001 HIGH NUL byte -> unhandled 500 on POST /resumes AND POST /agents/tailor/run. Defect is SYSTEMIC, not workspaces-only. Wave-1 fixer instructed to widen to one shared app-wide guard.",
+        "ML-RESUME-002 HIGH wrong \"Original - Base Resume\" shown when 2+ root resumes exist: FE .find(!parentId) over a newest-first list vs backend ResumeRepository.get_base() oldest-first",
+        "ML-RESUME-003 MEDIUM Resume Studio fully paywalled for Free tier (same shape as ML-JOBS-003 / GOV-011)",
+        "ML-RESUME-004 MEDIUM backend requires_review signal EXISTS but is never surfaced - this is \u00a75.3.1(5) honest sub-85 warning; only the UI is missing",
+        "ML-RESUME-005 MEDIUM missing-keywords chips polluted with tokenization noise (re, ll, use, about) - degrades W-C convergence quality",
+        "ML-RESUME-006 LOW no per-iteration progress indicator during 60-110s runs",
+        "ML-RESUME-007 LOW ATS precision inconsistency; a real +0.10 delta rounds to a displayed +0.0%",
+        "ML-RESUME-008 INFO large wireframe divergence (no PDF preview, no Approve/Revert/Compare UI)",
+        "POSITIVE: ATS shown MATCHES API exactly 3/3 (49.1, 40.7, 42.5) - G-J core requirement already met here",
+        "POSITIVE: before/after tailoring banner EXISTS and works (\u00a75.3.6 already satisfied)",
+        "POSITIVE: missing-keywords chip list EXISTS (\u00a75.3.2 already satisfied)",
+        "POSITIVE: honest zero-change no-op verified twice - \"No verifiable changes could be applied ... you were not charged\"",
+        "ML-resume-002 baseline failure did NOT reproduce (3rd stale baseline spec)"
+      ],
+      "stories": [
+        "GM2-STORY-001 HIGH 34 of 36 stories are paraphrase re-tellings of only 8 distinct achievements (8 duplicate groups, ids+titles documented)",
+        "GM2-STORY-002 HIGH create-dedup is byte-identical only; identical POST returns same id, paraphrase POST creates a new row every time",
+        "GM2-STORY-003 MEDIUM \u00a77.4 relevance_score entirely unimplemented - job_id query param silently ignored, no field, no UI badge",
+        "GM2-STORY-004 LOW no duplicate/merge affordance anywhere in the product",
+        "GM2-STORY-005 MEDIUM NUL byte -> 500 on POST /stories AND PUT /stories/{id} (5th and 6th affected endpoints)",
+        "GM2-STORY-008 LOW no server-side max_length on STAR fields (10,000-char title accepted)",
+        "GM2-STORY-009 MEDIUM->ESCALATED paywalled at UI layer while REST API appears UNGATED - entitlement may be client-side only",
+        "CONFIRMED ABSENCE: no auto-refresh polling on this screen (instrumented over 65s) - a real W-I gap",
+        "POSITIVE: full CRUD wiring, star persistence, validation, auth redirect, zero console errors in honest use, no 390px overflow, no fixture contamination",
+        "CLEANUP: all 5 test rows created were deleted and baseline re-verified (36 stories, 6 starred)"
+      ]
+    },
+    "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
+  },
+  "playwright_baseline_credibility": "3 of 12 red Playwright specs (ML-settings-001, rg-mob-appr, ML-resume-002) have now FAILED TO REPRODUCE on production; the specs target 127.0.0.1:3091. All 12 must be individually adjudicated real-vs-stale before G-N closes. Neither assume real nor assume stale.",
+  "nul_byte_affected_endpoints": [
+    "PUT /workspaces/settings",
+    "POST /resumes",
+    "POST /agents/tailor/run",
+    "POST /stories",
+    "PUT /stories/{id}"
+  ],
+  "escalations": [
+    {
+      "id": "ENTITLEMENT-BYPASS",
+      "severity": "HIGH (not CRITICAL)",
+      "status": "ADJUDICATED - original claim REFUTED, two real defects found instead",
+      "claim": "Subscription entitlement may be enforced CLIENT-SIDE ONLY: UI paywalls Free users while the REST API appears ungated. Fails in BOTH directions - Free users blocked in UI despite /pricing advertising the feature, and potentially able to consume paid LLM capacity by calling the API directly.",
+      "sources": [
+        "GM2-STORY-009",
+        "ML-JOBS-003",
+        "ML-RESUME-003"
+      ],
+      "note": "Real money product. If CONFIRMED this outranks most remaining workstream items.",
+      "refuted": "\"Entitlement enforced client-side only\" is REFUTED for the agents API. It is gate-BEFORE-work and fail-closed: a bogus job_id returns 402 NOT 404, proving the gate precedes resource lookup. Covers sync+async seams, constant-time secret compare. Both screen-testers inferred \"ungated\" from READ endpoints returning 200 instead of tracing LLM call sites. Orchestrator escalation was right to probe, wrong in characterisation.",
+      "real_defects": [
+        "ADV-ENT-001 HIGH: POST /cover-letters/{id}/refine (cover_letters.py:653) calls LLMClient().complete_json with model=get_model(\"REASONING\") at :743-749, grep count 0 for any guard. Bypasses entitlement, quota reserve, spend cap AND the AgentRun audit row. Margin leak invisible to billing reconciliation. Reachable by LAPSED subscribers (they keep their letters after cancelling). Fix: route through _record_run. Live LLM burn is [INFERRED] - code unambiguous, not demonstrated (would require mutating a real subscription row).",
+        "ADV-ENT-002 HIGH: the BACKEND (not stale frontend copy) advertises + provisions + reports a Free tier it always denies. GET /billing/plans returns runsPerMonth:5 and \"5 tailored agent runs / month\"; GET /billing/subscription reports runsUsed:0/runsAllowed:5; ensure_user_billing (billing.py:288-310) provisions runsAllowed=5 from RATIFIED_PLANS (billing.py:43); the gate then refuses universally. Australian Consumer Law exposure on a real-AUD product. Fix is a BUSINESS decision, then reconcile RATIFIED_PLANS / ensure_user_billing / feature strings / pricing page.",
+        "ADV-ENT-003 MEDIUM: Story Bank sold as a Starter-tier feature with no server-side enforcement (no LLM consumed, so not a capacity bypass).",
+        "ADV-ENT-004 LOW [INFERRED, deliberately not probed]: POST /resumes/upload persists the Resume row THEN raises 402, and no DELETE /resumes route exists to undo it."
+      ],
+      "positive": "AETHER_REQUIRE_PAID_SUBSCRIPTION posture is CORRECT and fail-safe: read per-call, default true, disabled only by explicit false/0/no/off - no bypass-by-omission. The 402 is intended \"subscription-only limited beta\" policy, corroborated by pre-existing ADR-MV-02."
+    }
   ]
 }

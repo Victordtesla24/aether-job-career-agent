@@ -1,0 +1,8 @@
+{
+  "phase3_fresh_verify_contaminated": true,
+  "phase3_empty_form_submit_disabled": true,
+  "phase3_filled_form_submit_disabled": false,
+  "phase3_generate_disabled_no_job": true,
+  "phase3_console": [],
+  "phase3_pageErrors": []
+}

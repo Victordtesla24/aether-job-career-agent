@@ -1,0 +1,42 @@
+[
+  {
+    "tab": "Profile",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nProfile\nGM\n\nGold Master V2 Test User\n\nQA Tester Probe\n\nFull name\nEmail\nTarget role\nLocation\nResume Management\n\nuploaded · 0 versions\n\nActive\nUpload new version\nCareer Data\n\nAether consolidates your public GitHub, portfolio site and LinkedIn summary into the evidence your tailoring and cover-letter agents draw on. Update a source and press “Sync now” to re-ingest it.\n\nGITHUB USERNAME\nNot configured\nPORTFOLIO URL\nNot configured\nPASTE YOUR LINKEDIN SUMMARY\nNot configured\n\nLinkedIn offers no public profile API to third-party apps, so it is not auto-synced. Paste your LinkedIn summary below and it will be consolidated into your tailoring evidence alongside GitHub and your portfolio.\n\nSync now\nAgent Configuration\n\nAuto-apply\n\nPreference for future automatic submission — saved now, enforced once auto-apply ships\n\nSaved, but not yet enforced by the agents — this preference doesn’t currently change agent behaviour.\n\nApproval gate\n\nRequire explicit approval for anything that leaves the "
+  },
+  {
+    "tab": "Resume Management",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nResume Management\n\nuploaded · 0 versions\n\nActive\nUpload new version\nCareer Data\n\nAether consolidates your public GitHub, portfolio site and LinkedIn summary into the evidence your tailoring and cover-letter agents draw on. Update a source and press “Sync now” to re-ingest it.\n\nGITHUB USERNAME\nNot configured\nPORTFOLIO URL\nNot configured\nPASTE YOUR LINKEDIN SUMMARY\nNot configured\n\nLinkedIn offers no public profile API to third-party apps, so it is not auto-synced. Paste your LinkedIn summary below and it will be consolidated into your tailoring evidence alongside GitHub and your portfolio.\n\nSync now"
+  },
+  {
+    "tab": "Portfolio Sync",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nResume Management\n\nuploaded · 0 versions\n\nActive\nUpload new version\nCareer Data\n\nAether consolidates your public GitHub, portfolio site and LinkedIn summary into the evidence your tailoring and cover-letter agents draw on. Update a source and press “Sync now” to re-ingest it.\n\nGITHUB USERNAME\nNot configured\nPORTFOLIO URL\nNot configured\nPASTE YOUR LINKEDIN SUMMARY\nNot configured\n\nLinkedIn offers no public profile API to third-party apps, so it is not auto-synced. Paste your LinkedIn summary below and it will be consolidated into your tailoring evidence alongside GitHub and your portfolio.\n\nSync now"
+  },
+  {
+    "tab": "Notifications",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nNotifications\n\nNotification delivery isn’t built yet — these preferences aren’t functional and aren’t saved by “Save Changes”. Coming soon.\n\nApproval requestsCOMING SOON\n\nNotify me when an agent needs my approval\n\nApplication updatesCOMING SOON\n\nStatus changes, recruiter views and responses\n\nWeekly digestCOMING SOON\n\nSummary of agent activity every Monday morning"
+  },
+  {
+    "tab": "Agent Configuration",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nAgent Configuration\n\nAuto-apply\n\nPreference for future automatic submission — saved now, enforced once auto-apply ships\n\nSaved, but not yet enforced by the agents — this preference doesn’t currently change agent behaviour.\n\nApproval gate\n\nRequire explicit approval for anything that leaves the system\n\nAlways enforced today for tailor, cover letter and email-agent runs, regardless of this preference.\n\nMatch threshold — only surface jobs above\n80%\n\nSaved, but not yet enforced by the agents — this value doesn’t currently filter which jobs are surfaced."
+  },
+  {
+    "tab": "Integrations",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nJob Board Integrations\nSync All\n\nJob boards are synced together — per-source sync isn’t available yet.\n\nConnected Accounts & API Keys\n\nOpenRouter Connected\n\nConfigured via server environment (legacy)\n\nAbacus Subscription (fallback) Connected\n\nAbacus subscription key (server environment) · standby (a higher-priority OpenRouter/Anthropic key is the active path)"
+  },
+  {
+    "tab": "Privacy & Compliance",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nPrivacy & Compliance\n\nAether stores your data for this workspace only. Agents never submit an application, send an email, or share your profile without an explicit approval.\n\nNo Gmail account connected. Manage or disconnect a connected Gmail account from the Email Command Center.\n\nYou can correct your profile details from the Profile tab at any time. There is no self-service “export all data” or “delete all data” feature yet; contact us to request a full data export or deletion and we will process it manually.\n\nPrivacy Policy\nTerms of Service"
+  },
+  {
+    "tab": "Billing & Subscription",
+    "found": true,
+    "snippet": "Settings & Profile\n\nProfile, agent behaviour and integrations.\n\nSave Changes\nProfile\nResume Management\nPortfolio Sync\nNotifications\nAgent Configuration\nIntegrations\nPrivacy & Compliance\nBilling & Subscription\nBilling & Subscription\n\nCurrent plan: Free\n\nStatus: active\n\nno billing cycle\nPrice: $0 / month\nNext billing date: No upcoming charge\nAgent runs this period\n0 / 5\nSpend this period\n$0.00 / $1.00 USD\n\nUsage quota resets 01/08/2026\n\nManage subscription"
+  }
+]

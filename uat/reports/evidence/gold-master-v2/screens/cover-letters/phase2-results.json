@@ -1,0 +1,147 @@
+{
+  "phase2a_idle_fetch_log": [
+    {
+      "t": 1785459696443,
+      "url": "/api/agents"
+    },
+    {
+      "t": 1785459696447,
+      "url": "/api/billing/subscription"
+    },
+    {
+      "t": 1785459696449,
+      "url": "/api/workspaces/settings"
+    },
+    {
+      "t": 1785459696451,
+      "url": "/api/agents"
+    },
+    {
+      "t": 1785459696455,
+      "url": "/api/approvals?status=pending"
+    },
+    {
+      "t": 1785459696456,
+      "url": "/api/billing/entitlement"
+    },
+    {
+      "t": 1785459696469,
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=6qbxc"
+    },
+    {
+      "t": 1785459696815,
+      "url": "/api/cover-letters"
+    },
+    {
+      "t": 1785459696815,
+      "url": "/api/jobs"
+    },
+    {
+      "t": 1785459696826,
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/resume?_rsc=6qbxc"
+    },
+    {
+      "t": 1785459697046,
+      "url": "/api/cover-letters/c04586c8d6ade25088c098c4b/insights"
+    },
+    {
+      "t": 1785459697064,
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/stories?_rsc=6qbxc"
+    },
+    {
+      "t": 1785459697071,
+      "url": "https://5cb5f0620.abacusai.cloud/dashboard/email?letter=c04586c8d6ade25088c098c4b&_rsc=6qbxc"
+    },
+    {
+      "t": 1785459726443,
+      "url": "/api/agents"
+    }
+  ],
+  "phase2b_mobile_overflow": {
+    "docWidth": 390,
+    "winWidth": 390,
+    "hasHorizontalOverflow": false
+  },
+  "phase2c_unauth": {
+    "status": 200,
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fcover-letters"
+  },
+  "phase2d_backforward": {
+    "urlAfterBack": "https://5cb5f0620.abacusai.cloud/dashboard/cover-letters",
+    "cardCountAfterBack": 77,
+    "urlAfterForward": "https://5cb5f0620.abacusai.cloud/dashboard/resume"
+  },
+  "phase2e_newuser_inventory": {
+    "cardCount": 0,
+    "emptyState": 0,
+    "jobOptions": 0
+  },
+  "phase2e_netlog_after_load": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "phase2e_error": "TimeoutError: locator.isDisabled: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"run-cover-letter-btn\"]')\u001b[22m\n"
+}

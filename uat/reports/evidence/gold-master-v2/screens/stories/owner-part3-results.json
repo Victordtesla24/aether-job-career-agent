@@ -1,0 +1,12 @@
+{
+  "notes": {
+    "fixtureStringGapP7DefB": false,
+    "fixtureStringEvidenceEffortReduction": false,
+    "fixtureStringSitWindow75": false,
+    "mobile390Overflow": {
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "bodyScrollWidth": 390
+    }
+  }
+}

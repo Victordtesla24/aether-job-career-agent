@@ -1,0 +1,155 @@
+{
+  "steps": [
+    {
+      "step": "unauth-pricing",
+      "url": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "step": "annual-toggle",
+      "bodySnippet": "A\nAether\nSimple, honest pricing\n\nAll prices are in Australian dollars and GST-inclusive. Pick a plan and let Aether do the applying — cancel anytime.\n\nEvery plan uses the same AI models — plans differ by monthly agent-run quota and feature access, not model quality.\n\nMonthly\nAnnualsave more\nFree\nCURRENT PLAN\n$0\nNo card required\n\n5 agent runs / month\n\n5 tailored agent runs / month\nResume tailoring + ATS scoring\nCommunity support\nGo to dashboard\nStarter\n$179\n/ year\nIncl. $16.27 GST\n\n30 agent runs / month\n\n30 tailored agent runs / month\nCover letters + story bank\nEmail agent (triage + drafts)\nSubscribe to Starter\nPro\n$359\n/ year\nIncl. $32.64 GST\n\n100 agent runs / month\n\n100 tailored agent runs / month\nEverything in Starter\nPriority email agent\nSubscribe to Pro\nPower\n$649\n/ year\nIncl. $59 GST\n\n300 agent runs / month\n\n300 tailored agent runs / month\nEverything in Pro\nHighest monthly run ceiling\nSubscribe to Power\n\nAlready have an account? Sign in\n\nPrivacy Policy\n·\nTerms\n·\n© 2026 Aether"
+    },
+    {
+      "step": "subscribe-starter-click",
+      "apiCalls": [
+        {
+          "method": "POST",
+          "url": "/api/billing/checkout",
+          "status": 200,
+          "ts": "2026-07-31T01:01:26.994Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://checkout-cookies.stripe.com/api/get-cookie",
+          "status": 200,
+          "ts": "2026-07-31T01:01:27.574Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps/api/js?key=AIzaSyCuvGvOqj_eSUVyAu3Dwq47JBdpAN3r-5Y&loading=async&libraries=places&callback=initGoogleMapsService",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.356Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/controls.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.444Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/places_impl.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.444Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/util.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.480Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/common.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.498Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/main.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.523Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps-api-v3/api/js/65/11b/places.js",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.656Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true",
+          "status": 200,
+          "ts": "2026-07-31T01:01:29.811Z"
+        },
+        {
+          "method": "POST",
+          "url": "https://collector-pxvl48pwoc.px-cloud.net/api/v2/collector",
+          "status": 200,
+          "ts": "2026-07-31T01:01:33.900Z"
+        },
+        {
+          "method": "POST",
+          "url": "https://collector-pxvl48pwoc.px-cloud.net/api/v2/collector",
+          "status": 200,
+          "ts": "2026-07-31T01:01:34.687Z"
+        }
+      ],
+      "mainPageUrl": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl",
+      "popupUrl": null
+    }
+  ],
+  "console": [
+    {
+      "type": "warning",
+      "text": "<link rel=preload> uses an unsupported `as` value",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "warning",
+      "text": "<link rel=preload> uses an unsupported `as` value",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x1f3c02574600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "endGroup",
+      "text": "EvalError\n    at mQ (https://client.px-cloud.net/PXVl48pWoc/main.min.js:2:70439)\n    at oP (https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:160)\n    at FA (https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:141136)\n    at Fy (https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:140755)\n    at https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:142507\n    at https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:142513\n    at https://client.px-cloud.net/PXVl48pWoc/main.min.js:3:142978",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "endGroup",
+      "text": "{}",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x1f3c02577000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "type": "endGroup",
+      "text": "{}",
+      "url": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=6i8d7",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=6i8d7",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://5cb5f0620.abacusai.cloud/pricing"
+    },
+    {
+      "url": "https://23bbfc7a7fba.w.hcaptcha.com/logo.png",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    },
+    {
+      "url": "https://b89524513ece.w.hcaptcha.com/logo.png",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "pageUrl": "https://checkout.stripe.com/c/pay/cs_live_a1gkEKKWLQvza0jJmsmnHJB8wOwmov3sAxM2GHo6XPLJ4cbMn0qfp09mad#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8nZmprcXdqaScpJ3Zxd2x1YERmZmpwa3EnPydkZmZxWjRRc1ZpSFd8MGowVEFqcUQnKSdkdWxOYHwnPyd1blppbHNgWjA0VHxgMXBCMWtXNUlCaHx2X2dLcmdsS0dcQmtVS1xBREE8QDZdXWRTVH1LVm5tT0Z8bUphQDI0YkNRcDJKR0N1a04ybFBkUGhvfWNcU0RjMzZObFBuYmp1NTVgQmBvbWoxQCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl"
+    }
+  ]
+}
