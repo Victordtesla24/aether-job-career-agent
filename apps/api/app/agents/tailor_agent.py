@@ -119,7 +119,11 @@ def _compute_conversion_metrics(
     }
 
 
-def build_story_evidence(user_id: str, repo: StoryRepository | None = None) -> str:
+def build_story_evidence(
+    user_id: str,
+    repo: StoryRepository | None = None,
+    job_description: str | None = None,
+) -> str:
     """Flatten the user's Story Bank into evidence text (GAP-P6-TAIL-001).
 
     The Story Bank holds real, user-authored STAR achievements whose skills are
@@ -128,10 +132,25 @@ def build_story_evidence(user_id: str, repo: StoryRepository | None = None) -> s
     genuinely proves (and pass the fabrication guard) — the only way a
     like-for-like ATS re-score can rise strictly without inventing anything.
     Every quantified result is kept so metric-bearing evidence survives. Empty
-    when the user has no stories (backward compatible)."""
+    when the user has no stories (backward compatible).
+
+    ``job_description`` (§7.3.5, optional/backward-compatible — default
+    ``None`` preserves the exact prior "every story unconditionally" corpus
+    for existing callers) narrows the story set to only those the SAME
+    scoring function ``GET /stories?job_id=`` already exposes
+    (``app.services.story_relevance.story_relevance_score``) rates >=
+    ``relevance_threshold()`` against this specific job. This can only ever
+    NARROW which of the candidate's own TRUE stories are included — it never
+    adds, rewrites, or invents story content, so the anti-fabrication
+    entailment guard downstream is unaffected."""
     repo = repo or StoryRepository()
+    stories = repo.list_by_user(user_id)
+    if job_description:
+        from app.services.story_relevance import filter_stories_by_relevance
+
+        stories = filter_stories_by_relevance(stories, job_description)
     parts: list[str] = []
-    for story in repo.list_by_user(user_id):
+    for story in stories:
         fields = [str(story.get("title") or ""), " ".join(story.get("tags") or [])]
         for key in ("situation", "task", "action", "result"):
             fields.append(str(story.get(key) or ""))
