@@ -2051,11 +2051,11 @@
         "grep for EventSource across apps/web/src \u2014 zero hits"
       ],
       "expected": "SSE endpoint streaming agent run progress; kanban_updated events on jobs:{workspace_id}",
-      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s | 6 contract tests written and RED for the right reason (404 route-unregistered); the not-found test asserts a specific 'Agent run not found' body so it cannot pass merely because unmatched routes 404. | SSE LAYER IMPLEMENTED (agent_run_stream.py NEW 334 lines; agents.py +53/-0, route 2161-2199). Events derived ONLY from the persisted AgentRun row, diffed server-side \u2014 nothing timer-driven. Postgres-row polling chosen over in-process bus because in-process delivers nothing with >1 uvicorn worker and ALREADY fails today for tailoring (separate ARQ process). Headers include X-Accel-Buffering:no (nginx would otherwise buffer SSE dead); 15s heartbeats sized against proxy_read_timeout 180s; bounded 600s lifetime emitting stream_timeout rather than a fabricated complete; failed runs emit `failed` with the real error and NEVER `complete`. 4/6 tests pass; the 2 failures are a proven contract contradiction (ADR-GMV4-002), not an implementation gap.",
+      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s | 6 contract tests written and RED for the right reason (404 route-unregistered); the not-found test asserts a specific 'Agent run not found' body so it cannot pass merely because unmatched routes 404. | SSE LAYER IMPLEMENTED (agent_run_stream.py NEW 334 lines; agents.py +53/-0, route 2161-2199). Events derived ONLY from the persisted AgentRun row, diffed server-side \u2014 nothing timer-driven. Postgres-row polling chosen over in-process bus because in-process delivers nothing with >1 uvicorn worker and ALREADY fails today for tailoring (separate ARQ process). Headers include X-Accel-Buffering:no (nginx would otherwise buffer SSE dead); 15s heartbeats sized against proxy_read_timeout 180s; bounded 600s lifetime emitting stream_timeout rather than a fabricated complete; failed runs emit `failed` with the real error and NEVER `complete`. 4/6 tests pass; the 2 failures are a proven contract contradiction (ADR-GMV4-002), not an implementation gap. | Contract amended per ADR-GMV4-002; 7/7 tests now pass.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "FIX-IN-TREE-CONTRACT-AMENDMENT-REQUIRED",
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
       "owner": "W-I/W-SUB fixer-hard",
       "fixCommits": [],
       "verifiedBy": null,
@@ -3234,15 +3234,145 @@
         "Run tests/test_agent_run_sse.py and compare tests 1/2 against test 6's monkeypatch"
       ],
       "expected": "A self-consistent contract asserting only genuinely-backed behaviour",
-      "observed": "Contract demands 200 and 404 for the same input, plus scripted progress",
+      "observed": "Tests 1-2 amended to monkeypatch a real owned run (matching tests 3-5); test 2 now asserts the actually-backed sequence ['snapshot','kanban_updated','complete'] instead of a fabricated six-step script; a new test pins x-accel-buffering: no. Full file 7/7 PASS.",
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-contract-conflict-proof-20260731T183930Z.txt"
       ],
-      "status": "OPEN",
+      "status": "VERIFIED-CLOSED",
       "owner": "test-author",
-      "fixCommits": [],
-      "verifiedBy": "fixer-hard (opus) 2026-07-31",
+      "fixCommits": [
+        "(uncommitted \u2014 wave)"
+      ],
+      "verifiedBy": "test-author 2026-07-31T18:44Z (ADR-GMV4-002 amendment)",
       "openedUtc": "2026-07-31T18:41:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-email-001",
+      "screen": "Email Center",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "THE USER CANNOT TELL THEIR EMAIL INTEGRATION IS BROKEN. Both linked Gmail accounts are in needs_reauth state on production, and the backend already computes that status \u2014 but the inbox account chips render only when status==='connected', so ZERO chips appear, and the CTA silently falls back to a bare 'Connect Gmail'. Across 2 sessions the words 'reauth'/'reconnect' appear nowhere on the page. Every email-dependent agent (outreach, notification, thread analysis) is therefore degraded with no user-visible cause \u2014 a silent-degradation violation of \u00a70.5 on a paying-user path.",
+      "reproduction": [
+        "Load /dashboard/email with both Gmail accounts at needs_reauth (current prod state)"
+      ],
+      "expected": "Accounts needing reconnection are visibly flagged with a reconnect action",
+      "observed": "No chip renders at all; generic 'Connect Gmail' CTA; no reauth wording anywhere",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-email/01-cold-load.png",
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-email/inbox.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch4 2026-07-31",
+      "openedUtc": "2026-07-31T18:45:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-email-002",
+      "screen": "n/a (data)",
+      "severity": "MEDIUM",
+      "category": "cleanup",
+      "summary": "A second un-deletable synthetic EmailThread now exists in production (cfc2cce71b52d38ffeff2db29, subject 'GOLD-MASTER-V4 TEST DRAFT...'), created during screen testing and NOT removable because no DELETE /emails/{thread_id} endpoint exists anywhere in the API. The first such row ('NUL byte test subject') was removed only by direct DB deletion under risk-officer approval. The missing endpoint is the underlying defect \u2014 it makes test data permanent by construction and mirrors GMV4-apps-003 (no DELETE for Application rows).",
+      "reproduction": [
+        "Search ROUTER-MATRIX.md for a DELETE on /emails"
+      ],
+      "expected": "Owner-scoped delete or archive for email threads",
+      "observed": "No delete path exists; synthetic rows are permanent",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-email/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-K janitor + W-B fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch4 2026-07-31",
+      "openedUtc": "2026-07-31T18:45:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-suites-003",
+      "screen": "n/a (test suite)",
+      "severity": "MEDIUM",
+      "category": "governance",
+      "summary": "EVIDENCE THAT A LARGE SHARE OF THE BACKEND FAILURES ARE FLAKINESS, NOT DEFECTS \u2014 but not proof, and it does not substitute for a quiescent run. All five targeted failing files (test_wave4b_interview_prep_agent, test_wave4c_notification_agent, test_wave4c_outreach_contact_agents, test_wave4c_thread_agents, test_networking) reproduce ONE signature: KeyError / mid-test 401 'Could not validate credentials' at the shared conftest fixture/register step \u2014 the documented shared-aether_test-schema race. The screen-tester then independently exercised the exact production scenarios those tests target (interview-prep with no job_id and no interview-stage application; networking contact get/delete) directly against prod and all behaved correctly and honestly. G-N still requires the quiescent run per GMV4-suites-002.",
+      "reproduction": [
+        "Compare failure signatures across the 5 files; re-run the targeted scenarios against production"
+      ],
+      "expected": "Each failure classified genuine-vs-flake by isolation proof",
+      "observed": "Single shared-fixture auth/race signature across all 5 files; prod scenarios behave correctly",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-interviews/REPORT.md",
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-networking/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-L (quiescent run)",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch4 2026-07-31",
+      "openedUtc": "2026-07-31T18:45:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-offers-001",
+      "screen": "Offers",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "POSITIVE FINDING + stale test. The Offers weighting UI was DELIBERATELY REMOVED, with a code comment recording that fabricating a weighted score was rejected as dishonest \u2014 the codebase choosing integrity over a feature. The backend still fetches a `weights` field that is never rendered. This also explains the baseline error in test_offers.py::test_offers_weights_sum_to_100: it tests a withdrawn feature. Resolve by retiring the stale test and the unused backend field, or by documenting the decision in an ADR.",
+      "reproduction": [
+        "Read the Offers page weighting comment; run test_offers.py::test_offers_weights_sum_to_100"
+      ],
+      "expected": "No dead field and no test for a withdrawn feature",
+      "observed": "Unused backend weights field; test asserts a removed capability",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-offers/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-K + test-author",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch4 2026-07-31",
+      "openedUtc": "2026-07-31T18:45:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-cal-001",
+      "screen": "Interviews",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "POSITIVE VERIFICATION for G-CAL's honesty precondition: the Interviews screen makes NO calendar claim of any kind (0 'calendar' text matches across 2 sessions) and scheduling_agent.py:140 hardcodes calendarIntegration=False. There is no dishonest calendar affordance to remove \u2014 W-CAL would be adding genuinely new capability, not correcting a lie.",
+      "reproduction": [
+        "Load /dashboard/interviews and grep the DOM for calendar affordances"
+      ],
+      "expected": "No unbacked calendar claims",
+      "observed": "None present",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-interviews/REPORT.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "W-CAL",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch4 2026-07-31",
+      "openedUtc": "2026-07-31T18:45:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-007",
+      "screen": "Jobs",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "CONFIRMED RED BY A STRENGTHENED TEST: Culture Fit on the job-insights payload is computed from a DEGRADED semantic score and presented as a real dimension. Observed live: culture_fit = {'label':'Culture Fit','score':70} derived from sem=50 (the degradation placeholder), with only a payload-wide semanticDegraded flag and NOTHING on the dimension itself. The prior test passed because its helper accepted any top-level flag; scoped to the dimension it fails. This is the round-2 review's finding 1 now pinned by a genuine red test.",
+      "reproduction": [
+        "Run tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit"
+      ],
+      "expected": "Culture Fit withheld or flagged ON THE DIMENSION when the semantic component is degraded",
+      "observed": "score 70 rendered from a placeholder with no dimension-level flag",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-ats-002-culturefit-strengthened-RED-20260731T184537Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-HF ai-loop-engineer round 3",
+      "fixCommits": [],
+      "verifiedBy": "test-author 2026-07-31",
+      "openedUtc": "2026-07-31T18:47:39Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

@@ -135,6 +135,44 @@ def _degradation_flagged(payload: dict) -> bool:
     return False
 
 
+#: round-2 review finding 3 (docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md §22
+#: STEP 2 TASK 2): the ORIGINAL ``_degradation_flagged`` above is satisfied by
+#: ANY top-level flag key, so it stays green even while ``culture_fit`` itself
+#: is still blended unconditionally from a possibly-degraded ``sem``
+#: (apps/api/app/routers/jobs.py:322,325,330,332,337 — the ``dimensions``
+#: list entry for "Culture Fit" carries no per-dimension signal of its own).
+#: These keys are checked SCOPED TO THE CULTURE FIT DIMENSION OBJECT ITSELF,
+#: not the whole payload, so a payload-wide flag elsewhere cannot satisfy it.
+_CULTURE_FIT_DIMENSION_DEGRADATION_KEYS = (
+    "degraded",
+    "isDegraded",
+    "semanticDegraded",
+    "scoringDegraded",
+    "flagged",
+)
+
+
+def _culture_fit_dimension(payload: dict) -> dict | None:
+    for dim in payload.get("dimensions", []):
+        if dim.get("label") == "Culture Fit":
+            return dim
+    return None
+
+
+def _culture_fit_withheld_or_flagged(payload: dict) -> bool:
+    """True only when Culture Fit is either ABSENT from ``dimensions``
+    (withheld) or its OWN dimension dict carries a degradation signal
+    (flagged) — never satisfied by a flag that lives elsewhere in the
+    payload."""
+    culture_fit = _culture_fit_dimension(payload)
+    if culture_fit is None:
+        return True  # withheld entirely
+    return any(
+        culture_fit.get(key) in (True, "degraded")
+        for key in _CULTURE_FIT_DIMENSION_DEGRADATION_KEYS
+    )
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -158,14 +196,26 @@ def test_resume_ats_response_flags_degraded_scoring(monkeypatch):
 
 
 def test_job_insights_does_not_blend_degraded_semantic_into_culture_fit(monkeypatch):
+    """STRENGTHENED (round-2 review finding 3): the original assertion below
+    was satisfiable by ANY top-level flag key (``_degradation_flagged``
+    scans the whole payload), so it stayed green even while the "Culture
+    Fit" dimension object itself carried no signal at all — a client
+    rendering just that one dimension (e.g. a per-dimension card/tooltip)
+    has no way to know its number is a degraded placeholder. This version
+    requires the signal to be SCOPED TO CULTURE FIT SPECIFICALLY: either the
+    dimension is withheld entirely, or its own dict carries a degradation
+    key — a payload-wide flag elsewhere no longer satisfies it."""
     score = _make_score(semantic_path="degraded", semantic_similarity=_DEGRADED_SEMANTIC_SCORE)
     result = _call_job_insights(monkeypatch, score)
 
-    culture_fit_dims = [d for d in result.get("dimensions", []) if d.get("label") == "Culture Fit"]
-    assert not culture_fit_dims or _degradation_flagged(result), (
-        "GET /jobs/{id}/insights blends the degraded semantic placeholder into "
-        f"a real-looking 'Culture Fit' dimension ({culture_fit_dims}) with no "
-        f"degradation signal anywhere in the payload: {result}"
+    culture_fit = _culture_fit_dimension(result)
+    assert _culture_fit_withheld_or_flagged(result), (
+        "GET /jobs/{id}/insights blends the degraded semantic placeholder "
+        f"into a real-looking 'Culture Fit' dimension ({culture_fit}) with "
+        "NO degradation signal on that dimension itself — only a "
+        f"payload-wide flag (e.g. semanticDegraded={result.get('semanticDegraded')!r}) "
+        "which a consumer of just the dimension object would never see. "
+        f"Full payload for context: {result}"
     )
 
 

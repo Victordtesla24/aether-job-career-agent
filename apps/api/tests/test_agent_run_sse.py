@@ -64,15 +64,16 @@ from app.repositories.agent_run import AgentRunRepository
 OWNER_USER: dict[str, Any] = {"id": "sse-owner-1", "email": "owner@example.com", "isAdmin": False}
 OTHER_USER: dict[str, Any] = {"id": "sse-other-1", "email": "other@example.com", "isAdmin": False}
 
-#: §14.5.5/§15.1 — the documented ordered step sequence for a submission run.
-EXPECTED_STEP_SEQUENCE = [
-    "scanning_queue",
-    "computing_ats_deltas",
-    "awaiting_approval",
-    "submitting",
-    "updating_kanban",
-    "complete",
-]
+#: §14.5.5/§15.1 names an ASPIRATIONAL six-step submission sequence
+#: (scanning_queue -> computing_ats_deltas -> awaiting_approval -> submitting
+#: -> updating_kanban -> complete). ADR-GMV4-002 (docs/delivery/
+#: GOLD-MASTER-V3-GOVERNANCE.md §5c) ruled that asserting it verbatim is a
+#: defective contract: four of the six steps have no journal behind them in
+#: this codebase today, so emitting them on a timer would be a scripted
+#: progress animation with no execution behind it (§0.5 auto-FAIL). No
+#: constant for it is defined here anymore — see
+#: ``app.services.agent_run_stream`` module docstring for exactly which
+#: frames ARE backed and emitted.
 
 
 @contextmanager
@@ -114,11 +115,30 @@ def _parse_sse_events(body: str) -> list[dict[str, Any]]:
 # --- 1. endpoint existence + SSE headers -------------------------------------
 
 
-def test_sse_endpoint_exists_and_sets_event_stream_content_type() -> None:
-    """``GET /agents/runs/{id}/stream`` must exist and set the SSE headers.
-    Today the route is unregistered, so this 404s before any header is set."""
+def test_sse_endpoint_exists_and_sets_event_stream_content_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``GET /agents/runs/{id}/stream`` must exist and set the SSE headers for
+    a REAL, owned run.
+
+    ADR-GMV4-002 (docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md §5c): the
+    original version of this test used an unmonkeypatched literal id
+    (``'some-run-id'``) and demanded 200 with no ownership backing. A fresh
+    probe proved the real ``get_by_id('some-run-id')`` already returns
+    ``None`` — byte-identical to test 6's monkeypatched not-found state — so
+    the same input was required to produce both 200 and 404. This version
+    follows the exact monkeypatch pattern tests 3-5 already use: a real,
+    owned run record, no magic id.
+    """
+    run_id = "run-headers-1"
+    monkeypatch.setattr(
+        AgentRunRepository,
+        "get_by_id",
+        lambda self, rid, uid: {"id": run_id, "userId": OWNER_USER["id"], "status": "completed"},
+    )
+
     with _client_as(OWNER_USER) as client:
-        resp = client.get("/agents/runs/some-run-id/stream")
+        resp = client.get(f"/agents/runs/{run_id}/stream")
 
     assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
     content_type = resp.headers.get("content-type", "")
@@ -126,19 +146,66 @@ def test_sse_endpoint_exists_and_sets_event_stream_content_type() -> None:
     assert resp.headers.get("cache-control") == "no-cache", resp.headers.get("cache-control")
 
 
+def test_sse_response_disables_nginx_buffering(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``X-Accel-Buffering: no`` must be present on the stream response.
+
+    Without it, nginx's ``location /api/`` (``deploy/5cb5f0620.conf`` has no
+    ``proxy_buffering off``) buffers the entire response before forwarding
+    it, so in production the stream appears dead until it closes — a real
+    deployment failure mode, not a cosmetic header. Pinned separately from
+    test 1 so a regression here fails with an unambiguous, specific reason."""
+    run_id = "run-buffering-1"
+    monkeypatch.setattr(
+        AgentRunRepository,
+        "get_by_id",
+        lambda self, rid, uid: {"id": run_id, "userId": OWNER_USER["id"], "status": "completed"},
+    )
+
+    with _client_as(OWNER_USER) as client:
+        resp = client.get(f"/agents/runs/{run_id}/stream")
+
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+    assert resp.headers.get("x-accel-buffering") == "no", resp.headers.get("x-accel-buffering")
+
+
 # --- 2. ordered step events ---------------------------------------------------
 
 
-def test_sse_stream_emits_progress_events_in_order() -> None:
-    """The documented step sequence must arrive IN ORDER — asserts the full
-    ordered list, not merely that each name appears somewhere in the body."""
+def test_sse_stream_emits_progress_events_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Asserts the ORDER of events that are actually backed by persisted
+    state for a completed, owned run — not the aspirational §14.5.5 six-step
+    script.
+
+    ADR-GMV4-002: the original version demanded a fixed six-step sequence
+    (``scanning_queue`` .. ``complete``) for a run with NO monkeypatch (i.e.
+    a run that does not exist) — scripted progress with no execution behind
+    it (§0.5 auto-FAIL) — and its exact-list equality additionally forbade
+    ``kanban_updated``, which test 4 simultaneously requires for an
+    equivalent completed run. This version monkeypatches a real completed
+    run, exactly as tests 3-5 do, and asserts the order of the frames
+    ``app.services.agent_run_stream`` actually emits for that state:
+    ``snapshot`` (real state at connect), ``kanban_updated`` (real
+    scope-invalidation signal, honestly labelled with its basis — see
+    ``_kanban_payload``), then ``complete`` (real persisted terminal
+    status). This list is exhaustive for this scenario (not merely
+    ordered-subset), so it still has teeth: it fails if the endpoint stops
+    emitting any of these, reorders them, or reintroduces exact-list
+    equality that would exclude a REAL event again.
+    """
+    run_id = "run-order-1"
+    monkeypatch.setattr(
+        AgentRunRepository,
+        "get_by_id",
+        lambda self, rid, uid: {"id": run_id, "userId": OWNER_USER["id"], "status": "completed"},
+    )
+
     with _client_as(OWNER_USER) as client:
-        resp = client.get("/agents/runs/some-run-id/stream")
+        resp = client.get(f"/agents/runs/{run_id}/stream")
 
     assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
     events = _parse_sse_events(resp.text)
     event_names = [e["event"] for e in events]
-    assert event_names == EXPECTED_STEP_SEQUENCE, event_names
+    assert event_names == ["snapshot", "kanban_updated", "complete"], event_names
 
 
 # --- 3. ownership boundary -----------------------------------------------------
