@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T16:30:00Z",
+  "updated_utc": "2026-07-31T16:55:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -259,6 +259,16 @@
       "my_error": "I recorded ML-SIGNUP-001 as \"FIXED AT HEAD, deployment lag\" on the strength of the db.py blanket guard. That was WRONG - the guard cannot see a value that fails before the DB layer. Signup is the first thing a new paying customer touches.",
       "fix": "Dual seam mirroring the existing MV-signup-001 precedent: (1) validate_password_policy() in repositories/user.py - reached via RegisterRequest Pydantic field_validator, so a NUL byte gets a clean 422 BEFORE the handler runs, consistent with how EmailStr already treats the email field; (2) hash_password() in security.py as defence-in-depth for callers outside RegisterRequest. 14 new tests incl. 7 POSITIVE round-trips (unicode, CJK, emoji, spaces, 72-byte boundary, punctuation, apostrophe surname) guarding against over-correction. 85 green across 5 suites.",
       "useful_finding": "verify_password() on the LOGIN path was ALREADY safe - PasswordValueError subclasses ValueError and login already caught it, so a NUL byte there was a harmless 401, never a 500. The agent verified that rather than assuming symmetry with register."
+    },
+    {
+      "id": "BLOCKER-005",
+      "severity": "MEDIUM now / HIGH after rotation",
+      "status": "FIX IN FLIGHT (tests-first)",
+      "title": "The BLOCKER-001 guard writes the admin password in PLAINTEXT to api.log on every boot",
+      "evidence": "Captured production log, 2026-07-31T15:26:36Z: \"BLOCKER-001: refusing to grant admin privilege to '<operator-email>' \u2014 its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak password 'admin123'.\" That is a COMPLETE WORKING CREDENTIAL PAIR (email + plaintext password) written to /var/log/aether/api.log on every restart.",
+      "why_it_matters": "\u00a70.5 forbids secrets being printed, logged, committed or echoed. Impact is limited TODAY (the password is already public and log access implies server access) \u2014 but the moment the operator rotates to a strong unique password, this guard will write the NEW SECRET to disk in plaintext on every boot. A latent leak of a real secret, introduced BY a security fix.",
+      "found_by": "orchestrator, while redacting evidence artifacts \u2014 the last un-redactable occurrence turned out to be the application logging it itself, not something an agent had written.",
+      "irony_worth_recording": "The fix that closed a published-credential vulnerability re-published the credential to disk. Caught only because a redaction sweep asked WHY one occurrence could not be removed."
     }
   ],
   "human_gated": {
@@ -868,5 +878,8 @@
     "log": "uat/reports/evidence/gold-master-v2/final/observation-window-2-*.log",
     "monitor_validated": "signal-proven \u2014 a probe produced an immediate api.log delta",
     "note": "Window 1 is INVALIDATED by the 2 BLOCKER-004 5xx. This is the fresh \u00a714.3.5 window required for G-M."
+  },
+  "evidence_hygiene": {
+    "action": "Redacted the plaintext weak password from 2 evidence markdown artifacts (FINAL-REPORT-SPOTCHECKS.md, POST-DEPLOY-SMOKE.md). Captured .log files were deliberately NOT edited \u2014 they are the raw record, and altering them would falsify evidence. The remaining occurrence in observation-window-*.log is the application own output, now being fixed at source as BLOCKER-005."
   }
 }
