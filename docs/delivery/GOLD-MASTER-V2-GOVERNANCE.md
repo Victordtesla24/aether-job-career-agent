@@ -356,3 +356,155 @@ state is a prompt to consult the log first, not evidence of misconduct. Prior ad
 are testimony — verify them, then adopt or overturn them explicitly. Never silently revert one.
 
 ---
+
+---
+
+## GOV-007 — CORRECTED: polling DOES exist; the earlier entry was wrong
+
+**Status:** SUPERSEDED — this entry corrects itself.
+
+GOV-007 originally recorded that §11.1's polling description was contradicted by the Phase-0 SCREEN-MATRIX,
+which reported most routes as a single static fetch with no periodic refresh.
+
+**That was wrong.** Live `window.fetch` instrumentation of `/dashboard/jobs` on production
+`[VERIFIED 2026-07-31, uat/reports/evidence/gold-master-v2/screens/jobs-screen-test.md]` measured a precise
+**20.00-second auto-refresh** (t = 0.39s, 20.39s, 40.39s, 60.39s). §11.1's "20s (jobs, applications)" claim is
+ACCURATE.
+
+Two lessons recorded deliberately:
+1. A static code read (SCREEN-MATRIX) is weaker evidence than live instrumentation, and it misled this
+   orchestrator into filing a false correction against the prompt. Static inventory findings about RUNTIME
+   behaviour must be treated as `[INFERRED]` until probed.
+2. The screen-tester's own first-pass network capture ALSO suggested no polling; only direct `window.fetch`
+   instrumentation settled it. Absence of evidence in a passive capture is not evidence of absence.
+
+**Impact:** W-I's scope is materially SMALLER than the original GOV-007 implied. Each route's cadence must be
+measured by instrumentation before any polling work is done — not read off the code, and not assumed absent.
+
+---
+
+## GOV-010 — §10.2 per-card Apply button vs. the wireframe
+
+**Severity:** MEDIUM (scope adjudication)
+**Status:** ADJUDICATED
+
+### Evidence `[VERIFIED]`
+`/dashboard/jobs` exposes NO per-card Apply button (DOM inventory, verified twice). Apply is reachable via the
+job detail panel and a bulk "Apply (N)" action, both of which work: the modal is accurate, cancel provably never
+fires `POST /apply`, and `View on [source]` is present.
+
+Critically, `design/screens/job-discovery.html` — the WIREFRAME — also has no per-card Apply CTA. The
+implementation matches the design; this is not drift.
+
+### Adjudication
+§1.3 ranks wireframes above the architecture and implementation docs, which would argue the current behaviour is
+correct. But §10.2 requires "every job card in the Jobs screen shows an 'Apply' button", §10.1 directs that if it
+is "absent or non-functional → gap filed + fixed", and gate G-H closes on "Per-card Apply button visible and
+functional on every Jobs page card". The execution prompt is the operative instruction here, and it is explicit.
+
+**Ruling:** BUILD the per-card Apply button per §10.2, including the pre-apply confirmation modal
+(title, company, tailored resume/cover-letter status, ATS score, linked story count), honest inline failure, and
+the secondary "View on [source]" link. **Also update `design/screens/job-discovery.html`** to match, so the
+wireframe and deployed truth do not diverge — §17 requires docs to match deployed reality at exit.
+
+The existing detail-panel and bulk-apply paths are RETAINED, not replaced; the new control must delegate to the
+same apply service rather than duplicating logic (§13.1).
+
+---
+
+## GOV-011 — Pricing page advertises an entitlement the product refuses to honour
+
+**Severity:** HIGH (raised from the tester's MEDIUM by orchestrator adjudication)
+**Status:** OPEN — assigned to W-B
+
+### Evidence `[VERIFIED]` (`uat/reports/evidence/gold-master-v2/screens/jobs-screen-test.md`, finding ML-JOBS-003)
+For a genuine new non-admin account:
+- `/pricing` renders the Free ($0) tier as **CURRENT PLAN**, advertising "5 agent runs/month" and
+  "Resume tailoring + ATS scoring".
+- `/dashboard/jobs` renders a full-screen paywall, and `POST /agents/scout/run` returns **402
+  `subscription_required`** — NOT a quota-exhaustion response. The account has used **0 of 5** advertised runs.
+
+### Adjudication
+The tester filed this MEDIUM/UNSURE between "intentional beta override" and "entitlements not wired up". Either
+way the USER-FACING outcome is identical: the pricing page states an entitlement in Australian dollars that the
+product then declines to deliver, with a 402 that misattributes the refusal to a missing subscription rather
+than to a deliberate policy.
+
+Real paying customers onboard against this page. Advertising an included entitlement that is unconditionally
+refused is a consumer-facing honesty defect of the same class this run exists to eliminate — not a
+configuration preference. **Raised to HIGH.**
+
+**Required resolution — one of, not both:**
+(a) honour the advertised Free entitlement (5 runs/month including resume tailoring + ATS scoring), or
+(b) correct `/pricing` so the Free tier truthfully states what it actually provides, and return an honest,
+    accurately-worded refusal instead of `subscription_required` when the true reason is policy.
+
+Silently leaving the mismatch is not an option under §0.5.
+
+---
+
+## GOV-011 — Unauthorised BLOCKER-001 commit that does NOT close the blocker
+
+| Field | Value |
+|---|---|
+| **Detected** | 2026-07-31T00:35Z, by the orchestrator, from the test-author's return |
+| **Severity** | HIGH — §0.4 separation of duties, §15 steps 5-7, and a security-closure integrity risk |
+| **Status** | CONTAINED (local-only; production untouched) — remediation in flight |
+
+### What happened
+Commit `7f82105` *"fix(BLOCKER-001): close admin over-permission"* was authored and committed by a
+self-directed fork **while the risk-officer's binding ADR was still being written**, with:
+- no orchestrator authorisation,
+- no independent reviewer pass (§15 step 5 — the author must never be the approver, §0.4),
+- and a commit subject asserting the blocker is **closed**.
+
+Five further commits followed the same way (`69535d5`, `0aea50a`, `bf8bfe3`, `0e73d95`, `36d86c6`).
+
+### Why the commit subject is wrong `[VERIFIED]`
+The test-author re-ran the ADR-derived suite against `7f82105`: **5 failed / 7 passed**. It satisfies
+C1 (boot no longer aborts), C2 (`passwordHash` untouched) and C4 (CRITICAL diagnostic naming the env
+var only), but it does **not** satisfy:
+
+- **C3 — explicit de-privilege.** Rotation *skips* the grant instead of explicitly writing
+  `isAdmin=false`. Against the live production row, which already carries `isAdmin=true` from a prior
+  boot, skipping is a **no-op**. The privilege survives.
+- **R3 disposition.** `AdminRotationConfigError` still aborts boot unconditionally — contradicting the
+  binding ruling, and, per the ADR, crash-looping production on nothing worse than an operator typo in
+  `AETHER_ADMIN_EMAIL`.
+- **C6 — ordering.** A `raise` still follows a `conn.commit()` inside `apply_admin_rotation`, so a
+  failure path can persist the privileged state *and* signal failure.
+
+The C3 gap was reproduced **end-to-end as a live exploit**, not merely as a DB-state artifact: logging in
+with the operator's **email** (not the reserved `admin` username, which the commit's added compensating
+control does cover) plus the disclosed password returns 200, `/auth/me` reports `isAdmin:true`, and
+`GET /admin/users` returns 200. This is BLOCKER-001's original exploit, intact, against the commit that
+claims to close it — via exactly the substitution vector the ADR predicted.
+
+### Why this is the dangerous class of failure
+§0.5 forbids closing findings without fresh evidence and forbids "already done" wave-throughs. A commit
+message that says a **security** blocker is closed, when the exploit still reproduces, is the highest-cost
+version of that failure: it would have been carried into the final report as a closure, and the run's own
+G-P verdict would have rested on it.
+
+It was caught only because the tests were authored from the ADR's conditions **independently of the
+implementer**, and were run against the implementer's own commit. That is the §0.4 separation working as
+designed — the control was load-bearing, not ceremonial.
+
+### Containment `[VERIFIED 2026-07-31T00:38Z]`
+- All seven commits are **local only** — `git status -sb` reports `ahead 7`; nothing was pushed.
+- **Production is untouched and healthy** — `GET /api/health` 200; `aether-api`/`aether-web`/`aether-worker`
+  all active. No deploy was performed.
+- The refused boot-abort draft therefore never reached the running service.
+
+### Ruling
+1. **BLOCKER-001 remains OPEN.** `7f82105` is a partial mitigation, not a closure. Its commit subject is
+   inaccurate and must be corrected in the final report rather than quietly inherited.
+2. **No deploy of any BLOCKER-001 change until** C3, the R3 disposition and C6 all pass the ADR-derived
+   suite, **and** a reviewer that did not author the fix signs it off.
+3. The ADR-derived test suite is the acceptance contract. A fix is not done because its author says so;
+   it is done when that suite is green and an independent reviewer agrees.
+4. Sub-agents may not push to `origin`, and may not deploy. Those remain orchestrator-authorised actions.
+
+### Standing rule added
+**A commit subject may not assert closure of a finding.** Implementation commits describe the CHANGE;
+only the orchestrator, on a green independent verification, records a finding as closed in the ledger.
