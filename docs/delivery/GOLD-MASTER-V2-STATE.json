@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:40:00Z",
+  "updated_utc": "2026-07-31T15:15:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -43,7 +43,7 @@
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
     "W-E": "12/12 tests GREEN, 36/36 regression green, ADV-ENT-001 closed. Dedup + relevance machinery SHIPPED AND TESTED. RELEVANCE GATE DELIBERATELY LEFT DISABLED on empirical evidence - see RELEVANCE-CALIBRATION ruling below. \u00a77.3.3 is therefore NOT met in substance and is re-scoped as a specified design change, not a patch.",
-    "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
+    "W-F": "COMPLETE (pending prod verify). Canonical PATCH /applications/{id}/stage 13/13; ML-APP-003 reconciliation 2/2; 133 regression tests green across 10 files. Shared service app/services/stage_transitions.py owns every rule - code MOVED not copied (\u00a713.1); PATCH plus both legacy POST .../move routes are thin adapters. from_stage is ENFORCED (409 naming the real stage; closed-application 422 checked first). Approvals half already verified live + 5/5 in tests.",
     "W-G": "COMPLETE (pending prod verify). FE 631/631 green (baseline 628 + exactly 3 new), tsc clean, Playwright verified TWICE with independent fixture users. Delivered: \"Admin sign in\" link on /login -> new standalone /admin-login page posting to the same POST /auth/login then routing to /admin (\u00a79.2.1); persistent Topbar \"Admin\" badge gated on live fetchMe().isAdmin (\u00a79.2.3), standard users see nothing. Backend/authz was ALREADY complete and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). NOT DEPLOYED.",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
     "W-I": "PENDING - MEASURED per screen by fetch instrumentation, NOT assumed: /dashboard/jobs 20.00s, /dashboard/applications 20s, /dashboard/resume ~3.1s, /dashboard/stories NONE. So polling is real on some screens and genuinely absent on others - GOV-007 corrected. Scope = add the shared hook to screens measured as having no refresh, plus SSE agent-run progress, plus optimistic mutations.",
@@ -79,8 +79,13 @@
       "status": "OPEN"
     },
     "G-F": {
-      "status": "APPROVALS-HALF-VERIFIED",
-      "note": "\u00a78.2 approvals contract VERIFIED live (Remove, bulk purge honest, counters reconcile) AND 5/5 green in tests. Stage-move half: keyboard-operable Move-to menu + server-side 422 already verified; canonical PATCH endpoint + ML-APP-003 reconciliation in flight."
+      "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v2/waves/WF-fix-report.md",
+        "uat/reports/evidence/gold-master-v2/screens/remaining-routes-screen-test.md"
+      ],
+      "met": "canonical PATCH endpoint + legal transition matrix + server-side enforcement + audit fields; keyboard-operable Move-to menu (verified live); approvals Remove/purge verified live and 5/5 in tests; stage counts and funnel now reconcile",
+      "reconciliation_ruling": "NEITHER surface filters on Job.status. apply()/submit() set Job.status=applied and never advance it, so the filter emptied the entire application-fed half of the board by construction. Job.status is already honoured by the board first-3 columns via GET /jobs. Filtering the funnel instead would undercount a lifetime conversion funnel and contradict its own unfiltered applied node."
     },
     "G-G": {
       "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
@@ -534,7 +539,8 @@
     "STORY-REL-002: stopword list misses including/all/while/using/within - 56% of matched weight comes from 25 generic terms.",
     "STORY-REL-003: two different JD strings feed the same scorer (tailor_agent.run vs routers/stories.py:152).",
     "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter.",
-    "GAP-market-pulse-interview-count-divergence (MEDIUM, LIVE, pre-existing per git blame 2026-07-12/18): analytics.py:362-372 uses a raw COUNT(*) for Market Pulse interview figures instead of the canonical get_application_counts() - the SAME divergent-query class the docstring says caused MV-mobile-dashboard-005. apps/web/src/app/dashboard/analytics/page.tsx renders BOTH the canonical conversion rate AND <MarketPulse /> on the SAME page, so a user can see two different interview figures side by side. Fix: mirror what f_last_month already does at analytics.py:380. NOT introduced by this run."
+    "GAP-market-pulse-interview-count-divergence (MEDIUM, LIVE, pre-existing per git blame 2026-07-12/18): analytics.py:362-372 uses a raw COUNT(*) for Market Pulse interview figures instead of the canonical get_application_counts() - the SAME divergent-query class the docstring says caused MV-mobile-dashboard-005. apps/web/src/app/dashboard/analytics/page.tsx renders BOTH the canonical conversion rate AND <MarketPulse /> on the SAME page, so a user can see two different interview figures side by side. Fix: mirror what f_last_month already does at analytics.py:380. NOT introduced by this run.",
+    "W-F residual (UI decision for the apps/web owner): the Applied tab (include_applied=true) is now a SUBSET of the board rather than disjoint - an honest overlap, but may want de-duplication. Also: from_stage mismatch -> 409 is an unpinned contract decision; one line to make advisory if preferred."
   ],
   "orchestrator_corrections": [
     {
@@ -609,5 +615,8 @@
     "reports": "uat/reports/evidence/gold-master-v2/screens/ (19 report files + ~350 screenshots)",
     "identities": "Every screen tested under BOTH the data-rich owner AND a genuine first-time non-admin, per \u00a73.2."
   },
-  "concurrent_dispatch_collision": "A duplicate /signup dispatch occurred: two screen-testers tested it independently. The second discovered the collision, DECLINED to overwrite the first's completed report, and appended an independent-corroboration addendum (\u00a716) instead. It disclosed that its cp had overwritten 6 screenshots, renamed its own with a -2ndtester suffix, and noted the findings are independently backed by response bodies and DB queries rather than screenshots alone. Net effect: /signup has TWO independent passes that AGREE - stronger evidence, at the cost of 3 extra test accounts (all in the purge ledger)."
+  "concurrent_dispatch_collision": "A duplicate /signup dispatch occurred: two screen-testers tested it independently. The second discovered the collision, DECLINED to overwrite the first's completed report, and appended an independent-corroboration addendum (\u00a716) instead. It disclosed that its cp had overwritten 6 screenshots, renamed its own with a -2ndtester suffix, and noted the findings are independently backed by response bodies and DB queries rather than screenshots alone. Net effect: /signup has TWO independent passes that AGREE - stronger evidence, at the cost of 3 extra test accounts (all in the purge ledger).",
+  "regressions_caused_and_fixed": [
+    "W-F refactor: making the move path acquire its own app.db connection split a request transaction across two modules, breaking test_ml_w17_application_race_unique_index (200 instead of 409 - the DB-level UniqueViolation backstop became unprovable). Fixed by making the CALLER own the unit of work via connection_factory across all three routes. The test was never edited."
+  ]
 }
