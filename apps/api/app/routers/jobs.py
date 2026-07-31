@@ -442,15 +442,21 @@ def _existing_application(user_id: str, job_id: str) -> tuple[str, str] | None:
     return (row[0], row[1]) if row else None
 
 
-@router.post("/{job_id}/apply")
-def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
-    """Create an Application and advance the job to ``applied`` (idempotent).
+def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
+    """Create an Application for ``job_id`` (owned by ``user_id``) and advance
+    the job to ``applied`` (idempotent).
 
-    Requires both a job-tailored resume and a non-empty Cover Letter Studio
-    draft before promoting the application to submitted. Already-submitted
-    applications remain idempotent.
+    The REAL submission gate + write behind ``POST /{job_id}/apply`` — requires
+    both a job-tailored resume and a non-empty Cover Letter Studio draft before
+    promoting the application to submitted. Already-submitted applications
+    remain idempotent. Extracted verbatim (GM2-AGENTS-001) so
+    :class:`app.agents.submission_agent.SubmissionAgent` performs the EXACT
+    same gate and write as the Jobs board's Apply button — never a second,
+    looser gate reimplemented for the Agents-screen card.
+
+    Raises ``HTTPException`` (404 job not found, 422 gate not satisfied) —
+    unchanged from the endpoint's prior inline behaviour.
     """
-    user_id = current_user["id"]
     repository = JobRepository()
     job = repository.get_by_id(job_id, user_id)
     if job is None:
@@ -518,7 +524,21 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
-    return {"job": _public(updated), "applicationId": application_id}
+    return {"job": updated, "applicationId": application_id}
+
+
+@router.post("/{job_id}/apply")
+def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Create an Application and advance the job to ``applied`` (idempotent).
+
+    Requires both a job-tailored resume and a non-empty Cover Letter Studio
+    draft before promoting the application to submitted. Already-submitted
+    applications remain idempotent. Thin HTTP wrapper over
+    :func:`submit_application_for_job`, the same write the Submission Agent
+    (GM2-AGENTS-001) now also performs.
+    """
+    result = submit_application_for_job(current_user["id"], job_id)
+    return {"job": _public(result["job"]), "applicationId": result["applicationId"]}
 
 
 # ---------------------------------------------------------------------------

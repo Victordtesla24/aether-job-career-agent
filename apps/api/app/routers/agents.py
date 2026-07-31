@@ -190,9 +190,23 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "which claims were rejected, flagged or withheld, and which artifacts "
             "came back clean. Runs that never reached a verdict are excluded, never "
             "passed. Deterministic, no LLM cost."},
+    # ADR-AG-1 (GM2-AGENTS-001): the old tip promised "reliable form-filling
+    # and browser automation reasoning" for GPT-4o — no browser-automation or
+    # third-party form-filling integration exists in this product. The honest,
+    # REAL scope is the submission gate + write POST /jobs/{id}/apply already
+    # performs (app.routers.jobs.submit_application_for_job), now also
+    # runnable as an agent — never left as a permanently "planned" card with
+    # no backend (§4), and never a stub: it is the SAME write the Jobs board's
+    # Apply button makes, reused verbatim.
     {"key": "submission", "name": "Submission Agent", "icon": "fa-paper-plane",
-     "accent": "green", "backend": None, "recommended": "gpt-4o",
-     "tip": "Best with GPT-4o for reliable form-filling and browser automation reasoning."},
+     "accent": "green", "backend": "submission", "recommended": "deterministic",
+     "tip": "Submits one of your OWN ready applications — the exact gate and "
+            "write the Jobs board's Apply button already performs (a "
+            "job-tailored resume plus a non-empty Cover Letter Studio draft), "
+            "now runnable as an agent. No browser automation or third-party "
+            "form-filling exists; nothing is invented. With no job specified "
+            "it picks your most recently updated ready application and "
+            "reports which one. Deterministic, no LLM cost."},
     {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
      "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "
@@ -1732,6 +1746,23 @@ def _agent_callable(
         # Takes NO params: the digest window is derived from the last digest the
         # user actually sent, never from caller input.
         return "notification", (lambda: NotificationAgent().run(user_id))
+    # GM2-AGENTS-001: real submission gate + write (app.routers.jobs
+    # submit_application_for_job, verbatim — never a second, looser gate).
+    # ``job_id`` is OPTIONAL so the Agents-screen Run button works with the
+    # FE's default empty body (no RUN_PARAMS/AGENT_ROUTE entry needed): with
+    # none supplied the agent picks the caller's own most recent already-ready
+    # application and REPORTS that choice back (the wave-4A/4B/4C
+    # convention). An EXPLICIT id that is not the caller's own raises
+    # LookupError -> honest 404, never a substituted job.
+    if name in ("submission", "submission-agent"):
+        from app.agents.submission_agent import SubmissionAgent
+
+        job_id = params.get("job_id")
+        return "submission", (
+            lambda: SubmissionAgent().run(
+                user_id, job_id=str(job_id) if job_id else None
+            )
+        )
     raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown agent '{name}'")
 
 
@@ -1749,6 +1780,7 @@ _RUNNABLE_BACKENDS = frozenset(
         "interviewPrep",
         "recruiterOutreach", "reference", "sentimentAnalysis", "scheduling",
         "notification",
+        "submission",
     }
 )
 
@@ -2833,6 +2865,10 @@ _DETERMINISTIC_BACKENDS = frozenset(
         # user's own rows — no model is ever called, so a per-agent model pick
         # would be a no-op and the picker is honestly locked.
         "notification",
+        # GM2-AGENTS-001: the submission gate + write is a deterministic DB
+        # operation (the same one POST /jobs/{id}/apply performs) — no model
+        # is ever called, so a per-agent model pick would be a no-op here too.
+        "submission",
     }
 )
 

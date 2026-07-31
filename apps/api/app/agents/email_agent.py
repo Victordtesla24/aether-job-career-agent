@@ -156,6 +156,36 @@ class EmailAgent:
             return str(msgs[-1].get("body") or "")
         return ""
 
+    #: Roles that mark a message as the candidate's OWN outbound text
+    #: (gmail_service._normalize_thread marks real inbound Gmail mail
+    #: "received"; routers/emails.py reply_to_thread/create_draft mark the
+    #: candidate's own text "reply"/"draft").
+    _OWN_MESSAGE_ROLES = frozenset({"reply", "draft"})
+
+    @classmethod
+    def _latest_counterparty_body(cls, thread: dict[str, Any]) -> str:
+        """The newest message that is NOT the candidate's own outbound text.
+
+        GM2-EMAIL-002: a reply/follow-up draft must be grounded on the
+        COUNTERPARTY's last message, never on the candidate's own prior
+        reply — even when that own reply is the newest message on the
+        thread. Walks back from the newest message and skips any whose
+        ``role`` marks it as the candidate's own ("reply"/"draft"). A
+        message with no ``role`` at all predates that field and is treated
+        as inbound, matching historical single-message-thread behaviour.
+        Returns "" when every message on the thread is the candidate's own.
+        """
+        msgs = thread.get("messages") or []
+        if not isinstance(msgs, list):
+            return ""
+        for msg in reversed(msgs):
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") in cls._OWN_MESSAGE_ROLES:
+                continue
+            return str(msg.get("body") or "")
+        return ""
+
     @staticmethod
     def _coerce_score(value: Any) -> Optional[int]:
         """Parse a triage score into an int clamped to 0-100, or ``None`` when the
@@ -304,7 +334,17 @@ class EmailAgent:
         if not thread_id:
             raise EmailAgentError(f"{mode} requires thread_id")
         thread = self._thread(user_id, thread_id)
-        incoming = self._latest_body(thread)
+        messages = thread.get("messages") or []
+        incoming = self._latest_counterparty_body(thread)
+        if isinstance(messages, list) and messages and not incoming:
+            # GM2-EMAIL-002: every message on this thread is the candidate's
+            # own outbound text — fail honestly rather than grounding the
+            # draft on the candidate's own words presented as the "incoming"
+            # email (the exact direction-reversal defect).
+            raise EmailAgentError(
+                f"Cannot draft a {mode.replace('_', ' ')} — this thread has "
+                "no message from the other party to respond to."
+            )
         resume_text = self._resume_text(user_id)
         if not resume_text.strip():
             raise EmailAgentError("Add your resume before drafting a reply.")

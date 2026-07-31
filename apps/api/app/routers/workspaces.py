@@ -464,6 +464,11 @@ def email_inbox(
     account_rows = creds_repo.list_accounts(uid)
     connected = len(account_rows) > 0
 
+    # GM2-EMAIL-001: accounts whose sync JUST failed with a real auth failure
+    # (expired/revoked token) must never be reported as "connected" below —
+    # capture which account ids failed instead of silently swallowing it.
+    auth_failed_account_ids: set[Any] = set()
+
     if connected:
         # Best-effort sync of EVERY connected inbox; a hiccup on one account must
         # never 500 the inbox or block the others.
@@ -487,7 +492,7 @@ def email_inbox(
             try:
                 GmailService(uid, account_id=acc.get("id")).sync_threads_to_db()
             except (GmailAuthError, GmailNotConnectedError):
-                pass
+                auth_failed_account_ids.add(acc.get("id"))
             except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
                 pass
 
@@ -621,18 +626,27 @@ def email_inbox(
     # One entry per connected inbox (for the account switcher). Falls back to a
     # single not-connected placeholder so the UI can prompt the first connect.
     if account_rows:
-        accounts = [
-            {
+        accounts = []
+        for acc in account_rows:
+            # GM2-EMAIL-001: honest status — this SAME request's own sync
+            # attempt (above) already proved the stored token is dead. Never
+            # report "connected" when a live auth check just failed.
+            needs_reauth = acc.get("id") in auth_failed_account_ids
+            accounts.append({
                 "id": acc.get("id"),
                 "email": acc.get("accountEmail") or "",
                 "provider": "Gmail",
-                "status": "connected",
+                "status": "needs_reauth" if needs_reauth else "connected",
                 "isPrimary": bool(acc.get("isPrimary")),
                 "unread": 0,
-                "note": "Gmail connected — your inbox is syncing.",
-            }
-            for acc in account_rows
-        ]
+                "actionRequired": needs_reauth,
+                "note": (
+                    "Gmail authorization expired or was revoked — "
+                    "reconnect your account to resume syncing."
+                    if needs_reauth
+                    else "Gmail connected — your inbox is syncing."
+                ),
+            })
     else:
         accounts = [
             {
