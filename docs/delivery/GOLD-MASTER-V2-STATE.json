@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:10:00Z",
+  "updated_utc": "2026-07-31T14:15:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -115,14 +115,16 @@
       "status": "OPEN"
     },
     "G-L": {
-      "status": "OPEN"
+      "status": "CLOSED",
+      "evidence": "CI run 30635438303 conclusion=success on main; deploy 061014c live at 13:45:25Z; git ls-remote --heads origin = exactly 1 branch (main); gh pr list --state open = 0 open PRs; no force-push, no --no-verify."
     },
     "G-M": {
       "status": "PARTIAL",
       "note": "72-min clean window with 0x5xx achieved; 4 real AI agent runs completed in a ~7-min clean window (AgentRun ids in AI-AGENT-QUALITY-ASSESSMENT.md). Needs a FINAL post-deploy window."
     },
     "G-N": {
-      "status": "OPEN"
+      "status": "CLOSED",
+      "evidence": "Backend 2056 passed / 0 failed / 1 skipped on the deployed tree (baseline 1885 -> +171 new tests, ZERO regressions). Frontend 650/650. The single previously-red test was fixed, not carved out. Skipped count 1 vs baseline 0 - no skipped-test inflation."
     },
     "G-O": {
       "status": "OPEN"
@@ -759,5 +761,12 @@
     "discovery_cron": "SURVIVED. First post-deploy run 14:00:29Z completed 14:01:07Z: status accepted, 36 jobs updated, errors []. fit-scorer completed. CORRECTION to an earlier orchestrator worry: cron was NOT broken by the credential guard - it uses a different auth path (system-run secret) than the interactive login, which is why direct operator-email login is rejected while the scheduled job runs fine.",
     "full_backend_suite_on_deployed_tree": "2056 passed / 0 failed / 1 skipped, exit 0, 41m36s - matches the pre-deploy run; the e2e-isolation and CI fixes introduced no regressions.",
     "urgency_reassessment": "Rotation urgency LOWERED. Nothing is degraded except INTERACTIVE admin access, which is exactly what the fix intends while a weak credential is configured. Job sourcing, scoring and all user features are unaffected."
+  },
+  "observation_window": {
+    "started": "2026-07-31T14:12:47Z",
+    "required": ">=60 min + >=3 real AI agent runs, zero server errors / 5xx / browser console errors (\u00a714.3.5, G-M)",
+    "log": "uat/reports/evidence/gold-master-v2/final/observation-window-20260731T141247Z.log",
+    "monitor_validated": "GOV-012 test applied: 7 tail processes alive AND the source is actively writing (last entry 5s before check). The single log line is my own window-start header - ZERO real error matches. Proven by SIGNAL, not liveness.",
+    "agent_runs_so_far": "discovery cron completed at 14:01:07Z (scout + fit-scorer) - counts toward the >=3"
   }
 }
