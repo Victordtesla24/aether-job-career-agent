@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T15:50:00Z",
+  "updated_utc": "2026-07-31T16:20:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -569,6 +569,13 @@
       "wrong_claim": "Escalated ML-PRICE-002 as CANDIDATE-CRITICAL: \"Stripe Checkout may charge USD on a fixed-AUD product\", treating a tester screenshot as evidence of a real money defect.",
       "reality": "REFUTED by reading the actual Stripe objects. The Prices and the Sessions are AUD; the USD figure was Adaptive Pricing presentment to a US-geolocated test browser. No customer would be charged USD.",
       "lesson": "A screenshot of a payment UI shows PRESENTMENT, not the charge. Money-correctness claims must be settled against the payment processor own objects. Escalating first was still right - the cost of checking was one read-only agent; the cost of a real currency defect would have been customer refunds - but the CLAIM should have been carried as UNVERIFIED, not as CRITICAL, until the Stripe objects were read."
+    },
+    {
+      "id": "ORCH-CORR-004",
+      "date": "2026-07-31",
+      "wrong_claim": "Relayed a claim-auditor report that contaminated cover letters were approved by an \"unidentifiable actor\" through a mechanism that \"structurally cannot be audited\", framing it as a possible safety-gate breach.",
+      "reality": "Nothing was transmitted (executedAt NULL on all 110 rows, ever); attribution IS recoverable from api.log client IPs; the cluster is the least remarkable in the account history; and the most likely actor is the owner in a normal browser session.",
+      "lesson": "I did hedge it as alleged-not-confirmed and dispatched independent verification before acting - that was right. But I still relayed the dramatic framing first. For incident-shaped claims, lead with the decisive unknown (\"did anything leave the building?\") rather than the narrative."
     }
   ],
   "entitlement_enforcement_map": {
@@ -629,5 +636,17 @@
   "concurrent_dispatch_collision": "A duplicate /signup dispatch occurred: two screen-testers tested it independently. The second discovered the collision, DECLINED to overwrite the first's completed report, and appended an independent-corroboration addendum (\u00a716) instead. It disclosed that its cp had overwritten 6 screenshots, renamed its own with a -2ndtester suffix, and noted the findings are independently backed by response bodies and DB queries rather than screenshots alone. Net effect: /signup has TWO independent passes that AGREE - stronger evidence, at the cost of 3 extra test accounts (all in the purge ledger).",
   "regressions_caused_and_fixed": [
     "W-F refactor: making the move path acquire its own app.db connection split a request transaction across two modules, breaking test_ml_w17_application_race_unique_index (200 instead of 409 - the DB-level UniqueViolation backstop became unprovable). Fixed by making the CALLER own the unit of work via connection_factory across all three routes. The test was never edited."
-  ]
+  ],
+  "approval_incident": {
+    "artifact": "uat/reports/evidence/gold-master-v2/adversarial/APPROVAL-AUDIT-INCIDENT.md",
+    "alarming_framing": "REFUTED on the decisive point",
+    "content_transmitted_externally": false,
+    "transmission_evidence": "executedAt is NULL on ALL 110 ApprovalRequest rows ever created - POST /approvals/{id}/execute has NEVER fired. Even if it had, execute_gated_action() side-effects only for type==\"email_send\"; these are application_submit. applications.py:427-431 docstring: \"The user applies on the company site themselves (human-in-the-loop); this endpoint only tracks that it happened.\" No outbound ATS submission code exists. Real blast radius: 3 rows on the owner private kanban reading \"submitted\".",
+    "attribution": "RECOVERABLE - the earlier \"unidentifiable actor\" claim was WRONG. api.log records client IP: six 401s at 03:50:11Z, POST /auth/login 200 at 03:50:23Z, then 14 minutes of browsing from 2a09:bac2:20e:24f0::3ae:5e. Rules out cron/autopilot/agent outright; ApprovalService().resolve() has no caller outside the router.",
+    "cluster_not_anomalous": "All 53 prior approvals came from the owner usual IP in the same rapid pattern - including 20 approvals in 15 SECONDS on 2026-07-25 and 17 in 17 seconds. Four in four seconds is the LEAST remarkable cluster in the account history. Every cluster resolves strictly newest-first, matching ORDER BY createdAt DESC - i.e. a human clicking down the rendered queue.",
+    "campaign_testers_exonerated": "This VM (2604:2dc0:208:2271:...) is the log dominant client at 41,909 requests and issued ZERO approve/reject calls, ever.",
+    "most_likely_cause": "The account owner in an interactive browser session from a different network. Confidence: HIGH that it was an authenticated interactive human session; MODERATE-HIGH that it was the owner.",
+    "corrections_to_the_claim": "The cluster is FOUR approvals not three (Peloton c1d607ab... missed), plus a fifth at 03:59:12Z. ApprovalRequest has no updatedAt column; it is resolvedAt.",
+    "audit_gap_STANDS": "HIGH (governance/auditability, NOT a security or data-integrity breach). Zero approval.approve/approval.reject rows in AdminAuditLog EVER. The asymmetry is damning: the same file calls write_audit() for approval.delete (17 rows) and approval.purge_expired (2 rows) - the HOUSEKEEPING actions - but not for the decision itself. Fix in flight."
+  }
 }
