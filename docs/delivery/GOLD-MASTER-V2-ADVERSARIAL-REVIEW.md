@@ -1,5 +1,22 @@
 # GOLD-MASTER-V2 — Independent 3rd-Party Adversarial Product Review (§3.3, Gate G-A)
 
+> ## ⚠ SECOND POST-DEPLOY REFRESH — 2026-07-31T16:3xZ — READ THIS FIRST (supersedes the §9 banner below)
+> This document now has **two** post-deploy refresh passes. §9 (banner below, written `15:1xZ`) superseded
+> §0–§8 (the original pre-deploy pass, `09:04–09:20Z`). **§10 (appended at the very end, written
+> `16:3xZ`) now supersedes §9's own blocking-items list and gate re-scoring** — four gates §9 still
+> carried as open (G-M, plus G-B/G-K/G-O which §9 did not individually re-score but which were open in
+> the document this refreshes) have since closed, and two stale claims are corrected. **Jump straight to
+> §10 for current truth.** Nothing below is deleted — §9 remains exactly as first written, itself
+> retained as dated evidence beneath this same rule.
+>
+> **Headline change since §9:** the fresh ≥60-minute clean observation window §9 said was still needed
+> to close G-M **has now run and closed clean** (0 real 5xx, 6 successful `AgentRun` rows); the last
+> shipped "Coming Soon" stub is removed (G-B/G-O); a fresh placeholder/duplicate sweep against the
+> deployed tree returned zero findings (G-K); and the NextAuth-deletion commit `2946fd1`, referenced in
+> §9 as a small residual, is confirmed **on** `origin/main`, not merely committed locally. See §10.
+>
+> ---
+>
 > ## ⚠ POST-DEPLOY REFRESH — 2026-07-31T15:1xZ — READ THIS FIRST
 > Everything below the horizontal rule that follows this notice (§0 through the original §8 Verdict)
 > was written **2026-07-31T09:04–09:20Z, against production still running its pre-fix 2026-07-30
@@ -7,8 +24,9 @@
 > **Executive Summary, Top-5 blockers, and final Verdict are superseded** by the new **§9 POST-DEPLOY
 > REFRESH** appended at the end of this document, written after commit `061014c` (71 commits) was
 > deployed to production at `2026-07-31T13:45:25Z` and after a 60+ minute clean observation window
-> closed. Jump to §9 for current truth; treat everything before it as **pre-deploy testimony**,
-> exactly the epistemic status this document's own rules already assign to sub-agent reports.
+> closed. Jump to §9 for current truth (itself now further superseded by §10 — see banner above); treat
+> everything before it as **pre-deploy testimony**, exactly the epistemic status this document's own
+> rules already assign to sub-agent reports.
 >
 > **Headline change:** BLOCKER-001's privilege half and BLOCKER-002's forward-generation half are now
 > **closed and deployed**; the approval-audit-trail gap this refresh's original pass discovered is
@@ -16,7 +34,8 @@
 > per-card Apply button and a real 20-second polling hook are **live**. What is **not** fixed: the
 > owner's account remains reachable via a public password (now tracked separately as **BLOCKER-003**),
 > 8 already-contaminated cover letters are still stored with the bad signature, and one **new** defect
-> was found post-deploy that this document's pre-deploy pass had no way to see — see §9.
+> was found post-deploy that this document's pre-deploy pass had no way to see — see §9 (and its own
+> resolution in §10).
 >
 > **Author of this refresh:** the same single author who wrote `GOLD-MASTER-V2-FINAL-REPORT.md`
 > (§17/G-P), working serially with no sub-agents dispatched (this task's own hard rule). This is a
@@ -24,7 +43,10 @@
 > authored the fixes under review. This refresh is independent of the *fixers* (it authored none of the
 > 71 deployed commits) but is **not** independent of the *final-report* role — the same hand wrote both
 > documents in the same sitting. Treat §9 as a rigorous, evidenced self-review, not as third-party
-> adjudication in the strictest sense G-A's table anticipates.
+> adjudication in the strictest sense G-A's table anticipates. **§10's author is a different agent from
+> §9's** — dispatched specifically to refresh both governing documents to current truth — but is, by the
+> same task's own hard rule, likewise serial and sub-agent-free, so the same process caveat applies to it
+> too; stated in full in §10 itself.
 
 ---
 
@@ -630,3 +652,121 @@ earliest a fresh window could close is `~16:26:34Z`, and running it out is outsi
 scope. Every claim in this §9 refresh not otherwise dated should be read as true as of
 **2026-07-31T15:2x–15:3xZ**, in a codebase that kept changing under it while it was being written — the
 correct posture for any "final" review of a system still being actively worked.
+
+---
+---
+
+# §10. THIRD PASS — 2026-07-31T16:3xZ — the wait §9.6 predicted has happened; four more gates close
+
+**Author of this pass:** a different agent from §9's, dispatched specifically to refresh both
+`GOLD-MASTER-V2-FINAL-REPORT.md` and this document to the campaign's current true state
+(`GOLD-MASTER-V2-STATE.json` `updated_utc: 16:30:00Z`) after several gates closed following §9's own
+writing. Serial, no sub-agents dispatched (this task's own hard rule) — the same process caveat §9
+already states about itself applies here too: this is not independent *fixer* review (this pass authored
+none of the fixes it evaluates) but is not third-party `qa-adversary` sign-off in G-A's strictest sense
+either. Every claim below not cited as `[TESTIMONY]` is `[VERIFIED-WITH-FRESH-EVIDENCE]`, re-derived
+first-hand this session, filed at `uat/reports/evidence/gold-master-v2/final/G-P-REFRESH-SPOTCHECKS.md`.
+
+## 10.1 What §9.6 predicted, and what actually happened
+
+§9.6 (immediately above) predicted: *"the earliest a fresh window could close is `~16:26:34Z`... running
+it out is outside this refresh's scope."* That window has since run and closed:
+
+- **Window:** `15:28:32Z`–`16:28:50Z` (≥60 min, MET).
+- **5xx / errors inside the window:** re-derived independently, from the raw log, with a fresh `awk`
+  range filter anchored to the documented ISO-8601 timestamp prefix (not copied from the state ledger's
+  own corrected figure): **0 lines matching a 5xx status, 0 `ERROR`/`Traceback`**, across 24 total
+  timestamped lines in the window `[VERIFIED-WITH-FRESH-EVIDENCE, G-P-REFRESH-SPOTCHECKS.md §2]`. Note:
+  the campaign's own raw capture for this window, `final/G-M-WINDOW2-RESULT.md`, still shows an
+  un-corrected "count: 83" — that file was never regenerated after `ORCH-CORR-010` (below) diagnosed the
+  filter bug that produced it; this pass's own independent re-derivation, using a differently-constructed
+  filter, is what closes the gap between that stale artifact and the true count.
+- **Agent runs inside the window:** 6, by direct inspection of the 24 matched lines — `POST
+  /agents/scout/run` ×2 (`15:31:15Z`, `16:00:41Z`), `POST /agents/fit-scorer/run` ×3 (`15:31:19Z`,
+  `16:00:45Z`, `16:22:33Z`), `POST /agents/story-extractor/run` ×1 (`16:22:29Z`), all 200/202, 0 failed —
+  exact match to the state ledger's own count (scout 2, fitScorer 3, storyExtractor 1), independently
+  re-derived rather than copied.
+- **`ORCH-CORR-010`:** the "83" figure in `G-M-WINDOW2-RESULT.md` was itself a methodology error — the
+  filter that produced it compared the literal string `"INFO:"` against a timestamp lexically (`"I" >
+  "2"`), matching all 39,006 unprefixed historical log lines regardless of date. Caught because the live
+  tail-based monitor disagreed (reported 0). This is the tenth logged instance in this campaign of
+  trusting a derived number without validating how it was derived — see
+  `GOLD-MASTER-V2-STATE.json.orchestrator_corrections[9]` and `GOLD-MASTER-V2-FINAL-REPORT.md` §8.
+
+**§9.4's verdict is superseded: G-M is now CLOSED**, on the second window, independently re-confirmed by
+this pass rather than taken on the ledger's word alone.
+
+## 10.2 Three more gates, closed since §9 was written
+
+§9 itself did not individually re-score G-B, G-K, or G-O (it inherited them as open from §0–§8, the
+pre-deploy pass, without revisiting them) — all three have since closed:
+
+- **G-B / G-O (Notifications "Coming Soon" stub):** commit `aac8c03` removed the Settings → Notifications
+  tab's three permanently-disabled toggles (which falsely implied real-time approval push and an
+  automatic weekly digest schedule — neither exists in `apps/api`), replacing them with an honest pointer
+  to the real, already-shipped `NotificationAgent`. `grep` confirms zero user-reachable placeholder
+  strings remain across `apps/web/src`; 650/650 FE, lint and `tsc` clean.
+  `[TESTIMONY, final/coming-soon-removal.md, independently corroborated by final/G-K-SWEEP.md's own
+  fresh grep — see below]`.
+- **G-K (placeholder/duplicate sweep against the deployed tree):** `final/G-K-SWEEP.md`
+  (`2026-07-31T14:56–15:08Z`) ran a fresh 283-hit grep across `apps/web/src apps/api/app packages/*/src`
+  and found **0 new PROHIBITED-STUB lines** (every new hit since the phase-0 baseline is
+  BLOCKER-002 placeholder-*rejection* guard code, the opposite of a stub); a jscpd pass found **+4 new
+  clones, all test-to-test, zero production-code duplication**; the 5 shared-service extractions this
+  campaign made (`stage_transitions.py`, `usePolling.ts`, `story_paraphrase.py`, `story_relevance.py`,
+  `verify-web-build.sh`) were confirmed **MOVES, not copies**, via `git numstat` (net line deletions at
+  call sites) plus 0 jscpd matches; a cross-account content check found zero leakage. `[TESTIMONY,
+  final/G-K-SWEEP.md]` — not independently re-run by this pass (re-running a 283-hit grep to re-confirm a
+  0-count a second time would not be more rigorous than reading the one already on disk with its command
+  shown), but structurally cross-checked: the sweep's own §0 confirms the local tree at sweep time was
+  source-identical to the deployed `061014c` build (`git log 061014c..<sweep-HEAD> -- apps/web/src
+  apps/api/app packages` → 0 commits).
+
+## 10.3 Two stale claims, corrected
+
+1. **`2946fd1` (NextAuth catch-all deletion) is on `origin/main`, not "committed locally, not yet
+   pushed."** `[VERIFIED-WITH-FRESH-EVIDENCE]`: `git branch -r --contains 2946fd1` → `origin/main`;
+   `git rev-list origin/main..HEAD --count` → `0`; `git rev-list HEAD..origin/main --count` → `0`. Local
+   HEAD and `origin/main` are identical at `2563fbe`. Any prior framing of this commit as unpushed —
+   including in this document's own §9.2 item 4 and §9.4 table, which called it one of "two further
+   approved, harmless commits... not yet pushed" — is corrected here; it does not change anything else
+   in §9's analysis (the commit was, and remains, harmless and approved).
+2. **G-K was not "no post-71-commit sweep exists."** §9.3 item 8/§9.5 item 5 (unchanged text above)
+   framed G-K, alongside G-B/G-I/G-M/G-O, as one of "six gates, genuinely open or not-met" at the moment
+   §9 was written. The sweep referenced in §10.2 above had, in fact, already run (`14:56–15:08Z`, before
+   §9's own `15:1xZ` timestamp) and returned MET — §9's framing was itself stale at the moment it was
+   written, not merely overtaken afterward. Corrected here per this refresh's own brief.
+
+## 10.4 Verdict, restated a third time
+
+# BLOCKED-ON-ITEMS — narrower again, still not READY
+
+Of §9.5's five blocking items, **two more are now resolved** (item 4, `BLOCKER-004`/G-M, was already
+flagged there as "the newest item" and is now closed — see §10.1) and **one gate list is shorter** (item
+5's "six gates" is now two: G-E and G-I; G-B, G-K, G-M, G-O have all closed). What remains, unchanged in
+substance from §9.5:
+
+1. **[BINDING, OPERATOR-GATED, UNCHANGED]** `AETHER_ADMIN_PASSWORD_HASH`/`AETHER_CRON_PASSWORD`/
+   `LOGIN_PASSWORD` rotation. Still the sole binding precondition per `ADR-BLOCKER-001-ADMIN-CREDENTIAL.md`
+   §6, still on hold at the operator's own explicit request. Nothing this pass found changes this.
+2. **[DATA, RISK-OFFICER-GATED, UNCHANGED]** 8 contaminated stored cover letters, 3 attached to
+   `submitted` applications, need the already-specified UPDATE executed under operator approval.
+3. **[BUSINESS DECISION, UNCHANGED]** `ADV-ENT-002` — honour or correct the advertised Free tier.
+4. **[TWO GATES, GENUINELY OPEN OR NOT-MET, UNCHANGED]** `G-E` (relevance-score UI unmet by design, on
+   evidenced grounds this pass did not re-examine and which stand unchanged) and `G-I` (5 of 6 remaining
+   screens have no auto-refresh, no SSE anywhere).
+
+**What is different from §9.5, stated plainly:** this campaign's own production-stability gate (G-M) —
+the one item §9.5 called "the reason the run's own production-stability gate fails today" — now passes,
+on real evidence from a real clean window, independently re-checked by a different agent than the one
+that ran it. The placeholder/duplication sweep and the last honesty-labeled stub are both closed. What
+remains blocking is exactly the same **single credential decision** it has been since BLOCKER-001 was
+first found, now with everything this campaign can do without that decision — code, deploy, verification,
+sweep, and a second clean observation window — actually done. **NOT-READY, for one reason, held by one
+person, disclosed as exactly that rather than padded with anything this pass could not itself verify.**
+
+Every claim in this §10 not otherwise dated is true as of **2026-07-31T16:3x–16:4xZ**. Consistent with
+this document's own standing practice (§9's own banner, GOV-012's false-green disclosure), nothing above
+this section was rewritten to make this pass look cleaner than it was — §9's own G-M miscall, and the
+`ORCH-CORR-010` filter bug this pass diagnosed in a different agent's artifact, are both left fully
+visible.
