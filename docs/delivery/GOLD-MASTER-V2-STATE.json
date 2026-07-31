@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T13:00:00Z",
+  "updated_utc": "2026-07-31T13:40:00Z",
   "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -45,7 +45,7 @@
     "W-E": "12/12 tests GREEN, 36/36 regression green, ADV-ENT-001 closed. Dedup + relevance machinery SHIPPED AND TESTED. RELEVANCE GATE DELIBERATELY LEFT DISABLED on empirical evidence - see RELEVANCE-CALIBRATION ruling below. \u00a77.3.3 is therefore NOT met in substance and is re-scoped as a specified design change, not a patch.",
     "W-F": "COMPLETE (pending prod verify). Canonical PATCH /applications/{id}/stage 13/13; ML-APP-003 reconciliation 2/2; 133 regression tests green across 10 files. Shared service app/services/stage_transitions.py owns every rule - code MOVED not copied (\u00a713.1); PATCH plus both legacy POST .../move routes are thin adapters. from_stage is ENFORCED (409 naming the real stage; closed-application 422 checked first). Approvals half already verified live + 5/5 in tests.",
     "W-G": "COMPLETE (pending prod verify). FE 631/631 green (baseline 628 + exactly 3 new), tsc clean, Playwright verified TWICE with independent fixture users. Delivered: \"Admin sign in\" link on /login -> new standalone /admin-login page posting to the same POST /auth/login then routing to /admin (\u00a79.2.1); persistent Topbar \"Admin\" badge gated on live fetchMe().isAdmin (\u00a79.2.3), standard users see nothing. Backend/authz was ALREADY complete and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). NOT DEPLOYED.",
-    "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
+    "W-H": "COMPLETE (pending prod verify). FE 644 -> 649 passed, zero regressions, tsc clean, commit 727bb24. Per-card Apply button on every job card, REUSING the existing submit-gate modal (jobs/page.tsx:1502, openGate :547, confirmSubmit :559) rather than building a second one. design/screens/job-discovery.html updated so wireframe and deployed truth agree (\u00a717). BONUS HONESTY FIX: the per-card path can open the gate BEFORE tailoring has run, so the modal \"tailored resume attached\" claim is now conditional on real state, mirroring the bulk gate honest \"current, untailored\" phrasing - a false claim its own feature would have created. Also fixed a pre-existing test-isolation bug (leftover mockImplementation breaking any test appended after it). Verified by same-moment git-stash A/B rather than a naive before/after count, because the working tree is shared with concurrent sessions.",
     "W-I": "PARTIAL \u2014 honestly scoped, NOT complete. SHIPPED: canonical apps/web/src/hooks/usePolling.ts (created; no existing canonical impl in sidebar/topbar to reuse); /dashboard/stories adopts it at 20s with filter-aware restart PLUS an optimistic star toggle with honest rollback; ML-DASH-002 closed by REMOVING the false \"live\" label from the load-once dashboard (honesty over re-architecture \u2014 the test 50ms window cannot observe a real 20s cadence, and no failing test justified converting a shared load-once architecture for one widget). NOT DONE: 6 screens still have no realtime refresh (analytics, admin, interviews, offers, networking, cover-letters); 5 pre-existing ad-hoc setInterval sites (sidebar/topbar/agents/applications/jobs) not migrated onto the hook; no SSE agent-run progress stream (\u00a711.2.3).",
     "W-J": "SUBSTANTIALLY COMPLETE. ATS score now survives the tracker schema, flows through buildStages, and renders on the tracker board card and Applied-history strip (\u00a712.4 \u2014 a sibling screen test had found NO score shown there). Resume Studio scores already matched the API exactly 3/3 and the before/after banner already worked \u2014 both now pinned by a characterization test. REMAINING: tailor-score-refresh.test.tsx is red by design, blocked on a jobs/page.tsx change owned by a concurrent agent.",
     "W-K": "PENDING - build/cache residue already clean+gitignored; 4 stale @example.com test users in prod DB with 0 spillover; PLUS a throwaway test account created in the production DB by the \u00a718 Stripe checkout probe - add to the purge manifest.; PLUS 4 near-duplicate story rows created by this run's own story-extraction probe (32->36).; PLUS 4 resume rows (v70-73) left on OWNER by the resume screen test - NO DELETE endpoint exists in the API, needs operator DB-level cleanup.",
@@ -96,7 +96,12 @@
       "note": "Post-deploy the Admin badge will correctly NOT render until the operator rotates the credential, because BLOCKER-001 revokes owner isAdmin. That is correct behaviour, not a regression."
     },
     "G-H": {
-      "status": "OPEN"
+      "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v2/waves/WH-apply-button-fix.md",
+        "uat/reports/evidence/gold-master-v2/screens/jobs-screen-test.md"
+      ],
+      "note": "Backend apply contract was ALREADY 7/7 (atomic, owner-scoped, idempotent, honest partial-batch). Per-card button + reused modal now shipped. Saved-view cards deliberately keep only the bulk path - scope decision documented with both interpretations."
     },
     "G-I": {
       "status": "PARTIAL",
@@ -692,5 +697,6 @@
     "delivered": "write_audit(approval.approve/approval.reject) mirroring the existing approval.delete call; resolvedByUserId + resolvedFromIp added ADDITIVELY via the existing ensure_approval_columns() lazy DDL",
     "toctou": "REAL HOLE, proven live pre-fix: a second resolve silently flipped an APPROVED row to REJECTED and returned 200. Now compare-and-set (WHERE id AND userId AND status=pending) returning an honest 409. The status predicate closed the real hole; the userId predicate is defence-in-depth for HTTP (service read already 404s foreign owners) but a genuine gap for direct repository callers."
   },
-  "stale_recipe_warning": "LOGIN_EMAIL/LOGIN_PASSWORD in .env NO LONGER AUTHENTICATE against production (verified 11:25:56Z, \"Could not validate credentials\") - the canonical-login recipe is stale post-BLOCKER-001. Use AETHER_CRON_EMAIL/AETHER_CRON_PASSWORD, which resolve to the same owner account."
+  "stale_recipe_warning": "LOGIN_EMAIL/LOGIN_PASSWORD in .env NO LONGER AUTHENTICATE against production (verified 11:25:56Z, \"Could not validate credentials\") - the canonical-login recipe is stale post-BLOCKER-001. Use AETHER_CRON_EMAIL/AETHER_CRON_PASSWORD, which resolve to the same owner account.",
+  "all_implementation_workstreams": "LANDED: W-B, W-C, W-D(withdrawn), W-E, W-F, W-G, W-H, W-I(partial), W-J. Remaining: W-K cleanup (discovery in flight), then W-L deploy sequence."
 }
