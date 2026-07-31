@@ -21,7 +21,11 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
-from app.agents.cover_letter_agent import FabricationError, StructuralError
+from app.agents.cover_letter_agent import (
+    FabricationError,
+    PlaceholderSignerError,
+    StructuralError,
+)
 from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
@@ -1794,9 +1798,20 @@ def _guard_rejection_http_error(
     instead of a generic error banner. They are preserved verbatim in both
     messages; only the ``subject`` varies, so a caller of the generic route
     learns WHICH agent refused.
+
+    ``PlaceholderSignerError`` (BLOCKER-002) is a ``StructuralError`` subclass
+    (so it reaches this function on the same catch-all path) but is a
+    DIFFERENT guard category — a placeholder/test-probe identity, not a
+    §10.2 format violation — so it gets its own explicit, actionable
+    message rather than the misleading "format contract not met" wording.
+    It intentionally does not match either frontend regex above; an
+    unmatched 422 falls back to the generic error banner there, which still
+    surfaces this ``detail`` text to the user.
     """
     if isinstance(exc, FabricationError):
         detail = f"{subject} rejected by fabrication guard: {exc.flagged}"
+    elif isinstance(exc, PlaceholderSignerError):
+        detail = f"{subject} rejected: {exc.issues[0]}"
     else:
         detail = f"{subject} rejected — §10.2 format contract not met: {exc.issues}"
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)

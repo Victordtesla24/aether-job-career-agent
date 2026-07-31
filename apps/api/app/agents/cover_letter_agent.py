@@ -1068,6 +1068,61 @@ class StructuralError(RuntimeError):
         self.issues = issues
 
 
+#: BLOCKER-002: a signer name is placeholder-looking if it contains the
+#: case-insensitive substrings "probe" or "test", OR the literal marker
+#: "GAP-", OR a run of 8+ consecutive digits (a strong signal of an
+#: auto-generated/timestamped test identity — no real human name contains an
+#: 8+ digit run). Test-author's detection rule
+#: (tests/test_wb1_blocker002_placeholder_signer_name.py module docstring) —
+#: implemented verbatim so the false-positive guard
+#: (``test_cover_letter_accepts_normal_human_name``) stays green.
+_PLACEHOLDER_NAME_SUBSTRINGS = ("probe", "test")
+_PLACEHOLDER_NAME_MARKER = "gap-"
+_PLACEHOLDER_DIGIT_RUN_RE = re.compile(r"\d{8,}")
+
+
+def _looks_like_placeholder_name(name: str) -> bool:
+    lowered = name.lower()
+    if any(token in lowered for token in _PLACEHOLDER_NAME_SUBSTRINGS):
+        return True
+    if _PLACEHOLDER_NAME_MARKER in lowered:
+        return True
+    return bool(_PLACEHOLDER_DIGIT_RUN_RE.search(name))
+
+
+class PlaceholderSignerError(StructuralError):
+    """BLOCKER-002: ``User.name`` looks like a leftover test-probe/placeholder
+    identity string rather than a real human name — cover-letter generation
+    must refuse rather than ship it onto a customer-facing document as the
+    letterhead/sign-off signer.
+
+    Deliberately a :class:`StructuralError` subclass (NOT a new top-level
+    exception family): every call site that dispatches the cover-letter
+    agent already catches ``(FabricationError, StructuralError)`` and treats
+    it as an honest guard-rejection degrade — the direct
+    ``/agents/cover-letter/run`` route, the fit->tailor->cover pipeline, the
+    generic ``/agents/{name}/run`` route, the async single-agent worker, and
+    the autopilot board-sweep (agents.py, workers/tasks.py,
+    workers/board_sweep.py). Subclassing reuses that proven
+    record/refund/HTTP-422-translation machinery everywhere with zero extra
+    wiring, instead of duplicating it at 7 call sites. The message is
+    intentionally NOT the generic "§10.2 format contract" wording
+    ``StructuralError.__init__`` would produce — this is a different guard
+    category (identity integrity, not letter format) — so ``__init__`` is
+    overridden to carry its own explicit, actionable detail instead.
+    """
+
+    def __init__(self, detail: str) -> None:
+        RuntimeError.__init__(self, detail)
+        self.issues = [detail]
+
+
+PLACEHOLDER_SIGNER_DETAIL = (
+    "Your profile name looks like a placeholder or test value, not a real "
+    "name — set your real name in Settings before generating a cover letter."
+)
+
+
 class CoverLetterAgent:
     def __init__(
         self,
@@ -1213,6 +1268,12 @@ class CoverLetterAgent:
         )
         user = self._users.get_by_id(user_id) or {}
         signer = str(user.get("name") or "")
+        # BLOCKER-002: refuse BEFORE any LLM call (no run cost incurred) when
+        # the stored name looks like a leftover test-probe/placeholder
+        # identity rather than a real human name — never let it reach the
+        # letterhead/sign-off of a document a real employer will read.
+        if signer and _looks_like_placeholder_name(signer):
+            raise PlaceholderSignerError(PLACEHOLDER_SIGNER_DETAIL)
         # ``targetRole`` is an additive profile column not carried by the default
         # UserRepository projection, so resolve it with its own guarded read —
         # otherwise the hook silently falls back for every user (GAP-P4-049).

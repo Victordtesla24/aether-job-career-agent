@@ -23,7 +23,9 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.agents.cover_letter_agent import (
+    PLACEHOLDER_SIGNER_DETAIL,
     REDACTION_PLACEHOLDER,
+    _looks_like_placeholder_name,
     build_approval_extras,
     build_body,
     compose_letter,
@@ -930,6 +932,16 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
     letter = _load_letter(letter_id, current_user["id"])
     job = JobRepository().get_by_id(letter["jobId"], current_user["id"])
     company = (job or {}).get("company") or "the team"
+
+    # BLOCKER-002: the exported PDF letterhead renders CURRENT_USER's name
+    # (``_sender_block`` below) regardless of what the profile name was when
+    # the letter body was drafted — a profile that drifted to a placeholder/
+    # test-probe identity AFTER a letter was generated must not ship it onto
+    # this customer-facing document either. Same shared detection rule as
+    # generation-time (CoverLetterAgent.run()).
+    _signer_name = str(current_user.get("name") or "")
+    if _signer_name and _looks_like_placeholder_name(_signer_name):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, PLACEHOLDER_SIGNER_DETAIL)
 
     regular, bold = _pdf_fonts()
     ink, muted = HexColor(_PDF_INK), HexColor(_PDF_MUTED)
