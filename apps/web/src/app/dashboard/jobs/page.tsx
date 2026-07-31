@@ -537,6 +537,18 @@ export default function JobsPage() {
       }
       setTailorResults((p) => ({ ...p, [jobId]: out }));
       setApplyStep((p) => ({ ...p, [jobId]: "tailored" }));
+      // §12.3: reflect the freshly-computed score on the card without a
+      // manual reload. The tailor-run response itself carries the new score
+      // (`conversionMetrics.tailoredATSScore` — apps/web/src/lib/api/resumes.ts:52),
+      // so patch it straight into `jobs` state (never recomputed locally,
+      // matching Resume Studio's discipline of using the API value verbatim
+      // — apps/web/src/app/dashboard/resume/page.tsx:135). This drives both
+      // the list-card and detail-panel MatchRings, since `selected` is
+      // derived from `jobs`.
+      if (out.conversionMetrics?.tailoredATSScore != null) {
+        const freshScore = out.conversionMetrics.tailoredATSScore;
+        setJobs((prev) => (prev ?? []).map((j) => (j.id === jobId ? { ...j, fitScore: freshScore } : j)));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Tailoring failed");
       setApplyStep((p) => ({ ...p, [jobId]: "idle" }));
