@@ -126,3 +126,30 @@ Enforced invariants for this run. Any violation = GATE-FAIL + an entry in §4 be
 | # | UTC | Item | Failing tier | Escalated to | Outcome |
 |---|---|---|---|---|---|
 | — | — | None recorded yet | — | — | — |
+
+---
+
+## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
+
+**Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
+costing ~420k sub-agent tokens across the three for ZERO delivered artifacts on first attempt.
+
+**Pattern.** The agent launches long-running work (pytest, Playwright) as a BACKGROUND job,
+arms a monitor or says "I'll pick this up when the notification lands", and then ends its
+turn. Ending the turn ends its execution, so the notification never gets acted on. The agent
+reports intent instead of results and the task silently produces nothing.
+
+**Root cause.** Sub-agents do not persist across their own turn boundary the way the
+orchestrator does. A background job plus an ended turn is an abandoned job.
+
+**Correction applied to every subsequent dispatch and to every resume message:**
+1. Explicitly FORBID background monitors and "awaiting notification" patterns.
+2. Require FOREGROUND blocking with a bounded `timeout`.
+3. Require work to be serialised one unit at a time (one screen, one suite), with the
+   artifact WRITTEN AFTER EACH UNIT so partial progress survives.
+4. State an explicit priority order so a truncated run still delivers the highest-value result.
+5. Require "report only observed results — no plans, no intent, no 'awaiting'".
+
+**Interaction with GMV4-process-001.** The shared `/tmp/aether-pytest.lock` amplifies this:
+a DB-free 7-test file that runs in 1.09s can queue behind an unrelated 30-minute suite,
+pushing agents toward exactly the background-wait pattern that loses their work.
