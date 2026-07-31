@@ -334,6 +334,19 @@ class EmailAgent:
         if not thread_id:
             raise EmailAgentError(f"{mode} requires thread_id")
         thread = self._thread(user_id, thread_id)
+        # GOLD-MASTER-V2 §15: résumé grounding is an ACCOUNT-LEVEL precondition
+        # (the candidate has no evidence corpus for ANY thread), so it is
+        # checked BEFORE the thread-specific counterparty-message check below —
+        # the same precedence CoverLetterAgent.run() already uses (résumé
+        # before its own thread/content-specific PlaceholderSignerError). A
+        # user with no résumé gets the one refusal that is actionable for
+        # every thread they could ever draft against; a thread-specific
+        # refusal for that same user would tell them nothing about the
+        # blocker that actually applies universally, and would flip on/off
+        # per-thread depending on message shape — never a fix they can act on.
+        resume_text = self._resume_text(user_id)
+        if not resume_text.strip():
+            raise EmailAgentError("Add your resume before drafting a reply.")
         messages = thread.get("messages") or []
         incoming = self._latest_counterparty_body(thread)
         if isinstance(messages, list) and messages and not incoming:
@@ -345,9 +358,6 @@ class EmailAgent:
                 f"Cannot draft a {mode.replace('_', ' ')} — this thread has "
                 "no message from the other party to respond to."
             )
-        resume_text = self._resume_text(user_id)
-        if not resume_text.strip():
-            raise EmailAgentError("Add your resume before drafting a reply.")
         # The incoming email's own text (names, company, role) is legitimate
         # evidence, so it joins the corpus the guard checks against — only
         # claims about the *candidate* that aren't in the resume get flagged.
