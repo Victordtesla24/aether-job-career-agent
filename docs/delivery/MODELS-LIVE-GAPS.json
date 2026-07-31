@@ -2707,11 +2707,11 @@
         "SELECT over StoryEntry grouping by normalised text prefix; see PROD-DATA-INVENTORY.md"
       ],
       "expected": "Zero duplicate stories in the live DB; duplicate prevention active at insert time",
-      "observed": "merge_duplicate_stories defined but never invoked in production; 16/37 stories are paraphrase duplicates",
+      "observed": "merge_duplicate_stories defined but never invoked in production; 16/37 stories are paraphrase duplicates | TEST-AUTHOR BREAKDOWN of the 6 required behaviours: ALREADY CORRECT (2) \u2014 merge shape (oldest survives, tags unioned, story_dedup_migration.py:58-113) and per-user scoping (list_by_user cannot cross users, verified with two real registered users). MISSING (3) \u2014 no production entrypoint at all (AST scan of app/ and scripts/ found zero Call nodes), no dry_run parameter (signature is merge_duplicate_stories(user_id: str)), no before/after counts (returns bare {'merged': N}). ACTIVELY UNSAFE (1) \u2014 hard DELETE, see GMV4-story-004. VERDICT: genuine new work, not wiring-only.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/PROD-DATA-INVENTORY.md"
       ],
-      "status": "OPEN",
+      "status": "TESTS-RED-READY-FOR-FIX",
       "owner": "W-E ai-loop-engineer",
       "fixCommits": [],
       "verifiedBy": "risk-officer (opus) 2026-07-31",
@@ -3373,6 +3373,30 @@
       "fixCommits": [],
       "verifiedBy": "test-author 2026-07-31",
       "openedUtc": "2026-07-31T18:47:39Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-004",
+      "screen": "Story Bank / data safety",
+      "severity": "BLOCKER",
+      "category": "data-loss-risk",
+      "summary": [
+        "LATENT DATA-DESTRUCTION HAZARD. merge_duplicate_stories HARD-DELETES the losing row (DELETE FROM \"StoryEntry\", story_dedup_migration.py:111) and is driven by BULK_MIGRATION_THRESHOLDS (story_paraphrase.py:131-136: title_min_jaccard=0.60, title_min_shared=4, achievement_min_jaccard=0.30, achievement_min_shared=5) which its own docstring (lines 120-130) confirms is DELIBERATELY looser than the create-time 0.70 thresholds so the bulk sweep catches more drift. An intentionally OVER-MATCHING heuristic wired to an IRREVERSIBLE delete, operating on user-authored career history that cannot be regenerated. The ONLY reason no user has lost data is that the function has ZERO production call sites and has never run. CRITICAL EXECUTION WARNING: \u00a78.1(a) asks for proof the migration 'has run against the live DB'. Wiring it up and running it as-is \u2014 the naive way to close G-E \u2014 would silently destroy real stories on every false-positive match. It MUST NOT be invoked until the hard DELETE is replaced with a recoverable soft-delete/archive AND a dry-run with human review exists. Verified by a real merge run in which the loser row physically vanished."
+      ],
+      "reproduction": [
+        "Run tests/test_story_dedup_invocation.py::test_merge_never_deletes_a_story_row \u2014 the loser row is physically deleted",
+        "Read story_dedup_migration.py:111 and story_paraphrase.py:120-136"
+      ],
+      "expected": "Bulk de-dup is recoverable (soft-delete/archive), dry-run first, human-reviewed, and never over-matches destructively",
+      "observed": "Hard DELETE under deliberately loose thresholds; unreachable only by accident",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-story-002-fail-before-20260731T185210Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-E fixer-hard + risk-officer approval before ANY live run",
+      "fixCommits": [],
+      "verifiedBy": "test-author 2026-07-31T18:52Z",
+      "openedUtc": "2026-07-31T18:53:20Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
