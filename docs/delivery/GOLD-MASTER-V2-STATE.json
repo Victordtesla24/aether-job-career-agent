@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T11:25:00Z",
+  "updated_utc": "2026-07-31T11:45:00Z",
   "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -189,7 +189,7 @@
       "id": "BLOCKER-002",
       "severity": "CRITICAL - ESCALATED (live contaminated content already queued)",
       "title": "Cover letter PDF letterhead and sign-off print a leftover test-probe string as the candidate name",
-      "status": "DATA HALF CLOSED ON PROD (verified). CODE GUARD VERIFIED GREEN (4 tests). NOT DEPLOYED. Remaining: 8 stored letters with the fixture string in body text (3 on pending approvals) need regeneration or purge - requires risk-officer approval.",
+      "status": "d1+d2 CODE FIX IN FLIGHT; d3 data half remains risk-officer gated",
       "detail": "Cover-letter output renders sender name as \"GAP-P7-DEF-B Probe 1785452243543\". Confirmed via GET /api/auth/me: that string IS the owner account User.name in production. Every real cover letter generated today would be signed with it.",
       "root_cause": "PRODUCTION DATA (stale test-probe value in User.name), not a rendering bug.",
       "fix_split": {
@@ -205,7 +205,15 @@
       "forward_path_VERIFIED_FIXED": "Fresh live generation on production (real model deepseek/deepseek-v4-pro, real cost, flagged:[]) is CORRECTLY SIGNED and its PDF letterhead is CLEAN. Name correction holds (Vikram Deshpande, verified twice). So NO NEW contaminated content is being produced.",
       "remaining": "ML-COVER-100 (BLOCKER): all 8 previously-contaminated stored letters STILL carry the GAP-P7-DEF-B Probe fixture string in stored BODY text (0/8 remediated). Needs regeneration or purge under risk-officer approval; no cover-letter DELETE endpoint exists.",
       "second_path_closed": "Refine was the SECOND path stamping User.name onto customer-facing content: it re-composes with compose_letter(..., signer) and stores a NEW CoverLetter row + approval. Generation and PDF export already refused placeholder identities; refine did not, so a profile drifting to a placeholder AFTER drafting still minted a freshly-signed stored letter. Now refuses with the shared detection rule + honest 422, raised so _record_run finishes the run failed and REFUNDS quota. Committed; verification queued.",
-      "still_open": "8 contaminated stored letters (6 of 73 submitted + 2 of 5 draft). Inventory and remediation plan NOT yet written \u2014 the agent was killed before Part 2/3. Needs risk-officer approval before any purge/regeneration; no cover-letter DELETE endpoint exists."
+      "still_open": "8 contaminated stored letters (6 of 73 submitted + 2 of 5 draft). Inventory and remediation plan NOT yet written \u2014 the agent was killed before Part 2/3. Needs risk-officer approval before any purge/regeneration; no cover-letter DELETE endpoint exists.",
+      "CRITICAL_INVERSION": "The User.name correction at 01:12:27Z - which I reported as closing the live half - actually UNBLOCKED a previously-blocked leak for the 8 EXISTING letters. The PDF export guard (cover_letters.py:999-1001) tests current_user[\"name\"], NEVER the stored body. Before the correction it tripped and returned 422; now it passes. VERIFIED LIVE 11:26:25Z: three PDFs pulled from production, all HTTP 200, CLEAN live letterhead (Vikram Deshpande) over CONTAMINATED stored sign-off, served as attachment; filename=\"cover-letter-<company>.pdf\" - a submission-ready file.",
+      "scope_corrections": [
+        "TWO fixture variants, not one: ...Probe 1785452243543 (5 rows) and ...Probe 1784823962960 (3 rows, 2026-07-24). A remediation keyed to the single briefed literal would have MISSED 3 rows.",
+        "Contamination can still GROW: jobs.py:487-500 copies a draft body into a new submitted row via raw INSERT..SELECT with NO guard and NO LLM call, so no signer guard runs. Both contaminated drafts are pick_rank=1 copy sources - an Apply click mints rows 9 and 10.",
+        "Regeneration DISQUALIFIED on a code fact: CoverLetterRepository.create is an INSERT and cannot overwrite the 8; it would add 8 more, cost real LLM spend, and rewrite reviewed prose on 6 submitted applications.",
+        "Only 3 of 8 have approval rows; executedAt still NULL across all 110 - nothing ever transmitted."
+      ],
+      "plan": "d_guard_then_update: (d1) extend the PDF-export and refine guards to inspect the STORED SIGN-OFF LINE, not just the live profile name - pure code, no DB write, no approval needed, and it alone turns every captured 200 back into a 422. (d2) guard the jobs.py apply-copy path. (d3) ONLY THEN the single-line regexp UPDATE on 8 rows, snapshot first - risk-officer gated. Deliberately does NOT touch ApprovalRequest.payload x3 / AgentRun x2 / BackgroundJob x2 - those are audit snapshots and rewriting them would falsify the trail."
     }
   ],
   "human_gated": {
@@ -541,7 +549,8 @@
     "STORY-REL-003: two different JD strings feed the same scorer (tailor_agent.run vs routers/stories.py:152).",
     "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter.",
     "GAP-market-pulse-interview-count-divergence (MEDIUM, LIVE, pre-existing per git blame 2026-07-12/18): analytics.py:362-372 uses a raw COUNT(*) for Market Pulse interview figures instead of the canonical get_application_counts() - the SAME divergent-query class the docstring says caused MV-mobile-dashboard-005. apps/web/src/app/dashboard/analytics/page.tsx renders BOTH the canonical conversion rate AND <MarketPulse /> on the SAME page, so a user can see two different interview figures side by side. Fix: mirror what f_last_month already does at analytics.py:380. NOT introduced by this run.",
-    "W-F residual (UI decision for the apps/web owner): the Applied tab (include_applied=true) is now a SUBSET of the board rather than disjoint - an honest overlap, but may want de-duplication. Also: from_stage mismatch -> 409 is an unpinned contract decision; one line to make advisory if preferred."
+    "W-F residual (UI decision for the apps/web owner): the Applied tab (include_applied=true) is now a SUBSET of the board rather than disjoint - an honest overlap, but may want de-duplication. Also: from_stage mismatch -> 409 is an unpinned contract decision; one line to make advisory if preferred.",
+    "Adjacent finding: 7 letters signed \"Administrator\" for a user whose real name is Vikram Deshpande. No placeholder rule catches it. Separate decision - assess whether it is in the signer guard scope."
   ],
   "orchestrator_corrections": [
     {
@@ -581,6 +590,13 @@
       "reality": "WRONG. The test still failed with the reverted \"MV Tester\" fixture, proving the name rule was not the cause. The real cause was a COLLISION between two of this run own fixes: GM2-EMAIL-002 counterparty refusal firing BEFORE the pre-existing resume-grounding refusal. The assertion message named the real cause in plain text the whole time.",
       "lesson": "Fifth instance of the same pattern: reaching for the most recently-discovered explanation instead of reading what the error actually says. Recoverable only because the fix was VERIFIED rather than trusted.",
       "silver_lining": "The placeholder false-positive fix was still correct on its own merits - real surnames (Probert, Testa, Testard, Probst) genuinely were refused. Right fix, wrong attribution."
+    },
+    {
+      "id": "ORCH-CORR-006",
+      "date": "2026-07-31",
+      "wrong_claim": "Reported that the User.name correction \"closed the live half\" of BLOCKER-002 and that only inert historical rows remained.",
+      "reality": "INVERTED. For the 8 existing letters the correction UNBLOCKED a leak the old contaminated profile name had been accidentally blocking - the export guard checks the profile, not the body, so it flipped 422 -> 200. Verified live with three downloaded PDFs.",
+      "lesson": "A guard that reads a DIFFERENT field from the one carrying the defect can invert when you fix the field it reads. Sixth instance of asserting a downstream conclusion without reading the guard code."
     }
   ],
   "entitlement_enforcement_map": {
@@ -664,5 +680,6 @@
     "result": "7 new tests red->green, 43 passed, 0 regressions",
     "delivered": "write_audit(approval.approve/approval.reject) mirroring the existing approval.delete call; resolvedByUserId + resolvedFromIp added ADDITIVELY via the existing ensure_approval_columns() lazy DDL",
     "toctou": "REAL HOLE, proven live pre-fix: a second resolve silently flipped an APPROVED row to REJECTED and returned 200. Now compare-and-set (WHERE id AND userId AND status=pending) returning an honest 409. The status predicate closed the real hole; the userId predicate is defence-in-depth for HTTP (service read already 404s foreign owners) but a genuine gap for direct repository callers."
-  }
+  },
+  "stale_recipe_warning": "LOGIN_EMAIL/LOGIN_PASSWORD in .env NO LONGER AUTHENTICATE against production (verified 11:25:56Z, \"Could not validate credentials\") - the canonical-login recipe is stale post-BLOCKER-001. Use AETHER_CRON_EMAIL/AETHER_CRON_PASSWORD, which resolve to the same owner account."
 }
