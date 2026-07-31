@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T13:05:00Z",
+  "updated_utc": "2026-07-31T13:35:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -38,7 +38,7 @@
     }
   },
   "workstream_status": {
-    "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
+    "W-A": "Phase 0 COMPLETE. \u00a73.2 SCREEN SWEEP COMPLETE \u2014 all 27 routes, dual-identity. \u00a73.3 adversarial review being refreshed from PARTIAL to FULL coverage. G-A closes on that refresh.",
     "W-B": "WAVE-1 VERIFIED GREEN (26 tests) + EMAIL/AGENTS WAVE VERIFIED GREEN (5 tests). Closed this run: NUL-byte 422 (blanket db.py guard, 11 endpoints), placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook, honest Gmail status, counterparty-grounded drafts, genuine Submission Agent. REMAINING W-B items from the canonical inventory: FE-D-003/FE-D-004 (auto-apply + match-threshold persisted-not-enforced, MEDIUM - honestly disclosed in UI), FE-D-001 (Notifications \"Coming soon\", HIGH - \u00a74 forbids at exit), FE-D-005 (Pause All/Manual Override, LOW - honestly disabled), APP_BASE_URL hardcoded fallback (MEDIUM, live in prod), next-auth dead stub (LOW, W-K).",
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
@@ -381,6 +381,14 @@
         "4 tiers render with price, GST tooltip, run quota, feature list and CTA",
         "The page deliberately HIDES a \"Light model tier\" bullet the API returns, because no plan actually gets a different model (existing MV-pricing-002 honesty fix) - correct behaviour",
         "ADV-ENT-002 remains: Free tile advertises 5 runs/month that the product then refuses with 402"
+      ],
+      "signup": [
+        "ML-SIGNUP-001 HIGH NUL byte in the PASSWORD field -> unhandled 500 on POST /auth/register (the EMAIL field is correctly caught by EmailStr with a clean 422). FIXED AT HEAD, deployment lag.",
+        "ML-SIGNUP-002 LOW/INFO duplicate-email registration returns an explicit 409 - structural enumeration disclosure",
+        "ML-SIGNUP-003 MEDIUM ADV-ENT-002 reproduced END-TO-END on a genuinely fresh account: sidebar advertises 0/5 free runs while POST /agents/scout/run 402s immediately. The paywall UI itself is honest and upfront; the persistent sidebar quota tile is what contradicts it.",
+        "ML-SIGNUP-004 INFO 3 unintended accounts created during adversarial registration testing (on a REGISTER endpoint, \"success\" IS account creation) - disclosed with reasoning, logged to the purge ledger",
+        "POSITIVE: password policy genuinely enforced client AND server (8+ chars, 1 digit; 1-char rejected)",
+        "POSITIVE: honest first-run UX, zero console errors, no 390px overflow, no fixture strings, no XSS/SQLi"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
@@ -567,5 +575,11 @@
       "also_verified": "analytics.py untouched by the commit (git show --stat, 2 files); all FIVE call sites (applications.py:61, analytics.py:114/207/380/662) key-based not shape-based, repo-wide grep confirms no 6th; no scope creep; no prohibited patterns; RT-004 9/9 and combined 22/22 re-run and matched.",
       "honest_loss_disclosed": "exact-dict-equality's incidental \"no unexpected extra key\" check is gone - narrow, not the protected contract, no consumer depends on it."
     }
-  ]
+  ],
+  "screen_sweep": {
+    "status": "COMPLETE \u2014 all 27 routes deep-tested",
+    "routes": 27,
+    "reports": "uat/reports/evidence/gold-master-v2/screens/ (19 report files + ~350 screenshots)",
+    "identities": "Every screen tested under BOTH the data-rich owner AND a genuine first-time non-admin, per \u00a73.2."
+  }
 }
