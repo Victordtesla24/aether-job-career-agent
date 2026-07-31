@@ -22,8 +22,8 @@ const out = { capturedAt: new Date().toISOString(), console: [], pageerror: [], 
   page.on("requestfailed", (r) => out.requestfailed.push({ current, url: r.url(), failure: r.failure()?.errorText }));
 
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.fill("#login-identifier", "admin");
-  await page.fill("#login-password", "admin123");
+  await page.fill("#login-identifier", (process.env.LOGIN_EMAIL ?? (() => { throw new Error("LOGIN_EMAIL must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
+  await page.fill("#login-password", (process.env.LOGIN_PASSWORD ?? (() => { throw new Error("LOGIN_PASSWORD must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
   await Promise.all([page.waitForURL(/\/dashboard/, { timeout: 60000 }).catch(() => {}), page.click('button[type="submit"]')]);
   await page.waitForTimeout(2500);
 

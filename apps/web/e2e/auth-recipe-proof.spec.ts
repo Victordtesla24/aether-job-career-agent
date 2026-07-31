@@ -9,12 +9,16 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { requireEnv } from './env';
 
 const __filename = fileURLToPath(import.meta.url);
 
 const PROD_URL = 'https://5cb5f0620.abacusai.cloud';
-const ADMIN_EMAIL = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+// No login credential is hardcoded in this repository (BLOCKER-001). Resolved
+// lazily inside the test so an unset variable fails this spec loudly rather
+// than throwing at collection time for the whole suite.
+const adminEmail = () => requireEnv('LOGIN_EMAIL');
+const adminPassword = () => requireEnv('LOGIN_PASSWORD');
 const EVIDENCE_DIR = '/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens';
 
 test('Auth Recipe Proof: Login and reach authenticated dashboard', async ({ page }) => {
@@ -43,8 +47,8 @@ test('Auth Recipe Proof: Login and reach authenticated dashboard', async ({ page
   console.log('[2] Form fields verified: email, password, submit');
 
   console.log('[3] Filling in credentials...');
-  await page.fill('#login-identifier', ADMIN_EMAIL);
-  await page.fill('#login-password', ADMIN_PASSWORD);
+  await page.fill('#login-identifier', adminEmail());
+  await page.fill('#login-password', adminPassword());
 
   console.log('[3] Clicking submit button...');
 

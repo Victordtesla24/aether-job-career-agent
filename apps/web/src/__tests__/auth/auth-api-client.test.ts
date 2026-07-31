@@ -141,10 +141,10 @@ describe("login", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await login("admin", "admin123", "http://api.test");
+    const result = await login("admin", "n0t-a-real-password", "http://api.test");
     expect(result.accessToken).toBe("jwt-admin");
     const [, init] = fetchMock.mock.calls[0];
-    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ email: "admin", password: "admin123" });
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ email: "admin", password: "n0t-a-real-password" });
   });
 });
 

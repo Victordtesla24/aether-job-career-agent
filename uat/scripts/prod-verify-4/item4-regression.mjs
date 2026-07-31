@@ -38,8 +38,8 @@ const apiResponses = [];
   page.on("response", (r) => { if (r.url().includes("/api/")) apiResponses.push({ route: current, url: r.url(), status: r.status() }); });
 
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.fill('input[name="email"], input[type="email"], input[type="text"]', "admin");
-  await page.fill('input[type="password"]', "admin123");
+  await page.fill('input[name="email"], input[type="email"], input[type="text"]', (process.env.LOGIN_EMAIL ?? (() => { throw new Error("LOGIN_EMAIL must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
+  await page.fill('input[type="password"]', (process.env.LOGIN_PASSWORD ?? (() => { throw new Error("LOGIN_PASSWORD must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/dashboard/, { timeout: 60000 });
 

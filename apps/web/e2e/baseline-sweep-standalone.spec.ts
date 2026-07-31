@@ -2,7 +2,8 @@
  * BASELINE SWEEP: Standalone Authenticated Routes
  *
  * Captures baseline screenshots for authenticated dashboard routes against
- * PRODUCTION (https://5cb5f0620.abacusai.cloud) using admin/admin123 credentials.
+ * PRODUCTION (https://5cb5f0620.abacusai.cloud) using the LOGIN_EMAIL/LOGIN_PASSWORD
+ * credentials from the environment (never hardcoded — BLOCKER-001).
  *
  * IMPORTANT: This test does NOT use the global auth setup. It logs in fresh
  * before each test session using the proven auth recipe.
@@ -15,12 +16,14 @@ import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { requireEnv } from './env';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVIDENCE_DIR = '/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification/screens';
 const PROD_URL = 'https://5cb5f0620.abacusai.cloud';
-const ADMIN_EMAIL = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+// No login credential is hardcoded in this repository (BLOCKER-001).
+const adminEmail = () => requireEnv('LOGIN_EMAIL');
+const adminPassword = () => requireEnv('LOGIN_PASSWORD');
 
 // Load SCREEN-MATRIX.json
 const SCREEN_MATRIX_PATH = path.join(EVIDENCE_DIR, 'SCREEN-MATRIX.json');
@@ -45,7 +48,7 @@ console.log(`[BASELINE-SWEEP] Preparing to capture ${authenticatedRoutes.length}
 let authContext: any = null;
 
 test.beforeAll(async () => {
-  console.log('[SETUP] Logging in to production with admin/admin123...');
+  console.log('[SETUP] Logging in to production with LOGIN_EMAIL/LOGIN_PASSWORD...');
   const browser = await chromium.launch({ headless: true });
   authContext = await browser.newContext();
   const loginPage = await authContext.newPage();
@@ -58,8 +61,8 @@ test.beforeAll(async () => {
     });
 
     // Fill and submit
-    await loginPage.fill('#login-identifier', ADMIN_EMAIL);
-    await loginPage.fill('#login-password', ADMIN_PASSWORD);
+    await loginPage.fill('#login-identifier', adminEmail());
+    await loginPage.fill('#login-password', adminPassword());
 
     const [response] = await Promise.all([
       loginPage.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }),

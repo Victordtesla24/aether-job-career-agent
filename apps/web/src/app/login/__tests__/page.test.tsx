@@ -71,11 +71,11 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
     fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: "admin" } });
-    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "admin123" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "n0t-a-real-password" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
-    expect(loginMock).toHaveBeenCalledWith("admin", "admin123");
+    expect(loginMock).toHaveBeenCalledWith("admin", "n0t-a-real-password");
     expect(window.localStorage.getItem("aether_token")).toBe("jwt-admin");
   });
 

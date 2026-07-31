@@ -8,11 +8,13 @@
 import { test, expect, chromium, Page, Browser, BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { requireEnv } from './env';
 
 const PROD_URL = 'https://5cb5f0620.abacusai.cloud';
 const EVIDENCE_ROOT = '/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/manual-verification';
 const SCREENS_DIR = path.join(EVIDENCE_ROOT, 'screens');
-const ADMIN_CRED = { email: 'admin', password: 'admin123' };
+// No login credential is hardcoded in this repository (BLOCKER-001).
+const adminCred = () => ({ email: requireEnv('LOGIN_EMAIL'), password: requireEnv('LOGIN_PASSWORD') });
 
 interface ScreenSpec {
   id: string;
@@ -58,8 +60,9 @@ async function login(page: Page): Promise<{ finalUrl: string; token: string | nu
   await page.goto(`${PROD_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   console.log('  [LOGIN] Filling credentials...');
-  await page.fill('#login-identifier', ADMIN_CRED.email);
-  await page.fill('#login-password', ADMIN_CRED.password);
+  const cred = adminCred();
+  await page.fill('#login-identifier', cred.email);
+  await page.fill('#login-password', cred.password);
 
   console.log('  [LOGIN] Submitting form...');
   try {

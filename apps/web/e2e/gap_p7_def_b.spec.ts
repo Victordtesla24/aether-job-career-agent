@@ -1,4 +1,5 @@
 import { test, expect, request as apiRequest } from "@playwright/test";
+import { requireEnv } from "./env";
 
 /**
  * GAP-P7-DEF-B (PROBE-P7-09): /dashboard/settings save fails for a stored
@@ -36,8 +37,9 @@ import { test, expect, request as apiRequest } from "@playwright/test";
  * used to confirm it parses. A future qa/fixer run is expected to actually
  * execute it once GAP-P7-DEF-B's fix lands.
  *
- * CREDENTIALS: [ASSUMED-PENDING-PROBE] — AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD
- * default to "admin"/"admin123" (same default as phase7-route-sweep.spec.ts,
+ * CREDENTIALS: AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD, else LOGIN_EMAIL/LOGIN_PASSWORD.
+ * There is NO hardcoded default (BLOCKER-001) — an unset credential throws
+ * (same contract as phase7-route-sweep.spec.ts,
  * itself unverified against the seeded DB by that fixer). GAP-P7-DEF-B's own
  * "observed" line records exactly one stored row affected —
  * `admin@aether.local` — which is consistent with this being the seeded
@@ -52,18 +54,20 @@ const BASE_URL = (process.env.BASE_URL || "https://5cb5f0620.abacusai.cloud").re
 const API_BASE = `${BASE_URL}/api`;
 const TOKEN_STORAGE_KEY = "aether_token";
 
-const E2E_EMAIL = process.env.AETHER_E2E_EMAIL || "admin";
-const E2E_PASSWORD = process.env.AETHER_E2E_PASSWORD || "admin123";
+// Resolved lazily: an unset credential must fail THIS spec, not abort
+// collection of the whole Playwright suite. No hardcoded default (BLOCKER-001).
+const e2eEmail = () => process.env.AETHER_E2E_EMAIL || requireEnv("LOGIN_EMAIL");
+const e2ePassword = () => process.env.AETHER_E2E_PASSWORD || requireEnv("LOGIN_PASSWORD");
 
 async function getAuthToken(): Promise<string> {
   const ctx = await apiRequest.newContext();
   try {
     const res = await ctx.post(`${API_BASE}/auth/login`, {
-      data: { email: E2E_EMAIL, password: E2E_PASSWORD },
+      data: { email: e2eEmail(), password: e2ePassword() },
     });
     if (!res.ok()) {
       throw new Error(
-        `gap_p7_def_b login failed: HTTP ${res.status()} for "${E2E_EMAIL}" against ` +
+        `gap_p7_def_b login failed: HTTP ${res.status()} for "${e2eEmail()}" against ` +
           `${API_BASE}/auth/login — set AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD to a real account.`,
       );
     }

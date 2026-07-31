@@ -5,7 +5,8 @@
  * the proven login recipe from AUTH-RECIPE-PROOF.
  *
  * Scope: /dashboard/* and /admin/* routes
- * Auth: Logs in as admin/admin123 (free-plan, non-admin user)
+ * Auth: Logs in with LOGIN_EMAIL/LOGIN_PASSWORD from the environment
+ *       (never hardcoded — BLOCKER-001)
  * Captures: Desktop + mobile viewports, console + request tracking
  */
 

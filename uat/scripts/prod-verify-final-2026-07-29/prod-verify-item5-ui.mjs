@@ -9,8 +9,8 @@ const OUT = "/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evide
   const browser = await chromium.launch({ args: ["--no-sandbox"] });
   const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.fill("#login-identifier", "admin");
-  await page.fill("#login-password", "admin123");
+  await page.fill("#login-identifier", (process.env.LOGIN_EMAIL ?? (() => { throw new Error("LOGIN_EMAIL must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
+  await page.fill("#login-password", (process.env.LOGIN_PASSWORD ?? (() => { throw new Error("LOGIN_PASSWORD must be set — no login credential is hardcoded in this repo (BLOCKER-001)"); })()));
   await Promise.all([page.waitForURL(/\/dashboard/, { timeout: 60000 }).catch(() => {}), page.click('button[type="submit"]')]);
   await page.goto(`${BASE}/dashboard/applications`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(9000);

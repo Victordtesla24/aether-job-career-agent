@@ -1,6 +1,7 @@
 import { test, expect, request as apiRequest } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { requireEnv } from "./env";
 
 /**
  * Phase-7 route sweep (PROBE-P7-12).
@@ -58,8 +59,9 @@ import path from "node:path";
  * any project-level storageState so a missing e2e/.auth/user.json (e.g. a
  * fresh checkout, or a run with --no-deps) can never break this spec.
  *
- * CREDENTIALS: [ASSUMED-PENDING-PROBE] — AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD
- * default to "admin"/"admin123" per the parent prompt's stated canonical
+ * CREDENTIALS: AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD, else LOGIN_EMAIL/LOGIN_PASSWORD.
+ * There is NO hardcoded default (BLOCKER-001) — an unset credential throws.
+ * Formerly defaulted to the demo credential per the parent prompt's canonical
  * test account; this default has NOT been independently verified against
  * the seeded DB by this fixer (test-only change, no DB access taken). Set
  * the env vars explicitly for a real run instead of relying on the default.
@@ -85,8 +87,10 @@ const BASE_HOST = new URL(BASE_URL).host;
 const API_BASE = `${BASE_URL}/api`;
 const TOKEN_STORAGE_KEY = "aether_token";
 
-const E2E_EMAIL = process.env.AETHER_E2E_EMAIL || "admin";
-const E2E_PASSWORD = process.env.AETHER_E2E_PASSWORD || "admin123";
+// Resolved lazily: an unset credential must fail THIS spec, not abort
+// collection of the whole Playwright suite. No hardcoded default (BLOCKER-001).
+const e2eEmail = () => process.env.AETHER_E2E_EMAIL || requireEnv("LOGIN_EMAIL");
+const e2ePassword = () => process.env.AETHER_E2E_PASSWORD || requireEnv("LOGIN_PASSWORD");
 
 const EVIDENCE_ROOT = path.resolve(process.cwd(), "../../uat/reports/evidence/phase7");
 const SCREENSHOT_DIR = path.join(EVIDENCE_ROOT, "playwright-route-sweep");
@@ -135,11 +139,11 @@ async function getAuthToken(): Promise<string> {
   const ctx = await apiRequest.newContext();
   try {
     const res = await ctx.post(`${API_BASE}/auth/login`, {
-      data: { email: E2E_EMAIL, password: E2E_PASSWORD },
+      data: { email: e2eEmail(), password: e2ePassword() },
     });
     if (!res.ok()) {
       throw new Error(
-        `route-sweep login failed: HTTP ${res.status()} for "${E2E_EMAIL}" against ` +
+        `route-sweep login failed: HTTP ${res.status()} for "${e2eEmail()}" against ` +
           `${API_BASE}/auth/login — set AETHER_E2E_EMAIL/AETHER_E2E_PASSWORD to a real account.`,
       );
     }

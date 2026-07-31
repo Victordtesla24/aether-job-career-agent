@@ -2,6 +2,7 @@ import { test, expect, request as apiRequest, Browser } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireEnv } from "./env";
 
 /**
  * MANUAL-VERIFICATION Phase 0, Step 6: Baseline Capture
@@ -20,8 +21,11 @@ const BASE_URL = (process.env.BASE_URL || "https://5cb5f0620.abacusai.cloud").re
 const API_BASE = `${BASE_URL}/api`;
 const TOKEN_STORAGE_KEY = "aether_token";
 
-const E2E_EMAIL = "admin";
-const E2E_PASSWORD = "admin123";
+// No login credential is hardcoded in this repository (BLOCKER-001). Resolved
+// lazily inside the test so an unset variable fails this spec loudly rather
+// than throwing at collection time for the whole suite.
+const e2eEmail = () => requireEnv("LOGIN_EMAIL");
+const e2ePassword = () => requireEnv("LOGIN_PASSWORD");
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const EVIDENCE_ROOT = path.join(REPO_ROOT, "uat/reports/evidence/manual-verification");
@@ -70,8 +74,8 @@ async function loginAndGetToken(browser) {
 
   try {
     await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle", timeout: 30000 });
-    await page.fill("#login-identifier", E2E_EMAIL);
-    await page.fill("#login-password", E2E_PASSWORD);
+    await page.fill("#login-identifier", e2eEmail());
+    await page.fill("#login-password", e2ePassword());
     await page.click("button[type='submit']");
     await page.waitForURL("**/dashboard**", { timeout: 30000 });
 

@@ -9,8 +9,11 @@ Covers (§15 Tier 1 + §14.7 + §14.8):
 - Suspend -> 403 on authenticated routes; unsuspend restores access.
 - Signup toggle: settings signupEnabled=false -> POST /auth/register 403.
 - Append-only AdminAuditLog: every admin mutation writes a row; no delete/edit.
-- §14.7 rotation: seeded admin/admin123 is demoted to isAdmin=false; an
+- §14.7 rotation: the seeded demo admin account is demoted to isAdmin=false; an
   env-configured admin (AETHER_ADMIN_EMAIL/PASSWORD_HASH) is granted isAdmin=true.
+  BLOCKER-001 hardening (weak-password denylist, reserved-username reclamation,
+  demote/regrant self-cancel refusal) is covered in
+  tests/test_blocker001_admin_overpermission.py.
 """
 from __future__ import annotations
 
@@ -362,9 +365,16 @@ def test_every_mutation_writes_audit_and_log_is_append_only(client):
 # --------------------------------------------------------------------------- #
 
 
-def test_rotation_demotes_seeded_admin_admin123(client):
+#: The demo seed has no default password since BLOCKER-001 — ``ADMIN_PASSWORD``
+#: is mandatory and denylist-checked. Rotation behaviour is independent of the
+#: value, so these tests supply one strong password explicitly.
+_SEED_ADMIN_PASSWORD = "S3edAdm1n!Pass"
+
+
+def test_rotation_demotes_seeded_admin_account(client, monkeypatch):
     from scripts.seed_demo import ADMIN_EMAIL, seed_admin_user
 
+    monkeypatch.setenv("ADMIN_PASSWORD", _SEED_ADMIN_PASSWORD)
     seed_admin_user()
     # Simulate a stray promotion of the seeded credential.
     _ensure_admin_schema()
@@ -389,6 +399,7 @@ def test_rotation_promotes_env_admin_and_keeps_seed_nonadmin(client, monkeypatch
     from app.security import hash_password
     from scripts.seed_demo import ADMIN_EMAIL, seed_admin_user
 
+    monkeypatch.setenv("ADMIN_PASSWORD", _SEED_ADMIN_PASSWORD)
     seed_admin_user()
     env_email = f"owner-{uuid.uuid4().hex[:8]}@aether.io"
     monkeypatch.setenv("AETHER_ADMIN_EMAIL", env_email)

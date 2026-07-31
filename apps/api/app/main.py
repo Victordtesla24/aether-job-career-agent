@@ -158,16 +158,38 @@ def _guard_production_discovery_fixtures() -> None:
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
 
-    Demotes the seeded ``admin/admin123`` credential to non-admin and, when
-    ``AETHER_ADMIN_EMAIL``/``AETHER_ADMIN_PASSWORD_HASH`` are set, grants the
-    configured operator admin. Best-effort: a rotation failure (e.g. DB briefly
-    unavailable at boot) logs a warning and never blocks startup.
-    """
-    try:
-        from app.repositories.admin import apply_admin_rotation
+    Reclaims the reserved demo username, demotes the seeded demo credential to
+    non-admin and, when ``AETHER_ADMIN_EMAIL``/``AETHER_ADMIN_PASSWORD_HASH``
+    are set, grants the configured operator admin.
 
+    Failure handling is deliberately split (BLOCKER-001). An INFRASTRUCTURE
+    failure (e.g. the DB is briefly unavailable at boot) is still best-effort:
+    it logs a warning and never blocks startup. A SECURITY failure —
+    ``AdminCredentialSecurityError`` (known-weak/malformed operator password
+    hash) or ``AdminRotationConfigError`` (the demote/regrant pair would
+    self-cancel and leave the demo identity privileged) — propagates and aborts
+    boot, exactly like ``_guard_production_replay_mode`` above. Before this
+    split, the blanket ``except Exception`` here would have downgraded those
+    guards to a single stderr line and served traffic anyway.
+    """
+    from app.repositories.admin import (
+        AdminCredentialSecurityError,
+        AdminRotationConfigError,
+        apply_admin_rotation,
+    )
+
+    try:
         apply_admin_rotation()
-    except Exception as exc:  # noqa: BLE001 — never let rotation break boot
+    except (AdminCredentialSecurityError, AdminRotationConfigError):
+        # Never swallow: booting anyway means serving behind an admin login
+        # that is known to be compromised or self-cancelling.
+        print(
+            "FATAL: §14.7 admin credential rotation refused the configured "
+            "operator admin — refusing to start. See the error below.",
+            file=sys.stderr,
+        )
+        raise
+    except Exception as exc:  # noqa: BLE001 — infra hiccups must not break boot
         print(
             f"WARNING: §14.7 admin credential rotation skipped at startup: {exc}",
             file=sys.stderr,

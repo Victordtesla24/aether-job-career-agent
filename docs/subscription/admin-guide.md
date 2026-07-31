@@ -2,9 +2,17 @@
 
 **Status:** Built and deployed. Live-verified in production (temp-QA-admin, 2026-07-16 — see
 `uat/reports/evidence/phase6/qa-prod-console-admin.json`, `gate17-admin-verification-raw.json`,
-`gate31-admin123-recheck-20260716T114522Z.json`). Formal closure of GATE-17 (the operator using
+a GATE-31 demo-credential recheck, 2026-07-16). Formal closure of GATE-17 (the operator using
 their *own* permanent admin credential) is **BLOCKED-ON-HUMAN** — see the "Provisioning your admin
 credential" section below.
+
+> **SECURITY NOTICE (BLOCKER-001, GOLD-MASTER-V2 phase 0).** The GATE-31 verification quoted above
+> did not hold. A phase-0 audit found the production `AETHER_ADMIN_PASSWORD_HASH` was a bcrypt of a
+> publicly-known weak password, and that the bare identifier `admin` resolved to the **owner**
+> account with `isAdmin: true` — not to the demoted demo row — so that credential reached
+> `GET /admin/users` and other users' email addresses. The code defects are fixed (see section 2);
+> **rotating the secret is still the operator's action and is outstanding.** Evidence:
+> `uat/reports/evidence/gold-master-v2/phase0/BLOCKER-admin-overpermission-verification.md`.
 
 **Production:** https://5cb5f0620.abacusai.cloud
 **Repo:** `apps/api/app/routers/admin.py`, `apps/api/app/repositories/admin.py`,
@@ -27,13 +35,26 @@ below. Nothing in the product UI lets a regular user become an admin.
 
 ## 2. Provisioning your admin credential (do this first)
 
-The database ships with **zero real admins**. A demo credential (`admin` / `admin123`,
-`admin@aether.local`) exists from earlier development seeding, but on every API boot the app
-**unconditionally demotes it to `isAdmin=false`** (`apps/api/app/repositories/admin.py::apply_admin_rotation`,
-wired into the FastAPI `lifespan` in `apps/api/app/main.py`). This is not configurable — it happens
-whether or not you have set your own admin yet, so the seeded credential can never hold privileges
-(GAP-P6-SEC-001 / GATE-31, verified live: `admin`/`admin123` login returns `isAdmin=false` and
-`GET /api/admin/users` returns 403 for that account).
+The database ships with **zero real admins**. A demo account (`admin@aether.local`, username
+`admin`) exists from earlier development seeding. On every API boot
+(`apps/api/app/repositories/admin.py::apply_admin_rotation`, wired into the FastAPI `lifespan` in
+`apps/api/app/main.py`) the app:
+
+- **reclaims the reserved username `admin`** from any account that is *not* the demo row, setting
+  that account's `username` to `NULL`. This is the BLOCKER-001 / D2 fix: the owner account had
+  independently acquired `username='admin'`, so the demo identifier resolved straight to it. Such an
+  account keeps its email login; only the `admin` alias is withdrawn, and each reclamation is logged
+  to stderr with the affected row ids.
+- **unconditionally demotes the demo row to `isAdmin=false`** (GAP-P6-SEC-001 / GATE-31). Not
+  configurable.
+- **refuses to start** if `AETHER_ADMIN_PASSWORD_HASH` verifies a known-weak password, or is not a
+  bcrypt hash at all (`_KNOWN_WEAK_ADMIN_PASSWORDS` in the same module). The check is fail-closed in
+  production and a loud stderr warning elsewhere.
+- **refuses to start** if `AETHER_ADMIN_EMAIL` names the demo address, because the demote and the
+  regrant would then write to the same row and cancel out — the original BLOCKER-001 mechanism.
+
+The demo seed itself (`apps/api/scripts/seed_demo.py`) no longer has a default password: it requires
+an explicit, non-denylisted `ADMIN_PASSWORD` and aborts otherwise.
 
 To provision **your own** admin account:
 
@@ -46,7 +67,8 @@ To provision **your own** admin account:
    - `AETHER_ADMIN_EMAIL` — the email address for your admin account.
    - `AETHER_ADMIN_PASSWORD_HASH` — the bcrypt hash from step 1 (never the plaintext password).
 3. Restart the API service. On next boot, `apply_admin_rotation()`:
-   - demotes the seeded `admin`/`admin123` account (always, regardless of the env vars), then
+   - reclaims the reserved `admin` username from any non-demo account, demotes the seeded demo
+     account (always, regardless of the env vars), then
    - inserts-or-updates a `User` row for `AETHER_ADMIN_EMAIL` with `isAdmin=true`,
      `suspended=false`, and the password hash you supplied, and gives it a Free-tier
      subscription + quota row so it behaves like any other account for billing purposes.

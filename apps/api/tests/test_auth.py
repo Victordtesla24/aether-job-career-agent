@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+
 VALID_CREDENTIALS = {"email": "casey@example.com", "password": "hunter2024"}
 
 
@@ -383,9 +385,15 @@ class TestAuthRateLimiting:
 
 
 class TestAdminSeed:
-    def test_admin_seed_is_idempotent(self, client, db_session):
+    #: The seed no longer has a default password (BLOCKER-001): ``ADMIN_PASSWORD``
+    #: is mandatory and is rejected if it is on the known-weak denylist. These
+    #: tests supply a strong one explicitly, exactly as a real deployment must.
+    SEED_ADMIN_PASSWORD = "S3edAdm1n!Pass"
+
+    def test_admin_seed_is_idempotent(self, client, db_session, monkeypatch):
         from scripts.seed_demo import seed_admin_user
 
+        monkeypatch.setenv("ADMIN_PASSWORD", self.SEED_ADMIN_PASSWORD)
         first = seed_admin_user()
         second = seed_admin_user()
         assert first == second
@@ -394,12 +402,30 @@ class TestAdminSeed:
             count = cur.fetchone()[0]
         assert count == 1
 
-    def test_admin_can_login_by_username(self, client):
+    def test_admin_can_login_by_username(self, client, monkeypatch):
         from scripts.seed_demo import seed_admin_user
 
+        monkeypatch.setenv("ADMIN_PASSWORD", self.SEED_ADMIN_PASSWORD)
         seed_admin_user()
         response = client.post(
-            "/auth/login", json={"email": "admin", "password": "admin123"}
+            "/auth/login",
+            json={"email": "admin", "password": self.SEED_ADMIN_PASSWORD},
         )
         assert response.status_code == 200, response.text
         assert response.json()["email"] == "admin@aether.local"
+
+    def test_admin_seed_refuses_without_an_explicit_password(self, client, monkeypatch):
+        """BLOCKER-001 item 3: no default credential, ever."""
+        from scripts.seed_demo import seed_admin_user
+
+        monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+        with pytest.raises(SystemExit, match="ADMIN_PASSWORD must be set"):
+            seed_admin_user()
+
+    def test_admin_seed_refuses_a_known_weak_password(self, client, monkeypatch):
+        """BLOCKER-001 item 3: the denylist also covers the seed path."""
+        from scripts.seed_demo import seed_admin_user
+
+        monkeypatch.setenv("ADMIN_PASSWORD", "password")
+        with pytest.raises(SystemExit, match="known-weak denylist"):
+            seed_admin_user()

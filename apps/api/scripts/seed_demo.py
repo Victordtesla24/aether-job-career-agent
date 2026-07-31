@@ -48,6 +48,7 @@ def _load_root_env_into_environ() -> None:
 
 
 from app.db import ensure_user_profile_columns, get_connection, new_id  # noqa: E402
+from app.repositories.admin import _weak_password_matching  # noqa: E402
 from app.repositories.user import UserRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
@@ -60,13 +61,33 @@ ADMIN_NAME = "Administrator"
 
 
 def _admin_password() -> str:
-    """Resolve the admin seed password.
+    """Resolve the admin seed password from ``ADMIN_PASSWORD`` — no default.
 
-    The owner's explicit product decision is a default of ``admin123``; it is
-    read from ``ADMIN_PASSWORD`` when set so real deployments can override it,
-    and this is the *only* place the default literal appears.
+    BLOCKER-001: this function used to fall back to a hardcoded weak literal
+    when ``ADMIN_PASSWORD`` was unset. Every environment seeded by this script
+    therefore shipped with the same publicly-known admin password, which is how
+    production came to be reachable as ``admin`` + a guessable string. There is
+    no safe default for a credential, so there is no default: an unset (or
+    known-weak) ``ADMIN_PASSWORD`` aborts the seed instead of silently
+    provisioning a guessable account.
+
+    Mirrors ``_demo_password`` below, which already refused to hardcode one.
     """
-    return os.environ.get("ADMIN_PASSWORD") or "admin123"
+    password = os.environ.get("ADMIN_PASSWORD") or ""
+    if not password:
+        raise SystemExit(
+            "ADMIN_PASSWORD must be set (as an env var, or in the repo-root "
+            ".env) to seed the admin user's password. Refusing to fall back to "
+            "a hardcoded default credential (BLOCKER-001)."
+        )
+    if _weak_password_matching(hash_password(password)) is not None:
+        raise SystemExit(
+            "ADMIN_PASSWORD is on the known-weak denylist "
+            "(app.repositories.admin._KNOWN_WEAK_ADMIN_PASSWORDS). Refusing to "
+            "seed an admin account with a guessable password (BLOCKER-001). "
+            "Choose a strong, unique password."
+        )
+    return password
 
 
 def seed_admin_user() -> str:
