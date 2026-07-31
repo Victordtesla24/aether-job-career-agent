@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T17:10:00Z",
+  "updated_utc": "2026-07-31T11:25:00Z",
   "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -573,6 +573,14 @@
       "wrong_claim": "Relayed a claim-auditor report that contaminated cover letters were approved by an \"unidentifiable actor\" through a mechanism that \"structurally cannot be audited\", framing it as a possible safety-gate breach.",
       "reality": "Nothing was transmitted (executedAt NULL on all 110 rows, ever); attribution IS recoverable from api.log client IPs; the cluster is the least remarkable in the account history; and the most likely actor is the owner in a normal browser session.",
       "lesson": "I did hedge it as alleged-not-confirmed and dispatched independent verification before acting - that was right. But I still relayed the dramatic framing first. For incident-shaped claims, lead with the decisive unknown (\"did anything leave the building?\") rather than the narrative."
+    },
+    {
+      "id": "ORCH-CORR-005",
+      "date": "2026-07-31",
+      "wrong_claim": "Diagnosed test_no_resume_user_email_draft_refused as caused by the placeholder-name rule matching the fixture \"MV Tester\", and dispatched a fix on that basis.",
+      "reality": "WRONG. The test still failed with the reverted \"MV Tester\" fixture, proving the name rule was not the cause. The real cause was a COLLISION between two of this run own fixes: GM2-EMAIL-002 counterparty refusal firing BEFORE the pre-existing resume-grounding refusal. The assertion message named the real cause in plain text the whole time.",
+      "lesson": "Fifth instance of the same pattern: reaching for the most recently-discovered explanation instead of reading what the error actually says. Recoverable only because the fix was VERIFIED rather than trusted.",
+      "silver_lining": "The placeholder false-positive fix was still correct on its own merits - real surnames (Probert, Testa, Testard, Probst) genuinely were refused. Right fix, wrong attribution."
     }
   ],
   "entitlement_enforcement_map": {
@@ -595,6 +603,11 @@
         "GM2-AGENTS-001 Submission Agent planned -> implemented genuinely and wired as backend=\"submission\""
       ],
       "note": "Supersedes the VERIFICATION QUEUED caveat in the commit message."
+    },
+    "REFUSAL-ORDERING": {
+      "result": "68 passed / 0 failed",
+      "log": "uat/reports/evidence/gold-master-v2/waves/refusal-order-verify-20260731T112040Z.log",
+      "closes": "Refusal-ordering collision; placeholder false-positive rule (real surnames no longer refused); \"MV Tester\" fixture restored so no masked defect remains."
     }
   },
   "consolidated_regression": {
