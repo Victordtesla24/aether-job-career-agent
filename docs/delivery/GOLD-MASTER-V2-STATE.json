@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T15:15:00Z",
+  "updated_utc": "2026-07-31T15:50:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -445,11 +445,15 @@
     {
       "id": "ML-PRICE-002",
       "severity": "CANDIDATE-CRITICAL (money correctness)",
-      "status": "VERIFICATION IN FLIGHT",
+      "status": "REFUTED \u2014 downgraded CRITICAL -> INFO",
       "claim": "Stripe Checkout defaults to USD, not AUD, on a fixed-AUD product.",
       "why_it_matters": "GET /billing/plans asserts {\"currency\":\"AUD\",\"gstIncluded\":true} (billing.py:102) and /pricing renders AUD with GST; the operator ABN 73 941 747 350 is a VERIFIED Australian entity. If checkout charges USD, customers are billed the wrong amount in the wrong currency - a real-money defect, not display.",
       "structural_risk_regardless_of_outcome": "billing.py:102 hardcodes the currency STRING while checkout passes only Stripe PRICE IDs. Currency is a property of the Stripe Price object, so our advertised currency can silently diverge from the actual charge with no local code looking wrong. The API should DERIVE currency from the Price objects rather than assert it.",
-      "source": "uat/reports/evidence/gold-master-v2/screens/pricing-screen-test.md (ML-PRICE-002)"
+      "source": "uat/reports/evidence/gold-master-v2/screens/pricing-screen-test.md (ML-PRICE-002)",
+      "verdict": "NO CURRENCY DEFECT EXISTS. All 6 Stripe Prices are AUD (1900/17900/3900/35900/6900/64900) with currency_options:null, matching the advertised amounts exactly. Both Checkout Sessions the tester screenshotted as \"USD $28.52\" are recorded BY STRIPE as currency:\"aud\", amount_total:3900, currency_conversion:null. The USD figure was Stripe ADAPTIVE PRICING presenting a local-currency equivalent to a US-GEOLOCATED browser - this VM egresses from San Francisco (208.122.8.11). A$39.00 x 0.7312 = US$28.52: same price, FX-displayed.",
+      "ml_price_003": "CLOSED, no defect. Non-charging tax.Calculation previews with an AU address: amount_total 3900, GST 355 INCLUSIVE at 10% - matches the app advertised {\"total\":39.0,\"gst\":3.55} to the cent. Every Price has tax_behavior=inclusive so Stripe backs GST OUT, never adds it. Stripe Tax active, AU head office, AU GST registration since 2026-07-21.",
+      "real_defect_remaining": "ML-adv-CUR-001 (MODERATE): billing.py:102 returns bare literals {\"currency\":\"AUD\",\"gstIncluded\":True} and a grep confirms ZERO Price.retrieve/unit_amount reconciliation anywhere in apps/api. Advertised currency, amount and tax behaviour agree with Stripe TODAY BY COINCIDENCE, NOT BY CONSTRUCTION. Editing a Price in the Stripe Dashboard would leave the app rendering \"A$39.00 incl. $3.55 GST\" while Checkout charges something else, with nothing failing.",
+      "recommendation": "Do NOT ship a currency \"fix\" - none is needed. Add a startup/CI reconciliation assert that each Plan Price satisfies currency==\"aud\", unit_amount==round(priceAud*100) and tax_behavior==\"inclusive\". Optionally disable Adaptive Pricing in the Stripe Dashboard (operator setting, not code) if AUD-only presentment is wanted."
     }
   ],
   "deploy_state": {
@@ -558,6 +562,13 @@
       "reality": "FALSE - the dashboard is CORRECT and internally consistent. get_application_counts() (app/routers/analytics.py:31, the RT-004 contract) deliberately counts DISTINCT JOBS, not raw Application rows, to avoid inflating counts with cover-letter re-draft/version rows - live evidence found ONE job with 9 letter-version rows. Independent SQL run this session: COUNT(DISTINCT jobId) WHERE status<>'draft' = 47, and of those 45 within 7 days - matching the UI's \"47\" and \"+45 this week\" EXACTLY. UI = API = live DB.",
       "lesson": "My \"74\" baseline was a RAW-ROW count - a different, non-comparable metric from what the product intentionally displays. I propagated it into multiple screen briefs as if it were ground truth. Baselines must record the PREDICATE, not just the number.",
       "consequence": "This also explains WHY RT-004 exists and why its strict-equality guard is load-bearing - it protects exactly this jobs-not-rows contract. Reinforces that the concurrent RT-004 adjudication must preserve the protection, with the tamper-proof, rather than simply relaxing the assertion."
+    },
+    {
+      "id": "ORCH-CORR-003",
+      "date": "2026-07-31",
+      "wrong_claim": "Escalated ML-PRICE-002 as CANDIDATE-CRITICAL: \"Stripe Checkout may charge USD on a fixed-AUD product\", treating a tester screenshot as evidence of a real money defect.",
+      "reality": "REFUTED by reading the actual Stripe objects. The Prices and the Sessions are AUD; the USD figure was Adaptive Pricing presentment to a US-geolocated test browser. No customer would be charged USD.",
+      "lesson": "A screenshot of a payment UI shows PRESENTMENT, not the charge. Money-correctness claims must be settled against the payment processor own objects. Escalating first was still right - the cost of checking was one read-only agent; the cost of a real currency defect would have been customer refunds - but the CLAIM should have been carried as UNVERIFIED, not as CRITICAL, until the Stripe objects were read."
     }
   ],
   "entitlement_enforcement_map": {
