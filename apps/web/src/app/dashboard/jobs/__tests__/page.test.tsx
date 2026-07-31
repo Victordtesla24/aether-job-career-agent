@@ -9,8 +9,8 @@
  * catching a regression that silently disconnects a tab's onClick from the
  * rendered market filter.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiRequest = vi.fn();
 const getToken = vi.fn();
@@ -137,25 +137,34 @@ function insightsFor(jobId: string) {
   };
 }
 
-apiRequest.mockImplementation(
-  async (path: string, options?: { method?: string; body?: unknown }) => {
-    if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
-    const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
-    if (insightsMatch) return insightsFor(insightsMatch[1]);
-    if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
-    const applyMatch = /^\/jobs\/([^/]+)\/apply$/.exec(path);
-    if (applyMatch && options?.method === "POST") {
-      const job = JOBS_FIXTURE.find((j) => j.id === applyMatch[1]);
-      return { job: { ...job, status: "applied" } };
-    }
-    if (path === "/agents/tailor/run" && options?.method === "POST") {
-      // 1 applied / 7 rejected — mirrors the real run observed in
-      // TESTING-OUTCOME-REPORT.md (MV-job-discovery-005).
-      return { resume_id: "resume-mock-1", changes: 1, rejected: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"] };
-    }
-    throw new Error(`unexpected apiRequest(${path})`);
-  },
-);
+/**
+ * The shared default mock body — factored out (rather than inlined only at
+ * module load) so any describe block can restore it in a `beforeEach`. Tests
+ * further down the file (e.g. MV-adv-A-002) install a narrower, test-local
+ * `mockImplementation` and `apiRequest.mockClear()` in the top-level
+ * `afterEach` does NOT reset that override — only restoring THIS function
+ * puts the mock back to its full-endpoint default for tests appended later
+ * in file order.
+ */
+async function defaultApiRequestImpl(path: string, options?: { method?: string; body?: unknown }) {
+  if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
+  const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
+  if (insightsMatch) return insightsFor(insightsMatch[1]);
+  if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
+  const applyMatch = /^\/jobs\/([^/]+)\/apply$/.exec(path);
+  if (applyMatch && options?.method === "POST") {
+    const job = JOBS_FIXTURE.find((j) => j.id === applyMatch[1]);
+    return { job: { ...job, status: "applied" } };
+  }
+  if (path === "/agents/tailor/run" && options?.method === "POST") {
+    // 1 applied / 7 rejected — mirrors the real run observed in
+    // TESTING-OUTCOME-REPORT.md (MV-job-discovery-005).
+    return { resume_id: "resume-mock-1", changes: 1, rejected: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"] };
+  }
+  throw new Error(`unexpected apiRequest(${path})`);
+}
+
+apiRequest.mockImplementation(defaultApiRequestImpl);
 getToken.mockResolvedValue("test-token");
 apiBaseUrl.mockReturnValue("http://test.local");
 fetchScoutSources.mockResolvedValue([]);
@@ -446,5 +455,121 @@ describe("Jobs-board no-op honesty (MV-adv-A-002)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByTestId("apply-step2")).toBeNull();
     expect(screen.getByTestId("tailor-resume")).not.toBeNull();
+  });
+});
+
+describe("Per-card Apply button (GOV-010 / GMV2 §10.2)", () => {
+  // MV-adv-A-002 (above) installs a test-local apiRequest.mockImplementation
+  // that has no /apply handler and never restores the default — mockClear()
+  // in the top-level afterEach only clears call history, not the
+  // implementation. Restore the full-endpoint default so these tests are
+  // self-contained regardless of file execution order.
+  beforeEach(() => {
+    apiRequest.mockImplementation(defaultApiRequestImpl);
+  });
+
+  /** Locates the list `job-card` (not the detail panel) for a given title. */
+  function cardFor(title: string): HTMLElement {
+    const match = screen.getAllByText(title)[0];
+    const card = match.closest('[data-testid="job-card"]');
+    if (!card) throw new Error(`job-card not found for "${title}"`);
+    return card as HTMLElement;
+  }
+
+  it("renders an Apply button on every job card, alongside the existing source link", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    const cards = screen.getAllByTestId("job-card");
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect(within(card).getByTestId("job-card-apply")).not.toBeNull();
+      // Item 6 — the secondary "View on [source]" link must survive.
+      expect(within(card).getByTestId("job-source-link")).not.toBeNull();
+    }
+  });
+
+  it("opens the SAME confirmation gate the detail panel's Review & Apply uses — no second modal, no apply before confirm", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(within(cardFor("AU Product Manager")).getByTestId("job-card-apply"));
+
+    const dialog = await screen.findByTestId("submit-gate");
+    expect(dialog.textContent).toContain("AU Product Manager");
+    // Un-tailored entry point — the gate must say so honestly rather than
+    // always claiming a tailored resume is attached.
+    expect(screen.getByTestId("gate-resume-status").textContent).toContain("Current (not tailored)");
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/jobs/job-au/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("cancel never applies", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(within(cardFor("AU Product Manager")).getByTestId("job-card-apply"));
+    await screen.findByTestId("submit-gate");
+
+    fireEvent.click(screen.getByTestId("submit-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("submit-gate")).toBeNull());
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/jobs/job-au/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+    // No optimistic success from merely opening/cancelling the gate.
+    expect(screen.queryByTestId("job-card-applied")).toBeNull();
+  });
+
+  it("confirm delegates to the same POST handler, updates the job's applied state, and shows a success toast", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(within(cardFor("AU Product Manager")).getByTestId("job-card-apply"));
+    await screen.findByTestId("submit-gate");
+    fireEvent.click(screen.getByTestId("submit-confirm"));
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/jobs/job-au/apply",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+
+    const toast = await screen.findByTestId("jobs-toast");
+    expect(toast.textContent?.toLowerCase()).toContain("applied");
+
+    await waitFor(() =>
+      expect(within(cardFor("AU Product Manager")).getByTestId("job-card-applied")).not.toBeNull(),
+    );
+    expect(within(cardFor("AU Product Manager")).queryByTestId("job-card-apply")).toBeNull();
+  });
+
+  it("on apply failure shows an honest inline error and never marks the job applied (no optimistic success)", async () => {
+    apiRequest.mockImplementation(
+      async (path: string, options?: { method?: string; body?: unknown }) => {
+        if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
+        const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
+        if (insightsMatch) return insightsFor(insightsMatch[1]);
+        if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
+        if (path === "/jobs/job-au/apply" && options?.method === "POST") {
+          throw new Error("Apply failed: upstream source unreachable");
+        }
+        throw new Error(`unexpected apiRequest(${path})`);
+      },
+    );
+
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    fireEvent.click(within(cardFor("AU Product Manager")).getByTestId("job-card-apply"));
+    await screen.findByTestId("submit-gate");
+    fireEvent.click(screen.getByTestId("submit-confirm"));
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Apply failed"));
+    expect(within(cardFor("AU Product Manager")).queryByTestId("job-card-applied")).toBeNull();
+    expect(within(cardFor("AU Product Manager")).getByTestId("job-card-apply")).not.toBeNull();
   });
 });

@@ -262,6 +262,11 @@ export default function JobsPage() {
   const [submitted, setSubmitted] = useState(false);
   const gateTriggerRef = useRef<HTMLElement | null>(null);
   const gateConfirmRef = useRef<HTMLButtonElement | null>(null);
+  // Success toast for a confirmed apply (GOV-010 / GMV2 §10.2) — the in-modal
+  // "submitted" state auto-closes the gate after 1.6s, so a visible,
+  // independent confirmation is needed for the new per-card entry point too.
+  // Shared by every path that calls confirmSubmit (card, detail panel).
+  const [applyToast, setApplyToast] = useState<string | null>(null);
 
   // Bulk-apply confirmation gate (MV-job-discovery-002) — the same
   // "irreversible action, explicit confirm" safety the single-job flow
@@ -558,6 +563,12 @@ export default function JobsPage() {
       const res = await apiRequest<{ job: Job }>(`/jobs/${gateJobId}/apply`, { method: "POST" });
       setJobs((prev) => (prev ?? []).map((j) => (j.id === res.job.id ? res.job : j)));
       setSubmitted(true);
+      // Independent success confirmation (GOV-010) — the in-modal
+      // "submitted" state auto-closes shortly after, so the per-card entry
+      // point (which never opened the detail panel) still leaves a visible
+      // trace that the apply succeeded.
+      setApplyToast(`Applied to ${res.job.company} — tracking in Applications.`);
+      window.setTimeout(() => setApplyToast(null), 3500);
       window.setTimeout(closeGate, 1600);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Apply failed");
@@ -657,6 +668,12 @@ export default function JobsPage() {
   };
 
   const gateJob = gateJobId ? (jobs ?? []).find((j) => j.id === gateJobId) : undefined;
+  // Honest resume-status for the gate copy (GOV-010): the per-card Apply
+  // button can open this same gate WITHOUT the detail panel's tailoring step
+  // having run, so the dialog must not always claim "tailored resume
+  // attached" — it must reflect this job's real state, same as the bulk gate
+  // already does for its "current, untailored" case.
+  const gateJobTailored = gateJobId ? applyStep[gateJobId] === "tailored" : false;
   const bulkGateJobs = useMemo(
     () => (jobs ?? []).filter((j) => bulkGateIds.includes(j.id)),
     [jobs, bulkGateIds],
@@ -664,6 +681,17 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-5">
+      {/* Apply success toast (GOV-010 / GMV2 §10.2) */}
+      {applyToast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="jobs-toast"
+          className="fixed right-6 top-20 z-50 rounded-xl border border-aether-green/40 bg-aether-green/15 px-5 py-3 text-sm font-medium text-aether-green shadow-lg backdrop-blur-md"
+        >
+          ✓ {applyToast}
+        </div>
+      ) : null}
       {/* Header + stats subtitle (jd03) */}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -1112,6 +1140,34 @@ export default function JobsPage() {
                               {autopilotSuppressionHint(job)}
                             </p>
                           ) : null}
+                          {/* Per-card Apply (GOV-010 / GMV2 §10.2) — reuses the
+                              SAME single-job confirmation gate + apply handler
+                              the detail panel's "Review & Apply" button opens
+                              (openGate/confirmSubmit below), never a second
+                              modal implementation (§13.1). */}
+                          <div className="mt-2.5 flex justify-end">
+                            {job.status === "applied" ? (
+                              <span
+                                data-testid="job-card-applied"
+                                className="rounded-lg border border-aether-green/25 bg-aether-green/10 px-3 py-1.5 text-[11px] font-semibold text-aether-green"
+                              >
+                                ✓ Applied
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                data-testid="job-card-apply"
+                                aria-label={`Apply to ${job.title} at ${job.company}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openGate(job.id, e.currentTarget);
+                                }}
+                                className="rounded-lg bg-aether-coral px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-90"
+                              >
+                                Apply
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1459,7 +1515,14 @@ export default function JobsPage() {
                 </h3>
                 <p className="mt-1 text-[12px] text-aether-muted">
                   Your application for <span className="text-[#C7C7D6]">{gateJob.title}</span> will be recorded as{" "}
-                  <span className="text-[#C7C7D6]">Applied</span> with your tailored resume attached.{" "}
+                  <span className="text-[#C7C7D6]">Applied</span>{" "}
+                  {gateJobTailored ? (
+                    "with your tailored resume attached."
+                  ) : (
+                    <>
+                      using your <span className="text-aether-yellow">current, untailored</span> resume.
+                    </>
+                  )}{" "}
                   <span className="text-aether-yellow">
                     Complete the submission on {SOURCE_LABEL[gateJob.source] ?? gateJob.source}
                     {gateJob.sourceUrl ? (
@@ -1488,6 +1551,15 @@ export default function JobsPage() {
             <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5 text-[12px]">
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Role</span><span className="text-[#C7C7D6]">{gateJob.title}</span></div>
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Company</span><span className="text-[#C7C7D6]">{gateJob.company}</span></div>
+              <div className="flex items-center justify-between">
+                <span className="text-aether-muted-dim">Resume</span>
+                <span
+                  data-testid="gate-resume-status"
+                  className={gateJobTailored ? "font-medium text-aether-green" : "font-medium text-aether-yellow"}
+                >
+                  {gateJobTailored ? "Tailored for this role" : "Current (not tailored)"}
+                </span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-aether-muted-dim">Match score</span>
                 <span className="mono font-semibold text-aether-green">
