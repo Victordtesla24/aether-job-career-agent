@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T08:50:00Z",
+  "updated_utc": "2026-07-31T09:30:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -328,11 +328,29 @@
         "POSITIVE: period pills genuinely re-scope server-side (7d: 47 apps/8 jobs; 30d+: 49/52)",
         "ML-ANALYTICS-002 LOW: no freshness/staleness label; static subtitle with no period echo",
         "Baseline interview-conversion line-chart spec NOT reproduced - production shows its own valid form"
+      ],
+      "agents": [
+        "GM2-AGENTS-001 HIGH Submission Agent permanently stuck \"Planned\" - \u00a74 forbids planned states at exit",
+        "GM2-AGENTS-002 MEDIUM Test Run modal FABRICATES a non-zero cost estimate for deterministic $0-cost agents before running",
+        "GM2-AGENTS-003 MEDIUM AWS Bedrock card says \"Access + Secret Key\" but its modal exposes a single \"API Key\" field",
+        "FE-D-005 CONFIRMED but NOT deceptive: Pause All / Manual Override honestly disabled with title=\"Not yet available\"",
+        "REFUTED ML-agents-002: model picker DOES persist across reload (baseline spec wrong)",
+        "REFUTED ML-agents-005/006: NO 390px overflow (baseline specs wrong)",
+        "POSITIVE: real agent runs honest end-to-end (running->completed, real AgentRun rows, no fabrication on empty states)",
+        "MEASURED: 30s polling on /api/agents via fetch instrumentation"
+      ],
+      "email": [
+        "GM2-EMAIL-001 HIGH Gmail account list shows \"Connected\" while live triage proves auth has EXPIRED (verified twice) - false status claim, same honesty class as the fixture-name defect",
+        "GM2-EMAIL-002 MEDIUM-HIGH AI Draft Reply REVERSES sender/recipient direction when the thread newest message is the user own prior reply (verified 3x; correct on a contrast thread) - outbound misdirection risk",
+        "GM2-EMAIL-003 HIGH NUL byte -> 500 on POST /api/emails/draft (matches the known class; FIXED AT HEAD by the blanket db.py guard, undeployed)",
+        "GM2-EMAIL-004 MEDIUM AI analysis/drafts are not persisted",
+        "GM2-EMAIL-005 LOW-MEDIUM Compose-button content overflow at 390px",
+        "POSITIVE: no fabricated email content; two-step send-confirmation gate WORKS and no email was sent (network-verified, Cancel only)"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
   },
-  "playwright_baseline_credibility": "5 independent disproofs now (ML-settings-001, rg-mob-appr, ML-resume-002, ML-admin-002 x2 routes). The 12 red specs target 127.0.0.1:3091. All 12 still require individual adjudication before G-N \u2014 but the prior assumption that they represent real prod defects is now strongly undermined.",
+  "playwright_baseline_credibility": "SEVEN independent disproofs now: ML-settings-001, rg-mob-appr, ML-resume-002, ML-admin-002 (x2 routes), ML-agents-002, ML-agents-005/006. Every \"known-failing\" spec checked against production has PASSED. The specs target 127.0.0.1:3091. Working assumption is now that the 12 red specs are STALE LOCAL-ONLY assertions, but each still requires individual adjudication before G-N closes.",
   "nul_byte_affected_endpoints": [
     "ALL of the following were confirmed 500 ON PRODUCTION (pre-fix code) and are FIXED AT HEAD by the blanket _NulByteGuardCursor in app/db.py: PUT /workspaces/settings, POST /resumes, POST /agents/tailor/run, POST /stories, PUT /stories/{id}, POST /cover-letters/{id}/refine, POST /agents/cover-letter/run, GET /admin/users?q= and ?plan=. Analytics endpoints already returned a correct 422 independently."
   ],
@@ -380,7 +398,8 @@
     "4 resume rows v70-73 (no DELETE endpoint)",
     "4 near-duplicate stories from the AI-quality probe",
     "throwaway Stripe-probe account",
-    "canonical non-admin test account gm2-nonadmin-1785454990@example.com"
+    "canonical non-admin test account gm2-nonadmin-1785454990@example.com",
+    "2 adversarial email drafts cd677a32f603c19a2d56f6725, c5f15526fed1587b0b9da76fe - NO DELETE/PATCH route exists for that resource"
   ],
   "session_limit_pause": {
     "hit_at": "2026-07-31T01:15Z",
