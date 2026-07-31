@@ -2031,7 +2031,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/services/SERVICE-REGISTRY.md"
       ],
-      "status": "FIX-REJECTED-BY-REVIEW-REWORK-IN-PROGRESS",
+      "status": "REWORK-COMPLETE-AWAITING-RE-REVIEW",
       "owner": "W-HF ai-loop-engineer",
       "fixCommits": [
         "(uncommitted working tree \u2014 pending \u00a722 step 5 review)"
@@ -2051,11 +2051,11 @@
         "grep for EventSource across apps/web/src \u2014 zero hits"
       ],
       "expected": "SSE endpoint streaming agent run progress; kanban_updated events on jobs:{workspace_id}",
-      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s | 6 contract tests written and RED for the right reason (404 route-unregistered); the not-found test asserts a specific 'Agent run not found' body so it cannot pass merely because unmatched routes 404.",
+      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s | 6 contract tests written and RED for the right reason (404 route-unregistered); the not-found test asserts a specific 'Agent run not found' body so it cannot pass merely because unmatched routes 404. | SSE LAYER IMPLEMENTED (agent_run_stream.py NEW 334 lines; agents.py +53/-0, route 2161-2199). Events derived ONLY from the persisted AgentRun row, diffed server-side \u2014 nothing timer-driven. Postgres-row polling chosen over in-process bus because in-process delivers nothing with >1 uvicorn worker and ALREADY fails today for tailoring (separate ARQ process). Headers include X-Accel-Buffering:no (nginx would otherwise buffer SSE dead); 15s heartbeats sized against proxy_read_timeout 180s; bounded 600s lifetime emitting stream_timeout rather than a fabricated complete; failed runs emit `failed` with the real error and NEVER `complete`. 4/6 tests pass; the 2 failures are a proven contract contradiction (ADR-GMV4-002), not an implementation gap.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "TESTS-RED-READY-FOR-FIX",
+      "status": "FIX-IN-TREE-CONTRACT-AMENDMENT-REQUIRED",
       "owner": "W-I/W-SUB fixer-hard",
       "fixCommits": [],
       "verifiedBy": null,
@@ -2623,11 +2623,11 @@
         "grep every consumer of ATSScore.semantic_similarity and check whether any reads semantic_path"
       ],
       "expected": "UI shows an honest warning whenever semantic_path != local/hf_api",
-      "observed": "semantic_path computed but never surfaced; 50.0 placeholder renders as a real score",
+      "observed": "semantic_path computed but never surfaced; 50.0 placeholder renders as a real score | ROUND 2 IN TREE: all four leak sites closed (resumes.py +semantic_path/semantic_degraded; jobs.py +semanticPath/semanticDegraded; tailoring_loop.py records semanticPath per iteration and gates success = reached_target AND NOT any_degraded per ADR-GMV4-001; tailor_agent._compute_conversion_metrics +baselineDegraded/tailoredDegraded/scoringDegraded). UI now replaces the number with an em-dash plus a 'not measured' badge and an honest directional-score note \u2014 no fabricated precision. 12/12 contract, 14/14 keep-green, tsc clean. UNSURE self-flagged: ATSScore.semantic_path default changed 'degraded' -> None, which is fail-OPEN on the very axis this workstream protects; under focal re-review.",
       "evidence": [
         "apps/api/app/services/ats_engine.py"
       ],
-      "status": "OPEN",
+      "status": "REWORK-COMPLETE-AWAITING-RE-REVIEW",
       "owner": "W-HF ai-loop-engineer (rework)",
       "fixCommits": [],
       "verifiedBy": null,
@@ -2679,19 +2679,19 @@
     {
       "id": "GMV4-suites-002",
       "screen": "n/a (process)",
-      "severity": "HIGH",
+      "severity": "BLOCKER",
       "category": "governance",
-      "summary": "THE BASELINE RUN IS CONTAMINATED AND ITS FLAKE-VS-REAL SPLIT IS UNPROVEN. The run spanned 17:06-17:50, straddling the window in which the W-HF agent installed sentence-transformers/torch and rewrote ats_engine.py, and that agent explicitly ran its own pytest OUTSIDE /tmp/aether-pytest.lock. A baseline that changes underneath itself is not a zero-regression reference line. The reporting agent nonetheless asserted the 36 failures are 'genuine code defects, not concurrent DB schema conflicts (tests ran with flock serialization)' \u2014 that premise is false, and the agent did NOT perform the required per-test isolation re-runs, so the classification is unsupported. Several errors carry the known shared-aether_test signature (401 Could not validate credentials, ForeignKeyViolation).",
+      "summary": "A TRUSTWORTHY BASELINE IS UNOBTAINABLE WHILE AGENTS RUN TESTS, AND G-N DEPENDS ON ONE. Run 1 (17:06-17:50): 36 failed / 9 errors / 2027 passed \u2014 contaminated by the W-HF sentence-transformers install and ats_engine rewrite landing mid-run. Run 2 (18:00-18:45, intended clean): 50 failed / 46 errors / 1983 passed \u2014 WORSE, because four concurrent agents were running targeted suites against the SAME shared `aether_test` schema; the 5x jump in ERRORS (9 -> 46) is the TRUNCATE-race signature, not new code defects. Neither run is a valid zero-regression reference line. The genuine failure count is therefore still UNKNOWN and G-N cannot be adjudicated on either run.",
       "reproduction": [
         "Compare run timestamps against the W-HF install window; re-run each failing node-id in isolation"
       ],
-      "expected": "A clean uncontaminated baseline with each failure classified flake-vs-real by isolation proof",
-      "observed": "Contaminated run; classification asserted without isolation evidence",
+      "expected": "One quiescent full-suite run with zero concurrent test activity, each failure classified by isolation re-run",
+      "observed": "Run1 36F/9E (contaminated by in-flight install); Run2 50F/46E (contaminated by concurrent agents)",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/suites/BASELINE-SUITES.md"
       ],
       "status": "OPEN",
-      "owner": "orchestrator (clean re-run in flight)",
+      "owner": "orchestrator \u2014 schedule a quiescent run at \u00a721.4 before final deploy",
       "fixCommits": [],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:52:14Z",
@@ -2896,11 +2896,11 @@
         "grep -rn 'warm_up_semantic_model|local_files_only' apps/api/tests/"
       ],
       "expected": "Load-bearing startup code covered by tests written before implementation",
-      "observed": "No coverage",
+      "observed": "12 tests now cover warm-up/local_files_only/startup; unguarded os.listdir at ats_engine.py:203 guarded against OSError",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/suites/GMV4-ats-001-adversarial-review-20260731T175538Z.md"
       ],
-      "status": "OPEN",
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
       "owner": "test-author (round 2)",
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-07-31T17:55Z",
@@ -3180,6 +3180,69 @@
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-07-31",
       "openedUtc": "2026-07-31T18:26:59Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-002",
+      "screen": "Agents",
+      "severity": "HIGH",
+      "category": "gap",
+      "summary": "THE AGENT PIPELINE DOES NOT JOURNAL ITS STEPS, so 4 of the 6 progress steps \u00a714.5.5 specifies have no observable backing and cannot be streamed honestly. scanning_queue and submitting: the work genuinely happens in submission_agent.py but is never recorded, so it is unobservable. computing_ats_deltas: the Submission Agent computes no ATS delta at all. awaiting_approval: `submission` is absent from _APPROVAL_GATED (see GMV4-submission-001). Closing this needs an ADDITIVE per-step journal written by the pipeline; until then the stream honestly emits only snapshot/status/kanban_updated/complete/failed/stream_timeout/stream_error. G-SUB depends on this.",
+      "reproduction": [
+        "Trace submission_agent.py for any per-step persistence; grep _APPROVAL_GATED for 'submission'"
+      ],
+      "expected": "Six named progress steps each backed by real recorded state",
+      "observed": "2 of 6 backed (complete real, updating_kanban partial); 4 unbacked and deliberately not emitted",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-after-20260731T181754Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-SUB fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:41:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-003",
+      "screen": "Agents (frontend)",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "The browser EventSource API CANNOT send an Authorization: Bearer header, and this app authenticates via a localStorage JWT (aether_token). A UI consumer of the new SSE endpoint therefore requires fetch + ReadableStream, not native EventSource. The fixer deliberately did NOT add a token-in-query-param auth path, since that would introduce a second auth model \u2014 the right call, but it means the UI half of G-I needs this decided explicitly.",
+      "reproduction": [
+        "Attempt to consume /agents/runs/{id}/stream with native EventSource and observe the missing auth header"
+      ],
+      "expected": "UI consumes the stream under the existing auth model",
+      "observed": "No UI consumer yet; native EventSource is unusable with bearer auth",
+      "evidence": [
+        "apps/api/app/services/agent_run_stream.py"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:41:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-004",
+      "screen": "n/a (test contract)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "test_agent_run_sse.py tests 1 and 2 are DEFECTIVE (ADR-GMV4-002). They pass run_id='some-run-id' with no monkeypatch and demand 200, while test 6 monkeypatches get_by_id->None and demands 404 \u2014 and the real get_by_id('some-run-id') already returns None, so the endpoint is required to return both 200 and 404 for byte-identical input. Test 2 additionally demands a fixed 6-step sequence for a nonexistent run (scripted progress, \u00a70.5) and its exact-list equality forbids the kanban_updated event test 4 requires. Amendment assigned to test-author; the fixer correctly did not touch tests.",
+      "reproduction": [
+        "Run tests/test_agent_run_sse.py and compare tests 1/2 against test 6's monkeypatch"
+      ],
+      "expected": "A self-consistent contract asserting only genuinely-backed behaviour",
+      "observed": "Contract demands 200 and 404 for the same input, plus scripted progress",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-contract-conflict-proof-20260731T183930Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "test-author",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:41:33Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

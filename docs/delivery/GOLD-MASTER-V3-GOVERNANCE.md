@@ -171,6 +171,43 @@ in that file are contract-agnostic.
 
 ---
 
+## 5c. ORCHESTRATOR ADJUDICATION ADR-GMV4-002 — the SSE contract is self-contradictory; tests 1 & 2 are defective
+
+**Escalated by** `fixer-hard` after implementing the SSE layer, with a proof artifact
+(`uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-contract-conflict-proof-20260731T183930Z.txt`)
+rather than a claim. It did not edit the tests — correct under §0.4.
+
+**The contradiction.** `test_agent_run_sse.py` tests 1 and 2 pass `run_id="some-run-id"` with NO
+monkeypatch and demand HTTP 200. Test 6 monkeypatches `get_by_id -> None` and demands 404. A
+fresh probe shows the real `get_by_id('some-run-id')` ALREADY returns `None` — byte-identical
+input to test 6's monkeypatched state. The endpoint is therefore required to return both 200
+and 404 for the same input. The only residual difference is the literal id string, and
+branching on a magic id would be hardcoding.
+
+Test 2 is independently defective on two counts: it demands a fixed 6-step sequence **for a run
+that does not exist** (scripted progress — a §0.5 auto-FAIL), and its exact-list equality
+forbids `kanban_updated`, which test 4 simultaneously requires.
+
+**Ruling: interpretation (A) — tests 1 and 2 are defective and must be amended by
+`test-author`.** Interpretation (B) ("any run id should stream for an authenticated caller") is
+rejected: it makes test 6 impossible AND forces fabricated progress, so it is unimplementable
+without a prohibited pattern. The implementation is correct; the contract is wrong.
+
+Required amendments (test-author only — the fixer must not touch tests):
+1. Tests 1 and 2 must monkeypatch a real run, exactly as tests 3-5 already do.
+2. Test 2 must assert the ORDER of events that have REAL backing, not a fixed six-step script,
+   and must not use exact-list equality that excludes `kanban_updated`.
+
+**This does not weaken the contract — it corrects it.** The six-step sequence in §14.5.5
+describes an aspiration the underlying pipeline does not yet journal. Asserting it today would
+only be satisfiable by emitting events not grounded in observed state.
+
+**Consequent finding.** Giving `scanning_queue`, `submitting`, `computing_ats_deltas` and
+`awaiting_approval` real backing requires an ADDITIVE per-step journal written by the agent
+pipeline. Filed as `GMV4-sse-002`; G-SUB depends on it.
+
+---
+
 ## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
 
 **Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
