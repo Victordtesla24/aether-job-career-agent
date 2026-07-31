@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T12:30:00Z",
+  "updated_utc": "2026-07-31T13:05:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -498,7 +498,8 @@
     "STORY-REL-001 (one-line bug): app/services/story_relevance.py:41 _WORD_RE admits trailing ./-/ so \"services.\" and \"services\" are distinct tokens - 1800 of 27432 real weighted JD tokens (6.6%) are permanently unmatchable. Changes no calibration conclusion but is a genuine defect.",
     "STORY-REL-002: stopword list misses including/all/while/using/within - 56% of matched weight comes from 25 generic terms.",
     "STORY-REL-003: two different JD strings feed the same scorer (tailor_agent.run vs routers/stories.py:152).",
-    "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter."
+    "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter.",
+    "GAP-market-pulse-interview-count-divergence (MEDIUM, LIVE, pre-existing per git blame 2026-07-12/18): analytics.py:362-372 uses a raw COUNT(*) for Market Pulse interview figures instead of the canonical get_application_counts() - the SAME divergent-query class the docstring says caused MV-mobile-dashboard-005. apps/web/src/app/dashboard/analytics/page.tsx renders BOTH the canonical conversion rate AND <MarketPulse /> on the SAME page, so a user can see two different interview figures side by side. Fix: mirror what f_last_month already does at analytics.py:380. NOT introduced by this run."
   ],
   "orchestrator_corrections": [
     {
@@ -555,5 +556,16 @@
       "pre-existing tailoring regression suites (28)"
     ],
     "significance": "Every fix shipped this run coexists green. The email/agents wave modified FOUR routers, so isolated green was not sufficient evidence - this proves no cross-workstream regression."
-  }
+  },
+  "independently_reviewed": [
+    {
+      "commit": "eac7d4b",
+      "subject": "RT-004 canonical-counts assertion relaxed to key-level",
+      "reviewer_verdict": "PASS (independent reviewer, NOT the author - \u00a70.4 satisfied)",
+      "artifact": "uat/reports/evidence/gold-master-v2/waves/RT004-relaxation-review.md",
+      "independently_reproduced": "Reviewer re-performed the tamper itself (COUNT(DISTINCT jobId) -> COUNT(*)), reproduced the exact failure, and found the guard is caught by TWO tests not one (test_funnel_sankey_counts_distinct_jobs also fails) - protection is STRONGER than the implementer claimed. Reverted from a pre-tamper backup; git status --porcelain clean.",
+      "also_verified": "analytics.py untouched by the commit (git show --stat, 2 files); all FIVE call sites (applications.py:61, analytics.py:114/207/380/662) key-based not shape-based, repo-wide grep confirms no 6th; no scope creep; no prohibited patterns; RT-004 9/9 and combined 22/22 re-run and matched.",
+      "honest_loss_disclosed": "exact-dict-equality's incidental \"no unexpected extra key\" check is gone - narrow, not the protected contract, no consumer depends on it."
+    }
+  ]
 }
