@@ -107,7 +107,11 @@ def test_cover_letter_agent_grounds_on_user_resume_not_operator_pdf(test_user_id
 
     class _StubUsers:
         def get_by_id(self, user_id):  # noqa: ANN001
-            return {"id": user_id, "name": "MV Tester"}
+            # BLOCKER-002: an ordinary human name — "MV Tester" matches the
+            # placeholder-signer rule ("test"), so CoverLetterAgent.run() now
+            # refuses before reaching the résumé-grounding call this test
+            # asserts on.
+            return {"id": user_id, "name": "Morgan Ellis"}
 
         def get_target_role(self, user_id):  # noqa: ANN001
             return ""

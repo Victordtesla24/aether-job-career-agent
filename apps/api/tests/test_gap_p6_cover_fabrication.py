@@ -115,7 +115,11 @@ class _StubJobs:
 
 class _StubUsers:
     def get_by_id(self, user_id):  # noqa: ANN001
-        return {"name": "Test User"}
+        # BLOCKER-002: an ordinary human name — a "test"/"probe" placeholder
+        # identity is now refused up-front by CoverLetterAgent.run()
+        # (PlaceholderSignerError), which would short-circuit the claim-guard
+        # behaviour this module is exercising.
+        return {"name": "Jordan Rivera"}
 
     def get_target_role(self, user_id):  # noqa: ANN001
         return ""

@@ -677,6 +677,20 @@ def _refine_cover_letter_body(
         )
     guard = FabricationGuard()
     signer = str(current_user.get("name") or "")
+    # BLOCKER-002: refine is the SECOND path that stamps ``User.name`` onto a
+    # customer-facing letter — it re-composes the revision with
+    # ``compose_letter(..., signer)`` below and stores it as a brand-new
+    # ``CoverLetter`` row plus an approval. Generation
+    # (``CoverLetterAgent.run()``) and the PDF letterhead
+    # (``export_cover_letter_pdf``) already refuse a placeholder/test-probe
+    # identity; without the same refusal here, a profile that drifts to one
+    # AFTER a letter was drafted still mints a freshly stored letter signed
+    # with it. Same shared detection rule, same honest 422 shape, and raised
+    # inside ``_refine_cover_letter_body`` so ``_record_run``'s
+    # ``except HTTPException`` still finishes the run as failed and REFUNDS
+    # the reserved quota (no LLM call has happened yet).
+    if signer and _looks_like_placeholder_name(signer):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, PLACEHOLDER_SIGNER_DETAIL)
     # ``current_user`` comes from the default UserRepository projection, which
     # omits ``targetRole`` — resolve it with the repository's guarded read so
     # the hook reflects the user's real configured role (GAP-P4-049).

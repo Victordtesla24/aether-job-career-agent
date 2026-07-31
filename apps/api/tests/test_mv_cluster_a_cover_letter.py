@@ -371,7 +371,21 @@ class TestRefineFabricatedSignOffName:
     letter that names someone OTHER than the actual account holder --
     exactly the production observation: "one refined letter signed 'Vikram
     Deshpande'" while the account's own profile name was different
-    (TESTING-OUTCOME-REPORT.md cover-letter-studio §5)."""
+    (TESTING-OUTCOME-REPORT.md cover-letter-studio §5).
+
+    Fixture note (BLOCKER-002, GOLD-MASTER-V2): this test's signer name was
+    originally "Test Candidate". The BLOCKER-002 fix (commit 36d86c6) made
+    cover-letter generation REFUSE any profile name containing "test"/"probe",
+    a "GAP-" marker, or an 8+ digit run, so that fixture name started failing
+    ``_make_letter``'s ``POST /agents/cover-letter/run`` with 422 before this
+    test's own subject (the refine sign-off) was ever exercised. The signer is
+    therefore an ordinary human name here — the assertions below are unchanged
+    and unweakened; only the identity string the fixture chooses moved out of
+    the placeholder-name namespace."""
+
+    #: Ordinary human signer name — must NOT trip ``_looks_like_placeholder_name``
+    #: and must differ from the résumé-corpus name the model tries to lift.
+    SIGNER_NAME = "Priya Raghavan"
 
     def test_fabricated_signoff_name_must_not_survive_refine(
         self, client, auth_headers, monkeypatch
@@ -381,7 +395,7 @@ class TestRefineFabricatedSignOffName:
             "/workspaces/settings",
             json={
                 "profile": {
-                    "fullName": "Test Candidate",
+                    "fullName": self.SIGNER_NAME,
                     "email": me["email"],
                     "targetRole": "Support Delivery Lead",
                     "location": "Melbourne",
@@ -423,11 +437,11 @@ class TestRefineFabricatedSignOffName:
         assert "Vikram Deshpande" not in letter, (
             "a name lifted from the base résumé text ('Vikram Deshpande') "
             "appeared in the shipped letter even though the logged-in "
-            "user's own profile name is 'Test Candidate' -- the sign-off "
+            f"user's own profile name is {self.SIGNER_NAME!r} -- the sign-off "
             "must always reflect the account holder's own identity, never "
             f"an unrelated name found elsewhere in the evidence corpus: {letter!r}"
         )
-        assert "Test Candidate" in letter, (
+        assert self.SIGNER_NAME in letter, (
             f"the real signer's own name must appear in the letter: {letter!r}"
         )
 

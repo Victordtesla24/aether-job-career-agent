@@ -127,3 +127,56 @@ def test_cover_letter_accepts_normal_human_name(client, auth_headers):
     assert "Sincerely,\nJordan Rivera" in body["cover_letter"], (
         "a normal human name must render correctly in the sign-off"
     )
+
+
+# ===========================================================================
+# BLOCKER-002, second write path: POST /cover-letters/{id}/refine
+# ===========================================================================
+
+
+def test_refine_refuses_placeholder_signer_name(client, auth_headers):
+    """``POST /cover-letters/{letter_id}/refine`` is the SECOND path that
+    stamps ``User.name`` onto a customer-facing letter: it re-composes the
+    revision with ``compose_letter(..., signer=current_user['name'])``
+    (apps/api/app/routers/cover_letters.py ``_refine_cover_letter_body``),
+    producing a brand-new stored ``CoverLetter`` row plus an approval.
+
+    The BLOCKER-002 fix guarded generation (``CoverLetterAgent.run()``) and
+    the PDF export letterhead (``export_cover_letter_pdf``) but NOT this
+    path, so the exact profile-drift scenario the PDF guard's own comment
+    describes — a profile that drifts to a placeholder/test-probe identity
+    AFTER a letter was drafted — still mints a freshly stored letter signed
+    with the placeholder string. Refusing here matters doubly because
+    refine-based regeneration is the sanctioned remediation route for
+    already-contaminated stored letters: a remediation path that can itself
+    re-contaminate is not a remediation path."""
+    _set_profile_name(client, auth_headers, "Jordan Rivera")
+    job = _seed_job(client, auth_headers)
+    gen = client.post(
+        "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
+    )
+    assert gen.status_code == 200, gen.text
+    letter_id = gen.json()["cover_letter_id"]
+
+    placeholder_name = "GAP-P7-DEF-B Probe 1785452243543"
+    _set_profile_name(client, auth_headers, placeholder_name)
+
+    resp = client.post(
+        f"/cover-letters/{letter_id}/refine",
+        json={"instructions": "Sharpen the closing."},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422, (
+        "refine must FAIL HONESTLY (422) when the profile name looks like a "
+        f"placeholder/test artefact ({placeholder_name!r}) instead of storing "
+        "a new letter signed with it. Got "
+        f"{resp.status_code}: {resp.text[:2000]!r}"
+    )
+    detail = str(resp.json().get("detail", "")).lower()
+    assert "name" in detail, (
+        f"422 detail must actionably tell the user to set their real name, got: {detail!r}"
+    )
+    assert placeholder_name.lower() not in resp.text.lower(), (
+        "the raw placeholder string must never leak into the error response body"
+    )

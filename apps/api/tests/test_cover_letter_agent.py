@@ -117,7 +117,14 @@ class TestCoverLetterAgent:
             "/workspaces/settings",
             json={
                 "profile": {
-                    "fullName": "Test Candidate",
+                    # BLOCKER-002: the signer name must be an ordinary human
+                    # name — cover-letter generation now refuses placeholder /
+                    # test-probe identities ("test"/"probe"/"GAP-"/8+ digit
+                    # run, cover_letter_agent._looks_like_placeholder_name),
+                    # and the previous fixture value ("Test Candidate") tripped
+                    # that guard with a 422 before this test's own subject (the
+                    # targetRole hook) was ever reached.
+                    "fullName": "Jordan Rivera",
                     "email": me["email"],
                     "targetRole": role,
                     "location": "Melbourne",
@@ -297,7 +304,11 @@ class TestStructuralContract:
 
         class _UserRepo:
             def get_by_id(self, user_id):
-                return {"name": "Test User"}
+                # BLOCKER-002: an ordinary human name — a "test"/"probe"
+                # placeholder identity is now refused up-front by
+                # CoverLetterAgent.run(), which would short-circuit the
+                # structural retry loop this test is actually exercising.
+                return {"name": "Jordan Rivera"}
 
             def get_target_role(self, user_id):
                 return ""
