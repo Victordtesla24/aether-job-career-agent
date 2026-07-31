@@ -95,10 +95,12 @@ _WEAK_HASH_AUDIT_CACHE_MAX = 64
 #: never latch on stale state. It is read by:
 #:   * :func:`weak_operator_credential_refused` — fail-CLOSED at auth, and
 #:   * :func:`health_overview` — so an operator sees the condition in the UI.
-#: NOTE: this message names the matched denylist entry, which on a degraded
-#: deploy IS the live password. It is written to the process log ONLY (an
-#: operator-only channel) and must never be returned over HTTP — see
-#: ``_DEGRADED_ADMIN_REMEDIATION`` for the safe, value-free public string.
+#: NOTE (§0.5): this message is written to the process log on every boot
+#: while the credential stays unrotated, so it deliberately never names the
+#: matched denylist entry — on a degraded deploy that value IS the live
+#: password (see ``_audit_admin_credential``). It still must never be
+#: returned over HTTP regardless — see ``_DEGRADED_ADMIN_REMEDIATION`` for
+#: the safe, value-free public string.
 _ADMIN_CREDENTIAL_DEGRADED: Optional[str] = None
 
 #: Public, value-free remediation text for the ``/admin/health`` payload.
@@ -191,14 +193,34 @@ def _audit_admin_credential(email: str, pw_hash: str) -> Optional[str]:
     weak = _weak_password_matching(pw_hash)
     if weak is None:
         return None
+    # §0.5 VALUE DISCIPLINE: this string is written to the process log on
+    # EVERY boot while the credential stays unrotated (_record_admin_credential_state
+    # -> logger.critical + stderr -> journalctl / /var/log/aether/api.log).
+    # It must therefore never interpolate the matched denylist entry: today
+    # that value happens to already be public (the confirmed live production
+    # password), but the guard runs unconditionally, so the SAME code path
+    # would print a real operator's freshly-rotated strong password in
+    # plaintext, forever, on every restart, the moment they reused (or
+    # mistyped into) a value this denylist happens to also contain. Naming
+    # the failure mode and the variable to rotate is fully actionable without
+    # the value: the remediation ("pick a new strong, unique password") is
+    # identical no matter which denylist entry matched. See
+    # ``_KNOWN_WEAK_ADMIN_PASSWORDS`` in this module for the full list, which
+    # is safe to read in source (public by construction) but must never be
+    # echoed back with the LIVE match highlighted.
     return (
         "BLOCKER-001: refusing to grant admin privilege to "
-        f"{email!r} — its AETHER_ADMIN_PASSWORD_HASH verifies the known-weak "
-        f"password {weak!r}. An admin account can read every user's email "
+        f"{email!r} — its AETHER_ADMIN_PASSWORD_HASH hashes a well-known "
+        "default/weak password (it matches an entry on this deployment's "
+        "known-weak-password denylist; the matched value is deliberately not "
+        "printed here — see _KNOWN_WEAK_ADMIN_PASSWORDS in "
+        "app/repositories/admin.py for the list — because this diagnostic is "
+        "written to the log on every boot and must never echo a live "
+        "credential value). An admin account can read every user's email "
         "address, change spend caps and issue real refunds; a guessable "
         "password on it is a full compromise of the platform. Rotate "
         "AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong, unique "
-        "password and restart."
+        "password (not a common default) and restart."
     )
 
 
