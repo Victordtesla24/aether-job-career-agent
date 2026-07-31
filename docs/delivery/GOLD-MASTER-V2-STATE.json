@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:10:00Z",
+  "updated_utc": "2026-07-31T14:40:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -376,7 +376,9 @@
         "VERDICT: HONEST AND INTERNALLY CONSISTENT. Every widget matches its backing API call, and every API call matches independently-run live SQL using the predicate the code documents.",
         "Active Applications 47 / \"+45 this week\" = COUNT(DISTINCT jobId) status<>draft, and 45 of those within 7d - CONFIRMED CORRECT, not a defect (see ORCH-CORR-002)",
         "Interview Rate 0% (\"0 of 47 applied\") MATCHES funnel interviewed:0 and live SQL",
-        "Market Pulse still honest: \"External market benchmark unavailable - Provider: none configured\", no fabricated external numbers"
+        "Market Pulse still honest: \"External market benchmark unavailable - Provider: none configured\", no fabricated external numbers",
+        "ML-DASH-002 MINOR: the \"live\" label is unsubstantiated - core widgets (stats/funnel/feed/opportunities/stories/market-pulse) are LOAD-ONCE with no polling; only the sidebar agent-pulse (30s) and topbar approvals badge (60s) actually poll. Feeds W-I.",
+        "ML-DASH-003 INFO: a real emailAgent failure was surfaced HONESTLY to the user"
       ],
       "pricing": [
         "GET /billing/plans and the rendered DOM agree EXACTLY, both logged-out and as a Free-tier user",
@@ -400,6 +402,11 @@
         "POSITIVE: \u00a78.2 approvals VERIFIED live - per-card Remove + confirm UX works, bulk purge-expired honest ({\"purged\":0,\"ids\":[]} with no expired rows present), counters reconcile EXACTLY (3 pending + 107 approved + 0 rejected = 110, bell matches)",
         "POSITIVE: /terms and /privacy-policy render fully, ZERO placeholders, GST treatment explicitly stated, and the ABN 73 941 747 350 was EXTERNALLY VERIFIED against the Australian Business Register as active and registered to DESHPANDE, VIKRAM - genuinely real operator details",
         "POSITIVE: /dashboard/[...slug] honest \"Section not found\" for both identities and both 1- and 3-segment unknown paths; NUL-byte paths blocked at the Cloudflare edge (400, not 500) across every route"
+      ],
+      "login": [
+        "ML-LOGIN-001 HIGH NUL byte crashes POST /auth/login with a 500 (FIXED AT HEAD, deployment lag)",
+        "ML-LOGIN-002 LOW/INFO admin entry point not yet live on prod though implemented at HEAD (commit 2bdb060) - confirms deploy lag, not a code gap",
+        "POSITIVE: NO user enumeration, rate limiting WORKS, no XSS/SQLi, no mobile overflow"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
@@ -429,6 +436,15 @@
       ],
       "positive": "AETHER_REQUIRE_PAID_SUBSCRIPTION posture is CORRECT and fail-safe: read per-call, default true, disabled only by explicit false/0/no/off - no bypass-by-omission. The 402 is intended \"subscription-only limited beta\" policy, corroborated by pre-existing ADR-MV-02.",
       "adv_ent_001_status": "CLOSED IN CODE (commit b5900f6, not deployed). POST /cover-letters/{id}/refine now routes through app.routers.agents._record_run under the \"coverLetter\" backend identity - the SAME mechanism every /agents/*/run endpoint uses, IMPORTED not duplicated (\u00a713.1). Gate now runs BEFORE resource lookup, so unentitled + bogus id -> 402 not 404. Verified by 5 tests."
+    },
+    {
+      "id": "ML-PRICE-002",
+      "severity": "CANDIDATE-CRITICAL (money correctness)",
+      "status": "VERIFICATION IN FLIGHT",
+      "claim": "Stripe Checkout defaults to USD, not AUD, on a fixed-AUD product.",
+      "why_it_matters": "GET /billing/plans asserts {\"currency\":\"AUD\",\"gstIncluded\":true} (billing.py:102) and /pricing renders AUD with GST; the operator ABN 73 941 747 350 is a VERIFIED Australian entity. If checkout charges USD, customers are billed the wrong amount in the wrong currency - a real-money defect, not display.",
+      "structural_risk_regardless_of_outcome": "billing.py:102 hardcodes the currency STRING while checkout passes only Stripe PRICE IDs. Currency is a property of the Stripe Price object, so our advertised currency can silently diverge from the actual charge with no local code looking wrong. The API should DERIVE currency from the Price objects rather than assert it.",
+      "source": "uat/reports/evidence/gold-master-v2/screens/pricing-screen-test.md (ML-PRICE-002)"
     }
   ],
   "deploy_state": {
@@ -592,5 +608,6 @@
     "routes": 27,
     "reports": "uat/reports/evidence/gold-master-v2/screens/ (19 report files + ~350 screenshots)",
     "identities": "Every screen tested under BOTH the data-rich owner AND a genuine first-time non-admin, per \u00a73.2."
-  }
+  },
+  "concurrent_dispatch_collision": "A duplicate /signup dispatch occurred: two screen-testers tested it independently. The second discovered the collision, DECLINED to overwrite the first's completed report, and appended an independent-corroboration addendum (\u00a716) instead. It disclosed that its cp had overwritten 6 screenshots, renamed its own with a -2ndtester suffix, and noted the findings are independently backed by response bodies and DB queries rather than screenshots alone. Net effect: /signup has TWO independent passes that AGREE - stronger evidence, at the cost of 3 extra test accounts (all in the purge ledger)."
 }

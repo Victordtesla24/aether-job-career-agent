@@ -18,3 +18,66 @@ Traceback (most recent call last):
 2026-07-31T06:21:23Z INFO:     208.122.8.11:0 - "GET /admin/users?plan=free%00x HTTP/1.1" 500 Internal Server Error
 2026-07-31T06:21:23Z ERROR:    Exception in ASGI application
 Traceback (most recent call last):
+2026-07-31T07:49:26Z INFO:     208.122.8.11:0 - "POST /emails/draft HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:49:26Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:49:39Z INFO:     208.122.8.11:0 - "POST /emails/draft HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:49:39Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:54:08Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /interviews HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:54:08Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:54:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /interviews HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:54:10Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:57:23Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /interviews HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:57:23Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:57:25Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /interviews HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:57:25Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T07:58:19Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /interviews HTTP/1.1" 500 Internal Server Error
+2026-07-31T07:58:19Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:03:42Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /workspaces/offers HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:03:42Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:03:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /workspaces/offers HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:03:44Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:05:50Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /workspaces/offers HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:05:50Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:09:42Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /networking/contacts HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:09:42Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:09:44Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /networking/contacts HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:09:44Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:10:38Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /networking/contacts HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:10:38Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:39:10Z INFO:     2604:2dc0:208:2271:2dbe:7836:6624:8223:0 - "POST /auth/login HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:39:10Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:40:04Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:40:04Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:40:04Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:40:04Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:40:13Z INFO:     208.122.8.11:0 - "POST /auth/login HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:40:13Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:55:26Z INFO:     208.122.8.11:0 - "POST /auth/register HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:55:26Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T08:55:26Z INFO:     208.122.8.11:0 - "POST /auth/register HTTP/1.1" 500 Internal Server Error
+2026-07-31T08:55:26Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T09:06:46Z INFO:     208.122.8.11:0 - "POST /auth/register HTTP/1.1" 500 Internal Server Error
+2026-07-31T09:06:46Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T09:06:46Z INFO:     208.122.8.11:0 - "POST /auth/register HTTP/1.1" 500 Internal Server Error
+2026-07-31T09:06:46Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
