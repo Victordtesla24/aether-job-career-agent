@@ -2,26 +2,26 @@
   "run": "GOLD-MASTER-V4",
   "prompt_file": "/home/ubuntu/aether-gold-master-execution-v4.md",
   "started_utc": "2026-07-31T17:07:58Z",
-  "updated_utc": "2026-07-31T17:07:58Z",
+  "updated_utc": "2026-07-31T17:26:22Z",
   "orchestrator": "claude-opus-5 (xhigh) \u2014 brain only per \u00a70.1",
-  "phase_step": "PHASE-0-STEP-6",
+  "phase_step": "PHASE-0-COMPLETE / W-A + W-HF IN-PROGRESS",
   "phase_step_detail": {
     "step_0_resume_check": "DONE \u2014 no prior GOLD-MASTER-V3-STATE.json; fresh run",
     "step_1_roster": "DONE \u2014 17/17 agents written, zero `model: inherit`; manifest in GOLD-MASTER-V3-GOVERNANCE.md",
     "step_2_runbook_drift": "DONE \u2014 RUNBOOK-DRIFT-VERIFICATION.md; 55 MATCH / 1 DRIFT (README.md:151 route count 28 vs 29)",
-    "step_3_prod_baseline": "IN-PROGRESS \u2014 browser-monitor baseline sweep",
+    "step_3_prod_baseline": "DONE (2nd attempt) \u2014 BASELINE-SWEEP-AUTH.md; auth proven 3 ways; 27 routes; 0 console errors in sweep. 1st attempt VOIDED (VIOL-001, unauthenticated).",
     "step_4_monitors": "DONE \u2014 persistent journalctl monitor armed on aether-api/web/worker (\u00a723.1 patterns)",
-    "step_5_service_probe": "IN-PROGRESS \u2014 svc-integrator probing 9 services",
-    "step_6_matrices": "IN-PROGRESS \u2014 SCREEN MATRIX + ROUTER MATRIX",
-    "step_7_baseline_suites": "IN-PROGRESS",
-    "step_8_state_commit": "IN-PROGRESS"
+    "step_5_service_probe": "DONE \u2014 SERVICE-REGISTRY.md; 5 LIVE / 7 CONDITIONALLY-CLOSED",
+    "step_6_matrices": "DONE \u2014 SCREEN-MATRIX, ROUTER-MATRIX, FILE-CENSUS, REFERENCE-GRAPH, INCOMPLETE-FEATURE-INVENTORY, WIREFRAME-PROMISES, FEATURE-COMPLETENESS-MATRIX, GMV2-CLAIM-LEDGER (39 claims UNVERIFIED-THIS-RUN)",
+    "step_7_baseline_suites": "IN-PROGRESS (long-running)",
+    "step_8_state_commit": "DONE \u2014 committed 0454ff1, fb7bae6"
   },
   "workstream_status": {
-    "W-A": "NOT-STARTED",
+    "W-A": "IN-PROGRESS (docs done; screen batch 1 running)",
     "W-B": "NOT-STARTED",
-    "W-HF": "NOT-STARTED",
+    "W-HF": "IN-PROGRESS (\u00a722 step 2 tests-first; fail-before proof pending)",
     "W-C": "NOT-STARTED",
-    "W-D": "NOT-STARTED",
+    "W-D": "BLOCKED-PENDING-RISK-OFFICER (\u00a77.2 adjudication in flight)",
     "W-E": "NOT-STARTED",
     "W-F": "NOT-STARTED",
     "W-CAL": "NOT-STARTED",
@@ -39,9 +39,15 @@
   },
   "waves": [],
   "findings_delta": {
-    "open": 0,
+    "open": 15,
     "closed": 0,
-    "conditionally_closed": 0
+    "conditionally_closed": 1,
+    "by_severity": {
+      "BLOCKER": 3,
+      "HIGH": 6,
+      "MEDIUM": 4,
+      "LOW": 2
+    }
   },
   "gates": {
     "G-A": {
@@ -144,7 +150,20 @@
   "last_commit": "6440325b363e2b9a684f54742ad02781babefe47",
   "last_deploy_sha": null,
   "next_actions": [
-    "Complete Phase 0 Steps 3/5/6/7",
-    "Then W-A adversarial per-screen review (\u00a73)"
+    "Finish Step 7 baseline suites",
+    "W-HF: obtain fail-before proof, then implement local model + HF API path",
+    "W-A: screen batches 2-4 (remaining ~17 dashboard routes)",
+    "W-D: act on risk-officer ruling",
+    "Build SSE layer (GMV4-sse-001) as prerequisite for G-I and G-SUB"
+  ],
+  "key_corrections_to_prompt_premises": [
+    "\u00a71.1 test login admin/admin123 returns 401 on prod; only AETHER_CRON_* authenticates (GMV4-cred-001)",
+    "\u00a79.1/\u00a79.2 stage-move + approvals purge ALREADY EXIST (applications.py:255, approvals.py:152/179) -> re-verify not implement",
+    "\u00a76 tailor endpoint is POST /agents/tailor/run (agents.py:2292), not POST /jobs/{id}/tailor",
+    "\u00a714.1/\u00a714.3 premise that submission has approvalRequired:true is FALSE (agents.py:95-98) -> gate must be ADDED",
+    "\u00a712 admin UI routes already exist; blocked from live verification by BLOCKER-001 admin credential revocation",
+    "\u00a716 interview_conversion_rate is already a real DB query (analytics.py:220), not a placeholder",
+    "\u00a715/\u00a714.5 SSE layer does not exist at all -> G-I and G-SUB both depend on building it",
+    "\u00a77.1 premise that Firecrawl/WebScraping.AI are licensed intermediaries conflicts with adopted ADR D-0034 (DECISIONS.md:1020) -> risk-officer adjudicating"
   ]
 }

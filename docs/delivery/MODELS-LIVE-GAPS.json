@@ -2209,6 +2209,134 @@
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:14:05Z",
       "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-analytics-001",
+      "screen": "Analytics",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "apps/web/src/app/dashboard/analytics/page.tsx:61 carries '// Dashboard endpoint not yet deployed - degrade gracefully.' A user-reachable graceful-degradation path implies the /analytics/dashboard endpoint may not exist in prod, so the Analytics screen may render partial data without telling the user.",
+      "reproduction": [
+        "Read apps/web/src/app/dashboard/analytics/page.tsx:61",
+        "Probe the analytics dashboard endpoint on prod with an authenticated token"
+      ],
+      "expected": "Analytics renders live data from a deployed endpoint, or surfaces an honest error",
+      "observed": "Silent graceful degradation branch present in shipped code",
+      "evidence": [
+        "docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:16:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-seek-fe-001",
+      "screen": "Jobs",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "apps/web/src/app/dashboard/jobs/page.tsx:894 renders a hardcoded ' (unavailable)' suffix via isSourceUnavailable(s). \u00a77.4 requires this be replaced with env-driven availability sourced from the backend sources endpoint (GET /agents/scout/sources, agents.py:2206) plus a working Seek source chip.",
+      "reproduction": [
+        "Read apps/web/src/app/dashboard/jobs/page.tsx:894",
+        "GET /agents/scout/sources on prod"
+      ],
+      "expected": "Source availability is backend-driven and accurate; Seek chip visible and functional",
+      "observed": "Frontend label driven by a local predicate; Seek shows '(unavailable)'",
+      "evidence": [
+        "docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-D fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:16:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-deadcode-001",
+      "screen": "n/a (cleanup)",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "Zero-reference modules identified for \u00a720 review: services/anthropic_oauth.py (superseded by the Phase-5 GT-3 subscription-OAuth reversal), services/env_file_writer.py (deprecated), agents/outreach_support.py (never registered in the agents.py run_agent dispatcher). NOT approved for deletion - requires refs-proof + reviewer/risk-officer approval per \u00a720.2.",
+      "reproduction": [
+        "uat/reports/evidence/gold-master-v3/REFERENCE-GRAPH.md"
+      ],
+      "expected": "Zero dead code with no live references",
+      "observed": "3 zero-reference modules present",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/REFERENCE-GRAPH.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-K scout->reviewer->janitor",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:16:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-inventory-001",
+      "screen": "n/a (process)",
+      "severity": "MEDIUM",
+      "category": "governance",
+      "summary": "The \u00a74.1 incomplete-feature sweep returned only 6 markers across 296 .py and the whole apps/web/src tree. That is implausibly low for a codebase of this size and may indicate an under-broad grep. G-K must NOT close on this sweep alone; an independent re-sweep by a different agent with an explicitly widened pattern set is required before the gate is adjudicated.",
+      "reproduction": [
+        "Re-run the \u00a720.1 marker grep independently with a different agent and compare counts"
+      ],
+      "expected": "Marker inventory is provably exhaustive",
+      "observed": "6 markers reported; completeness unproven",
+      "evidence": [
+        "docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md"
+      ],
+      "status": "OPEN",
+      "owner": "qa-adversary (G-K)",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:16:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-cred-001",
+      "screen": "Login",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "The execution prompt \u00a71.1 documents the production test login as admin/admin123. That credential returns 401 Invalid email or password on prod. LOGIN_EMAIL/LOGIN_PASSWORD from .env ALSO returns 401. Only AETHER_CRON_EMAIL/AETHER_CRON_PASSWORD authenticates. Either the documented test accounts were removed from the prod DB or .env has stale values; both are a real onboarding hazard the day before paying users arrive.",
+      "reproduction": [
+        "POST the auth endpoint on prod with each credential pair and record the status"
+      ],
+      "expected": "A documented, working non-admin test credential exists and matches the runbook",
+      "observed": "2 of 3 documented credential pairs return 401; only the cron account works",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/browser/BASELINE-SWEEP-AUTH.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-medium + doc-updater",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:20:05Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-admin-002",
+      "screen": "Admin suite (6 routes)",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "All /admin/* routes are unverifiable this run: the only working account is non-admin, so AdminGuard redirects every admin route to /dashboard (5 byte-identical screenshots). This is the documented \u00a712.3 behaviour and NOT a defect, but it means G-G cannot be closed on live evidence. Pre-existing BLOCKER-001 deliberately revoked admin privilege until AETHER_ADMIN_PASSWORD_HASH is rotated off a weak password.",
+      "reproduction": [
+        "Log in with the working account and navigate to /admin \u2014 observe redirect to /dashboard"
+      ],
+      "expected": "Admin portal content verified live on prod",
+      "observed": "Admin routes redirect to /dashboard for the only usable account",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/browser/BASELINE-SWEEP-AUTH.md"
+      ],
+      "status": "CONDITIONALLY-CLOSED-PENDING-OPERATOR",
+      "owner": "W-G qa-adversary",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:20:05Z",
+      "run": "GOLD-MASTER-V4"
     }
   ],
   "gmv4": {
