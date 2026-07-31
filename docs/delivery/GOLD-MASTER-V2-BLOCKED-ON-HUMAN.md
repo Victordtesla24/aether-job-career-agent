@@ -195,3 +195,74 @@ per-variable disposition in the evidence log.
 
 Evidence: `uat/reports/evidence/gold-master-v2/phase0/human-gated-verification.md`
 (repo HEAD `297946d7dea3d01207586a4c9ef4a8e8bb91f6ef`, probes run 2026-07-30 23:18–23:24 UTC).
+
+---
+
+## ESCALATION — BLOCKER-001 is a **DISCLOSED** credential, not merely a weak one
+
+**Added 2026-07-31T00:2xZ by the orchestrator. Supersedes the "URGENT" note above in severity.**
+Binding ruling: `docs/delivery/ADR-BLOCKER-001-ADMIN-CREDENTIAL.md`.
+
+### What was verified first-hand this run `[VERIFIED]`
+
+| # | Fact | How verified |
+|---|---|---|
+| 1 | `POST /api/auth/login` with identifier `admin` and the documented demo password returns **200** on live production, and `GET /api/auth/me` returns **`isAdmin: true` on the real owner account** | orchestrator live probe, 2026-07-31T00:05Z |
+| 2 | `GET /api/admin/users` returns **200 with 7 user rows** — other users' email, plan, subscription status, signup/last-login timestamps and spend | same probe |
+| 3 | The configured `AETHER_ADMIN_PASSWORD_HASH` **bcrypt-verifies the documented demo password** | local bcrypt verify against the env var; no secret printed |
+| 4 | `AETHER_ENV=production` | `.env` read |
+| 5 | **The GitHub repository is PUBLIC** (`visibility: PUBLIC`) | `gh repo view` |
+| 6 | The **tracked** file `scripts/discovery_cron.sh:30` hardcodes the owner's admin email as a shell default | `git ls-files` + source read |
+
+### Why this is worse than "weak password"
+
+Facts 5 + 6 mean the **identifier** is published in a public repository, and the **password** is published as
+the demo credential throughout the project's own documentation. Both halves of a production admin credential
+for an internet-facing host serving **7 real user accounts** are therefore publicly derivable by anyone.
+
+Treat this as a **disclosed credential requiring rotation and an exposure assessment**, not as a hardening
+backlog item. Rotation is not optional and not deferrable.
+
+### Operator actions — required, in this order
+
+| id | Action | Why it matters |
+|---|---|---|
+| **O1** | Rotate `AETHER_ADMIN_PASSWORD_HASH` to a bcrypt hash of a strong, unique, unpublished password | The actual fix. No agent may choose this secret (§18). |
+| **O2** | **Rotate `AETHER_CRON_PASSWORD` in lockstep** | ⚠️ **THE STEP THAT GETS FORGOTTEN.** `AETHER_CRON_EMAIL == AETHER_ADMIN_EMAIL` and cron shares the credential. Rotating only the admin hash makes scheduled discovery start returning 401 and **die silently** — this codebase has already suffered a 48-hour outage of exactly this shape. |
+| **O3** | Resolve the stale `LOGIN_PASSWORD` | It no longer matches the account, and `scripts/discovery_cron.sh:49` falls back to it. |
+| **O4** | Exposure assessment | Public repo + internet-facing host + 7 real users. Consider user notification. Consider removing the hardcoded owner email at `scripts/discovery_cron.sh:30` from the public repository. |
+| **O5** | Verify after rotating | Restart `aether-api` per the runbook, confirm health, confirm the admin grant **self-restores** automatically. If `/admin` still returns 403, the new hash is failing the guard — the usual cause is pasting the plaintext password into the hash variable instead of its bcrypt hash. |
+
+### What this run ships without you (defence-in-depth, zero downtime)
+
+Approved by the risk-officer and implemented under the §15 pipeline. These **reduce** the blast radius; they do
+**not** close it:
+
+- **R1 — de-privilege on a weak/disclosed credential.** Rotation refuses **the grant, not the boot**: it
+  explicitly sets `isAdmin=false` and logs CRITICAL, instead of aborting startup. Because `isAdmin` is read live
+  from the database on every request, this **immediately strips admin power from already-issued tokens**, including
+  any an attacker already holds. Production stays up. `passwordHash` is untouched, so the owner keeps ordinary
+  product access; only `/admin` is withheld until O1 is done, after which the grant self-restores.
+- **R2** — a malformed / non-bcrypt hash gets the same de-privilege treatment (this is the exact mistake an
+  operator makes *during* O1, so it must not crash production either).
+- **R4** — reclaim the `admin` username alias from the owner row. **Defence-in-depth only**, explicitly *not* a
+  closure of BLOCKER-001: the owner's email is published in the public repo, so this closes only one of two
+  equally-public identifiers.
+
+### Explicitly NOT claimed as mitigation
+
+- Login throttling (5 failures / 15 min) **already existed** and is irrelevant here: the attacker *knows* the
+  credential and does not need to guess it. Citing it as mitigation would be a dishonest closure.
+- Tightening `GET /admin/users` disclosure is security theatre while the privilege itself is intact — an
+  `isAdmin` holder reaches every other `/admin` route regardless.
+
+### Effect on the run's exit verdict
+
+**G-P ("ready for real paid user onboarding") is REFUSED, and stays refused even after the full approved fix set
+is deployed and verified.** R1 genuinely downgrades the blocker — no account holds `isAdmin`, every `/admin`
+route returns 403, existing tokens lose admin power immediately, and other users' PII is no longer reachable.
+But the owner's ordinary account still carries a publicly-derivable credential on an internet-facing host, and
+that account is also the cron identity and the platform recovery path. Declaring other people's money and data
+safe under a named accountable owner is not supported by that state.
+
+**G-P unblocks when O1 + O2 are confirmed complete and verified per O5. No agent can close it.**
