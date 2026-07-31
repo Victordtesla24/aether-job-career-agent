@@ -901,11 +901,35 @@ def _validate_settings_email(value: str) -> str:
 SettingsEmail = Annotated[str, AfterValidator(_validate_settings_email)]
 
 
+def _reject_nul_byte(value: str) -> str:
+    """ML-settings-006: reject a NUL byte (0x00) in a profile string field
+    with an honest, specific 422 instead of letting it reach the DB layer.
+
+    ``update_settings`` (below, ~line 1092) writes ``fullName`` /
+    ``targetRole`` / ``location`` straight into a parameterized
+    ``cur.execute(...)``. psycopg2 refuses to encode a Python string
+    containing a NUL byte as a Postgres string literal and raises a bare
+    ``ValueError`` *before* the SQL ever reaches Postgres; nothing in
+    ``app.main`` handles a bare ``ValueError``, so it was propagating out of
+    the route as an unhandled 500. Catching it here, at the pydantic layer,
+    keeps the guard in one shared place instead of duplicating a NUL check
+    per field (§13.1). ``email`` does not need this validator: it already
+    goes through ``_validate_settings_email`` -> ``email_validator``, which
+    rejects a NUL byte in the local-part on its own.
+    """
+    if "\x00" in value:
+        raise ValueError("must not contain a NUL (0x00) character")
+    return value
+
+
+SettingsText = Annotated[str, AfterValidator(_reject_nul_byte)]
+
+
 class SettingsProfile(BaseModel):
-    fullName: str = Field(min_length=1, max_length=120)
+    fullName: SettingsText = Field(min_length=1, max_length=120)
     email: SettingsEmail
-    targetRole: str = Field(min_length=1, max_length=120)
-    location: str = Field(min_length=1, max_length=120)
+    targetRole: SettingsText = Field(min_length=1, max_length=120)
+    location: SettingsText = Field(min_length=1, max_length=120)
 
 
 class AgentConfig(BaseModel):
