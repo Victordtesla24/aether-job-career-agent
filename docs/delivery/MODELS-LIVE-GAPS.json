@@ -2051,11 +2051,11 @@
         "grep for EventSource across apps/web/src \u2014 zero hits"
       ],
       "expected": "SSE endpoint streaming agent run progress; kanban_updated events on jobs:{workspace_id}",
-      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s",
+      "observed": "No SSE endpoint; clients poll GET /agents/runs/{run_id} (agents.py:2150) every 2-3s | 6 contract tests written and RED for the right reason (404 route-unregistered); the not-found test asserts a specific 'Agent run not found' body so it cannot pass merely because unmatched routes 404.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "OPEN",
+      "status": "TESTS-RED-READY-FOR-FIX",
       "owner": "W-I/W-SUB fixer-hard",
       "fixCommits": [],
       "verifiedBy": null,
@@ -2109,16 +2109,16 @@
       "screen": "Resume Studio / Jobs",
       "severity": "HIGH",
       "category": "gap",
-      "summary": "The tailoring endpoint POST /agents/tailor/run (agents.py:2292) calls TailoringLoop (tailor_agent.py:32) but its response does NOT include iteration-level progress data. \u00a76.1(b) requires iterations, ats_score and gap_keywords in the API response; G-C requires a before/after banner and a missing-keywords chip list driven by that data.",
+      "summary": "NARROWED + PARTLY CORRECTED by first-hand test-author probe. The defect is PLUMBING, NOT COMPUTATION: TailoringLoop.run() (tailoring_loop.py:152-222) ALREADY computes per-attempt `iterations` (index, score, gapKeywords, rejected) and an honest never-clamped warning, and TailoringAgent.run() ALREADY persists them to the DB (sections['tailoringIterations'], tailor_agent.py:463) \u2014 but never copies them onto the returned TailorRunResult dataclass (fields at 281-295 have neither `iterations` nor `gapKeywords`), so the client never sees them. TWO OF MY EARLIER CLAIMS DO NOT HOLD and are withdrawn: (1) conversionMetrics.baselineATSScore/tailoredATSScore DO already exist and ARE already read by resume/page.tsx \u2014 the real gap is that jobs/page.tsx never reads conversionMetrics; (2) the sub-target honesty warning text is already correct. Actual response keys confirmed: approval_id, approval_status, changes, conversionMetrics, rejected, resume_id, warning.",
       "reproduction": [
         "Read the response model of POST /agents/tailor/run at apps/api/app/routers/agents.py:2292"
       ],
       "expected": "Response contains iterations, ats_score, gap_keywords",
-      "observed": "Response contains resume_id, changes, rejected, conversionMetrics, approvalRequired, noChangesApplied",
+      "observed": "iterations/gapKeywords computed and persisted but absent from the API response dataclass",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "OPEN",
+      "status": "TESTS-RED-READY-FOR-FIX",
       "owner": "W-C ai-loop-engineer",
       "fixCommits": [],
       "verifiedBy": null,
@@ -3013,6 +3013,27 @@
       "openedUtc": "2026-07-31T18:07:37Z",
       "run": "GOLD-MASTER-V4",
       "operatorStep": "Rotate the password for DB role role_fdc4e11da on db-fdc4e11da.db005.hosteddb.reai.io (Abacus Database tile), then update DATABASE_URL and DATABASE_URL_TEST in .env and restart aether-api, aether-worker, aether-discovery."
+    },
+    {
+      "id": "GMV4-tailor-002",
+      "screen": "Jobs",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "jobs/page.tsx never reads conversionMetrics, so the before/after ATS values that the backend already returns (and that resume/page.tsx already renders) are absent from job cards. This is the precise, narrowed remainder of the earlier over-broad 'no delta anywhere' claim.",
+      "reproduction": [
+        "grep conversionMetrics in apps/web/src/app/dashboard/jobs/page.tsx"
+      ],
+      "expected": "Job cards show the before->after ATS delta already available in the response",
+      "observed": "jobs/page.tsx does not read conversionMetrics",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-jobs/"
+      ],
+      "status": "OPEN",
+      "owner": "W-J fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "test-author 2026-07-31",
+      "openedUtc": "2026-07-31T18:09:41Z",
+      "run": "GOLD-MASTER-V4"
     }
   ],
   "gmv4": {
