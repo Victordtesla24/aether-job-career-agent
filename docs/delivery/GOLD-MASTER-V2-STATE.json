@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T13:35:00Z",
+  "updated_utc": "2026-07-31T14:10:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -79,8 +79,8 @@
       "status": "OPEN"
     },
     "G-F": {
-      "status": "PARTIAL",
-      "note": "Keyboard-operable Move-to menu VERIFIED + server-side 422 on illegal transitions VERIFIED. OUTSTANDING: stage counts do NOT reconcile with the funnel (ML-APP-003); no one-click \"Mark as In Review\" quick action (\u00a78.1.2); approvals purge FE affordances unverified."
+      "status": "APPROVALS-HALF-VERIFIED",
+      "note": "\u00a78.2 approvals contract VERIFIED live (Remove, bulk purge honest, counters reconcile) AND 5/5 green in tests. Stage-move half: keyboard-operable Move-to menu + server-side 422 already verified; canonical PATCH endpoint + ML-APP-003 reconciliation in flight."
     },
     "G-G": {
       "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
@@ -197,7 +197,9 @@
       "scope_expanded": "ML-CL-002: the PDF EXPORT LETTERHEAD renders current_user.name LIVE at render time, regardless of the letter body's own sign-off. Letters with a clean sign-off (\"Vikram Deshpande\") still export with the fixture string in the letterhead - internally contradictory documents. So the defect is injected at RENDER, not merely stored in content. ML-CL-003: fresh generation still contaminated across 3 independent code paths with real LLM calls, because the placeholder guard exists ONLY in the local working tree and is NOT DEPLOYED.",
       "blast_radius": "8 contaminated cover letters; 3 attached to pending approvals",
       "real_name_evidence": "The owner's real name appears as \"Vikram Deshpande\" in clean sign-offs within their own existing letters - so the data correction is knowable from the account's own content.",
-      "data_half_status": "CLOSED ON PRODUCTION 2026-07-31T01:1xZ \u2014 VERIFIED independently: GET /api/auth/me now returns name=\"Vikram Deshpande\" (was \"GAP-P7-DEF-B Probe 1785452243543\"). Because the PDF letterhead renders current_user.name at EXPORT time, all FUTURE exports and all NEW generation are now correctly signed. REMAINING: 8 stored letters whose BODY sign-off still carries the old string (3 attached to pending approvals) need regeneration or purge; and the code-level placeholder guard (commit 36d86c6) is still UNDEPLOYED."
+      "data_half_status": "CLOSED ON PRODUCTION 2026-07-31T01:1xZ \u2014 VERIFIED independently: GET /api/auth/me now returns name=\"Vikram Deshpande\" (was \"GAP-P7-DEF-B Probe 1785452243543\"). Because the PDF letterhead renders current_user.name at EXPORT time, all FUTURE exports and all NEW generation are now correctly signed. REMAINING: 8 stored letters whose BODY sign-off still carries the old string (3 attached to pending approvals) need regeneration or purge; and the code-level placeholder guard (commit 36d86c6) is still UNDEPLOYED.",
+      "forward_path_VERIFIED_FIXED": "Fresh live generation on production (real model deepseek/deepseek-v4-pro, real cost, flagged:[]) is CORRECTLY SIGNED and its PDF letterhead is CLEAN. Name correction holds (Vikram Deshpande, verified twice). So NO NEW contaminated content is being produced.",
+      "remaining": "ML-COVER-100 (BLOCKER): all 8 previously-contaminated stored letters STILL carry the GAP-P7-DEF-B Probe fixture string in stored BODY text (0/8 remediated). Needs regeneration or purge under risk-officer approval; no cover-letter DELETE endpoint exists."
     }
   ],
   "human_gated": {
@@ -389,6 +391,15 @@
         "ML-SIGNUP-004 INFO 3 unintended accounts created during adversarial registration testing (on a REGISTER endpoint, \"success\" IS account creation) - disclosed with reasoning, logged to the purge ledger",
         "POSITIVE: password policy genuinely enforced client AND server (8+ chars, 1 digit; 1-char rejected)",
         "POSITIVE: honest first-run UX, zero console errors, no 390px overflow, no fixture strings, no XSS/SQLi"
+      ],
+      "remaining-routes": [
+        "ML-COVER-100 BLOCKER 8 stored letters still contain the fixture string in body text (0/8 remediated)",
+        "ML-COVER-101 MODERATE the LLM wrote a WRONG contact email (sarkar.I@gmail.com) inside the letter body while the letterhead is correct - a content-fidelity defect distinct from the fixture-name one",
+        "ML-APPROVALS-100 LOW/process the earlier approvals-screen-test.md was an incomplete 18-line STUB; caught and re-tested properly by a different agent (\u00a70.5 fake-green class caught in our own evidence)",
+        "ML-FORGOT-100 INFO /forgot-password has NO submittable reset form on production - fully static page. No user enumeration possible by construction.",
+        "POSITIVE: \u00a78.2 approvals VERIFIED live - per-card Remove + confirm UX works, bulk purge-expired honest ({\"purged\":0,\"ids\":[]} with no expired rows present), counters reconcile EXACTLY (3 pending + 107 approved + 0 rejected = 110, bell matches)",
+        "POSITIVE: /terms and /privacy-policy render fully, ZERO placeholders, GST treatment explicitly stated, and the ABN 73 941 747 350 was EXTERNALLY VERIFIED against the Australian Business Register as active and registered to DESHPANDE, VIKRAM - genuinely real operator details",
+        "POSITIVE: /dashboard/[...slug] honest \"Section not found\" for both identities and both 1- and 3-segment unknown paths; NUL-byte paths blocked at the Cloudflare edge (400, not 500) across every route"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
