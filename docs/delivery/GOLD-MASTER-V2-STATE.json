@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T11:45:00Z",
+  "updated_utc": "2026-07-31T12:10:00Z",
   "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -189,7 +189,7 @@
       "id": "BLOCKER-002",
       "severity": "CRITICAL - ESCALATED (live contaminated content already queued)",
       "title": "Cover letter PDF letterhead and sign-off print a leftover test-probe string as the candidate name",
-      "status": "d1+d2 CODE FIX IN FLIGHT; d3 data half remains risk-officer gated",
+      "status": "CODE HALF CLOSED (commit d0c75a5, 105 tests green): PDF export, refine, and the apply-copy/promote path now all inspect the STORED SIGN-OFF LINE, not just the live profile name. Every captured HTTP 200 leak should flip back to 422. DATA HALF (8 rows) remains risk-officer gated.",
       "detail": "Cover-letter output renders sender name as \"GAP-P7-DEF-B Probe 1785452243543\". Confirmed via GET /api/auth/me: that string IS the owner account User.name in production. Every real cover letter generated today would be signed with it.",
       "root_cause": "PRODUCTION DATA (stale test-probe value in User.name), not a rendering bug.",
       "fix_split": {
@@ -213,7 +213,14 @@
         "Regeneration DISQUALIFIED on a code fact: CoverLetterRepository.create is an INSERT and cannot overwrite the 8; it would add 8 more, cost real LLM spend, and rewrite reviewed prose on 6 submitted applications.",
         "Only 3 of 8 have approval rows; executedAt still NULL across all 110 - nothing ever transmitted."
       ],
-      "plan": "d_guard_then_update: (d1) extend the PDF-export and refine guards to inspect the STORED SIGN-OFF LINE, not just the live profile name - pure code, no DB write, no approval needed, and it alone turns every captured 200 back into a 422. (d2) guard the jobs.py apply-copy path. (d3) ONLY THEN the single-line regexp UPDATE on 8 rows, snapshot first - risk-officer gated. Deliberately does NOT touch ApprovalRequest.payload x3 / AgentRun x2 / BackgroundJob x2 - those are audit snapshots and rewriting them would falsify the trail."
+      "plan": "d_guard_then_update: (d1) extend the PDF-export and refine guards to inspect the STORED SIGN-OFF LINE, not just the live profile name - pure code, no DB write, no approval needed, and it alone turns every captured 200 back into a 422. (d2) guard the jobs.py apply-copy path. (d3) ONLY THEN the single-line regexp UPDATE on 8 rows, snapshot first - risk-officer gated. Deliberately does NOT touch ApprovalRequest.payload x3 / AgentRun x2 / BackgroundJob x2 - those are audit snapshots and rewriting them would falsify the trail.",
+      "agent_corrections_to_my_plan": [
+        "The INSERT..SELECT at jobs.py:487-500 is effectively UNREACHABLE for a draft copy (needs existing_application is None, but the gate requires a draft to exist). The LIVE vector is the in-place promote UPDATE at :504-523. Both candidate bodies are now guarded so the fix holds either way.",
+        "Refused to substitute an older clean draft: the Studio shows the NEWEST draft, so silently copying an older one would submit a body the user never saw. Refuses with 422 instead.",
+        "Rejected the cheaper WHERE-predicate form: zero matched rows would still return an applicationId for an Application never inserted, with the job marked applied."
+      ],
+      "orchestrator_ruling_on_deviation": "ACCEPTED. The agent used a NEW constant STORED_PLACEHOLDER_SIGNER_DETAIL instead of the PLACEHOLDER_SIGNER_DETAIL I named, because the existing text says \"Your profile name ... set your real name in Settings\" - FALSE here (the profile is clean) and a dead end the user cannot act on. Honest, actionable messaging outranks literal compliance with my brief; the QA-greppable phrase \"placeholder or test value\" was kept identical.",
+      "remaining_user_visible_surface": "GET /api/cover-letters still RETURNS the contaminated bodies, so the Studio still DISPLAYS the bad sign-off on screen even though export/refine/apply are now blocked. Closing that needs the d3 data fix (risk-officer gated) or an apps/web change."
     }
   ],
   "human_gated": {
@@ -550,7 +557,8 @@
     "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter.",
     "GAP-market-pulse-interview-count-divergence (MEDIUM, LIVE, pre-existing per git blame 2026-07-12/18): analytics.py:362-372 uses a raw COUNT(*) for Market Pulse interview figures instead of the canonical get_application_counts() - the SAME divergent-query class the docstring says caused MV-mobile-dashboard-005. apps/web/src/app/dashboard/analytics/page.tsx renders BOTH the canonical conversion rate AND <MarketPulse /> on the SAME page, so a user can see two different interview figures side by side. Fix: mirror what f_last_month already does at analytics.py:380. NOT introduced by this run.",
     "W-F residual (UI decision for the apps/web owner): the Applied tab (include_applied=true) is now a SUBSET of the board rather than disjoint - an honest overlap, but may want de-duplication. Also: from_stage mismatch -> 409 is an unpinned contract decision; one line to make advisory if preferred.",
-    "Adjacent finding: 7 letters signed \"Administrator\" for a user whose real name is Vikram Deshpande. No placeholder rule catches it. Separate decision - assess whether it is in the signer guard scope."
+    "Adjacent finding: 7 letters signed \"Administrator\" for a user whose real name is Vikram Deshpande. No placeholder rule catches it. Separate decision - assess whether it is in the signer guard scope.",
+    "Administrator sign-off (7 letters): SEPARATE FINDING, deliberately out of the signer guard scope. \"Administrator\" is a real generic display name the product already treats as legitimate (cover_letter_agent.py:889-892 has common-noun logic; test_mv_cluster_a_cover_letter.py pins it). Catching it would require a \"stored sign-off must equal current User.name\" rule whose false-positive population is large and legitimate (legal name changes, preferred forms like Vik vs Vikram, middle names) - it would block EVERY historical letter of anyone whose name drifted. Recommend a stale-display-name DATA finding plus at most a NON-BLOCKING display advisory, never a hard 422; the real forward fix is at onboarding."
   ],
   "orchestrator_corrections": [
     {
