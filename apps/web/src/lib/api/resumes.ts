@@ -53,6 +53,12 @@ export interface ConversionMetrics {
   estimatedConversionLift: string;
   methodology: string;
   confidence: string;
+  /**
+   * True exactly when the score-aware TailoringLoop stopped at its iteration
+   * cap without reaching the 85 ATS target (tailor_agent.py). Wired
+   * alongside the top-level `warning` string below (§5.3.1 pt 5).
+   */
+  requires_review?: boolean;
 }
 
 export interface TailorRunResult {
@@ -69,6 +75,14 @@ export interface TailorRunResult {
   /** Honest no-op: the guards rejected every edit, nothing billed or created. */
   noChangesApplied?: boolean;
   message?: string;
+  /**
+   * Honest sub-85 warning from the score-aware TailoringLoop (§5.3.1 pt 5),
+   * sourced verbatim from `TailoringLoopResult.warning`
+   * (apps/api/app/services/tailoring_loop.py) via
+   * `apps/api/app/routers/agents.py:2309`. Null when the loop reached the
+   * 85 ATS target — never rendered as an error, never as success.
+   */
+  warning?: string | null;
 }
 
 /**

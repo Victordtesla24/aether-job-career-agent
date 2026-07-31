@@ -85,6 +85,9 @@ export default function ResumePage() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Honest sub-85 warning from the score-aware TailoringLoop (§5.3.1 pt 5) —
+   *  null whenever the run reached the 85 ATS target. */
+  const [tailorWarning, setTailorWarning] = useState<string | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(VERSIONS_PAGE_SIZE);
 
@@ -117,6 +120,7 @@ export default function ResumePage() {
     setRunning(true);
     setError(null);
     setNotice(null);
+    setTailorWarning(null);
     try {
       const result = await runTailorAgent(selectedJob);
       if (result.noChangesApplied) {
@@ -129,6 +133,10 @@ export default function ResumePage() {
         );
       } else {
         setConversion(result.conversionMetrics ?? null);
+        // §5.3.1 pt 5: surface the TailoringLoop's own honest sub-85 message
+        // verbatim when the loop stopped short of the 85 target — never when
+        // the run actually reached it (warning is null on a clean run).
+        setTailorWarning(result.warning ?? null);
       }
       await load();
     } catch (e) {
@@ -369,6 +377,15 @@ export default function ResumePage() {
             />
           </p>
         </section>
+      ) : null}
+
+      {tailorWarning ? (
+        <p
+          data-testid="tailor-score-warning"
+          className="rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+        >
+          {tailorWarning}
+        </p>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
