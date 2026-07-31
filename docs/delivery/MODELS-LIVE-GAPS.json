@@ -2702,19 +2702,19 @@
       "screen": "Story Bank",
       "severity": "HIGH",
       "category": "defect",
-      "summary": "G-E's 'zero duplicate stories' does NOT hold. Live production StoryEntry: 37 rows, 0 exact duplicates, but 5 NEAR-DUPLICATE clusters covering 16 rows (43%) \u2014 paraphrased repeats of the same underlying achievement with distinct contentHash and titles. story_dedup_migration.py is specifically a PARAPHRASE de-dup, so exact-match dedup working while 43% paraphrase duplication survives is direct evidence the migration either never ran against live data or does not work as claimed. \u00a78.1(a) demands before/after story counts as fresh proof it ran; that proof does not exist.",
+      "summary": "ROOT CAUSE ESTABLISHED by risk-officer: merge_duplicate_stories has ZERO PRODUCTION CALL SITES. It appears only in its own docstring, one cross-reference in story_paraphrase.py, and test_we_story_dedup_relevance.py. No route, no cron, no admin action invokes it \u2014 so the bulk paraphrase de-dup has NEVER run against live data. Only the create-time forward guard has ever executed (and that guard is verified working). This is why 5 near-duplicate clusters cover 16 of 37 live stories while insert-time prevention succeeds. \u00a78.1(a) demanded before/after counts as proof the migration ran; it never ran. IMPORTANT SHAPE CONSTRAINT: the function MERGES (oldest row survives, tags and metrics unioned) \u2014 converting it to a bulk DELETE is auto-rejected; user-authored career history is unrecoverable.",
       "reproduction": [
         "SELECT over StoryEntry grouping by normalised text prefix; see PROD-DATA-INVENTORY.md"
       ],
       "expected": "Zero duplicate stories in the live DB; duplicate prevention active at insert time",
-      "observed": "43% of stories are paraphrase near-duplicates | \u00a78.1(b) INSERT-TIME DEDUP VERIFIED WORKING LIVE: a manually-crafted near-duplicate submitted through the UI produced a card-count delta of 0 and the server returned the SAME pre-existing row id with title updated and tags unioned \u2014 the paraphrase-merge fired exactly as coded. The defect is therefore narrower and precise: insert-time prevention WORKS; the pre-existing rows were never RETROACTIVELY merged, i.e. the bulk migration never ran against live data. ~37 stories reduce to ~8 underlying achievements.",
+      "observed": "merge_duplicate_stories defined but never invoked in production; 16/37 stories are paraphrase duplicates",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/PROD-DATA-INVENTORY.md"
       ],
       "status": "OPEN",
       "owner": "W-E ai-loop-engineer",
       "fixCommits": [],
-      "verifiedBy": "scout prod-DB sweep 2026-07-31",
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
       "openedUtc": "2026-07-31T17:54:27Z",
       "run": "GOLD-MASTER-V4"
     },
@@ -2926,6 +2926,70 @@
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-07-31T17:55Z",
       "openedUtc": "2026-07-31T17:58:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-schema-001",
+      "screen": "n/a (database schema)",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "ORPHAN-ON-DELETE SCHEMA DEFECT. Only 8 tables declare ON DELETE CASCADE to User, while 18 further tables carry a userId column with NO FOREIGN KEY AT ALL. Deleting a User therefore ORPHANS rather than cascades. Executing the deletion manifest as originally proposed would have stranded 31 orphan rows, two of them bound to LIVE STRIPE CUSTOMERS (cus_Uz1KUWADymWjVY, cus_Uz2v3ncOw3IptQ). The identical defect was recorded in a prior GMV2 review and is still unfixed. Any future account-deletion feature (a GDPR/DPA requirement for an AU consumer product) is unsafe until this is closed.",
+      "reproduction": [
+        "Enumerate FK constraints referencing User; compare against all columns named userId across the schema"
+      ],
+      "expected": "Every userId column has an FK with an explicit, intentional ON DELETE behaviour",
+      "observed": "8 cascading FKs; 18 userId columns with no FK; deletes orphan silently",
+      "evidence": [
+        "cleanup/DELETION-MANIFEST-1.json",
+        "uat/reports/evidence/launch-ready/governance/RISK-OFFICER-APPROVAL-DELETION-MANIFEST-1.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-hard (additive FKs only)",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:02:47Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-manifest-001",
+      "screen": "n/a (process)",
+      "severity": "MEDIUM",
+      "category": "governance",
+      "summary": "The scout's deletion proposal contained a MATERIAL FACTUAL DEFECT: it asserted the 14 test User rows had '0 content rows anywhere' after checking only 8 tables, when each in fact owns a Subscription and a UsageQuota (and one owns 3 CareerProfile rows). Caught by the risk-officer's independent re-derivation before execution. Confirms the \u00a720.2 propose->approve->execute separation is load-bearing and must not be collapsed; a proposer's zero-reference claim is not evidence until independently reproduced.",
+      "reproduction": [
+        "Compare the proposal's claimed reference check against the full set of user-referencing columns"
+      ],
+      "expected": "Zero-reference proofs are exhaustive before approval",
+      "observed": "Proposal checked 8 of 24 user-referencing tables and declared zero references",
+      "evidence": [
+        "cleanup/DELETION-MANIFEST-1.json"
+      ],
+      "status": "OPEN",
+      "owner": "orchestrator (process note)",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:02:47Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-backup-001",
+      "screen": "n/a (ops)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "pg_dump is UNUSABLE against the production database from this VM: client 16.14 vs server 17.9 causes a hard abort (proved, not assumed). There is therefore no conventional backup path available in-VM before destructive operations; the working substitute is a psql row_to_json capture (verified read-only: 47 rows / 20,383 bytes / all lines re-parsed). An operator should install a matching client version before any larger data operation.",
+      "reproduction": [
+        "Run pg_dump against DATABASE_URL and observe the version-mismatch abort"
+      ],
+      "expected": "A working backup mechanism exists before destructive production operations",
+      "observed": "pg_dump aborts on version mismatch; row_to_json capture used instead",
+      "evidence": [
+        "cleanup/DELETION-MANIFEST-1.json"
+      ],
+      "status": "OPEN",
+      "owner": "operator / W-L deployer",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T18:02:47Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
