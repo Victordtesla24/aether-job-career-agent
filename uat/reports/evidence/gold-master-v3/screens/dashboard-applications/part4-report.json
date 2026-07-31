@@ -1,0 +1,53 @@
+{
+  "cleanupRevert": {
+    "status": 200,
+    "resultStatus": "submitted"
+  },
+  "illegalTransitionDirectApi": {
+    "beforeStatus": "submitted",
+    "httpStatus": 422,
+    "body": "{\"detail\":\"Stage 'discovered' is Job-status-fed — a application card cannot move there. Valid targets for a application card: ['in-review', 'interview', 'offer', 'ready', 'submitted']\"}",
+    "afterStatus": "submitted",
+    "unchanged": true
+  },
+  "unknownStageKeyProbe": {
+    "httpStatus": 422,
+    "body": "{\"detail\":\"Unknown stage 'not-a-real-stage'. Valid stages: ['discovered', 'evaluating', 'in-review', 'interview', 'offer', 'ready', 'submitted', 'tailoring']\"}"
+  },
+  "canonicalPatchProbe": {
+    "httpStatus": 200,
+    "body": "{\"id\":\"c15369eafaad7210d65151a6d\",\"userId\":\"c6c8d0163d973a8048e7e33b8\",\"jobId\":\"c0642f2dc8cbc53209d95421d\",\"resumeId\":\"c16a1ba47a3823a9dcc24746b\",\"status\":\"submitted\",\"coverLetter\":\"31 July 2026\\n\\nHiring Team\\nGrafana Labs\\nRe: Senior Product Manager, Infrastructure Observability | Sweden | Remote\\"
+  },
+  "canonicalPatchStaleFromStageProbe": {
+    "httpStatus": 409,
+    "body": "{\"detail\":\"Stage conflict — this application is in 'submitted', not 'interview'. Reload the board and move it again.\"}"
+  },
+  "finalTestAppStatus": "submitted",
+  "postCleanupUiCheck": {
+    "cardTitleLeakedIntoDiscovered": false,
+    "cardBackInSubmitted": true
+  },
+  "clearPipelineGate": {
+    "gateText": "⚠️\nClear the entire pipeline?\n\nThis will archive ALL jobs still sitting in the agent-driven pipeline columns — Discovered, Evaluating and Tailoring. Archived jobs are soft-deleted (recoverable in the history view), not destroyed. Your applications, the Ready-to-Apply through Offer columns, and closed items (rejected / withdrawn) are left untouched.\n\n✕\nCancel\n✕ Yes, Archive Pipeline Jobs",
+    "gateClosedAfterCancel": true
+  },
+  "clearPipelineGateEscCloses": true,
+  "pollingIntervalMeasurement": {
+    "windowMs": 65015,
+    "timestamps": [
+      1785519252877,
+      1785519272819,
+      1785519292804
+    ],
+    "deltasMs": [
+      19942,
+      19985
+    ]
+  },
+  "consoleErrorsDuringSession": [
+    "Failed to load resource: the server responded with a status of 422 ()",
+    "Failed to load resource: the server responded with a status of 422 ()",
+    "Failed to load resource: the server responded with a status of 409 ()"
+  ],
+  "pageErrorsDuringSession": []
+}

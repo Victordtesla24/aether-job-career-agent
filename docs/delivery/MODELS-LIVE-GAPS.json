@@ -2215,22 +2215,22 @@
     {
       "id": "GMV4-analytics-001",
       "screen": "Analytics",
-      "severity": "HIGH",
+      "severity": "LOW",
       "category": "defect",
-      "summary": "apps/web/src/app/dashboard/analytics/page.tsx:61 carries '// Dashboard endpoint not yet deployed - degrade gracefully.' A user-reachable graceful-degradation path implies the /analytics/dashboard endpoint may not exist in prod, so the Analytics screen may render partial data without telling the user.",
+      "summary": "WITHDRAWN AS A DEFECT. First-hand probing shows GET /analytics/dashboard returns 200 on all 5 observed production loads \u2014 the degrade path premised by the code comment does NOT trigger. The comment at apps/web/src/app/dashboard/analytics/page.tsx:61 ('Dashboard endpoint not yet deployed \u2014 degrade gracefully') is STALE and is a documentation cleanup item only, not a live defect.",
       "reproduction": [
         "Read apps/web/src/app/dashboard/analytics/page.tsx:61",
         "Probe the analytics dashboard endpoint on prod with an authenticated token"
       ],
       "expected": "Analytics renders live data from a deployed endpoint, or surfaces an honest error",
-      "observed": "Silent graceful degradation branch present in shipped code",
+      "observed": "Endpoint live (200 x5); no degradation observed; comment stale",
       "evidence": [
         "docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md"
       ],
-      "status": "OPEN",
-      "owner": "W-B fixer-medium",
+      "status": "CLOSED-NOT-A-DEFECT",
+      "owner": "doc-updater (comment cleanup)",
       "fixCommits": [],
-      "verifiedBy": null,
+      "verifiedBy": "screen-tester batch3 2026-07-31",
       "openedUtc": "2026-07-31T17:16:14Z",
       "run": "GOLD-MASTER-V4"
     },
@@ -3033,6 +3033,132 @@
       "fixCommits": [],
       "verifiedBy": "test-author 2026-07-31",
       "openedUtc": "2026-07-31T18:09:41Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-analytics-002",
+      "screen": "Analytics",
+      "severity": "HIGH",
+      "category": "gap",
+      "summary": "interview_conversion_rate is COMPUTED CORRECTLY AND HONESTLY but is NEVER RENDERED. Verified live at 0% and cross-checked against 0 interviews / 48 submitted. \u00a76.2 requires it shown as a live computed metric on the Analytics screen and G-C/G-J both depend on it. This is a DISPLAY gap, not a computation gap \u2014 the hard part is already done.",
+      "reproduction": [
+        "Open /dashboard/analytics on prod and search for the conversion-rate metric"
+      ],
+      "expected": "interview_conversion_rate visible as a live metric on Analytics",
+      "observed": "Computed and returned by the API; absent from the UI",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-analytics/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-J fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-agents-001",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "Agent run-history table exposes only Agent/Status/Started/Error (20 rows). \u00a714.5.5 requires the last 10 runs with jobs_submitted, jobs_skipped, ats_avg_delta and duration. Needed for G-SUB.",
+      "reproduction": [
+        "Open /dashboard/agents and inspect the run history table columns"
+      ],
+      "expected": "Run history shows jobs_submitted / jobs_skipped / ats_avg_delta / duration",
+      "observed": "Only Agent/Status/Started/Error",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-agents/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-SUB fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-agents-002",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "No submission_ats_threshold and no submission_auto_approve control exists anywhere. The Submission Agent's own settings panel exposes only Temperature / Thinking effort / Billing credential. \u00a714.4.7 requires both, and \u00a714.3 requires auto_approve to default false and to be user-set only \u2014 never agent-set.",
+      "reproduction": [
+        "Open the Submission Agent settings panel on /dashboard/agents"
+      ],
+      "expected": "submission_ats_threshold (default 85.0) and submission_auto_approve (default false) exposed",
+      "observed": "Neither control exists",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-agents/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-SUB fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-agents-003",
+      "screen": "Agents (global sidebar)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "Idle auto-refresh exceeds the \u00a715.1 <=20s requirement. First-hand: during an agent run the page polls at a real 3000ms cadence, but at TRUE IDLE the Agents page has NO continuous poll at all \u2014 only a global sidebar widget (apps/web/src/components/sidebar.tsx:45) polling GET /agents every 30s. Combined with GMV4-approvals-002 (Approvals polls not at all), G-I cannot close on current behaviour.",
+      "reproduction": [
+        "Open /dashboard/agents, idle 60s with network capture, measure the poll cadence"
+      ],
+      "expected": "All screens auto-refresh <= 20s",
+      "observed": "30s sidebar poll; no page-level idle poll",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-agents/REPORT.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-gsc-001",
+      "screen": "Analytics",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "POSITIVE VERIFICATION: the CLS 0.67 problem named in \u00a717.3 is ALREADY FIXED. Measured 0.0794 on a cold production load (reserved-space fix at analytics/page.tsx:145 working; small residual shift remains). The \u00a717.3 work item is satisfied; only the stale code comment referencing 0.67 needs updating.",
+      "reproduction": [
+        "Cold-load /dashboard/analytics on prod with CLS measurement"
+      ],
+      "expected": "CLS < 0.1",
+      "observed": "CLS 0.0794",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-analytics/REPORT.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "doc-updater",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-screens-001",
+      "screen": "Analytics / Dashboard",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "POSITIVE VERIFICATION: the canonical design-time funnel 847->412->156->23->4 (D-0003) does NOT appear anywhere in production. Both Analytics and the main dashboard render real account data (52/48/2/0/0) consistently. A live sighting would have been a genuine defect; it is absent.",
+      "reproduction": [
+        "Inspect Analytics and main dashboard funnel figures on prod"
+      ],
+      "expected": "No design-time fixture numbers in production",
+      "observed": "Real per-account data shown consistently",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-analytics/REPORT.md"
+      ],
+      "status": "VERIFIED-CLOSED",
+      "owner": "n/a",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch3 2026-07-31",
+      "openedUtc": "2026-07-31T18:15:33Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

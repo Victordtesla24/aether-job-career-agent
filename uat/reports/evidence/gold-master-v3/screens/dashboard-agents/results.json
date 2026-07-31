@@ -1,0 +1,432 @@
+{
+  "status": "COMPLETE_PART1",
+  "steps": [
+    {
+      "step": "login_session1",
+      "ok": true,
+      "ts": "2026-07-31T17:59:31Z"
+    },
+    {
+      "step": "load_agents_screen",
+      "ok": true,
+      "ts": "2026-07-31T17:59:37Z"
+    },
+    {
+      "step": "inventory_agent_cards",
+      "ok": true,
+      "ts": "2026-07-31T17:59:38Z",
+      "count": 22
+    },
+    {
+      "step": "inventory_secondary_panels",
+      "ok": true,
+      "ts": "2026-07-31T17:59:40Z"
+    },
+    {
+      "step": "test_run_modal",
+      "ok": true,
+      "ts": "2026-07-31T17:59:45Z"
+    },
+    {
+      "step": "settings_panel_inspect",
+      "ok": true,
+      "ts": "2026-07-31T17:59:47Z"
+    },
+    {
+      "step": "toggle_persistence_test",
+      "ok": true,
+      "ts": "2026-07-31T17:59:56Z"
+    },
+    {
+      "step": "trigger_safe_agent_run",
+      "ok": true,
+      "ts": "2026-07-31T18:00:21Z"
+    },
+    {
+      "step": "idle_60s_poll_measurement",
+      "ok": true,
+      "ts": "2026-07-31T18:01:21Z",
+      "calls_during_idle": 3
+    },
+    {
+      "step": "reload_verify_run_recorded",
+      "ok": true,
+      "ts": "2026-07-31T18:01:28Z"
+    }
+  ],
+  "inventory": {
+    "agent_cards": [
+      {
+        "key": "jobDiscovery",
+        "name": "Job Discovery Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "resumeTailoring",
+        "name": "Resume Tailoring Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "coverLetter",
+        "name": "Cover Letter Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "atsOptimization",
+        "name": "ATS Optimization Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "compliance",
+        "name": "Compliance Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "submission",
+        "name": "Submission Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "matchScoring",
+        "name": "Match Scoring Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "jobMatching",
+        "name": "Job Matching Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "salaryIntelligence",
+        "name": "Salary Intelligence Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "interviewPrep",
+        "name": "Interview Prep Agent",
+        "model": "anthropic/claude-sonnet-4",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "companyResearch",
+        "name": "Company Research Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "skillGap",
+        "name": "Skill Gap Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "recruiterOutreach",
+        "name": "Recruiter Outreach Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "emailAgent",
+        "name": "Email Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "marketTrends",
+        "name": "Market Trends Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "scheduling",
+        "name": "Scheduling Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "sentimentAnalysis",
+        "name": "Sentiment Analysis Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "reference",
+        "name": "Reference Agent",
+        "model": "deepseek/deepseek-v4-pro",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "storyExtraction",
+        "name": "Story Extraction Agent",
+        "model": "qwen/qwen3-coder-next",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "learningFeedback",
+        "name": "Learning / Feedback Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      },
+      {
+        "key": "orchestration",
+        "name": "Orchestration Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": false,
+        "has_toggle": true
+      },
+      {
+        "key": "notification",
+        "name": "Notification Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      }
+    ],
+    "agent_card_count": 22,
+    "submission_agent_card": [
+      {
+        "key": "submission",
+        "name": "Submission Agent",
+        "model": "deterministic",
+        "status_label": "Active",
+        "has_run_btn": true,
+        "has_toggle": true
+      }
+    ],
+    "header_count_text": "22 agents \u00b7 7 AI providers \u00b7 configure models & connections",
+    "provider_section_present": true,
+    "run_history_table": {
+      "present": true,
+      "headers": [
+        "AGENT",
+        "STATUS",
+        "STARTED",
+        "ERROR"
+      ],
+      "row_count": 20
+    },
+    "pause_all_disabled": true,
+    "manual_override_disabled": true,
+    "approval_queue_panel_present": false,
+    "approve_all_cta_present": false,
+    "ats_delta_chip_present": false,
+    "test_run_select_options": [
+      "Job Discovery Agent \u00b7 deterministic",
+      "Resume Tailoring Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Cover Letter Agent \u00b7 deepseek/deepseek-v4-pro",
+      "ATS Optimization Agent \u00b7 deterministic",
+      "Compliance Agent \u00b7 deterministic",
+      "Submission Agent \u00b7 deterministic",
+      "Match Scoring Agent \u00b7 deterministic",
+      "Job Matching Agent \u00b7 deterministic",
+      "Salary Intelligence Agent \u00b7 deterministic",
+      "Interview Prep Agent \u00b7 anthropic/claude-sonnet-4",
+      "Company Research Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Skill Gap Agent \u00b7 deterministic",
+      "Recruiter Outreach Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Email Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Market Trends Agent \u00b7 deterministic",
+      "Scheduling Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Sentiment Analysis Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Reference Agent \u00b7 deepseek/deepseek-v4-pro",
+      "Story Extraction Agent \u00b7 qwen/qwen3-coder-next",
+      "Learning / Feedback Agent \u00b7 deterministic",
+      "Orchestration Agent \u00b7 deterministic",
+      "Notification Agent \u00b7 deterministic"
+    ],
+    "test_run_network_calls": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/test-run",
+        "status": 200,
+        "method": "POST",
+        "ts": 1785520782.053242
+      }
+    ],
+    "settings_panel_target": "submission",
+    "submission_settings_panel_text": "TEMPERATURE\n\u2014\n\nDeterministic agent \u2014 no LLM sampling, temperature does not apply.\n\nTHINKING EFFORT\nNone\nLow\nMedium\nHigh\nBILLING CREDENTIAL (OPENROUTER)\nDeployment default\n\nBills to: Deployment default credential\n\nSave settings",
+    "has_ats_threshold_field": false,
+    "has_auto_approve_field": false,
+    "toggle_test_agent": "jobDiscovery",
+    "toggle_persistence_test": {
+      "before": "true",
+      "after_click": "false",
+      "after_reload": "false",
+      "restored_to": "true"
+    },
+    "run_target_chosen": {
+      "key": "matchScoring",
+      "name": "Match Scoring Agent",
+      "model": "deterministic",
+      "status_label": "Active",
+      "has_run_btn": true,
+      "has_toggle": true
+    },
+    "run_trigger_network_calls": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520800.0850148
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520800.1000555
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520800.1002514
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520801.3382142
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520802.9318943
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520802.9422405
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520802.9493742
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/fit-scorer/run",
+        "status": 200,
+        "method": "POST",
+        "ts": 1785520803.3312743
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520803.5320082
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520803.537503
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/stats",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520803.5587227
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520803.8746128
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520804.120226
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents/catalog",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520805.078823
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520821.595835
+      }
+    ],
+    "run_wall_seconds": 22.039212226867676,
+    "idle_60s_network_calls": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520850.899651
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520850.9158757
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785520880.9123151
+      }
+    ],
+    "idle_window_seconds": 60.005435943603516,
+    "run_history_first_row_after_reload": "fitScorer\tcompleted\t31/07/2026, 6:00:54 pm\t\u2014"
+  },
+  "findings_raw": []
+}

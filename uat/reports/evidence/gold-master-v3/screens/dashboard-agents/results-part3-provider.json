@@ -1,0 +1,29 @@
+{
+  "provider_ids": [
+    "anthropic",
+    "openrouter",
+    "openai",
+    "gemini",
+    "bedrock",
+    "groq",
+    "abacus"
+  ],
+  "provider_modal_target": "anthropic",
+  "modal_has_test_connection": true,
+  "modal_has_show_hide": true,
+  "modal_has_auth_mode_radio": true,
+  "test_connection_network_calls": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers/anthropic/verify",
+      "status": 200,
+      "method": "POST",
+      "ts": 1785521028.3088462
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/providers",
+      "status": 200,
+      "method": "GET",
+      "ts": 1785521028.9005103
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "testCard": {
+    "cardTitle": "Senior Product Manager, Infrastructure Observability | Sweden | Remote"
+  },
+  "manualDragAttempt": {
+    "ok": true
+  },
+  "dndMoveNetwork": [],
+  "dndResult": {
+    "cardNowInReviewColumn": false,
+    "cardStillInSubmitted": true
+  },
+  "moveMenuOptionsForThisCard": [
+    "Ready to Apply",
+    "In Review",
+    "Interview",
+    "Offer"
+  ],
+  "moveMenuActionNetwork": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/applications/c15369eafaad7210d65151a6d/move",
+      "method": "POST",
+      "status": 200,
+      "ts": 1785519060024,
+      "reqBody": "{\"to_stage\":\"in-review\"}",
+      "resBody": "{\"id\":\"c15369eafaad7210d65151a6d\",\"userId\":\"c6c8d0163d973a8048e7e33b8\",\"jobId\":\"c0642f2dc8cbc53209d95421d\",\"resumeId\":\"c16a1ba47a3823a9dcc24746b\",\"status\":\"screening\",\"coverLetter\":\"31 July 2026\\n\\nHiring Team\\nGrafana Labs\\nRe: Senior Product Manager, Infrastructure Observability | Sweden | Remote\\n\\nDear Hiring Team at Grafana Labs,\\n\\nMy background as a Business Analyst/Project Manager/Scrum Master is a direct match for the Senior Product Manager, Infrastructure Observability | Sweden | Remote role at Grafana Labs. My work architecting a COBOL/mainframe test-evidence automation harness that cut evidence effort by ≈92% across 200+ SIT/E2E scenarios mirrors the infrastructure observability challenge of simplifying complex monitoring experiences at scale.\\n\\nThe role calls for transforming ideas and feedback into a product vision and roadmap, curating user needs to inform engineering tradeoffs, and working closely with GTM on differentiation. At the Australian Taxation Office I lead end-to-end delivery for the Agile Kookaburras squad on the Payday Super reform program, owning sprint cadence, PI Planning, and executive status reporting while convening a cross-discipline technical wa"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/applications",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785519060216,
+      "reqBody": null,
+      "resBody": "[{\"id\":\"c564163e17c00b936823d6d78\",\"userId\":\"c6c8d0163d973a8048e7e33b8\",\"jobId\":\"c90eb4a8d3a8f239f3a29ca9f\",\"resumeId\":\"c2b64e20c8ff4e5b5a06b6745\",\"status\":\"draft\",\"coverLetter\":\"31 July 2026\\n\\nHiring Team\\nTwilio\\nRe: Staff Impartner Product Owner, PRM\\n\\nDear Hiring Team at Twilio,\\n\\nMy background as a Business Analyst/Project Manager/Scrum Master is a direct match for the Staff Impartner Product Owner, PRM role at Twilio. I bridge business and technical teams to deliver scalable platform improvements—in a previous role, I translated complex business requirements into a product backlog that guided cloud-native modernisation and cut end-to-end delivery time by over 30%.\\n\\nThe Staff Product Owner, PRM role at Twilio requires bridging business and technical teams—articulating the 'what' and 'why' of requirements to platform developers. I have done this as a Technical Product Owner, owning the product backlog for major platform modernisations and ensuring 100% compliance with enterprise architectural standards. I also bring a strong process-mapping discipline: I’ve conducted gap analyses that yielded 10 key insights and improved system reliability by 15%, and I architected a test-"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs",
+      "method": "GET",
+      "status": 200,
+      "ts": 1785519060429,
+      "reqBody": null,
+      "resBody": "[{\"id\":\"ce33bc4a46050ffc29e2fe08c\",\"userId\":\"c6c8d0163d973a8048e7e33b8\",\"title\":\"Senior Technical Program Manager, Security\",\"company\":\"replit\",\"location\":\"Foster City, CA\",\"remote\":true,\"salaryMin\":null,\"salaryMax\":null,\"currency\":null,\"description\":\"Replit is the agentic software creation platform that enables anyone to build applications using natural language. With millions of users worldwide, Replit is democratizing software development by removing traditional barriers to application creation. About the Role: We are seeking a Senior Technical Program Manager to own our vulnerability management program end to end. In this role, you will drive vulnerability intake, triage, remediation, and reporting across our bug bounty program, our Google Cloud Platform (GCP) infrastructure, source code hosted on GitHub, and a broad portfolio of third-party SaaS services. You will partner closely with platform engineering, product engineering, SRE, security, IT, legal, and vendor management to make sure vulnerabilities are found fast, triaged accurately, and closed within SLA — and that leadership always has a clear, current picture of the organization's risk posture.The ideal candidate uses A"
+    }
+  ],
+  "moveMenuTargetUsed": "In Review",
+  "afterMoveMenuReloadPersistence": {
+    "inReview": true,
+    "submitted": false
+  },
+  "cleanupRevertedToOriginalStage": true
+}

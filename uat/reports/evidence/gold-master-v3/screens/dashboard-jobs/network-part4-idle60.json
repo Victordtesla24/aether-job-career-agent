@@ -1,0 +1,38 @@
+[
+  {
+    "t": "2026-07-31T17:36:00.679Z",
+    "url": "/api/jobs?sort=fitScore",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:36:10.300Z",
+    "url": "/api/agents",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:36:20.671Z",
+    "url": "/api/jobs?sort=fitScore",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:36:40.276Z",
+    "url": "/api/approvals?status=pending",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:36:40.292Z",
+    "url": "/api/agents",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:36:40.674Z",
+    "url": "/api/jobs?sort=fitScore",
+    "method": "GET",
+    "status": 200
+  }
+]

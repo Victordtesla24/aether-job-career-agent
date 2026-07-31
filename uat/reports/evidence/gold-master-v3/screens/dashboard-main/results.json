@@ -1,0 +1,58 @@
+{
+  "status": "COMPLETE",
+  "steps": [
+    {
+      "step": "login_session1",
+      "ok": true,
+      "ts": "2026-07-31T18:11:59Z"
+    },
+    {
+      "step": "widget_inventory",
+      "ok": true,
+      "ts": "2026-07-31T18:12:03Z"
+    },
+    {
+      "step": "idle_60s_measurement",
+      "ok": true,
+      "ts": "2026-07-31T18:13:04Z",
+      "count": 3
+    }
+  ],
+  "inventory": {
+    "agent-feed_present": true,
+    "agent-feed_text": "Agent Activity\nView all\nAll\nDiscovered\nTailored\nSubmitted\nWaiting\n\nFit Scorer checked for unscored jobs \u2014 all up to date\n\n11 min ago\n\nCompleted\n\nScout Agent checked job boards \u2014 no new roles\n\n11 min ago \u00b7 36 refreshed\n\nDiscovered\n\nFit Scorer checked for unscored jobs \u2014 all up to date\n\n12 min ago\n\nCompleted\n\nstoryExtractor agent run completed\n\n19 min ago\n\nCompleted\n\nCover Letter Agent drafted a cover letter \u2014 awaiting your approval\n\n30 min ago \u00b7 needs approval\n\nApprove\nDrafted\n\nTailoring Agent run failed\n\n31 min ago \u00b7 The AI service is temporarily unavailable. Please try again\n\nFailed\n\nCover Le",
+    "todays-opportunities_present": true,
+    "todays-opportunities_text": "Today's Opportunities\nBrowse all jobs\nG\n45%\nSenior Professional Services Project Manager\n\nGitLab \u00b7 Remote\n\nvia greenhouse \u00b7 posting \u2197\n\nTailor & Apply\nR\n44%\nSenior Technical Program Manager, Security\n\nreplit \u00b7 Foster City, CA\n\nvia ashby \u00b7 posting \u2197\n\nReview Match\nT\n44%\nStaff Impartner Product Owner, PRM\n\nTwilio \u00b7 Remote - Australia\n\nvia greenhouse \u00b7 posting \u2197\n\nReview Match",
+    "funnel-widget_present": true,
+    "funnel-widget_text": "Application Funnel (all time)\nJobs Found\n52\nApplied\n48\nScreened\n2\nInterviewed\n0\nOffers\n0",
+    "story-bank-widget_present": true,
+    "story-bank-widget_text": "Story Bank\nOpen\n\n36 STAR achievements ready to deploy\n\nLATEST STORIES\n\nCross-Discipline Technical War Room for NTP & Distribution UI Delivery (updated)\n2 metrics\nAnalytics Dashboard for Sprint Velocity & LLM-Retrospectives\n2 metrics\nCloud-Native Core Banking Transformation \u2013 30% Faster Delivery\n4 metrics",
+    "crm-summary_present": true,
+    "crm-summary_text": "Recruiter CRM\nOpen\n\n0 active recruiter conversations\n\n0 follow-ups due today\n\n0 warm intro pending",
+    "needs-approval-widget_present": true,
+    "needs-approval-widget_text": "Needs Approval\n5\n\nSubmit application\n\nSenior Technical Program Manager, Security \u00b7 replit\n\nrequested 31 min ago \u00b7 waiting on you\n\nApprove\nReject\n\nSubmit application\n\nInnovation Product Manager, Australia \u00b7 harvey\n\nrequested 42 min ago \u00b7 waiting on you\n\nApprove\nReject\n\nSubmit application\n\nStaff Program Manager, Trust & Safety \u00b7 Mozilla\n\nrequested 3 hr ago \u00b7 waiting on you\n\nApprove\nReject\n+2 more waiting \u2014 review all",
+    "approval_count_badge": "5",
+    "search_input_present": true,
+    "market_intel_present": false,
+    "idle_60s_calls": [
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785521550.2953546
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785521580.2802887
+      },
+      {
+        "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+        "status": 200,
+        "method": "GET",
+        "ts": 1785521580.3020782
+      }
+    ]
+  }
+}

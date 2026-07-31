@@ -1,0 +1,8 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/cover-letters/cd24eb1bebb161feca6d30ef1/refine",
+    "method": "POST",
+    "failure": "net::ERR_ABORTED",
+    "ts": "2026-07-31T17:41:39Z"
+  }
+]

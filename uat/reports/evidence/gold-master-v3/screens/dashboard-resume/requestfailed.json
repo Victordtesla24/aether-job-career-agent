@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve",
+    "method": "GET",
+    "failure": "net::ERR_ABORTED",
+    "ts": "2026-07-31T17:32:21Z"
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1obve",
+    "method": "GET",
+    "failure": "net::ERR_ABORTED",
+    "ts": "2026-07-31T17:32:21Z"
+  }
+]

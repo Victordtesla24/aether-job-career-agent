@@ -1,0 +1,51 @@
+[
+  {
+    "t": "2026-07-31T17:33:12.252Z",
+    "step": "unauthenticated-access",
+    "finalUrl": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fjobs"
+  },
+  {
+    "t": "2026-07-31T17:33:14.992Z",
+    "step": "login3",
+    "ok": true
+  },
+  {
+    "t": "2026-07-31T17:33:19.741Z",
+    "step": "role-filter-isolated",
+    "targetTitle": "Innovation Product Manager, Australia",
+    "matchedCards": 1
+  },
+  {
+    "t": "2026-07-31T17:33:21.359Z",
+    "step": "selected-job-confirm",
+    "h2": "Innovation Product Manager, Australia"
+  },
+  {
+    "t": "2026-07-31T17:33:22.137Z",
+    "step": "review-apply-present",
+    "stepIsTailored": 1
+  },
+  {
+    "t": "2026-07-31T17:33:25.263Z",
+    "step": "gate-full-content",
+    "gateText": "⚠️Submit application to harvey?Your application for Innovation Product Manager, Australia will be recorded as Applied with your tailored resume attached. Complete the submission on ashby — open the job posting ↗.✕RoleInnovation Product Manager, AustraliaCompanyharveyResumeTailored for this roleMatch score34How well this posting matches your resume — a 0–100 blend of keyword, semantic and experience fit.Cancel✈ Submit Application",
+    "gateResumeStatus": "Tailored for this role",
+    "hasStoryCountMention": false
+  },
+  {
+    "t": "2026-07-31T17:33:26.411Z",
+    "step": "gate-cancelled-first",
+    "ok": true
+  },
+  {
+    "t": "2026-07-31T17:33:27.484Z",
+    "step": "submit-confirm-clicked-real",
+    "ok": true
+  },
+  {
+    "t": "2026-07-31T17:34:00.749Z",
+    "step": "submitted-state",
+    "submittedVisible": false,
+    "submittedText": null
+  }
+]

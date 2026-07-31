@@ -1,0 +1,50 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521372.3924487
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/networking/page-537fd4c6c843d116.js",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521374.6248102
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521374.6249185
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521374.6250005
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521374.6250763
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/stories/page-d4cb115bc0fb4c5d.js",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521374.6251447
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1uukd",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521384.8244767
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1uukd",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521384.824707
+  }
+]

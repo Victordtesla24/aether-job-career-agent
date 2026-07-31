@@ -1,0 +1,32 @@
+{
+  "loginOk": true,
+  "testAppFinalStatusReVerified": "submitted",
+  "reconciliationReVerified": {
+    "computed": {
+      "discovered": 0,
+      "evaluating": 0,
+      "tailoring": 2,
+      "ready": 1,
+      "submitted": 45,
+      "in-review": 2,
+      "interview": 0,
+      "offer": 0
+    },
+    "uiBadges": {
+      "discovered": 0,
+      "evaluating": 0,
+      "tailoring": 2,
+      "ready": 1,
+      "submitted": 45,
+      "in-review": 2,
+      "interview": 0,
+      "offer": 0
+    },
+    "match": true
+  },
+  "illegalTransitionReVerified": {
+    "status": 422,
+    "body": "{\"detail\":\"Stage 'tailoring' is Job-status-fed — a application card cannot move there. Valid targets for a application card: ['in-review', 'interview', 'offer', 'ready', 'submitted']\"}"
+  },
+  "unauthRedirectReVerified": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fapplications"
+}

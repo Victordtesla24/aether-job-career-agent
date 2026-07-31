@@ -1,0 +1,5 @@
+{
+  "unauth_final_url": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Fsettings",
+  "fresh_session_body_has_calendar": false,
+  "fresh_session_threshold_value": "50"
+}

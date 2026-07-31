@@ -1,0 +1,50 @@
+[
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521146.2197735
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1obve",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521146.2329116
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/networking/page-537fd4c6c843d116.js",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2464814
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/stories/page-d4cb115bc0fb4c5d.js",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2466908
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/jobs/page-77fd17e69f36ddd8.js",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2468812
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2470655
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2504864
+  },
+  {
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+    "failure": "net::ERR_ABORTED",
+    "method": "GET",
+    "ts": 1785521148.2505426
+  }
+]

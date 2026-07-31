@@ -1,0 +1,371 @@
+{
+  "status": "ERROR",
+  "steps": [
+    {
+      "step": "login",
+      "ok": true,
+      "ts": "2026-07-31T17:32:25Z"
+    },
+    {
+      "step": "load_resume",
+      "ok": true,
+      "ts": "2026-07-31T17:32:29Z"
+    },
+    {
+      "step": "select_first_version",
+      "ok": true,
+      "ts": "2026-07-31T17:32:32Z"
+    }
+  ],
+  "inventory_initial": {
+    "job_select": 1,
+    "tailor_btn": 1,
+    "hero_original_name": 1,
+    "hero_original_empty": 0,
+    "hero_tailored_name": 1,
+    "hero_tailored_empty": 0,
+    "integrity_status": 1,
+    "version_cards": 8,
+    "download_btn": 0,
+    "conversion_metrics": 0,
+    "ats_score_panel": 0,
+    "tailor_score_warning": 0,
+    "versions_show_more": 1
+  },
+  "job_options": [
+    "Select a job to tailor for\u2026",
+    "Senior Technical Program Manager, Security \u00b7 replit",
+    "Staff Impartner Product Owner, PRM \u00b7 Twilio",
+    "Principal Business Technology Product Manager \u00b7 Samsara",
+    "Program Manager, Sales Operations and Training \u00b7 Peloton",
+    "Enablement Program Manager, APAC \u00b7 Okta",
+    "Product Manager - Marketplace \u00b7 supabase",
+    "Program Manager, Security GRC \u00b7 Stripe",
+    "Innovation Product Manager, Australia \u00b7 harvey",
+    "Senior Professional Services Project Manager \u00b7 GitLab",
+    "Product Manager \u00b7 360Dialog",
+    "Senior Product Manager Platform \u00b7 Delinea",
+    "Implementation Manager - Spend  \u00b7 airwallex",
+    "Support Delivery Lead, Government \u00b7 openai",
+    "Program Manager, People Transformation \u00b7 Wikimedia Foundation",
+    "Staff Program Manager, Trust & Safety \u00b7 Mozilla",
+    "Senior Legal Analyst & Litigation Project Manager \u00b7 Samsara",
+    "Senior Product Manager, Infrastructure Observability | Sweden | Remote \u00b7 Grafana Labs",
+    "Onboarding Project Manager \u00b7 Block",
+    "Junior Project Manager \u00b7 Canonical",
+    "Lead Product Manager \u00b7 Careers at Eucalyptus"
+  ],
+  "version_count": 8,
+  "download_result": {
+    "ok": true,
+    "filename": "resume-c56d01de.pdf"
+  },
+  "job_option_values": [
+    {
+      "value": "",
+      "text": "Select a job to tailor for\u2026"
+    },
+    {
+      "value": "ce33bc4a46050ffc29e2fe08c",
+      "text": "Senior Technical Program Manager, Security \u00b7 replit"
+    },
+    {
+      "value": "c90eb4a8d3a8f239f3a29ca9f",
+      "text": "Staff Impartner Product Owner, PRM \u00b7 Twilio"
+    },
+    {
+      "value": "c7ccd0437bbe6ff278b656427",
+      "text": "Principal Business Technology Product Manager \u00b7 Samsara"
+    },
+    {
+      "value": "ca18ac952343701fabb668795",
+      "text": "Program Manager, Sales Operations and Training \u00b7 Peloton"
+    },
+    {
+      "value": "cb0f678f7f491154487a93fa9",
+      "text": "Enablement Program Manager, APAC \u00b7 Okta"
+    },
+    {
+      "value": "cef9875f73e0eb3537f92b8fa",
+      "text": "Product Manager - Marketplace \u00b7 supabase"
+    },
+    {
+      "value": "c0fa013ab1789b46299ec7d11",
+      "text": "Program Manager, Security GRC \u00b7 Stripe"
+    },
+    {
+      "value": "c4c33686999824dfcf31377a3",
+      "text": "Innovation Product Manager, Australia \u00b7 harvey"
+    },
+    {
+      "value": "cee1ec18afc6f429841f18815",
+      "text": "Senior Professional Services Project Manager \u00b7 GitLab"
+    },
+    {
+      "value": "c5204b2a0309d622d72e7685e",
+      "text": "Product Manager \u00b7 360Dialog"
+    },
+    {
+      "value": "c876d63a3bb720bfc3c34f499",
+      "text": "Senior Product Manager Platform \u00b7 Delinea"
+    },
+    {
+      "value": "cea5634dee1b90a820498a940",
+      "text": "Implementation Manager - Spend  \u00b7 airwallex"
+    },
+    {
+      "value": "c663244a8f6f3ce57ab6fbfb3",
+      "text": "Support Delivery Lead, Government \u00b7 openai"
+    },
+    {
+      "value": "cc70e24a1253e86ed0ad1fa75",
+      "text": "Program Manager, People Transformation \u00b7 Wikimedia Foundation"
+    },
+    {
+      "value": "c330e42c7fbfbdf53ec058bb5",
+      "text": "Staff Program Manager, Trust & Safety \u00b7 Mozilla"
+    },
+    {
+      "value": "c1bb4d08cb00394ef30f3e548",
+      "text": "Senior Legal Analyst & Litigation Project Manager \u00b7 Samsara"
+    },
+    {
+      "value": "c0642f2dc8cbc53209d95421d",
+      "text": "Senior Product Manager, Infrastructure Observability | Sweden | Remote \u00b7 Grafana Labs"
+    },
+    {
+      "value": "c1baca90e8823b85fc605198f",
+      "text": "Onboarding Project Manager \u00b7 Block"
+    },
+    {
+      "value": "c40cacaf75c90fe428a31d5ac",
+      "text": "Junior Project Manager \u00b7 Canonical"
+    },
+    {
+      "value": "ca661ce62b1ec594062f98844",
+      "text": "Lead Product Manager \u00b7 Careers at Eucalyptus"
+    }
+  ],
+  "chosen_job_for_tailor": {
+    "value": "ce33bc4a46050ffc29e2fe08c",
+    "text": "Senior Technical Program Manager, Security \u00b7 replit"
+  },
+  "tailor_wait_error": "Page.wait_for_function: Timeout 90000ms exceeded.",
+  "tailor_run1_duration_sec": 91.33,
+  "tailor_run1_network": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+      "method": "POST",
+      "status": 202,
+      "ts": "2026-07-31T17:32:35Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:38Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:41Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:44Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:47Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:51Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:54Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:32:57Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:00Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:03Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:06Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:09Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:13Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:16Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:19Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:25Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:25Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:28Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:32Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:35Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:38Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:41Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:44Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:47Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:50Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:54Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:56Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:33:57Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:34:00Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:34:03Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/cbfe633ab7715f759a7df921f",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:34:06Z"
+    }
+  ],
+  "tailor_run1_state": {
+    "conversion_before_after": null,
+    "conversion_lift": null,
+    "tailor_notice": null,
+    "tailor_score_warning": null,
+    "error": null,
+    "ats_overall": "32.3",
+    "integrity_status": "Layout hash differs from the base \u2014 review formatting before using this version."
+  },
+  "error": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-testid=\\\"run-tailor-btn\\\"]\")\n    - locator resolved to <button disabled type=\"button\" data-testid=\"run-tailor-btn\" class=\"rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50\">Tailoring...</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 \u00d7 waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+}

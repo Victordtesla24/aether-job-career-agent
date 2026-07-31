@@ -1,0 +1,3951 @@
+{
+  "status": "COMPLETE",
+  "steps": [
+    {
+      "step": "login",
+      "ok": true,
+      "ts": "2026-07-31T17:36:21Z"
+    }
+  ],
+  "chosen_job_for_tailor": {
+    "value": "ce33bc4a46050ffc29e2fe08c",
+    "text": "Senior Technical Program Manager, Security \u00b7 replit"
+  },
+  "version_count_before_run1": 8,
+  "tailor_run1_duration_sec": 263.3,
+  "tailor_run1_completed_in_time": true,
+  "tailor_run1_network": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+      "method": "POST",
+      "status": 202,
+      "ts": "2026-07-31T17:36:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:39Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:42Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:45Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:48Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:36:58Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:01Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:04Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:07Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:10Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:14Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:17Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:20Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:23Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:29Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:39Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:42Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:45Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:48Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:37:58Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:01Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:04Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:07Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:11Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:14Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:17Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:20Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:23Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:29Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:39Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:42Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:45Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:48Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:38:58Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:01Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:04Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:07Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:11Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:14Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:17Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:20Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:23Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:39Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:42Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:45Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:48Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:39:58Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:01Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:04Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:08Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:11Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:14Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:17Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:20Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:23Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:26Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:39Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:42Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:45Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:48Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/jobs",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:49Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/resumes",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:49Z"
+    }
+  ],
+  "tailor_run1_state": {
+    "conversion_before_after": "Before: 44.06% \u2192 After: 46.28%",
+    "conversion_lift": "Estimated interview conversion improvement\n+0.1%",
+    "tailor_notice": null,
+    "tailor_score_warning": "Tailoring stopped after 5 iteration(s) without reaching the target ATS score of 85. Best score achieved: 46.3/100. Please review this resume manually before submitting.",
+    "error": null
+  },
+  "version_count_after_run1": 8,
+  "run_tailor_btn_disabled_before_run2": false,
+  "tailor_run2_duration_sec": 303.67,
+  "tailor_run2_completed_in_time": true,
+  "tailor_run2_network": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run",
+      "method": "POST",
+      "status": 202,
+      "ts": "2026-07-31T17:40:53Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:56Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:40:59Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:02Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:05Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:08Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:12Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:15Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:18Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:21Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:24Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:27Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:31Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:34Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:37Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:40Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:43Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:46Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:49Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:53Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:56Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:41:59Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:02Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:06Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:09Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:12Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:15Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:18Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:21Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:24Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:28Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:31Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:34Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:37Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:40Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:43Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:46Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:50Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:53Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:56Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:42:59Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:02Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:05Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:08Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:12Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:15Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:18Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:21Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:24Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:27Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:34Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:37Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:40Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:43Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:46Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:49Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:56Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:43:59Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:02Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:05Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:08Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:11Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:15Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:18Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:21Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:24Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:27Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:37Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:40Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:43Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:46Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:49Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:55Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:44:59Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:02Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:05Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:08Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:11Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:14Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:18Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:21Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:22Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:24Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:27Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:30Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:33Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:36Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:40Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:43Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:46Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:49Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:52Z"
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9",
+      "method": "GET",
+      "status": 200,
+      "ts": "2026-07-31T17:45:55Z"
+    }
+  ],
+  "tailor_run2_state": {
+    "conversion_before_after": "Before: 44.06% \u2192 After: 46.28%",
+    "conversion_lift": "Estimated interview conversion improvement\n+0.1%",
+    "tailor_notice": null,
+    "tailor_score_warning": null
+  },
+  "version_count_after_run2": 8,
+  "post_reload_version_count": 8,
+  "post_reload_ats_overall": "46.3",
+  "key_response_bodies": {
+    "https://5cb5f0620.abacusai.cloud/api/agents/tailor/run": [
+      {
+        "ts": "2026-07-31T17:36:26Z",
+        "status": 202,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "enqueued"
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:53Z",
+        "status": 202,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "enqueued"
+        }
+      }
+    ],
+    "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c4f7792ce340a8e8b29b9b60a": [
+      {
+        "ts": "2026-07-31T17:36:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:39Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:42Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:45Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:48Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:36:58Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:01Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:04Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:07Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:10Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:14Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:17Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:20Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:23Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:26Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:29Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:39Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:42Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:45Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:48Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:37:58Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:01Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:04Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:07Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:11Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:14Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:17Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:20Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:23Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:26Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:29Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:39Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:42Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:45Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:49Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:38:58Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:01Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:04Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:07Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:11Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:14Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:17Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:20Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:23Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:26Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:39Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:42Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:45Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:48Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:39:58Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:01Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:04Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:08Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:11Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:14Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:17Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:20Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:23Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:26Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:39Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:42Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:45Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:48Z",
+        "status": 200,
+        "body": {
+          "job_id": "c4f7792ce340a8e8b29b9b60a",
+          "status": "completed",
+          "agentKey": "tailor",
+          "result": {
+            "model": "deepseek/deepseek-v4-pro",
+            "run_id": "cf2b7aa98dc35f7fcc5b63b2c",
+            "changes": 1,
+            "costUsd": 0.043056,
+            "warning": "Tailoring stopped after 5 iteration(s) without reaching the target ATS score of 85. Best score achieved: 46.3/100. Please review this resume manually before submitting.",
+            "rejected": [
+              "Led end-to-end delivery process for the Agile Kookaburras squad, accountable for sprint cadence, PI Planning (PI 47\u201348), capacity management, and executive status reporting, as one of eight squads on the Payday Super reform program (NTP & Distribution UI capabilities).",
+              "Accountable for a program portfolio valued at over $5M, directing 5+ cross-functional squads (up to 40 resources, including offshore teams) to deliver on-time, high-quality application releases.",
+              "Accountable for defining the technical vision and owning the product backlog for major platform modernisations, ensuring 100% audit-ready compliance with enterprise architectural standards and risk models through rigorous governance processes.",
+              "Accountable for managing the delivery stream process for a critical risk and compliance program, ensuring 100% regulatory adherence and audit readiness for major data initiatives.",
+              "Conducted deep-dive business analysis process, translating complex regulatory requirements into actionable, audit-ready technical specifications for development teams.",
+              "Spearheaded process initiatives to align DevOps tooling and strategies with overall IT objectives, achieving 95% alignment with enterprise architecture standards and enhancing audit compliance.",
+              "Delivered analytics and Business Intelligence (BI) projects, leveraging BI tooling to boost client customer engagement by 20% and automate regulatory reporting processes, achieving 100% accuracy for audit-ready reporting."
+            ],
+            "tokensIn": 89898,
+            "resume_id": "c7ad3aa3d2e7b284b515446b5",
+            "tokensOut": 4541,
+            "approval_id": "c59b99569f60425893aad3a9f",
+            "duration_ms": 259716,
+            "billingAudit": {
+              "authMode": "api_key",
+              "provider": "openrouter",
+              "quotaPath": "metered_api",
+              "credentialSource": "database"
+            },
+            "approval_status": "pending",
+            "approvalRequired": true,
+            "conversionMetrics": {
+              "confidence": "model-estimated",
+              "methodology": "Like-for-like ATS delta (shared context) \u00d7 population baseline (2.5%)",
+              "requires_review": true,
+              "baselineATSScore": 44.06,
+              "tailoredATSScore": 46.28,
+              "estimatedConversionLift": "+0.1%"
+            }
+          },
+          "error": null,
+          "createdAt": "2026-07-31T17:36:29.762934+00:00",
+          "startedAt": "2026-07-31T17:36:30.280279+00:00",
+          "finishedAt": "2026-07-31T17:40:50.462305+00:00"
+        }
+      }
+    ],
+    "https://5cb5f0620.abacusai.cloud/api/agents/jobs/c6dcde7a051a64298821664a9": [
+      {
+        "ts": "2026-07-31T17:40:56Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:40:59Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:02Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:05Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:08Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:12Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:15Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:18Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:21Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:24Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:27Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:31Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:34Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:37Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:40Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:43Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:46Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:49Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:53Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:56Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:41:59Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:02Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:06Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:09Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:12Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:15Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:18Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:21Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:24Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:28Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:31Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:34Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:37Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:40Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:43Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:46Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:50Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:53Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:56Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:42:59Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:02Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:05Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:08Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:12Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:15Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:18Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:21Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:24Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:27Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:34Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:37Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:40Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:43Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:46Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:49Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:53Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:56Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:43:59Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:02Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:05Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:08Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:11Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:15Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:18Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:21Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:24Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:27Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:37Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:40Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:43Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:46Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:49Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:44:59Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:02Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:05Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:08Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:11Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:14Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:18Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:21Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:24Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:27Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:30Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:33Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:36Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:40Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:43Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:46Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:49Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:52Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "processing",
+          "agentKey": "tailor",
+          "result": null,
+          "error": null,
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": null
+        }
+      },
+      {
+        "ts": "2026-07-31T17:45:55Z",
+        "status": 200,
+        "body": {
+          "job_id": "c6dcde7a051a64298821664a9",
+          "status": "failed",
+          "agentKey": "tailor",
+          "result": null,
+          "error": "The AI service is temporarily unavailable. Please try again in a moment.",
+          "createdAt": "2026-07-31T17:40:56.029993+00:00",
+          "startedAt": "2026-07-31T17:40:56.116507+00:00",
+          "finishedAt": "2026-07-31T17:45:56.836376+00:00"
+        }
+      }
+    ],
+    "https://5cb5f0620.abacusai.cloud/api/resumes/c7ad3aa3d2e7b284b515446b5/diff": [
+      {
+        "ts": "2026-07-31T17:46:02Z",
+        "status": 200,
+        "body": {
+          "resume_id": "c7ad3aa3d2e7b284b515446b5",
+          "parent_id": "c16a1ba47a3823a9dcc24746b",
+          "changes": [
+            {
+              "evidenceRef": "bullet-3",
+              "before": "Delivery Recovery: Converted a mathematically infeasible SIT window \u2014 75+ hours of manual evidence per team against 64 available hours \u2014 into an achievable plan through a six-day tiered harness build with a formal go/no-go gate and a four-level contingency ladder.",
+              "after": "Remediated a mathematically infeasible SIT window \u2014 75+ hours of manual evidence per team against 64 available hours \u2014 by architecting a six-day tiered harness build process leveraging automation tooling, with a formal go/no-go gate and a four-level contingency ladder."
+            }
+          ]
+        }
+      }
+    ],
+    "https://5cb5f0620.abacusai.cloud/api/resumes/c7ad3aa3d2e7b284b515446b5/ats": [
+      {
+        "ts": "2026-07-31T17:46:02Z",
+        "status": 200,
+        "body": {
+          "resume_id": "c7ad3aa3d2e7b284b515446b5",
+          "job_id": "ce33bc4a46050ffc29e2fe08c",
+          "job_title": "Senior Technical Program Manager, Security",
+          "company": "replit",
+          "overall": 46.3,
+          "keyword_match": 47.5,
+          "semantic_similarity": 18.2,
+          "experience_gap": 100.0,
+          "matched_keywords": [
+            "program",
+            "engineering",
+            "management",
+            "cloud",
+            "risk",
+            "compliance",
+            "gcp",
+            "drive",
+            "leadership",
+            "platform",
+            "reporting",
+            "technical",
+            "automation",
+            "office",
+            "process",
+            "tooling",
+            "vendor",
+            "application",
+            "communication"
+          ],
+          "missing_keywords": [
+            "security",
+            "vulnerability",
+            "code",
+            "remediation",
+            "replit",
+            "bounty",
+            "bug",
+            "end",
+            "in-office",
+            "only",
+            "triage",
+            "health",
+            "saas",
+            "sla",
+            "vulnerabilities",
+            "about",
+            "accountable",
+            "applications",
+            "audit",
+            "backgrounds",
+            "creation"
+          ],
+          "requires_review": true
+        }
+      }
+    ]
+  }
+}

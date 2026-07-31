@@ -1,0 +1,109 @@
+[
+  {
+    "t": "2026-07-31T17:26:50.855Z",
+    "step": "login2",
+    "ok": true
+  },
+  {
+    "t": "2026-07-31T17:26:54.765Z",
+    "step": "scout-sources-raw",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:26:54.873Z",
+    "step": "scout-sources-availability-raw",
+    "status": 200
+  },
+  {
+    "t": "2026-07-31T17:26:54.924Z",
+    "step": "total-job-cards-au",
+    "cardCount": 6
+  },
+  {
+    "t": "2026-07-31T17:26:58.957Z",
+    "step": "found-idle-job",
+    "index": 4,
+    "idleJobTitle": "Innovation Product Manager, Australia"
+  },
+  {
+    "t": "2026-07-31T17:26:58.957Z",
+    "step": "idle-job-search-result",
+    "idleJobFound": true,
+    "idleJobTitle": "Innovation Product Manager, Australia"
+  },
+  {
+    "t": "2026-07-31T17:28:31.266Z",
+    "step": "tailor-run1-timeout",
+    "error": "TimeoutError: page.waitForSelector: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"apply-step2\"]') to be visible\u001b[22m\n"
+  },
+  {
+    "t": "2026-07-31T17:29:03.524Z",
+    "step": "tailor-run1-text",
+    "run1Text": null
+  },
+  {
+    "t": "2026-07-31T17:29:03.559Z",
+    "step": "links-present",
+    "previewLink": 0,
+    "viewPostingLink": 0,
+    "viewPostingHref": null
+  },
+  {
+    "t": "2026-07-31T17:29:03.565Z",
+    "step": "review-apply-btn-not-found",
+    "ok": false
+  },
+  {
+    "t": "2026-07-31T17:29:09.373Z",
+    "step": "applications-tracker-cards",
+    "appCards": 31,
+    "appCardTexts": [
+      "S33ATS 33Product Manager - Marketplacesupabasetailoring resume…27 min agoMove to…",
+      "B43ATS 43Onboarding Project ManagerBlocktailoring resume…27 min agoMove to…",
+      "T44ATS 44Staff Impartner Product Owner, PRMTwilioneeds approval11 h agoMove to…",
+      "R44ATS 44Senior Technical Program Manager, Securityreplitneeds approval11 h agoMove to…",
+      "GL39ATS 39Senior Product Manager, Infrastructure Observability | Sweden | RemoteGrafana LabsView Email Thread13 h agoMove to…",
+      "S35ATS 35Principal Business Technology Product ManagerSamsaraView Email Thread13 h agoMove to…",
+      "P36Program Manager, Sales Operations and TrainingPelotonView Email Thread17 h agoMove to…",
+      "S36ATS 36Program Manager, Security GRCStripeView Email Thread1 d agoMove to…",
+      "A36Staff Product Manager, OnboardingairwallexView Email Thread1 d agoMove to…",
+      "S34ATS 34Senior Legal Analyst & Litigation Project ManagerSamsaraView Email Thread1 d agoMove to…",
+      "P40Product Manager, Credit AutomationPlentiView Email Thread1 d agoMove to…",
+      "MO35Creative Project ManagerMUSEUM OF ICE CREAMView Email Thread2 d agoMove to…",
+      "S35Principal Business Technology Product ManagerSamsaraView Email Thread6 d agoMove to…",
+      "P36ATS 36Program Manager, Sales Operations and TrainingPelotonView Email Thread6 d agoMove to…",
+      "S34Product Manager - InterfacessupabaseView Email Thread6 d agoMove to…",
+      "H34ATS 34Innovation Product Manager, AustraliaharveyView Email Thread6 d agoMove to…",
+      "V35Technical Product Manager, Energy StorageVoltusView Email Thread6 d agoMove to…",
+      "O33Enablement Program Manager, APACOktaView Email Thread6 d agoMove to…",
+      "O33ATS 33Enablement Program Manager, APACOktaView Email Thread6 d agoMove to…",
+      "M25ATS 25Staff Program Manager, Trust & SafetyMozillaView Email Thread6 d agoMove to…",
+      "WF43ATS 43Program Manager, People TransformationWikimedia FoundationView Email Thread6 d agoMove to…",
+      "H41GTM Technology Product OwnerharveyView Email Thread6 d agoMove to…",
+      "R39Senior Product ManagerreplitView Email Thread6 d agoMove to…",
+      "M39Senior Product ManagerMableView Email Thread6 d agoMove to…",
+      "S38Product Manager - InfrastructuresupabaseView Email Thread6 d agoMove to…",
+      "R38Enterprise Product ManagerreplitView Email Thread6 d agoMove to…",
+      "CA38ATS 38Lead Product ManagerCareers at EucalyptusView Email Thread6 d agoMove to…",
+      "G45ATS 45Senior Professional Services Project ManagerGitLabView Email Thread6 d agoMove to…",
+      "S43Senior Manager - Technical Program ManagementsupabaseView Email Thread6 d agoMove to…",
+      "P50Senior Product Manager, Strategic Origination PlatformsPlentiView Email Thread7 d agoMove to…",
+      "D42Senior Product ManagerDeputyView Email Thread7 d agoMove to…"
+    ]
+  },
+  {
+    "t": "2026-07-31T17:29:15.179Z",
+    "step": "reload-applied-badge-count",
+    "appliedBadgeCount": 0
+  },
+  {
+    "t": "2026-07-31T17:29:19.225Z",
+    "step": "back-nav",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/applications"
+  },
+  {
+    "t": "2026-07-31T17:29:21.800Z",
+    "step": "forward-nav",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/jobs"
+  }
+]
