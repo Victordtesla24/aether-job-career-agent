@@ -244,6 +244,79 @@ trusted the same environment that poisoned the build would validate the poison.
 **Rule:** no `aether-web.service` restart, in a deploy or otherwise, without
 `scripts/verify-web-build.sh` exiting 0 first.
 
+### 0.5 ADDENDUM (2026-07-31, GOLD-MASTER-V2) — ROOT CAUSE of the Playwright
+rebuild-into-prod hazard is now closed; how to run the e2e suite
+
+§0.4 above added a pre-flight gate that catches a poisoned build before a
+restart. This addendum closes the mechanism that produced that poisoned
+build in the first place, so the same class of incident cannot recur.
+
+**Root cause:** `apps/web/playwright.config.ts` `webServer.command` used to
+be:
+
+```
+pnpm run build && pnpm exec next start -p 3000
+```
+
+Because this VM has no separate build output / worktree / staging copy for
+`apps/web` — `next build` always writes into `apps/web/.next`, and that is
+the exact directory `aether-web.service`'s already-running `next-server`
+process serves from — **running Playwright anywhere in this working tree
+rebuilt directly into the live production build.** Worse, starting on `-p
+3000` (the production port) combined with `reuseExistingServer: !CI` meant
+that outside CI, if a server was already listening on :3000 (i.e.
+production), Playwright would silently attach its authenticated "chromium"
+project to the **live production server** instead of a throwaway one. This
+is exactly how BUILD-RISK-001 happened, and this campaign ran Playwright
+repeatedly, so the hazard was live and recurring, not theoretical.
+
+**Fix — two structural changes, both in `apps/web/playwright.config.ts`:**
+
+1. **`webServer.command` no longer builds.** It now invokes
+   `scripts/run-e2e-server.sh`, which:
+   - calls `scripts/verify-web-build.sh` (reused, not duplicated) to assert
+     a valid, unpoisoned build already exists in `apps/web/.next` — this is
+     also where the `AETHER_API_PROXY` guard from §0.4 lives, so a polluted
+     shell still cannot reach a build an e2e run will serve;
+   - then runs `next start` **read-only** against that existing build.
+     `next start` never writes to `.next/` (only `next build` does), so once
+     the gate passes, an e2e run structurally cannot overwrite the build
+     `aether-web.service` serves. A caller must build first — this script
+     refuses to build on your behalf.
+2. **The e2e server now runs on a dedicated port, 3100** (`AETHER_E2E_PORT`
+   env var to override, but the script hard-refuses port `3000` under any
+   configuration). `baseURL` and the `webServer.url` health-check both moved
+   from `http://127.0.0.1:3000` to `http://127.0.0.1:3100`. Because the
+   e2e server is never on :3000, `reuseExistingServer: !process.env.CI`
+   (unchanged) can now only ever reuse a **previous e2e run of this same
+   script** — never the live production service.
+
+**How to run the e2e suite now (local or CI):**
+
+```bash
+cd /home/ubuntu/github_repos/aether-job-career-agent
+# 1. Build first — same clean-env recipe as a real deploy (§0.4).
+env -u AETHER_API_PROXY -u NEXT_PUBLIC_API_BASE_URL pnpm --dir apps/web build
+# 2. Gate the build (same gate a deploy would run before restarting).
+scripts/verify-web-build.sh
+# 3. Run e2e — starts a READ-ONLY next-start on :3100, never rebuilds,
+#    never touches :3000.
+pnpm --dir apps/web run e2e
+```
+
+If step 1/2 are skipped, `scripts/run-e2e-server.sh` (invoked automatically
+by step 3) fails loudly before starting any server — it does not build for
+you and does not run against a missing/incomplete/poisoned build.
+
+**Residual risk (documented, not eliminated):** two pre-existing spec files
+(`e2e/ml-agents-refix.spec.ts`, `e2e/ml-fe-polish.spec.ts`) already bypass
+this config's `webServer` entirely via their own `test.use({ baseURL: ...
+})` override, pointed at throwaway ports (3012 / 3091) that per their own
+comments require a separately, manually started API+web pair. They are
+outside this fix's scope (they never touch `apps/web/.next` or port 3000 via
+the main config) but are called out here so a future agent does not assume
+`playwright.config.ts` alone governs every spec in `apps/web/e2e/`.
+
 ---
 
 ## 1. Systemd Unit Names and Service Definitions
