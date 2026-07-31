@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:50:00Z",
+  "updated_utc": "2026-07-31T15:20:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -119,8 +119,10 @@
       "evidence": "CI run 30635438303 conclusion=success on main; deploy 061014c live at 13:45:25Z; git ls-remote --heads origin = exactly 1 branch (main); gh pr list --state open = 0 open PRs; no force-push, no --no-verify."
     },
     "G-M": {
-      "status": "PARTIAL",
-      "note": "72-min clean window with 0x5xx achieved; 4 real AI agent runs completed in a ~7-min clean window (AgentRun ids in AI-AGENT-QUALITY-ASSESSMENT.md). Needs a FINAL post-deploy window."
+      "status": "NOT-MET \u2014 window ran clean on duration and agent runs, but 2 REAL 5xx occurred",
+      "window": "2026-07-31T14:12:47Z .. 15:13:06Z (60 min, monitor alive 7 tails, proven by signal)",
+      "agent_runs": "7 AgentRun rows inside the window, 0 failed \u2014 fitScorer 2, scout 2, coverLetter 1, storyExtractor 1, tailor 1. Includes GENUINE LLM work (tailor/coverLetter/storyExtractor), not just lightweight discovery scans. Requirement was >=3.",
+      "blocking": "2x HTTP 500 on POST /auth/register at 15:06:58Z and 15:07:46Z. \u00a714.3.5 requires ZERO 5xx, so G-M does NOT close. A fresh window must run after the fix."
     },
     "G-N": {
       "status": "CLOSED",
@@ -241,6 +243,15 @@
       "relationship_to_BLOCKER_001": "DISTINCT and NOT closed by it. BLOCKER-001's fix correctly removed ADMIN PRIVILEGE (isAdmin now false, /admin/* 403, other users' PII protected). It does NOT block ordinary login to the owner's own account, by deliberate design (admin.py:297 keys on the bare identifier 'admin' only, so the discovery cron keeps working). The account-access exposure survives the admin fix.",
       "blast_radius": "Read/write access to the owner's own career data. NOT other users' data (that path is 403). Includes the ability to generate content and consume the pro entitlement.",
       "the_only_real_fix": "Rotate the password. Currently ON HOLD at operator request (user verification pending). The hold is the operator's call; this entry exists so the decision is made with full information."
+    },
+    {
+      "id": "BLOCKER-004",
+      "severity": "HIGH \u2014 live 500 on the signup path",
+      "status": "FIX IN FLIGHT (tests-first)",
+      "title": "POST /auth/register returns 500 on a NUL byte in the password field",
+      "verified": "Production api.log 2026-07-31T15:06:58Z and 15:07:46Z, full traceback captured.",
+      "root_cause": "hash_password() -> passlib bcrypt raises PasswordValueError(\"bcrypt does not allow NULL bytes in password\") BEFORE any DB query runs. The blanket _NulByteGuardCursor in app/db.py protects the DB CURSOR path only; a password never reaches the DB as a raw string, so this endpoint was never covered. The email field IS safe (EmailStr returns a clean 422).",
+      "my_error": "I recorded ML-SIGNUP-001 as \"FIXED AT HEAD, deployment lag\" on the strength of the db.py blanket guard. That was WRONG - the guard cannot see a value that fails before the DB layer. Signup is the first thing a new paying customer touches."
     }
   ],
   "human_gated": {
@@ -635,6 +646,14 @@
       "wrong_claim": "Stated TWICE that the operator-email login is refused by the deployed guard, and told the user they had \"no working admin access at all\" and that user-triggered LLM runs were unavailable.",
       "reality": "FALSE both times. The first reading was likely my own rate-limit lockout from repeated probing; the second was a MALFORMED curl (HTTP 422 JSON decode error from an unescaped character in the email) that I read as a rejection. A correctly-formed request returns HTTP 200 with a pro-entitled session. The paywall-verification agent was right and I was wrong.",
       "lesson": "Seventh instance of the same failure: I read a downstream symptom (a non-200) as a conclusion without checking the request itself. A 422 JSON-decode error is not an auth rejection. Verify the PROBE before trusting the RESULT."
+    },
+    {
+      "id": "ORCH-CORR-008",
+      "date": "2026-07-31",
+      "wrong_claim": "Asserted the entire NUL-byte class (11 endpoints) was fixed at HEAD by the blanket _NulByteGuardCursor in db.py, and specifically that ML-SIGNUP-001 was deployment lag rather than a real gap.",
+      "reality": "FALSE for the password field. bcrypt raises BEFORE the DB layer, so a cursor-level guard is structurally incapable of covering it. Proven by a live 500 on production during the very observation window meant to demonstrate zero errors.",
+      "lesson": "A guard placed at one layer does not cover inputs that fail at an earlier layer. I generalised from \"the guard is blanket across all queries\" to \"the class is closed\" without asking which inputs never reach a query at all. Eighth instance of concluding from a mechanism without tracing the actual path.",
+      "silver_lining": "The observation window did exactly its job - it caught a live defect that every test suite and the entire 27-route smoke sweep had missed."
     }
   ],
   "entitlement_enforcement_map": {
