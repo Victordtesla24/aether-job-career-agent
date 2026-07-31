@@ -274,5 +274,16 @@ class TestCountsCountJobsNotRows:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 counts = get_application_counts(cur, user_id)
-        # job_a was actually sent (submitted); job_b only drafted.
-        assert counts == {"total": 2, "submitted": 1}
+        # job_a was actually sent (submitted); job_b only drafted. Assert the
+        # jobs-not-rows contract on the keys this test exists to protect —
+        # NOT exact dict-key equality. ``get_application_counts`` is the
+        # single canonical counts source for the whole platform (see its
+        # docstring) and legitimately grows additional DISTINCT-jobId
+        # sub-counts over time (e.g. "interviewed", added for
+        # interview_conversion_rate, §5.3.5) — a new key computed with the
+        # SAME distinct-job discipline is not a dedup regression. If this
+        # ever regresses to counting Application ROWS instead of distinct
+        # jobs, these two assertions still fail (proven via tamper-test,
+        # see RT004-WC-regression-adjudication.md).
+        assert counts["total"] == 2, counts
+        assert counts["submitted"] == 1, counts
