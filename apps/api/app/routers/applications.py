@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.db import ensure_application_unique_active_index, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.routers.analytics import get_application_counts
+from app.services.stage_transitions import move_application_stage, move_job_stage
 
 logger = logging.getLogger(__name__)
 
@@ -108,10 +109,32 @@ def list_applications(
 ) -> list[dict[str, Any]]:
     """List the authenticated user's applications, joined with job metadata.
 
-    By default excludes jobs whose Job.status is 'applied' or 'archived' —
-    those are terminal and live in the separate Applied/History views
-    (phase4). Pass ``?include_applied=true`` to fetch only those terminal
-    jobs.
+    ML-APP-003 (§8, HIGH): this listing is the board's data source and it is
+    driven by ``Application.status`` ALONE — the same population
+    ``/applications/funnel/sankey`` counts. It used to additionally exclude
+    every row whose parent ``Job.status`` was 'applied' or 'archived', which
+    made the board and the funnel answer differently about identical data:
+    ``POST /jobs/{id}/apply`` (and ``POST /applications/{id}/submit``) flip
+    ``Job.status`` to 'applied' the moment an application is created/promoted
+    and NEVER advance it again, so an application the user then moved on to
+    screening / interview / offer stayed invisible on the board — live
+    evidence: the "In Review" column showed 0 while the Sankey said
+    "Screened: 2" for the SAME 2 rows. That filter also emptied the board's
+    Submitted column by construction (every submitted application has an
+    'applied' job), i.e. the entire application-fed half of the board.
+
+    The Job.status filter is a JOB-lifecycle concept and belongs to the board's
+    first three columns, which are fed by ``GET /jobs`` (an 'applied' or
+    'archived' job has no stage key in tracker-lib's JOB_STAGE map, so its job
+    card correctly disappears from the pipeline half). Applying to a job ends
+    the JOB's pipeline, not the APPLICATION's — so the application card must
+    stay visible in its true stage column. A card on the board is now always
+    counted by the funnel and vice versa; the application's own closed states
+    (rejected/withdrawn) remain the way a row leaves the active pipeline.
+
+    ``?include_applied=true`` is unchanged: it is the separate Applied/History
+    view (phase4, apps/web ``fetchAppliedApplications``) and still answers with
+    exactly the applications whose job the user has applied to.
     """
     clauses = ['a."userId" = %s']
     params: list[Any] = [current_user["id"]]
@@ -126,9 +149,6 @@ def list_applications(
     if include_applied:
         clauses.append('j."status" = %s::"JobStatus"')
         params.append("applied")
-    else:
-        clauses.append('j."status" NOT IN (%s::"JobStatus", %s::"JobStatus")')
-        params.extend(["applied", "archived"])
     where = " AND ".join(clauses)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -196,60 +216,80 @@ class SubmitRequest(BaseModel):
     applied_url: str | None = Field(default=None, max_length=2000)
 
 
-# ---- FEAT-B2: move cards between kanban stages ------------------------------
+# ---- §8.1 / FEAT-B2: move cards between kanban stages -----------------------
 #
 # The board (apps/web tracker-lib.ts) has 8 columns. The FIRST 3 are fed by
 # Job.status (discovered / evaluating / tailoring — the agent pipeline half);
-# the LAST 5 are fed by Application.status. Moves are therefore two endpoints:
-# application cards move between the 5 app-fed stages, job cards between the
-# 3 job-fed stages. Crossing the split is rejected with an honest 422 — an
-# application's presence is what removes the job card from the pipeline half.
-
-#: stage key → Application.status (the 5 application-fed columns).
-_APP_STAGE_TO_STATUS = {
-    "ready": "draft",
-    "submitted": "submitted",
-    "in-review": "screening",
-    "interview": "interview",
-    "offer": "offer",
-}
-
-#: stage key → Job.status (the 3 job-fed columns). "evaluating" renders both
-#: 'screening' and 'matched' jobs; 'screening' is the canonical write target.
-_JOB_STAGE_TO_STATUS = {
-    "discovered": "discovered",
-    "evaluating": "screening",
-    "tailoring": "tailoring",
-}
-
-_ALL_STAGE_KEYS = set(_APP_STAGE_TO_STATUS) | set(_JOB_STAGE_TO_STATUS)
-
-#: Closed applications live in the board's "closed" strip, not a column —
-#: they cannot be dragged back into the pipeline via a stage move.
-_CLOSED_STATUSES = frozenset({"rejected", "withdrawn"})
+# the LAST 5 are fed by Application.status. Moves are therefore two card
+# families: application cards move between the 5 app-fed stages, job cards
+# between the 3 job-fed stages. Crossing the split is rejected with an honest
+# 422 — an application's presence is what removes the job card from the
+# pipeline half.
+#
+# GOV-003 / §13.1: ALL of the rules (stage matrix, closed-application guard,
+# RT-004 one-active-application-per-job invariant, audit write) live in ONE
+# shared transition service — app/services/stage_transitions.py. The three
+# routes below are thin transport adapters over it; there is no second
+# implementation. PATCH /applications/{id}/stage is the CANONICAL contract
+# (§8.1); the two POST .../move routes are the legacy transports kept for
+# their live callers (apps/web tracker-api.ts).
 
 
 class MoveRequest(BaseModel):
-    """Target stage for moving a kanban card (FEAT-B2)."""
+    """Target stage for moving a kanban card (legacy FEAT-B2 payload)."""
 
     to_stage: str = Field(..., max_length=50, description="Target stage key")
 
 
-def _validate_stage(to_stage: str, mapping: dict[str, str], side: str) -> str:
-    """Resolve a stage key to a status, with honest 422s for illegal targets."""
-    if to_stage not in _ALL_STAGE_KEYS:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Unknown stage '{to_stage}'. Valid stages: {sorted(_ALL_STAGE_KEYS)}",
-        )
-    if to_stage not in mapping:
-        other = "Job-status-fed" if side == "application" else "Application-status-fed"
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Stage '{to_stage}' is {other} — a {side} card cannot move there. "
-            f"Valid targets for a {side} card: {sorted(mapping)}",
-        )
-    return mapping[to_stage]
+class StageTransitionRequest(BaseModel):
+    """Canonical §8.1 stage-move payload: where the card was, where it goes."""
+
+    from_stage: str = Field(
+        ..., max_length=50, description="Stage key the card is moving OUT of"
+    )
+    to_stage: str = Field(
+        ..., max_length=50, description="Stage key the card is moving INTO"
+    )
+
+
+@router.patch("/{application_id}/stage")
+def patch_application_stage(
+    application_id: str, body: StageTransitionRequest, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Canonical stage move for an APPLICATION card (§8.1, GOV-003).
+
+    Delegates to :func:`app.services.stage_transitions.move_application_stage`
+    — the same service the legacy ``POST /applications/{id}/move`` route uses,
+    so the two transports can never drift apart (§13.1).
+
+    Legal matrix: any transition between ready/submitted/in-review/interview/
+    offer, forward or backward — the user is the source of truth for their own
+    pipeline; same-stage is an idempotent no-op. Enforced SERVER-SIDE:
+      * job-fed (discovered/evaluating/tailoring) or unknown stage keys in
+        EITHER field → 422 naming the offending stage;
+      * a closed (rejected/withdrawn) application → 422;
+      * ``from_stage`` that disagrees with the application's real stage → 409
+        naming the real one (a stale board never silently overwrites a move
+        that happened in between);
+      * another user's (or an unknown) application → 404 "Application not
+        found", the same owner-scoped answer every other application endpoint
+        gives — never a silent success;
+      * every applied transition is audited as ``application.stage_move`` with
+        actor / from / to / timestamp, atomically with the update.
+
+    Returns the updated application row (identical shape to
+    ``GET /applications/{id}``).
+    """
+    move_application_stage(
+        user_id=current_user["id"],
+        application_id=application_id,
+        to_stage=body.to_stage,
+        from_stage=body.from_stage,
+        # This router owns the request's unit of work — the transition runs on
+        # the same connection source as the read that renders the response.
+        connection_factory=get_connection,
+    )
+    return get_application(application_id, current_user)
 
 
 @router.post("/pipeline/{job_id}/move")
@@ -261,63 +301,15 @@ def move_pipeline_job(
     422 for app-fed/unknown targets; 409 when the job already has an
     application (it is no longer a pipeline card — move the application
     instead); 404 unknown/foreign job. Audited as ``job.stage_move``.
+    Delegates to the shared transition service (GOV-003).
     """
-    uid = current_user["id"]
-    new_status = _validate_stage(body.to_stage, _JOB_STAGE_TO_STATUS, "job")
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "status" FROM "Job" WHERE "id" = %s AND "userId" = %s',
-                (job_id, uid),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
-            from_status = row[0]
-            cur.execute(
-                'SELECT 1 FROM "Application" WHERE "jobId" = %s AND "userId" = %s LIMIT 1',
-                (job_id, uid),
-            )
-            if cur.fetchone() is not None:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    "This job already has an application — move the application "
-                    "card instead.",
-                )
-            if from_status != new_status:
-                cur.execute(
-                    'UPDATE "Job" SET "status" = %s::"JobStatus", "updatedAt" = NOW() '
-                    'WHERE "id" = %s AND "userId" = %s',
-                    (new_status, job_id, uid),
-                )
-                from app.repositories.admin import write_audit
-
-                write_audit(
-                    uid,
-                    "job.stage_move",
-                    target_type="job",
-                    target_id=job_id,
-                    detail={
-                        "from": from_status,
-                        "to": new_status,
-                        "to_stage": body.to_stage,
-                    },
-                    cur=cur,
-                )
-            conn.commit()
-    # RT-008 event-driven trigger: a card moved into evaluating or tailoring
-    # is exactly the signal that creates board-sweep work — enqueue a sweep
-    # NOW instead of waiting up to 10 minutes for the next cron tick. The
-    # cron remains the floor: best-effort, never blocks or surfaces an
-    # enqueue failure to the user making the move.
-    if from_status != new_status and new_status in ("screening", "tailoring"):
-        try:
-            from app.workers.board_sweep import enqueue_user_sweep
-
-            enqueue_user_sweep(uid)
-        except Exception:  # noqa: BLE001 — best-effort; cron still fires
-            logger.exception("job.stage_move %s: sweep trigger failed", job_id)
-    return {"id": job_id, "status": new_status, "stage": body.to_stage}
+    move = move_job_stage(
+        user_id=current_user["id"],
+        job_id=job_id,
+        to_stage=body.to_stage,
+        connection_factory=get_connection,
+    )
+    return {"id": move.job_id, "status": move.to_status, "stage": move.to_stage}
 
 
 @router.post("/{application_id}/move")
@@ -326,93 +318,18 @@ def move_application(
 ) -> dict[str, Any]:
     """Move an APPLICATION card between the 5 application-fed stages (FEAT-B2).
 
-    Legal matrix: any transition between ready/submitted/in-review/interview/
-    offer, forward or backward — the user is the source of truth for their own
-    pipeline; same-stage is an idempotent no-op. Honest 422s for job-fed or
-    unknown targets and for closed (rejected/withdrawn) applications. The
-    transition is audited (who/when/from→to) atomically with the update, so
-    ``/funnel/sankey`` — computed live from statuses with the cumulative
-    model — can never double-count or orphan a moved application.
+    LEGACY transport for the canonical PATCH ``/applications/{id}/stage``
+    above: same shared transition service, same rules, same responses — it
+    simply carries no ``from_stage``, so no stale-board conflict check is
+    possible for its callers. Kept because the shipped web client
+    (``apps/web`` tracker-api ``moveApplication``) calls it.
     """
-    uid = current_user["id"]
-    new_status = _validate_stage(body.to_stage, _APP_STAGE_TO_STATUS, "application")
-    ensure_application_unique_active_index()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "status", "jobId" FROM "Application" '
-                'WHERE "id" = %s AND "userId" = %s',
-                (application_id, uid),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
-            from_status, move_job_id = row
-            if from_status in _CLOSED_STATUSES:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    f"Application is {from_status} (closed) — closed applications "
-                    "cannot be moved between pipeline stages.",
-                )
-            if from_status == "draft" and new_status != "draft":
-                # RT-004 promotion guard: Application rows double as
-                # cover-letter versions; promoting a SECOND version of an
-                # already-applied job minted a permanent duplicate board card
-                # (live evidence: 11 cards for one job). One active
-                # application per job.
-                cur.execute(
-                    'SELECT "id" FROM "Application" WHERE "userId" = %s '
-                    'AND "jobId" = %s AND "id" <> %s AND "status" IN '
-                    "('submitted','screening','interview','offer') LIMIT 1",
-                    (uid, move_job_id, application_id),
-                )
-                if cur.fetchone() is not None:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
-                        "This job already has an active application — move that "
-                        "card instead; this draft stays in the letter's version "
-                        "history.",
-                    )
-            if from_status != new_status:
-                # NTH-R10 (wave35-sonnet-review-verdict.json): the guard just
-                # above is check-then-act -- a concurrent promotion of a
-                # DIFFERENT draft for the SAME job can commit between this
-                # request's SELECT and its own UPDATE below, so the guard
-                # alone cannot stop a cross-row duplicate. The partial unique
-                # index (ensure_application_unique_active_index) is the real
-                # backstop; map its violation to the IDENTICAL 409 the guard
-                # above returns, so the client contract is unchanged whether
-                # the race is caught here or up there.
-                try:
-                    cur.execute(
-                        'UPDATE "Application" '
-                        'SET "status" = %s::"ApplicationStatus", "updatedAt" = NOW() '
-                        'WHERE "id" = %s AND "userId" = %s',
-                        (new_status, application_id, uid),
-                    )
-                except psycopg2.errors.UniqueViolation:
-                    conn.rollback()
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
-                        "This job already has an active application — move that "
-                        "card instead; this draft stays in the letter's version "
-                        "history.",
-                    )
-                from app.repositories.admin import write_audit
-
-                write_audit(
-                    uid,
-                    "application.stage_move",
-                    target_type="application",
-                    target_id=application_id,
-                    detail={
-                        "from": from_status,
-                        "to": new_status,
-                        "to_stage": body.to_stage,
-                    },
-                    cur=cur,
-                )
-            conn.commit()
+    move_application_stage(
+        user_id=current_user["id"],
+        application_id=application_id,
+        to_stage=body.to_stage,
+        connection_factory=get_connection,
+    )
     return get_application(application_id, current_user)
 
 
