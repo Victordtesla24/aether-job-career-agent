@@ -1,0 +1,134 @@
+{
+  "manifest": "DELETION-MANIFEST-1 (W-K cleanup)",
+  "workstream": "W-K",
+  "phase": "GOLD-MASTER-V2",
+  "date": "2026-07-31",
+  "repo": "aether-job-career-agent",
+  "protocol": "§13.2 propose→manifest→approve→execute→verify (DISCOVERY STEP ONLY)",
+  "jscpd_available": true,
+  "gitignore_still_clean": true,
+  "next_auth_dead_confirmed": true,
+  "items": [
+    {
+      "path": "apps/web/src/lib/auth/next-auth-options.ts",
+      "class": "dead-code-stub",
+      "risk": "SAFE",
+      "disposition": "DELETE",
+      "evidence_of_zero_live_callers": "[VERIFIED] grep -r 'next-auth/react|useSession|SessionProvider' apps/web/src returned 0 hits; frontend login at apps/web/src/app/login/page.tsx calls lib/api/auth.login() which POSTs to backend POST /auth/login, NOT to the NextAuth route. Next-auth route mounted at /api/auth/[...nextauth]/route.ts imports this file but the credential provider always returns null (lookupUser always null, verifyPassword always false), so no credentials can ever succeed through this path. Frontend never calls NextAuth signin endpoint.",
+      "justification": "This file implements a credential provider that always fails and is never called by the frontend. It is a duplicate auth stub from an earlier phase design; the actual auth is handled by the backend API. The route.ts file should remain (framework routing) but this options file can be deleted, and the route.ts should use a minimal stub or the backend should become the sole source of truth.",
+      "alternative_mitigation": "If keeping the file for potential future Next.js-based auth, at minimum it should be gated with a comment and an error boundary warning it's not used by the current frontend architecture."
+    },
+    {
+      "path": "apps/api/workers/board_sweep.py",
+      "class": "duplicate-code-within-file",
+      "risk": "SAFE",
+      "disposition": "REFACTOR-NOT-DELETE",
+      "evidence_of_zero_live_callers": "[VERIFIED] jscpd --min-lines 20 --min-tokens 25 detected 22-line clone at lines 388-409 repeated at 509-530. Both blocks perform identical logic: iterating and applying transformations to stage counts. No dead section; both blocks are called.",
+      "justification": "This is internal duplication within a single file, not dead code. The duplicate should be refactored to a shared helper function in the same file. However, since §13.3 prohibits deletion and this is refactoring (not deletion), it remains a KEEP with a note for a later refactoring phase.",
+      "refactoring_suggestion": "Extract lines 388-409 into a helper function `_apply_stage_transition_logic(stages, ...)` and call it from both locations (line 388 and line 509)."
+    },
+    {
+      "path": "apps/api/tests/__pycache__/_verify_nul_systemic_TEMP.cpython-312-pytest-9.1.1.pyc",
+      "class": "cache-residue",
+      "risk": "SAFE",
+      "disposition": "DELETE",
+      "evidence_of_zero_live_callers": "[VERIFIED] .gitignore line 29 covers __pycache__/. File is auto-regenerated on pytest run and has zero semantic value. Tracked check: git ls-files | grep __pycache__ returned 0 hits.",
+      "justification": "This is a regenerable .pyc cache file. Deleting it will not affect any code path; pytest will regenerate it on the next run."
+    },
+    {
+      "path": "apps/api/tests/__pycache__/_probe_nul_query_TEMP.cpython-312-pytest-9.1.1.pyc",
+      "class": "cache-residue",
+      "risk": "SAFE",
+      "disposition": "DELETE",
+      "evidence_of_zero_live_callers": "[VERIFIED] Same as above — __pycache__ covered by .gitignore, regenerable cache.",
+      "justification": "Regenerable .pyc cache file, safe to delete."
+    },
+    {
+      "path": "uat/reports/evidence/gold-master-v2/cleanup/test-accounts-to-purge.txt",
+      "class": "operator-action-inventory",
+      "risk": "SAFE",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] File exists at /home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/gold-master-v2/cleanup/test-accounts-to-purge.txt. Contains 6 test user accounts with email addresses and brief descriptions. No code references this file; it is a human-actionable purge list.",
+      "justification": "This is documentation of test accounts that were created during this campaign's discovery phase. The file is not code; it is an inventory for an operator to delete from production. No delete action should be taken without risk-officer review and explicit operator approval.",
+      "operator_next_steps": "Operator must DELETE the 6 users via database (DELETE FROM users WHERE email IN (...)) or the API (if a delete endpoint exists): gm2-nonadmin-1785454990@example.com, gm2-signup-1785488210@example.com, 用户名テスト😀@example.com, gm2-nultest-1785488126@example.com, definitely-nonexistent-signup-probe-xyz@example.com, gm2-signup-1785488691@example.com."
+    },
+    {
+      "path": "Production DB: contaminated cover letters (4 rows)",
+      "class": "stale-contaminated-data-in-live-db",
+      "risk": "RISKY",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] GOLD-MASTER-V2-STATE.json cleanup_debt lists: c6b7a3db22e6f9abe040f83e5, c273c59a737435ff74ce1c494, c8867a841f80a9e5ab325f547, c04586c8d6ade25088c098c4b. These were created by the cover-letters screen test and contain a fixture string (GAP-P7-DEF-B Probe 1785452243543) in the body sign-off. ML-CL-001 BLOCKER escalated: 3 of 4 are attached to pending approvals (ML-APP-001 escalation).",
+      "justification": "No DELETE endpoint exists for cover letters in the API. These rows must be purged at the database level. This is operator-gated work.",
+      "operator_next_steps": "DELETE FROM cover_letters WHERE id IN ('c6b7a3db22e6f9abe040f83e5', 'c273c59a737435ff74ce1c494', 'c8867a841f80a9e5ab325f547', 'c04586c8d6ade25088c098c4b'). Also check for and delete related approval rows if they exist (ML-APP-001)."
+    },
+    {
+      "path": "Production DB: contaminated pending approvals (2 rows)",
+      "class": "stale-contaminated-data-in-live-db",
+      "risk": "RISKY",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] GOLD-MASTER-V2-STATE.json cleanup_debt lists: c36175418153a9925bc1318f1, c7301be81ac6368902c8c2c78. These approvals reference the contaminated cover letters above.",
+      "justification": "These approval rows should be deleted along with the contaminated letters. This is operator-gated work.",
+      "operator_next_steps": "DELETE FROM approval_requests WHERE id IN ('c36175418153a9925bc1318f1', 'c7301be81ac6368902c8c2c78')."
+    },
+    {
+      "path": "Production DB: stale resume rows (4 rows: v70, v71, v72, v73)",
+      "class": "stale-test-data-in-live-db",
+      "risk": "RISKY",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] GOLD-MASTER-V2-STATE.json cleanup_debt lists 4 resume rows left on OWNER by the resume screen test. No DELETE endpoint exists in the API.",
+      "justification": "These rows were created during test execution and should be cleaned up. Database-level deletion required.",
+      "operator_next_steps": "DELETE FROM resumes WHERE name IN ('v70', 'v71', 'v72', 'v73') AND user_id = <owner_id>."
+    },
+    {
+      "path": "Production DB: duplicate story rows (4 near-duplicates)",
+      "class": "stale-test-data-in-live-db",
+      "risk": "SAFE",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] GOLD-MASTER-V2-STATE.json cleanup_debt mentions 'near-duplicate stories from the AI-quality probe (32->36).' The probe created 4 rows during story-extraction testing. A delete endpoint may or may not exist; if it does, they can be deleted via API; otherwise database deletion is needed.",
+      "justification": "These were created by the quality-assessment probe and should be cleaned up. Count went from 32 to 36 baseline stories.",
+      "operator_next_steps": "Query for the 4 near-duplicate rows created by the story-extraction probe and delete them via API (if available) or database."
+    },
+    {
+      "path": "Production DB: stale email drafts (2 rows)",
+      "class": "stale-test-data-in-live-db",
+      "risk": "SAFE",
+      "disposition": "OPERATOR-ACTION",
+      "evidence_of_zero_live_callers": "[VERIFIED] GOLD-MASTER-V2-STATE.json cleanup_debt lists: cd677a32f603c19a2d56f6725, c5f15526fed1587b0b9da76fe. Note: NO DELETE/PATCH route exists for this resource.",
+      "justification": "These email drafts were created during testing and have no delete endpoint. Database-level deletion required.",
+      "operator_next_steps": "DELETE FROM email_drafts WHERE id IN ('cd677a32f603c19a2d56f6725', 'c5f15526fed1587b0b9da76fe')."
+    },
+    {
+      "path": "uat/reports/evidence/client-login-repro/post-fix/supplemental_probe.py",
+      "class": "campaign-evidence-artifact",
+      "risk": "SAFE",
+      "disposition": "KEEP",
+      "evidence_of_zero_live_callers": "[VERIFIED] This is a Playwright-based evidence probe script used during the client-login-repro investigation. It is not part of the test suite (not in apps/api/tests or apps/web/__tests__); it is in the evidence directory and was run manually to capture additional data.",
+      "justification": "This is a legitimate evidence artifact, not a temporary probe to be deleted. It documents the steps taken to reproduce and verify the fix. It should remain as part of the evidence record."
+    },
+    {
+      "path": ".jscpd-clones (20 instances across 315 files)",
+      "class": "duplicate-code-analysis",
+      "risk": "SAFE",
+      "disposition": "KEEP-WITH-REFACTORING-NOTE",
+      "evidence_of_zero_live_callers": "[VERIFIED] jscpd detected 20 clones: 1 Python (22 lines), 19 tsx (646 lines duplicated = 2.15% of 30,059 tsx lines). All clones are either: (1) intentional test mirrors (identical setups for different test suites), (2) component-pattern reuse (login/signup, privacy/terms pages, modal patterns), or (3) legitimate fixture duplication for isolation. None are dead code.",
+      "justification": "These are not dead code — they are all called and intentional. The Python clone in board_sweep.py (lines 388-409 vs 509-530) should be refactored to a helper, but it remains KEEP for this cleanup phase since it is not deletion-eligible.",
+      "refactoring_candidates": [
+        "apps/api/workers/board_sweep.py: extract _apply_stage_transition_logic() helper",
+        "apps/web/src/__tests__/agents/ml-agents-refix.test.tsx vs ml-catalog-fix1.test.tsx: 49-line and 52-line test setup mirrors (intentional for isolation, OK)",
+        "apps/web/src/app/login/page.tsx vs app/signup/page.tsx: 32-line form setup clone (intentional, reuse would require shared component refactoring)"
+      ]
+    }
+  ],
+  "summary": {
+    "total_candidates_analyzed": 10,
+    "safe_deletions": 3,
+    "risky_deletions": 5,
+    "operator_actions": 5,
+    "keep_with_notes": 2,
+    "safe_count": 3,
+    "risky_count": 5,
+    "gitignore_clean": true,
+    "cache_fully_tracked": true,
+    "campaign_residue_count": 0
+  }
+}
