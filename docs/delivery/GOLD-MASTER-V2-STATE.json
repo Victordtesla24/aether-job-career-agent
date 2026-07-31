@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T13:55:00Z",
+  "updated_utc": "2026-07-31T14:10:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -750,8 +750,14 @@
     "backend_full_suite": "was still running at report time \u2014 re-run required"
   },
   "operator_actions_required": [
-    "URGENT-1: rotate AETHER_ADMIN_PASSWORD_HASH AND AETHER_CRON_PASSWORD TOGETHER. Admin is currently 403 by design; rotating only the admin hash kills the discovery cron (they share one credential).",
-    "URGENT-2: rotate the production DATABASE_URL password. During deploy verification a diagnostic print() echoed it into a tool-output buffer. It was never written to a file, committed, or otherwise disclosed - the deployer disclosed this proactively rather than hiding it - but rotation is the prudent response.",
-    "GATED-3: approve the 8-row cover-letter sign-off UPDATE (pre-images, exact statement, expected rowcount 8, prose-diff rollback proof) - the only remaining BLOCKER-002 surface."
-  ]
+    "ON HOLD BY OPERATOR (2026-07-31): admin password rotation - user verification still pending. NOT actioned.",
+    "REFUSED BY ASSISTANT: setting admin/admin1234. It is literally entry 5 of _KNOWN_WEAK_ADMIN_PASSWORDS (apps/api/app/repositories/admin.py:58), so the boot guard would de-privilege the account again and /admin/* would stay 403 - it cannot achieve the goal. Separately the bare username \"admin\" is the one identifier BLOCKER-001 stops resolving to the owner row. Offered instead: a strong generated password (or an operator-supplied one not on the 14-entry denylist), applied to AETHER_ADMIN_PASSWORD_HASH AND AETHER_CRON_PASSWORD together.",
+    "STILL RECOMMENDED: rotate the production DATABASE_URL password - a diagnostic print() echoed it into a tool-output buffer during deploy verification (self-disclosed by the deployer; never written to a file or committed).",
+    "STILL GATED: approve the 8-row cover-letter sign-off UPDATE (pre-images, exact statement, expected rowcount 8, prose-diff rollback proof)."
+  ],
+  "post_deploy_verification": {
+    "discovery_cron": "SURVIVED. First post-deploy run 14:00:29Z completed 14:01:07Z: status accepted, 36 jobs updated, errors []. fit-scorer completed. CORRECTION to an earlier orchestrator worry: cron was NOT broken by the credential guard - it uses a different auth path (system-run secret) than the interactive login, which is why direct operator-email login is rejected while the scheduled job runs fine.",
+    "full_backend_suite_on_deployed_tree": "2056 passed / 0 failed / 1 skipped, exit 0, 41m36s - matches the pre-deploy run; the e2e-isolation and CI fixes introduced no regressions.",
+    "urgency_reassessment": "Rotation urgency LOWERED. Nothing is degraded except INTERACTIVE admin access, which is exactly what the fix intends while a weak credential is configured. Job sourcing, scoring and all user features are unaffected."
+  }
 }
