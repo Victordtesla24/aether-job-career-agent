@@ -1,0 +1,209 @@
+{
+  "run": "GOLD-MASTER-V2",
+  "prompt": "/home/ubuntu/aether-gold-master-execution.md",
+  "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
+  "started_utc": "2026-07-30T22:36:00Z",
+  "updated_utc": "2026-07-31T01:45:00Z",
+  "phase_step": "W-A \u00a73.2 screen sweep in progress (2 of ~20 routes); W-B inventory CANONICAL; BLOCKER-001 tests queued",
+  "evidence_root": "uat/reports/evidence/gold-master-v2/",
+  "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
+  "baseline": {
+    "pytest": {
+      "status": "GREEN - CLEAN AND TRUSTWORTHY",
+      "passed": 1885,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "duration_sec": 2134,
+      "log": "uat/reports/evidence/gold-master-v2/phase0/logs/pytest-baseline-clean-20260730T231714Z.log",
+      "note": "This is the G-N 0-regression reference line. Zero skipped, so no skipped-test-inflation baseline. NOTE: README claims 967 backend tests - stale by ~918; add to README corrections."
+    },
+    "vitest": {
+      "status": "GREEN",
+      "exit_code": 0,
+      "duration_sec": 156
+    },
+    "playwright": {
+      "status": "RED",
+      "exit_code": 1,
+      "passed": 40,
+      "failed": 12,
+      "note": "carried as findings; \u00a714.1/G-N require green"
+    },
+    "git": {
+      "remote_branches": 1,
+      "open_prs": 0,
+      "ci_latest_on_main": "success",
+      "head": "297946d"
+    }
+  },
+  "workstream_status": {
+    "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
+    "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod).",
+    "W-C": "PENDING - MEASURED baseline: resume tailoring produces 0 changes; baselineATSScore == tailoredATSScore exactly (+0.0% lift) even on runs reporting changes:1. NO score-aware iterative loop exists in resume_tailor.py (single LLM pass + non-regression guard). Craft 2/10. KEY TENSION: 0 changes occurs because the anti-fabrication guard CORRECTLY refuses to inject JD keywords the resume genuinely lacks. >=85 is therefore not honestly reachable for every job; \u00a75.3.1(5) governs - iterate genuinely, never fabricate, surface an honest best-achieved-score warning. Zero fabrication detected in any output - honesty holds, usefulness fails.",
+    "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
+    "W-E": "PENDING - CONFIRMED REAL: re-running story extraction on an UNCHANGED resume created 4 more near-duplicate rows (32->36) during this run. Dedup catches only byte-identical repeats, not paraphrases. NOTE: the Phase-0 PROD-DB-STATE probe concluded \"0 duplicates / CLEAN\" - it measured exact and full-content equality only and MISSED the paraphrase class. Superseded by this fresh evidence.",
+    "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
+    "W-G": "PENDING - NOT human-gated: admin auth confirmed possible via AETHER_CRON_EMAIL/PASSWORD (live login isAdmin=true). G-G fully testable.",
+    "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
+    "W-I": "PENDING - SCREEN-MATRIX contradicts \u00a711.1 (GOV-007): most routes are static one-time fetch, no periodic refresh",
+    "W-J": "PENDING - Job has fitScore+atsScore; tailoring_iteration and score_updated_at columns ABSENT; Application/Resume/CoverLetter carry no score columns",
+    "W-K": "PENDING - build/cache residue already clean+gitignored; 4 stale @example.com test users in prod DB with 0 spillover; PLUS a throwaway test account created in the production DB by the \u00a718 Stripe checkout probe - add to the purge manifest.; PLUS 4 near-duplicate story rows created by this run's own story-extraction probe (32->36).",
+    "W-L": "PENDING"
+  },
+  "gates": {
+    "G-A": {
+      "status": "OPEN"
+    },
+    "G-B": {
+      "status": "OPEN"
+    },
+    "G-C": {
+      "status": "OPEN"
+    },
+    "G-D": {
+      "status": "WITHDRAWN-UNACHIEVABLE",
+      "evidence": "docs/delivery/ADR-SEEK-FIRECRAWL.md (FINAL, REFUSED); uat/reports/evidence/gold-master-v2/phase0/seek-risk-adjudication.md",
+      "note": "Binding risk-officer refusal. Do NOT re-attempt from the prompt text."
+    },
+    "G-E": {
+      "status": "OPEN"
+    },
+    "G-F": {
+      "status": "OPEN"
+    },
+    "G-G": {
+      "status": "OPEN",
+      "note": "NOT conditionally-closed - operator admin credential IS available, so \u00a79 is fully testable and must be fully closed."
+    },
+    "G-H": {
+      "status": "OPEN"
+    },
+    "G-I": {
+      "status": "OPEN"
+    },
+    "G-J": {
+      "status": "OPEN"
+    },
+    "G-K": {
+      "status": "OPEN"
+    },
+    "G-L": {
+      "status": "OPEN"
+    },
+    "G-M": {
+      "status": "PARTIAL",
+      "note": "72-min clean window with 0x5xx achieved; 4 real AI agent runs completed in a ~7-min clean window (AgentRun ids in AI-AGENT-QUALITY-ASSESSMENT.md). Needs a FINAL post-deploy window."
+    },
+    "G-N": {
+      "status": "OPEN"
+    },
+    "G-O": {
+      "status": "OPEN"
+    },
+    "G-P": {
+      "status": "OPEN"
+    }
+  },
+  "binding_rulings": [
+    "GOV-001: \u00a70.2 model IDs claude-sonnet-4/claude-opus-4 do not exist; remapped within-tier to claude-sonnet-5/claude-opus-5. Active registry is /home/ubuntu/.claude/agents/, NOT the repo copy.",
+    "GOV-002: Workflow tool concurrency = min(16, cores-2) = ~1 on this 2-vCPU box. Use direct Agent fan-out. Keep the pytest flock and one-CPU-heavy-job-at-a-time.",
+    "GOV-003: stage-move and approvals delete/purge endpoints already exist. Build PATCH /applications/{id}/stage as canonical, refactor POST /move to delegate to one shared service. Do not duplicate.",
+    "GOV-005: janitor/risk-officer/ai-loop-engineer were unregistered at session start; now available. Always pass an explicit model override on dispatch.",
+    "GOV-006: every suite run writes to a session-unique timestamped log path. Never a shared filename.",
+    "GOV-008: Seek REFUSED. Do NOT set AETHER_ENABLE_SEEK. Do NOT remove the Jobs '(unavailable)' Seek label - it is truthful and backend-served. ML-audit-seek-fe-hardcode-001 = NOT-A-DEFECT."
+  ],
+  "next_actions": [
+    "BLOCKER-001: on CONFIRMED, run the \u00a715 fix pipeline immediately (interrupts other priorities per \u00a716)",
+    "W-A \u00a73.2: dispatch screen-testers per route AFTER pytest frees CPU - and use a genuine NON-admin identity, not admin/admin123",
+    "W-A \u00a73.3: write docs/delivery/GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md - gates all remaining workstreams",
+    "Seek R4: code-level guard so get_adapter_class('seek') cannot bypass the registry gate (test-first)",
+    "W-B: implement from the merged BACKEND+FRONTEND inventories once both triages land",
+    "W-K: purge 4 stale @example.com users + the Stripe-probe throwaway account"
+  ],
+  "last_commit": "297946d",
+  "last_deploy_sha": null,
+  "blockers": [
+    {
+      "id": "BLOCKER-001",
+      "title": "admin/admin123 authenticates as the REAL admin account on production (isAdmin=true)",
+      "severity": "CRITICAL",
+      "status": "CONFIRMED; tests red for right reasons; \u00a715 step 3 implementation IN FLIGHT",
+      "found_by": "\u00a718 human-gated investigation",
+      "detail": "\u00a71.1 documents admin/admin123 as a NON-admin test user. First-hand probe found it resolves to the same userId as the operator/owner account with isAdmin=true and reaches admin-only endpoints. Contradicts a \"GATE-31 verified live\" claim in docs/delivery/PROGRESS.md. Every screen test this run has used this credential, so prior UI observations were made as an ADMIN, not as a regular paying user - \u00a73.2 testing must be redone under a genuine non-admin identity.",
+      "blast_radius": "Widely-documented demo password grants full production admin, with paying users onboarding imminently.",
+      "next": "On CONFIRMED: \u00a715 pipeline - failing test first, then minimal genuine fix, review by a different agent, deploy, prod re-verify.",
+      "artifact": "uat/reports/evidence/gold-master-v2/phase0/BLOCKER-admin-overpermission-verification.md",
+      "corrected_root_cause": "AETHER_ADMIN_PASSWORD_HASH in the production .env is itself a bcrypt hash of the literal string \"admin123\" - the operator/owner admin password IS admin123. Deleting the seed account or repairing the username=admin demotion/regrant logic would NOT close the hole. Second contributing cause: the identifier \"admin\" resolves to the owner row. JWT carries NO isAdmin claim; privilege is resolved live from the DB row per request (apps/api/app/middleware/auth.py:48-55), so the token is a plain 24h bearer for the full owner identity.",
+      "confirmed_impact": "POST /auth/login {\"email\":\"admin\",\"password\":\"admin123\"} -> 200 as owner; /auth/me -> isAdmin:true; five admin-only endpoints return 200 including GET /admin/users which discloses OTHER USERS' email addresses, plan, subStatus, signup/last-login timestamps and spend. Token TTL 24h.",
+      "remediation_split": {
+        "operator_required_URGENT": "Rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of a strong unique password. The run CANNOT choose the operator password for them - \u00a718 lists this hash as an operator-held credential.",
+        "implementable_now_defence_in_depth": [
+          "Fail-fast guard rejecting a known-weak AETHER_ADMIN_PASSWORD_HASH, mirroring _guard_production_replay_mode in apps/api/app/main.py",
+          "Stop the literal identifier \"admin\" resolving to the operator/owner row",
+          "Login throttling on POST /auth/login if absent",
+          "Re-verify admin-only endpoints return 403 to non-admins and never leak other users' emails"
+        ]
+      },
+      "run_impact": "Every screen observation this run used admin/admin123 and was therefore made AS AN ADMIN. The \u00a73.2 sweep must be redone under a genuine non-admin identity.",
+      "tests": {
+        "file": "apps/api/tests/test_blocker001_admin_overpermission.py",
+        "before_fix": "7 failed / 1 passed (EXIT_CODE=1)",
+        "all_fail_for_right_reason": true,
+        "proof_excerpts": [
+          "assert 'c481885e32082e2c8950643e5' != 'c481885e32082e2c8950643e5' (demo identifier IS the operator row)",
+          "assert 200 == 401 (admin123 login succeeds)",
+          "assert 'pii-victim-...@example.com' not in '{\"users\":[...]}' (PII leak reproduced)"
+        ],
+        "rate_limit_pin": "PASSES - characterization test, must stay green",
+        "log": "uat/reports/evidence/gold-master-v2/phase0/logs/blocker001-fail-20260730T234803Z.log"
+      }
+    },
+    {
+      "id": "BLOCKER-002",
+      "severity": "CRITICAL (customer-facing output)",
+      "title": "Cover letter PDF letterhead and sign-off print a leftover test-probe string as the candidate name",
+      "status": "CONFIRMED - fix not yet started",
+      "detail": "Cover-letter output renders sender name as \"GAP-P7-DEF-B Probe 1785452243543\". Confirmed via GET /api/auth/me: that string IS the owner account User.name in production. Every real cover letter generated today would be signed with it.",
+      "root_cause": "PRODUCTION DATA (stale test-probe value in User.name), not a rendering bug.",
+      "fix_split": {
+        "code": "Cover-letter generation must refuse with an honest error when the profile name looks like a placeholder/test artefact, instead of emitting it onto a customer-facing document. Consistent with the codebase anti-fabrication/honesty policy.",
+        "data": "Owner account User.name must be set to the real candidate name. Operator-visible; also settable through the normal Settings UI."
+      },
+      "artifact": "uat/reports/evidence/gold-master-v2/adversarial/AI-AGENT-QUALITY-ASSESSMENT.md"
+    }
+  ],
+  "human_gated": {
+    "genuinely_gated": [
+      "Gmail OAuth interactive consent",
+      "Adzuna AU credentials (ADZUNA_APP_ID/ADZUNA_APP_KEY)"
+    ],
+    "NOT_gated": {
+      "stripe": "STRIPE_SECRET_KEY is a live key (sk_live_* class) with all price IDs + webhook secret set; a real cs_live_ checkout session was created end-to-end on production during verification. Only human card entry remains, which is normal live-payment usage, not a credential gap.",
+      "operator_admin": "AETHER_CRON_EMAIL/AETHER_CRON_PASSWORD in .env bcrypt-match AETHER_ADMIN_PASSWORD_HASH; live production login returned isAdmin=true. G-G is therefore FULLY testable and NOT human-gated."
+    },
+    "artifact": "docs/delivery/GOLD-MASTER-V2-BLOCKED-ON-HUMAN.md"
+  },
+  "runtime_health_window_1": {
+    "window": "2026-07-30T22:37:01Z..23:49:28Z (72 min)",
+    "requests": 1488,
+    "http_5xx": 0,
+    "http_4xx": 52,
+    "tracebacks": 0,
+    "unhandled_exceptions": 0,
+    "discovery_timer_runs": 2,
+    "discovery_ok": true,
+    "worker_jobs_complete": 262,
+    "worker_jobs_failed": 0,
+    "monitor_alive": true,
+    "only_error": "Wellfound upstream HTTP 403 SourceBlockedError - handled gracefully, surfaced honestly",
+    "artifact": "uat/reports/evidence/gold-master-v2/runtime/RUNTIME-MONITOR-REPORT-1.md",
+    "gate_G_M_note": ">=60 min clean achieved; still needs >=3 real AI agent runs inside a clean window (in flight)"
+  },
+  "positive_findings": [
+    "Authorization layer is SOUND: a genuine non-admin gets 403 on all four admin endpoints, sees 0 jobs, no cross-user leakage. BLOCKER-001 is solely a weak/shared operator credential, NOT a broken admin gate.",
+    "Repo-wide PROHIBITED-STUB count = 0 across all 432 grep hits (both halves, 100% coverage).",
+    "Runtime: 1488 requests, zero 5xx, zero tracebacks over a 72-minute exercised window.",
+    "Runbook: 99 claims verified, 0 code-impacting drifts."
+  ]
+}

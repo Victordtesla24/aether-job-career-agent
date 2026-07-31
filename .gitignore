@@ -55,3 +55,10 @@ evidence/
 
 # Local git worktrees (per-session, not deliverables)
 .claude/worktrees/
+
+# GOLD-MASTER-V2 evidence binaries — archived to S3 per prompt §1.1, never committed
+uat/reports/evidence/gold-master-v2/**/*.png
+uat/reports/evidence/gold-master-v2/**/*.jpg
+uat/reports/evidence/gold-master-v2/**/*.pdf
+uat/reports/evidence/gold-master-v2/**/*.zip
+uat/reports/evidence/gold-master-v2/**/*.webm

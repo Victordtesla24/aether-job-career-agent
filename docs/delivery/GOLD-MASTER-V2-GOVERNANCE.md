@@ -1,0 +1,358 @@
+# GOLD-MASTER-V2 — Governance Log
+
+Run: GOLD-MASTER-V2 · Prompt: `/home/ubuntu/aether-gold-master-execution.md`
+Orchestrator: claude-opus-5 (xhigh, brain-only per §0.1)
+Started: 2026-07-30T22:36Z
+
+Every deviation from the prompt-as-written, every governance violation, and every orchestrator
+adjudication is recorded here with evidence. Prior reports are TESTIMONY; only `[VERIFIED]` closes.
+
+---
+
+## GOV-001 — §0.2 roster pins two model IDs that do not exist in this runtime
+
+**Severity:** CRITICAL (blocked 9 of 15 sub-agent types from dispatching)
+**Status:** RESOLVED
+**Detected:** 2026-07-30T23:0xZ, when the first sonnet-tier agent (`reviewer`) was dispatched.
+
+### Evidence `[VERIFIED]`
+Dispatch of the `reviewer` sub-agent terminated immediately with:
+
+> `Agent terminated early due to an API error: There's an issue with the selected model
+> (claude-sonnet-4). It may not exist or you may not have access to it.`
+
+§0.2 of the prompt pins `model: claude-sonnet-4` (6 agents) and `model: claude-opus-4` (3 agents).
+Neither model ID is available in this runtime. The models that ARE available are
+`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5`, `claude-fable-5`.
+
+Confirmed working this run before the repair: `claude-haiku-4-5` (`scout`, `evidence`,
+`infra-discovery`, `researcher` all dispatched and returned artifacts).
+
+### Impact
+9 of the 15 §0.2 roster agents — `test-author`, `fixer-medium`, `screen-tester`, `reviewer`,
+`doc-updater`, `ai-loop-engineer` (sonnet tier) and `fixer-hard`, `qa-adversary`, `risk-officer`
+(opus tier) — could not run at all. Only haiku-tier mechanical/monitoring/evidence work was
+completing, which presented externally as sub-agents "idling and queued". A further 6 non-roster
+agent files carried the same dead pins.
+
+### Adjudication
+§0.2 forbids `model: inherit` and pins a model per agent; its INTENT (§0.3 rule 1) is a strict
+cost-optimal tiering: haiku for mechanical/monitoring/evidence, sonnet for code
+authoring/fixing/testing/review, opus only where judgment failure is expensive. The pinned IDs are
+stale relative to this runtime. Honouring the literal IDs is impossible; honouring the TIERING is
+both possible and clearly the operative requirement.
+
+**Ruling:** remap to the nearest available model in the SAME tier. `model: inherit` remains
+forbidden and is still absent (0 occurrences). No agent was moved across tiers, so §0.3's
+cost-optimality is preserved exactly.
+
+| §0.2 pinned ID | Availability | Remapped to | Tier preserved |
+|---|---|---|---|
+| `claude-haiku-4-5` | available | unchanged | mechanical |
+| `claude-sonnet-4` | **does not exist** | `claude-sonnet-5` | authoring |
+| `claude-opus-4` | **does not exist** | `claude-opus-5` | judgment |
+| `claude-opus-4-8` (non-roster files) | **does not exist** | `claude-opus-5` | judgment |
+
+### Repair `[VERIFIED]`
+15 agent definition files rewritten in `.claude/agents/` (backup taken first). Post-repair audit:
+
+- §0.2 roster: 15/15 present, all on an existing model, tiering intact
+- `model: claude-sonnet-4` / `claude-opus-4` / `claude-opus-4-8` remaining: **0**
+- `model: inherit` remaining: **0**
+
+Roster manifest: `uat/reports/evidence/gold-master-v2/phase0/ROSTER-MANIFEST.md`
+
+---
+
+## GOV-002 — Workflow-tool concurrency is capped to ~1 agent on this 2-vCPU VM
+
+**Severity:** HIGH (throughput, not correctness)
+**Status:** RESOLVED (orchestration strategy changed)
+
+### Evidence `[VERIFIED]`
+`nproc` = **2**. The Workflow tool caps concurrent sub-agents at `min(16, cores - 2)` =
+`min(16, 0)` → effectively **1**. Every `parallel()` fan-out was therefore serialized into a queue
+irrespective of how many thunks were passed. Load average during Phase 0 reached 3.04 on 2 cores
+(pytest ~28% CPU + headless Chromium ~45%).
+
+### Adjudication
+§0.3 rule 4 caps parallelism at "≤ 4 concurrent task agents + 2 always-on monitors". That ceiling
+is a COST control, not a throughput floor, and the runtime was enforcing a far lower one.
+
+**Ruling:** parallel work is dispatched via direct Agent fan-out (multiple invocations in a single
+message), which is not subject to the core-derived cap, holding to §0.3's ≤4 ceiling. The Workflow
+tool is retained only for genuinely sequential pipelines.
+
+Two serializations are retained DELIBERATELY and must not be "optimised away":
+1. **`flock /tmp/aether-pytest.lock` around every pytest run.** All runs share the single
+   `aether_test` Postgres schema; concurrent `TRUNCATE` produces non-deterministic failures, and a
+   mis-scoped run previously wiped the PRODUCTION database
+   (`docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md`). Safety outranks wall-clock.
+2. **At most one CPU-heavy job (pytest OR a headless browser) in flight.** On 2 cores, stacking
+   browsers increases wall-clock. Concurrency is therefore biased toward token/IO-bound agents.
+
+---
+
+## GOV-003 — §1.2 / §8 endpoint-absence claims are stale testimony
+
+**Severity:** MEDIUM (scope accuracy)
+**Status:** ADJUDICATED
+
+### Evidence `[VERIFIED]` (direct source probe, `apps/api/app/routers/`)
+The prompt asserts no stage-move endpoint and no approvals delete/purge endpoint exist. Probe:
+
+| Prompt claim (§1.2, §8) | Reality |
+|---|---|
+| "no stage-move endpoint or drag/move UX exists" | `POST /applications/{application_id}/move` **exists** — `applications.py:323`; also `POST /applications/pipeline/{job_id}/move` — `applications.py:255` |
+| "No delete/dismiss endpoint exists on the approvals router" | `DELETE /approvals/{approval_id}` **exists** — `approvals.py:139` |
+| (§8.2 implies purge absent) | `POST /approvals/purge-expired` **exists** — `approvals.py:112` |
+
+Genuinely absent, confirmed: `PATCH /applications/{id}/stage`; `GET /agents/runs/{run_id}/stream` (SSE).
+
+**Correction (2026-07-30T23:2xZ):** an earlier revision of this entry also listed "any endpoint exposing
+job-source availability" as absent. That was WRONG. `GET /agents/scout/sources/availability` **exists** —
+`apps/api/app/routers/agents.py:2167` — and the Jobs screen already consumes it
+(`apps/web/src/app/dashboard/jobs/page.tsx:854`, confirmed by both the W-D researcher and the Phase 0
+SCREEN-MATRIX). Consequently §6.2.3's premise is also stale: the frontend does NOT hardcode Seek as
+"(unavailable)"; it derives availability from this backend endpoint. Finding `ML-audit-seek-fe-hardcode-001`
+is already remediated and must not be "re-fixed".
+
+### Adjudication
+§8.1 names `PATCH /applications/{id}/stage` explicitly, while §13.1 forbids duplicate modules and
+functions. Building a second, independent stage-move implementation would satisfy the first and
+violate the second.
+
+**Ruling:** build the named `PATCH /applications/{id}/stage` as the CANONICAL stage-move endpoint,
+and refactor the existing `POST .../move` handlers to delegate to one shared transition service.
+The prompt's named endpoint ships; no logic is duplicated. Backward compatibility of the existing
+POST routes is retained so no current caller breaks.
+
+The existing approvals `DELETE` and `purge-expired` endpoints are NOT rebuilt. §8.2's requirements
+are re-scoped to VERIFY their behaviour against the stated contract (owner-scoping, idempotency,
+honest 404/403, 48h expiry check that must not touch non-expired pending approvals, audit logging)
+and to build the frontend affordances, which remain unverified.
+
+---
+
+## GOV-004 — Prod "before-record" visual-classification column is unreliable
+
+**Severity:** LOW (artifact quality)
+**Status:** NOTED — superseded by §3.2 per-screen testing
+
+`BEFORE-RECORD.md` labels all 26 routes `Visual: error` while simultaneously reporting 0 console
+errors on every route. Orchestrator spot-check of `before/dashboard.png` shows a correctly
+authenticated dashboard rendering real production data (47 active applications, real agent-activity
+timeline, real job cards). The `visual` column is a false classification produced by the capture
+script's heuristic; the SCREENSHOTS themselves are sound and are retained as the "before" baseline.
+
+The column is not relied upon. §3.2 per-screen human-grade testing supersedes it.
+
+---
+
+## GOV-005 — Active agent registry is user-scoped and cached at session start
+
+**Severity:** HIGH (blocked dispatch; forced role substitutions)
+**Status:** RESOLVED (with documented substitutions)
+
+### Evidence `[VERIFIED]`
+Two `.claude/agents/` directories exist:
+- `/home/ubuntu/.claude/agents/` — the ACTIVE registry (primary working directory is `/home/ubuntu`)
+- `/home/ubuntu/github_repos/aether-job-career-agent/.claude/agents/` — a shadow copy, NOT loaded
+
+GOV-001's first repair was applied only to the repo copy, so the dead `claude-sonnet-4` pin persisted and the
+re-dispatched `reviewer` failed identically a second time. The repair was then applied to the user-scoped
+registry, after which the sonnet tier dispatched successfully.
+
+Separately, the harness snapshots the registry at SESSION START. Three §0.2 roster agents absent from the
+user-scoped registry at session start — `janitor`, `risk-officer`, `ai-loop-engineer` — were copied in but
+remain undispatchable this session (`Agent type 'risk-officer' not found`).
+
+### Adjudication
+§0.4 requires separation of duties by ROLE (tester ≠ fixer ≠ test-author ≠ reviewer ≠ qa-adversary; janitor
+executes approved deletions but never selects them). The role separation, not the filename, is the requirement.
+
+**Ruling:** for the three unregistered roles, dispatch an available agent type at the SAME model tier, framed
+explicitly in-prompt with the required role, constraints and prohibitions. Separation of duties is preserved by
+never assigning a substitute the same task it (or its author) previously performed.
+
+| §0.2 role | Tier | Substitute used this session | Separation preserved by |
+|---|---|---|---|
+| `risk-officer` | opus | `qa-adversary` + `model: opus` | never the researcher who produced the evidence |
+| `ai-loop-engineer` | sonnet | `fixer-hard`/`fixer-medium` + role framing | never reviews its own diff |
+| `janitor` | haiku | `deployer`/`general-purpose` + manifest-only framing | executes an approved manifest exactly; never selects deletions |
+
+Additionally, every Agent dispatch this run passes an EXPLICIT `model` override (documented to take precedence
+over frontmatter), so a stale cached pin can never silently stall a sub-agent again.
+
+---
+
+## GOV-006 — First baseline (Step 6) was corrupted by an orphaned process tree
+
+**Severity:** MEDIUM (evidence integrity)
+**Status:** RESOLVED — clean re-run dispatched
+
+### Evidence `[VERIFIED]`
+The Phase 0 workflow was interrupted when its host process exited; its detached
+`run_pytest_bg.sh → flock → pytest` tree (PIDs 251801/251804/251805) kept running. On resume, a second pytest
+invocation started. The `flock /tmp/aether-pytest.lock` wrapper correctly serialized DB ACCESS — the shared
+`aether_test` schema was never concurrently truncated — but the LOG PATH was not lock-protected, so each
+writer's `>` redirect truncated the other's output. The resulting `pytest-baseline.log` was 9 lines with no
+final summary and without the `schema=aether_test` safety line.
+
+At 15:06 elapsed the orphan was in `futex_wait` with system load at 0.83 — stalled, not progressing, while
+holding the pytest lock and blocking any clean baseline.
+
+### Action taken
+Orphan tree terminated (a process this run started, via the interrupted workflow); lock confirmed re-acquirable;
+corrupted log quarantined to `logs/quarantine-collided/`. A clean full-suite re-run was dispatched to a
+SESSION-UNIQUE log filename, run in the foreground, with a mandatory check that the `schema=aether_test` safety
+line is present before the counts are trusted.
+
+**Standing rule for the rest of this run:** every suite invocation writes to a session-unique, timestamped log
+path. Never a shared fixed filename.
+
+### Carried forward as findings (not fixed here)
+- Playwright baseline: **EXIT_CODE=1 — 12 failed / 40 passed**. Predominantly 390px horizontal-overflow
+  assertions (`/admin/settings`, `/admin/users`, `/dashboard/resume`, `/dashboard/agents`, settings 422 path)
+  plus functional failures: per-agent model persistence after reload (`ml-agents-refix`), internal-email
+  allowlist save (`gap_p7_def_b`), approvals page at mobile viewport (30s timeout), and a
+  `baseline-manual-verification` sweep failing in 2ms (likely setup). §14.1/G-N require these green.
+- vitest: EXIT_CODE=0, coherent single report, 156s — trustworthy.
+
+---
+
+## GOV-007 — §11.1 realtime description contradicted by code inventory
+
+**Severity:** MEDIUM (scope accuracy)
+**Status:** OPEN — to be resolved in W-I
+
+§11.1 states current polling is "20s (jobs, applications), 30s (sidebar), 60s (topbar)". The Phase 0
+SCREEN-MATRIX finds instead: 3000ms async JOB-RUN polling (`agents.ts:57–107`, 10-minute cap) on
+`/dashboard/agents`, `/dashboard/cover-letters`, `/dashboard/resume`, `/dashboard/stories`; load-once-on-mount
+on `/dashboard`; and STATIC one-time fetch on every other route — i.e. no periodic data refresh at all on most
+screens. W-I must re-verify against the live bundle before implementing, and treat the SCREEN-MATRIX (fresh
+evidence) over the prompt's framing (testimony).
+
+---
+
+## GOV-008 — §6/§1.2 Seek premise contradicted by primary sources
+
+**Severity:** CRITICAL (legal/compliance; changes a workstream outcome)
+**Status:** OPEN — binding adjudication in flight with acting risk-officer
+
+§1.2/§1.3/§6.1 assert Firecrawl is "a licensed intermediary, not raw scraping" and that ADR-P6-SEEK's
+prohibition therefore does not apply. Live research this run found the opposite: Seek ToS clause 4(d) bans
+automated data gathering without written consent (no direct-vs-intermediary carve-out); `au.seek.com/robots.txt`
+(retrieved 2026-07-30T23:10:30Z) disallows `*/job/` and `/api/jobsearch/` and names `anthropic-ai` explicitly as
+a disallowed agent; and Firecrawl's documentation makes no licensed-intermediary representation and does not
+address target-site ToS compliance.
+
+Per §6.2.1 and §1.3 the risk-officer gate must clear BEFORE any env or code change. No `.env` change and no code
+change has been made. Ruling pending; this run will NOT enable `AETHER_ENABLE_SEEK` unless the adjudication
+returns APPROVED on the evidence.
+
+---
+
+## GOV-009 — Sub-agents reporting "completed" without producing their deliverable
+
+**Severity:** HIGH (silent non-delivery; a fake-green class)
+**Status:** MITIGATED — standing dispatch rules added
+
+### Evidence `[VERIFIED]`
+Three sub-agents this run returned a `completed` status while their required artifact did not exist on disk,
+or their task had not actually finished:
+
+1. **§4.1 triage (first attempt).** Burned 149k tokens / 30 tool calls / 13 min. Final message: *"waiting on
+   the frontend fork's complete 128-row table before finalizing the inventory."* Neither
+   `docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md` nor its `.json` existed. Root cause: it spawned its own
+   sub-forks and blocked on them, despite the brief's explicit "ALWAYS write the artifact, even on error".
+2. **Clean pytest baseline.** Final message: *"I'll stop polling now and simply wait for the background task's
+   completion notification."* It had backgrounded pytest contrary to an explicit foreground instruction and
+   exited. The run itself was sound (PID 270030, session-unique log, `schema=aether_test` safety line present),
+   but no counts were extracted and `BASELINE-SUITES.md` was not updated.
+3. **Orphaned frontend fork.** Delivered a complete 128-row triage table ONLY as a relayed peer message, never
+   to disk. Preserved manually by the orchestrator to
+   `uat/reports/evidence/gold-master-v2/phase0/INCOMPLETE-FEATURE-INVENTORY-FRONTEND-forkA.md`, explicitly
+   marked TESTIMONY rather than [VERIFIED].
+
+### Why this matters
+§0.5 forbids closing findings without fresh evidence and forbids "already done" wave-throughs. An agent
+returning a confident prose summary with no artifact behind it is exactly the failure mode those rules exist to
+catch. Orchestrator verified each deliverable on disk rather than trusting the completion status — which is why
+all three were caught.
+
+### Standing dispatch rules (applied to every subsequent sub-agent brief)
+1. **Sub-agents MUST NOT spawn their own sub-agents/forks.** Serial work only. Fork coordination is the
+   observed cause of failure 1.
+2. **Write the artifact EARLY and INCREMENTALLY** — skeleton first, append as you go. An incomplete file on
+   disk with an honest coverage marker is a SUCCESS; producing nothing is a FAILURE.
+3. **Long jobs run in the FOREGROUND** with a generous timeout. No background wrapper scripts, so the agent
+   cannot exit while its own work is still running.
+4. **Split oversized scopes across agents** (e.g. backend/frontend) rather than one agent fanning out.
+5. **Orchestrator verifies every artifact exists on disk before accepting any completion claim.** A sub-agent's
+   own report is TESTIMONY.
+
+---
+
+## GOV-010 — Orchestrator erroneously reverted the GOV-001 model remap
+
+**Severity:** MEDIUM (self-inflicted; caught and corrected within minutes, no work lost)
+**Status:** RESOLVED
+**Detected + corrected:** 2026-07-31T00:0xZ, by the orchestrator, on itself.
+
+### What happened
+On returning from the Phase 0 workflow the orchestrator observed 14 `.claude/agents/*.md` files with
+rewritten `model:` frontmatter (`claude-sonnet-4` → `claude-sonnet-5`, `claude-opus-4` → `claude-opus-5`)
+and, without first reading this governance log, diagnosed it as a sub-agent scope violation. It ran
+`git checkout -- .claude/agents/`, restoring the literal §0.2 pins, and logged the "violation".
+
+That diagnosis was **wrong on both counts**:
+
+1. The rewrite was the GOV-001 repair — a documented, evidence-backed adjudication remapping two model
+   IDs that **do not exist in this runtime** onto the nearest available model in the SAME tier. Reverting
+   it re-introduced dead pins that make 9 of the 15 §0.2 roster agents undispatchable.
+2. The revert was applied to `…/aether-job-career-agent/.claude/agents/` — which GOV-005 establishes is a
+   **shadow copy that is not loaded**. The ACTIVE registry is `/home/ubuntu/.claude/agents/` (the primary
+   working directory is `/home/ubuntu`). The revert therefore had no effect on dispatch at all; it only
+   desynchronised the two directories.
+
+### Verification performed before correcting `[VERIFIED 2026-07-31T00:0xZ]`
+- `nproc` = **2** → the Workflow tool's `min(16, cores-2)` cap is effectively **1** concurrent sub-agent.
+  GOV-002 independently confirmed. Dispatch strategy for the remainder of this run is **direct Agent
+  fan-out**, held to the §0.3.4 ceiling of ≤ 4 concurrent task agents + 2 monitors.
+- Active registry enumerated: `/home/ubuntu/.claude/agents/` — 28 files, all 15 roster roles present
+  (including `janitor`, `risk-officer`, `ai-loop-engineer`), all on existing models.
+- Live dispatch probe of a sonnet-tier agent (`fixer-medium`) returned its expected result, confirming
+  the remapped tier dispatches successfully.
+
+### Correction
+The repo shadow copy was re-synchronised to the GOV-001 mapping. Post-correction audit of the shadow:
+**15/15 roster roles present, dead pins (`claude-sonnet-4` / `claude-opus-4` / `claude-opus-4-8`) = 0,
+`model: inherit` = 0.** The active registry was already correct and was not touched.
+
+### Adjudication carried forward
+GOV-001's ruling stands and is **adopted by this orchestrator**: §0.2's INTENT is the strict cost-optimal
+tiering of §0.3 rule 1, not the literal string of two now-nonexistent model IDs. Tiers are preserved
+exactly; no agent moved tier; `model: inherit` remains forbidden and absent.
+
+### What the earlier GOV-010 draft got right, and what it did not
+The same erroneous entry also alleged that sub-agents had self-approved workstreams by calling
+`TaskUpdate` (marking W-D `completed`, W-B `in_progress`) and had written unsolicited deliverables. The
+**task-status resets stand** — W-D and W-B are `pending`, and no workstream closes without
+orchestrator-verified, this-run evidence, per §0.5. But the characterisation of the artifacts as rogue is
+withdrawn: `seek-research.md`, `seek-risk-adjudication.md`, `human-gated-verification.md`,
+`INCOMPLETE-FEATURE-INVENTORY-*` and `ADR-SEEK-FIRECRAWL.md` are this run's own in-flight W-B/W-D working
+evidence, produced under the adjudications recorded above.
+
+They remain **TESTIMONY** until re-verified by their owning workstream — which is the standing rule for
+all prior artifacts under the run's epistemic discipline, not a sanction. In particular
+`ADR-SEEK-FIRECRAWL.md` does not close §6.2.1: that clause requires the risk-officer gate to clear on the
+evidence **before** any env or code change, and GOV-008 records that adjudication as still OPEN with the
+primary sources pointing AGAINST the prompt's premise.
+
+### Standing rule added
+**Read `docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md` before adjudicating any observed drift.** Unexpected
+state is a prompt to consult the log first, not evidence of misconduct. Prior adjudications in this file
+are testimony — verify them, then adopt or overturn them explicitly. Never silently revert one.
+
+---
