@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:30:00Z",
+  "updated_utc": "2026-07-31T13:15:00Z",
   "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -705,7 +705,18 @@
     "evidence": "apps/web/.next/routes-manifest.json (built 2026-07-31T08:25) rewrites /api/* to 127.0.0.1:8090. curl 127.0.0.1:8090 -> HTTP 000 (nothing listening); curl 127.0.0.1:8000/api/health -> alive. The running next-server (pid 234334) started 2026-07-30T12:27:09 \u2014 ~20h BEFORE that build \u2014 so production is healthy ONLY because it holds an older in-memory build targeting :8000. AETHER_API_PROXY is absent from .env, so the 8090 value came from a build run under a polluted e2e environment.",
     "consequence": "ANY restart of aether-web.service (including the ordinary deploy step) routes every /api/* request to a dead port = TOTAL APP OUTAGE, with a symptom that looks nothing like its cause.",
     "mitigation_required_BEFORE_deploy": "Rebuild apps/web from a CLEAN environment with AETHER_API_PROXY unset, then ASSERT routes-manifest.json contains 8000 and not 8090, BEFORE any restart. Add that assertion to the deploy runbook as a hard pre-flight gate.",
-    "caught_by": "risk-officer, while verifying an unrelated cleanup build-condition. Not in any test suite."
+    "caught_by": "risk-officer, while verifying an unrelated cleanup build-condition. Not in any test suite.",
+    "fix": {
+      "commit": "d7fa3bb",
+      "status": "FIXED AND VERIFIED by the orchestrator",
+      "mechanism": "apps/web/next.config.mjs:12 resolves the /api/* rewrite upstream from a BUILD-TIME env var. next start reads its rewrite table from the BUILT .next/routes-manifest.json (getRoutesManifest()) and NEVER re-evaluates the config at boot \u2014 so the value is frozen into the artefact.",
+      "offending_var": "AETHER_API_PROXY",
+      "poisoned_TWO_files": "routes-manifest.json AND required-server-files.json ($.config._originalRewrites.afterFiles[0]). A gate checking only the first would have been incomplete. (A third hit in prerender-manifest.json was a FALSE POSITIVE \u2014 8090 inside a previewModeSigningKey hex string.)",
+      "verified_after": "both files now read 127.0.0.1:8000; scripts/verify-web-build.sh exists and exits 0",
+      "preflight_gate": "scripts/verify-web-build.sh, wired into the runbook deploy step \u2014 converts a latent trap into a loud failure before any restart",
+      "independent_proof_running_process_is_stale": "/admin-login (added 08:34Z by commit 2bdb060) exists in source AND in the new on-disk build, but production returns 404 for it right now \u2014 the route table, like the rewrite table, was loaded once at boot on 2026-07-30T12:27:09Z."
+    },
+    "ROOT_CAUSE_STILL_OPEN": "apps/web/playwright.config.ts:37 \u2014 webServer.command is \"pnpm run build && pnpm exec next start -p 3000\" with reuseExistingServer outside CI. ANY Playwright run in this tree REBUILDS INTO THE LIVE .next/ that aether-web.service serves, and then points e2e at the running production server. That is how the poisoning happened, and this campaign ran Playwright repeatedly. The gate catches the CONSEQUENCE; a separate fix to remove the CAUSE is in flight."
   },
   "W_K_adjudication": {
     "artifact": "uat/reports/evidence/gold-master-v2/cleanup/W-K-risk-adjudication.md",
@@ -727,5 +738,13 @@
     ],
     "manifest_quality": "The manifest was substantially WRONG: it named five tables that do not exist, undercounted the contaminated rows (4 vs the real 8 across TWO fixture strings), listed 2 of 3 approvals and called them pending when all 3 are resolved, and cited a path for board_sweep.py that does not exist. Executing it as written would have destroyed real user data.",
     "ordering": "BLOCKER-002 SUPERSEDES W-K items 3 and 4 entirely. Sequence: (1) read-only SELECT of resolvedByUserId/resolvedFromIp on the 3 approvals \u2014 zero risk, may close the CRITICAL attribution item; (2) d1 body-level guard [ALREADY SHIPPED]; (3) d2 apply-copy guard [ALREADY SHIPPED]; (4) d3 snapshotted 8-row UPDATE \u2014 needs a SEPARATE risk-officer approval not granted yet; (5) NEVER the W-K DELETEs."
+  },
+  "ci_preflight": {
+    "artifact": "uat/reports/evidence/gold-master-v2/final/CI-PREFLIGHT.md",
+    "initial": "NO-GO \u2014 6 lint violations blocking two enforced gates that run BEFORE any test",
+    "fixed_by_orchestrator": "ruff --fix on 4 test files + removed 2 genuinely-unused imports (each appeared exactly once). After: ruff \"All checks passed\", ESLint \"No warnings or errors\", tsc clean.",
+    "frontend": "649 passed / 1 KNOWN RED (tailor-score-refresh.test.tsx, file-ownership fence)",
+    "mypy": "PASS, 117 source files",
+    "backend_full_suite": "was still running at report time \u2014 re-run required"
   }
 }
