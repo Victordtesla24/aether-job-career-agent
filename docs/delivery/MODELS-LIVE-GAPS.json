@@ -2413,7 +2413,7 @@
         "Log in to prod, open /dashboard/approvals, select the All or Approved filter"
       ],
       "expected": "Zero fixture/placeholder content on any user-reachable path",
-      "observed": "Two synthetic QA rows rendered to the live user | PROD-DB SWEEP: 17 synthetic rows total across ApprovalRequest/Resume/EmailThread/User. MATERIAL RISK CONTEXT: 100% of content rows in every major table belong to the single cron/test account (c6c8d0163d973a8048e7e33b8); ZERO real customers have any data in production. So no paying customer is currently seeing synthetic content. Remains a launch blocker; is NOT an active customer-facing incident. Manifest cleanup/DELETION-MANIFEST-1.json PROPOSED, awaiting risk-officer approval.",
+      "observed": "Two synthetic QA rows rendered to the live user | PROD-DB SWEEP: 17 synthetic rows total across ApprovalRequest/Resume/EmailThread/User. MATERIAL RISK CONTEXT: 100% of content rows in every major table belong to the single cron/test account (c6c8d0163d973a8048e7e33b8); ZERO real customers have any data in production. So no paying customer is currently seeing synthetic content. Remains a launch blocker; is NOT an active customer-facing incident. Manifest cleanup/DELETION-MANIFEST-1.json PROPOSED, awaiting risk-officer approval. | PARTIAL REMEDIATION EXECUTED 2026-07-31T18:1xZ: the two data-only synthetic surfaces were deleted from production under risk-officer approval with a verified rollback capture (Resume 77->76, EmailThread 230->229; independently re-verified by the orchestrator; health 200). The synthetic ApprovalRequest ccbe2e7518343e818809f8009 is deliberately RETAINED so qa-adversary can reproduce this BLOCKER; it must be removed in W-K and G-K cannot close while it exists.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/screens/dashboard-approvals/16-BLOCKER-synthetic-fixture-rows-live.png"
       ],
@@ -2991,6 +2991,28 @@
       "verifiedBy": "risk-officer (opus) 2026-07-31",
       "openedUtc": "2026-07-31T18:02:47Z",
       "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-secret-001",
+      "screen": "n/a (security/ops)",
+      "severity": "HIGH",
+      "category": "security",
+      "summary": "PRODUCTION DATABASE CREDENTIAL EXPOSED IN A SESSION TRANSCRIPT, CAUSED BY THIS RUN. The orchestrator sourced `.env` in a Bash call; job-control echoed the assignments, printing DATABASE_URL and DATABASE_URL_TEST including the role password. Not written to any file, artifact, or commit \u2014 transcript-only. Disclosed rather than dropped because \u00a70.5 forbids echoing secrets and the rule binds the orchestrator identically to sub-agents.",
+      "reproduction": [
+        "Historic: `set -a; . ./.env; set +a` in a Bash tool call surfaces the assignments via job control"
+      ],
+      "expected": "Credentials never rendered into any output stream",
+      "observed": "DATABASE_URL and DATABASE_URL_TEST echoed with password in cleartext",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md (VIOL-006)"
+      ],
+      "status": "OPEN-HUMAN-GATED",
+      "owner": "OPERATOR \u2014 rotate the DB role password",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T18:07:37Z",
+      "run": "GOLD-MASTER-V4",
+      "operatorStep": "Rotate the password for DB role role_fdc4e11da on db-fdc4e11da.db005.hosteddb.reai.io (Abacus Database tile), then update DATABASE_URL and DATABASE_URL_TEST in .env and restart aether-api, aether-worker, aether-discovery."
     }
   ],
   "gmv4": {

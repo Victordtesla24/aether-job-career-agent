@@ -1,10 +1,10 @@
 {
   "run": "GOLD-MASTER-V4",
   "proposed_utc": "2026-07-31T17:49:41Z",
-  "database": "fdc4e11da (schema=aether, host=db-fdc4e11da.db005.hosteddb.reai.io) — PRODUCTION schema, distinct from aether_test schema which lives on the same physical DB instance",
+  "database": "fdc4e11da (schema=aether, host=db-fdc4e11da.db005.hosteddb.reai.io) \u2014 PRODUCTION schema, distinct from aether_test schema which lives on the same physical DB instance",
   "proposer": "scout",
   "status": "APPROVED-WITH-EXCLUSIONS",
-  "supersedes_note": "cleanup/DELETION-MANIFEST-1.json previously held a DIFFERENT, earlier GOLD-MASTER-V2 manifest (path-based, not this §20.1.3 DB-inventory schema). That prior content is preserved verbatim at cleanup/DELETION-MANIFEST-1-GOLD-MASTER-V2-PRIOR.json. Notably it independently flagged EmailThread id cd677a32f603c19a2d56f6725 as stale test data — this fresh scan corroborates that row is still present in production today.",
+  "supersedes_note": "cleanup/DELETION-MANIFEST-1.json previously held a DIFFERENT, earlier GOLD-MASTER-V2 manifest (path-based, not this \u00a720.1.3 DB-inventory schema). That prior content is preserved verbatim at cleanup/DELETION-MANIFEST-1-GOLD-MASTER-V2-PRIOR.json. Notably it independently flagged EmailThread id cd677a32f603c19a2d56f6725 as stale test data \u2014 this fresh scan corroborates that row is still present in production today.",
   "items": [
     {
       "table": "ApprovalRequest",
@@ -12,12 +12,12 @@
       "owning_user_id": "c6c8d0163d973a8048e7e33b8",
       "owning_user_email": "sarkar.vikram@gmail.com (= AETHER_CRON_EMAIL, the live test/operator account)",
       "matched_column": "payload",
-      "matched_value": "{\"why\": \"MODELS-LIVE QA synthetic test row — deliberately missing recipient so approve cannot send a real email.\", \"body\": \"synthetic test body, no recipient set\", \"preview\": \"SYNTHETIC TEST DATA (mod...",
+      "matched_value": "{\"why\": \"MODELS-LIVE QA synthetic test row \u2014 deliberately missing recipient so approve cannot send a real email.\", \"body\": \"synthetic test body, no recipient set\", \"preview\": \"SYNTHETIC TEST DATA (mod...",
       "created_at": "2026-07-22T14:15:05.249Z",
       "user_reachable": true,
       "user_reachable_proof": "/dashboard/approvals (apps/web/src/app/dashboard/approvals/page.tsx) renders GET /approvals for the logged-in user; SCREEN-MATRIX.md line 50",
       "classification": "SYNTHETIC-FIXTURE",
-      "proposed_disposition": "KEEP-AS-EVIDENCE — orchestrator directive explicitly forbids deleting this row (retained as incident evidence). Re-propose DELETE only after evidence use concludes and a human/janitor step explicitly clears it.",
+      "proposed_disposition": "KEEP-AS-EVIDENCE \u2014 orchestrator directive explicitly forbids deleting this row (retained as incident evidence). Re-propose DELETE only after evidence use concludes and a human/janitor step explicitly clears it.",
       "note": "This is the row already known to the operator (mate of cbf83a2061808d8526c298f2a, which a prior tester already deleted and is confirmed ABSENT from the DB by this scan).",
       "approved": false,
       "approval_reason": "RETAIN-AS-EVIDENCE (not approved for deletion in this ruling). Sole surviving live artefact proving BLOCKER GMV4-approvals-001. Deleting it now destroys qa-adversary's ability to independently reproduce the blocker. Risk of retention is near-zero: status='approved', payload has no recipient so approve/send cannot emit email, and it is visible only to the operator's own account (c6c8d016...) or an admin session. MUST NOT SHIP: re-propose DELETE in W-K immediately after qa-adversary signs off; G-K may not close while this row exists in production."
@@ -28,7 +28,7 @@
       "owning_user_id": "c6c8d0163d973a8048e7e33b8",
       "owning_user_email": "sarkar.vikram@gmail.com (= AETHER_CRON_EMAIL, the live test/operator account)",
       "matched_column": "label, sections",
-      "matched_value": "label=\"Uploaded — valid-resume\"; sections.raw_text=\"Jane Doe Test Resume\\nSoftware Engineer specializing in Python and distributed systems\\nEXPERIENCE\\nSenior Engineer at Test Corp 2...\"",
+      "matched_value": "label=\"Uploaded \u2014 valid-resume\"; sections.raw_text=\"Jane Doe Test Resume\\nSoftware Engineer specializing in Python and distributed systems\\nEXPERIENCE\\nSenior Engineer at Test Corp 2...\"",
       "created_at": "2026-07-31T00:20:58.605Z",
       "user_reachable": true,
       "user_reachable_proof": "/dashboard/resume (apps/web/src/app/dashboard/resume/page.tsx) renders GET /resumes for the logged-in user; SCREEN-MATRIX.md line 52",
@@ -49,7 +49,7 @@
       "user_reachable_proof": "/dashboard/email (apps/web/src/app/dashboard/email/page.tsx) renders GET /emails for the logged-in user; SCREEN-MATRIX.md line 54",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DELETE",
-      "note": "Also flagged in the prior GOLD-MASTER-V2 manifest (2026-07-31 12:26 run) as a stale test-data row with the same id, alongside a second id (c5f15526fed1587b0b9da76fe) this scan did NOT find in the current DB — that second row is confirmed ABSENT now (already cleaned up between runs).",
+      "note": "Also flagged in the prior GOLD-MASTER-V2 manifest (2026-07-31 12:26 run) as a stale test-data row with the same id, alongside a second id (c5f15526fed1587b0b9da76fe) this scan did NOT find in the current DB \u2014 that second row is confirmed ABSENT now (already cleaned up between runs).",
       "approved": true,
       "approval_reason": "APPROVED. Zero-reference proof re-derived independently this run against the live aether schema: no FK, no shipped-screen dependency, no test fixture and no repo reference (grep of the exact primary key across all of apps/, packages/, ci/, scripts/, deploy/, docs/ returned 0 code hits). Row confirmed present and owned by the operator/cron account or by a reserved-domain test signup. Verified: no FK constraint anywhere in the schema targets EmailThread, so there is no cascade or orphan surface at all."
     },
@@ -137,7 +137,7 @@
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DO-NOT-DELETE (risk-officer exclusion)",
       "approved": false,
-      "approval_reason": "EXCLUDED — zero-reference proof FAILS. Carries a real Stripe customer id (cus_Uz1KUWADymWjVY) plus 1 Subscription + 1 UsageQuota row, neither of which has an FK to \"User\" and therefore will NOT cascade. This is the 'throwaway Stripe-probe account' the prior GOLD-MASTER-V2 campaign already DEFERRED for exactly this reason ('billing-linked, and the lazy-DDL tables have NO FK to User so deletion orphans rather than cascades'). That reason was re-verified as still true this run. Needs a billing-aware disposition (revoke/detach the Stripe customer, then delete User+Subscription+UsageQuota in one transaction) before it can be approved."
+      "approval_reason": "EXCLUDED \u2014 zero-reference proof FAILS. Carries a real Stripe customer id (cus_Uz1KUWADymWjVY) plus 1 Subscription + 1 UsageQuota row, neither of which has an FK to \"User\" and therefore will NOT cascade. This is the 'throwaway Stripe-probe account' the prior GOLD-MASTER-V2 campaign already DEFERRED for exactly this reason ('billing-linked, and the lazy-DDL tables have NO FK to User so deletion orphans rather than cascades'). That reason was re-verified as still true this run. Needs a billing-aware disposition (revoke/detach the Stripe customer, then delete User+Subscription+UsageQuota in one transaction) before it can be approved."
     },
     {
       "table": "User",
@@ -180,7 +180,7 @@
       "primary_key": "c0267eaac66e5e5fa77834802",
       "owning_user_id": "c0267eaac66e5e5fa77834802",
       "matched_column": "email",
-      "matched_value": "name=(none); email=\"用户名テスト😀@example.com\" (unicode/emoji stress-test signup)",
+      "matched_value": "name=(none); email=\"\u7528\u6237\u540d\u30c6\u30b9\u30c8\ud83d\ude00@example.com\" (unicode/emoji stress-test signup)",
       "created_at": "2026-07-31T08:54:22.782Z",
       "user_reachable": true,
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
@@ -222,9 +222,9 @@
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DO-NOT-DELETE (risk-officer exclusion)",
-      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list under 'test-accounts-to-purge.txt', still present now — never actioned.",
+      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list under 'test-accounts-to-purge.txt', still present now \u2014 never actioned.",
       "approved": false,
-      "approval_reason": "EXCLUDED — live dependency, and the manifest's factual basis is wrong. docs/delivery/GOLD-MASTER-V2-STATE.json names this the 'canonical non-admin test account' and lists it under deferred as 'gm2-nonadmin account (still REQUIRED for W-L non-admin re-verification)'. It is the project's only non-admin login and deleting it removes the ability to verify non-admin behaviour. It also does NOT have '0 content rows': it owns 3 CareerProfile rows (no FK -> would orphan) and a real Stripe customer id (cus_Uz2v3ncOw3IptQ). Re-propose only after W-L non-admin re-verification is complete."
+      "approval_reason": "EXCLUDED \u2014 live dependency, and the manifest's factual basis is wrong. docs/delivery/GOLD-MASTER-V2-STATE.json names this the 'canonical non-admin test account' and lists it under deferred as 'gm2-nonadmin account (still REQUIRED for W-L non-admin re-verification)'. It is the project's only non-admin login and deleting it removes the ability to verify non-admin behaviour. It also does NOT have '0 content rows': it owns 3 CareerProfile rows (no FK -> would orphan) and a real Stripe customer id (cus_Uz2v3ncOw3IptQ). Re-propose only after W-L non-admin re-verification is complete."
     },
     {
       "table": "User",
@@ -237,7 +237,7 @@
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DELETE",
-      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now — never actioned.",
+      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now \u2014 never actioned.",
       "approved": true,
       "approval_reason": "APPROVED. Zero-reference proof re-derived independently this run against the live aether schema: no FK, no shipped-screen dependency, no test fixture and no repo reference (grep of the exact primary key across all of apps/, packages/, ci/, scripts/, deploy/, docs/ returned 0 code hits). Row confirmed present and owned by the operator/cron account or by a reserved-domain test signup. MANDATORY PRECONDITION: this User row has 1 Subscription and 1 UsageQuota row that have NO FK to \"User\" and will NOT cascade. Janitor MUST delete Subscription and UsageQuota for this userId in the SAME transaction as the User row, or the delete is REJECTED.",
       "collateral_rows_that_do_not_cascade": {
@@ -256,7 +256,7 @@
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DELETE",
-      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now — never actioned.",
+      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now \u2014 never actioned.",
       "approved": true,
       "approval_reason": "APPROVED. Zero-reference proof re-derived independently this run against the live aether schema: no FK, no shipped-screen dependency, no test fixture and no repo reference (grep of the exact primary key across all of apps/, packages/, ci/, scripts/, deploy/, docs/ returned 0 code hits). Row confirmed present and owned by the operator/cron account or by a reserved-domain test signup. MANDATORY PRECONDITION: this User row has 1 Subscription and 1 UsageQuota row that have NO FK to \"User\" and will NOT cascade. Janitor MUST delete Subscription and UsageQuota for this userId in the SAME transaction as the User row, or the delete is REJECTED.",
       "collateral_rows_that_do_not_cascade": {
@@ -275,7 +275,7 @@
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DELETE",
-      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now — never actioned.",
+      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now \u2014 never actioned.",
       "approved": true,
       "approval_reason": "APPROVED. Zero-reference proof re-derived independently this run against the live aether schema: no FK, no shipped-screen dependency, no test fixture and no repo reference (grep of the exact primary key across all of apps/, packages/, ci/, scripts/, deploy/, docs/ returned 0 code hits). Row confirmed present and owned by the operator/cron account or by a reserved-domain test signup. MANDATORY PRECONDITION: this User row has 1 Subscription and 1 UsageQuota row that have NO FK to \"User\" and will NOT cascade. Janitor MUST delete Subscription and UsageQuota for this userId in the SAME transaction as the User row, or the delete is REJECTED.",
       "collateral_rows_that_do_not_cascade": {
@@ -294,7 +294,7 @@
       "user_reachable_proof": "same as above (/admin/users); 0 content rows",
       "classification": "SYNTHETIC-FIXTURE",
       "proposed_disposition": "DELETE",
-      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now — never actioned.",
+      "note": "Also named in prior GOLD-MASTER-V2 manifest's operator-purge list, still present now \u2014 never actioned.",
       "approved": true,
       "approval_reason": "APPROVED. Zero-reference proof re-derived independently this run against the live aether schema: no FK, no shipped-screen dependency, no test fixture and no repo reference (grep of the exact primary key across all of apps/, packages/, ci/, scripts/, deploy/, docs/ returned 0 code hits). Row confirmed present and owned by the operator/cron account or by a reserved-domain test signup. MANDATORY PRECONDITION: this User row has 1 Subscription and 1 UsageQuota row that have NO FK to \"User\" and will NOT cascade. Janitor MUST delete Subscription and UsageQuota for this userId in the SAME transaction as the User row, or the delete is REJECTED.",
       "collateral_rows_that_do_not_cascade": {
@@ -306,7 +306,7 @@
   "ambiguous_escalations": [
     {
       "topic": "Story-bank near-duplicate clusters",
-      "description": "5 clusters of near-duplicate StoryEntry rows (16 of 37 rows, 43%) sharing near-identical situation text but distinct titles/contentHash — e.g. 5 variants of an 'ANZ core banking transformation' story generated on 2026-07-21, 07-22, 07-23, 07-23, 07-31. All owned by the same cron/test account (c6c8d0163d973a8048e7e33b8). These are NOT byte-identical (contentHash all distinct across all 37 rows, 0 exact duplicates found) and do not self-announce as synthetic, so they fail the SYNTHETIC-FIXTURE bar — but they materially undercut the §8.1(a) claim that a dedup migration eliminated story-bank duplication: it appears to prevent byte-exact repeats only, not paraphrase repeats generated by repeated tailoring runs against the same underlying test resume.",
+      "description": "5 clusters of near-duplicate StoryEntry rows (16 of 37 rows, 43%) sharing near-identical situation text but distinct titles/contentHash \u2014 e.g. 5 variants of an 'ANZ core banking transformation' story generated on 2026-07-21, 07-22, 07-23, 07-23, 07-31. All owned by the same cron/test account (c6c8d0163d973a8048e7e33b8). These are NOT byte-identical (contentHash all distinct across all 37 rows, 0 exact duplicates found) and do not self-announce as synthetic, so they fail the SYNTHETIC-FIXTURE bar \u2014 but they materially undercut the \u00a78.1(a) claim that a dedup migration eliminated story-bank duplication: it appears to prevent byte-exact repeats only, not paraphrase repeats generated by repeated tailoring runs against the same underlying test resume.",
       "affected_ids": [
         "c2ae4412687cbfa4da7261007",
         "c838dfc6fa892a728b447b9b8",
@@ -326,11 +326,11 @@
         "c588b640468691eab4a86a2f9"
       ],
       "classification": "AMBIGUOUS",
-      "proposed_disposition": "ESCALATE — do not auto-delete; needs a human/product decision on whether near-duplicate story consolidation is in scope, since these are algorithm-generated paraphrases tied to genuine underlying career-history content on the test account, not self-announcing fake content."
+      "proposed_disposition": "ESCALATE \u2014 do not auto-delete; needs a human/product decision on whether near-duplicate story consolidation is in scope, since these are algorithm-generated paraphrases tied to genuine underlying career-history content on the test account, not self-announcing fake content."
     }
   ],
   "refs_proof": "User-reachability was established by cross-referencing uat/reports/evidence/gold-master-v3/SCREEN-MATRIX.md's route table (lines 46-68), which maps each shipped Next.js page.tsx to the backend GET endpoint it polls and renders. ApprovalRequest -> /dashboard/approvals -> GET /approvals (line 50); Resume -> /dashboard/resume -> GET /resumes (line 52); EmailThread -> /dashboard/email -> GET /emails (line 54); User -> /admin/users -> GET /admin/users (line 63). All confirmed rows sit in tables whose primary access path is scoped by userId matching the logged-in session, so any row is reachable by whoever is authenticated as that owning user (or, for User rows themselves, by an admin session).",
-  "approver": "risk-officer (GOLD-MASTER-V4 §20.2 designated approver for runtime-path deletions)",
+  "approver": "risk-officer (GOLD-MASTER-V4 \u00a720.2 designated approver for runtime-path deletions)",
   "approved_utc": "2026-07-31T18:00:22Z",
   "approved_count": 14,
   "excluded_count": 3,
@@ -354,17 +354,17 @@
     "if_i_am_wrong": "Worst realistic case is the loss of one operator-owned synthetic resume, one operator-owned synthetic email thread, and up to 12 dormant @example.com test logins plus their free-tier entitlement rows. No paying customer, no revenue-bearing subscription and no third-party-owned content is in scope. The excluded items are precisely the ones where being wrong would be expensive.",
     "who_notices": "Only the operator (sarkar.vikram@gmail.com). The Resume disappears from /dashboard/resume, the thread from /dashboard/email, and 12 rows from /admin/users. No end user exists to notice.",
     "production_behaviour_change_on_landing": "The synthetic \"Jane Doe Test Resume\" stops rendering on /dashboard/resume and the \"NUL byte test subject\" thread stops rendering on /dashboard/email - which is the point: both are user-reachable synthetic-fixture surfaces feeding BLOCKER GMV4-approvals-001. /admin/users drops from 15 to 3 rows once the W-K batch runs. No schema change, no code change, no behaviour change for any code path; these are pure data rows. The BLOCKER is NOT fully retired by this manifest because ApprovalRequest ccbe2e7518343e818809f8009 is deliberately retained.",
-    "auto_reject_check": "Checked: nothing in the approved set appears on the §1.4 PROTECTED or §6.2 DO-NOT-TOUCH lists (packages/db/src/schema.prisma, e2e/auth.setup.ts, Vik_Resume fixture+generator). No force-push, no history rewrite, no schema migration, no bulk purge."
+    "auto_reject_check": "Checked: nothing in the approved set appears on the \u00a71.4 PROTECTED or \u00a76.2 DO-NOT-TOUCH lists (packages/db/src/schema.prisma, e2e/auth.setup.ts, Vik_Resume fixture+generator). No force-push, no history rewrite, no schema migration, no bulk purge."
   },
   "sequencing_ruling": {
     "ruling": "SPLIT EXECUTION.",
-    "execute_now": "The Resume and the EmailThread ONLY. Justification: §23.3 lets a BLOCKER interrupt §20 last-runs-cleanup ordering, these two rows are the user-reachable synthetic-fixture surfaces that constitute BLOCKER GMV4-approvals-001, they are data-only with zero code or FK dependency, and blast radius is near-zero because no real customer data exists. Still gated on the rollback capture precondition.",
-    "defer_to_W_K": "All 12 approved User rows, together with their 24 non-cascading Subscription/UsageQuota rows. Justification: these are reachable only via the admin-only /admin/users screen, so they contribute nothing to the BLOCKER and earn no §23.3 interrupt. Batching them into W-K keeps the account deletions and the orphan cleanup in one reviewed transaction.",
+    "execute_now": "The Resume and the EmailThread ONLY. Justification: \u00a723.3 lets a BLOCKER interrupt \u00a720 last-runs-cleanup ordering, these two rows are the user-reachable synthetic-fixture surfaces that constitute BLOCKER GMV4-approvals-001, they are data-only with zero code or FK dependency, and blast radius is near-zero because no real customer data exists. Still gated on the rollback capture precondition.",
+    "defer_to_W_K": "All 12 approved User rows, together with their 24 non-cascading Subscription/UsageQuota rows. Justification: these are reachable only via the admin-only /admin/users screen, so they contribute nothing to the BLOCKER and earn no \u00a723.3 interrupt. Batching them into W-K keeps the account deletions and the orphan cleanup in one reviewed transaction.",
     "never_without_further_approval": "The 2 excluded accounts and the retained ApprovalRequest evidence row."
   },
   "story_dedup_ruling": {
     "ruling": "AGREED - the 5 near-duplicate StoryEntry clusters MUST NOT be bulk-deleted. The proposer was right to classify them AMBIGUOUS/ESCALATE, and I am not approving any deletion against StoryEntry.",
-    "root_cause_identified": "The migration is not broken - it has never been invoked. apps/api/app/services/story_dedup_migration.py::merge_duplicate_stories has ZERO call sites in production code: grep across apps/ and packages/ finds it only in its own docstring, in a docstring cross-reference in app/services/story_paraphrase.py, and in apps/api/tests/test_we_story_dedup_relevance.py. There is no route, no cron, no admin action and no startup hook that calls it. Its own docstring describes it as operator-triggered. So the §8.1(a) claim that a dedup migration eliminated story-bank duplication is unsupported for existing data: only the create-time forward guard in StoryRepository.create has ever run.",
+    "root_cause_identified": "The migration is not broken - it has never been invoked. apps/api/app/services/story_dedup_migration.py::merge_duplicate_stories has ZERO call sites in production code: grep across apps/ and packages/ finds it only in its own docstring, in a docstring cross-reference in app/services/story_paraphrase.py, and in apps/api/tests/test_we_story_dedup_relevance.py. There is no route, no cron, no admin action and no startup hook that calls it. Its own docstring describes it as operator-triggered. So the \u00a78.1(a) claim that a dedup migration eliminated story-bank duplication is unsupported for existing data: only the create-time forward guard in StoryRepository.create has ever run.",
     "important_nuance": "merge_duplicate_stories MERGES rather than deletes - the oldest row of a group survives with its id, later wording is folded in, and tags/metrics are unioned. That is the correct shape for user-authored career history and must be preserved. Any proposal that converts this into a bulk DELETE is auto-rejected.",
     "preconditions_before_any_story_dedup_touches_live_data": [
       "Full row_to_json capture of all StoryEntry rows for the target user, verified parseable and uploaded off-box, exactly as for any other production deletion.",
@@ -375,5 +375,69 @@
       "Note that StoryEntry drifted from 37 to 36 rows during this ruling, so any dedup run must re-snapshot immediately beforehand rather than trusting the inventory numbers."
     ],
     "not_a_deletion_approval": "This ruling authorises NO write of any kind against StoryEntry. It states the conditions under which a future proposal could be brought to me."
-  }
+  },
+  "execution_records": [
+    {
+      "executed_utc": "2026-07-31T18:05:50.554073Z",
+      "executor": "janitor",
+      "execution_scope": "SPLIT execution: Resume + EmailThread only (User rows deferred to W-K)",
+      "executed_items": [
+        {
+          "table": "Resume",
+          "primary_key": "c969dbcecd27c827a80f6bea0",
+          "executed": true,
+          "affected_rows": 1
+        },
+        {
+          "table": "EmailThread",
+          "primary_key": "cd677a32f603c19a2d56f6725",
+          "executed": true,
+          "affected_rows": 1
+        }
+      ],
+      "post_execution_counts": {
+        "Resume": {
+          "before": 77,
+          "after": 76,
+          "expected_after": 76
+        },
+        "EmailThread": {
+          "before": 230,
+          "after": 229,
+          "expected_after": 229
+        },
+        "ApprovalRequest_evidence_row": {
+          "id": "ccbe2e7518343e818809f8009",
+          "count": 1,
+          "status": "retained_as_required"
+        },
+        "User": {
+          "count": 15,
+          "status": "unchanged_as_required"
+        }
+      },
+      "capture_details": {
+        "capture_file": "cleanup/ROLLBACK-CAPTURE-1.jsonl",
+        "capture_location": "/home/ubuntu/github_repos/aether-job-career-agent/cleanup/ROLLBACK-CAPTURE-1.jsonl",
+        "s3_uri": "s3://abacusai-apps-e154d00a983f92d71946ca64-us-west-2/49362/aether-gmv4-rollback/ROLLBACK-CAPTURE-1.jsonl",
+        "rows_captured": 2,
+        "rows_verified": 2,
+        "lines_parsed": 2
+      },
+      "health_check": {
+        "endpoint": "https://5cb5f0620.abacusai.cloud/api/health",
+        "status": 200,
+        "response": {
+          "status": "ok",
+          "version": "0.2.0"
+        }
+      },
+      "database": {
+        "connection": "fdc4e11da / aether (production)",
+        "verified_schema": "aether",
+        "server_version": "17.9"
+      }
+    }
+  ],
+  "execution_status": "EXECUTED"
 }
