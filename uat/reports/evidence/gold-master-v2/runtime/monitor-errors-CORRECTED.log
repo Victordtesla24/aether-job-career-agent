@@ -6,3 +6,15 @@ Traceback (most recent call last):
 2026-07-31T01:04:54Z INFO:     208.122.8.11:0 - "POST /agents/cover-letter/run HTTP/1.1" 500 Internal Server Error
 2026-07-31T01:04:54Z ERROR:    Exception in ASGI application
 Traceback (most recent call last):
+2026-07-31T06:17:17Z INFO:     208.122.8.11:0 - "GET /admin/users?q=foo%00bar HTTP/1.1" 500 Internal Server Error
+2026-07-31T06:17:17Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T06:17:17Z INFO:     208.122.8.11:0 - "GET /admin/users?plan=free%00x HTTP/1.1" 500 Internal Server Error
+2026-07-31T06:17:17Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T06:21:23Z INFO:     208.122.8.11:0 - "GET /admin/users?q=verify2%00nul HTTP/1.1" 500 Internal Server Error
+2026-07-31T06:21:23Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+2026-07-31T06:21:23Z INFO:     208.122.8.11:0 - "GET /admin/users?plan=free%00x HTTP/1.1" 500 Internal Server Error
+2026-07-31T06:21:23Z ERROR:    Exception in ASGI application
+Traceback (most recent call last):

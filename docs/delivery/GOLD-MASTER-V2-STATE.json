@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T06:35:00Z",
+  "updated_utc": "2026-07-31T07:20:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -40,7 +40,7 @@
   "workstream_status": {
     "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
     "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook.",
-    "W-C": "PENDING - SCOPE NARROWED by live verification. ALREADY BUILT and working: before/after score banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change messaging, ATS matches API. GENUINELY MISSING: (1) the score-aware ITERATIVE loop (\u00a75.3.1) - currently a single pass; (2) surfacing the existing backend requires_review signal as the honest sub-85 warning (\u00a75.3.1 pt5) - signal exists, UI absent; (3) gap_keywords quality - chips carry tokenization noise (re/ll/use/about) which would poison loop convergence; (4) per-iteration progress display; (5) interview_conversion_rate metric (\u00a75.3.5) - 0/72 today. CORRECTION: earlier \"+0.0% lift\" was imprecise - real delta is +0.10 that ROUNDS to +0.0% in display.",
+    "W-C": "BACKEND SUBSTANTIVELY COMPLETE. 12/13 W-C tests green; 23 regression tests green (gap_p5_tailoring, gap_p6_tailoring_ats, tailoring_agent); anti-fabrication guard VERIFIED INTACT via its dedicated test wired to the real ResumeTailorService+ATSEngine. TailoringLoop service at apps/api/app/services/tailoring_loop.py (262 lines), MAX_ITERATIONS=5, no migration needed (Resume.sections is already flexible JSON). Router already returns warning at routers/agents.py:2309. REMAINING: (1) WC-INTERVIEW-SEED-001 test-seed defect being repaired; (2) FRONTEND does not yet consume warning/requires_review - failing FE test being written now (\u00a75.3.1 pt 5).",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
     "W-E": "PENDING - MEASURED: 34/36 stories are paraphrase duplicates of 8 real achievements. Dedup in apps/api/app/repositories/story.py hashes byte-identical content only. \u00a77.4 relevance scoring entirely absent. No merge affordance. Scope = content fingerprint (normalized title + achievement prefix), bulk de-dup migration for the existing 36 rows, story_relevance_score(), relevance exposed on GET /stories?job_id=, UI badge.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
@@ -315,6 +315,13 @@
         "POSITIVE: AdminAuditLog rows written correctly for a real admin action",
         "POSITIVE: zero console errors / uncaught page errors / silent failures across 2 independent passes",
         "CONFIRMED: INC-B-002 both halves reproduce on prod (UI toggle inert; backend still loose-coerces \"yes\"/1) - consistent with fix verified-but-UNDEPLOYED"
+      ],
+      "analytics": [
+        "POSITIVE: interview conversion HONESTLY displayed as 0% via Stage Conversion (Screened->Interview) and a Job Probability factor; matches DB truth (0 interviews) on every surface checked",
+        "POSITIVE: analytics endpoints return a clean 422 on NUL (?period=%00 -> \"Invalid period\"), NOT the systemic 500 - a CORRECT pattern already exists in this codebase for the admin fix to reuse",
+        "POSITIVE: period pills genuinely re-scope server-side (7d: 47 apps/8 jobs; 30d+: 49/52)",
+        "ML-ANALYTICS-002 LOW: no freshness/staleness label; static subtitle with no period echo",
+        "Baseline interview-conversion line-chart spec NOT reproduced - production shows its own valid form"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
@@ -419,5 +426,15 @@
       "INC-B-001 trial_will_end": "1/1 - webhook no longer silently discarded."
     },
     "commit_e78f51d_status": "UNVERIFIED label SUPERSEDED - now VERIFIED GREEN by this run."
-  }
+  },
+  "test_defects": [
+    {
+      "id": "WC-INTERVIEW-SEED-001",
+      "severity": "MEDIUM (test quality, not implementation)",
+      "test": "test_wc_interview_conversion_rate.py::test_interview_conversion_rate_denominator_is_distinct_submitted_jobs",
+      "diagnosis": "Fails in its own SEED step with psycopg2 UniqueViolation on Application_user_job_active_key - a pre-existing PARTIAL UNIQUE INDEX (workstream RT-004/ML-W-17) forbidding two simultaneously-active Application rows for one (user, job). The seed tries to insert exactly that.",
+      "implementation_verified_correct": "YES - independently confirmed via a rolled-back transaction: 1 job, 2 rows counted once. The DISTINCT-jobId denominator logic is right; only the test seed is wrong.",
+      "handling": "\u00a715 step 2 mirror case - a test failing for the WRONG reason is as much a test defect as one passing when it should fail. Repair dispatched to test-author; the implementing agent correctly refused to touch a test it did not author (\u00a70.4)."
+    }
+  ]
 }
