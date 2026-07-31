@@ -918,23 +918,34 @@ export default function SettingsClient({
           {active === "notifications" && (
             <section className="glass rounded-2xl border border-white/10 p-5" data-testid="settings-notifications">
               <h2 className="mb-4 text-[15px] font-semibold">Notifications</h2>
+              {/* GOLD-MASTER-V2 §4/G-B+G-O: per-category notification
+                  PREFERENCES (approval-request pushes, status-change pushes,
+                  a scheduled weekly send) have no backend anywhere in
+                  apps/api — building that now would be a new subsystem, out
+                  of scope this late in the campaign. The three toggles that
+                  used to sit here were an honestly-disabled "Coming soon"
+                  stub, which §4/G-O still classify as a shipped placeholder.
+                  Removed. What IS real is NotificationAgent
+                  (apps/api/app/agents/notification_agent.py): a deterministic,
+                  approval-gated digest (status changes + new scored matches)
+                  sent to the user's own connected Gmail, runnable today from
+                  the Agents screen — this notice points there instead of
+                  promising behavior that doesn't exist. */}
               <p
                 role="status"
-                data-testid="notifications-unavailable-notice"
-                className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted"
+                data-testid="notifications-info-notice"
+                className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted"
               >
                 <i className="fa-solid fa-circle-info mr-2 text-aether-muted-dim" aria-hidden="true" />
-                Notification delivery isn&rsquo;t built yet — these preferences aren&rsquo;t functional and
-                aren&rsquo;t saved by &ldquo;Save Changes&rdquo;. Coming soon.
+                There are no per-category notification preferences to save yet — no approval-request or
+                application-update push, and no scheduled weekly send. What&rsquo;s real today is an
+                on-demand digest: run the{" "}
+                <Link href="/dashboard/agents" className="font-semibold text-aether-coral hover:underline">
+                  Notification Agent
+                </Link>{" "}
+                any time to queue an approval-gated email — application status changes and new scored
+                matches — to your connected Gmail.
               </p>
-              <div className="space-y-4">
-                <Toggle label="Approval requests" description="Notify me when an agent needs my approval"
-                  value={true} testId="toggle-notif-approvals" onChange={() => undefined} disabled />
-                <Toggle label="Application updates" description="Status changes, recruiter views and responses"
-                  value={true} testId="toggle-notif-apps" onChange={() => undefined} disabled />
-                <Toggle label="Weekly digest" description="Summary of agent activity every Monday morning"
-                  value={false} testId="toggle-notif-digest" onChange={() => undefined} disabled />
-              </div>
             </section>
           )}
 

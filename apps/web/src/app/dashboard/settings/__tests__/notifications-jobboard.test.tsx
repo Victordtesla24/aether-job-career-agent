@@ -1,14 +1,29 @@
 // @vitest-environment jsdom
 /**
- * /dashboard/settings — Notifications (MV-settings-001) and Job Board
- * Integrations Sync (MV-settings-002).
+ * /dashboard/settings — Notifications (MV-settings-001, superseded by
+ * GOLD-MASTER-V2 §4/G-B+G-O) and Job Board Integrations Sync (MV-settings-002).
  *
- * MV-settings-001: the three Notifications toggles are rendered with a fixed
- * `value` and `onChange={() => undefined}` — they look interactive (a real
- * switch with aria-checked) but are dead no-ops; no backend field for
- * notification preferences exists anywhere in apps/api. The approved fix
- * makes them honestly non-interactive (disabled) with a visible disclosure,
- * instead of a fake-looking interactive control.
+ * MV-settings-001 (original): the three Notifications toggles were rendered
+ * with a fixed `value` and `onChange={() => undefined}` — they looked
+ * interactive (a real switch with aria-checked) but were dead no-ops. That
+ * fix made them honestly non-interactive (`disabled`) with a "Coming soon"
+ * disclosure.
+ *
+ * GOLD-MASTER-V2 §4/G-B+G-O (this fix): even an honestly-disabled toggle
+ * labelled "Coming soon" is still a shipped placeholder, which §4 classifies
+ * as a BLOCKER ("No feature may remain in any partial state at exit") and
+ * G-O forbids ("no routes render placeholders, 'Coming Soon', or planned
+ * states"). Per-category notification PREFERENCES (approval-request pushes,
+ * status-change pushes, a scheduled weekly send) have no backend at all —
+ * building that now would be a new subsystem, out of scope this late in the
+ * campaign. But a REAL, already-shipped delivery path does exist:
+ * `NotificationAgent` (apps/api/app/agents/notification_agent.py), wired to
+ * `POST /agents/run` and runnable today from the Agents screen
+ * (`/dashboard/agents`) — it composes a real digest (status changes + new
+ * scored matches) from the user's own data and queues an approval-gated send
+ * to their connected Gmail. The three fake toggles are removed; the tab now
+ * honestly says there are no preferences to save yet and links to the real
+ * on-demand agent instead of promising unbuilt push/schedule behavior.
  *
  * MV-settings-002: "Sync All" and the 5 per-row "Sync" buttons under Job
  * Board Integrations only flip local `syncing` state via `setTimeout` — zero
@@ -136,66 +151,48 @@ async function renderOnIntegrations() {
   await waitFor(() => screen.getByTestId("settings-integrations"));
 }
 
-describe("SettingsPage — Notifications toggles are honestly inert (MV-settings-001)", () => {
-  it("renders all three notification toggle buttons as disabled with aria-disabled", async () => {
+describe("SettingsPage — Notifications tab has no stub toggles or 'Coming soon' copy (GOLD-MASTER-V2 G-B/G-O)", () => {
+  it("renders none of the three former notification preference toggles", async () => {
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
 
     await renderOnNotifications();
 
-    for (const testId of ["toggle-notif-approvals", "toggle-notif-apps", "toggle-notif-digest"]) {
-      const btn = screen.getByTestId(testId) as HTMLButtonElement;
-      expect(btn.disabled).toBe(true);
-      expect(btn.getAttribute("aria-disabled")).toBe("true");
-    }
+    expect(screen.queryByTestId("toggle-notif-approvals")).toBeNull();
+    expect(screen.queryByTestId("toggle-notif-apps")).toBeNull();
+    expect(screen.queryByTestId("toggle-notif-digest")).toBeNull();
   });
 
-  it("is genuinely inert via a disabled control (not merely a no-op click handler on an enabled-looking switch)", async () => {
+  it("contains no 'Coming soon' (or equivalent placeholder) text anywhere in the tab", async () => {
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
 
     await renderOnNotifications();
 
-    const approvals = screen.getByTestId("toggle-notif-approvals") as HTMLButtonElement;
-    const apps = screen.getByTestId("toggle-notif-apps") as HTMLButtonElement;
-    const digest = screen.getByTestId("toggle-notif-digest") as HTMLButtonElement;
-
-    // The contract requires the *mechanism* of inertness to be a real
-    // `disabled` HTML attribute on the control — not just an onChange that
-    // happens to be a no-op while the button still presents as an active,
-    // clickable switch (which is exactly today's dishonest defect: it LOOKS
-    // interactive with no visible cue that nothing happens).
-    expect(approvals.disabled).toBe(true);
-    expect(apps.disabled).toBe(true);
-    expect(digest.disabled).toBe(true);
-
-    expect(approvals.getAttribute("aria-checked")).toBe("true");
-    expect(apps.getAttribute("aria-checked")).toBe("true");
-    expect(digest.getAttribute("aria-checked")).toBe("false");
-
-    fireEvent.click(approvals);
-    fireEvent.click(apps);
-    fireEvent.click(digest);
-
-    // Still exactly the fixed inert display values — clicking a disabled
-    // control must never flip it.
-    expect(approvals.getAttribute("aria-checked")).toBe("true");
-    expect(apps.getAttribute("aria-checked")).toBe("true");
-    expect(digest.getAttribute("aria-checked")).toBe("false");
+    const section = screen.getByTestId("settings-notifications");
+    const text = (section.textContent ?? "").toLowerCase();
+    expect(text).not.toContain("coming soon");
+    expect(text).not.toMatch(/in planning|planned\b/);
   });
 
-  it("discloses honestly that notification preferences are not yet functional/saved", async () => {
+  it("honestly points to the real on-demand Notification Agent instead of promising unbuilt push/schedule preferences", async () => {
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
 
     await renderOnNotifications();
 
-    const notice = screen.getByTestId("notifications-unavailable-notice");
+    const notice = screen.getByTestId("notifications-info-notice");
     expect(notice.getAttribute("role")).toBe("status");
-    expect(notice.textContent ?? "").toMatch(/not (yet )?available|isn't (built|saved|functional)|coming soon/i);
+    const text = notice.textContent ?? "";
+    expect(text).toMatch(/notification agent/i);
+    expect(text).toMatch(/on-demand|any time|connected gmail/i);
+
+    // Real link to the screen where the agent actually runs — not a dead end.
+    const link = screen.getByRole("link", { name: /notification agent/i });
+    expect(link.getAttribute("href")).toBe("/dashboard/agents");
   });
 });
 
