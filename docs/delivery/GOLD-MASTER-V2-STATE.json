@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T11:00:00Z",
+  "updated_utc": "2026-07-31T11:35:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -39,7 +39,7 @@
   },
   "workstream_status": {
     "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
-    "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook. || SUBMISSION AGENT IMPLEMENTED GENUINELY (apps/api/app/agents/submission_agent.py, 144 lines, ZERO stub markers, orchestrator-verified): performs a real write via submit_application_for_job with owner-scoped resolution, honest \"nothing ready\" path, 404 on another user's job id (never silently substituted), readiness enforced as 422 by the service. Resolves the \u00a74 (no planned states) vs \u00a70.5 (no stubs) tension by building the capability rather than faking or deleting it.",
+    "W-B": "WAVE-1 VERIFIED GREEN (26 tests) + EMAIL/AGENTS WAVE VERIFIED GREEN (5 tests). Closed this run: NUL-byte 422 (blanket db.py guard, 11 endpoints), placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook, honest Gmail status, counterparty-grounded drafts, genuine Submission Agent. REMAINING W-B items from the canonical inventory: FE-D-003/FE-D-004 (auto-apply + match-threshold persisted-not-enforced, MEDIUM - honestly disclosed in UI), FE-D-001 (Notifications \"Coming soon\", HIGH - \u00a74 forbids at exit), FE-D-005 (Pause All/Manual Override, LOW - honestly disabled), APP_BASE_URL hardcoded fallback (MEDIUM, live in prod), next-auth dead stub (LOW, W-K).",
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
     "W-E": "12/12 tests GREEN, 36/36 regression green, ADV-ENT-001 closed. Dedup + relevance machinery SHIPPED AND TESTED. RELEVANCE GATE DELIBERATELY LEFT DISABLED on empirical evidence - see RELEVANCE-CALIBRATION ruling below. \u00a77.3.3 is therefore NOT met in substance and is re-scoped as a specified design change, not a patch.",
@@ -507,5 +507,17 @@
   "false_green_defects_caught": [
     "W-G e2e: /admin/login would have satisfied waitForURL(/\\/admin(\\/|$|\\?)/) VACUOUSLY - Playwright resolves immediately when the current URL already matches, so the spec would have passed with no navigation at all. Fixed by using the sibling path /admin-login.",
     "W-G e2e: a next/link client transition left the OLD /login form interactable during the transition window, letting a fast fill+submit race it and submit the wrong form. Fixed with a real top-level <a href>."
-  ]
+  ],
+  "verified_green_suites": {
+    "GM2-EMAIL-AGENTS": {
+      "result": "5 passed / 0 failed (EXIT_CODE=0)",
+      "log": "uat/reports/evidence/gold-master-v2/waves/email-agents-verify-20260731T083821Z.log",
+      "closes": [
+        "GM2-EMAIL-001 Gmail \"Connected\" while token expired -> status now derived from REAL token validity; the guard test proving a genuinely valid token still reads Connected ALSO passes",
+        "GM2-EMAIL-002 draft reply reversed direction -> now grounds on the newest COUNTERPARTY message; the contrast case (counterparty newest) still passes",
+        "GM2-AGENTS-001 Submission Agent planned -> implemented genuinely and wired as backend=\"submission\""
+      ],
+      "note": "Supersedes the VERIFICATION QUEUED caveat in the commit message."
+    }
+  }
 }
