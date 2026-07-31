@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T09:30:00Z",
+  "updated_utc": "2026-07-31T09:55:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -42,7 +42,7 @@
     "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook.",
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
-    "W-E": "10/11 GREEN, false-positive guard holding, zero regressions. Delivered: paraphrase-similarity dedup layer (services/story_paraphrase.py, dual Jaccard on title + achievement, each needing BOTH a ratio and an absolute shared-keyword floor, calibrated against the evidence-report pairs AND every pre-existing test_story_dedup.py fixture); idempotent bulk merge migration (services/story_dedup_migration.py); TF-weighted services/story_relevance.py wired into GET /stories?job_id=. LAST RED TEST (relevance filtering in build_story_evidence) in flight - the prior agent correctly REFUSED to edit tailor_agent.py because it was on its stay-out list, and documented the exact fix instead.",
+    "W-E": "12/12 tests GREEN, 36/36 regression green, ADV-ENT-001 closed. Dedup + relevance machinery SHIPPED AND TESTED. RELEVANCE GATE DELIBERATELY LEFT DISABLED on empirical evidence - see RELEVANCE-CALIBRATION ruling below. \u00a77.3.3 is therefore NOT met in substance and is re-scoped as a specified design change, not a patch.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
     "W-G": "Backend + authz COMPLETE and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). 3 failing tests written for the ONLY gaps: \u00a79.2.1 admin entry on /login and \u00a79.2.3 persistent admin indicator. Implementation IN FLIGHT. Portal route is /admin (do NOT create /admin/dashboard).",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
@@ -124,7 +124,8 @@
     "GOV-003: stage-move and approvals delete/purge endpoints already exist. Build PATCH /applications/{id}/stage as canonical, refactor POST /move to delegate to one shared service. Do not duplicate.",
     "GOV-005: janitor/risk-officer/ai-loop-engineer were unregistered at session start; now available. Always pass an explicit model override on dispatch.",
     "GOV-006: every suite run writes to a session-unique timestamped log path. Never a shared filename.",
-    "GOV-008: Seek REFUSED. Do NOT set AETHER_ENABLE_SEEK. Do NOT remove the Jobs '(unavailable)' Seek label - it is truthful and backend-served. ML-audit-seek-fe-hardcode-001 = NOT-A-DEFECT."
+    "GOV-008: Seek REFUSED. Do NOT set AETHER_ENABLE_SEEK. Do NOT remove the Jobs '(unavailable)' Seek label - it is truthful and backend-served. ML-audit-seek-fe-hardcode-001 = NOT-A-DEFECT.",
+    "RELEVANCE-CALIBRATION (evidence: uat/reports/evidence/gold-master-v2/adversarial/STORY-RELEVANCE-CALIBRATION.md, 1872 real story x job pairs): DO NOT enable the story-relevance gate. (a) 0.4 is ABOVE THE CORPUS CEILING - max real score 0.1017, median 0.0234; 0.4/0.3/0.25/0.2/0.15 all starve 100% of 52 jobs, 0.1 starves 96%. (b) The SCORER IS TOO WEAK TO GATE ON: the same achievement reworded scores median 2.33x apart (max 10.04x) against the same job, signal/noise 1.566; 2 of 6 sampled jobs rank inverted. (c) STRUCTURAL: all three build_story_evidence call sites feed ANTI-FABRICATION GUARD corpora, not prompt material - filtering there makes the guard FORGET TRUE ACHIEVEMENTS, a truthfulness REGRESSION, and does not implement \u00a77.3.3 at all. Meeting \u00a77.3.3 in substance needs a separate parameter (filtered set -> prompt material; FULL set -> guard corpus) - a design change to be specified and reviewed, never patched in. Recommended interim: top-N-by-score (N~5, scale-free, can never return empty). The disputed regression fixture STAYS GREEN and unchanged."
   ],
   "next_actions": [
     "BLOCKER-001: on CONFIRMED, run the \u00a715 fix pipeline immediately (interrupts other priorities per \u00a716)",
@@ -459,7 +460,11 @@
   "open_items_carried": [
     "ML-CL-004 STILL OPEN: /refine can persist an ungoverned draft if ApprovalRepository.create fails AFTER CoverLetterRepository.create succeeds. Now at least audited as a failed AgentRun row, but the transactional gap remains. Needs its own fix (atomicity), reported honestly by the implementer rather than silently closed.",
     "Story relevance thresholds: create-time title Jaccard 0.70 vs bulk-migration 0.60 - a narrow evidence-calibrated band. Flagged for adversarial re-verification before G-E closes.",
-    "ADV-ENT-002 (backend advertises + provisions a Free tier it universally denies) UNADDRESSED - needs a BUSINESS decision: honour the advertised 5 free runs, or correct /pricing + RATIFIED_PLANS + ensure_user_billing + the 402 wording. Consumer-law exposure on a real-AUD product."
+    "ADV-ENT-002 (backend advertises + provisions a Free tier it universally denies) UNADDRESSED - needs a BUSINESS decision: honour the advertised 5 free runs, or correct /pricing + RATIFIED_PLANS + ensure_user_billing + the 402 wording. Consumer-law exposure on a real-AUD product.",
+    "STORY-REL-001 (one-line bug): app/services/story_relevance.py:41 _WORD_RE admits trailing ./-/ so \"services.\" and \"services\" are distinct tokens - 1800 of 27432 real weighted JD tokens (6.6%) are permanently unmatchable. Changes no calibration conclusion but is a genuine defect.",
+    "STORY-REL-002: stopword list misses including/all/while/using/within - 56% of matched weight comes from 25 generic terms.",
+    "STORY-REL-003: two different JD strings feed the same scorer (tailor_agent.run vs routers/stories.py:152).",
+    "\u00a77.3.3 NOT MET IN SUBSTANCE - requires the specified design change above, not the shipped filter."
   ],
   "orchestrator_corrections": [
     {
