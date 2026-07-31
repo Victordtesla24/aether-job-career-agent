@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:15:00Z",
+  "updated_utc": "2026-07-31T14:30:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -767,6 +767,27 @@
     "required": ">=60 min + >=3 real AI agent runs, zero server errors / 5xx / browser console errors (\u00a714.3.5, G-M)",
     "log": "uat/reports/evidence/gold-master-v2/final/observation-window-20260731T141247Z.log",
     "monitor_validated": "GOV-012 test applied: 7 tail processes alive AND the source is actively writing (last entry 5s before check). The single log line is my own window-start header - ZERO real error matches. Proven by SIGNAL, not liveness.",
-    "agent_runs_so_far": "discovery cron completed at 14:01:07Z (scout + fit-scorer) - counts toward the >=3"
+    "agent_runs_so_far": "discovery cron completed at 14:01:07Z (scout + fit-scorer) - counts toward the >=3",
+    "status_at_1430": {
+      "elapsed": "~17 of 60 min",
+      "error_matches": 0,
+      "monitor_proof": "A curl at 14:27:10Z appeared in api.log immediately \u2014 the monitor catches traffic. Preceding zero-delta periods were genuine app idleness, not a blind capture (GOV-012 distinction).",
+      "agent_runs_INSIDE_window": 0,
+      "G_M_evidence_constraint": "The 14:01 scout+fit-scorer runs PREDATE the 14:12:47Z window start and do not count. Next discovery fire 14:30:56Z (scout+fit-scorer), then 15:00 \u2014 reaching >=3 by ~15:01, window closing 15:12:47Z. HONEST LIMITATION: with the credential rotation ON HOLD, the owner login is refused (auth.py:159 weak_operator_credential_refused blocks the LOGIN, not merely admin privilege) and the test account is paywalled, so I cannot trigger user-initiated LLM generation. G-M will therefore close on DISCOVERY-CRON agent runs (scout + fit-scorer, real AgentRun rows against real job boards) rather than on tailoring/cover-letter generation. That is a weaker form of evidence than \u00a714.3.5 envisions and will be stated as such in the final report."
+    }
+  },
+  "post_deploy_smoke": {
+    "artifact": "uat/reports/evidence/gold-master-v2/final/POST-DEPLOY-SMOKE.md",
+    "result": "\u00a714.3.4 MET \u2014 18/18 routes 200, ZERO console errors, ZERO 5xx, no placeholder content, across two independent fresh sessions. Only \"failed requests\" were benign Next.js ?_rsc= prefetch cancellations from navigating away mid-hover.",
+    "live_verified": [
+      "/admin-login renders its form (200)",
+      "Topbar Admin badge correctly ABSENT for a non-admin",
+      "Dashboard false \"live\" label GONE (0 page-wide matches + confirmed removed in source)"
+    ],
+    "NOT_live_verified": [
+      "per-card Apply button + modal (G-H)",
+      "stories 20s polling (G-I)"
+    ],
+    "why": "The canonical test account is Free-tier and the PRE-EXISTING SubscriptionGate (git-diff confirmed UNCHANGED by this deploy) paywalls every dashboard route except /dashboard/settings. Both features are present in the deployed diff; only live exercise is missing. The agent correctly REFUSED to bypass the paywall (would have required completing a real payment) and reported NOT-TESTED rather than inferring."
   }
 }
