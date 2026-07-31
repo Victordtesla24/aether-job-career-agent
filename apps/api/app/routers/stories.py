@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
+from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
+from app.services.story_relevance import story_relevance_score
 
 router = APIRouter()
 
@@ -135,9 +137,22 @@ def _enrich(story: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("")
-def list_stories(current_user: CurrentUser) -> list[dict[str, Any]]:
-    rows = StoryRepository().list_by_user(current_user["id"])
-    return [_enrich(r) for r in rows]
+def list_stories(
+    current_user: CurrentUser,
+    job_id: str | None = Query(default=None),
+) -> list[dict[str, Any]]:
+    """§7.3.4: when ``job_id`` is supplied, each row also carries
+    ``relevance_score`` (§7.3.3) against that job's title+description —
+    previously silently ignored (no query params were read at all)."""
+    rows = [_enrich(r) for r in StoryRepository().list_by_user(current_user["id"])]
+    if job_id:
+        job = JobRepository().get_by_id(job_id, current_user["id"])
+        if job is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+        job_description = f"{job.get('title') or ''} {job.get('description') or ''}"
+        for row in rows:
+            row["relevance_score"] = story_relevance_score(row, job_description)
+    return rows
 
 
 @router.get("/stats")

@@ -19,6 +19,7 @@ from typing import Any
 
 from app.db import ensure_story_dedup_column, get_connection, new_id, rows_to_dicts
 from app.services.dedup import compute_story_content_hash
+from app.services.story_paraphrase import CREATE_TIME_THRESHOLDS, best_paraphrase_match
 
 #: Client-safe columns — the internal ``contentHash`` is NEVER selected.
 _COLUMNS = (
@@ -32,12 +33,25 @@ _STAR_FIELDS = ("title", "situation", "task", "action", "result")
 
 class StoryRepository:
     def create(self, user_id: str, story: dict[str, Any]) -> dict[str, Any]:
-        """Insert a story, or return the caller's existing identical one.
+        """Insert a story, or MERGE it into an existing matching one.
 
-        A dedup hit is NOT an error and NOT a silent drop: the caller gets back
-        the row that already holds this exact content, in the same shape an
-        insert returns, so ``POST /stories`` stays idempotent for identical
-        content instead of growing the Story Bank a duplicate per double-click.
+        Two dedup layers, checked in order:
+
+        1. EXACT match — an identical sha256 of the five STAR fields
+           (``contentHash``). NOT an error and NOT a silent drop: the caller
+           gets back the row that already holds this exact content, in the
+           same shape an insert returns, so ``POST /stories`` stays
+           idempotent for identical content instead of growing the Story
+           Bank a duplicate per double-click.
+        2. PARAPHRASE match (GM2-STORY-001/002, §7.3.1) — a reworded
+           re-telling of the SAME achievement (title + achievement keyword
+           similarity, ``app.services.story_paraphrase``). Verified live: 34
+           of the owner's 36 real stories were paraphrase re-tellings of only
+           8 distinct achievements that the exact-hash check alone let
+           through as brand-new rows every time. On a paraphrase match the
+           EXISTING row is UPDATED to the new (freshest) wording — tags and
+           metrics are MERGED (union), never dropped — and returned; nothing
+           is inserted.
         """
         ensure_story_dedup_column()
         content_hash = compute_story_content_hash(
@@ -57,6 +71,47 @@ class StoryRepository:
                         (existing[0],),
                     )
                     return rows_to_dicts(cur)[0]
+
+                cur.execute(
+                    'SELECT "id","title","situation","task","action","result",'
+                    '"metrics","tags" FROM "StoryEntry" WHERE "userId" = %s',
+                    (user_id,),
+                )
+                candidates = rows_to_dicts(cur)
+                match = best_paraphrase_match(story, candidates, CREATE_TIME_THRESHOLDS)
+                if match is not None:
+                    merged_metrics = {
+                        **(match.get("metrics") or {}),
+                        **(story.get("metrics") or {}),
+                    }
+                    merged_tags = list(
+                        dict.fromkeys(
+                            [*(match.get("tags") or []), *(story.get("tags") or [])]
+                        )
+                    )
+                    merged_hash = compute_story_content_hash(
+                        user_id, *(story[f] for f in _STAR_FIELDS)
+                    )
+                    cur.execute(
+                        f'''
+                        UPDATE "StoryEntry" SET
+                            "title" = %s, "situation" = %s, "task" = %s,
+                            "action" = %s, "result" = %s, "metrics" = %s,
+                            "tags" = %s, "contentHash" = %s, "updatedAt" = NOW()
+                        WHERE "id" = %s
+                        RETURNING {_COLUMNS}
+                        ''',
+                        (
+                            story["title"], story["situation"], story["task"],
+                            story["action"], story["result"],
+                            json.dumps(merged_metrics), merged_tags, merged_hash,
+                            match["id"],
+                        ),
+                    )
+                    rows = rows_to_dicts(cur)
+                    conn.commit()
+                    return rows[0]
+
                 cur.execute(
                     f'''
                     INSERT INTO "StoryEntry"

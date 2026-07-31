@@ -650,11 +650,17 @@ class RefineRequest(BaseModel):
     formality: int | None = Field(None, ge=0, le=100)
 
 
-@router.post("/{letter_id}/refine")
-def refine_cover_letter(
-    letter_id: str, body: RefineRequest, current_user: CurrentUser
+def _refine_cover_letter_body(
+    letter_id: str, body: RefineRequest, current_user: dict[str, Any]
 ) -> dict[str, Any]:
-    """Fabrication-guarded revision → new draft + pending approval (P2-S07)."""
+    """The actual generation body for ``POST /{letter_id}/refine`` (P2-S07).
+
+    Extracted to a plain function (rather than inlined in the route) so it
+    can be passed as the ``fn`` callable to
+    ``app.routers.agents._record_run`` (ADV-ENT-001 — see
+    ``refine_cover_letter`` below), which gates entitlement and reserves plan
+    quota BEFORE any of this function's resource lookups or LLM calls run.
+    """
     user_id = current_user["id"]
     letter = _load_letter(letter_id, user_id)
     job = JobRepository().get_by_id(letter["jobId"], user_id)
@@ -868,6 +874,43 @@ def refine_cover_letter(
         "approval_id": approval["id"],
         "approval_status": approval["status"],
     }
+
+
+@router.post("/{letter_id}/refine")
+def refine_cover_letter(
+    letter_id: str, body: RefineRequest, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Fabrication-guarded revision → new draft + pending approval (P2-S07).
+
+    ADV-ENT-001: this call used to reach a REASONING-tier LLM call directly
+    (``LLMClient().complete_json(...)`` inside the old inline body) with ZERO
+    entitlement gate, plan-quota reserve, USD spend-cap check or ``AgentRun``
+    audit row — a lapsed/cancelled ex-subscriber's OWN cover-letter row (the
+    only way one can exist at all) gave them a permanent, unmetered,
+    unaudited handle on paid LLM capacity. Every other actionable agent
+    (``/agents/*/run``) already gates through
+    ``app.routers.agents._record_run`` -> ``_require_active_subscription``,
+    which runs BEFORE any resource lookup — so a bogus id still 402s instead
+    of 404ing. Reusing that SAME mechanism here (never a second, hand-rolled
+    guard — §13.1) under the ``"coverLetter"`` backend name — the EXACT
+    metering identity the main Cover Letter Agent already runs under
+    (``_LLM_TIER_BY_BACKEND["coverLetter"] == "REASONING"``) — means a refine
+    call is now gated, reserved, spend-capped and audited identically to a
+    fresh generation, and a guard-rejection/404/422 raised inside
+    ``_refine_cover_letter_body`` is still translated to the exact same HTTP
+    status it always was (``_record_run``'s generic ``except HTTPException``
+    finishes the run as "failed", refunds the reserved quota, and re-raises
+    the ORIGINAL exception unchanged).
+    """
+    from app.routers.agents import _record_run
+
+    user_id = current_user["id"]
+    return _record_run(
+        user_id,
+        "coverLetter",
+        {"letter_id": letter_id, "instructions": body.instructions.strip()},
+        lambda: _refine_cover_letter_body(letter_id, body, current_user),
+    )
 
 
 # --- Business-letter PDF export (light, submission-ready) --------------------
