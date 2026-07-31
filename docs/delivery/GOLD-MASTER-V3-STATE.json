@@ -1,0 +1,150 @@
+{
+  "run": "GOLD-MASTER-V4",
+  "prompt_file": "/home/ubuntu/aether-gold-master-execution-v4.md",
+  "started_utc": "2026-07-31T17:07:58Z",
+  "updated_utc": "2026-07-31T17:07:58Z",
+  "orchestrator": "claude-opus-5 (xhigh) \u2014 brain only per \u00a70.1",
+  "phase_step": "PHASE-0-STEP-6",
+  "phase_step_detail": {
+    "step_0_resume_check": "DONE \u2014 no prior GOLD-MASTER-V3-STATE.json; fresh run",
+    "step_1_roster": "DONE \u2014 17/17 agents written, zero `model: inherit`; manifest in GOLD-MASTER-V3-GOVERNANCE.md",
+    "step_2_runbook_drift": "DONE \u2014 RUNBOOK-DRIFT-VERIFICATION.md; 55 MATCH / 1 DRIFT (README.md:151 route count 28 vs 29)",
+    "step_3_prod_baseline": "IN-PROGRESS \u2014 browser-monitor baseline sweep",
+    "step_4_monitors": "DONE \u2014 persistent journalctl monitor armed on aether-api/web/worker (\u00a723.1 patterns)",
+    "step_5_service_probe": "IN-PROGRESS \u2014 svc-integrator probing 9 services",
+    "step_6_matrices": "IN-PROGRESS \u2014 SCREEN MATRIX + ROUTER MATRIX",
+    "step_7_baseline_suites": "IN-PROGRESS",
+    "step_8_state_commit": "IN-PROGRESS"
+  },
+  "workstream_status": {
+    "W-A": "NOT-STARTED",
+    "W-B": "NOT-STARTED",
+    "W-HF": "NOT-STARTED",
+    "W-C": "NOT-STARTED",
+    "W-D": "NOT-STARTED",
+    "W-E": "NOT-STARTED",
+    "W-F": "NOT-STARTED",
+    "W-CAL": "NOT-STARTED",
+    "W-YT": "NOT-STARTED",
+    "W-G": "NOT-STARTED",
+    "W-H": "NOT-STARTED",
+    "W-SUB": "NOT-STARTED",
+    "W-I": "NOT-STARTED",
+    "W-J": "NOT-STARTED",
+    "W-GSC": "NOT-STARTED",
+    "W-GF": "NOT-STARTED",
+    "W-DG": "NOT-STARTED",
+    "W-K": "NOT-STARTED",
+    "W-L": "NOT-STARTED"
+  },
+  "waves": [],
+  "findings_delta": {
+    "open": 0,
+    "closed": 0,
+    "conditionally_closed": 0
+  },
+  "gates": {
+    "G-A": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-B": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-HF": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-C": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-D": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-E": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-F": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-CAL": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-YT": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-G": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-H": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-SUB": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-I": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-J": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-GSC": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-GF": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-DG": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-K": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-L": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-M": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-N": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-O": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-P": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    },
+    "G-FINAL": {
+      "status": "NOT-ADJUDICATED",
+      "evidence": null
+    }
+  },
+  "last_commit": "6440325b363e2b9a684f54742ad02781babefe47",
+  "last_deploy_sha": null,
+  "next_actions": [
+    "Complete Phase 0 Steps 3/5/6/7",
+    "Then W-A adversarial per-screen review (\u00a73)"
+  ]
+}
