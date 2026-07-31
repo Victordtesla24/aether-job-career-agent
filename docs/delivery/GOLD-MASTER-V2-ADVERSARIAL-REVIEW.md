@@ -1,5 +1,35 @@
 # GOLD-MASTER-V2 — Independent 3rd-Party Adversarial Product Review (§3.3, Gate G-A)
 
+> ## ⚠ POST-DEPLOY REFRESH — 2026-07-31T15:1xZ — READ THIS FIRST
+> Everything below the horizontal rule that follows this notice (§0 through the original §8 Verdict)
+> was written **2026-07-31T09:04–09:20Z, against production still running its pre-fix 2026-07-30
+> binary.** It is retained in full as valuable, dated evidence — nothing is deleted — but its
+> **Executive Summary, Top-5 blockers, and final Verdict are superseded** by the new **§9 POST-DEPLOY
+> REFRESH** appended at the end of this document, written after commit `061014c` (71 commits) was
+> deployed to production at `2026-07-31T13:45:25Z` and after a 60+ minute clean observation window
+> closed. Jump to §9 for current truth; treat everything before it as **pre-deploy testimony**,
+> exactly the epistemic status this document's own rules already assign to sub-agent reports.
+>
+> **Headline change:** BLOCKER-001's privilege half and BLOCKER-002's forward-generation half are now
+> **closed and deployed**; the approval-audit-trail gap this refresh's original pass discovered is
+> **fixed and deployed**; `ML-PRICE-002` (Stripe currency) is **refuted**, not a real defect; a real
+> per-card Apply button and a real 20-second polling hook are **live**. What is **not** fixed: the
+> owner's account remains reachable via a public password (now tracked separately as **BLOCKER-003**),
+> 8 already-contaminated cover letters are still stored with the bad signature, and one **new** defect
+> was found post-deploy that this document's pre-deploy pass had no way to see — see §9.
+>
+> **Author of this refresh:** the same single author who wrote `GOLD-MASTER-V2-FINAL-REPORT.md`
+> (§17/G-P), working serially with no sub-agents dispatched (this task's own hard rule). This is a
+> **process gap worth stating plainly**: G-A calls for `qa-adversary` sign-off, distinct from whoever
+> authored the fixes under review. This refresh is independent of the *fixers* (it authored none of the
+> 71 deployed commits) but is **not** independent of the *final-report* role — the same hand wrote both
+> documents in the same sitting. Treat §9 as a rigorous, evidenced self-review, not as third-party
+> adjudication in the strictest sense G-A's table anticipates.
+
+---
+
+# GOLD-MASTER-V2 — Independent 3rd-Party Adversarial Product Review (§3.3, Gate G-A)
+
 **Coverage: FULL — all 27 routes in `phase0/SCREEN-MATRIX.md` now have a completed §3.2 deep pass.**
 This document supersedes the 2026-07-31T01:20Z PARTIAL draft (6 of 27 routes). The sweep that draft
 flagged as outstanding (`W-A §3.2: dispatch screen-testers per route`) completed between then and
@@ -420,3 +450,183 @@ deep-dives already on disk (each independently `[VERIFIED-WITH-FRESH-EVIDENCE]`-
 rather than re-deriving 27 routes' worth of UI evidence a second time. Where this refresh had reason to
 extend or question that evidence — the approval-queue cross-reference — it went to the API and the source
 directly rather than accepting either the prior "PASS" verdict or a guess.
+
+---
+---
+
+# §9. POST-DEPLOY REFRESH — 2026-07-31T15:1xZ
+
+**This section supersedes §1 (Executive summary), §8 (Verdict), and the blockers/gates framing above.**
+Everything above this line was accurate for the state it described (production on the pre-fix
+2026-07-30 binary); it is retained as dated evidence, not rewritten.
+
+**What changed the operative facts:** commit `061014c` (71 commits ahead of the `0588aff` build this
+document's original pass examined) deployed to production at `2026-07-31T13:45:25Z`, CI run
+`30635438303` green. A 60+ minute clean observation window closed at `15:12:59Z` with zero 5xx / zero
+unhandled errors / zero service restarts. Full detail, gate-by-gate: `docs/delivery/GOLD-MASTER-V2-FINAL-REPORT.md`
+(§17/G-P, written the same sitting as this refresh). This section states only what an adversarial
+reviewer, reading that report skeptically, independently confirms or disputes.
+
+## 9.1 Fresh probes performed for this refresh
+
+All from `uat/reports/evidence/gold-master-v2/final/FINAL-REPORT-SPOTCHECKS.md`, re-derived
+independently of (not merely copied from) the deploy report and smoke-test artifacts, using a
+browser-like User-Agent (bare `urllib`/`requests` UAs get a Cloudflare `error code: 1010` — a known
+trap for future probes, not a product defect).
+
+| # | Probe | Result | Timestamp |
+|---|---|---|---|
+| 1 | `GET /admin-login` | **200**, real form | 2026-07-31T15:07Z |
+| 2 | `GET /api/health` | **200** `{"status":"ok","version":"0.2.0"}` | 2026-07-31T15:07Z |
+| 3 | `POST /api/auth/login` (`admin`/`admin123`) | **401**, no token — BLOCKER-001's privilege fix independently re-confirmed live, ~6 hours after the deploy this document's original pass found it still exploitable | 2026-07-31T15:07Z |
+| 4 | `POST /api/auth/register`, NUL byte in password, control run first (clean registration succeeds, 201) | **500 Internal Server Error, reproduced twice** | 2026-07-31T15:07:49Z + re-confirm |
+| 5 | `POST /api/auth/register`, NUL byte in email field | **422**, clean — asymmetric with #4 | 2026-07-31T15:07Z |
+| 6 | `git ls-remote --heads origin` / `gh pr list` / `gh run list` | 1 branch, 0 open PRs, latest 3 CI runs green | 2026-07-31T15:10Z |
+| 7 | `api.log` grep for 5xx/ERROR from the `061014c` boot line through EOF; `NRestarts` on all 3 services | **0 / 0 / 0/0/0** across 87+ minutes | 2026-07-31T15:12Z |
+| 8 | Discovery-cron `AgentRun` count inside the `[14:12:47Z,15:12:47Z]` window | 4 events (2 scout + 2 fit-scorer), all clean | 2026-07-31T15:12Z |
+
+**New finding this refresh adds (probes 4–5, source-confirmed):** `POST /auth/register` still crashes
+with an unhandled 500 on a NUL byte in the password field, live, right now, on the deployed build.
+`GOLD-MASTER-V2-STATE.json` logs `ML-SIGNUP-001` as "FIXED AT HEAD, deployment lag" — **that framing
+is wrong, not merely outdated.** Root cause: `apps/api/app/security.py:36-37`'s `hash_password()`
+(the only external call site is the register endpoint, confirmed by `grep`) has no
+`try/except ValueError` guard around `_pwd_context.hash()`, unlike the sibling `verify_password()`
+(`security.py:40-52`, used by `/auth/login`) which explicitly catches the same exception class and
+converts it to a clean `401`. The blanket `db.py` cursor-factory guard that closed the other 11
+NUL-byte instances cannot reach this crash, because it occurs in the password-hashing call *before*
+any database cursor is opened. **Canonical ID `BLOCKER-004`** — a concurrent orchestrator process
+working the same run independently found the identical defect within minutes (commit `cf587a4`) and, by
+the time this refresh was finalized, had already committed a fix (`f3415e0`, 14 regression tests, **not
+yet deployed**). See `GOLD-MASTER-V2-FINAL-REPORT.md` §6 for the full write-up. **This defect is the
+proximate cause of §9.4's G-M finding below** — its two live 5xx are what breaks the observation
+window's "zero 5xx" requirement.
+
+## 9.2 Top blockers, restated for the deployed build
+
+| # | Blocker | Was (pre-deploy pass) | Now (post-deploy, this refresh) |
+|---|---|---|---|
+| 1 | Admin credential | `admin/admin123` → 200, `isAdmin:true`, full PII access | **Privilege half CLOSED, deployed, independently re-confirmed** (probe 3): 401, no token, no admin access via that path for anyone. **Credential half NOT closed** — the owner's own **email** + `admin123` still authenticates the real, `pro`-entitled account (BLOCKER-003, distinct finding, verified directly by the orchestrator inline in the state ledger — this refresh did not repeat that specific login to avoid a third exposure of the same credential in as many hours, and cites it as same-run evidence rather than re-deriving it). Rotation remains on hold at explicit operator request. |
+| 2 | Contaminated cover-letter identity + unaudited approval-resolution | 8 stored letters contaminated; 3 silently resolved to `submitted` with zero audit trail; unidentified actor | **Forward path CLOSED, deployed**: export/refine/apply-copy all now refuse a contaminated stored sign-off with 422 (this document's original pass could not observe this — it predates the fix). **Audit-trail gap CLOSED, deployed**: `approval.approve`/`approval.reject` now write audit rows (commit `eb13fd5`, confirmed ancestor of `061014c`), with a real TOCTOU race fixed via compare-and-set (a pre-fix probe demonstrated a second resolve silently flipping an already-decided row — now a clean 409). **Attribution resolved, not "unidentifiable"**: `api.log` shows the three approvals resolved from an authenticated interactive session at the account owner's usual client IP, ruling out an automated/cron actor definitively (no `auto-approve` code path exists anywhere in the codebase, confirmed by repo-wide grep) — the original "unidentifiable actor" framing above (§1 item 2) is **superseded**, not merely softened; see `APPROVAL-AUDIT-INCIDENT.md`. **STILL OPEN**: the 8 stored letters' body text is unremediated (0/8), 3 of them attached to the now-`submitted` applications — a risk-officer-gated single UPDATE statement is specified and waiting on operator approval, not yet executed. |
+| 3 | Resume tailoring moves its own metric by 0.0% | 7/7 runs, 0.0% ATS movement, no re-score loop existed in code | **Code-complete and deployed** (`TailoringLoop`, `MAX_ITERATIONS=5`, confirmed ancestor of `061014c`) with an honest sub-85 warning now surfaced in the UI where the target genuinely can't be reached without fabrication. **Not re-measured live post-deploy** — no fresh production tailoring run exists confirming actual score movement on a real job, deliberately not forced (would spend real LLM/Stripe-linked quota on the one disclosed credential this refresh is trying to use minimally). Downgraded from "confirmed 0.0% today" to "the mechanism that produced 0.0% is replaced; the replacement is unexercised live." |
+| 4 | Nothing was deployed; 45 (now 71) commits sat unpushed | Production ran a 20+-hour-stale binary | **DEPLOY RESOLVED; the CLEAN-WINDOW claim did not hold.** Deployed, CI green — but the 60+ min post-deploy observation window this refresh re-checked was **not** clean: `BLOCKER-004` (above) produced 2 real 5xx inside it (§9.4). A fix is committed but not deployed; a fresh window is required. Two further approved, harmless commits (`2946fd1` dead-route removal, `f3415e0` the BLOCKER-004 fix itself) are locally committed but **not yet pushed**. |
+| 5 | Billing: over-advertised Free tier + Stripe currency risk | `ADV-ENT-002` open; `ML-PRICE-002` framed as a NEW CRITICAL currency defect | `ADV-ENT-002` **still open** — genuine, needs the business decision this document already specified (§6 original). `ML-PRICE-002` is **REFUTED**, not merely downgraded: independent reading of the actual Stripe Price and Checkout Session objects (not the tester's screenshot, which showed *presentment*, not the charge) found every Price and every Session is `currency:"aud"` — the "USD $28.52" the original tester saw was Stripe Adaptive Pricing showing a US-geolocated test browser a live FX-converted display of the *same* AUD price (`A$39.00 × 0.7312 = US$28.52`, exact). No customer is charged the wrong currency. A real, narrower structural finding survives: `billing.py:102` asserts the currency as a bare string rather than deriving it from the Stripe Price object, so today's correctness is coincidental, not enforced — recommend a CI/startup reconciliation assert, not a "fix." (`ORCH-CORR-003`, `STRIPE-CURRENCY-VERIFICATION.md`.) |
+
+**New, not in the pre-deploy pass:** `POST /auth/register` NUL-byte 500 (§9.1) — a live crash this
+refresh found by testing the deployed build directly rather than trusting the ledger's "fixed" label.
+
+## 9.3 Gate re-scoring
+
+Full detail and evidence citations: `GOLD-MASTER-V2-FINAL-REPORT.md` §9. Restated here in this
+document's own blocking-items shape for continuity with §8 above:
+
+1. ~~Rotate the admin credential~~ → **still required, now scoped to BLOCKER-003** (owner-account
+   access, not admin privilege). **OPERATOR-GATED, ON HOLD BY OPERATOR REQUEST.**
+2. ~~Determine who resolved the 3 contaminated approvals + add an audit-log write~~ → **CLOSED.**
+   Attribution recovered (owner's own interactive session); audit-log write shipped and deployed.
+3. ~~8 stored cover letters still carry the fixture signature~~ → **STILL OPEN**, now a purely
+   data-remediation problem (the code side is closed both for export and for future contamination) —
+   **risk-officer-gated, awaiting operator approval of a specified, reviewed UPDATE.**
+4. ~~45 unpushed commits~~ → **DEPLOY closed** (CI green, live); **clean-window sub-claim NOT closed** —
+   see item 9/§9.4 (`BLOCKER-004` broke the window's zero-5xx requirement).
+5. Resume tailoring must gain a real loop → **shipped and deployed**; live movement **unverified**, not
+   re-measured this refresh (§9.2 item 3).
+6. `ADV-ENT-002` + `ML-PRICE-002` → **`ADV-ENT-002` still open** (business decision needed);
+   **`ML-PRICE-002` refuted**, remove from the blocking list, replace with the narrower
+   currency-reconciliation-assert recommendation (non-blocking).
+7. Playwright 40/52 → **unchanged.** Still not re-run to green. Every one of the 12 red specs has now
+   individually failed to reproduce against production wherever checked (12/12), which is strong
+   circumstantial evidence they are stale/local-targeted, but "individually didn't reproduce 12 times"
+   is not "the suite passed," and this refresh will not conflate the two, consistent with this
+   document's own epistemic rules.
+8. `approvals-screen-test.md` stub → **not completed this run** (documentation debt only; the
+   underlying evidence gap it left — the audit-trail finding — is now closed regardless, per item 2).
+
+**New item, this refresh:**
+9. `POST /auth/register` NUL-byte 500 (`BLOCKER-004`) → **OPEN, newly found, and directly responsible
+   for G-M not closing** (§9.1, §9.4).
+
+## 9.4 Runtime health — G-M does NOT close (corrected)
+
+§5 above (pre-deploy pass) correctly could not close G-M — production was on a stale binary and no
+post-deploy window existed yet. **This refresh's own first attempt to re-derive closure was itself
+wrong**, on two stacked methodology errors: `grep` without `-a` silently mis-searched `api.log` as
+binary (the file contains raw NUL bytes from this very refresh's own §9.1 test payloads), and the
+"most recent restart" line-anchor initially used was actually a restart from early in a
+150,000+-line, 12-day log history, not today's `13:45:25Z` boot. The corrected check, anchored to the
+verified boot line (`api.log:154304`, timestamped `13:45:22–27Z`):
+
+- Window `14:12:47Z`–`15:12:47Z` (≥60 min): **MET**.
+- Real agent runs inside the window: **MET**, and more strongly than this refresh's own count — the
+  concurrent orchestrator process independently recorded **7** `AgentRun` rows inside the window
+  (fitScorer ×2, scout ×2, plus genuine LLM-backed `coverLetter`, `storyExtractor`, `tailor` runs, all
+  succeeded), stronger evidence than the 4 discovery-cron-only events this refresh found on its own.
+- **5xx inside the window: 2, not 0** — `POST /auth/register` at `15:06:58Z` and `15:07:46Z`, both
+  `BLOCKER-004` (§9.1), both self-inflicted by this refresh's own test probes but real HTTP 500
+  responses from the production server nonetheless. §14.3.5/G-M's "zero 5xx" condition has no
+  carve-out for self-inflicted test traffic.
+- Zero service restarts; zero browser console errors (unaffected by the correction).
+
+**G-M does NOT close.** Independently corroborated by the concurrent orchestrator process's own
+`BLOCKER-004`/"G-M NOT-MET" finding (commit `cf587a4`), reached by a different method (its own runtime
+monitor, not manual `grep`). What would close it: deploy the already-committed fix (`f3415e0`) and run
+a fresh ≥60-minute window — neither of which is within this refresh's authority (no deploy permitted).
+This correction is disclosed rather than silently fixed, consistent with this document's own standing
+practice (GOV-012 did the same for an earlier false-green monitor).
+
+## 9.5 Verdict, restated
+
+# BLOCKED-ON-ITEMS — narrower than before, still not READY
+
+Not "NOT-READY" in the same shape as §8's original verdict — the shape of what blocks launch has
+changed materially. Two of the original five Top-5 blockers are now closed (audit-trail gap; the
+"nothing is deployed" process blocker). A third (currency) turned out not to be a real defect at all.
+What remains blocking is narrower and, unlike before, dominated by **one item this run structurally
+cannot close itself**:
+
+1. **[BINDING, OPERATOR-GATED]** `AETHER_ADMIN_PASSWORD_HASH`/`AETHER_CRON_PASSWORD`/`LOGIN_PASSWORD`
+   rotation. Per `ADR-BLOCKER-001-ADMIN-CREDENTIAL.md` §6, verbatim: *"This system is NOT certified
+   ready for real paid user onboarding (G-P) until `AETHER_ADMIN_PASSWORD_HASH` and
+   `AETHER_CRON_PASSWORD` are rotated together and verified."* That ruling explicitly anticipated and
+   pre-empted today's situation ("holds even after the full approved set is deployed and verified").
+   Nothing this refresh found changes that conclusion; BLOCKER-003 reinforces it with a second,
+   independent live-exploit path (owner-account access, not merely admin privilege).
+2. **[DATA, RISK-OFFICER-GATED]** 8 contaminated stored cover letters, 3 attached to now-`submitted`
+   applications, need the already-specified UPDATE executed under operator approval.
+3. **[BUSINESS DECISION]** `ADV-ENT-002` — honour or correct the advertised Free tier.
+4. **[PROCESS, NEWLY OPEN, BLOCKING G-M DIRECTLY]** `BLOCKER-004` — the register-endpoint NUL-byte
+   crash this refresh found live, post-deploy, contradicting the ledger's own "fixed" claim. A fix is
+   committed (`f3415e0`) but not deployed; until it is, and a fresh clean window runs, **G-M does not
+   close** (§9.4) — this item is not merely "one more finding," it is the reason the run's own
+   production-stability gate fails today.
+5. **[SIX GATES, GENUINELY OPEN OR NOT-MET]** G-B (Notifications stub), G-E (relevance UI unmet by
+   design), G-I (5 of 6 remaining screens have no auto-refresh, no SSE), G-K (no post-71-commit
+   placeholder sweep exists), **G-M (item 4, above)**, G-O (same Notifications stub as G-B) — see
+   `GOLD-MASTER-V2-FINAL-REPORT.md` §9 for the full gate scorecard.
+
+**What is genuinely, verifiably better, restated without the hedge a "still not ready" verdict risks
+implying:** the two CRITICAL blockers that dominated the pre-deploy verdict are both substantially
+narrower today. Nobody's PII beyond the owner's own is exposed by any code path this campaign found.
+No contaminated content can newly leave the system through export, refine, or the apply-copy path. The
+approval queue — the safety backstop the original §1 called "the single most consequence-bearing
+finding of this refresh" — is now audited going forward. A real per-card Apply button, a real
+20-second-verified polling hook with correct pause/restart semantics, and a real score-aware tailoring
+loop are live, not merely committed. **The honest bottom line: this is no longer "nothing shipped, one
+disclosed credential, and a currency defect on top" — it is "most of what shipped works as claimed,
+one disclosed credential remains the single binding blocker, and one small new crash was found by
+testing rather than trusting the label."** NOT-READY still, but for a shorter, more precise list, with
+the shortest item on it — one credential rotation — also the one this campaign has no authority to
+execute. The newest item on the list (`BLOCKER-004`) is, in miniature, the whole campaign's method:
+found by testing the deployed build rather than trusting a "fixed" label, disclosed even though it
+broke this refresh's own attempted gate closure, and left visible rather than quietly smoothed over.
+
+## 9.6 Late-breaking: `BLOCKER-004` fixed and deployed, verified at the moment this refresh closes
+
+`aether-api` restarted again at **`2026-07-31T15:26:34Z`** (`NRestarts=0`, clean) while this refresh was
+being finalized. Independently re-probed: `POST /api/auth/register` with a NUL byte in the password
+field now returns a clean **422** (`"password must not contain a NUL byte"`), not 500
+`[VERIFIED-WITH-FRESH-EVIDENCE, 2026-07-31T15:2xZ]`. Item 4 in §9.5 is resolved. **This does not
+retroactively close G-M** — the new restart resets the ≥60-minute clean-window clock to zero; the
+earliest a fresh window could close is `~16:26:34Z`, and running it out is outside this refresh's
+scope. Every claim in this §9 refresh not otherwise dated should be read as true as of
+**2026-07-31T15:2x–15:3xZ**, in a codebase that kept changing under it while it was being written — the
+correct posture for any "final" review of a system still being actively worked.

@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T15:35:00Z",
+  "updated_utc": "2026-07-31T15:30:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -247,7 +247,7 @@
     {
       "id": "BLOCKER-004",
       "severity": "HIGH \u2014 live 500 on the signup path",
-      "status": "FIXED (commit f3415e0), CI GREEN (run 30642581385), DEPLOY IN FLIGHT",
+      "status": "CLOSED AND VERIFIED LIVE ON PRODUCTION. POST /auth/register with a NUL byte in the password now returns HTTP 422 with an honest message (\"password must not contain a NUL byte\") instead of the 500 it threw at 15:06:58Z. Deployed 15:26:34Z, orchestrator-verified 15:2xZ.",
       "title": "POST /auth/register returns 500 on a NUL byte in the password field",
       "verified": "Production api.log 2026-07-31T15:06:58Z and 15:07:46Z, full traceback captured.",
       "root_cause": "hash_password() -> passlib bcrypt raises PasswordValueError(\"bcrypt does not allow NULL bytes in password\") BEFORE any DB query runs. The blanket _NulByteGuardCursor in app/db.py protects the DB CURSOR path only; a password never reaches the DB as a raw string, so this endpoint was never covered. The email field IS safe (EmailStr returns a clean 422).",
@@ -836,5 +836,23 @@
     "jscpd": "Campaign added +4 clones, ALL test-file-to-test-file, ZERO production code. The 5 shared-service extractions (stage_transitions.py, usePolling.ts, story_paraphrase.py, story_relevance.py, verify-web-build.sh) confirmed MOVES not copies via numstat (net line deletions at call sites) and 0 jscpd matches. NOTE: the agent corrected the baseline - the \"prior 20 clones\" figure had been measured AFTER 25 campaign commits, not before.",
     "new_surface_found": "GET /api/applications ALSO returns the fixture cover-letter text (same 8 DB rows), and the Applications Tracker renders it verbatim (applications/page.tsx:833-840). Widens the display surface of the already-gated BLOCKER-002 data fix - not a new defect.",
     "stale_data": "11 of 12 User rows are test/fixture accounts; 5 pre-date this campaign and are untracked in the purge ledger. Cross-account check across all content tables: ZERO non-owner content rows - no leakage."
+  },
+  "final_report": {
+    "artifact": "docs/delivery/GOLD-MASTER-V2-FINAL-REPORT.md",
+    "verdict": "LAUNCH DECLARATION: NO \u2014 cannot be made",
+    "agreed_by": "orchestrator",
+    "binding_reason": "ADR-BLOCKER-001 \u00a76 while the owner credential remains unrotated (doubly evidenced by BLOCKER-003). Rotation is ON HOLD at the operator's explicit request.",
+    "two_stale_claims_corrected_by_orchestrator": [
+      "It states the NextAuth deletion (2946fd1) is local-only and needs pushing. FALSE \u2014 it is on origin/main; verified via git branch -r --contains.",
+      "It marks G-K OPEN for want of a post-71-commit sweep. FALSE \u2014 the G-K adversarial sweep RAN and returned MET (uat/reports/evidence/gold-master-v2/final/G-K-SWEEP.md). Both were written while the deploy and sweep were still in flight."
+    ],
+    "self_disclosed_error": "ORCH-CORR-009 \u2014 the report author's own first attempt to close G-M was wrong (a grep methodology error: silent binary-file skip plus a mis-anchored boot line across a 150k-line/12-day log). It caught and DISCLOSED this rather than silently correcting it."
+  },
+  "observation_window_2": {
+    "started": "2026-07-31T15:28:32Z",
+    "api_restarted": "15:26:34Z",
+    "log": "uat/reports/evidence/gold-master-v2/final/observation-window-2-*.log",
+    "monitor_validated": "signal-proven \u2014 a probe produced an immediate api.log delta",
+    "note": "Window 1 is INVALIDATED by the 2 BLOCKER-004 5xx. This is the fresh \u00a714.3.5 window required for G-M."
   }
 }
