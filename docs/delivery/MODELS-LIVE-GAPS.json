@@ -2055,7 +2055,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "FIX-IN-TREE-AWAITING-REVIEW",
+      "status": "REVIEW-FAILED-ROUND-2-REQUIRED",
       "owner": "W-I/W-SUB fixer-hard",
       "fixCommits": [],
       "verifiedBy": null,
@@ -3397,6 +3397,48 @@
       "fixCommits": [],
       "verifiedBy": "test-author 2026-07-31T18:52Z",
       "openedUtc": "2026-07-31T18:53:20Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-005",
+      "screen": "Agents / platform",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "SSE STREAMS CAN EXHAUST THE DATABASE CONNECTION CEILING \u2014 a production DoS surface. There is no per-user or global cap on concurrent streams (agent_run_stream.py:107-125, agents.py:2160-2199) while apps/api/app/db.py:8-9 documents a 25-CONNECTION HARD CEILING for the whole application, and get_connection() (db.py:145-154) opens an UNPOOLED connection per poll at a 1.0s default for up to 600s per stream. No rate limiter covers this route (app/rate_limit.py covers only login/register/checkout/portal). A user with a handful of open tabs could starve the entire app of connections. Compounding: the design note claims the stream 'replaces the client 2-3s poll', but the real client poll is 3000ms (apps/web/src/lib/api/agents.ts:57), so a 1.0s default is 3x MORE DB load than what it replaces. Ruling ADR \u00a75e: cap concurrent streams per-user and globally with an honest 429/503, raise the default poll to >=3.0s, and use the pool or prove the cap sits below 25 with headroom. Launch precondition before any UI consumer ships.",
+      "reproduction": [
+        "Read db.py:8-9 connection ceiling, get_connection at db.py:145-154, and the stream loop at agent_run_stream.py:107-125"
+      ],
+      "expected": "Bounded concurrent streams that cannot exhaust the connection ceiling",
+      "observed": "Unbounded streams, unpooled per-poll connections, 1.0s default, no rate limit",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-adversarial-review-VERDICT-20260731T185226Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-07-31T18:52Z",
+      "openedUtc": "2026-07-31T18:55:24Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-006",
+      "screen": "Agents",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "kanban_updated fires for EVERY completed run regardless of agentName (agent_run_stream.py:167-201), so a tailoring or cover-letter run that never touches the board emits the same event as a real submission. The fixer self-flagged this UNSURE and shipped the weaker reading with test 4 (test_agent_run_sse.py:246-266) written around it, converting an unresolved ambiguity into a permanent contract. Orchestrator ruling ADR-GMV4-003: WITHHOLD unless basis=='run_output'; the event name asserts a board change and emitting it otherwise is false to every connected client. Test 4 must be rewritten by test-author, never by the fixer.",
+      "reproduction": [
+        "Complete a tailoring run and observe kanban_updated emitted with changes: []"
+      ],
+      "expected": "kanban_updated emitted only when the run actually changed board state",
+      "observed": "Emitted for every completed run",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-adversarial-review-VERDICT-20260731T185226Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-hard + test-author",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-07-31T18:52Z",
+      "openedUtc": "2026-07-31T18:55:24Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

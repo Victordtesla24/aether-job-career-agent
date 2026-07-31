@@ -208,6 +208,54 @@ pipeline. Filed as `GMV4-sse-002`; G-SUB depends on it.
 
 ---
 
+## 5d. ORCHESTRATOR ADJUDICATION ADR-GMV4-003 — `kanban_updated` must be withheld unless board state actually changed
+
+**Escalated by** the SSE `fixer-hard` as an explicit UNSURE with both readings, then independently
+recommended by the adversarial reviewer.
+
+**Question.** Should `kanban_updated` be emitted for every completed agent run, or only when the
+run's persisted output records a real board change (`basis == "run_output"`)?
+
+**Ruling: interpretation (b) — WITHHOLD unless `basis == "run_output"`.**
+
+**Reasoning.** The event NAME asserts that the kanban changed. Emitting it for a tailoring or
+cover-letter run that never touched the board is a false statement to every connected client,
+even with `changes: []` and disclosed provenance attached. §0.5 forbids exactly this shape:
+technically-qualified output whose plain reading is untrue. A generic "run finished, you may
+want to refetch" signal is a legitimate thing to want — but it must be named for what it is,
+not borrowed from an event that means something stronger.
+
+**Consequence.** `test_agent_run_sse.py` test 4 currently REQUIRES the weaker behaviour for a
+bare `{status:"completed"}` run, so it must be rewritten — by `test-author`, never by the fixer.
+Note the sequence: the fixer self-flagged this UNSURE and shipped the weaker reading with a
+passing test around it. A test written to match an unresolved ambiguity converts that ambiguity
+into a permanent contract. UNSURE items must be adjudicated BEFORE their behaviour is pinned.
+
+---
+
+## 5e. ORCHESTRATOR RULING — SSE resource limits are a launch precondition
+
+The reviewer found no fabrication in the SSE layer but did find a genuine production DoS
+surface: no per-user or global cap on concurrent streams, against the app-wide **25-connection
+hard ceiling** documented at `apps/api/app/db.py:8-9`, with `get_connection()` opening an
+UNPOOLED connection per poll (default 1.0s) for up to 600s per stream, and no rate limiter on
+the route (`app/rate_limit.py` covers only login/register/checkout/portal).
+
+Binding requirements before any UI consumer ships:
+1. A per-user AND global concurrent-stream cap, with an honest 429/503 when exceeded — never a
+   silent hang.
+2. Default `AETHER_SSE_POLL_SECONDS` raised to **at least 3.0s**, matching the existing client
+   poll at `apps/web/src/lib/api/agents.ts:57`. The design note claimed the stream "replaces the
+   client's 2-3s poll"; the real client poll is 3000ms, so a 1.0s default is **3× MORE** database
+   load than the mechanism it replaces. The claim was inaccurate and the default is wrong.
+3. Streams must use the connection pool, or the cap must be provably below the 25-connection
+   ceiling with headroom for normal request traffic.
+
+Rationale: a realtime feature that can exhaust the database connection ceiling from a few browser
+tabs is a worse launch risk than the polling it replaces.
+
+---
+
 ## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
 
 **Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
