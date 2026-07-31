@@ -74,9 +74,11 @@ def get_application_counts(
     # Application rows (re-tailored/re-drafted versions of one submitted
     # application) counts as ONE interviewed job, not three. This is the
     # canonical numerator for ``interview_conversion_rate``; market-pulse's
-    # separate "Interview conversion" factor uses a raw ``COUNT(*)``
-    # denominator instead (a known, distinct pre-existing divergence, out of
-    # scope here) and must not be confused with this one.
+    # separate "Interview conversion" factor (its ``interviewed / total``,
+    # not ``interviewed / submitted``) ALSO now derives both terms from this
+    # function (GAP-market-pulse-interview-count-divergence, fixed) — it
+    # previously used a raw ``COUNT(*)`` instead, which could disagree with
+    # this canonical figure on the SAME analytics page for the SAME data.
     cur.execute(
         f'''
         SELECT
@@ -359,17 +361,16 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             heatmap_rows = rows_to_dicts(cur)
 
             # --- Funnel counts for probability + market-vs-you -------------
-            cur.execute(
-                '''
-                SELECT
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE "status" IN ('interview','offer')) AS interviews,
-                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers
-                FROM "Application" WHERE "userId" = %s
-                ''',
-                (user_id,),
-            )
-            f_total, f_interviews, _f_offers = cur.fetchone()
+            # Interview figures must use the SAME canonical, DISTINCT-jobId
+            # get_application_counts() every other cumulative "applications"
+            # figure on the platform derives from (see that function's
+            # docstring) — a raw COUNT(*) double-counts jobs that carry
+            # multiple Application rows (draft/re-tailored cover-letter
+            # versions), inflating/deflating this factor against the
+            # canonical interview_conversion_rate shown elsewhere on the SAME
+            # analytics page (GAP-market-pulse-interview-count-divergence).
+            pulse_counts = get_application_counts(cur, user_id)
+            f_total, f_interviews = pulse_counts["total"], pulse_counts["interviewed"]
 
             # "Applications / month" (Market vs. You) must count the SAME
             # submitted set as every other "applications" figure on this
