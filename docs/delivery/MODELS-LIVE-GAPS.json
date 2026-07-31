@@ -2400,6 +2400,195 @@
       "verifiedBy": "risk-officer (opus) 2026-07-31",
       "openedUtc": "2026-07-31T17:30:46Z",
       "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-approvals-001",
+      "screen": "Approvals",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "SYNTHETIC FIXTURE DATA VISIBLE TO A REAL USER IN PRODUCTION. Two approval rows from a prior closed QA campaign render on the live Approvals All/Approved filters: type=email_send with payload.preview='SYNTHETIC TEST DATA (models-live qa) - no \"to\" field on purpose.' ids cbf83a2061808d8526c298f2a (deleted during testing) and ccbe2e7518343e818809f8009 (left in place as evidence). Direct \u00a70.5 zero-tolerance violation on a user-reachable path, one day before paying customers onboard.",
+      "reproduction": [
+        "Log in to prod, open /dashboard/approvals, select the All or Approved filter"
+      ],
+      "expected": "Zero fixture/placeholder content on any user-reachable path",
+      "observed": "Two synthetic QA rows rendered to the live user",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-approvals/16-BLOCKER-synthetic-fixture-rows-live.png"
+      ],
+      "status": "OPEN",
+      "owner": "W-K scout->reviewer->janitor",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-approvals-002",
+      "screen": "Approvals",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "Approvals screen has ZERO auto-refresh. A 65s idle observation recorded no polling at all and the code has no interval timer, while sibling screens poll ~20s. \u00a715.1 requires <=20s on ALL screens. A 5th pending approval appeared from live agent activity mid-test and would not surface without a manual reload - the user silently misses pending work.",
+      "reproduction": [
+        "Open /dashboard/approvals, idle 65s with network capture, observe zero polling"
+      ],
+      "expected": "Auto-refresh <= 20s",
+      "observed": "No polling whatsoever on this screen",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-approvals/"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-jobs-001",
+      "screen": "Jobs",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "Tailor-Resume runs for 163.8s on production (real LLM call, deepseek/deepseek-v4-pro, $0.038) behind a STATIC spinner with a fixed caption - no elapsed timer, no percentage, no 'this can take a few minutes' copy. It is indistinguishable from a hang, so a paying user will reasonably assume the app is broken and abandon or retry. \u00a715.1 requires agent operations to stream progress.",
+      "reproduction": [
+        "Trigger Tailor Resume on a real job on prod and watch the UI for the full duration"
+      ],
+      "expected": "Live progress indication for long AI operations",
+      "observed": "Static spinner for 164s with no elapsed or step feedback",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-jobs/16-tailoring-in-progress.png"
+      ],
+      "status": "OPEN",
+      "owner": "W-I fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-apps-001",
+      "screen": "Applications",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "The shipped client fires the LEGACY endpoint POST /applications/{id}/move for stage changes, not the canonical PATCH /applications/{id}/stage (applications.py:255). The canonical endpoint works when called directly but is unreachable from the UI. \u00a79.1 and G-F are written against PATCH; docs and client disagree with each other.",
+      "reproduction": [
+        "Move a card on /dashboard/applications with network capture and observe the request"
+      ],
+      "expected": "Client and documented canonical endpoint agree",
+      "observed": "Client uses legacy POST /move; PATCH /stage unreachable from the UI",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-applications/"
+      ],
+      "status": "OPEN",
+      "owner": "W-F fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-jobs-002",
+      "screen": "Jobs",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "Pre-apply confirmation modal omits the LINKED STORY COUNT required by \u00a713.1(b). It shows title, company, match score and tailored-status only.",
+      "reproduction": [
+        "Click Apply on a job card on prod and inspect the modal"
+      ],
+      "expected": "Modal shows job title, company, current ATS score AND linked story count",
+      "observed": "Story count absent",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-jobs/"
+      ],
+      "status": "OPEN",
+      "owner": "W-H fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-jobs-003",
+      "screen": "Jobs / Resume Studio",
+      "severity": "HIGH",
+      "category": "gap",
+      "summary": "No before->after ATS delta is rendered ANYWHERE despite the backend computing both values. \u00a76.2 and \u00a716.1 require a before/after banner per tailored job, and G-C/G-J/G-SUB all depend on it (the submission queue needs an 'ATS: 52% -> 91%' delta badge per \u00a714.2.2).",
+      "reproduction": [
+        "Tailor a job on prod and look for a before/after banner on the Job card and Resume Studio"
+      ],
+      "expected": "Before->after ATS banner and delta badge visible",
+      "observed": "Only a single current match-score ring; no delta anywhere",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-jobs/"
+      ],
+      "status": "OPEN",
+      "owner": "W-C/W-J fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-apps-002",
+      "screen": "Applications",
+      "severity": "LOW",
+      "category": "gap",
+      "summary": "No dedicated 'Complete / Mark as In Review' quick action on cards (\u00a79.1 requires one on every card); only the generic Move-to menu covers it.",
+      "reproduction": [
+        "Inspect any application card on prod"
+      ],
+      "expected": "Quick action present on every card",
+      "observed": "Absent; generic menu only",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-applications/"
+      ],
+      "status": "OPEN",
+      "owner": "W-F fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-apps-003",
+      "screen": "Applications",
+      "severity": "LOW",
+      "category": "gap",
+      "summary": "No DELETE endpoint exists anywhere in the API for Application rows, so test/duplicate applications are permanent residuals. Surfaced when a test job's Application row could not be cleaned up.",
+      "reproduction": [
+        "Search ROUTER-MATRIX.md for a DELETE on /applications"
+      ],
+      "expected": "Owner-scoped delete or archive for applications",
+      "observed": "No delete path exists",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-F fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-evidence-001",
+      "screen": "n/a (process)",
+      "severity": "MEDIUM",
+      "category": "governance",
+      "summary": "Sub-agents were blocked by an internal Write-tool restriction from creating REPORT.md files, so all three batch-1 screens have complete RAW evidence on disk (116 files: screenshots + network/console/event JSON) but no synthesized report. Orchestrator verified no repo hook causes this and that bash heredoc writes succeed. \u00a726 requires locatable artifacts per closed finding.",
+      "reproduction": [
+        "ls uat/reports/evidence/gold-master-v3/screens/*/ shows 0 .md files"
+      ],
+      "expected": "Each tested screen has a REPORT.md alongside its raw evidence",
+      "observed": "Raw evidence present, reports absent",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/"
+      ],
+      "status": "OPEN",
+      "owner": "evidence agent (regenerate via bash heredoc)",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch1 2026-07-31",
+      "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
     }
   ],
   "gmv4": {
