@@ -2413,7 +2413,7 @@
         "Log in to prod, open /dashboard/approvals, select the All or Approved filter"
       ],
       "expected": "Zero fixture/placeholder content on any user-reachable path",
-      "observed": "Two synthetic QA rows rendered to the live user",
+      "observed": "Two synthetic QA rows rendered to the live user | PROD-DB SWEEP: 17 synthetic rows total across ApprovalRequest/Resume/EmailThread/User. MATERIAL RISK CONTEXT: 100% of content rows in every major table belong to the single cron/test account (c6c8d0163d973a8048e7e33b8); ZERO real customers have any data in production. So no paying customer is currently seeing synthetic content. Remains a launch blocker; is NOT an active customer-facing incident. Manifest cleanup/DELETION-MANIFEST-1.json PROPOSED, awaiting risk-officer approval.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/screens/dashboard-approvals/16-BLOCKER-synthetic-fixture-rows-live.png"
       ],
@@ -2511,14 +2511,14 @@
     {
       "id": "GMV4-jobs-003",
       "screen": "Jobs / Resume Studio",
-      "severity": "HIGH",
+      "severity": "MEDIUM",
       "category": "gap",
-      "summary": "No before->after ATS delta is rendered ANYWHERE despite the backend computing both values. \u00a76.2 and \u00a716.1 require a before/after banner per tailored job, and G-C/G-J/G-SUB all depend on it (the submission queue needs an 'ATS: 52% -> 91%' delta badge per \u00a714.2.2).",
+      "summary": "CORRECTED 2026-07-31 by batch-2 first-hand evidence. My earlier entry claimed no before->after ATS delta is rendered ANYWHERE; that was WRONG and was based on Jobs-screen-only observation. Resume Studio DOES render 'Before: 44.06% -> After: 46.28%' plus a missing-JD-keywords chip list (8 of 21 shown). The genuine remaining gap is narrower: the delta is absent on JOB CARDS and in the Applications tracker, and \u00a714.2.2 needs it as a per-card delta badge in the submission queue.",
       "reproduction": [
         "Tailor a job on prod and look for a before/after banner on the Job card and Resume Studio"
       ],
       "expected": "Before->after ATS banner and delta badge visible",
-      "observed": "Only a single current match-score ring; no delta anywhere",
+      "observed": "Banner + keyword chips present in Resume Studio; absent on Job cards / tracker / submission queue",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/screens/dashboard-jobs/"
       ],
@@ -2695,6 +2695,195 @@
       "fixCommits": [],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:52:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-002",
+      "screen": "Story Bank",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "G-E's 'zero duplicate stories' does NOT hold. Live production StoryEntry: 37 rows, 0 exact duplicates, but 5 NEAR-DUPLICATE clusters covering 16 rows (43%) \u2014 paraphrased repeats of the same underlying achievement with distinct contentHash and titles. story_dedup_migration.py is specifically a PARAPHRASE de-dup, so exact-match dedup working while 43% paraphrase duplication survives is direct evidence the migration either never ran against live data or does not work as claimed. \u00a78.1(a) demands before/after story counts as fresh proof it ran; that proof does not exist.",
+      "reproduction": [
+        "SELECT over StoryEntry grouping by normalised text prefix; see PROD-DATA-INVENTORY.md"
+      ],
+      "expected": "Zero duplicate stories in the live DB; duplicate prevention active at insert time",
+      "observed": "43% of stories are paraphrase near-duplicates | \u00a78.1(b) INSERT-TIME DEDUP VERIFIED WORKING LIVE: a manually-crafted near-duplicate submitted through the UI produced a card-count delta of 0 and the server returned the SAME pre-existing row id with title updated and tags unioned \u2014 the paraphrase-merge fired exactly as coded. The defect is therefore narrower and precise: insert-time prevention WORKS; the pre-existing rows were never RETROACTIVELY merged, i.e. the bulk migration never ran against live data. ~37 stories reduce to ~8 underlying achievements.",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/PROD-DATA-INVENTORY.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-E ai-loop-engineer",
+      "fixCommits": [],
+      "verifiedBy": "scout prod-DB sweep 2026-07-31",
+      "openedUtc": "2026-07-31T17:54:27Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-cleanup-001",
+      "screen": "n/a (process)",
+      "severity": "MEDIUM",
+      "category": "governance",
+      "summary": "A prior GOLD-MASTER-V2 deletion manifest proposed removing the same EmailThread nul-byte test row and was NEVER ACTIONED \u2014 the row is still live two campaigns later (prior manifest preserved at cleanup/DELETION-MANIFEST-1-GOLD-MASTER-V2-PRIOR.json). Cleanup being proposed and then silently dropped is how fixture data survives into a launch. G-K must verify EXECUTION, not merely the existence of a manifest.",
+      "reproduction": [
+        "Compare cleanup/DELETION-MANIFEST-1-GOLD-MASTER-V2-PRIOR.json against live rows"
+      ],
+      "expected": "Approved manifests are executed and verified",
+      "observed": "Prior manifest proposed but never executed",
+      "evidence": [
+        "cleanup/DELETION-MANIFEST-1-GOLD-MASTER-V2-PRIOR.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-K janitor + qa-adversary",
+      "fixCommits": [],
+      "verifiedBy": "scout prod-DB sweep 2026-07-31",
+      "openedUtc": "2026-07-31T17:54:27Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-users-001",
+      "screen": "n/a (data)",
+      "severity": "LOW",
+      "category": "cleanup",
+      "summary": "14 leftover QA/test signup User rows in the production User table (Phase7A, ML-Adv, GM2, QA DeepSweep probes), each with zero content rows. Total User table = 15 (1 cron account + 14 shells). Proposed for deletion pending risk-officer confirmation that none is a real person's abandoned signup.",
+      "reproduction": [
+        "SELECT over User with per-user content-row counts; see PROD-DATA-INVENTORY.md"
+      ],
+      "expected": "Production user table contains only genuine accounts",
+      "observed": "14 of 15 users are test artifacts",
+      "evidence": [
+        "cleanup/DELETION-MANIFEST-1.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-K janitor (post-approval)",
+      "fixCommits": [],
+      "verifiedBy": "scout prod-DB sweep 2026-07-31",
+      "openedUtc": "2026-07-31T17:54:27Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-004",
+      "screen": "Resume Studio",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "THE \u00a76.2 ATS >= 85 TARGET IS NOT MET ON PRODUCTION, BY A WIDE MARGIN. A real tailoring run against a real job moved the score 44.06% -> 46.28% (+2.2 points) after the loop EXHAUSTED all 5 iterations ('stopped after 5 iteration(s)'). G-C requires >= 85 after tailoring or an honest surfaced sub-target warning. The shortfall is disclosed only inside a free-text `warning` string, not as structured data the UI can act on, and the screen still presents the result as a successful tailoring. NOTE: this measurement was taken with the OLD token-overlap scorer; the W-HF embedding fix is in the working tree but NOT yet deployed, so this MUST be re-measured post-deploy before the size of the gap is treated as final.",
+      "reproduction": [
+        "Tailor a real job on prod and read baselineATSScore/tailoredATSScore in the resolved job result"
+      ],
+      "expected": "ATS >= 85 after tailoring, or an honest, prominent sub-target warning",
+      "observed": "44.06% -> 46.28% after 5 exhausted iterations",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-resume/results.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-C ai-loop-engineer",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-resume-001",
+      "screen": "Resume Studio",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "No semantic-degradation disclosure in the UI, confirmed first-hand from the user's side. The ATS panel's only copy is 'Deterministic keyword + semantic + experience evaluation vs {job}', presented as authoritative, while semantic_similarity (18.2 in the observed run) was a token-overlap approximation. This is the user-visible half of GMV4-ats-001/003.",
+      "reproduction": [
+        "Open Resume Studio ATS panel on prod and read the methodology copy"
+      ],
+      "expected": "UI states honestly when the semantic component is unavailable/degraded",
+      "observed": "Presented as a real semantic evaluation with no qualifier",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-resume/"
+      ],
+      "status": "OPEN",
+      "owner": "W-J fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-resume-002",
+      "screen": "Resume Studio",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "Back-to-back tailoring on the same job fails with no backpressure: the 2nd run waits 300.8s behind a spinner and then returns 'The AI service is temporarily unavailable. Please try again in a moment.' No cooldown, no queue feedback, no early rejection. The failure is honest but arrives after five minutes of apparent progress \u2014 a paying user will read that as a broken product. Pairs with GMV4-jobs-001 (163.8s static spinner).",
+      "reproduction": [
+        "Trigger Tailor twice in succession on the same job on prod"
+      ],
+      "expected": "Concurrent/duplicate runs rejected fast, or queued with visible position",
+      "observed": "5-minute wait then a generic unavailable error",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-resume/results-2.json"
+      ],
+      "status": "OPEN",
+      "owner": "W-I/W-C fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-003",
+      "screen": "Story Bank",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "Story relevance score (\u00a78.1c) never reaches the UI, with a precise root cause: the backend GET /stories supports a relevance_score when passed job_id (apps/api/app/routers/stories.py), but the frontend fetchStories() never sends job_id, so the capability is silently unreachable. G-E requires the score visible per story per job.",
+      "reproduction": [
+        "Inspect fetchStories() in the Story Bank page and compare with the stories router signature"
+      ],
+      "expected": "Relevance score visible per story per job",
+      "observed": "Backend capability exists; frontend never requests it",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-stories/"
+      ],
+      "status": "OPEN",
+      "owner": "W-E fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-cover-001",
+      "screen": "Cover Letter Studio",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "UNSURE - a 'Request Changes' refine submitted with a >2000-char adversarial instruction produced a POST /cover-letters/{id}/refine that aborted client-side (net::ERR_ABORTED) with NO response and NO user-facing error. Two readings: (a) benign - Playwright .fill() bypassed the textarea maxLength=2000 and the oversized request was cancelled; (b) genuine defect - a long instruction silently cancels the refine with no feedback. Not re-verified with a bounded <2000-char string. Requires a variant re-run before classification.",
+      "reproduction": [
+        "Submit a bounded (<2000 char) adversarial refine instruction and observe whether the request completes"
+      ],
+      "expected": "Refine either succeeds or fails with a visible honest error",
+      "observed": "Request aborted client-side, silently",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-cover-letters/requestfailed.json"
+      ],
+      "status": "OPEN",
+      "owner": "qa-adversary (variant re-run)",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-pdf-001",
+      "screen": "Resume Studio",
+      "severity": "LOW",
+      "category": "gap",
+      "summary": "Resume Studio's export control is labelled 'Download' where the wireframe specifies 'Export PDF'. It does produce a real PDF. Cover Letter Studio's 'Export PDF' is present and works. Relevant to G-DG: PDF export already exists via the in-app path, independent of DocuGenerate (which has no credential).",
+      "reproduction": [
+        "Compare the Resume Studio control against design/screens wireframe copy"
+      ],
+      "expected": "Control labelled per wireframe",
+      "observed": "Labelled 'Download'",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/screens/dashboard-resume/"
+      ],
+      "status": "OPEN",
+      "owner": "W-DG/doc-updater",
+      "fixCommits": [],
+      "verifiedBy": "screen-tester batch2 2026-07-31",
+      "openedUtc": "2026-07-31T17:55:25Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

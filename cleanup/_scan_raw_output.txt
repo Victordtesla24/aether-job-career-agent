@@ -1,0 +1,55 @@
+Output format is unaligned.
+Field separator is "	".
+=== ApprovalRequest.payload ===
+tbl	id	userId	col	snippet	createdAt
+ApprovalRequest	ccbe2e7518343e818809f8009	c6c8d0163d973a8048e7e33b8	payload	{"why": "MODELS-LIVE QA synthetic test row — deliberately missing recipient so approve cannot send a real email.", "body": "synthetic test body, no recipient set", "preview": "SYNTHETIC TEST DATA (mod	2026-07-22 14:15:05.249
+(1 row)
+=== Application.coverLetter/answers ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== Job.title/company/location/description/requirements ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== Resume.label/sections ===
+tbl	id	userId	col	snippet	createdAt
+Resume	c969dbcecd27c827a80f6bea0	c6c8d0163d973a8048e7e33b8	label/sections	Uploaded — valid-resume | {"bullets": [], "contact": {}, "raw_text": "Jane Doe Test Resume\nSoftware Engineer specializing in Python and distributed systems\nEXPERIENCE\nSenior Engineer at Test Corp 2	2026-07-31 00:20:58.605
+(1 row)
+=== StoryEntry.title/situation/task/action/result ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== EmailThread.subject/messages/draftReply ===
+tbl	id	userId	col	snippet	createdAt
+EmailThread	cd677a32f603c19a2d56f6725	c6c8d0163d973a8048e7e33b8	subject/messages/draftReply	NUL byte test subject | [{"body": "To: nul-byte-test@example.com\n\nBody with NUL byte: end of body.", "role": "draft", "cre | 	2026-07-31 07:48:49.963
+(1 row)
+=== AgentRun.input/output/error ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== User.name/email/username/targetRole/location ===
+tbl	id	userId	col	snippet	createdAt
+User	c08d643531d09af3651a8c649	c08d643531d09af3651a8c649	name/email/username/targetRole/location	Phase7A Tester | test-phase7a@example.com |  |  | 	2026-07-24 23:36:05.406
+User	c097be69c865a39926245ce08	c097be69c865a39926245ce08	name/email/username/targetRole/location	QA DeepSweep | qa-deepsweep-20260729@example.com |  |  | 	2026-07-29 04:14:05.368
+User	cccd35dcf1f2a57e715bf821b	cccd35dcf1f2a57e715bf821b	name/email/username/targetRole/location	ML Adv Probe | ml-adv-storyleak-20260723051146@example.com |  |  | 	2026-07-23 05:11:48.873
+User	c08c4e7416692b70e268170fd	c08c4e7416692b70e268170fd	name/email/username/targetRole/location	 | mltest+001@example.com |  |  | 	2026-07-22 12:30:49.154
+User	ca4079d6361217caf5cba595e	ca4079d6361217caf5cba595e	name/email/username/targetRole/location	GM2 Phase0 Probe | gm2-phase0-probe-1785453738@example.com |  |  | 	2026-07-30 23:22:21.187
+User	c2b94be6616c803d50f56a23a	c2b94be6616c803d50f56a23a	name/email/username/targetRole/location	Spot Check Control | spotcheck-control-1785510466@example.com |  |  | 	2026-07-31 15:07:49.697
+User	ccd4a8f7f706bcbe115759fe3	ccd4a8f7f706bcbe115759fe3	name/email/username/targetRole/location	Gold Master Legit Check | gm2-legitcheck-1785511626@example.com |  |  | 	2026-07-31 15:27:09.844
+User	c0267eaac66e5e5fa77834802	c0267eaac66e5e5fa77834802	name/email/username/targetRole/location	 | 用户名テスト😀@example.com |  |  | 	2026-07-31 08:54:22.782
+User	c860686a86a16536de282b4b5	c860686a86a16536de282b4b5	name/email/username/targetRole/location	GM2 Report Refresh Legit | gm2-report-refresh-legit-1785515581@example.com |  |  | 	2026-07-31 16:33:04.41
+User	c56667cb7661a0cfef18ada20	c56667cb7661a0cfef18ada20	name/email/username/targetRole/location	Gold Master V2 Test User | gm2-nonadmin-1785454990@example.com |  | QA Tester Probe | Sydney, AU	2026-07-30 23:43:17.134
+User	cb1940977b1442e5de562019d	cb1940977b1442e5de562019d	name/email/username/targetRole/location	 | gm2-nultest-1785488126@example.com |  |  | 	2026-07-31 08:55:40.583
+User	c23a38bef0e875d0844b95acb	c23a38bef0e875d0844b95acb	name/email/username/targetRole/location	 | definitely-nonexistent-signup-probe-xyz@example.com |  |  | 	2026-07-31 08:55:55.803
+User	c03deb51f1c51790143a1a29c	c03deb51f1c51790143a1a29c	name/email/username/targetRole/location	GM2 Signup Tester | gm2-signup-1785488210@example.com |  |  | 	2026-07-31 08:56:54.908
+User	c8b3529224e5f2c7052ce089b	c8b3529224e5f2c7052ce089b	name/email/username/targetRole/location	GM2 Signup Test | gm2-signup-1785488691@example.com |  |  | 	2026-07-31 09:04:55.804
+(14 rows)
+=== Contact.name/title/company/email ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== InterviewSchedule (empty table but checking) ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== Offer (company/role/location) ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
+=== OutreachTask.message ===
+tbl	id	userId	col	snippet	createdAt
+(0 rows)
