@@ -19,6 +19,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.agents.cover_letter_agent import (
+    STORED_PLACEHOLDER_SIGNER_DETAIL,
+    stored_letter_has_placeholder_signer,
+)
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.job import VALID_STATUSES, JobRepository
@@ -411,6 +415,61 @@ def _cover_letter_for_apply(user_id: str, job_id: str) -> bool:
             return cur.fetchone() is not None
 
 
+def _guard_apply_cover_letter_source(
+    user_id: str, job_id: str, reuse_application_id: str | None
+) -> None:
+    """GOLD-MASTER-V2 §15 (d2) — refuse to submit a contaminated draft body.
+
+    The apply write is the ONLY cover-letter write path with no guard at all
+    (remediation plan §5.6, path #4): it either copies the newest non-empty
+    draft body into a new submitted row (``INSERT … SELECT "coverLetter"``)
+    or promotes that draft row in place — raw SQL both ways, no LLM call, so
+    none of the generation/refine/export signer guards ever runs. Verified
+    2026-07-31T11:27Z: both contaminated production drafts are the selected
+    copy source (``pick_rank = 1``), i.e. an Apply click mints a 9th and 10th
+    contaminated row.
+
+    BEHAVIOUR: **refuse**, never substitute. The alternative — skipping the
+    contaminated draft and copying the newest CLEAN one instead — would
+    submit a body the user never saw (the Studio and ``GET /cover-letters``
+    both show the NEWEST draft), which is a silent substitution on the single
+    most consequential action in the product. A ``WHERE`` predicate on the
+    copy source would be worse still: with no clean draft left it matches
+    zero rows, and the caller would return an ``applicationId`` for an
+    Application that was never inserted while the job is marked applied.
+
+    Both candidate bodies are checked — the row that would be promoted and
+    the row the ``INSERT … SELECT`` would pick — because which of the two
+    write shapes runs depends on whether the newest Application for the job
+    is that same draft.
+    """
+    candidates: list[str] = []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "coverLetter" FROM "Application" '
+                'WHERE "userId" = %s AND "jobId" = %s '
+                'AND "status" = \'draft\'::"ApplicationStatus" '
+                'AND NULLIF(BTRIM("coverLetter"), \'\') IS NOT NULL '
+                'ORDER BY "createdAt" DESC LIMIT 1',
+                (user_id, job_id),
+            )
+            row = cur.fetchone()
+            if row:
+                candidates.append(row[0] or "")
+            if reuse_application_id is not None:
+                cur.execute(
+                    'SELECT "coverLetter" FROM "Application" '
+                    'WHERE "id" = %s AND "userId" = %s',
+                    (reuse_application_id, user_id),
+                )
+                row = cur.fetchone()
+                if row:
+                    candidates.append(row[0] or "")
+    if any(stored_letter_has_placeholder_signer(body) for body in candidates):
+        raise HTTPException(status_code=422, detail=STORED_PLACEHOLDER_SIGNER_DETAIL)
+
+
 def _resume_for_apply(user_id: str, job_id: str) -> str | None:
     """Pick the resume to apply with: the most recent job-tailored one.
 
@@ -481,6 +540,15 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
                     "Generate one in the Cover Letter Studio first."
                 ),
             )
+        # BLOCKER-002 d2: the letter about to be submitted must not carry a
+        # placeholder/test-probe sign-off. Runs after the gate above and
+        # before EITHER write shape below, so a refusal leaves the job
+        # un-applied and no Application row created or promoted.
+        _guard_apply_cover_letter_source(
+            user_id,
+            job_id,
+            existing_application[0] if existing_application is not None else None,
+        )
 
         application_id = existing_application[0] if existing_application is not None else None
     if application_id is None:

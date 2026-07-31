@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from app.agents.cover_letter_agent import (
     PLACEHOLDER_SIGNER_DETAIL,
     REDACTION_PLACEHOLDER,
+    STORED_PLACEHOLDER_SIGNER_DETAIL,
     _looks_like_placeholder_name,
     build_approval_extras,
     build_body,
@@ -35,6 +36,7 @@ from app.agents.cover_letter_agent import (
     injected_provenance_tokens,
     letter_date,
     sanitize_untrusted_text,
+    stored_letter_has_placeholder_signer,
     strip_injection_compliance,
     strip_injection_leaks,
     strip_letter_scaffolding,
@@ -691,6 +693,19 @@ def _refine_cover_letter_body(
     # the reserved quota (no LLM call has happened yet).
     if signer and _looks_like_placeholder_name(signer):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, PLACEHOLDER_SIGNER_DETAIL)
+    # GOLD-MASTER-V2 §15 (d1): the check above tests the LIVE profile name
+    # only, so a letter ALREADY signed with a placeholder stayed refinable
+    # the moment the profile was corrected — and refine re-composes the
+    # revision from THIS stored body, laundering the contaminated source into
+    # a brand-new stored row plus an approval. Inspect the stored sign-off
+    # too, with the SAME shared rule (§13.1), scoped to the sign-off line so
+    # ordinary prose ("led testing", "closed the capability gap") can never
+    # refuse a legitimate letter. Raised here, before any LLM call, so
+    # ``_record_run`` finishes the run as failed and REFUNDS the quota.
+    if stored_letter_has_placeholder_signer(letter.get("coverLetter") or ""):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, STORED_PLACEHOLDER_SIGNER_DETAIL
+        )
     # ``current_user`` comes from the default UserRepository projection, which
     # omits ``targetRole`` — resolve it with the repository's guarded read so
     # the hook reflects the user's real configured role (GAP-P4-049).
@@ -999,6 +1014,20 @@ def export_cover_letter_pdf(letter_id: str, current_user: CurrentUser) -> Respon
     _signer_name = str(current_user.get("name") or "")
     if _signer_name and _looks_like_placeholder_name(_signer_name):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, PLACEHOLDER_SIGNER_DETAIL)
+    # GOLD-MASTER-V2 §15 (d1): the letterhead is re-rendered LIVE from
+    # ``current_user`` (``_sender_block`` below) but the body — including the
+    # sign-off — is the STORED string, and nothing substitutes the signer
+    # inside it. Checking only the profile name therefore made this export
+    # *more* reachable once ``User.name`` was corrected: verified live on
+    # production 2026-07-31T11:26:25Z, this endpoint returned HTTP 200 for
+    # three contaminated letters, each a submission-ready
+    # ``attachment; filename="cover-letter-<company>.pdf"`` carrying a clean
+    # letterhead over a "GAP-P7-DEF-B Probe <digits>" sign-off. Refuse on the
+    # stored sign-off as well, same shared rule, sign-off line only.
+    if stored_letter_has_placeholder_signer(letter.get("coverLetter") or ""):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, STORED_PLACEHOLDER_SIGNER_DETAIL
+        )
 
     regular, bold = _pdf_fonts()
     ink, muted = HexColor(_PDF_INK), HexColor(_PDF_MUTED)

@@ -1117,6 +1117,86 @@ def _looks_like_placeholder_name(name: str) -> bool:
     return any(tok in _PLACEHOLDER_NAME_TOKENS for tok in tokens)
 
 
+# ---------------------------------------------------------------------------
+# GOLD-MASTER-V2 §15 (BLOCKER-002, leak path d1/d2): the SAME rule above,
+# applied to the signer a STORED letter body already carries.
+#
+# Every shipped placeholder-signer guard tests the LIVE profile name at call
+# time; none inspects the stored body. Verified consequence on production
+# 2026-07-31T11:26:25Z (uat/reports/evidence/gold-master-v2/waves/
+# blocker002-remediation-plan.md §3.3/§3.4): correcting ``User.name`` flipped
+# the PDF export for 8 already-contaminated letters from 422 to **200** —
+# a clean live letterhead over a "GAP-P7-DEF-B Probe <digits>" stored
+# sign-off, served as an ``attachment`` submission-ready file. Contamination
+# that is already at rest needs a read-time check, not only a write-time one.
+#
+# SCOPING (load-bearing): only the SIGN-OFF LINE is inspected — never the
+# body prose. Unlike ``User.name`` (a short profile field), a letter body is
+# MODEL-GENERATED PROSE: "I led testing…", "closed the capability gap", or a
+# quoted 8-digit figure would each trip ``_looks_like_placeholder_name`` on a
+# whole-body scan and refuse a paying customer their own letter — a worse
+# defect than the one being fixed, and the exact false-positive class commit
+# 1f6f6a5 already had to repair once for real surnames (Probert, Testa,
+# Testard, Probst). §1.4 of the plan verifies the scoping is also sufficient:
+# in all 8 production rows the fixture appears exactly once, as the final
+# line after the valediction, never in prose, with no stored letterhead.
+# ---------------------------------------------------------------------------
+
+#: The closing words that open a sign-off block, normalised off ``_CLOSINGS``
+#: (the SAME list ``strip_letter_scaffolding`` uses — never a second list).
+_SIGNOFF_CLOSINGS = frozenset(closing.rstrip(",").strip() for closing in _CLOSINGS)
+
+#: A sign-off name line is a NAME, not a sentence. Capping its length keeps a
+#: prose line that merely OPENS with a closing word ("Best, I want to add
+#: that our test suite passed.") from being read as an identity. Real sign-off
+#: lines — including "GAP-P7-DEF-B Probe 1785452243543" (3 tokens) and a
+#: name-plus-title line — sit far below this.
+_MAX_SIGNOFF_NAME_TOKENS = 8
+
+
+def _closing_line_signer(line: str) -> str | None:
+    """``None`` when ``line`` is not a closing line; otherwise the signer
+    carried ON that line (``"Sincerely, Ada Lovelace"``), or ``""`` when the
+    signer is on the following line (``compose_letter``'s own shape)."""
+    stripped = line.strip()
+    if not stripped:
+        return None
+    head, comma, rest = stripped.partition(",")
+    if comma:
+        return rest.strip() if head.strip().lower() in _SIGNOFF_CLOSINGS else None
+    # No comma: the whole line must BE the closing ("Sincerely" / "Regards.").
+    return "" if stripped.rstrip(".").strip().lower() in _SIGNOFF_CLOSINGS else None
+
+
+def stored_signoff_name(letter_text: str) -> str:
+    """The signer name a stored letter body signs off with, or ``""``.
+
+    Scans upward from the end so the letter's FINAL sign-off wins, and
+    abstains (empty string) when the body carries no closing block at all —
+    an honest boundary rather than guessing at the last prose line. The
+    residual false negative (a body with no valediction, or a >8-token
+    sign-off line) is covered on the write side by the generation-time guard
+    in :meth:`CoverLetterAgent.run`.
+    """
+    lines = (letter_text or "").splitlines()
+    for index in range(len(lines) - 1, -1, -1):
+        signer = _closing_line_signer(lines[index])
+        if signer is None:
+            continue
+        if not signer:
+            signer = next((ln.strip() for ln in lines[index + 1:] if ln.strip()), "")
+        return signer if 0 < len(signer.split()) <= _MAX_SIGNOFF_NAME_TOKENS else ""
+    return ""
+
+
+def stored_letter_has_placeholder_signer(letter_text: str) -> bool:
+    """True when a STORED letter body is signed with a placeholder/test-probe
+    identity — the read-time counterpart of the write-time profile-name
+    guard, using the SAME detection rule (§13.1: one implementation only)."""
+    signer = stored_signoff_name(letter_text)
+    return bool(signer) and _looks_like_placeholder_name(signer)
+
+
 class PlaceholderSignerError(StructuralError):
     """BLOCKER-002: ``User.name`` looks like a leftover test-probe/placeholder
     identity string rather than a real human name — cover-letter generation
@@ -1147,6 +1227,20 @@ class PlaceholderSignerError(StructuralError):
 PLACEHOLDER_SIGNER_DETAIL = (
     "Your profile name looks like a placeholder or test value, not a real "
     "name — set your real name in Settings before generating a cover letter."
+)
+
+#: GOLD-MASTER-V2 §15 (d1/d2). Same guard family, DIFFERENT cause, so a
+#: different message: here the PROFILE name is already correct and it is the
+#: letter ALREADY ON FILE that is signed with a placeholder. Reusing
+#: ``PLACEHOLDER_SIGNER_DETAIL`` verbatim would send the user to Settings to
+#: fix a name that is not broken — a dead end that leaves them unable to
+#: clear the block. The actionable remedy is to regenerate the letter, so the
+#: message says that. The recognisable "placeholder or test value" phrasing
+#: is kept identical to the profile-name variant.
+STORED_PLACEHOLDER_SIGNER_DETAIL = (
+    "This letter's stored sign-off is a placeholder or test value, not your "
+    "real name — regenerate the letter before exporting, refining or "
+    "applying with it."
 )
 
 
