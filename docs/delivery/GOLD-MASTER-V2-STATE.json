@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T11:45:00Z",
+  "updated_utc": "2026-07-31T12:30:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -369,6 +369,18 @@
         "ML-NETWORKING-003 LOW stage label inconsistency: pipeline badge \"New\" vs detail panel \"identified\"",
         "CONFIRMED WORKING: ML-networking-001 two-click delete (0 calls on first click, DELETE 204 on second, reload-verified)",
         "POSITIVE: empty state honest, no fabricated content"
+      ],
+      "dashboard": [
+        "VERDICT: HONEST AND INTERNALLY CONSISTENT. Every widget matches its backing API call, and every API call matches independently-run live SQL using the predicate the code documents.",
+        "Active Applications 47 / \"+45 this week\" = COUNT(DISTINCT jobId) status<>draft, and 45 of those within 7d - CONFIRMED CORRECT, not a defect (see ORCH-CORR-002)",
+        "Interview Rate 0% (\"0 of 47 applied\") MATCHES funnel interviewed:0 and live SQL",
+        "Market Pulse still honest: \"External market benchmark unavailable - Provider: none configured\", no fabricated external numbers"
+      ],
+      "pricing": [
+        "GET /billing/plans and the rendered DOM agree EXACTLY, both logged-out and as a Free-tier user",
+        "4 tiers render with price, GST tooltip, run quota, feature list and CTA",
+        "The page deliberately HIDES a \"Light model tier\" bullet the API returns, because no plan actually gets a different model (existing MV-pricing-002 honesty fix) - correct behaviour",
+        "ADV-ENT-002 remains: Free tile advertises 5 runs/month that the product then refuses with 402"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
@@ -496,6 +508,14 @@
       "reality": "FALSE. Empirically disproven at HEAD: _NulByteGuardCursor in apps/api/app/db.py (commit e78f51d) is installed as a blanket cursor_factory on EVERY get_connection() call, not scoped to writes. GET /admin/users?q=<NUL> already returns a clean 422 at HEAD. The production 500 observed by the screen tester is DEPLOYMENT LAG (prod runs pre-fix code), not a code gap. The screen-test evidence itself said \"fix verified but undeployed\".",
       "lesson": "The orchestrator asserted a code-scope conclusion from a production symptom without reading the implementation. That is precisely the [INFERRED]-presented-as-[VERIFIED] error \u00a70 prohibits. Production symptoms prove PRODUCTION state; only reading HEAD proves HEAD state - and with 25 undeployed commits the two diverge by construction.",
       "residual_value": "21 regression tests now lock the 422 contract, plus a documented sweep across every other free-text GET filter (networking, workspaces, interviews, jobs, applications, approvals)."
+    },
+    {
+      "id": "ORCH-CORR-002",
+      "date": "2026-07-31",
+      "wrong_claim": "The dashboard showing \"47 ACTIVE APPLICATIONS\" while the DB holds 74 is a cross-screen inconsistency / possible stale widget (flagged repeatedly across several screen briefs).",
+      "reality": "FALSE - the dashboard is CORRECT and internally consistent. get_application_counts() (app/routers/analytics.py:31, the RT-004 contract) deliberately counts DISTINCT JOBS, not raw Application rows, to avoid inflating counts with cover-letter re-draft/version rows - live evidence found ONE job with 9 letter-version rows. Independent SQL run this session: COUNT(DISTINCT jobId) WHERE status<>'draft' = 47, and of those 45 within 7 days - matching the UI's \"47\" and \"+45 this week\" EXACTLY. UI = API = live DB.",
+      "lesson": "My \"74\" baseline was a RAW-ROW count - a different, non-comparable metric from what the product intentionally displays. I propagated it into multiple screen briefs as if it were ground truth. Baselines must record the PREDICATE, not just the number.",
+      "consequence": "This also explains WHY RT-004 exists and why its strict-equality guard is load-bearing - it protects exactly this jobs-not-rows contract. Reinforces that the concurrent RT-004 adjudication must preserve the protection, with the tamper-proof, rather than simply relaxing the assertion."
     }
   ],
   "entitlement_enforcement_map": {
