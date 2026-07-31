@@ -138,6 +138,18 @@ def _ensure_billing_tables() -> None:
                 'ON "Subscription" ("stripeSubscriptionId") '
                 'WHERE "stripeSubscriptionId" IS NOT NULL'
             )
+            # INC-B-001: additive-only column (ADR-TR-1 discipline — no
+            # migration runner in this repo). The
+            # ``customer.subscription.trial_will_end`` webhook handler
+            # (routers/billing.py ``_handle_trial_will_end``) stamps this to
+            # ``now()`` so "a reminder was recorded" is a durable, queryable
+            # fact instead of the bare ``pass`` it used to be. Nullable,
+            # never backfilled — absence just means no trial-ending event has
+            # been processed for that subscription yet.
+            cur.execute(
+                'ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS '
+                '"trialEndNotifiedAt" timestamptz'
+            )
 
             # ---- UsageQuota (per user, rolling) ----
             cur.execute(

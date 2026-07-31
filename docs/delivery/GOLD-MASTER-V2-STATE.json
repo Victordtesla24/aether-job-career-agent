@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T05:40:00Z",
+  "updated_utc": "2026-07-31T06:45:00Z",
   "phase_step": "W-A \u00a73.2 screen sweep in progress (2 of ~20 routes); W-B inventory CANONICAL; BLOCKER-001 tests queued",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -53,7 +53,10 @@
   },
   "gates": {
     "G-A": {
-      "status": "OPEN"
+      "status": "DELIVERABLE-WRITTEN-NOT-CLOSED",
+      "evidence": "docs/delivery/GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md",
+      "verdict": "NOT-READY (BLOCKED-ON-ITEMS)",
+      "note": "Document exists with executive verdict as G-A requires, but coverage is PARTIAL (6/27 routes). Must be refreshed as the sweep completes before qa-adversary can close G-A."
     },
     "G-B": {
       "status": "OPEN"
@@ -179,7 +182,10 @@
         "data": "Owner account User.name must be set to the real candidate name. Operator-visible; also settable through the normal Settings UI."
       },
       "artifact": "uat/reports/evidence/gold-master-v2/adversarial/AI-AGENT-QUALITY-ASSESSMENT.md",
-      "escalation": "ML-APP-001: the \"GAP-P7-DEF-B Probe\" fixture string is the signature on a REAL, LIVE, PENDING cover-letter approval reachable from the /dashboard/applications approvals banner. Contaminated customer-facing content is ALREADY QUEUED in production, not merely possible on the next generation. If that approval is actioned it goes out signed with a test string. Remediation therefore needs THREE parts: (1) code guard [in flight]; (2) correct the owner User.name [operator-gated]; (3) identify and purge/regenerate every already-queued approval carrying the fixture signature."
+      "escalation": "ML-APP-001: the \"GAP-P7-DEF-B Probe\" fixture string is the signature on a REAL, LIVE, PENDING cover-letter approval reachable from the /dashboard/applications approvals banner. Contaminated customer-facing content is ALREADY QUEUED in production, not merely possible on the next generation. If that approval is actioned it goes out signed with a test string. Remediation therefore needs THREE parts: (1) code guard [in flight]; (2) correct the owner User.name [operator-gated]; (3) identify and purge/regenerate every already-queued approval carrying the fixture signature.",
+      "scope_expanded": "ML-CL-002: the PDF EXPORT LETTERHEAD renders current_user.name LIVE at render time, regardless of the letter body's own sign-off. Letters with a clean sign-off (\"Vikram Deshpande\") still export with the fixture string in the letterhead - internally contradictory documents. So the defect is injected at RENDER, not merely stored in content. ML-CL-003: fresh generation still contaminated across 3 independent code paths with real LLM calls, because the placeholder guard exists ONLY in the local working tree and is NOT DEPLOYED.",
+      "blast_radius": "8 contaminated cover letters; 3 attached to pending approvals",
+      "real_name_evidence": "The owner's real name appears as \"Vikram Deshpande\" in clean sign-offs within their own existing letters - so the data correction is knowable from the account's own content."
     }
   ],
   "human_gated": {
@@ -282,6 +288,16 @@
         "CONFIRMED ABSENCE: no auto-refresh polling on this screen (instrumented over 65s) - a real W-I gap",
         "POSITIVE: full CRUD wiring, star persistence, validation, auth redirect, zero console errors in honest use, no 390px overflow, no fixture contamination",
         "CLEANUP: all 5 test rows created were deleted and baseline re-verified (36 stories, 6 starred)"
+      ],
+      "cover-letters": [
+        "ML-CL-001 BLOCKER fixture identity is OWNER.User.name in prod; sign-off on stored letters incl. one on a real pending approval",
+        "ML-CL-002 BLOCKER every PDF export letterhead contaminated live from current_user.name regardless of clean body sign-off",
+        "ML-CL-003 BLOCKER new generation/refine still signs fresh real-LLM letters with the fixture string (guard undeployed)",
+        "ML-CL-004 HIGH /refine can 500 to the client while SILENTLY PERSISTING a new ungoverned draft with NO approval record - governance-gate bypass",
+        "ML-CL-005 HIGH NUL byte in /refine instructions -> systemic 500",
+        "ML-CL-006 MEDIUM NUL byte in /agents/cover-letter/run job_id -> systemic 500",
+        "ML-CL-007 LOW new user paywalled at client layer despite read API + 0/5 free-runs counter",
+        "POSITIVE: 0 fabrication across 5 attempts, 2 honest refusals; wireframe conformant; 0 console errors; no 390px overflow"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
@@ -292,7 +308,9 @@
     "POST /resumes",
     "POST /agents/tailor/run",
     "POST /stories",
-    "PUT /stories/{id}"
+    "PUT /stories/{id}",
+    "POST /cover-letters/{id}/refine",
+    "POST /agents/cover-letter/run"
   ],
   "escalations": [
     {
@@ -315,5 +333,28 @@
       ],
       "positive": "AETHER_REQUIRE_PAID_SUBSCRIPTION posture is CORRECT and fail-safe: read per-call, default true, disabled only by explicit false/0/no/off - no bypass-by-omission. The 402 is intended \"subscription-only limited beta\" policy, corroborated by pre-existing ADR-MV-02."
     }
+  ],
+  "deploy_state": {
+    "production_running": "PRE-FIX code from 2026-07-30T12:27:09Z \u2014 healthy, but STILL VULNERABLE",
+    "local_commits_ahead_of_origin": 10,
+    "pushed": false,
+    "deployed": false,
+    "undeployed_fixes": [
+      "BLOCKER-001 restart-safe de-privilege (6dcf927)",
+      "BLOCKER-002 placeholder-name guard (36d86c6)",
+      "ML-settings-006 NUL byte -> 422 (0e73d95) + shared guard in app/db.py",
+      "W-B wave1 admin/billing changes (uncommitted working tree)"
+    ],
+    "ORDERING CONSTRAINT": "Deploying BLOCKER-001 REVOKES isAdmin on the owner and makes the \"admin\" identifier 401. Because the operator rotates the credential AFTER this run, the admin portal becomes untestable post-deploy. Therefore ALL admin-surface testing (W-G / G-G) MUST complete BEFORE deploy. Admin screen test dispatched.",
+    "post_deploy_recipe_change": "Screen-testers must switch from the \"admin\" identifier to operator-EMAIL login (password unchanged); admin surfaces will 403 until the operator rotates."
+  },
+  "cleanup_debt_created_by_this_run": [
+    "4 contaminated cover letters created by the cover-letters screen test: c6b7a3db22e6f9abe040f83e5, c273c59a737435ff74ce1c494, c8867a841f80a9e5ab325f547, c04586c8d6ade25088c098c4b",
+    "2 pending approvals created by the same test: c36175418153a9925bc1318f1, c7301be81ac6368902c8c2c78",
+    "NO cover-letter DELETE endpoint exists - purge requires risk-officer approval + a DB-level or new-endpoint path",
+    "4 resume rows v70-73 (no DELETE endpoint)",
+    "4 near-duplicate stories from the AI-quality probe",
+    "throwaway Stripe-probe account",
+    "canonical non-admin test account gm2-nonadmin-1785454990@example.com"
   ]
 }

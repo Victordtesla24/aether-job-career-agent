@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import psycopg2
 import psycopg2.extras
+from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +43,111 @@ def get_database_url() -> str:
     return url
 
 
+#: ML-settings-006 / ML-RESUME-001: a NUL byte (0x00) in user-supplied text
+#: reaching psycopg2/Postgres shows up as ONE OF TWO distinct exception
+#: shapes, both reproduced live against this codebase:
+#:
+#: 1. ``ValueError`` — raised CLIENT-SIDE by psycopg2 itself, before the SQL
+#:    is even sent, when a NUL byte sits directly in a plain string
+#:    parameter (e.g. ``UPDATE "User" SET name=%s`` with a raw Python str —
+#:    ``PUT /workspaces/settings``). Message: "A string literal cannot
+#:    contain NUL (0x00) characters."
+#: 2. ``psycopg2.errors.UntranslatableCharacter`` — raised SERVER-SIDE by
+#:    Postgres's own JSON parser when a NUL byte is embedded inside a JSON/
+#:    JSONB parameter: ``json.dumps`` legally escapes it as a 6-character
+#:    JSON escape sequence (backslash, u, 0, 0, 0, 0) — not a literal NUL
+#:    byte — which sails past psycopg2's client-side check above, but
+#:    Postgres's ``text`` type still cannot represent codepoint U+0000 once
+#:    the JSON escape is decoded, so it rejects it as "unsupported Unicode
+#:    escape sequence" / "<the escape sequence> cannot be converted to text"
+#:    (``POST /resumes``' ``sections`` JSON column).
+#:
+#: Matched on these specific message substrings only — any OTHER
+#: ``ValueError`` or ``UntranslatableCharacter`` (e.g. a genuinely invalid
+#: non-NUL Unicode escape) is re-raised untouched, never treated as this case.
+_NUL_BYTE_VALUE_ERROR_MARKER = "NUL (0x00)"
+_NUL_BYTE_JSON_ESCAPE_MARKER = "\\u0000"
+
+_NUL_BYTE_USER_MESSAGE = (
+    "Invalid input: a field contains an unsupported NUL (0x00) character."
+)
+
+
+def _is_nul_byte_failure(exc: BaseException) -> bool:
+    if isinstance(exc, ValueError) and _NUL_BYTE_VALUE_ERROR_MARKER in str(exc):
+        return True
+    if (
+        isinstance(exc, psycopg2.errors.UntranslatableCharacter)
+        and _NUL_BYTE_JSON_ESCAPE_MARKER in str(exc)
+    ):
+        return True
+    return False
+
+
+class _NulByteGuardCursor(psycopg2.extensions.cursor):
+    """A NUL byte in ANY string parameter makes psycopg2/Postgres raise one
+    of the two exception shapes documented above (:func:`_is_nul_byte_failure`)
+    synchronously inside ``.execute()``/``.executemany()`` — on a SELECT/WHERE
+    lookup exactly as much as an INSERT/UPDATE, and on a plain text column
+    exactly as much as a JSON/JSONB one. Uncaught, either propagates out of
+    whichever route triggered it as an unhandled 500 with a full traceback —
+    reproduced live on at least three independent endpoints
+    (``PUT /workspaces/settings``, ``POST /resumes``,
+    ``POST /agents/tailor/run``; ML-settings-006 / ML-RESUME-001), because
+    none of them (nor anything upstream) guarded against it individually.
+
+    Rather than patching each call site (§13.1 forbids duplicating that
+    guard per router/field), this cursor class is installed ONCE as the
+    ``cursor_factory`` on every connection ``get_connection()`` yields
+    (below) — the single seam every ``cur.execute(...)`` call in this
+    codebase already passes through (237+ call sites at last grep). It
+    changes nothing for any query that does not hit one of these two exact
+    shapes: only those are intercepted and translated into an honest,
+    specific 422 (never a 500, never a leaked "ValueError"/"psycopg2"/
+    traceback) — every other exception, including any other
+    ``ValueError``/``psycopg2.Error`` raised for an unrelated reason
+    (e.g. a genuine ``UniqueViolation``, which existing per-router ``except``
+    clauses already handle), is re-raised untouched, same object, same
+    traceback.
+
+    Raising ``fastapi.HTTPException`` directly from this low-level DB module
+    (rather than a bespoke exception a router would need to catch, or a
+    handler registered on the ``FastAPI`` app instance) is deliberate: it
+    needs no registration anywhere — Starlette/FastAPI already install a
+    default handler for ``HTTPException`` on every app instance — so this
+    is the only seam that closes the gap application-wide without touching
+    ``app/main.py`` (occupied by a concurrent BLOCKER-001 fix at the time of
+    this change; editing it risked a collision with unrelated in-flight
+    work).
+    """
+
+    def execute(self, query: Any, vars: Any = None) -> Any:  # noqa: A002 - matches psycopg2's own signature
+        try:
+            return super().execute(query, vars)
+        except (ValueError, psycopg2.Error) as exc:
+            if _is_nul_byte_failure(exc):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, _NUL_BYTE_USER_MESSAGE
+                ) from None
+            raise
+
+    def executemany(self, query: Any, vars_list: Any) -> Any:
+        try:
+            return super().executemany(query, vars_list)
+        except (ValueError, psycopg2.Error) as exc:
+            if _is_nul_byte_failure(exc):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, _NUL_BYTE_USER_MESSAGE
+                ) from None
+            raise
+
+
 @contextmanager
 def get_connection() -> Iterator[psycopg2.extensions.connection]:
     """Yield a short-lived psycopg2 connection with the right search_path."""
     dsn, schema = _translate_prisma_url(get_database_url())
     options = f"-csearch_path={schema}" if schema else None
-    conn = psycopg2.connect(dsn, options=options)
+    conn = psycopg2.connect(dsn, options=options, cursor_factory=_NulByteGuardCursor)
     try:
         yield conn
     finally:

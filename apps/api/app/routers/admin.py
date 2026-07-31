@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, StrictBool, ValidationError
 
 from app.middleware.auth import AdminUser
 from app.repositories import admin as admin_repo
@@ -175,7 +175,17 @@ def admin_spend(_admin: AdminUser) -> dict[str, Any]:
 
 class SettingsRequest(BaseModel):
     signupEnabled: Optional[bool] = None
-    emailVerificationEnabled: Optional[bool] = None
+    # INC-B-002 / FE-D-002(b): pydantic's default LAX bool coercion silently
+    # accepts a materially wider set of non-boolean JSON values than the
+    # JSON boolean literals ``true``/``false`` -- bare ints ``1``/``0`` and
+    # the strings "yes"/"no"/"on"/"off"/"TRUE" -- and this endpoint was
+    # PERSISTING that coerced value (200, not 422). ``StrictBool`` requires
+    # the input to already be a genuine JSON boolean; a clearly-malformed
+    # value (e.g. the string "banana", a bare int like 123, an array, an
+    # object) still 422s exactly as before via pydantic's own
+    # ``bool_parsing``/``bool_type`` errors -- this only narrows what
+    # COUNTED as "close enough" to true/false.
+    emailVerificationEnabled: Optional[StrictBool] = None
 
 
 async def _parse_settings_body(request: Request) -> SettingsRequest:

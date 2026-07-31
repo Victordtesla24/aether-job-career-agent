@@ -295,7 +295,7 @@ def _dispatch_stripe_event(cur: Any, event_type: str, obj: dict[str, Any]) -> No
     elif event_type == "charge.dispute.created":
         _handle_dispute_created(cur, obj)
     elif event_type == "customer.subscription.trial_will_end":
-        pass  # hook point for a reminder notification; no state change
+        _handle_trial_will_end(cur, obj)
     # Unknown types: no-op but still marked 'processed' (idempotent ack).
 
 
@@ -487,6 +487,40 @@ def _handle_subscription_updated(cur: Any, obj: dict[str, Any]) -> None:
             '"updatedAt"=now() WHERE "userId"=%s',
             (plan_id, runs_allowed, spend_cap, user_id),
         )
+
+
+def _handle_trial_will_end(cur: Any, obj: dict[str, Any]) -> None:
+    """INC-B-001: was a bare ``pass`` — the event left no trace beyond the
+    generic ``StripeEvent`` idempotency row every event type gets regardless
+    of its handler, so "was this event even seen" was indistinguishable from
+    "was it handled", and trial users approaching their first charge got no
+    durable record that a reminder was due.
+
+    No outbound-email infrastructure exists anywhere in this codebase to
+    "notify" with (grepped: no smtplib/EmailMessage/sendgrid/postmark/resend
+    outside ``app/services/gmail_service.py``, which is the USER's own
+    OAuth-connected inbox, not something Aether can send FROM) — so the
+    smallest additive, defensible fix is the same shared Subscription-row-
+    mutation pattern every other stateful handler in this file already uses
+    (mirrors :func:`_handle_subscription_updated`'s user resolution exactly):
+    stamp ``Subscription."trialEndNotifiedAt"`` to ``now()`` for the resolved
+    user, so the fact "this trial-ending event was processed for this user"
+    is durable and queryable. A future change is free to layer a real
+    outbound reminder on top of this without touching the record contract.
+    """
+    metadata = _obj_get(obj, "metadata") or {}
+    subscription_id = _obj_get(obj, "id")
+    user_id = metadata.get("user_id") or _user_by_subscription(cur, subscription_id)
+    if not user_id:
+        # Same idempotent-no-op disposition as _handle_subscription_updated:
+        # an out-of-order event for a subscription with no local row yet
+        # resolves to no user — ack it without a write.
+        return
+    cur.execute(
+        'UPDATE "Subscription" SET "trialEndNotifiedAt"=now(),"updatedAt"=now() '
+        'WHERE "userId"=%s',
+        (user_id,),
+    )
 
 
 def _revoke_to_free(cur: Any, user_id: str, *, cancel_stripe: bool) -> None:
