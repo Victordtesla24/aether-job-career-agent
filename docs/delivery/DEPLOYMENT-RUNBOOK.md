@@ -185,6 +185,65 @@ between).
 Neither of these changes the deploy recipe's commands in §5 — they are
 process rules for *when* those commands are run, not new commands.
 
+### 0.4 ADDENDUM (2026-07-31, GOLD-MASTER-V2 W-K, BUILD-RISK-001) — the `/api/*` rewrite upstream is baked in at BUILD time; `scripts/verify-web-build.sh` is a MANDATORY pre-restart gate
+
+**Symptom (caught pre-deploy, never reached production):** none. That is the
+entire hazard. Production was serving perfectly while the on-disk build was
+already fatal.
+
+**Root cause:** `apps/web/next.config.mjs` resolves the `/api/*` proxy target
+from a **build-time** environment variable:
+
+```js
+const apiOrigin = process.env.AETHER_API_PROXY ?? "http://127.0.0.1:8000";
+return [{ source: "/api/:path*", destination: `${apiOrigin}/:path*` }];
+```
+
+A `pnpm build` run at 2026-07-31T08:25Z in the live `apps/web` tree happened
+while `AETHER_API_PROXY=http://127.0.0.1:8090` was exported in that shell, so
+`http://127.0.0.1:8090` was written into `.next/routes-manifest.json` and
+`.next/required-server-files.json`. **Nothing listens on :8090** (the real
+FastAPI is :8000), so every `/api/*` request through Next would have failed.
+
+**Why it stayed invisible — the part that makes this class of defect
+dangerous:** `next start` reads its rewrite table from the **built**
+`routes-manifest.json` (`getRoutesManifest()` in
+`next/dist/server/next-server.js`) and **does not re-evaluate
+`next.config.mjs` at boot.** The `next-server` process running in production
+had started 2026-07-30T12:27:09Z — ~20h *before* that build — and still held
+the correct `:8000` table in memory. So the running app was healthy, and the
+first ordinary `systemctl restart aether-web.service` (including the deploy's
+own Phase 4) would have swapped in the dead-port table and taken the entire
+app down at once, with a symptom (every API call fails) that looks nothing
+like its cause (a stale build artefact).
+
+Two corollaries, both verified empirically on 2026-07-31:
+
+1. **Fixing the environment is NOT enough — only a rebuild is.** With
+   `AETHER_API_PROXY` unset, a `next start` against the poisoned build still
+   proxied `/api/health` to :8090. The value is frozen in the artefact.
+2. **The pollution vector is the e2e harness.** `apps/web/playwright.config.ts`
+   sets `webServer.command = "pnpm run build && pnpm exec next start -p 3000"`,
+   i.e. running Playwright in this tree *builds into the live `.next`*. Combined
+   with §0.3, any e2e run with a non-default `AETHER_API_PROXY` exported leaves
+   a restart-fatal artefact behind. Treat an e2e run in the live tree as
+   equivalent to a deploy build: gate it, then rebuild before deploying.
+
+**Permanent control:** `scripts/verify-web-build.sh` — run it after `pnpm build`
+and before any `aether-web.service` restart (**§5 Phase 3b**, and in the
+Complete Deploy Recipe). It asserts that every absolute `/api/*` rewrite
+destination in both `routes-manifest.json` and `required-server-files.json`
+targets `http://127.0.0.1:8000`, refuses to pass if it found no rewrite to
+check at all (so a Next upgrade that changes the manifest shape fails loudly
+instead of silently verifying nothing), and also refuses to run if
+`AETHER_API_PROXY` is exported in the invoking shell with a non-default value
+(which would poison the *next* build). The expected upstream is hardcoded in
+the script and deliberately **not** read from `AETHER_API_PROXY` — a gate that
+trusted the same environment that poisoned the build would validate the poison.
+
+**Rule:** no `aether-web.service` restart, in a deploy or otherwise, without
+`scripts/verify-web-build.sh` exiting 0 first.
+
 ---
 
 ## 1. Systemd Unit Names and Service Definitions
@@ -658,6 +717,19 @@ pnpm build
 
 **Expected Outcome:** Web build succeeds with no errors, .next/ directory updated
 
+#### Phase 3b: Web Build Pre-Flight Gate (MANDATORY — blocks Phase 4)
+
+```bash
+cd /home/ubuntu/github_repos/aether-job-career-agent
+scripts/verify-web-build.sh
+# Expected: "[web-build-gate] PASS — build is safe to serve; restart authorised."
+```
+
+**This gate is BLOCKING. If it exits non-zero, STOP — do not proceed to
+Phase 4.** Rebuild per the remedy the script prints, then re-run it. See
+**§0.4** below for what it guards against and why a restart on a failing
+manifest is a total outage.
+
 #### Phase 4: Restart Services (Including Worker)
 
 **Stop all services (API, Web, Worker):**
@@ -697,6 +769,16 @@ tail -20 /var/log/aether/worker.log  # Should show ARQ worker startup messages
 curl -s -H 'Host: 5cb5f0620.vm.internal' http://localhost/api/health || echo "API endpoint test"
 ```
 
+**3b. Confirm the RESTARTED Next server proxies `/api/*` to the live API (§0.4):**
+```bash
+# Goes through next-server's own rewrite table (port 3000), NOT nginx — this is
+# the check that would have caught BUILD-RISK-001 the moment it went live.
+curl -s --max-time 10 http://127.0.0.1:3000/api/health
+# Expected: {"status":"ok","version":"..."}
+# A hang, empty body, or 500 here means the rewrite upstream is wrong ->
+# roll back per §6 immediately; every API call in the app is broken.
+```
+
 **4. Test Web endpoint:**
 ```bash
 curl -s -H 'Host: 5cb5f0620.vm.internal' http://localhost/ | head -20
@@ -719,33 +801,43 @@ REPO_DIR="/home/ubuntu/github_repos/aether-job-career-agent"
 API_DIR="$REPO_DIR/apps/api"
 WEB_DIR="$REPO_DIR/apps/web"
 
-echo "[1/6] Verifying gh authentication..."
+echo "[1/7] Verifying gh authentication..."
 gh auth status || { echo "ERROR: Not authenticated to GitHub"; exit 1; }
 
-echo "[2/6] Pulling latest code from origin/main..."
+echo "[2/7] Pulling latest code from origin/main..."
 cd "$REPO_DIR"
 git fetch origin main
 git pull origin main
 DEPLOYED_COMMIT=$(git log --oneline -1)
 echo "Deployed commit: $DEPLOYED_COMMIT"
 
-echo "[3/6] Installing Python dependencies..."
+echo "[3/7] Installing Python dependencies..."
 cd "$API_DIR"
 pip install -r requirements.txt
 
-echo "[4/6] Installing Node dependencies and building web..."
+echo "[4/7] Installing Node dependencies and building web..."
 cd "$REPO_DIR"
 pnpm install --frozen-lockfile
 cd "$WEB_DIR"
-pnpm build
+# Unset the build-time rewrite override so a polluted deploy shell cannot bake
+# a dead upstream into .next/routes-manifest.json (§0.4, BUILD-RISK-001).
+env -u AETHER_API_PROXY -u NEXT_PUBLIC_API_BASE_URL pnpm build
 
-echo "[5/6] Restarting services (API, Web, Worker)..."
+echo "[5/7] Web build pre-flight gate (BLOCKING — see §0.4)..."
+cd "$REPO_DIR"
+scripts/verify-web-build.sh || {
+    echo "ERROR: web build pre-flight gate FAILED — refusing to restart aether-web."
+    echo "Restarting on this artefact would take the whole app down."
+    exit 1
+}
+
+echo "[6/7] Restarting services (API, Web, Worker)..."
 sudo systemctl stop aether-api.service aether-web.service aether-worker.service
 sleep 2
 sudo systemctl start aether-api.service aether-web.service aether-worker.service
 sleep 5
 
-echo "[6/6] Verifying deployment..."
+echo "[7/7] Verifying deployment..."
 if systemctl is-active --quiet aether-api.service; then
     echo "✓ API service running"
 else
@@ -785,9 +877,10 @@ echo "=========================================="
 | 1 | git fetch + pull | ~5s | Depends on network, code size |
 | 2 | pip install | ~30s | Python deps mostly cached |
 | 3 | pnpm install | ~20s | Node deps, incremental updates |
-| 4 | pnpm build | ~60s | Next.js build, can vary |
-| 5 | Service restart (API, Web, Worker) | ~5s | Graceful shutdown + startup |
-| 6 | Verification (4 services) | ~10s | Health checks + log inspection |
+| 4 | pnpm build | ~60s (~160s from a cold `.next`) | Next.js build, can vary |
+| 5 | `scripts/verify-web-build.sh` | <1s | **BLOCKING gate — §0.4.** Non-zero exit = do not restart |
+| 6 | Service restart (API, Web, Worker) | ~5s | Graceful shutdown + startup |
+| 7 | Verification (4 services + `/api` proxy) | ~10s | Health checks + log inspection |
 | **Total** | **Full deploy** | **~2-2.5min** | **May vary based on changes** |
 
 **Note:** Phase 5 now includes aether-worker restart. Async jobs in flight will be automatically retried by the worker after restart.
