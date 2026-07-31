@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T14:30:00Z",
+  "updated_utc": "2026-07-31T14:50:00Z",
   "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -230,6 +230,17 @@
       ],
       "orchestrator_ruling_on_deviation": "ACCEPTED. The agent used a NEW constant STORED_PLACEHOLDER_SIGNER_DETAIL instead of the PLACEHOLDER_SIGNER_DETAIL I named, because the existing text says \"Your profile name ... set your real name in Settings\" - FALSE here (the profile is clean) and a dead end the user cannot act on. Honest, actionable messaging outranks literal compliance with my brief; the QA-greppable phrase \"placeholder or test value\" was kept identical.",
       "remaining_user_visible_surface": "GET /api/cover-letters still RETURNS the contaminated bodies, so the Studio still DISPLAYS the bad sign-off on screen even though export/refine/apply are now blocked. Closing that needs the d3 data fix (risk-officer gated) or an apps/web change."
+    },
+    {
+      "id": "BLOCKER-003",
+      "severity": "CRITICAL \u2014 LIVE, EXPLOITABLE FROM THE PUBLIC INTERNET RIGHT NOW",
+      "title": "The owner's own production account is reachable with a publicly-published password",
+      "verified_by": "orchestrator, directly, 2026-07-31T14:4xZ",
+      "evidence": "POST /api/auth/login with the operator email + the password 'admin123' returns HTTP 200 and a valid token. GET /auth/me -> isAdmin:false, name 'Vikram Deshpande'. GET /billing/entitlement -> {active_paid:true, plan:{id:'pro',status:'active'}}. That is the OWNER'S REAL ACCOUNT with all their jobs, applications, resumes, cover letters and stories.",
+      "why_it_is_public": "BOTH halves are in the PUBLIC GitHub repo on origin/main: 'admin123' appears in 58 tracked files, and the operator email appears in 39. The BLOCKER-001 purge cleaned README but not the rest.",
+      "relationship_to_BLOCKER_001": "DISTINCT and NOT closed by it. BLOCKER-001's fix correctly removed ADMIN PRIVILEGE (isAdmin now false, /admin/* 403, other users' PII protected). It does NOT block ordinary login to the owner's own account, by deliberate design (admin.py:297 keys on the bare identifier 'admin' only, so the discovery cron keeps working). The account-access exposure survives the admin fix.",
+      "blast_radius": "Read/write access to the owner's own career data. NOT other users' data (that path is 403). Includes the ability to generate content and consume the pro entitlement.",
+      "the_only_real_fix": "Rotate the password. Currently ON HOLD at operator request (user verification pending). The hold is the operator's call; this entry exists so the decision is made with full information."
     }
   ],
   "human_gated": {
@@ -617,6 +628,13 @@
       "wrong_claim": "Reported that the User.name correction \"closed the live half\" of BLOCKER-002 and that only inert historical rows remained.",
       "reality": "INVERTED. For the 8 existing letters the correction UNBLOCKED a leak the old contaminated profile name had been accidentally blocking - the export guard checks the profile, not the body, so it flipped 422 -> 200. Verified live with three downloaded PDFs.",
       "lesson": "A guard that reads a DIFFERENT field from the one carrying the defect can invert when you fix the field it reads. Sixth instance of asserting a downstream conclusion without reading the guard code."
+    },
+    {
+      "id": "ORCH-CORR-007",
+      "date": "2026-07-31",
+      "wrong_claim": "Stated TWICE that the operator-email login is refused by the deployed guard, and told the user they had \"no working admin access at all\" and that user-triggered LLM runs were unavailable.",
+      "reality": "FALSE both times. The first reading was likely my own rate-limit lockout from repeated probing; the second was a MALFORMED curl (HTTP 422 JSON decode error from an unescaped character in the email) that I read as a rejection. A correctly-formed request returns HTTP 200 with a pro-entitled session. The paywall-verification agent was right and I was wrong.",
+      "lesson": "Seventh instance of the same failure: I read a downstream symptom (a non-200) as a conclusion without checking the request itself. A 422 JSON-decode error is not an auth rejection. Verify the PROBE before trusting the RESULT."
     }
   ],
   "entitlement_enforcement_map": {
