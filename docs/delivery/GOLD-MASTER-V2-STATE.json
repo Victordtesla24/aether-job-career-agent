@@ -3,8 +3,8 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T06:15:00Z",
-  "phase_step": "PAUSED \u2014 session usage limit hit 2026-07-31T01:15Z, resets 04:10Z. Fully checkpointed; resume per resume_recipe.",
+  "updated_utc": "2026-07-31T06:35:00Z",
+  "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
   "baseline": {
@@ -77,8 +77,11 @@
       "note": "Keyboard-operable Move-to menu VERIFIED + server-side 422 on illegal transitions VERIFIED. OUTSTANDING: stage counts do NOT reconcile with the funnel (ML-APP-003); no one-click \"Mark as In Review\" quick action (\u00a78.1.2); approvals purge FE affordances unverified."
     },
     "G-G": {
-      "status": "OPEN",
-      "note": "NOT conditionally-closed - operator admin credential IS available, so \u00a79 is fully testable and must be fully closed."
+      "status": "CONDITIONAL-PASS-PENDING-ENTRY-POINTS",
+      "evidence": "uat/reports/evidence/gold-master-v2/screens/admin-portal-screen-test.md",
+      "met": "data plumbing, authz at UI+API, audit logging, real-data rendering, non-admin blocking",
+      "outstanding": "\u00a79.2.1 admin login entry point; \u00a79.2.3 persistent admin indicator. Tests being written.",
+      "note": "NOT human-gated - operator admin credential IS available (AETHER_CRON_EMAIL/PASSWORD). Must be FULLY closed."
     },
     "G-H": {
       "status": "OPEN"
@@ -299,11 +302,24 @@
         "ML-CL-006 MEDIUM NUL byte in /agents/cover-letter/run job_id -> systemic 500",
         "ML-CL-007 LOW new user paywalled at client layer despite read API + 0/5 free-runs counter",
         "POSITIVE: 0 fabrication across 5 attempts, 2 honest refusals; wireframe conformant; 0 console errors; no 390px overflow"
+      ],
+      "admin-portal": [
+        "ML-admin-003 HIGH NEW: GET /api/admin/users?q= or ?plan= with a NUL byte -> bare 500 (reproduced twice). 8th endpoint in the NUL class and a DIFFERENT code path - the shipped db.py guard covers WRITE-path strings, not GET query params. Fix is INCOMPLETE as built.",
+        "ML-admin-005 MEDIUM no Admin Login entry point anywhere (\u00a79.2.1 not met) - verified twice",
+        "ML-admin-006 MEDIUM no persistent Admin indicator outside /admin/* (\u00a79.2.3 admin-half not met)",
+        "ML-admin-004 LOW/INFO 390px hides Plan/LastLogin/SignedUp/Spend/View columns (responsive hiding, not overflow)",
+        "ML-admin-002 baseline mobile-overflow claim NOT reproduced - 5th independent disproof",
+        "CONFIRMED ABSENCE: no realtime polling on any admin page (0 fetches across two instrumented 30s windows)",
+        "POSITIVE: all 7 routes redirect/403 for non-admin at BOTH UI and API layers, 12/12 clean, ZERO data leak",
+        "POSITIVE: all 7 routes render REAL data cross-checked exactly vs live API (7 users, $0.6209, 3587 runs), no placeholders",
+        "POSITIVE: AdminAuditLog rows written correctly for a real admin action",
+        "POSITIVE: zero console errors / uncaught page errors / silent failures across 2 independent passes",
+        "CONFIRMED: INC-B-002 both halves reproduce on prod (UI toggle inert; backend still loose-coerces \"yes\"/1) - consistent with fix verified-but-UNDEPLOYED"
       ]
     },
     "entitlement_artifact": "uat/reports/evidence/gold-master-v2/adversarial/ENTITLEMENT-ENFORCEMENT-VERIFICATION.md"
   },
-  "playwright_baseline_credibility": "3 of 12 red Playwright specs (ML-settings-001, rg-mob-appr, ML-resume-002) have now FAILED TO REPRODUCE on production; the specs target 127.0.0.1:3091. All 12 must be individually adjudicated real-vs-stale before G-N closes. Neither assume real nor assume stale.",
+  "playwright_baseline_credibility": "5 independent disproofs now (ML-settings-001, rg-mob-appr, ML-resume-002, ML-admin-002 x2 routes). The 12 red specs target 127.0.0.1:3091. All 12 still require individual adjudication before G-N \u2014 but the prior assumption that they represent real prod defects is now strongly undermined.",
   "nul_byte_affected_endpoints": [
     "PUT /workspaces/settings",
     "POST /resumes",
@@ -311,7 +327,8 @@
     "POST /stories",
     "PUT /stories/{id}",
     "POST /cover-letters/{id}/refine",
-    "POST /agents/cover-letter/run"
+    "POST /agents/cover-letter/run",
+    "GET /admin/users?q= and ?plan= (QUERY PARAM path \u2014 not covered by the db.py write-path guard)"
   ],
   "escalations": [
     {
@@ -346,7 +363,7 @@
       "ML-settings-006 NUL byte -> 422 (0e73d95) + shared guard in app/db.py",
       "W-B wave1 admin/billing changes (uncommitted working tree)"
     ],
-    "ORDERING CONSTRAINT": "Deploying BLOCKER-001 REVOKES isAdmin on the owner and makes the \"admin\" identifier 401. Because the operator rotates the credential AFTER this run, the admin portal becomes untestable post-deploy. Therefore ALL admin-surface testing (W-G / G-G) MUST complete BEFORE deploy. Admin screen test dispatched.",
+    "ORDERING CONSTRAINT": "SATISFIED \u2014 admin-surface testing COMPLETE 2026-07-31T06:3xZ. Deploy is now unblocked once in-flight implementations land and the full suite is green.",
     "post_deploy_recipe_change": "Screen-testers must switch from the \"admin\" identifier to operator-EMAIL login (password unchanged); admin surfaces will 403 until the operator rotates."
   },
   "cleanup_debt_created_by_this_run": [
