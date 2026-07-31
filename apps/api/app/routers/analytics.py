@@ -111,22 +111,32 @@ def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
                 (user_id,),
             )
             jobs_found = cur.fetchone()[0]
-            # "Applied" is the canonical submitted-set count (see
-            # get_application_counts docstring) — not a divergent inline query.
-            applied = get_application_counts(cur, user_id, job_filter)["submitted"]
+            # "Applied" and "interviewed" are the canonical DISTINCT-jobId
+            # counts (see get_application_counts docstring) — not divergent
+            # inline queries. The funnel is a stage count of OPPORTUNITIES: a
+            # user has one application to a job, not N — a job re-tailored/
+            # re-drafted into several Application (letter-version) rows must
+            # not count as several funnel entries (GOLD-MASTER-V2 §15
+            # raw-count divergence class; see also RT-004/get_application_
+            # counts's own docstring for the live "9 rows, 1 job" evidence).
+            counts = get_application_counts(cur, user_id, job_filter)
+            applied = counts["submitted"]
+            interviewed = counts["interviewed"]
+            # "screened" and "offers" have no canonical helper key (§15: do
+            # not modify get_application_counts itself) — computed here with
+            # the SAME DISTINCT-jobId discipline instead of a raw COUNT(*).
             cur.execute(
                 f'''
                 SELECT
-                    COUNT(*) FILTER (
+                    COUNT(DISTINCT "jobId") FILTER (
                         WHERE "status" IN ('screening','interview','offer')
                     ) AS screened,
-                    COUNT(*) FILTER (WHERE "status" IN ('interview','offer')) AS interviewed,
-                    COUNT(*) FILTER (WHERE "status" = 'offer') AS offers
+                    COUNT(DISTINCT "jobId") FILTER (WHERE "status" = 'offer') AS offers
                 FROM "Application" WHERE "userId" = %s{job_filter}
                 ''',
                 (user_id,),
             )
-            screened, interviewed, offers = cur.fetchone()
+            screened, offers = cur.fetchone()
     return {
         "period": period,
         "jobs_found": jobs_found,
@@ -436,8 +446,17 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             agent_spend_rows = rows_to_dicts(cur)
 
             # Weekly applications (last 12 weeks) for application velocity.
+            # "Your application velocity" narrows to "applications" — the
+            # SAME concept as the canonical, DISTINCT-jobId "Applications /
+            # month" comparison computed via get_application_counts() below
+            # on this SAME response. A raw COUNT(*) counted every re-tailored
+            # draft/letter-version row on one job as a separate "application"
+            # this week, diverging from that canonical figure on the SAME
+            # page for the SAME underlying data (GOLD-MASTER-V2 §15
+            # raw-count divergence class).
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', "createdAt") AS week, COUNT(*) AS cnt '
+                'SELECT DATE_TRUNC(\'week\', "createdAt") AS week, '
+                'COUNT(DISTINCT "jobId") AS cnt '
                 'FROM "Application" WHERE "userId" = %s '
                 'AND "createdAt" >= NOW() - INTERVAL \'84 days\' '
                 'GROUP BY week ORDER BY week',
@@ -659,19 +678,20 @@ def _dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
             # statuses figure (see get_application_counts docstring): this
             # card's label is the unqualified "Applications", so it must
             # show every Application row, not a narrower submitted-only
-            # count.
-            total_apps = get_application_counts(cur, user_id, app_filter)["total"]
+            # count. "interviews" lives on the SAME card next to that
+            # already-canonical figure, so it must derive from the SAME
+            # DISTINCT-jobId helper rather than a raw COUNT(*) that can
+            # silently diverge from it (GOLD-MASTER-V2 §15 raw-count
+            # divergence class).
+            counts = get_application_counts(cur, user_id, app_filter)
+            total_apps = counts["total"]
+            interviews = counts["interviewed"]
 
+            # "offers" has no canonical helper key (§15: do not modify
+            # get_application_counts itself) — computed here with the SAME
+            # DISTINCT-jobId discipline instead of a raw COUNT(*).
             cur.execute(
-                f'''SELECT COUNT(*) FROM "Application"
-                   WHERE "userId" = %s
-                   AND "status" IN ('interview','offer'){app_filter}''',
-                (user_id,),
-            )
-            interviews = cur.fetchone()[0]  # type: ignore[index]
-
-            cur.execute(
-                f'''SELECT COUNT(*) FROM "Application"
+                f'''SELECT COUNT(DISTINCT "jobId") FROM "Application"
                    WHERE "userId" = %s AND "status" = 'offer'{app_filter}''',
                 (user_id,),
             )
