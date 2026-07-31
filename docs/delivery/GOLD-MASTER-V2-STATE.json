@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T11:35:00Z",
+  "updated_utc": "2026-07-31T11:45:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -519,5 +519,21 @@
       ],
       "note": "Supersedes the VERIFICATION QUEUED caveat in the commit message."
     }
+  },
+  "consolidated_regression": {
+    "result": "112 passed / 0 failed / EXIT_CODE=0 in 180.86s",
+    "log": "uat/reports/evidence/gold-master-v2/waves/regression-sweep-20260731T083955Z.log",
+    "suites": 16,
+    "covers": [
+      "GM2 email/agents (5)",
+      "BLOCKER-001 overpermission + restart safety (16)",
+      "W-B wave1 NUL/signer/email-verification/trial webhook (21)",
+      "W-C tailoring loop + persistence + interview conversion (13)",
+      "W-E story dedup/relevance (7)",
+      "ADV-ENT-001 refine entitlement gate (5)",
+      "ML-admin-003 NUL query param (21)",
+      "pre-existing tailoring regression suites (28)"
+    ],
+    "significance": "Every fix shipped this run coexists green. The email/agents wave modified FOUR routers, so isolated green was not sufficient evidence - this proves no cross-workstream regression."
   }
 }
