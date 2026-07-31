@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T07:55:00Z",
+  "updated_utc": "2026-07-31T08:20:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -42,7 +42,7 @@
     "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook.",
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
-    "W-E": "PENDING - MEASURED: 34/36 stories are paraphrase duplicates of 8 real achievements. Dedup in apps/api/app/repositories/story.py hashes byte-identical content only. \u00a77.4 relevance scoring entirely absent. No merge affordance. Scope = content fingerprint (normalized title + achievement prefix), bulk de-dup migration for the existing 36 rows, story_relevance_score(), relevance exposed on GET /stories?job_id=, UI badge.",
+    "W-E": "10/11 GREEN, false-positive guard holding, zero regressions. Delivered: paraphrase-similarity dedup layer (services/story_paraphrase.py, dual Jaccard on title + achievement, each needing BOTH a ratio and an absolute shared-keyword floor, calibrated against the evidence-report pairs AND every pre-existing test_story_dedup.py fixture); idempotent bulk merge migration (services/story_dedup_migration.py); TF-weighted services/story_relevance.py wired into GET /stories?job_id=. LAST RED TEST (relevance filtering in build_story_evidence) in flight - the prior agent correctly REFUSED to edit tailor_agent.py because it was on its stay-out list, and documented the exact fix instead.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
     "W-G": "PENDING - NOT human-gated: admin auth confirmed possible via AETHER_CRON_EMAIL/PASSWORD (live login isAdmin=true). G-G fully testable.",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
@@ -362,7 +362,8 @@
         "ADV-ENT-003 MEDIUM: Story Bank sold as a Starter-tier feature with no server-side enforcement (no LLM consumed, so not a capacity bypass).",
         "ADV-ENT-004 LOW [INFERRED, deliberately not probed]: POST /resumes/upload persists the Resume row THEN raises 402, and no DELETE /resumes route exists to undo it."
       ],
-      "positive": "AETHER_REQUIRE_PAID_SUBSCRIPTION posture is CORRECT and fail-safe: read per-call, default true, disabled only by explicit false/0/no/off - no bypass-by-omission. The 402 is intended \"subscription-only limited beta\" policy, corroborated by pre-existing ADR-MV-02."
+      "positive": "AETHER_REQUIRE_PAID_SUBSCRIPTION posture is CORRECT and fail-safe: read per-call, default true, disabled only by explicit false/0/no/off - no bypass-by-omission. The 402 is intended \"subscription-only limited beta\" policy, corroborated by pre-existing ADR-MV-02.",
+      "adv_ent_001_status": "CLOSED IN CODE (commit b5900f6, not deployed). POST /cover-letters/{id}/refine now routes through app.routers.agents._record_run under the \"coverLetter\" backend identity - the SAME mechanism every /agents/*/run endpoint uses, IMPORTED not duplicated (\u00a713.1). Gate now runs BEFORE resource lookup, so unentitled + bogus id -> 402 not 404. Verified by 5 tests."
     }
   ],
   "deploy_state": {
@@ -442,5 +443,10 @@
       "implementation_verified_correct": "YES - independently confirmed via a rolled-back transaction: 1 job, 2 rows counted once. The DISTINCT-jobId denominator logic is right; only the test seed is wrong.",
       "handling": "\u00a715 step 2 mirror case - a test failing for the WRONG reason is as much a test defect as one passing when it should fail. Repair dispatched to test-author; the implementing agent correctly refused to touch a test it did not author (\u00a70.4)."
     }
+  ],
+  "open_items_carried": [
+    "ML-CL-004 STILL OPEN: /refine can persist an ungoverned draft if ApprovalRepository.create fails AFTER CoverLetterRepository.create succeeds. Now at least audited as a failed AgentRun row, but the transactional gap remains. Needs its own fix (atomicity), reported honestly by the implementer rather than silently closed.",
+    "Story relevance thresholds: create-time title Jaccard 0.70 vs bulk-migration 0.60 - a narrow evidence-calibrated band. Flagged for adversarial re-verification before G-E closes.",
+    "ADV-ENT-002 (backend advertises + provisions a Free tier it universally denies) UNADDRESSED - needs a BUSINESS decision: honour the advertised 5 free runs, or correct /pricing + RATIFIED_PLANS + ensure_user_billing + the 402 wording. Consumer-law exposure on a real-AUD product."
   ]
 }
