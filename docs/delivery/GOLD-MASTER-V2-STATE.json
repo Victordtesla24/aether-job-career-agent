@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T08:20:00Z",
+  "updated_utc": "2026-07-31T08:50:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -44,7 +44,7 @@
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
     "W-E": "10/11 GREEN, false-positive guard holding, zero regressions. Delivered: paraphrase-similarity dedup layer (services/story_paraphrase.py, dual Jaccard on title + achievement, each needing BOTH a ratio and an absolute shared-keyword floor, calibrated against the evidence-report pairs AND every pre-existing test_story_dedup.py fixture); idempotent bulk merge migration (services/story_dedup_migration.py); TF-weighted services/story_relevance.py wired into GET /stories?job_id=. LAST RED TEST (relevance filtering in build_story_evidence) in flight - the prior agent correctly REFUSED to edit tailor_agent.py because it was on its stay-out list, and documented the exact fix instead.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
-    "W-G": "PENDING - NOT human-gated: admin auth confirmed possible via AETHER_CRON_EMAIL/PASSWORD (live login isAdmin=true). G-G fully testable.",
+    "W-G": "Backend + authz COMPLETE and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). 3 failing tests written for the ONLY gaps: \u00a79.2.1 admin entry on /login and \u00a79.2.3 persistent admin indicator. Implementation IN FLIGHT. Portal route is /admin (do NOT create /admin/dashboard).",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
     "W-I": "PENDING - MEASURED per screen by fetch instrumentation, NOT assumed: /dashboard/jobs 20.00s, /dashboard/applications 20s, /dashboard/resume ~3.1s, /dashboard/stories NONE. So polling is real on some screens and genuinely absent on others - GOV-007 corrected. Scope = add the shared hook to screens measured as having no refresh, plus SSE agent-run progress, plus optimistic mutations.",
     "W-J": "PENDING - Job has fitScore+atsScore; tailoring_iteration and score_updated_at columns ABSENT; Application/Resume/CoverLetter carry no score columns",
@@ -334,14 +334,7 @@
   },
   "playwright_baseline_credibility": "5 independent disproofs now (ML-settings-001, rg-mob-appr, ML-resume-002, ML-admin-002 x2 routes). The 12 red specs target 127.0.0.1:3091. All 12 still require individual adjudication before G-N \u2014 but the prior assumption that they represent real prod defects is now strongly undermined.",
   "nul_byte_affected_endpoints": [
-    "PUT /workspaces/settings",
-    "POST /resumes",
-    "POST /agents/tailor/run",
-    "POST /stories",
-    "PUT /stories/{id}",
-    "POST /cover-letters/{id}/refine",
-    "POST /agents/cover-letter/run",
-    "GET /admin/users?q= and ?plan= (QUERY PARAM path \u2014 not covered by the db.py write-path guard)"
+    "ALL of the following were confirmed 500 ON PRODUCTION (pre-fix code) and are FIXED AT HEAD by the blanket _NulByteGuardCursor in app/db.py: PUT /workspaces/settings, POST /resumes, POST /agents/tailor/run, POST /stories, PUT /stories/{id}, POST /cover-letters/{id}/refine, POST /agents/cover-letter/run, GET /admin/users?q= and ?plan=. Analytics endpoints already returned a correct 422 independently."
   ],
   "escalations": [
     {
@@ -448,5 +441,15 @@
     "ML-CL-004 STILL OPEN: /refine can persist an ungoverned draft if ApprovalRepository.create fails AFTER CoverLetterRepository.create succeeds. Now at least audited as a failed AgentRun row, but the transactional gap remains. Needs its own fix (atomicity), reported honestly by the implementer rather than silently closed.",
     "Story relevance thresholds: create-time title Jaccard 0.70 vs bulk-migration 0.60 - a narrow evidence-calibrated band. Flagged for adversarial re-verification before G-E closes.",
     "ADV-ENT-002 (backend advertises + provisions a Free tier it universally denies) UNADDRESSED - needs a BUSINESS decision: honour the advertised 5 free runs, or correct /pricing + RATIFIED_PLANS + ensure_user_billing + the 402 wording. Consumer-law exposure on a real-AUD product."
+  ],
+  "orchestrator_corrections": [
+    {
+      "id": "ORCH-CORR-001",
+      "date": "2026-07-31",
+      "wrong_claim": "ML-admin-003 proves the NUL fix is INCOMPLETE - the db.py guard covers WRITE paths only, so GET query params are a separate uncovered code path.",
+      "reality": "FALSE. Empirically disproven at HEAD: _NulByteGuardCursor in apps/api/app/db.py (commit e78f51d) is installed as a blanket cursor_factory on EVERY get_connection() call, not scoped to writes. GET /admin/users?q=<NUL> already returns a clean 422 at HEAD. The production 500 observed by the screen tester is DEPLOYMENT LAG (prod runs pre-fix code), not a code gap. The screen-test evidence itself said \"fix verified but undeployed\".",
+      "lesson": "The orchestrator asserted a code-scope conclusion from a production symptom without reading the implementation. That is precisely the [INFERRED]-presented-as-[VERIFIED] error \u00a70 prohibits. Production symptoms prove PRODUCTION state; only reading HEAD proves HEAD state - and with 25 undeployed commits the two diverge by construction.",
+      "residual_value": "21 regression tests now lock the 422 contract, plus a documented sweep across every other free-text GET filter (networking, workspaces, interviews, jobs, applications, approvals)."
+    }
   ]
 }
