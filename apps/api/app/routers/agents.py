@@ -2309,6 +2309,9 @@ def run_tailor(
         "approvalRequired": output.get("approvalRequired", False),
         "approval_id": output.get("approval_id"),
         "approval_status": output.get("approval_status"),
+        # §5.3.1 point 5: an honest sub-85 warning from the score-aware
+        # TailoringLoop — None when the loop reached the target.
+        "warning": output.get("warning"),
     }
 
 

@@ -68,17 +68,33 @@ def get_application_counts(
     # row-counts inflated every "applications" surface — live evidence
     # 2026-07-24: one Plenti job with 9 promoted letter-versions counted as
     # 9 applications in the funnel's "Applied" node.
+    #
+    # ``interviewed`` (§5.3.5, GOLD-MASTER-V2): the SAME DISTINCT-jobId
+    # discipline, applied to the interview stage — a job with three
+    # Application rows (re-tailored/re-drafted versions of one submitted
+    # application) counts as ONE interviewed job, not three. This is the
+    # canonical numerator for ``interview_conversion_rate``; market-pulse's
+    # separate "Interview conversion" factor uses a raw ``COUNT(*)``
+    # denominator instead (a known, distinct pre-existing divergence, out of
+    # scope here) and must not be confused with this one.
     cur.execute(
         f'''
         SELECT
             COUNT(DISTINCT "jobId") AS total,
-            COUNT(DISTINCT "jobId") FILTER (WHERE "status" <> 'draft') AS submitted
+            COUNT(DISTINCT "jobId") FILTER (WHERE "status" <> 'draft') AS submitted,
+            COUNT(DISTINCT "jobId") FILTER (
+                WHERE "status" IN ('interview', 'offer')
+            ) AS interviewed
         FROM "Application" WHERE "userId" = %s{period_clause}
         ''',
         (user_id,),
     )
-    total, submitted = cur.fetchone()
-    return {"total": int(total), "submitted": int(submitted)}
+    total, submitted, interviewed = cur.fetchone()
+    return {
+        "total": int(total),
+        "submitted": int(submitted),
+        "interviewed": int(interviewed),
+    }
 
 
 @router.get("/funnel")
@@ -171,11 +187,25 @@ def agent_roi(current_user: CurrentUser) -> dict[str, Any]:
 
 @router.get("/conversion")
 def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
-    """Stage-to-stage conversion rates derived from the funnel."""
+    """Stage-to-stage conversion rates derived from the funnel.
+
+    ``interview_conversion_rate`` (§5.3.5, GOLD-MASTER-V2): interviews booked
+    over applications SUBMITTED — a real DB computation via the canonical
+    ``get_application_counts`` (DISTINCT jobId, never a raw Application-row
+    count; see that function's docstring), never a placeholder. Healthy at
+    the >=1:5 (20%) industry-standard floor.
+    """
     data = funnel(current_user, period)
 
     def rate(numerator: int, denominator: int) -> float:
         return round(numerator / denominator * 100, 2) if denominator else 0.0
+
+    user_id = current_user["id"]
+    job_filter = _period_clause(period, '"createdAt"')
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            counts = get_application_counts(cur, user_id, job_filter)
+    interview_conversion_rate = rate(counts["interviewed"], counts["submitted"])
 
     return {
         "period": period,
@@ -183,6 +213,8 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
         "applied_to_screened": rate(data["screened"], data["applied"]),
         "screened_to_interview": rate(data["interviewed"], data["screened"]),
         "interview_to_offer": rate(data["offers"], data["interviewed"]),
+        "interview_conversion_rate": interview_conversion_rate,
+        "interview_conversion_healthy": interview_conversion_rate >= 20.0,
     }
 
 

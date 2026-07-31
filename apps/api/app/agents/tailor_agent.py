@@ -25,9 +25,11 @@ from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
 from app.services.resume_tailor import (
     ResumeTailorService,
+    TailorResult,
     render_tailored_raw_text,
     strip_bullet_lines,
 )
+from app.services.tailoring_loop import TailoringLoop
 
 #: Floor for the ATS-score denominator so a legitimate baseline of exactly
 #: 0.0 never raises ZeroDivisionError (GAP-E2).
@@ -268,6 +270,10 @@ class TailorRunResult:
     #: ``None`` only on legacy/uncreated paths.
     approval_id: str | None = None
     approval_status: str | None = None
+    #: §5.3.1 point 5: populated iff the score-aware loop (see
+    #: ``TailoringLoop``) never reached the 85 ATS target within its
+    #: iteration cap — an honest sub-target signal, NEVER silently dropped.
+    warning: str | None = None
 
 
 class TailoringAgent:
@@ -278,12 +284,18 @@ class TailoringAgent:
         service: ResumeTailorService | None = None,
         stories: StoryRepository | None = None,
         approvals: ApprovalRepository | None = None,
+        ats_engine: ATSEngine | None = None,
     ) -> None:
         self._resumes = resumes or ResumeRepository()
         self._jobs = jobs or JobRepository()
         self._service = service or ResumeTailorService()
         self._stories = stories or StoryRepository()
         self._approvals = approvals or ApprovalRepository()
+        #: Drives the score-aware ``TailoringLoop`` (§5.3 item 1) — the SAME
+        #: deterministic engine ``/resumes/{id}/ats`` and the before/after
+        #: score banner already use, so the loop's convergence decisions and
+        #: the UI's displayed score are computed identically.
+        self._ats_engine = ats_engine or ATSEngine()
 
     def resume_for_job(self, user_id: str, job_id: str) -> dict[str, Any]:
         """Resume to attach when drafting for a job (cover_letter_agent's
@@ -379,33 +391,58 @@ class TailoringAgent:
         # truthful JD keywords the tailor can surface for a genuine ATS lift.
         story_evidence = build_story_evidence(user_id, self._stories)
         evidence_extra = "\n\n".join(p for p in (career_corpus, story_evidence) if p)
-        result = self._service.tailor(
+        # §5.3 item 1: score-aware iterative tailoring — tailor, score via the
+        # SAME ATSEngine ``/resumes/{id}/ats`` uses, and — while below the 85
+        # target and iterations remain — retry with a directive naming the
+        # score gap and the clean gap keywords. The anti-fabrication guard
+        # inside ``self._service`` runs unmodified on every iteration; closing
+        # a keyword gap never means inventing experience the candidate lacks.
+        loop = TailoringLoop(service=self._service, ats_engine=self._ats_engine)
+        loop_result = loop.run(
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )
+        best = loop_result.iterations[loop_result.best_iteration - 1]
 
         # MV-resume-studio-003: when the fabrication/entailment guards reject
-        # EVERY proposed rewrite the tailored bullets are byte-identical to the
-        # parent (0 net changes). Persisting that as a new "Tailored" version was a
-        # silent, billed no-op indistinguishable from a real change. Instead raise
-        # — mirroring the cover letter's FabricationError — so NO version is
+        # EVERY proposed rewrite across every iteration the tailored bullets of
+        # the best-scoring pass are byte-identical to the parent (0 net
+        # changes). Persisting that as a new "Tailored" version was a silent,
+        # billed no-op indistinguishable from a real change. Instead raise —
+        # mirroring the cover letter's FabricationError — so NO version is
         # created, NO approval is opened, and the reserved run is refunded (the
-        # caller's _execute_reserved_run refunds on any exception). Honest outcome:
-        # the résumé is unchanged and the user is not charged.
-        if result.changes == 0:
-            raise NoChangesApplied(rejected=result.rejected)
+        # caller's _execute_reserved_run refunds on any exception). Honest
+        # outcome: the résumé is unchanged and the user is not charged.
+        if best["changes"] == 0:
+            raise NoChangesApplied(rejected=best["rejected"])
 
         # GAP-P6-TAIL-002: regenerate the persisted raw_text from the TAILORED
         # bullets (not the parent's verbatim raw_text) so a later independent
         # GET /resumes/{id}/ats — which scores raw_text preferentially —
         # reflects the tailored score, matching the PDF and the run's reported
         # tailoredATSScore instead of reverting to the stale baseline.
-        tailored_raw_text = render_tailored_raw_text(resume_text, result.bullets)
+        tailored_raw_text = render_tailored_raw_text(resume_text, loop_result.final_bullets)
+        # The TRUE pre-loop baseline (post-dedup), structured exactly as
+        # ``ResumeTailorService.tailor`` structures ``originals`` internally —
+        # used below for an honest before/after diff even when a LATER
+        # iteration (not the first) ends up the best-scoring one.
+        baseline_bullets = ResumeTailorService._structure_originals(
+            parent_bullets, resume_text
+        )
         # MV-resume-studio-001: a freshly tailored version is created ``pending`` —
         # it stays under human review until its ApprovalRequest (below) is
         # approved, at which point ApprovalRepository flips it to ``approved``.
         tailored = self._resumes.create(
             user_id,
-            {"bullets": result.bullets, "raw_text": tailored_raw_text},
+            {
+                "bullets": loop_result.final_bullets,
+                "raw_text": tailored_raw_text,
+                # §5.3.3: every iteration's output + score, persisted so the UI
+                # can show tailoring progress honestly (the before/after score
+                # banner already renders the headline baseline/tailored
+                # numbers from conversionMetrics below; this is the
+                # per-iteration detail behind them).
+                "tailoringIterations": loop_result.iterations,
+            },
             base["formatHash"],  # source PDF untouched → hash carried through
             label=f"Tailored — {job['title']} @ {job['company']}",
             version=self._resumes.next_version(user_id),
@@ -414,8 +451,13 @@ class TailoringAgent:
             approval_status="pending",
         )
         conversion_metrics = _compute_conversion_metrics(
-            resume_text, result.originals, result.bullets, job.get("description") or ""
+            resume_text, baseline_bullets, loop_result.final_bullets,
+            job.get("description") or "",
         )
+        # §5.3.1 point 5: surface the loop's own honest verdict on this run —
+        # wired to the same "needs a human look" concept ``ATSScore.
+        # requires_review`` already computes, never silently dropped.
+        conversion_metrics["requires_review"] = loop_result.requires_review
         # MV-resume-studio-001: open a REAL pending ApprovalRequest (mirroring the
         # cover letter agent) so the run's ``approvalRequired: true`` flag is backed
         # by an actual human-in-the-loop gate rather than being decorative. Kept
@@ -425,6 +467,12 @@ class TailoringAgent:
         # approval. ``application_submit`` is the shared enum type (as the cover
         # letter uses); ``kind`` discriminates the artifact family.
         evidence_corpus = "\n".join(p for p in (resume_text, evidence_extra) if p)
+        loop_as_result = TailorResult(
+            bullets=loop_result.final_bullets,
+            originals=baseline_bullets,
+            changes=best["changes"],
+            rejected=best["rejected"],
+        )
         approval = self._approvals.create(
             user_id,
             "application_submit",
@@ -438,7 +486,7 @@ class TailoringAgent:
                 # than the application_submit defaults.
                 "agent": "Tailoring Agent",
                 "action": "apply a tailored résumé",
-                **build_tailor_approval_extras(result, job, evidence_corpus),
+                **build_tailor_approval_extras(loop_as_result, job, evidence_corpus),
             },
         )
         # RT-005: a successfully tailored job belongs in the "Tailoring"
@@ -449,9 +497,10 @@ class TailoringAgent:
         )
         return TailorRunResult(
             resume_id=tailored["id"],
-            changes=result.changes,
-            rejected=result.rejected,
+            changes=best["changes"],
+            rejected=best["rejected"],
             conversionMetrics=conversion_metrics,
             approval_id=approval["id"],
             approval_status=approval["status"],
+            warning=loop_result.warning,
         )
