@@ -3,7 +3,7 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T10:20:00Z",
+  "updated_utc": "2026-07-31T11:00:00Z",
   "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
@@ -39,12 +39,12 @@
   },
   "workstream_status": {
     "W-A": "IN-PROGRESS - Phase 0 complete; \u00a73.2 sweep BLOCKED pending BLOCKER-001 fix (needs a real non-admin identity)",
-    "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook.",
+    "W-B": "IN-PROGRESS - canonical docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md written. 432 hits triaged, 100% coverage, repo-wide PROHIBITED-STUB = 0. Execution order: 1 FE-D-003 auto-apply (BLOCKER) -> 2 FE-D-004 match-threshold (BLOCKER) -> 3 INC-B-002/FE-D-002 email-verification, UI disabled BUT POST /admin/settings has zero server-side validation (HIGH) -> 4 FE-D-001 Notifications \"Coming Soon\" (HIGH) -> 5 FE-D-005 Pause All/Manual Override (LOW) -> 6 INC-B-001 Stripe trial_will_end webhook (LOW). UNSURE resolved: next-auth stub -> delete (W-K, LOW); PROVIDER_SEED -> C for this deployment (keys absent); APP_BASE_URL fallback UPGRADED to MEDIUM (live in prod). || WAVE-1 VERIFIED GREEN (26 tests, 0 failures): NUL-byte 422, placeholder-signer guard, email-verification enforcement + strict boolean, trial_will_end webhook. || SUBMISSION AGENT IMPLEMENTED GENUINELY (apps/api/app/agents/submission_agent.py, 144 lines, ZERO stub markers, orchestrator-verified): performs a real write via submit_application_for_job with owner-scoped resolution, honest \"nothing ready\" path, 404 on another user's job id (never silently substituted), readiness enforced as 422 by the service. Resolves the \u00a74 (no planned states) vs \u00a70.5 (no stubs) tension by building the capability rather than faking or deleting it.",
     "W-C": "COMPLETE (pending prod verify + qa-adversary closure). Backend 13/13 green, FE 628/628 green (baseline 627/1 -> +1, ZERO regressions), tsc clean, 23 tailoring regression tests green, anti-fabrication guard VERIFIED INTACT. Delivered: TailoringLoop (MAX_ITERATIONS=5) with clean gap_keywords, per-iteration persistence, honest sub-85 warning now SURFACED in Resume Studio (amber informational idiom, data-testid=tailor-score-warning), interview_conversion_rate real computation with 1:5 threshold. Pre-existing and verified working: before/after banner (\u00a75.3.6), missing-keywords chips (\u00a75.3.2), honest zero-change no-op. NOT DEPLOYED.",
     "W-D": "WITHDRAWN - risk-officer REFUSED (GOV-008). G-D unachievable, withdrawn not failed. Compliant substitute: Adzuna AU credentials (operator item).",
     "W-E": "12/12 tests GREEN, 36/36 regression green, ADV-ENT-001 closed. Dedup + relevance machinery SHIPPED AND TESTED. RELEVANCE GATE DELIBERATELY LEFT DISABLED on empirical evidence - see RELEVANCE-CALIBRATION ruling below. \u00a77.3.3 is therefore NOT met in substance and is re-scoped as a specified design change, not a patch.",
     "W-F": "PENDING - stage-move + approvals delete/purge endpoints ALREADY EXIST (GOV-003); scope = canonical PATCH endpoint + FE affordances + contract verification",
-    "W-G": "Backend + authz COMPLETE and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). 3 failing tests written for the ONLY gaps: \u00a79.2.1 admin entry on /login and \u00a79.2.3 persistent admin indicator. Implementation IN FLIGHT. Portal route is /admin (do NOT create /admin/dashboard).",
+    "W-G": "COMPLETE (pending prod verify). FE 631/631 green (baseline 628 + exactly 3 new), tsc clean, Playwright verified TWICE with independent fixture users. Delivered: \"Admin sign in\" link on /login -> new standalone /admin-login page posting to the same POST /auth/login then routing to /admin (\u00a79.2.1); persistent Topbar \"Admin\" badge gated on live fetchMe().isAdmin (\u00a79.2.3), standard users see nothing. Backend/authz was ALREADY complete and verified live (7 routes real data, 12/12 non-admin blocks, audit rows). NOT DEPLOYED.",
     "W-H": "PENDING - REFERENCE-GRAPH verdict COMPLETE; requires prod verification per \u00a710.1",
     "W-I": "PENDING - MEASURED per screen by fetch instrumentation, NOT assumed: /dashboard/jobs 20.00s, /dashboard/applications 20s, /dashboard/resume ~3.1s, /dashboard/stories NONE. So polling is real on some screens and genuinely absent on others - GOV-007 corrected. Scope = add the shared hook to screens measured as having no refresh, plus SSE agent-run progress, plus optimistic mutations.",
     "W-J": "PENDING - Job has fitScore+atsScore; tailoring_iteration and score_updated_at columns ABSENT; Application/Resume/CoverLetter carry no score columns",
@@ -83,11 +83,12 @@
       "note": "Keyboard-operable Move-to menu VERIFIED + server-side 422 on illegal transitions VERIFIED. OUTSTANDING: stage counts do NOT reconcile with the funnel (ML-APP-003); no one-click \"Mark as In Review\" quick action (\u00a78.1.2); approvals purge FE affordances unverified."
     },
     "G-G": {
-      "status": "CONDITIONAL-PASS-PENDING-ENTRY-POINTS",
-      "evidence": "uat/reports/evidence/gold-master-v2/screens/admin-portal-screen-test.md",
-      "met": "data plumbing, authz at UI+API, audit logging, real-data rendering, non-admin blocking",
-      "outstanding": "\u00a79.2.1 admin login entry point; \u00a79.2.3 persistent admin indicator. Tests being written.",
-      "note": "NOT human-gated - operator admin credential IS available (AETHER_CRON_EMAIL/PASSWORD). Must be FULLY closed."
+      "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v2/screens/admin-portal-screen-test.md",
+        "uat/reports/evidence/gold-master-v2/waves/WG-fix-report.md"
+      ],
+      "note": "Post-deploy the Admin badge will correctly NOT render until the operator rotates the credential, because BLOCKER-001 revokes owner isAdmin. That is correct behaviour, not a regression."
     },
     "G-H": {
       "status": "OPEN"
@@ -502,5 +503,9 @@
     "NOT_gated_server_side": "CRUD routers - stories, interviews, offers, networking (Free-tier POST /networking/contacts returned a real 201 via direct API while the UI blocks the whole screen). No LLM capacity is consumed by these, so this is a feature-entitlement gap, not a cost/capacity bypass.",
     "verdict": "Entitlement is enforced SERVER-SIDE where it protects paid capacity, and CLIENT-SIDE ONLY on CRUD features sold as tier benefits. Combined with ADV-ENT-002 (backend advertises + provisions a Free tier it universally denies), the billing story needs one coherent decision, not per-router patches."
   },
-  "deploy_impact_forecast": "ONE deploy closes the NUL->500 class on ELEVEN endpoints at once: PUT /workspaces/settings, POST /resumes, POST /agents/tailor/run, POST /stories, PUT /stories/{id}, POST /cover-letters/{id}/refine, POST /agents/cover-letter/run, GET /admin/users (q/plan), POST /emails/draft, POST /interviews, POST /workspaces/offers, POST /networking/contacts. Verify each on prod AFTER deploy rather than re-fixing (ORCH-CORR-001)."
+  "deploy_impact_forecast": "ONE deploy closes the NUL->500 class on ELEVEN endpoints at once: PUT /workspaces/settings, POST /resumes, POST /agents/tailor/run, POST /stories, PUT /stories/{id}, POST /cover-letters/{id}/refine, POST /agents/cover-letter/run, GET /admin/users (q/plan), POST /emails/draft, POST /interviews, POST /workspaces/offers, POST /networking/contacts. Verify each on prod AFTER deploy rather than re-fixing (ORCH-CORR-001).",
+  "false_green_defects_caught": [
+    "W-G e2e: /admin/login would have satisfied waitForURL(/\\/admin(\\/|$|\\?)/) VACUOUSLY - Playwright resolves immediately when the current URL already matches, so the spec would have passed with no navigation at all. Fixed by using the sibling path /admin-login.",
+    "W-G e2e: a next/link client transition left the OLD /login form interactable during the transition window, letting a fast fill+submit race it and submit the wrong form. Fixed with a real top-level <a href>."
+  ]
 }
