@@ -3,8 +3,8 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T16:20:00Z",
-  "phase_step": "RESUMED after session-limit pause. Admin sweep DONE -> deploy blocker LIFTED. W-C/W-E/ADV-ENT-001 implementations + analytics/approvals sweep in flight.",
+  "updated_utc": "2026-07-31T17:10:00Z",
+  "phase_step": "PAUSED \u2014 second session-limit pause (resets 11:00Z). Tree CLEAN, all work committed, verification queued.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
   "baseline": {
@@ -134,12 +134,11 @@
     "RELEVANCE-CALIBRATION (evidence: uat/reports/evidence/gold-master-v2/adversarial/STORY-RELEVANCE-CALIBRATION.md, 1872 real story x job pairs): DO NOT enable the story-relevance gate. (a) 0.4 is ABOVE THE CORPUS CEILING - max real score 0.1017, median 0.0234; 0.4/0.3/0.25/0.2/0.15 all starve 100% of 52 jobs, 0.1 starves 96%. (b) The SCORER IS TOO WEAK TO GATE ON: the same achievement reworded scores median 2.33x apart (max 10.04x) against the same job, signal/noise 1.566; 2 of 6 sampled jobs rank inverted. (c) STRUCTURAL: all three build_story_evidence call sites feed ANTI-FABRICATION GUARD corpora, not prompt material - filtering there makes the guard FORGET TRUE ACHIEVEMENTS, a truthfulness REGRESSION, and does not implement \u00a77.3.3 at all. Meeting \u00a77.3.3 in substance needs a separate parameter (filtered set -> prompt material; FULL set -> guard corpus) - a design change to be specified and reviewed, never patched in. Recommended interim: top-N-by-score (N~5, scale-free, can never return empty). The disputed regression fixture STAYS GREEN and unchanged."
   ],
   "next_actions": [
-    "BLOCKER-001: on CONFIRMED, run the \u00a715 fix pipeline immediately (interrupts other priorities per \u00a716)",
-    "W-A \u00a73.2: dispatch screen-testers per route AFTER pytest frees CPU - and use a genuine NON-admin identity, not admin/admin123",
-    "W-A \u00a73.3: write docs/delivery/GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md - gates all remaining workstreams",
-    "Seek R4: code-level guard so get_adapter_class('seek') cannot bypass the registry gate (test-first)",
-    "W-B: implement from the merged BACKEND+FRONTEND inventories once both triages land",
-    "W-K: purge 4 stale @example.com users + the Stripe-probe throwaway account"
+    "1. Read uat/reports/evidence/gold-master-v2/waves/post-limit-verify-*.log \u2014 verifies the refine guard and the 6 cover-letter suites the killed agent had modified. Do NOT trust commit 54 until read.",
+    "2. Re-dispatch BLOCKER-002 Parts 2+3: read-only contaminated-row inventory + remediation plan (NOT execution).",
+    "3. Re-dispatch W-I/W-J: run the committed test files, prove red-for-right-reason, write the evidence artifact.",
+    "4. Then W-I/W-J implementation, W-H per-card Apply button, W-K cleanup.",
+    "5. Then W-L: CI green, PUSH (54 commits unpushed), deploy, prod re-verify the ~11-endpoint NUL class and every fixed-but-undeployed item, 60-min clean observation window with >=3 real agent runs, final report."
   ],
   "last_commit": "297946d",
   "last_deploy_sha": null,
@@ -204,7 +203,9 @@
       "real_name_evidence": "The owner's real name appears as \"Vikram Deshpande\" in clean sign-offs within their own existing letters - so the data correction is knowable from the account's own content.",
       "data_half_status": "CLOSED ON PRODUCTION 2026-07-31T01:1xZ \u2014 VERIFIED independently: GET /api/auth/me now returns name=\"Vikram Deshpande\" (was \"GAP-P7-DEF-B Probe 1785452243543\"). Because the PDF letterhead renders current_user.name at EXPORT time, all FUTURE exports and all NEW generation are now correctly signed. REMAINING: 8 stored letters whose BODY sign-off still carries the old string (3 attached to pending approvals) need regeneration or purge; and the code-level placeholder guard (commit 36d86c6) is still UNDEPLOYED.",
       "forward_path_VERIFIED_FIXED": "Fresh live generation on production (real model deepseek/deepseek-v4-pro, real cost, flagged:[]) is CORRECTLY SIGNED and its PDF letterhead is CLEAN. Name correction holds (Vikram Deshpande, verified twice). So NO NEW contaminated content is being produced.",
-      "remaining": "ML-COVER-100 (BLOCKER): all 8 previously-contaminated stored letters STILL carry the GAP-P7-DEF-B Probe fixture string in stored BODY text (0/8 remediated). Needs regeneration or purge under risk-officer approval; no cover-letter DELETE endpoint exists."
+      "remaining": "ML-COVER-100 (BLOCKER): all 8 previously-contaminated stored letters STILL carry the GAP-P7-DEF-B Probe fixture string in stored BODY text (0/8 remediated). Needs regeneration or purge under risk-officer approval; no cover-letter DELETE endpoint exists.",
+      "second_path_closed": "Refine was the SECOND path stamping User.name onto customer-facing content: it re-composes with compose_letter(..., signer) and stores a NEW CoverLetter row + approval. Generation and PDF export already refused placeholder identities; refine did not, so a profile drifting to a placeholder AFTER drafting still minted a freshly-signed stored letter. Now refuses with the shared detection rule + honest 422, raised so _record_run finishes the run failed and REFUNDS quota. Committed; verification queued.",
+      "still_open": "8 contaminated stored letters (6 of 73 submitted + 2 of 5 draft). Inventory and remediation plan NOT yet written \u2014 the agent was killed before Part 2/3. Needs risk-officer approval before any purge/regeneration; no cover-letter DELETE endpoint exists."
     }
   ],
   "human_gated": {
@@ -481,17 +482,13 @@
     "2 adversarial email drafts cd677a32f603c19a2d56f6725, c5f15526fed1587b0b9da76fe - NO DELETE/PATCH route exists for that resource"
   ],
   "session_limit_pause": {
-    "hit_at": "2026-07-31T01:15Z",
-    "resets_at": "2026-07-31T04:10Z",
-    "agents_killed_mid_flight": [
-      "W-C tailoring tests (files WRITTEN, unverified)",
-      "W-E dedup/ADV-ENT-001 tests (files WRITTEN, unverified)",
-      "BLOCKER-002 data correction (COMPLETED on prod \u2014 verified independently)",
-      "analytics screen test (INCOMPLETE \u2014 no artifact)",
-      "admin portal screen test (INCOMPLETE \u2014 no artifact, TIME-CRITICAL)",
-      "W-B wave-1 fixes (code WRITTEN + committed, UNVERIFIED)"
+    "hit_at": "2026-07-31T~16:50Z",
+    "resets_at": "11:00Z",
+    "agents_killed": [
+      "BLOCKER-002 remediation (cover_letters.py refine guard WRITTEN + committed; inventory/plan NOT written)",
+      "W-I/W-J failing tests (test files WRITTEN + committed; evidence artifact NOT written, full run NOT done)"
     ],
-    "tree_state": "CLEAN \u2014 all work committed (10e3e41 tests+review, e78f51d wave-1 partial). Stray temp files removed."
+    "tree_state": "CLEAN \u2014 everything committed with explicit UNVERIFIED labelling where the author was cut off."
   },
   "resume_recipe": [
     "1. Cheap re-probes first (\u00a72.3.3): git log/status, systemctl is-active aether-api aether-web aether-worker, curl /api/health, and CONFIRM the monitor is capturing SIGNAL (wc -l on uat/reports/evidence/gold-master-v2/runtime/monitor-alltraffic-CORRECTED.log must be growing \u2014 a silent capture means a broken monitor, never a clean system; see GOV-012).",
@@ -648,5 +645,11 @@
     "most_likely_cause": "The account owner in an interactive browser session from a different network. Confidence: HIGH that it was an authenticated interactive human session; MODERATE-HIGH that it was the owner.",
     "corrections_to_the_claim": "The cluster is FOUR approvals not three (Peloton c1d607ab... missed), plus a fifth at 03:59:12Z. ApprovalRequest has no updatedAt column; it is resolvedAt.",
     "audit_gap_STANDS": "HIGH (governance/auditability, NOT a security or data-integrity breach). Zero approval.approve/approval.reject rows in AdminAuditLog EVER. The asymmetry is damning: the same file calls write_audit() for approval.delete (17 rows) and approval.purge_expired (2 rows) - the HOUSEKEEPING actions - but not for the decision itself. Fix in flight."
+  },
+  "approval_audit_fix": {
+    "commit": "eb13fd5",
+    "result": "7 new tests red->green, 43 passed, 0 regressions",
+    "delivered": "write_audit(approval.approve/approval.reject) mirroring the existing approval.delete call; resolvedByUserId + resolvedFromIp added ADDITIVELY via the existing ensure_approval_columns() lazy DDL",
+    "toctou": "REAL HOLE, proven live pre-fix: a second resolve silently flipped an APPROVED row to REJECTED and returned 200. Now compare-and-set (WHERE id AND userId AND status=pending) returning an honest 409. The status predicate closed the real hole; the userId predicate is defence-in-depth for HTTP (service read already 404s foreign owners) but a genuine gap for direct repository callers."
   }
 }
