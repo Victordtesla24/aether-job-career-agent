@@ -1,0 +1,64 @@
+
+Running 2 tests using 1 worker
+
+  ✘  1 [chromium] › e2e/wg-admin-login-path.spec.ts:52:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › an admin login reaches /admin (the real admin portal), not /dashboard (5.8s)
+  ✘  2 [chromium] › e2e/wg-admin-login-path.spec.ts:89:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › a non-admin hitting the admin login path is refused honestly, with no user-enumeration signal (5.8s)
+
+
+  1) [chromium] › e2e/wg-admin-login-path.spec.ts:52:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › an admin login reaches /admin (the real admin portal), not /dashboard 
+
+    Error: §9.2.1: no 'Admin' entry link found on /login — the admin login path is unreachable from the public sign-in screen
+
+    expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: /admin/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - §9.2.1: no 'Admin' entry link found on /login — the admin login path is unreachable from the public sign-in screen with timeout 5000ms
+      - waiting for getByRole('link', { name: /admin/i })
+
+
+      61 |       "§9.2.1: no 'Admin' entry link found on /login — the admin login path " +
+      62 |         "is unreachable from the public sign-in screen"
+    > 63 |     ).toBeVisible({ timeout: 5_000 });
+         |       ^
+      64 |
+      65 |     await adminLink.click();
+      66 |
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/wg-admin-login-path.spec.ts:63:7
+
+    Error Context: test-results/wg-admin-login-path-W-G-§9-92fe0--admin-portal-not-dashboard-chromium/error-context.md
+
+  2) [chromium] › e2e/wg-admin-login-path.spec.ts:89:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › a non-admin hitting the admin login path is refused honestly, with no user-enumeration signal 
+
+    Error: §9.2.1: no 'Admin' entry link found on /login — cannot exercise the refusal contract without the entry point existing
+
+    expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: /admin/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - §9.2.1: no 'Admin' entry link found on /login — cannot exercise the refusal contract without the entry point existing with timeout 5000ms
+      - waiting for getByRole('link', { name: /admin/i })
+
+
+       95 |       "§9.2.1: no 'Admin' entry link found on /login — cannot exercise the " +
+       96 |         "refusal contract without the entry point existing"
+    >  97 |     ).toBeVisible({ timeout: 5_000 });
+          |       ^
+       98 |
+       99 |     await adminLink.click();
+      100 |
+        at /home/ubuntu/github_repos/aether-job-career-agent/apps/web/e2e/wg-admin-login-path.spec.ts:97:7
+
+    Error Context: test-results/wg-admin-login-path-W-G-§9-e328a--no-user-enumeration-signal-chromium/error-context.md
+
+  2 failed
+    [chromium] › e2e/wg-admin-login-path.spec.ts:52:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › an admin login reaches /admin (the real admin portal), not /dashboard 
+    [chromium] › e2e/wg-admin-login-path.spec.ts:89:3 › W-G §9.2.1/§9.2.2: admin login reaches the admin portal › a non-admin hitting the admin login path is refused honestly, with no user-enumeration signal 

@@ -1,0 +1,536 @@
+
+ RUN  v2.1.9 /home/ubuntu/github_repos/aether-job-career-agent/apps/web
+
+ × src/components/__tests__/wg-admin-indicator-006.test.tsx > W-G §9.2.3: persistent Admin indicator outside /admin/* > shows a persistent Admin indicator in the shell for a logged-in admin 547ms
+   → logged-in admin: expected a persistent 'Admin' indicator somewhere in the Topbar/UserMenu shell (outside /admin/*); none was rendered: expected null not to be null
+ ✓ src/components/__tests__/wg-admin-indicator-006.test.tsx > W-G §9.2.3: persistent Admin indicator outside /admin/* > shows NOTHING admin-related for a standard (non-admin) user
+ × src/app/login/__tests__/wg-admin-entry-004.test.tsx > W-G §9.2.1: /login admin entry point > exposes a clearly-labelled "Admin" entry point linking to an admin login path
+   → Unable to find an accessible element with the role "link" and name `/admin/i`
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  [36m<main[39m
+    [33mclass[39m=[32m"min-h-screen flex items-center justify-center bg-aether-bg px-4"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  form:
+
+  Name "Sign in":
+  [36m<form[39m
+    [33maria-label[39m=[32m"Sign in"[39m
+    [33mclass[39m=[32m"glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Sign in":
+  [36m<h1[39m
+    [33mclass[39m=[32m"text-lg font-semibold"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-aether-muted mt-1"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-aether-muted text-center"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  textbox:
+
+  Name "Email or username":
+  [36m<input[39m
+    [33mautocomplete[39m=[32m"username"[39m
+    [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+    [33mid[39m=[32m"login-identifier"[39m
+    [33mname[39m=[32m"email"[39m
+    [33mrequired[39m=[32m""[39m
+    [33mtype[39m=[32m"text"[39m
+    [33mvalue[39m=[32m""[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "Forgot password?":
+  [36m<a[39m
+    [33mclass[39m=[32m"text-xs text-aether-muted hover:text-aether-indigo hover:underline"[39m
+    [33mhref[39m=[32m"/forgot-password"[39m
+  [36m/>[39m
+
+  Name "Create account":
+  [36m<a[39m
+    [33mclass[39m=[32m"text-aether-indigo hover:underline"[39m
+    [33mhref[39m=[32m"/signup"[39m
+  [36m/>[39m
+
+  Name "Privacy Policy":
+  [36m<a[39m
+    [33mclass[39m=[32m"hover:text-white transition"[39m
+    [33mhref[39m=[32m"/privacy-policy"[39m
+  [36m/>[39m
+
+  Name "Terms":
+  [36m<a[39m
+    [33mclass[39m=[32m"hover:text-white transition"[39m
+    [33mhref[39m=[32m"/terms"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Sign in":
+  [36m<button[39m
+    [33mclass[39m=[32m"mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  contentinfo:
+
+  Name "":
+  [36m<footer[39m
+    [33mclass[39m=[32m"mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim"[39m
+    [33mdata-testid[39m=[32m"public-legal-footer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"min-h-screen flex items-center justify-center bg-aether-bg px-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"w-full max-w-md"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center justify-center gap-3 mb-8"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"w-10 h-10 rounded-xl bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-lg font-bold"[39m
+          [36m>[39m
+            [0mA[0m
+          [36m</div>[39m
+          [36m<div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-xl font-semibold tracking-tight"[39m
+            [36m>[39m
+              [0mAether[0m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-[11px] text-aether-muted-dim mono"[39m
+            [36m>[39m
+              [0mjob & career agent[0m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<form[39m
+          [33maria-label[39m=[32m"Sign in"[39m
+          [33mclass[39m=[32m"glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5"[39m
+        [36m>[39m
+          [36m<div>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"text-lg font-semibold"[39m
+            [36m>[39m
+              [0mSign in[0m
+            [36m</h1>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm text-aether-muted mt-1"[39m
+            [36m>[39m
+              [0mAccess your agent dashboard.[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1.5 text-[13px] font-medium"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mfor[39m=[32m"login-identifier"[39m
+            [36m>[39m
+              [0mEmail or username[0m
+            [36m</label>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"username"[39m
+              [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+              [33mid[39m=[32m"login-identifier"[39m
+              [33mname[39m=[32m"email"[39m
+              [33mrequired[39m=[32m""[39m
+              [33mtype[39m=[32m"text"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1.5 text-[13px] font-medium"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mfor[39m=[32m"login-password"[39m
+            [36m>[39m
+              [0mPassword[0m
+            [36m</label>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"current-password"[39m
+              [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+              [33mid[39m=[32m"login-password"[39m
+              [33mname[39m=[32m"password"[39m
+              [33mrequired[39m=[32m""[39m
+              [33mtype[39m=[32m"password"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-right"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"text-xs text-aether-muted hover:text-aether-indigo hover:underline"[39m
+                [33mhref[39m=[32m"/forgot-password"[39m
+              [36m>[39m
+                [0mForgot password?[0m
+              [36m</a>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0mSign in[0m
+          [36m</button>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-sm text-aether-muted text-center"[39m
+          [36m>[39m
+            [0mDon't have an account?[0m
+            [0m [0m
+            [36m<a[39m
+              [33mclass[39m=[32m"text-aether-indigo hover:underline"[39m
+              [33mhref[39m=[32m"/signup"[39m
+            [36m>[39m
+              [0mCreate account[0m
+            [36m</a>[39m
+          [36m</p>[39m
+        [36m</form>[39m
+        [36m<footer[39m
+          [33mclass[39m=[32m"mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim"[39m
+          [33mdata-testid[39m=[32m"public-legal-footer"[39m
+        [36m>[39m
+          [36m<a[39m
+            [33mclass[39m=[32m"hover:text-white transition"[39m
+            [33mhref[39m=[32m"/privacy-policy"[39m
+          [36m>[39m
+            [0mPrivacy Policy[0m
+          [36m</a>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+          [36m>[39m
+            [0m·[0m
+          [36m</span>[39m
+          [36m<a[39m
+            [33mclass[39m=[32m"hover:text-white transition"[39m
+            [33mhref[39m=[32m"/terms"[39m
+          [36m>[39m
+            [0mTerms[0m
+          [36m</a>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+          [36m>[39m
+            [0m·[0m
+          [36m</span>[39m
+          [36m<span>[39m
+            [0m© 2026 Aether[0m
+          [36m</span>[39m
+        [36m</footer>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/__tests__/wg-admin-indicator-006.test.tsx > W-G §9.2.3: persistent Admin indicator outside /admin/* > shows a persistent Admin indicator in the shell for a logged-in admin
+AssertionError: logged-in admin: expected a persistent 'Admin' indicator somewhere in the Topbar/UserMenu shell (outside /admin/*); none was rendered: expected null not to be null
+ ❯ src/components/__tests__/wg-admin-indicator-006.test.tsx:103:11
+    101|       "logged-in admin: expected a persistent 'Admin' indicator somewh…
+    102|         "Topbar/UserMenu shell (outside /admin/*); none was rendered",
+    103|     ).not.toBeNull();
+       |           ^
+    104|   });
+    105| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/app/login/__tests__/wg-admin-entry-004.test.tsx > W-G §9.2.1: /login admin entry point > exposes a clearly-labelled "Admin" entry point linking to an admin login path
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/admin/i`
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  [36m<main[39m
+    [33mclass[39m=[32m"min-h-screen flex items-center justify-center bg-aether-bg px-4"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  form:
+
+  Name "Sign in":
+  [36m<form[39m
+    [33maria-label[39m=[32m"Sign in"[39m
+    [33mclass[39m=[32m"glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Sign in":
+  [36m<h1[39m
+    [33mclass[39m=[32m"text-lg font-semibold"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-aether-muted mt-1"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-aether-muted text-center"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  textbox:
+
+  Name "Email or username":
+  [36m<input[39m
+    [33mautocomplete[39m=[32m"username"[39m
+    [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+    [33mid[39m=[32m"login-identifier"[39m
+    [33mname[39m=[32m"email"[39m
+    [33mrequired[39m=[32m""[39m
+    [33mtype[39m=[32m"text"[39m
+    [33mvalue[39m=[32m""[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "Forgot password?":
+  [36m<a[39m
+    [33mclass[39m=[32m"text-xs text-aether-muted hover:text-aether-indigo hover:underline"[39m
+    [33mhref[39m=[32m"/forgot-password"[39m
+  [36m/>[39m
+
+  Name "Create account":
+  [36m<a[39m
+    [33mclass[39m=[32m"text-aether-indigo hover:underline"[39m
+    [33mhref[39m=[32m"/signup"[39m
+  [36m/>[39m
+
+  Name "Privacy Policy":
+  [36m<a[39m
+    [33mclass[39m=[32m"hover:text-white transition"[39m
+    [33mhref[39m=[32m"/privacy-policy"[39m
+  [36m/>[39m
+
+  Name "Terms":
+  [36m<a[39m
+    [33mclass[39m=[32m"hover:text-white transition"[39m
+    [33mhref[39m=[32m"/terms"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Sign in":
+  [36m<button[39m
+    [33mclass[39m=[32m"mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  contentinfo:
+
+  Name "":
+  [36m<footer[39m
+    [33mclass[39m=[32m"mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim"[39m
+    [33mdata-testid[39m=[32m"public-legal-footer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"min-h-screen flex items-center justify-center bg-aether-bg px-4"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"w-full max-w-md"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center justify-center gap-3 mb-8"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"w-10 h-10 rounded-xl bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-lg font-bold"[39m
+          [36m>[39m
+            [0mA[0m
+          [36m</div>[39m
+          [36m<div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-xl font-semibold tracking-tight"[39m
+            [36m>[39m
+              [0mAether[0m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-[11px] text-aether-muted-dim mono"[39m
+            [36m>[39m
+              [0mjob & career agent[0m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<form[39m
+          [33maria-label[39m=[32m"Sign in"[39m
+          [33mclass[39m=[32m"glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5"[39m
+        [36m>[39m
+          [36m<div>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"text-lg font-semibold"[39m
+            [36m>[39m
+              [0mSign in[0m
+            [36m</h1>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm text-aether-muted mt-1"[39m
+            [36m>[39m
+              [0mAccess your agent dashboard.[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1.5 text-[13px] font-medium"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mfor[39m=[32m"login-identifier"[39m
+            [36m>[39m
+              [0mEmail or username[0m
+            [36m</label>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"username"[39m
+              [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+              [33mid[39m=[32m"login-identifier"[39m
+              [33mname[39m=[32m"email"[39m
+              [33mrequired[39m=[32m""[39m
+              [33mtype[39m=[32m"text"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col gap-1.5 text-[13px] font-medium"[39m
+          [36m>[39m
+            [36m<label[39m
+              [33mfor[39m=[32m"login-password"[39m
+            [36m>[39m
+              [0mPassword[0m
+            [36m</label>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"current-password"[39m
+              [33mclass[39m=[32m"bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"[39m
+              [33mid[39m=[32m"login-password"[39m
+              [33mname[39m=[32m"password"[39m
+              [33mrequired[39m=[32m""[39m
+              [33mtype[39m=[32m"password"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"text-right"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"text-xs text-aether-muted hover:text-aether-indigo hover:underline"[39m
+                [33mhref[39m=[32m"/forgot-password"[39m
+              [36m>[39m
+                [0mForgot password?[0m
+              [36m</a>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0mSign in[0m
+          [36m</button>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-sm text-aether-muted text-center"[39m
+          [36m>[39m
+            [0mDon't have an account?[0m
+            [0m [0m
+            [36m<a[39m
+              [33mclass[39m=[32m"text-aether-indigo hover:underline"[39m
+              [33mhref[39m=[32m"/signup"[39m
+            [36m>[39m
+              [0mCreate account[0m
+            [36m</a>[39m
+          [36m</p>[39m
+        [36m</form>[39m
+        [36m<footer[39m
+          [33mclass[39m=[32m"mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-aether-muted-dim"[39m
+          [33mdata-testid[39m=[32m"public-legal-footer"[39m
+        [36m>[39m
+          [36m<a[39m
+            [33mclass[39m=[32m"hover:text-white transition"[39m
+            [33mhref[39m=[32m"/privacy-policy"[39m
+          [36m>[39m
+            [0mPrivacy Policy[0m
+          [36m</a>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+          [36m>[39m
+            [0m·[0m
+          [36m</span>[39m
+          [36m<a[39m
+            [33mclass[39m=[32m"hover:text-white transition"[39m
+            [33mhref[39m=[32m"/terms"[39m
+          [36m>[39m
+            [0mTerms[0m
+          [36m</a>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+          [36m>[39m
+            [0m·[0m
+          [36m</span>[39m
+          [36m<span>[39m
+            [0m© 2026 Aether[0m
+          [36m</span>[39m
+        [36m</footer>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/app/login/__tests__/wg-admin-entry-004.test.tsx:49:30
+     47|     render(<LoginPage />);
+     48| 
+     49|     const adminLink = screen.getByRole("link", { name: /admin/i });
+       |                              ^
+     50|     expect(adminLink).toBeTruthy();
+     51| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 1 passed (3)
+   Start at  07:51:06
+   Duration  5.48s (transform 150ms, setup 0ms, collect 838ms, tests 666ms, environment 2.51s, prepare 297ms)
+
