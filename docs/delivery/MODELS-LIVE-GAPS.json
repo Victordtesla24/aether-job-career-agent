@@ -2654,6 +2654,48 @@
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:50:43Z",
       "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-suites-001",
+      "screen": "n/a (test suite)",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "THE BACKEND SUITE IS NOT GREEN. Baseline pytest: 36 failed, 2027 passed, 1 skipped, 9 errors (2073 items, 44m37s). G-N requires full suites green versus baseline with no skipped-test inflation, so this blocks the exit gate outright. Failures cluster in tests/test_wave4b_interview_prep_agent.py (5), test_wave4c_notification_agent.py (2+1 error), test_wave4c_outreach_contact_agents.py (2), test_wave4c_thread_agents.py (1), with 9 setup/teardown errors across test_networking, test_offers, test_part2_remediation, test_resume_ingest, test_resume_upload, test_rt_007_board_sweep, test_wave4a_catalog_wiring. Frontend is clean: vitest 650/650 across 96 files, eslint 0, tsc 0.",
+      "reproduction": [
+        "flock /tmp/aether-pytest.lock scripts/run-tests.sh -p no:xdist --tb=short"
+      ],
+      "expected": "Full backend suite green",
+      "observed": "36 failed / 9 errors / 2027 passed",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/BASELINE-SUITES.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-B/W-L fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:52:14Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-suites-002",
+      "screen": "n/a (process)",
+      "severity": "HIGH",
+      "category": "governance",
+      "summary": "THE BASELINE RUN IS CONTAMINATED AND ITS FLAKE-VS-REAL SPLIT IS UNPROVEN. The run spanned 17:06-17:50, straddling the window in which the W-HF agent installed sentence-transformers/torch and rewrote ats_engine.py, and that agent explicitly ran its own pytest OUTSIDE /tmp/aether-pytest.lock. A baseline that changes underneath itself is not a zero-regression reference line. The reporting agent nonetheless asserted the 36 failures are 'genuine code defects, not concurrent DB schema conflicts (tests ran with flock serialization)' \u2014 that premise is false, and the agent did NOT perform the required per-test isolation re-runs, so the classification is unsupported. Several errors carry the known shared-aether_test signature (401 Could not validate credentials, ForeignKeyViolation).",
+      "reproduction": [
+        "Compare run timestamps against the W-HF install window; re-run each failing node-id in isolation"
+      ],
+      "expected": "A clean uncontaminated baseline with each failure classified flake-vs-real by isolation proof",
+      "observed": "Contaminated run; classification asserted without isolation evidence",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/BASELINE-SUITES.md"
+      ],
+      "status": "OPEN",
+      "owner": "orchestrator (clean re-run in flight)",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:52:14Z",
+      "run": "GOLD-MASTER-V4"
     }
   ],
   "gmv4": {

@@ -1,0 +1,57 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 7 items
+
+tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_local_model_when_available FAILED [ 14%]
+tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_hf_inference_api_when_local_unavailable FAILED [ 28%]
+tests/test_ats_engine_semantic.py::test_hf_inference_response_parsed_and_clamped FAILED [ 42%]
+tests/test_ats_engine_semantic.py::test_hf_inference_error_does_not_return_silent_token_overlap FAILED [ 57%]
+tests/test_ats_engine_semantic.py::test_semantic_score_is_not_token_overlap_for_paraphrase_pair FAILED [ 71%]
+tests/test_ats_engine_semantic.py::test_engine_reports_active_scoring_path FAILED [ 85%]
+tests/test_ats_engine_semantic.py::test_ats_total_score_composition_unchanged FAILED [100%]
+
+=================================== FAILURES ===================================
+___________ test_semantic_similarity_uses_local_model_when_available ___________
+tests/test_ats_engine_semantic.py:155: in test_semantic_similarity_uses_local_model_when_available
+    result = engine._semantic_similarity_detailed(resume, jd)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSEngine' object has no attribute '_semantic_similarity_detailed'
+____ test_semantic_similarity_uses_hf_inference_api_when_local_unavailable _____
+tests/test_ats_engine_semantic.py:186: in test_semantic_similarity_uses_hf_inference_api_when_local_unavailable
+    result = engine._semantic_similarity_detailed(resume, jd)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSEngine' object has no attribute '_semantic_similarity_detailed'
+________________ test_hf_inference_response_parsed_and_clamped _________________
+tests/test_ats_engine_semantic.py:223: in test_hf_inference_response_parsed_and_clamped
+    values = engine._call_hf_inference_api("jd text", ["resume text"])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSEngine' object has no attribute '_call_hf_inference_api'
+_________ test_hf_inference_error_does_not_return_silent_token_overlap _________
+tests/test_ats_engine_semantic.py:252: in test_hf_inference_error_does_not_return_silent_token_overlap
+    with pytest.raises(ats_engine.SemanticScoringUnavailableError):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'app.services.ats_engine' has no attribute 'SemanticScoringUnavailableError'
+_________ test_semantic_score_is_not_token_overlap_for_paraphrase_pair _________
+tests/test_ats_engine_semantic.py:298: in test_semantic_score_is_not_token_overlap_for_paraphrase_pair
+    result = engine._semantic_similarity_detailed(resume, jd)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSEngine' object has no attribute '_semantic_similarity_detailed'
+___________________ test_engine_reports_active_scoring_path ____________________
+tests/test_ats_engine_semantic.py:324: in test_engine_reports_active_scoring_path
+    assert engine.score(resume, jd).semantic_path == "local"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSScore' object has no attribute 'semantic_path'
+__________________ test_ats_total_score_composition_unchanged __________________
+tests/test_ats_engine_semantic.py:375: in test_ats_total_score_composition_unchanged
+    assert score.semantic_path == "local"
+           ^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ATSScore' object has no attribute 'semantic_path'
+=========================== short test summary info ============================
+FAILED tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_local_model_when_available
+FAILED tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_hf_inference_api_when_local_unavailable
+FAILED tests/test_ats_engine_semantic.py::test_hf_inference_response_parsed_and_clamped
+FAILED tests/test_ats_engine_semantic.py::test_hf_inference_error_does_not_return_silent_token_overlap
+FAILED tests/test_ats_engine_semantic.py::test_semantic_score_is_not_token_overlap_for_paraphrase_pair
+FAILED tests/test_ats_engine_semantic.py::test_engine_reports_active_scoring_path
+FAILED tests/test_ats_engine_semantic.py::test_ats_total_score_composition_unchanged
+============================== 7 failed in 1.09s ===============================
