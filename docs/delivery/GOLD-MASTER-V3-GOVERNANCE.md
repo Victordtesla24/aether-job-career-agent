@@ -131,6 +131,46 @@ Enforced invariants for this run. Any violation = GATE-FAIL + an entry in §4 be
 
 ---
 
+## 5b. ORCHESTRATOR ADJUDICATION ADR-GMV4-001 — degraded ATS scores: CONVERGE-BUT-FLAG
+
+**Escalated by** `test-author` while pinning the tailoring-loop guard (correctly identified as a
+product decision rather than a test-design choice, and escalated instead of guessed).
+
+**Question.** When `semantic_path == "degraded"` — i.e. no genuine semantic scoring path was
+available and a neutral placeholder stood in — must `TailoringLoop` (a) REFUSE-AND-ERROR,
+raising before returning any result, or (b) CONVERGE-BUT-FLAG, returning a result that can
+never claim `success=True` and instead carries `requires_review=True` plus a named warning?
+
+**Ruling: (b) CONVERGE-BUT-FLAG.** Binding for W-HF, W-C and W-SUB.
+
+**Reasoning.**
+1. *Codebase precedent, twice.* `ATSEngine.score()`'s own honest-degradation design already
+   chose flag-not-throw. More decisively, the cover-letter `FabricationError` hard-fail
+   (2026-07-21, commit `56552e0`) was REVERTED precisely because raising killed the whole
+   pipeline and left users with nothing; graceful degradation replaced it. Re-introducing
+   refuse-and-error here would repeat a mistake this codebase has already paid for.
+2. *The execution prompt states the same principle elsewhere.* §10.3 requires that a Calendar
+   failure "must NEVER prevent the interview from being saved", with an honest inline warning
+   instead. The same shape should govern a degraded score.
+3. *User outcome.* A paying user who tailors a resume should still receive the tailored resume
+   when scoring is degraded — the rewrite work is real and valuable even when the measurement
+   is not. What they must never receive is a false claim that a quality target was met.
+
+**Binding conditions on this ruling — the flag is worthless if it stops at the API boundary:**
+- `success=True` MUST be unreachable when any contributing iteration was degraded.
+- `requires_review=True` plus a specific, named warning (not generic prose) must be returned.
+- The degradation MUST propagate to the UI and be visible to the user (finding GMV4-ats-003,
+  BLOCKER). A flag that no consumer renders reproduces the original defect one layer up, which
+  is exactly what the §22 step-5 review already caught once in this workstream.
+- Any derived metric (ATS delta / "lift" / conversion estimate) computed from a degraded
+  endpoint must be withheld or flagged — never presented as a measurement.
+
+**Alternative preserved.** If the operator later prefers REFUSE-AND-ERROR, only
+`test_loop_does_not_declare_success_on_degraded_scores` needs rewriting; the other three tests
+in that file are contract-agnostic.
+
+---
+
 ## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
 
 **Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
