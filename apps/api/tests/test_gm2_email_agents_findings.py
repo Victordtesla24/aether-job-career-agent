@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from app.repositories.gmail_account import GmailAccountRepository
 
-
 # ===========================================================================
 # GM2-EMAIL-001 — connection status must reflect REAL token validity, not
 # merely the presence of a stored credential row.

@@ -71,9 +71,9 @@ from fastapi.testclient import TestClient
 from app.db import get_connection
 from app.main import create_app
 from app.repositories.admin import (
+    _SEED_ADMIN_EMAIL,
     AdminCredentialSecurityError,
     AdminRotationConfigError,
-    _SEED_ADMIN_EMAIL,
     _ensure_admin_schema,
     _reset_admin_ready_for_tests,
     apply_admin_rotation,

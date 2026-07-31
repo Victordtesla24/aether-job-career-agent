@@ -27,9 +27,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "../../../lib/api/client";
 import type { AgentRun } from "../../../lib/api/agents";
-import type { Approval } from "../../../lib/api/approvals";
 import type { Funnel } from "../../../lib/api/analytics";
 import type { MarketPulse as MarketPulseData } from "../../../lib/api/workspaces";
 

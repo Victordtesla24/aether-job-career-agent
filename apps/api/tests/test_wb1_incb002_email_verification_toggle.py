@@ -48,7 +48,6 @@ import pytest
 from app.db import get_connection
 from app.repositories.admin import _ensure_admin_schema
 
-
 # --------------------------------------------------------------------------- #
 # Admin helpers (mirrors tests/test_gap_p6_admin.py's local pattern -- each
 # test file in this suite owns its own copy rather than importing across
