@@ -2235,9 +2235,9 @@
     {
       "id": "GMV4-seek-fe-001",
       "screen": "Jobs",
-      "severity": "HIGH",
+      "severity": "LOW",
       "category": "defect",
-      "summary": "apps/web/src/app/dashboard/jobs/page.tsx:894 renders a hardcoded ' (unavailable)' suffix via isSourceUnavailable(s). \u00a77.4 requires this be replaced with env-driven availability sourced from the backend sources endpoint (GET /agents/scout/sources, agents.py:2206) plus a working Seek source chip.",
+      "summary": "SUPERSEDED BY RISK-OFFICER SUB-RULING (i). \u00a77.4 asserts the ' (unavailable)' label at apps/web/src/app/dashboard/jobs/page.tsx:894 is a hardcode needing rewiring to GET /agents/scout/sources. First-hand review shows it is ALREADY backend-driven: page.tsx:478-480 reads sourceAvailability populated at page.tsx:461-477 from GET /agents/scout/sources/availability -> source_availability() (adapter_registry.py:101-146), and fails OPEN (unknown -> enabled, no fabricated label). \u00a77.4 names the WRONG endpoint: /agents/scout/sources (agents.py:2206) returns sync-status rows with no `available` field, so rewiring to it would be a REGRESSION. Action: verify on prod and record as already-satisfied; do NOT rewire.",
       "reproduction": [
         "Read apps/web/src/app/dashboard/jobs/page.tsx:894",
         "GET /agents/scout/sources on prod"
@@ -2247,8 +2247,8 @@
       "evidence": [
         "docs/delivery/INCOMPLETE-FEATURE-INVENTORY.md"
       ],
-      "status": "OPEN",
-      "owner": "W-D fixer-medium",
+      "status": "VERIFY-ALREADY-SATISFIED",
+      "owner": "W-D screen-tester (verify only)",
       "fixCommits": [],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:16:14Z",
@@ -2336,6 +2336,69 @@
       "fixCommits": [],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:20:05Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-seek-001",
+      "screen": "Jobs / sourcing",
+      "severity": "HIGH",
+      "category": "compliance",
+      "summary": "G-D CANNOT CLOSE AS SPECIFIED. Risk-officer adjudication under \u00a77.2 REFUSED both AETHER_ENABLE_SEEK=true and the Firecrawl+WebScraping.AI Seek paths. Seek ToS clause 7(d) bans automated data gathering absent written consent; clause 9(b) bans using OR ASSISTING ANYONE TO USE automated means, foreclosing the intermediary argument that \u00a77.1 rests on. WebScraping.AI ToS \u00a74.4/\u00a76.2 place target-site compliance on the customer and require a warranty of authorisation Aether cannot truthfully give; \u00a713 indemnifies the vendor. Firecrawl grants no content licence either, so it is not grandfathered. \u00a77.1's 'both are licensed crawling intermediaries' premise is factually false. Per \u00a71.3, adopted ADR D-0034 (DECISIONS.md:1020) outranks implementation instructions.",
+      "reproduction": [
+        "Read docs/delivery/ADR-SEEK-V3.md (risk-officer ruling, first-hand ToS retrieval 2026-07-31T17:21-17:23Z)"
+      ],
+      "expected": "Seek listings sourced lawfully, or the source remains disabled",
+      "observed": "Seek sourcing refused on compliance; AETHER_ENABLE_SEEK remains unset; .env untouched",
+      "evidence": [
+        "docs/delivery/ADR-SEEK-V3.md"
+      ],
+      "status": "REFUSED-ON-COMPLIANCE",
+      "owner": "orchestrator (accepted ruling)",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T17:30:46Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-seek-003",
+      "screen": "Jobs",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "Risk-officer identifies legitimate honest-UI work that DOES remain in W-D: the backend supplies a `reason` string explaining why a source is disabled, but the UI does not surface it. Users see a source absent/disabled with no explanation. Surfacing the reason is truthful, needs no risk approval, and is the correct substitute for the refused Seek work.",
+      "reproduction": [
+        "Inspect source_availability() reason field in adapter_registry.py:101-146 vs what the Jobs UI renders"
+      ],
+      "expected": "Disabled sources explain themselves to the user",
+      "observed": "Reason string exists in the backend response but is not rendered",
+      "evidence": [
+        "docs/delivery/ADR-SEEK-V3.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-D fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T17:30:46Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-process-001",
+      "screen": "n/a (process)",
+      "severity": "LOW",
+      "category": "governance",
+      "summary": "Shared pytest lock (/tmp/aether-pytest.lock) forces DB-free unit-test files to queue behind unrelated 30+ minute full-suite runs with no fast path. A 7-test DB-free file took 1.09s once it ran. This is real friction for the tests-first discipline \u00a722 mandates and slows every fix in this run.",
+      "reproduction": [
+        "flock -n /tmp/aether-pytest.lock; observe queueing behind an unrelated pytest PID"
+      ],
+      "expected": "DB-free unit tests can run without waiting on DB-touching suites",
+      "observed": "All pytest invocations serialise on one lock",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/GMV4-ats-001-fail-before-20260731T172722Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-medium (optional)",
+      "fixCommits": [],
+      "verifiedBy": "risk-officer (opus) 2026-07-31",
+      "openedUtc": "2026-07-31T17:30:46Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
