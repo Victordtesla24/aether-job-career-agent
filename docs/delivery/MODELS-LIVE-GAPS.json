@@ -2027,11 +2027,11 @@
         "ls the MODEL_CACHE_DIR referenced by ats_engine.py"
       ],
       "expected": "ATS semantic component computed by all-MiniLM-L6-v2 (local cache) or the HF Inference API",
-      "observed": "Deterministic JD-resume token intersection at apps/api/app/services/ats_engine.py:208-213 | FIX LANDED (uncommitted): sentence-transformers 5.6.1 + torch 2.13.0+cpu installed additively; all-MiniLM-L6-v2 cached to /tmp/aether_models (88M); semantic_path=local verified; 7/7 contract tests pass; non-blocking daemon warm-up, GET /health 200 during load; HF Inference API path implemented but CONDITIONALLY-CLOSED (HF_TOKEN absent).",
+      "observed": "Deterministic JD-resume token intersection at apps/api/app/services/ats_engine.py:208-213 | FIX LANDED (uncommitted): sentence-transformers 5.6.1 + torch 2.13.0+cpu installed additively; all-MiniLM-L6-v2 cached to /tmp/aether_models (88M); semantic_path=local verified; 7/7 contract tests pass; non-blocking daemon warm-up, GET /health 200 during load; HF Inference API path implemented but CONDITIONALLY-CLOSED (HF_TOKEN absent). | \u00a722 STEP 5 REVIEW = FAIL. Engine internals correct (every branch traced; SemanticScoringUnavailableError caught exactly once, always sets semantic_path=degraded), but NO CONSUMER checks semantic_path, so the 50.0 placeholder leaks outward and is consumed as a real measurement. Rework dispatched.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/services/SERVICE-REGISTRY.md"
       ],
-      "status": "FIX-IMPLEMENTED-AWAITING-REVIEW",
+      "status": "FIX-REJECTED-BY-REVIEW-REWORK-IN-PROGRESS",
       "owner": "W-HF ai-loop-engineer",
       "fixCommits": [
         "(uncommitted working tree \u2014 pending \u00a722 step 5 review)"
@@ -2616,9 +2616,9 @@
     {
       "id": "GMV4-ats-003",
       "screen": "Resume Studio / Jobs / Analytics",
-      "severity": "HIGH",
+      "severity": "BLOCKER",
       "category": "gap",
-      "summary": "The honest-degradation signal is not surfaced to users. ATSScore.semantic_path now reports local/hf_api/degraded, and a neutral _DEGRADED_SEMANTIC_SCORE=50.0 is injected when scoring is unavailable, but no router or UI reads semantic_path. A degraded 50.0 would render to a paying user as an ordinary ATS score with nothing indicating it is not a real measurement \u2014 which reproduces the ORIGINAL defect's user-visible symptom through a new route. \u00a70.5 forbids silent degradation on user-reachable paths.",
+      "summary": "ESCALATED TO BLOCKER BY ADVERSARIAL REVIEW. The degraded placeholder is not merely undisplayed - it is CONSUMED AS TRUTH by four call sites, none of which check semantic_path: (1) resumes.py:179 returns semantic_similarity with semantic_path omitted from the payload and resume/page.tsx:573 renders it unconditionally as 'Semantic similarity (40%)'; (2) jobs.py:298,317 blends it into culture_fit; (3) tailoring_loop.py:176-200 uses the contaminated `overall` for the per-iteration record, best_score, the convergence check (overall >= target_score) and the success/requires_review outcome, recording no path in iterations[] - an AUTOMATED BUSINESS DECISION MADE OFF A FABRICATED NUMBER; (4) tailor_agent.py:101-115 derives baselineATSScore/tailoredATSScore and the 'lift' metric from two potentially-degraded endpoints. Reproduces the original defect one layer up.",
       "reproduction": [
         "grep every consumer of ATSScore.semantic_similarity and check whether any reads semantic_path"
       ],
@@ -2628,7 +2628,7 @@
         "apps/api/app/services/ats_engine.py"
       ],
       "status": "OPEN",
-      "owner": "W-J/W-I fixer-medium",
+      "owner": "W-HF ai-loop-engineer (rework)",
       "fixCommits": [],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:50:43Z",
@@ -2884,6 +2884,48 @@
       "fixCommits": [],
       "verifiedBy": "screen-tester batch2 2026-07-31",
       "openedUtc": "2026-07-31T17:55:25Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-005",
+      "screen": "n/a (test coverage)",
+      "severity": "HIGH",
+      "category": "gap",
+      "summary": "warm_up_semantic_model(), local_files_only=True and the main.py daemon-thread startup wiring have ZERO test coverage (grep of apps/api/tests for either symbol returns nothing). This is the most load-bearing new code in the W-HF fix - it is what makes the LOCAL scoring path reachable at all on a fresh production deploy - and it shipped without any fail-before evidence, contrary to \u00a722 step 2.",
+      "reproduction": [
+        "grep -rn 'warm_up_semantic_model|local_files_only' apps/api/tests/"
+      ],
+      "expected": "Load-bearing startup code covered by tests written before implementation",
+      "observed": "No coverage",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/GMV4-ats-001-adversarial-review-20260731T175538Z.md"
+      ],
+      "status": "OPEN",
+      "owner": "test-author (round 2)",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-07-31T17:55Z",
+      "openedUtc": "2026-07-31T17:58:31Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-006",
+      "screen": "n/a (test suite)",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "Independent stash A/B by the reviewer CONFIRMED the author's claim that three disputed tests are pre-existing calibration to the removed fake, not regressions: against UNMODIFIED ats_engine.py with the model installed, test_perfect_keyword_overlap_scores_high fails 'assert 87.74 >= 90', test_baseline_zero_does_not_divide_by_zero fails 'assert 4.75 == 0.0', test_env_override_of_baseline_rate_is_respected fails 'assert 23.7 == 24.0' - identical to post-fix numbers. Recalibration is therefore legitimate and is NOT fixing tests to get green; the A/B proof must be cited alongside the change so it cannot be mistaken for one.",
+      "reproduction": [
+        "git stash push the 4 fix files; run the 3 tests; compare numbers; stash pop"
+      ],
+      "expected": "Tests assert genuine model behaviour, with the A/B proof recorded",
+      "observed": "Tests still assert the fake's output",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/GMV4-ats-001-adversarial-review-20260731T175538Z.md"
+      ],
+      "status": "OPEN",
+      "owner": "test-author (recalibrate)",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-07-31T17:55Z",
+      "openedUtc": "2026-07-31T17:58:31Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
