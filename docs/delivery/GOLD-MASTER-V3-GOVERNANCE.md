@@ -125,7 +125,7 @@ Enforced invariants for this run. Any violation = GATE-FAIL + an entry in §4 be
 
 | # | UTC | Item | Failing tier | Escalated to | Outcome |
 |---|---|---|---|---|---|
-| — | — | None recorded yet | — | — | — |
+| ESC-001 | 2026-07-31T17:50Z | Phase 0 Step 7 baseline suite counts. Two consecutive FAILs by the same `evidence` agent (haiku): both attempts ended at "awaiting notification" with no artifact and no counts, ~223k tokens across the two. §0.3 rule 6 triggered at 2 consecutive FAILs. | haiku (`evidence`) | Mechanism change rather than tier change | Root cause was NOT model capability: pytest genuinely runs 40+ minutes on this VM and vitest had already completed, so the agent had a partial result it simply failed to report. Escalation resolved by moving the WAIT to the orchestrator's own background shell (which survives turn boundaries) and reserving the sub-agent for parsing + artifact authorship once the run exits. Recorded here because §0.3 rule 6 was triggered and the resolution deviates from a plain tier bump. |
 
 ---
 

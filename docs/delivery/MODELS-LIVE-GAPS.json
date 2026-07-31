@@ -2027,13 +2027,15 @@
         "ls the MODEL_CACHE_DIR referenced by ats_engine.py"
       ],
       "expected": "ATS semantic component computed by all-MiniLM-L6-v2 (local cache) or the HF Inference API",
-      "observed": "Deterministic JD-resume token intersection at apps/api/app/services/ats_engine.py:208-213",
+      "observed": "Deterministic JD-resume token intersection at apps/api/app/services/ats_engine.py:208-213 | FIX LANDED (uncommitted): sentence-transformers 5.6.1 + torch 2.13.0+cpu installed additively; all-MiniLM-L6-v2 cached to /tmp/aether_models (88M); semantic_path=local verified; 7/7 contract tests pass; non-blocking daemon warm-up, GET /health 200 during load; HF Inference API path implemented but CONDITIONALLY-CLOSED (HF_TOKEN absent).",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/services/SERVICE-REGISTRY.md"
       ],
-      "status": "OPEN",
+      "status": "FIX-IMPLEMENTED-AWAITING-REVIEW",
       "owner": "W-HF ai-loop-engineer",
-      "fixCommits": [],
+      "fixCommits": [
+        "(uncommitted working tree \u2014 pending \u00a722 step 5 review)"
+      ],
       "verifiedBy": null,
       "openedUtc": "2026-07-31T17:14:05Z",
       "run": "GOLD-MASTER-V4"
@@ -2588,6 +2590,69 @@
       "fixCommits": [],
       "verifiedBy": "screen-tester batch1 2026-07-31",
       "openedUtc": "2026-07-31T17:46:08Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-002",
+      "screen": "n/a (test suite)",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "THE EXISTING TEST SUITE ENCODED THE DEFECT AS CORRECT BEHAVIOUR. Three tests (test_ats_engine.py::test_perfect_keyword_overlap_scores_high expecting >90, plus 2 in test_gap_e2_conversion.py) fail once genuine embeddings are active, and were proven by git-stash A/B to fail on UNMODIFIED baseline code with the model installed. They were calibrated to the token-overlap fake (fake ~95% vs genuine cosine 74.9% on the same pair; 15.6% on an unrelated pair, confirming the model discriminates correctly). This is why prior runs reported 'all suites green' while a BLOCKER was live in production. Tests must be RECALIBRATED to genuine model output by test-author (never by the fixer), with the A/B proof recorded so this is not mistaken for fixing tests to get green.",
+      "reproduction": [
+        "git stash the ats_engine fix, run test_ats_engine.py with sentence-transformers installed, observe identical failures"
+      ],
+      "expected": "Tests assert genuine semantic behaviour",
+      "observed": "Tests assert values only the removed approximation could produce",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v3/suites/"
+      ],
+      "status": "OPEN",
+      "owner": "test-author (recalibrate)",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:50:43Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-003",
+      "screen": "Resume Studio / Jobs / Analytics",
+      "severity": "HIGH",
+      "category": "gap",
+      "summary": "The honest-degradation signal is not surfaced to users. ATSScore.semantic_path now reports local/hf_api/degraded, and a neutral _DEGRADED_SEMANTIC_SCORE=50.0 is injected when scoring is unavailable, but no router or UI reads semantic_path. A degraded 50.0 would render to a paying user as an ordinary ATS score with nothing indicating it is not a real measurement \u2014 which reproduces the ORIGINAL defect's user-visible symptom through a new route. \u00a70.5 forbids silent degradation on user-reachable paths.",
+      "reproduction": [
+        "grep every consumer of ATSScore.semantic_similarity and check whether any reads semantic_path"
+      ],
+      "expected": "UI shows an honest warning whenever semantic_path != local/hf_api",
+      "observed": "semantic_path computed but never surfaced; 50.0 placeholder renders as a real score",
+      "evidence": [
+        "apps/api/app/services/ats_engine.py"
+      ],
+      "status": "OPEN",
+      "owner": "W-J/W-I fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:50:43Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-001",
+      "screen": "Story Bank",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "story_relevance_score (app/services/story_relevance.py) was NOT rewired to the embedding path. \u00a75.2 step 3 and \u00a78.3 require story relevance to use the same model path, and G-E states 'HF semantic path used'. The fixer filed it UNSURE, arguing it is honestly labelled keyword-overlap rather than a silent fallback, has no pinning test, and adds per-story-per-job cost. Orchestrator ruling pending reviewer recommendation; the local model is now installed so the cost is CPU-only and batching stories once per JD bounds it.",
+      "reproduction": [
+        "Read app/services/story_relevance.py and compare against \u00a75.2 step 3 / \u00a78.3 / G-E"
+      ],
+      "expected": "Story relevance uses the same resolved embedding path as ATS scoring",
+      "observed": "Still TF-weighted keyword overlap",
+      "evidence": [
+        "apps/api/app/services/story_relevance.py"
+      ],
+      "status": "OPEN",
+      "owner": "W-E ai-loop-engineer (tests first)",
+      "fixCommits": [],
+      "verifiedBy": null,
+      "openedUtc": "2026-07-31T17:50:43Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
