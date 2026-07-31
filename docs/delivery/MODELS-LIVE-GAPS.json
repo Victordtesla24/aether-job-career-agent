@@ -2114,14 +2114,14 @@
         "Read the response model of POST /agents/tailor/run at apps/api/app/routers/agents.py:2292"
       ],
       "expected": "Response contains iterations, ats_score, gap_keywords",
-      "observed": "iterations/gapKeywords computed and persisted but absent from the API response dataclass",
+      "observed": "iterations/gapKeywords computed and persisted but absent from the API response dataclass | FIX IN TREE: iterations + gapKeywords added to TailorRunResult (tailor_agent.py:296-312, 542-543) sourced from the SAME loop_result objects already persisted as sections['tailoringIterations'], plus the sync run_tailor whitelist dict (agents.py:2347-2356). Async path required no change (asdict flows additively). 4/4 contract tests pass; zero attributable regressions proven by git checkout/apply A/B isolation. | REVIEW PASS: reviewer did not merely trace the async path, it drove run_agent_job through the real worker and polled GET /agents/jobs/{job_id} via TestClient, confirming both fields arrive verbatim; probe deleted afterwards. Additive-only confirmed against the committed baseline (all 8 pre-existing keys survive). gapKeywords fabrication risk ruled out: max_iterations=5 hardcoded at the only production call site, best_score inits to -1.0 and ATS overall is clamped to [0,100], so iterations is always non-empty before best is indexed.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "TESTS-RED-READY-FOR-FIX",
+      "status": "REVIEW-PASSED-AWAITING-WAVE-COMMIT-AND-DEPLOY",
       "owner": "W-C ai-loop-engineer",
       "fixCommits": [],
-      "verifiedBy": null,
+      "verifiedBy": "reviewer (sonnet) 2026-07-31 \u2014 PASS, async path proven end-to-end via TestClient probe",
       "openedUtc": "2026-07-31T17:14:05Z",
       "run": "GOLD-MASTER-V4"
     },
@@ -3159,6 +3159,27 @@
       "fixCommits": [],
       "verifiedBy": "screen-tester batch3 2026-07-31",
       "openedUtc": "2026-07-31T18:15:33Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-tailor-003",
+      "screen": "n/a (test coverage)",
+      "severity": "MEDIUM",
+      "category": "test-coverage",
+      "summary": "The 4 GMV4-tailor-001 contract tests exercise TailoringAgent.run() via asdict() only \u2014 none hit the HTTP router's hand-built 200-path dict or the async GET /agents/jobs/{job_id} poll path, which is EXACTLY the layer where the original bug lived (the router whitelists response keys and silently dropped both fields). A future regression re-dropping a key, or a typo in a .get() name, would pass all 4 tests undetected. The reviewer closed this with a throwaway probe it then deleted; permanent HTTP-boundary regression tests are being added.",
+      "reproduction": [
+        "Remove iterations/gapKeywords from the router dict at agents.py and observe all 4 contract tests still pass"
+      ],
+      "expected": "HTTP-boundary regression tests lock both the sync 200-path and the async poll path",
+      "observed": "Coverage stops at the dataclass boundary",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/"
+      ],
+      "status": "TESTS-IN-PROGRESS",
+      "owner": "test-author",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-07-31",
+      "openedUtc": "2026-07-31T18:26:59Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
