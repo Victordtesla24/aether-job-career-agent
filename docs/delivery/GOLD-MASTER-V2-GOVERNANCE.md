@@ -508,3 +508,40 @@ designed — the control was load-bearing, not ceremonial.
 ### Standing rule added
 **A commit subject may not assert closure of a finding.** Implementation commits describe the CHANGE;
 only the orchestrator, on a green independent verification, records a finding as closed in the ledger.
+
+---
+
+## GOV-012 — The orchestrator's own runtime monitor was a false green
+
+| Field | Value |
+|---|---|
+| **Detected + corrected** | 2026-07-31T00:42Z, by the orchestrator, on itself |
+| **Severity** | MEDIUM — evidence integrity for G-M |
+| **Status** | RESOLVED |
+
+At Phase 0 Step 4 the orchestrator started `journalctl -u aether-api -u aether-web -u aether-worker
+-u aether-discovery -f` and recorded the monitor as RUNNING. At 00:42Z that capture held **1 line**,
+last written at 22:37:00Z — the moment it started. The tail process was alive the whole time.
+
+The services do not log to journald; they log to files (`/var/log/aether/{api,worker,web,discovery}.log`),
+exactly as `DEPLOYMENT-RUNBOOK.md` §4 states. The runbook was right and the monitor was pointed at the wrong
+source. A liveness check on the tail PROCESS returned healthy throughout, which is precisely what made this
+dangerous: **"monitor alive" was true while "monitor observing" was false.**
+
+Had this gone unnoticed, G-M ("≥ 60 min monitored production, ZERO server errors") would have been closed on a
+capture that could not have recorded an error if one had occurred — the §0.5 fake-green class, self-inflicted.
+
+Corrected: the empty capture is retained as `journal-live-EMPTY-FALSE-GREEN.log` (evidence of the gap, not
+deleted), and an event-driven monitor now tails the real log files, filtered to `ERROR|CRITICAL|Traceback|
+Unhandled|ValidationError|5xx|Application startup failed`, so matches arrive as notifications rather than
+accumulating unread.
+
+Independently, a concurrent runtime-monitor was already tailing `/var/log/aether/api.log` correctly and had
+caught a real production 500 on `PUT /workspaces/settings` at 2026-07-30T23:50:46Z with a full traceback
+(ML-settings-006, NUL byte in profile strings). That finding is genuine and is already test-covered and fixed
+in the working tree. Its existence is also the proof that the correct log source yields signal — the
+orchestrator's capture was silent over the same window because it was watching nothing.
+
+**Standing rule:** a monitor is proven by SIGNAL, not by liveness. Before trusting any monitoring window,
+confirm the capture contains expected routine traffic; a capture with zero lines over an exercised window is
+evidence of a broken monitor, never of a clean system.
