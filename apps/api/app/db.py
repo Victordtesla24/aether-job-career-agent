@@ -335,17 +335,24 @@ _approval_columns_ready = False
 
 
 def ensure_approval_columns() -> None:
-    """Idempotently add the additive ``ApprovalRequest.executedAt`` column on first use.
+    """Idempotently add the additive ``ApprovalRequest`` columns on first use.
 
     ``executedAt`` (MV-approval-modal-010) is the idempotency marker for the
     ``/approvals/{id}/execute`` side-effect: the endpoint claims an approved
     request by conditionally stamping this column exactly once, so a
-    double-submit/retry cannot fire the same real Gmail send twice. Introduced by
-    lazy DDL (ADR-TR-1 — there is no migration runner), mirroring
-    ``ensure_resume_columns``.
+    double-submit/retry cannot fire the same real Gmail send twice.
 
-    ``ADD COLUMN ... timestamptz`` with no default is a metadata-only change on
-    PostgreSQL (existing rows read ``NULL`` = "never executed"), so it is fast and
+    ``resolvedByUserId`` / ``resolvedFromIp`` (GOLD-MASTER-V2 §15 Defect 1)
+    persist who resolved an approval, and from what client IP, on the row
+    itself — independent of ``AdminAuditLog`` or access logs, which rotate.
+    Populated by ``ApprovalRepository._resolve()`` alongside the existing
+    ``resolvedAt`` stamp.
+
+    Introduced by lazy DDL (ADR-TR-1 — there is no migration runner),
+    mirroring ``ensure_resume_columns``.
+
+    ``ADD COLUMN ...`` with no default is a metadata-only change on
+    PostgreSQL (existing rows read ``NULL`` = "not set"), so it is fast and
     safe on the production ``ApprovalRequest`` table and backfills the shared test
     schema — fully backward compatible; the ``ApprovalStatus`` enum is untouched. A
     transaction-scoped advisory lock serializes concurrent first-hit callers so the
@@ -354,24 +361,34 @@ def ensure_approval_columns() -> None:
     global _approval_columns_ready
     if _approval_columns_ready:
         return
+    _managed_columns = ("executedAt", "resolvedByUserId", "resolvedFromIp")
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER when the column
-            # already exists (production / warm test schema).
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTERs when every
+            # managed column already exists (production / warm test schema).
             cur.execute(
                 "SELECT count(*) FROM information_schema.columns"
                 " WHERE table_name = 'ApprovalRequest'"
                 " AND table_schema = ANY(current_schemas(false))"
-                " AND column_name = 'executedAt'"
+                " AND column_name = ANY(%s)",
+                (list(_managed_columns),),
             )
             row = cur.fetchone()
-            if row and row[0] == 1:
+            if row and row[0] == len(_managed_columns):
                 _approval_columns_ready = True
                 return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240725,))
             cur.execute(
                 'ALTER TABLE "ApprovalRequest" '
                 'ADD COLUMN IF NOT EXISTS "executedAt" timestamptz'
+            )
+            cur.execute(
+                'ALTER TABLE "ApprovalRequest" '
+                'ADD COLUMN IF NOT EXISTS "resolvedByUserId" text'
+            )
+            cur.execute(
+                'ALTER TABLE "ApprovalRequest" '
+                'ADD COLUMN IF NOT EXISTS "resolvedFromIp" text'
             )
         conn.commit()
     _approval_columns_ready = True

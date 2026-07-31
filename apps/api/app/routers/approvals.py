@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi import status as http_status
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,46 @@ from app.services.approval_service import EXPIRY_HOURS, ApprovalService, _is_exp
 router = APIRouter()
 
 _STATUS_FILTERS = frozenset({"pending", "approved", "rejected", "all"})
+
+
+def _client_ip(request: Request) -> str | None:
+    """Best-effort caller IP for the decision audit trail (GOLD-MASTER-V2
+    §15 Defect 1). Duplicated locally rather than imported from
+    ``routers/admin.py`` to avoid a cross-router dependency on a private
+    helper; behaviour intentionally mirrors it: behind Envoy->nginx the
+    socket peer is nginx, so prefer the forwarded chain's first hop when
+    present."""
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip() or None
+    return request.client.host if request.client else None
+
+
+def _write_decision_audit(
+    user_id: str, action: str, decision: str, resolved: dict[str, Any]
+) -> None:
+    """Append the approve/reject audit row — MIRRORS the existing
+    ``approval.delete`` / ``approval.purge_expired`` calls in this file
+    (§13.1: reuse, don't reinvent). Closes GOLD-MASTER-V2 §15 Defect 1: the
+    human approval gate's decisions must be as attributable as its
+    housekeeping actions.
+    """
+    payload = ApprovalRepository._payload_dict(resolved)
+    write_audit(
+        user_id,
+        action,
+        target_type="approval",
+        target_id=resolved["id"],
+        detail={
+            "decision": decision,
+            "type": resolved.get("type"),
+            "kind": payload.get("kind"),
+            "job_id": payload.get("job_id"),
+            "application_id": resolved.get("applicationId"),
+            "edited": bool(payload.get("edited")),
+            "trust_agent": payload.get("trust_agent"),
+        },
+    )
 
 
 class CreateApprovalBody(BaseModel):
@@ -176,18 +216,34 @@ def delete_approval(approval_id: str, current_user: CurrentUser) -> dict[str, An
 
 @router.post("/{approval_id}/approve")
 def approve(
-    approval_id: str, current_user: CurrentUser, body: DecisionBody | None = None
+    approval_id: str,
+    current_user: CurrentUser,
+    request: Request,
+    body: DecisionBody | None = None,
 ) -> dict[str, Any]:
-    _merge_decision_context(approval_id, current_user["id"], body)
-    return ApprovalService().resolve(approval_id, current_user["id"], "approved")
+    user_id = current_user["id"]
+    _merge_decision_context(approval_id, user_id, body)
+    resolved = ApprovalService().resolve(
+        approval_id, user_id, "approved", ip=_client_ip(request)
+    )
+    _write_decision_audit(user_id, "approval.approve", "approved", resolved)
+    return resolved
 
 
 @router.post("/{approval_id}/reject")
 def reject(
-    approval_id: str, current_user: CurrentUser, body: DecisionBody | None = None
+    approval_id: str,
+    current_user: CurrentUser,
+    request: Request,
+    body: DecisionBody | None = None,
 ) -> dict[str, Any]:
-    _merge_decision_context(approval_id, current_user["id"], body)
-    return ApprovalService().resolve(approval_id, current_user["id"], "rejected")
+    user_id = current_user["id"]
+    _merge_decision_context(approval_id, user_id, body)
+    resolved = ApprovalService().resolve(
+        approval_id, user_id, "rejected", ip=_client_ip(request)
+    )
+    _write_decision_audit(user_id, "approval.reject", "rejected", resolved)
+    return resolved
 
 
 @router.post("/{approval_id}/execute")

@@ -8,7 +8,7 @@ from app.db import ensure_approval_columns, get_connection, new_id, rows_to_dict
 
 _COLUMNS = (
     '"id", "userId", "applicationId", "type", "status", "payload", '
-    '"createdAt", "resolvedAt"'
+    '"createdAt", "resolvedAt", "resolvedByUserId", "resolvedFromIp"'
 )
 
 VALID_TYPES = frozenset({"application_submit", "email_send", "offer_response"})
@@ -24,6 +24,7 @@ class ApprovalRepository:
     ) -> dict[str, Any]:
         if type_ not in VALID_TYPES:
             raise ValueError(f"Invalid approval type '{type_}'")
+        ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Idempotent per (job, type, kind): regenerating or refining an
@@ -159,6 +160,7 @@ class ApprovalRepository:
             conn.commit()
 
     def get_by_id(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
+        ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -181,6 +183,7 @@ class ApprovalRepository:
         if status is not None:
             clauses.append('"status" = %s::"ApprovalStatus"')
             params.append(status)
+        ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -190,14 +193,18 @@ class ApprovalRepository:
                 )
                 return rows_to_dicts(cur)
 
-    def approve(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
-        return self._resolve(approval_id, "approved", user_id)
+    def approve(
+        self, approval_id: str, user_id: str, ip: str | None = None
+    ) -> dict[str, Any] | None:
+        return self._resolve(approval_id, "approved", user_id, ip=ip)
 
-    def reject(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
-        return self._resolve(approval_id, "rejected", user_id)
+    def reject(
+        self, approval_id: str, user_id: str, ip: str | None = None
+    ) -> dict[str, Any] | None:
+        return self._resolve(approval_id, "rejected", user_id, ip=ip)
 
     def _resolve(
-        self, approval_id: str, status: str, user_id: str
+        self, approval_id: str, status: str, user_id: str, ip: str | None = None
     ) -> dict[str, Any] | None:
         """Resolve an approval and sync its linked Application atomically.
 
@@ -206,17 +213,30 @@ class ApprovalRepository:
         the tracked application stuck in ``draft`` whenever the follow-up write
         failed, so the approval became terminal (re-tries 409) while the kanban
         still showed ``draft``. Both writes now land together or not at all.
+
+        The UPDATE is a compare-and-set (GOLD-MASTER-V2 §15 Defect 2): the
+        ``WHERE`` clause requires ``"userId" = %s AND "status" = 'pending'``,
+        so it is owner-scoped and can transition a row at most once. Two
+        racing resolves (or a call reached with a stale "pending" read) can no
+        longer both succeed — the loser's ``UPDATE`` matches zero rows and this
+        returns ``None``, which the caller (``ApprovalService.resolve``) turns
+        into an honest 409 instead of a silent second resolve. Also stamps
+        ``resolvedByUserId``/``resolvedFromIp`` so the decision is attributable
+        on the row itself, independent of ``AdminAuditLog`` or access logs.
         """
+        ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'''
                     UPDATE "ApprovalRequest"
-                    SET "status" = %s::"ApprovalStatus", "resolvedAt" = NOW()
-                    WHERE "id" = %s
+                    SET "status" = %s::"ApprovalStatus", "resolvedAt" = NOW(),
+                        "resolvedByUserId" = %s, "resolvedFromIp" = %s
+                    WHERE "id" = %s AND "userId" = %s
+                      AND "status" = 'pending'::"ApprovalStatus"
                     RETURNING {_COLUMNS}
                     ''',
-                    (status, approval_id),
+                    (status, user_id, ip, approval_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
                 approval = rows[0] if rows else None
@@ -306,6 +326,7 @@ class ApprovalRepository:
         when nothing matched (unknown/foreign id — the caller answers 404, so
         a repeated delete is idempotent-honest with no side effect).
         """
+        ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(

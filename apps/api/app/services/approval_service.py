@@ -43,7 +43,9 @@ class ApprovalService:
     def list_pending(self, user_id: str) -> list[dict[str, Any]]:
         return self._repo.list_pending(user_id)
 
-    def resolve(self, approval_id: str, user_id: str, decision: str) -> dict[str, Any]:
+    def resolve(
+        self, approval_id: str, user_id: str, decision: str, ip: str | None = None
+    ) -> dict[str, Any]:
         approval = self.get(approval_id, user_id)
         if approval["status"] != "pending":
             raise HTTPException(
@@ -59,8 +61,18 @@ class ApprovalService:
         # Fixes defect D2 (Phase-2 audit, journey J4): the repository resolves
         # the approval and syncs the linked Application in one transaction, so
         # the Applications kanban can never diverge from the approval queue.
-        resolved = resolver(approval_id, user_id)
-        assert resolved is not None  # existence verified above
+        resolved = resolver(approval_id, user_id, ip=ip)
+        if resolved is None:
+            # GOLD-MASTER-V2 §15 Defect 2 (TOCTOU): the read above saw
+            # "pending", but the repository's compare-and-set UPDATE (scoped
+            # to "userId" = ... AND "status" = 'pending') matched zero rows by
+            # write-time — a concurrent resolve won the race in between. This
+            # used to be an unreachable ``assert``; it is now a real, honest
+            # outcome that must never silently double-resolve.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Approval was resolved concurrently — no change made.",
+            )
         return resolved
 
     def assert_action_allowed(self, approval_id: str, user_id: str) -> dict[str, Any]:
