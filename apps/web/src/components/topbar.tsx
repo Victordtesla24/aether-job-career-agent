@@ -17,6 +17,7 @@ import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals } from "../lib/api/approvals";
 import { fetchSettings } from "../lib/api/workspaces";
 import { apiRequest } from "../lib/api/client";
+import { fetchMe } from "../lib/api/admin";
 import { UserMenu } from "./user-menu";
 
 export interface SearchHit {
@@ -147,6 +148,13 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchIndex = useRef<SearchHit[] | null>(null);
   const [, setIndexReady] = useState(false);
+  // GOLD-MASTER-V2 §9.2.3: persistent "Admin" indicator outside /admin/*.
+  // Derived from the SAME live source AdminGuard already uses (/auth/me's
+  // `isAdmin`, via the existing lib/api/admin fetchMe) — never a new
+  // client-side flag, never cached beyond this mount, so a revoked admin
+  // stops seeing it on their next page load like everything else gated by
+  // /auth/me.
+  const [isAdmin, setIsAdmin] = useState(false);
   const [chip, setChip] = useState<UserChip>({
     firstName: "",
     initials: "AE",
@@ -210,6 +218,16 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         .catch(() => undefined);
     void loadApprovals();
     const timer = setInterval(loadApprovals, 60_000);
+    fetchMe()
+      .then((me) => {
+        if (!cancelled) setIsAdmin(me.isAdmin);
+      })
+      .catch(() => {
+        // Not resolvable (401, network error, revoked) — same graceful,
+        // non-blocking fallback as fetchSettings/fetchAgents above: treat
+        // as non-admin rather than surfacing anything.
+        if (!cancelled) setIsAdmin(false);
+      });
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -315,6 +333,15 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
           ) : null}
         </Link>
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            aria-label="Admin — go to the admin portal"
+            className="inline-flex items-center rounded-lg border border-aether-indigo/30 bg-aether-indigo/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aether-indigo hover:bg-aether-indigo/20 transition"
+          >
+            Admin
+          </Link>
+        ) : null}
         <UserMenu initials={chip.initials} name={chip.chipName} role={chip.role} />
       </div>
     </header>

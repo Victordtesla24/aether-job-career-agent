@@ -159,6 +159,34 @@ export default function LoginPage() {
           </p>
         </form>
 
+        {/*
+          GOLD-MASTER-V2 §9.2.1: a distinct, clearly-labelled entry point into
+          the admin sign-in path (/admin-login — see that route's own file
+          header for why it is a sibling of /admin/* rather than nested
+          under it), deliberately kept visually minor (small, muted, below
+          the main sign-in card) so it reads as a secondary/administrative
+          affordance rather than inviting a normal user to try it — matching
+          the same subdued idiom PublicFooter below already uses for the
+          legal links.
+
+          A plain <a>, not next/link's <Link>, is deliberate: this crosses a
+          trust boundary (general session -> admin sign-in) and a real
+          top-level navigation guarantees the general /login form is fully
+          torn down before the admin form can receive input — a Link's
+          client-side transition briefly leaves BOTH forms' identically
+          labelled fields ("Email or username" / "Password") resolvable at
+          once, so a fast fill+submit (automation, or just a quick typist)
+          can race the transition and submit the wrong form entirely.
+        */}
+        <div className="mt-4 text-center">
+          <a
+            href="/admin-login"
+            className="text-[11px] text-aether-muted-dim hover:text-aether-muted transition"
+          >
+            Admin sign in
+          </a>
+        </div>
+
         <PublicFooter />
       </div>
     </main>
