@@ -907,8 +907,20 @@ export default function ApplicationsPage() {
                                   {initials(card.company)}
                                 </span>
                                 {card.fit != null ? (
-                                  <span className={`mono text-[11px] font-semibold ${fitClass(card.fit)}`}>
+                                  <span
+                                    className={`mono text-[11px] font-semibold ${fitClass(card.fit)}`}
+                                    title="Match score"
+                                  >
                                     {card.fit}
+                                  </span>
+                                ) : null}
+                                {card.atsScore != null ? (
+                                  <span
+                                    className="mono text-[11px] font-semibold text-aether-violet"
+                                    title="ATS score"
+                                    data-testid="tracker-ats-score"
+                                  >
+                                    ATS {card.atsScore}
                                   </span>
                                 ) : null}
                               </div>
@@ -1082,8 +1094,20 @@ export default function ApplicationsPage() {
                         {initials(a.company)}
                       </span>
                       {a.fitScore != null ? (
-                        <span className={`mono text-[11px] font-semibold ${fitClass(Math.round(Number(a.fitScore)))}`}>
+                        <span
+                          className={`mono text-[11px] font-semibold ${fitClass(Math.round(Number(a.fitScore)))}`}
+                          title="Match score"
+                        >
                           {Math.round(Number(a.fitScore))}
+                        </span>
+                      ) : null}
+                      {a.atsScore != null ? (
+                        <span
+                          className="mono text-[11px] font-semibold text-aether-violet"
+                          title="ATS score"
+                          data-testid="tracker-ats-score"
+                        >
+                          ATS {Math.round(Number(a.atsScore))}
                         </span>
                       ) : null}
                     </div>

@@ -165,6 +165,8 @@ export type StageCard = {
   company: string;
   updatedAt: string;
   fit?: number;
+  /** ATS score (distinct from `fit`/match score) — GOLD-MASTER-V2 §12.4. */
+  atsScore?: number;
   app?: TrackerApplication;
   meta: TrackerMeta;
 };
@@ -217,6 +219,9 @@ export function buildStages(apps: TrackerApplication[], jobs: Job[]): Stage[] {
   const jobFit = new Map(
     jobs.filter((j) => j.fitScore != null).map((j) => [j.id, Math.round(Number(j.fitScore))]),
   );
+  const jobAts = new Map(
+    jobs.filter((j) => j.atsScore != null).map((j) => [j.id, Math.round(Number(j.atsScore))]),
+  );
   const appJobIds = new Set(apps.map((a) => a.jobId));
   const stages: Stage[] = STAGE_DEFS.map((d) => ({ ...d, cards: [] }));
   const byKey = new Map(stages.map((s) => [s.key, s]));
@@ -230,6 +235,7 @@ export function buildStages(apps: TrackerApplication[], jobs: Job[]): Stage[] {
         company: j.company,
         updatedAt: j.updatedAt ?? j.createdAt ?? "",
         fit: j.fitScore != null ? Math.round(Number(j.fitScore)) : undefined,
+        atsScore: j.atsScore != null ? Math.round(Number(j.atsScore)) : undefined,
         meta: {},
       });
     }
@@ -243,6 +249,8 @@ export function buildStages(apps: TrackerApplication[], jobs: Job[]): Stage[] {
         company: a.company,
         updatedAt: a.updatedAt,
         fit: a.fitScore != null ? Math.round(Number(a.fitScore)) : jobFit.get(a.jobId),
+        atsScore:
+          a.atsScore != null ? Math.round(Number(a.atsScore)) : jobAts.get(a.jobId),
         app: a,
         meta: metaOf(a),
       });

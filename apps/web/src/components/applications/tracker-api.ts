@@ -13,6 +13,11 @@ import { apiRequest, type RequestOptions } from "../../lib/api/client";
 export const TrackerApplicationSchema = ApplicationSchema.extend({
   answers: z.record(z.unknown()).nullish(),
   fitScore: z.number().nullish(),
+  // GOLD-MASTER-V2 §12.4 / W-J item 5: the API already returns a distinct
+  // atsScore alongside fitScore (see Job.atsScore in lib/api/jobs.ts), but
+  // zod's default "strip unknown keys" parsing silently dropped it here —
+  // the Application/tracker card never saw it at all.
+  atsScore: z.number().nullish(),
 });
 
 export type TrackerApplication = z.infer<typeof TrackerApplicationSchema>;

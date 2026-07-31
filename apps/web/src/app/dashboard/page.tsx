@@ -221,9 +221,16 @@ export default function DashboardPage() {
           <section className="glass rounded-2xl border border-white/10 p-6" data-testid="agent-feed">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <span className="live-dot h-2 w-2 rounded-full bg-aether-green" />
+                {/* ML-DASH-002: this feed (and every other widget on this
+                    page) is fetched exactly once on mount — there is no
+                    setInterval/usePolling refresh here. A "live" label +
+                    green dot previously rendered unconditionally, claiming a
+                    refresh capability that does not exist on this screen
+                    (only the sidebar/topbar poll). Removed rather than
+                    faked — see the W-I fix report for the honesty-class
+                    reasoning (same defect class as the Gmail "Connected"
+                    finding). */}
                 <h2 className="text-[15px] font-semibold">Agent Activity</h2>
-                <span className="mono text-[11px] text-aether-muted-dim">live</span>
               </div>
               <Link
                 href="/dashboard/agents"

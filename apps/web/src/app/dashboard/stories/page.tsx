@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { usePolling } from "../../../hooks/usePolling";
 import { extractorTriggerState } from "../../../components/stories/logic";
 import { StoryAside } from "../../../components/stories/story-aside";
 import { StoryCard } from "../../../components/stories/story-card";
@@ -61,9 +62,11 @@ export default function StoryBankPage() {
     }
   }, []);
 
-  useEffect(() => {
-    void load(filter);
-  }, [filter, load]);
+  // GOLD-MASTER-V2 §11.2 / W-I item 1+2: shared polling hook instead of a
+  // bespoke `setInterval` — fires immediately on mount/filter change (via
+  // restartKey) and re-fetches every 20s so this screen is no longer
+  // load-once (ML-realtime gap).
+  usePolling(() => load(filter), 20_000, { restartKey: filter });
 
   const effectiveStories = useMemo(
     () => (demoEmpty ? [] : (stories ?? [])),
@@ -129,10 +132,19 @@ export default function StoryBankPage() {
   };
 
   const star = async (story: Story) => {
+    // GOLD-MASTER-V2 §11.2 / W-I item 4: flip immediately (optimistic) so
+    // the click feels instant, then reconcile with the server response; on
+    // failure roll back to the exact prior snapshot and surface an honest
+    // error — never leave the UI silently showing an un-persisted change.
+    const previous = stories;
+    setStories((prev) =>
+      (prev ?? []).map((s) => (s.id === story.id ? { ...s, starred: !s.starred } : s)),
+    );
     try {
       const updated = await toggleStar(story);
       setStories((prev) => (prev ?? []).map((s) => (s.id === story.id ? updated : s)));
     } catch (e) {
+      setStories(previous);
       setError(e instanceof Error ? e.message : "Failed to update story");
     }
   };
