@@ -3549,22 +3549,45 @@
     {
       "id": "GMV4-runtime-001",
       "screen": "n/a (monitoring)",
-      "severity": "HIGH",
+      "severity": "BLOCKER",
       "category": "governance",
-      "summary": "NO SERVER-SIDE RUNTIME EVIDENCE EXISTS FOR THIS RUN. \u00a723.1 mandates an always-on runtime-monitor tailing journalctl for aether-api/web/worker with every ERROR/Traceback/5xx becoming a finding, and G-M requires a >=60min clean observation window. The orchestrator armed a persistent journalctl monitor at Phase 0 Step 4 which reported zero matching events all run, but uat/reports/evidence/gold-master-v3/runtime/ is EMPTY \u2014 no artifact was ever filed, so the absence of server errors is unevidenced and G-M cannot close on it.",
+      "summary": "\u00a723.1 CONTINUOUS MONITORING WAS NEVER ACTUALLY IN FORCE. The orchestrator's always-on watch tailed journalctl for aether-api/web/worker, but journalctl returns 'No journal files were found' for those units \u2014 there is NO journald data; the services log to /var/log/aether/{api,discovery,web}.log. The monitor consumed an EMPTY stream for ~8.5h and reported zero events because there was nothing to read, not because the system was clean. Phase 0 Step 2's runbook verification (55/56 claims MATCH, including log locations) did not catch this. SEPARATELY, the first runtime-monitor artifact reported '39 ERROR + 3 CRITICAL during the window' \u2014 those are WHOLE-FILE counts (file totals ~3577, dominated by 3409 historical 'address already in use' startup-contention lines and 158 ASGI exceptions), not in-window counts. INDEPENDENT TRIAGE OF THE REAL LOGS: the window IS clean on the merits \u2014 the last error-level events are 2026-07-31T15:06:58Z and 15:07:46Z, BOTH BEFORE the 16:59Z run start, and the three CRITICAL DEGRADED ADMIN CREDENTIAL lines (15:26, 16:57:20, 16:57:21) are expected-by-design startup output from pre-existing BLOCKER-001. But that is now known from evidence, not from a monitor that was incapable of detecting anything.",
       "reproduction": [
         "ls uat/reports/evidence/gold-master-v3/runtime/ \u2014 empty"
       ],
-      "expected": "Timestamped journalctl excerpts filed as artifacts across the observation window",
-      "observed": "Directory empty; monitor output exists only as live notifications",
+      "expected": "Continuous monitoring of the ACTUAL log sink, with in-window counts anchored to a stated time filter",
+      "observed": "Monitor read an empty journald stream all run; first artifact reported whole-file counts as window counts",
       "evidence": [
         "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
       ],
       "status": "OPEN",
-      "owner": "runtime-monitor + evidence",
+      "owner": "orchestrator (VIOL-007) + runtime-monitor re-dispatch",
       "fixCommits": [],
       "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
       "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-runbook-002",
+      "screen": "n/a (ops docs)",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "RUNBOOK DRIFT WITH OPERATIONAL CONSEQUENCES: DEPLOYMENT-RUNBOOK.md directs log inspection through journalctl, but journald holds NO data for aether-api/aether-web/aether-worker ('No journal files were found'). The real sink is /var/log/aether/{api,discovery,web}.log. Any operator or agent following the runbook to investigate an incident would see an empty stream and conclude the system is healthy \u2014 which is exactly what happened to this run's own \u00a723.1 monitor for 8.5 hours. Phase 0 Step 2 verified 55/56 runbook claims and still missed it, because it checked that log locations EXIST rather than that the documented command RETURNS DATA.",
+      "reproduction": [
+        "journalctl -u aether-api --since '2026-07-31 16:00' --no-pager  # => No journal files were found",
+        "ls -la /var/log/aether/  # => api.log 14.9MB, discovery.log, web.log"
+      ],
+      "expected": "The runbook's documented log command returns the service's actual logs",
+      "observed": "Documented command returns nothing; real logs live elsewhere",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md (VIOL-007)",
+        "uat/reports/evidence/gold-master-v3/runtime/"
+      ],
+      "status": "OPEN",
+      "owner": "doc-updater + W-L deployer",
+      "fixCommits": [],
+      "verifiedBy": "orchestrator 2026-08-01T00:25Z",
+      "openedUtc": "2026-08-01T00:25:29Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
