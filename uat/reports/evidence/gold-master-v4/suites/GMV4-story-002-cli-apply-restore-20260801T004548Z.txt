@@ -1,0 +1,68 @@
+seeded user c2e45b9a8026a4a41da35208d with 2 near-duplicate stories
+
+###### DRY RUN ######
+DRY RUN — thresholds: BULK_MIGRATION {'title_min_jaccard': 0.6, 'title_min_shared': 4, 'achievement_min_jaccard': 0.3, 'achievement_min_shared': 5}
+stories now: 2
+would merge: 1
+would leave: 1
+  [1] score 1.0
+      KEEP    c67718726fa77c36c18d8bf9e  'ANZ Cloud-Native Core Banking transformation'
+      ARCHIVE ce1cd655c4b4de3af6907ca07  'ANZ Cloud-Native Core Banking Modernisation'
+      title jaccard 0.6667 (shared 4), achievement jaccard 0.3333 (shared 7)
+      survivor text AFTER merge -> 'ANZ Cloud-Native Core Banking Modernisation'
+
+plan written to /tmp/claude-2000/-home-ubuntu/7ebbbb54-9384-44c2-90f3-c2ed9335f581/scratchpad/plan2.json
+NOTHING WAS WRITTEN TO THE DATABASE. To apply: review the plan, set its "reviewed_by" field to your name, then re-run with --apply --plan <file> --confirm-user-id <id>.
+--- live row titles after the dry run (must still be 2) ---
+  ce1cd655c4b4de3af6907ca07 'ANZ Cloud-Native Core Banking Modernisation' ['azure']
+  c67718726fa77c36c18d8bf9e 'ANZ Cloud-Native Core Banking transformation' ['banking']
+
+###### HUMAN SIGNS THE PLAN ######
+reviewed_by set to: fixer-hard evidence run
+
+###### APPLY ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+APPLYING — thresholds: BULK_MIGRATION
+plan /tmp/claude-2000/-home-ubuntu/7ebbbb54-9384-44c2-90f3-c2ed9335f581/scratchpad/plan2.json reviewed by: fixer-hard evidence run
+  [1] score 1.0
+      KEEP    c67718726fa77c36c18d8bf9e  'ANZ Cloud-Native Core Banking transformation'
+      ARCHIVE ce1cd655c4b4de3af6907ca07  'ANZ Cloud-Native Core Banking Modernisation'
+      title jaccard 0.6667 (shared 4), achievement jaccard 0.3333 (shared 7)
+      survivor text AFTER merge -> 'ANZ Cloud-Native Core Banking Modernisation'
+
+batch_id:     c25918c59705455499716f236cc728cd
+before_count: 2
+merged:       1  (archived, restorable)
+after_count:  1
+reconciled:   True
+
+To reverse: --restore --batch-id c25918c59705455499716f236cc728cd --apply --confirm-user-id c2e45b9a8026a4a41da35208d
+exit=0
+
+###### LIVE ROWS AFTER MERGE (Story Bank view) ######
+  c67718726fa77c36c18d8bf9e 'ANZ Cloud-Native Core Banking Modernisation' ['banking', 'azure'] {'cost': '15%', 'delivery': '30%'}
+
+###### --list-archived ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+1 archived (merged-away) row(s) for user c2e45b9a8026a4a41da35208d
+  ce1cd655c4b4de3af6907ca07  archived 2026-08-01 00:45:54.915155+00:00  -> c67718726fa77c36c18d8bf9e  batch c25918c59705455499716f236cc728cd  by ubuntu@vm
+      'ANZ Cloud-Native Core Banking Modernisation'
+
+###### RESTORE DRY RUN ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+RESTORE DRY RUN — user c2e45b9a8026a4a41da35208d
+restorable: 1  restored: 0
+  un-archive ce1cd655c4b4de3af6907ca07 'ANZ Cloud-Native Core Banking Modernisation'; survivor c67718726fa77c36c18d8bf9e back to 'ANZ Cloud-Native Core Banking transformation'
+
+###### RESTORE APPLY ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+RESTORE — user c2e45b9a8026a4a41da35208d
+restorable: 1  restored: 1
+  un-archive ce1cd655c4b4de3af6907ca07 'ANZ Cloud-Native Core Banking Modernisation'; survivor c67718726fa77c36c18d8bf9e back to 'ANZ Cloud-Native Core Banking transformation'
+exit=0
+--- live rows after restore (both back, original wording) ---
+  ce1cd655c4b4de3af6907ca07 'ANZ Cloud-Native Core Banking Modernisation' ['azure'] {'cost': '15%'}
+  c67718726fa77c36c18d8bf9e 'ANZ Cloud-Native Core Banking transformation' ['banking'] {'delivery': '30%'}
+
+###### CLEANUP ######
+removed 2 demo story rows + the demo user from aether_test

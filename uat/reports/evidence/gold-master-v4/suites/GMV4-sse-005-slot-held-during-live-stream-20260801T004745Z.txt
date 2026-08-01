@@ -1,0 +1,4 @@
+mid-stream samples (t, active_count): [(783.7, 2), (784.2, 2), (785.0, 2), (785.5, 2), (786.2, 2)]
+streams finished so far: 0
+after both streams ended: statuses= [200, 200]  active_count= 0
+RESULT: SLOT HELD FOR THE WHOLE LIVE STREAM, RELEASED AFTER

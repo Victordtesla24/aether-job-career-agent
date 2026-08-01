@@ -1,0 +1,29 @@
+GMV4-ats-002 ROUND 4 — proof that the structural guard has teeth
+================================================================
+Probe: apps/web/src/lib/scoring/__guard_probe.ts (created, compiled, DELETED).
+It reproduces round 3's leak shape verbatim — read the number, ignore the
+provenance — and the shape rounds 1-2 missed (an absent `degraded` key).
+
+  import { conversionImpactFrom, fitDimensionsFrom } from "./provenance";
+  const impact = conversionImpactFrom({ tailoredATSScore: 91 });
+  export const leak1 = impact!.tailoredATSScore;
+  export const leak2 = fitDimensionsFrom([{ label: "x", score: 50 }])[0].score;
+
+$ cd apps/web && npx tsc --noEmit
+src/lib/scoring/__guard_probe.ts(3,30): error TS2339: Property 'tailoredATSScore' does not exist on type 'ConversionImpact'.
+  Property 'tailoredATSScore' does not exist on type 'ConversionContext & { readonly provenance: "degraded"; }'.
+src/lib/scoring/__guard_probe.ts(4,72): error TS2339: Property 'score' does not exist on type 'FitDimension'.
+  Property 'score' does not exist on type '{ readonly label: string; readonly measured: false; }'.
+
+=> The exact line round 3 filed as a review finding
+   (jobs/page.tsx:570 `out.conversionMetrics.tailoredATSScore`, no check)
+   is now a BUILD FAILURE on an already-required gate.
+
+After removing the probe:
+$ cd apps/web && npx tsc --noEmit   ->  exit 0, no output.
+
+--- RE-RUN after the `as`-cast refactor, 2026-08-01T00:50:11Z (identical) ---
+src/lib/scoring/__guard_probe.ts(3,30): error TS2339: Property 'tailoredATSScore' does not exist on type 'ConversionImpact'.
+  Property 'tailoredATSScore' does not exist on type 'ConversionContext & { readonly provenance: "degraded"; }'.
+src/lib/scoring/__guard_probe.ts(4,72): error TS2339: Property 'score' does not exist on type 'FitDimension'.
+  Property 'score' does not exist on type '{ readonly label: string; readonly measured: false; }'.

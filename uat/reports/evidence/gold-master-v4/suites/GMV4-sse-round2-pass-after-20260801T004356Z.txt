@@ -1,0 +1,37 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 13 items
+
+tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type PASSED [  7%]
+tests/test_agent_run_sse.py::test_sse_response_disables_nginx_buffering PASSED [ 15%]
+tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order PASSED [ 23%]
+tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner PASSED   [ 30%]
+tests/test_agent_run_sse.py::test_kanban_updated_emitted_when_run_output_records_a_board_change PASSED [ 38%]
+tests/test_agent_run_sse.py::test_kanban_updated_withheld_when_run_touched_no_board PASSED [ 46%]
+tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete PASSED [ 53%]
+tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 PASSED   [ 61%]
+tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_per_user PASSED [ 69%]
+tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_globally PASSED [ 76%]
+tests/test_agent_run_sse_limits.py::test_stream_rejection_is_honest_not_a_silent_hang PASSED [ 84%]
+tests/test_agent_run_sse_limits.py::test_default_poll_interval_is_not_more_aggressive_than_the_client_poll PASSED [ 92%]
+tests/test_agent_run_sse_limits.py::test_stream_releases_its_db_connection_on_disconnect PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 13 passed, 6 warnings in 30.29s ========================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

@@ -1,0 +1,79 @@
+###### SEED (test DB only) ######
+seeded user: c8eeac401f766db92546597ab
+
+###### 1. DEFAULT INVOCATION = DRY RUN (no --apply) ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+DRY RUN — thresholds: BULK_MIGRATION {'title_min_jaccard': 0.6, 'title_min_shared': 4, 'achievement_min_jaccard': 0.3, 'achievement_min_shared': 5}
+stories now: 2
+would merge: 1
+would leave: 1
+  [1] score 1.0
+      KEEP    c4f0634ad5cf79984d877fb02  'ANZ Cloud-Native Core Banking transformation'
+      ARCHIVE c322272c574ecbcb9dff87102  'ANZ Cloud-Native Core Banking Modernisation'
+      title jaccard 0.6667 (shared 4), achievement jaccard 0.3333 (shared 7)
+      survivor text AFTER merge -> 'ANZ Cloud-Native Core Banking Modernisation'
+
+plan written to /tmp/claude-2000/-home-ubuntu/7ebbbb54-9384-44c2-90f3-c2ed9335f581/scratchpad/plan.json
+NOTHING WAS WRITTEN TO THE DATABASE. To apply: review the plan, set its "reviewed_by" field to your name, then re-run with --apply --plan <file> --confirm-user-id <id>.
+exit=0
+
+###### 2. APPLY WITHOUT A PLAN -> MUST REFUSE ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+REFUSING TO WRITE: --apply requires --plan <file> from a dry run.
+exit=1
+
+###### 3. APPLY WITH WRONG --confirm-user-id -> MUST REFUSE ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+REFUSING TO WRITE: --confirm-user-id does not match --user-id (re-state the user id exactly to confirm the target).
+exit=1
+
+###### 4. APPLY WITH AN UNREVIEWED PLAN -> MUST REFUSE ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+REFUSING TO WRITE: the plan has not been reviewed. A human must open it and set "reviewed_by" to their name — that review is the control that bounds a deliberately permissive merge heuristic.
+exit=1
+
+###### 5. HUMAN SIGNS THE PLAN, BUT THE DATA CHANGED -> MUST REFUSE ######
+injected a THIRD story after the plan was signed
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+REFUSING TO WRITE: the Story Bank changed since the plan was reviewed.
+  reviewed plan digest: 97593242960fc9a0df8729532517d0546099e94cbb1d938ff4af8b21ef0f0af5
+  live plan digest:     4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+  reviewed pairs: 1, live pairs: 0
+Re-run the dry run, review the new plan, then apply.
+exit=2
+
+###### 6. RE-REVIEW, THEN APPLY FOR REAL ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+APPLYING — thresholds: BULK_MIGRATION
+plan /tmp/claude-2000/-home-ubuntu/7ebbbb54-9384-44c2-90f3-c2ed9335f581/scratchpad/plan.json reviewed by: fixer-hard evidence run
+  (no duplicate pairs qualify under these thresholds)
+
+batch_id:     605850c180ae4817a84deaaf5b7a5cea
+before_count: 2
+merged:       0  (archived, restorable)
+after_count:  2
+reconciled:   True
+
+To reverse: --restore --batch-id 605850c180ae4817a84deaaf5b7a5cea --apply --confirm-user-id c8eeac401f766db92546597ab
+exit=0
+
+###### 7. WHAT IS ARCHIVED ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+0 archived (merged-away) row(s) for user c8eeac401f766db92546597ab
+
+###### 8. --expect-account GUARD ######
+REFUSING TO RUN: --expect-account 'cronbot' but this process runs as 'ubuntu'.
+exit=1
+
+###### 9. RESTORE (dry run, then apply) ######
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+RESTORE DRY RUN — user c8eeac401f766db92546597ab
+restorable: 0  restored: 0
+exit=0
+[story_dedup_sweep] target database: db-fdc4e11da.db005.hosteddb.reai.io/fdc4e11da?schema=aether_test
+RESTORE — user c8eeac401f766db92546597ab
+restorable: 0  restored: 0
+exit=0
+
+###### CLEANUP ######
+removed 2 demo story rows + the demo user from aether_test

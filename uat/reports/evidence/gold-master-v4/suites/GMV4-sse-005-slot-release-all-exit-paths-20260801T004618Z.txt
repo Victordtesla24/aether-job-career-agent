@@ -1,0 +1,61 @@
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+agent-run stream refused (global cap 1) user=probe-user-1 run=probe-capped
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+PASS  1 normal completion: active_count=0 (expected 0)
+PASS  2 404 not-found unwind: active_count=0 (expected 0)
+      rejection status=503 detail='The server is at its live agent-run stream capacity (1 concu' retry-after=5
+PASS  3 cap rejection holds no extra slot: active_count=1 (expected 1)
+PASS  3b after releasing the occupier: active_count=0 (expected 0)
+
+
+
+
+ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+      mid-stream active_count=0 (expected 1)
+PASS  4 client disconnect: active_count=0 (expected 0)
+ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+agent-run stream probe-error: reload failed
+Traceback (most recent call last):
+  File "/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/services/agent_run_stream.py", line 553, in iter_agent_run_events
+    fresh = await run_in_threadpool(reload_run, run_id, user_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2641, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1033, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-2000/-home-ubuntu/7ebbbb54-9384-44c2-90f3-c2ed9335f581/scratchpad/slot_release_probe.py", line 118, in _raising
+    raise RuntimeError("probe: simulated DB read failure")
+RuntimeError: probe: simulated DB read failure
+PASS  5 stream_timeout: active_count=0 (expected 0)
+PASS  6 stream_error: active_count=0 (expected 0)
+
+RESULT: LEAKS: ['4 mid-stream slot not held']
+
+--- RESOLUTION OF THE ONE "FAIL" LINE ABOVE (2026-08-01) ---
+The only non-PASS line is the probe's own mid-stream sanity check
+("mid-stream active_count=0 (expected 1)"), NOT an exit path. Cause: breaking
+out of httpx `iter_lines()` closes the response, which propagates the
+disconnect and releases the slot BEFORE the probe reads the count — i.e. the 0
+is a fast, correct release, not a slot that was never taken.
+Disproved by GMV4-sse-005-slot-held-during-live-stream-20260801T004745Z.txt:
+2 concurrent live streams sampled from a separate thread show active_count=2
+across 5 samples spanning ~2.5s, then 0 after both ended.
+All SIX real exit paths (normal completion, 404 unwind, cap rejection,
+disconnect, stream_timeout, stream_error) released to active_count=0.

@@ -3604,11 +3604,11 @@
         "Tailor a job while semantic scoring is degraded; observe job.fitScore adopt the placeholder and render in the apply-confirmation modal"
       ],
       "expected": "A degraded score is never adopted as fitScore, or is flagged everywhere fitScore renders",
-      "observed": "Unguarded assignment; 4 unguarded render sites including the apply gate",
+      "observed": "Unguarded assignment; 4 unguarded render sites including the apply gate | ROUND 4 (inventory-first, opus): the written inventory found 3 DISTINCT defects across 7 primary sites and ~24 downstream renders \u2014 round 3 had been handed 1 of 3. Root insight nobody had drawn in three rounds: overall = 0.4*keyword + 0.4*semantic + 0.2*experience, so `overall` is ITSELF 40% placeholder and every derived value inherits it; both new leaks live at that second hop. UNGUARDED-1 fixed (fitScore now withheld AND flagged, surfaced at the detail ring and the apply-confirmation gate). Structural guard added: discriminated unions whose untrustworthy arm has NO numeric member, plus a keyword-only _dimension(label, score, *, degraded) with no default \u2014 round 3's exact leak line now fails tsc with TS2339. 12/12, 14/14, 34 adjacent, tsc clean, lint clean, vitest 657/657.",
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-ats-002-round3-adversarial-review-20260801T002542Z.md"
       ],
-      "status": "OPEN",
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
       "owner": "W-HF fixer-hard (round 4, ESC-002)",
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-08-01T00:25Z",
@@ -3634,6 +3634,48 @@
       "fixCommits": [],
       "verifiedBy": "fixer-hard self-report 2026-08-01",
       "openedUtc": "2026-08-01T00:49:11Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-009",
+      "screen": "Jobs insights",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "UNGUARDED-2, found only by the two-hop contamination trace: the job-insights dimensions 'Role Alignment' (= overall, itself 40% placeholder when semantic is degraded) and 'Career Growth' (0.6*seniority + 0.4*overall) carried NO degraded key (apps/api/app/routers/jobs.py:343,347). Worse, the panel's honesty note named only 'Industry Match, Culture Fit and North Star Align' \u2014 it AFFIRMATIVELY EXCLUDED the two contaminated rows, actively telling the user those figures were sound. _empty_insights had the same shape, so a no-resume user's zeros were placeholders rendered as 0 rather than em-dash. FIXED in round 4; listed for the review record because it shows the first three rounds were patching a list rather than tracing contamination.",
+      "reproduction": [
+        "Request job insights with a degraded semantic component and inspect Role Alignment / Career Growth for a degraded flag"
+      ],
+      "expected": "Every dimension derived from a contaminated value is flagged",
+      "observed": "Two dimensions unflagged and explicitly excluded from the note",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-ats-CONSUMER-INVENTORY.md"
+      ],
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
+      "owner": "W-HF fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard (opus) 2026-08-01",
+      "openedUtc": "2026-08-01T00:52:04Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-010",
+      "screen": "Jobs / Dashboard / Analytics / Offers / Notifications / autopilot",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "UNGUARDED-3 \u2014 PROVENANCE IS DESTROYED AT THE DATABASE BOUNDARY. apps/api/app/agents/fit_scorer.py:65 persists score.overall into Job.fitScore/atsScore. Since overall is 40% semantic, a degraded run writes a 40%-placeholder number with NO flag, and ~21 downstream readers (apply gate, dashboard average, analytics, offers, notifications, board_sweep) then STRUCTURALLY cannot check \u2014 no type system can guard a fact the DB never stored. ORCHESTRATOR RULING ADR-GMV4-004(1): add an ADDITIVE Job.\"fitScoreDegraded\" boolean rather than withholding. Withholding (fitScore = NULL) needs no schema change but board_sweep.py:143,224,394,515 gates autopilot on fitScore IS NOT NULL, so it would SILENTLY HALT AUTOPILOT \u2014 the exact pipeline-killing failure ADR-GMV4-001 records this codebase already paying for at 56552e0. Requires migrator + fixer + deploy. G-HF cannot fully close until it lands.",
+      "reproduction": [
+        "Trace fit_scorer.py:65 -> Job.fitScore and grep the ~21 readers for any provenance check"
+      ],
+      "expected": "Persisted scores carry their provenance so downstream readers can disclose honestly",
+      "observed": "Flag discarded at write time; 21 readers structurally unable to check",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-ats-CONSUMER-INVENTORY.md"
+      ],
+      "status": "OPEN",
+      "owner": "migrator + fixer-hard (additive column)",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard (opus) 2026-08-01",
+      "openedUtc": "2026-08-01T00:52:04Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

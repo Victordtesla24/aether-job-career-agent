@@ -258,6 +258,57 @@ tabs is a worse launch risk than the polling it replaces.
 
 ---
 
+## 5f. ORCHESTRATOR ADJUDICATION ADR-GMV4-004 — persisted score provenance, and the "unattested" third state
+
+Both escalated by the W-HF round-4 `fixer-hard` with both interpretations filed rather than guessed.
+
+### (1) UNGUARDED-3 — `Job.fitScore` destroys provenance. **RULING: add the flag column.**
+
+`apps/api/app/agents/fit_scorer.py:65` persists `score.overall` into DB `Job.fitScore` / `atsScore`.
+Because `overall = 0.4*keyword + 0.4*semantic + 0.2*experience`, a degraded semantic component
+makes `overall` **40% placeholder** — and once written, the flag is gone. ~21 downstream readers
+(apply gate, dashboard average, analytics, offers, notifications, board-sweep) then *structurally
+cannot* check. No type system can guard a fact the database never stored.
+
+The two options and why one wins:
+- **Withhold** (`fitScore = NULL` when degraded) needs no schema change, BUT `board_sweep.py:143,224,394,515`
+  gates the autopilot on `fitScore IS NOT NULL`, so withholding would **silently halt autopilot**.
+  That is precisely the pipeline-killing failure ADR-GMV4-001 ¶1 records this codebase already
+  paying for once (the cover-letter `FabricationError` hard-fail, reverted at `56552e0`).
+- **Flag** — an ADDITIVE `Job."fitScoreDegraded"` boolean — preserves every existing reader's
+  behaviour, keeps autopilot running, and lets surfaces that care disclose honestly. It is the
+  shape ADR-GMV4-001 already mandates everywhere else.
+
+**Ruling: flag, via an additive column** (`ADD COLUMN IF NOT EXISTS`, default false, no backfill
+needed since false = "not known degraded" and matches every historical row's meaning). Requires
+`migrator` + `fixer` + a deploy, so it is filed as its own finding rather than bolted onto round 4.
+Until it lands, the ~21 readers remain unguarded and G-HF cannot fully close.
+
+### (2) The `"unattested"` third state. **RULING: fail closed — go to option (A).**
+
+`ConversionImpact` currently has three arms because five TRACKED test fixtures supply
+`conversionMetrics` with numbers and no flags and assert the numbers render
+(`tailor-score-refresh.test.tsx:92`, `conversion-banner.test.tsx:65`,
+`resume-conversion-tooltip.test.tsx:71`, `resume-tailor-score-warning.test.tsx:113,153`).
+
+This is the **same tail-wagging-dog pattern already rejected once in this workstream** — round 2's
+bare `None` default existed for exactly the same reason, and was overturned in round 3. A third
+state whose only justification is that pre-existing fixtures would otherwise fail is an
+accommodation, not a design. Production is genuinely two-state: `_compute_conversion_metrics`
+always emits all three flags, so failing closed costs nothing in production and removes a
+permanent hole.
+
+**Ruling: `test-author` adds explicit `false` flags to those five fixtures** (declaring provenance
+is better test hygiene regardless), then `conversionImpactFrom` collapses `"unattested"` into
+`"degraded"`. The fixer must NOT edit those tests itself (§0.4).
+
+**Note the pattern for the final report:** three separate times in this workstream, production
+behaviour was shaped to keep pre-existing test doubles passing. Each time the honest fix was to
+correct the doubles instead. Test fixtures encode assumptions; when an assumption is wrong, the
+fixture is the thing to change.
+
+---
+
 ## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
 
 **Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
