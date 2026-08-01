@@ -116,6 +116,22 @@
       "DROP-001": "FIXED @8c0ac5e. Root cause was deeper than \"no UI reads it\": ApiError flattened the whole response body into a message string, so the structured detail was unreachable at the TRANSPORT layer, and runErrorNotice had no 429 branch at all \u2014 a quota wall fell through to generic copy telling the user to \"retry in a moment\" and check RECENT RUNS, both wrong for a quota. Now surfaces the server own message + reset time + upgrade CTA; states a reset ONLY when the server sent a parseable one; spend_cap labelled \"review plan\" not \"upgrade plan\". 8/8 tests (RED at HEAD), 20/20 surrounding, lint+tsc clean.",
       "DROP-002": "LOW-MED/honesty \u2014 tailoring-loop `iterations` and `gapKeywords` are returned and never surfaced, so a sub-target ATS result cannot be shown as honest rather than clamped. RECORDED, NOT FIXED."
     },
-    "W-CAL_oauth_risk_assessed": "W-CAL adds calendar.events to GOOGLE_SCOPES \u2014 the change most able to break existing users, since BOTH production Gmail accounts are already needs_reauth. Verified SAFE by reading google_oauth.py: include_granted_scopes=true (incremental auth) is documented as load-bearing, granted-scope state is derived from what Google ACTUALLY granted rather than what was requested, and calendar features refuse honestly when the grant is absent. Existing Gmail grants survive."
+    "W-CAL_oauth_risk_assessed": "W-CAL adds calendar.events to GOOGLE_SCOPES \u2014 the change most able to break existing users, since BOTH production Gmail accounts are already needs_reauth. Verified SAFE by reading google_oauth.py: include_granted_scopes=true (incremental auth) is documented as load-bearing, granted-scope state is derived from what Google ACTUALLY granted rather than what was requested, and calendar features refuse honestly when the grant is absent. Existing Gmail grants survive.",
+    "W-CAL": {
+      "status": "DONE @b85914c \u2014 13 files. NOT pushed, NOT deployed, NOT self-approved by its author.",
+      "delivered": "calendar.events added to GOOGLE_SCOPES; interview -> real Google Calendar event; free/busy; truthful Settings status; ADR-CALENDAR-V4.md. 26 new tests, 0 regressions, mypy clean across 119 files.",
+      "why_the_scope_line_was_the_dangerous_part": "Adding calendar.events naively would have broken GMAIL in two ways. (1) oauthlib RAISES when the granted scope set differs from the requested set, so a user who ticked Gmail but unticked Calendar would have had the whole token exchange explode \u2014 losing Gmail. Proven by neutering the fix and capturing the verbatim \"Scope has changed from ... to ...\" error. (2) credentials.scopes is what we ASKED FOR, not what was GRANTED, so the old persistence line would have recorded a Calendar grant for every user including those who declined \u2014 a fabricated capability the rest of the product would then repeat.",
+      "OPERATOR_ACTION_REQUIRED": "The Google Cloud console consent screen MUST list calendar.events or consent fails at runtime. Not verifiable from inside the VM \u2014 needs the owner.",
+      "open_risks": [
+        "Every existing user must reconnect Google once; no in-product reconnect prompt beyond the Settings badge and per-interview banner. Note this compounds with GMV4-email-001: both Gmail accounts are ALREADY needs_reauth, so the reconnect path is the one users will actually hit.",
+        "Rescheduling/cancelling does NOT update or delete the calendar event \u2014 next W-CAL increment.",
+        "Free/busy reads the primary calendar only; DST-transition slots use default fold rules.",
+        "Multi-account: prefers whichever account granted calendar.events; no UI to choose.",
+        "Not independently reviewed \u2014 author flagged _relaxed_token_scope blast radius and settings-probe latency.",
+        "No production verification: nothing deployed, no live Google call made; all evidence is local."
+      ],
+      "author_honesty_note": "A late run showed 1 failure the author diagnosed as self-inflicted (editing routers/agents.py while a pytest batch was in flight; inspect.getsource resolves via linecache, so an on-disk edit shifts line numbers). Proven not a real regression via a frozen-file re-run with md5sums recorded before and after: 170 passed, 1 skipped, 0 failed. Recorded rather than silently re-run to green."
+    },
+    "CI_ruff": "FIXED @c9e45d6. ruff check app/ tests/ was failing on 2 errors that would have failed the W-L CI-green gate. One was MINE: BLOCKER-006 (0ed302a) added \"lastSeenAt\" to the INSERT column list, pushing job.py:305 to 105 chars. Wrapped; placeholder count unchanged (16 %s + 2 NOW() = 18 columns). The other was an unsorted import block, auto-fixed. Now: \"All checks passed!\""
   }
 }
