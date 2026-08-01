@@ -1,0 +1,1670 @@
+[
+  {
+    "t": 1785522238981,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/login"
+  },
+  {
+    "t": 1785522239150,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/login"
+  },
+  {
+    "t": 1785522239163,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522239163,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522239163,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522239163,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522239164,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522239164,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522239164,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-2cdd644ded9d14dc.js"
+  },
+  {
+    "t": 1785522239164,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522239164,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522239172,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522239188,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522239189,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522239189,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522239189,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/login/page-2cdd644ded9d14dc.js"
+  },
+  {
+    "t": 1785522239196,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522239198,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522239261,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522239343,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522239398,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522239398,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522239473,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve"
+  },
+  {
+    "t": 1785522239473,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve"
+  },
+  {
+    "t": 1785522239474,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1obve"
+  },
+  {
+    "t": 1785522239475,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1obve"
+  },
+  {
+    "t": 1785522239476,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522239502,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522239529,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/forgot-password?_rsc=1obve"
+  },
+  {
+    "t": 1785522239529,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/signup?_rsc=1obve"
+  },
+  {
+    "t": 1785522239529,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/privacy-policy?_rsc=1obve"
+  },
+  {
+    "t": 1785522239529,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/terms?_rsc=1obve"
+  },
+  {
+    "t": 1785522239529,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-75eb23bb442de606.js"
+  },
+  {
+    "t": 1785522239545,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/signup/page-75eb23bb442de606.js"
+  },
+  {
+    "t": 1785522239730,
+    "phase": "request",
+    "method": "POST",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login"
+  },
+  {
+    "t": 1785522240298,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/login"
+  },
+  {
+    "t": 1785522240304,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=urzlp"
+  },
+  {
+    "t": 1785522240322,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard?_rsc=urzlp"
+  },
+  {
+    "t": 1785522240332,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522240332,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/290-aca3a6622a04b793.js"
+  },
+  {
+    "t": 1785522240332,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-c1711821870f59ee.js"
+  },
+  {
+    "t": 1785522240332,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-2af9071f18142c49.js"
+  },
+  {
+    "t": 1785522240332,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522240363,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/290-aca3a6622a04b793.js"
+  },
+  {
+    "t": 1785522240364,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/181-c1711821870f59ee.js"
+  },
+  {
+    "t": 1785522240364,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522240367,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522240387,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/page-2af9071f18142c49.js"
+  },
+  {
+    "t": 1785522240451,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522240455,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522240500,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522240500,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522240509,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522240576,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522240576,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522240580,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522240592,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522240639,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522240639,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522240656,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522240685,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/stories"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/agents?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/jobs?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/stories?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522240979,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/networking?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522241004,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/agents?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522241004,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/agents/page-afac6fe1bfabbfd3.js"
+  },
+  {
+    "t": 1785522241004,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/stories?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522241004,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/stories/page-d4cb115bc0fb4c5d.js"
+  },
+  {
+    "t": 1785522241011,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/jobs?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522241011,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/networking?_rsc=hi3jv"
+  },
+  {
+    "t": 1785522241011,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/jobs/page-77fd17e69f36ddd8.js"
+  },
+  {
+    "t": 1785522241011,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/networking/page-537fd4c6c843d116.js"
+  },
+  {
+    "t": 1785522241018,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522241034,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/agents/page-afac6fe1bfabbfd3.js"
+  },
+  {
+    "t": 1785522241037,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522241057,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/stories/page-d4cb115bc0fb4c5d.js"
+  },
+  {
+    "t": 1785522241058,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=7d",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241063,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/networking/summary",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241063,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/jobs?sort=fitScore",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241063,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/jobs/page-77fd17e69f36ddd8.js",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241063,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/funnel?period=all",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241065,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/stories",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241065,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/networking/page-537fd4c6c843d116.js",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241065,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241065,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/analytics/market-pulse",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241065,
+    "phase": "requestfailed",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents/runs",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1785522241093,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522241093,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522241094,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522241103,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522241108,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522241108,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522241108,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522241108,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522241108,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522241149,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522241150,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522241150,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522241169,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522241170,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522241170,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522241170,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522241170,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522241238,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522241288,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522241330,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522241354,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522241359,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522241360,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522241451,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522241459,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522241478,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522241597,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522241612,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522241629,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522241662,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522241669,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522241761,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522241761,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522241929,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522245564,
+    "phase": "request",
+    "method": "POST",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522245833,
+    "phase": "response",
+    "status": 201,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522245849,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522245980,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522245981,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522246139,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522251046,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522251064,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522251085,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522251087,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522251088,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522251107,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522251126,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522251168,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522251180,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522251203,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522251203,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522251304,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522251308,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522251326,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522251455,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522251458,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522251465,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522251500,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522251509,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522251598,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522251607,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522251777,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522255583,
+    "phase": "request",
+    "method": "DELETE",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews/ced05649b59817be09e14b3a5"
+  },
+  {
+    "t": 1785522255829,
+    "phase": "response",
+    "status": 204,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews/ced05649b59817be09e14b3a5"
+  },
+  {
+    "t": 1785522256718,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522256738,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/interviews"
+  },
+  {
+    "t": 1785522256754,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522256754,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/css/63ecb25c72c98ddc.css"
+  },
+  {
+    "t": 1785522256754,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522256754,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/webpack-e43aefa80398458c.js"
+  },
+  {
+    "t": 1785522256754,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522256755,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/ed95e382-1b44a3312b0fe1ed.js"
+  },
+  {
+    "t": 1785522256755,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522256755,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/86-cd14dc9f9d48442a.js"
+  },
+  {
+    "t": 1785522256755,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/main-app-f32cee49e52cf047.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/395-1c5d35ce55453aa9.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/110-c209fe26726b8c7b.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/interviews/page-eaeb6e803e629653.js"
+  },
+  {
+    "t": 1785522256758,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522256759,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/layout-6ed60aff5d0bc738.js"
+  },
+  {
+    "t": 1785522256759,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522256759,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  },
+  {
+    "t": 1785522256759,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522256759,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "response",
+    "status": 200,
+    "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522256767,
+    "phase": "response",
+    "status": 200,
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522256782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522256844,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522256883,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/dashboard/approvals?_rsc=1gcvb"
+  },
+  {
+    "t": 1785522256886,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522256886,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/_next/static/chunks/app/dashboard/approvals/page-441e17cb5921224e.js"
+  },
+  {
+    "t": 1785522256963,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/auth/me"
+  },
+  {
+    "t": 1785522256972,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522256993,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522257113,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/entitlement"
+  },
+  {
+    "t": 1785522257113,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/workspaces/settings"
+  },
+  {
+    "t": 1785522257114,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522257162,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522257162,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/billing/subscription"
+  },
+  {
+    "t": 1785522257275,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/interviews"
+  },
+  {
+    "t": 1785522257275,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522257440,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/applications"
+  },
+  {
+    "t": 1785522286783,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522286952,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522316782,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  },
+  {
+    "t": 1785522316784,
+    "phase": "request",
+    "method": "GET",
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522316932,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending"
+  },
+  {
+    "t": 1785522316958,
+    "phase": "response",
+    "status": 200,
+    "url": "https://5cb5f0620.abacusai.cloud/api/agents"
+  }
+]

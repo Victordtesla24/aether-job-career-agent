@@ -44,6 +44,18 @@ redis>=5
 # AttributeError in Webhook.construct_event on a webhook payload missing the
 # top-level "object": "event" key (verified at 15.0.0 and 15.3.1).
 stripe>=13.2,<14
-# Optional/heavy: embedding-based semantic similarity for the ATS engine
-# (see requirements-ml.txt). The engine degrades gracefully to a deterministic
-# TF-IDF/token-overlap fallback when it (or its cached model) is unavailable.
+# Embedding-based semantic similarity for the ATS engine (GMV4-ats-001).
+# MOVED from requirements-ml.txt (optional) to here (required): the ATS
+# engine markets ``semantic_similarity`` to paying users as a genuine
+# sentence-transformers cosine-similarity score — a silently-missing optional
+# dependency is exactly the defect this fix closes (it made scoring fall
+# through to an undisclosed token-overlap approximation). CPU-only torch is
+# sufficient (no GPU on the production VM); install with:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install sentence-transformers
+# then pre-download all-MiniLM-L6-v2 into SENTENCE_TRANSFORMERS_HOME so the
+# LOCAL path (see app/services/ats_engine.py) is active with no network I/O
+# at scoring time. If this is ever missing/uncached AND HF_TOKEN is unset,
+# the engine now raises/degrades honestly instead of substituting a fake
+# number — see ats_engine.SemanticScoringUnavailableError.
+sentence-transformers>=3.0

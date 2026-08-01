@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.repositories.approval import ApprovalRepository
@@ -98,8 +98,10 @@ def _compute_conversion_metrics(
         bullet_text = "\n".join(b.get("text", "") for b in bullets)
         return f"{context}\n{bullet_text}" if context else bullet_text
 
-    baseline_score = engine.score(_corpus(original_bullets), job_description).overall
-    tailored_score = engine.score(_corpus(tailored_bullets), job_description).overall
+    baseline = engine.score(_corpus(original_bullets), job_description)
+    tailored = engine.score(_corpus(tailored_bullets), job_description)
+    baseline_score = baseline.overall
+    tailored_score = tailored.overall
 
     population_rate = float(
         os.environ.get("AETHER_CONVERSION_BASELINE_RATE", str(_DEFAULT_POPULATION_BASELINE_RATE))
@@ -110,12 +112,27 @@ def _compute_conversion_metrics(
     lift_pct = lift_fraction * 100
     sign = "+" if lift_pct >= 0 else ""
 
+    # GMV4-ats-002: both re-scores are 40% built from semantic_similarity —
+    # if EITHER endpoint's semantic component was "degraded" (no genuine
+    # embedding model/HF Inference API available), the delta/lift derived
+    # from it is a fabricated business metric, not a measurement. Flagged
+    # here (never withheld — the numbers are still directionally useful) so
+    # a consumer can label them honestly instead of presenting a fabricated
+    # "lift" as fact. Round 3: WHITELIST — only "local"/"hf_api" count as
+    # genuinely measured; "degraded", "untracked" and any unrecognised value
+    # all read as degraded (fails closed instead of open).
+    baseline_degraded = baseline.semantic_path not in ("local", "hf_api")
+    tailored_degraded = tailored.semantic_path not in ("local", "hf_api")
+
     return {
         "baselineATSScore": baseline_score,
         "tailoredATSScore": tailored_score,
         "estimatedConversionLift": f"{sign}{lift_pct:.1f}%",
         "methodology": "Like-for-like ATS delta (shared context) × population baseline (2.5%)",
         "confidence": "model-estimated",
+        "baselineDegraded": baseline_degraded,
+        "tailoredDegraded": tailored_degraded,
+        "scoringDegraded": baseline_degraded or tailored_degraded,
     }
 
 
@@ -293,6 +310,23 @@ class TailorRunResult:
     #: ``TailoringLoop``) never reached the 85 ATS target within its
     #: iteration cap — an honest sub-target signal, NEVER silently dropped.
     warning: str | None = None
+    #: GMV4-tailor-001 (§6.1(b)/§6.2): per-attempt progress trail — ONE entry
+    #: per ``TailoringLoop`` iteration actually run, each carrying
+    #: ``"iteration"`` (1-based index), ``"score"``, ``"gapKeywords"``,
+    #: ``"changes"`` and ``"rejected"`` (tailoring_loop.py:179-186). Copied
+    #: verbatim from ``loop_result.iterations`` — the SAME object already
+    #: persisted to the DB as ``sections["tailoringIterations"]`` (see
+    #: ``TailoringAgent.run`` below), so the API response and the DB agree.
+    #: Never recomputed here; an empty list iff the loop genuinely ran zero
+    #: attempts (never a fabricated placeholder entry).
+    iterations: list[dict[str, Any]] = field(default_factory=list)
+    #: GMV4-tailor-001 (§6.2 UI chip list): still-missing JD keywords for the
+    #: run's WINNING (best-scoring) iteration — the exact
+    #: ``clean_gap_keywords`` output already computed by the loop
+    #: (tailoring_loop.py:177,184), taken from the same ``best`` iteration
+    #: record ``TailoringAgent.run`` already selects to persist the tailored
+    #: version, so the chip list always matches what was actually produced.
+    gapKeywords: list[str] = field(default_factory=list)
 
 
 class TailoringAgent:
@@ -475,8 +509,16 @@ class TailoringAgent:
         )
         # §5.3.1 point 5: surface the loop's own honest verdict on this run —
         # wired to the same "needs a human look" concept ``ATSScore.
-        # requires_review`` already computes, never silently dropped.
-        conversion_metrics["requires_review"] = loop_result.requires_review
+        # requires_review`` already computes, never silently dropped. Round 3
+        # fix: OR in ``conversion_metrics["scoringDegraded"]`` rather than
+        # overwriting — ``_compute_conversion_metrics`` re-scores baseline/
+        # tailored with two FRESH ``ATSEngine().score()`` calls made after the
+        # loop finished, so a transient degradation there is a distinct event
+        # the loop's own verdict cannot see. Discarding it (the round-2 bug)
+        # meant a degraded conversion re-score produced no warning anywhere.
+        conversion_metrics["requires_review"] = (
+            loop_result.requires_review or bool(conversion_metrics.get("scoringDegraded"))
+        )
         # MV-resume-studio-001: open a REAL pending ApprovalRequest (mirroring the
         # cover letter agent) so the run's ``approvalRequired: true`` flag is backed
         # by an actual human-in-the-loop gate rather than being decorative. Kept
@@ -522,4 +564,6 @@ class TailoringAgent:
             approval_id=approval["id"],
             approval_status=approval["status"],
             warning=loop_result.warning,
+            iterations=loop_result.iterations,
+            gapKeywords=best["gapKeywords"],
         )

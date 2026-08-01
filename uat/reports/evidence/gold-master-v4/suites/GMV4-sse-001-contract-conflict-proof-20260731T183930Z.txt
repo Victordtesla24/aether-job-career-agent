@@ -1,0 +1,50 @@
+GMV4-sse-001 — PROOF: contract tests 1 & 2 are mutually exclusive with test 6
+captured: 2026-07-31T18:39:30Z  by: fixer-hard  repo HEAD: 102ef3c
+
+CLAIM: no honest implementation can satisfy all six tests in apps/api/tests/test_agent_run_sse.py.
+
+1. The endpoint receives exactly three inputs: run_id, current_user, and the
+   result of AgentRunRepository.get_by_id(run_id, user_id).
+
+2. test_sse_run_not_found_returns_404 (line 241) monkeypatches get_by_id -> None
+   for run_id='does-not-exist' and REQUIRES HTTP 404 {'detail':'Agent run not found'}.
+
+3. test_sse_endpoint_exists... (line 121) and test_sse_stream_emits_progress_events_in_order
+   (line 136) do NOT monkeypatch get_by_id, use run_id='some-run-id', and REQUIRE HTTP 200.
+   FRESH PROBE of the REAL get_by_id in the same aether_test env:
+   --------------------------------------------------------------
+   get_by_id('some-run-id') -> None
+   get_by_id('does-not-exist') -> None
+   --------------------------------------------------------------
+   i.e. the REAL lookup returns None — byte-identical to test 6's monkeypatched None.
+
+4. Therefore the endpoint sees an IDENTICAL (None) lookup result in both cases and is
+   required to return 200 in one and 404 in the other. The only remaining difference is
+   the literal run-id string ('some-run-id' vs 'does-not-exist'). Branching on a literal
+   id string is hardcoding (prohibited, GMV4 §0.5).
+
+5. INDEPENDENTLY, test 2 asserts event_names == ['scanning_queue','computing_ats_deltas',
+   'awaiting_approval','submitting','updating_kanban','complete'] for a run that DOES NOT
+   EXIST. Emitting a fixed six-step sequence for a nonexistent run is a timer-driven
+   progress animation with no execution behind it = §0.5 placeholder violation (auto-FAIL).
+   Test 2 also forbids any 'kanban_updated' event (exact-list equality), while test 4
+   REQUIRES 'kanban_updated' for an equivalent completed owner-run — a second conflict.
+
+6. Of the six named steps, real backing in this codebase TODAY:
+     scanning_queue        NO journal (the ready-to-apply scan happens, is not recorded)
+     computing_ats_deltas  NO — the Submission Agent computes no ATS delta at all
+     awaiting_approval     NO — 'submission' is not in agents.py _APPROVAL_GATED
+     submitting            NO journal (submit_application_for_job runs, is not recorded)
+     updating_kanban       PARTIAL — surfaced as kanban_updated w/ real jobId/applicationId
+                           from the run's persisted output when the run recorded them
+     complete              YES — AgentRun.status == 'completed' is real persisted state
+
+RESOLUTION TAKEN: implemented the honest 404-on-unknown-run semantics (identical to the
+existing GET /agents/runs/{run_id} at agents.py:2150, as the task brief instructed).
+Tests 3,4,5,6 PASS. Tests 1,2 FAIL and were NOT edited, per the no-weakening rule.
+ORCHESTRATOR RULING REQUIRED — two interpretations:
+ (A) tests 1 & 2 are defective (they omit the monkeypatch that tests 3-5 have, and test 2
+     additionally encodes a scripted-progress requirement). Fix = test-author amends them.
+ (B) the endpoint should stream any run id for an authenticated caller. This makes test 6
+     impossible AND requires fabricating progress for nonexistent runs (§0.5 FAIL).
+Fixer recommendation: (A). (B) cannot be implemented without a prohibited pattern.

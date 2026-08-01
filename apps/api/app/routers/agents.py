@@ -19,6 +19,8 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.agents.cover_letter_agent import (
@@ -46,6 +48,7 @@ from app.repositories.user_provider_credential import (
     _ensure_user_agent_tables,
 )
 from app.services import credential_vault
+from app.services.agent_run_stream import SSE_HEADERS, iter_agent_run_events
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
     LLM_UNAVAILABLE_USER_MESSAGE,
@@ -2155,6 +2158,46 @@ def get_run(run_id: str, current_user: CurrentUser) -> dict[str, Any]:
     return run
 
 
+@router.get("/runs/{run_id}/stream")
+async def stream_run(
+    run_id: str, request: Request, current_user: CurrentUser
+) -> StreamingResponse:
+    """Server-Sent Events feed of one agent run's REAL persisted state
+    (GMV4-sse-001, §14.5.5).
+
+    Authorisation is the SAME model as the ``GET /runs/{run_id}`` poll directly
+    above — same ``CurrentUser`` dependency, same owner-scoped
+    ``AgentRunRepository.get_by_id(run_id, user_id)`` whose SQL predicate is
+    ``"userId" = %s``. A run belonging to anyone else resolves to ``None`` and
+    gets the identical honest 404: the non-owner is never told the run exists
+    and never receives a single stream frame.
+
+    The polling endpoint is UNCHANGED and remains supported; this is an
+    additive transport over the same row, not a replacement.
+
+    What the stream does and does not claim is documented on
+    ``app.services.agent_run_stream`` — in particular it does NOT emit the
+    six-step submission vocabulary, because four of those six steps have no
+    recorded backing in this codebase and a timer-driven sequence of them would
+    be a fabricated progress animation.
+    """
+    repo = AgentRunRepository()
+    run = await run_in_threadpool(repo.get_by_id, run_id, current_user["id"])
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent run not found")
+    return StreamingResponse(
+        iter_agent_run_events(
+            run=run,
+            run_id=run_id,
+            user_id=current_user["id"],
+            reload_run=repo.get_by_id,
+            is_disconnected=request.is_disconnected,
+        ),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
 @router.get("/jobs/{job_id}")
 def get_background_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     """Poll an async background generation job (GAP-P7-ASYNC-001 §3.3).
@@ -2344,6 +2387,16 @@ def run_tailor(
         # §5.3.1 point 5: an honest sub-85 warning from the score-aware
         # TailoringLoop — None when the loop reached the target.
         "warning": output.get("warning"),
+        # GMV4-tailor-001 (§6.1(b)/§6.2): per-attempt progress trail + the
+        # winning iteration's still-missing JD keywords — ALREADY computed by
+        # TailoringLoop and returned on TailorRunResult (tailor_agent.py); this
+        # endpoint previously whitelisted its response keys and silently
+        # dropped both, even though the async job-result path
+        # (``_job_status_payload`` -> ``job.get("result")``) already forwards
+        # ``output`` unfiltered. Defaulting to ``[]`` only guards a non-tailor
+        # backend's output shape — ``_dispatch`` for "tailor" always sets both.
+        "iterations": output.get("iterations", []),
+        "gapKeywords": output.get("gapKeywords", []),
     }
 
 

@@ -177,6 +177,16 @@ def ats_score(
         "overall": round(score.overall, 1),
         "keyword_match": round(score.keyword_match, 1),
         "semantic_similarity": round(score.semantic_similarity, 1),
+        # GMV4-ats-002: which path actually produced semantic_similarity —
+        # "local"/"hf_api" (genuine) or "degraded" (neutral placeholder, see
+        # ats_engine.py's ATSScore.semantic_path). Without this, a degraded
+        # score is indistinguishable from a real measurement to any caller.
+        "semantic_path": score.semantic_path,
+        # Unambiguous, client-branchable boolean twin of semantic_path —
+        # never requires the client to know the sentinel string. Round 3:
+        # WHITELIST — only "local"/"hf_api" count as measured; "degraded",
+        # "untracked" and any unrecognised value all read as degraded.
+        "semantic_degraded": score.semantic_path not in ("local", "hf_api"),
         "experience_gap": round(score.experience_gap, 1),
         "matched_keywords": score.matched_keywords,
         "missing_keywords": score.missing_keywords,

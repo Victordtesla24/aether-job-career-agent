@@ -59,6 +59,15 @@ export interface ConversionMetrics {
    * alongside the top-level `warning` string below (§5.3.1 pt 5).
    */
   requires_review?: boolean;
+  /**
+   * GMV4-ats-002: true iff the baseline and/or tailored re-score's semantic
+   * component was "degraded" (no genuine embedding model or HF Inference API
+   * available — apps/api/app/services/ats_engine.py's ATSScore.semantic_path).
+   * When true, the delta these numbers imply is not a trustworthy measurement.
+   */
+  baselineDegraded?: boolean;
+  tailoredDegraded?: boolean;
+  scoringDegraded?: boolean;
 }
 
 export interface TailorRunResult {

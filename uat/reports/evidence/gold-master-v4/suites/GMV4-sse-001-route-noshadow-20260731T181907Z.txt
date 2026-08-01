@@ -1,0 +1,6 @@
+total routes discovered: 4
+run-related routes: []
+REGRESSION poll GET /agents/runs/{id}   -> 200 application/json reg-run-1
+REGRESSION poll 404 body                -> 404 {'detail': 'Agent run not found'}
+NEW      GET /agents/runs/{id}/stream   -> 200 text/event-stream; charset=utf-8
+NO SHADOWING (poll unchanged, distinct paths): True

@@ -1,0 +1,163 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/abacus-python/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.2
+collecting ... collected 6 items
+
+tests/test_story_dedup_invocation.py::TestProductionInvocationPath::test_merge_duplicate_stories_has_a_production_invocation_path FAILED [ 16%]
+tests/test_story_dedup_invocation.py::TestDryRun::test_dry_run_emits_proposed_merges_without_writing FAILED [ 33%]
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags PASSED [ 50%]
+tests/test_story_dedup_invocation.py::TestNeverDeletes::test_merge_never_deletes_a_story_row FAILED [ 66%]
+tests/test_story_dedup_invocation.py::TestBeforeAfterCounts::test_merge_reports_before_and_after_counts FAILED [ 83%]
+tests/test_story_dedup_invocation.py::TestScoping::test_merge_is_scoped_to_a_single_user_or_workspace PASSED [100%]
+
+=================================== FAILURES ===================================
+_ TestProductionInvocationPath.test_merge_duplicate_stories_has_a_production_invocation_path _
+
+self = <test_story_dedup_invocation.TestProductionInvocationPath object at 0x7fc1891c8530>
+
+    def test_merge_duplicate_stories_has_a_production_invocation_path(self):
+        """merge_duplicate_stories must be reachable from a genuine
+        production entrypoint (an admin route, a maintenance script, or a
+        scheduled job) — not merely defined and cross-referenced in
+        docstrings. Scans every ``.py`` file under ``app/`` and ``scripts/``
+        (excluding the function's own defining module) for an actual AST
+        Call node naming it.
+        """
+        candidates = [
+            f for f in _iter_python_files(_APP_DIR, _SCRIPTS_DIR)
+            if f.resolve() != _OWN_MODULE.resolve()
+        ]
+        call_sites = [f for f in candidates if _calls_merge_duplicate_stories(f)]
+>       assert call_sites, (
+            "merge_duplicate_stories() has ZERO production call sites under "
+            f"{_APP_DIR} or {_SCRIPTS_DIR}: no router, admin action, "
+            "maintenance script, or scheduled job invokes it (only its own "
+            "docstring usage example and one cross-reference from "
+            "story_paraphrase.py's docstring exist) — the retroactive "
+            "bulk paraphrase de-dup has therefore NEVER run against live "
+            "data (GMV4-story-002)"
+        )
+E       AssertionError: merge_duplicate_stories() has ZERO production call sites under /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app or /home/ubuntu/github_repos/aether-job-career-agent/apps/api/scripts: no router, admin action, maintenance script, or scheduled job invokes it (only its own docstring usage example and one cross-reference from story_paraphrase.py's docstring exist) — the retroactive bulk paraphrase de-dup has therefore NEVER run against live data (GMV4-story-002)
+E       assert []
+
+tests/test_story_dedup_invocation.py:175: AssertionError
+________ TestDryRun.test_dry_run_emits_proposed_merges_without_writing _________
+
+self = <test_story_dedup_invocation.TestDryRun object at 0x7fc1891c8cb0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc189188fb0>
+
+    def test_dry_run_emits_proposed_merges_without_writing(self, monkeypatch):
+        """The risk-officer requires a dry-run mode that returns every
+        proposed merge pair with its similarity score and performs ZERO
+        writes, before this sweep is ever pointed at live data. Today's
+        signature is ``merge_duplicate_stories(user_id: str)`` — no
+        ``dry_run`` parameter exists at all.
+        """
+        from app.services import story_dedup_migration as mod
+    
+        sig = inspect.signature(mod.merge_duplicate_stories)
+>       assert "dry_run" in sig.parameters, (
+            "merge_duplicate_stories(user_id) has no 'dry_run' parameter "
+            f"(found only {list(sig.parameters)!r}) — there is no way to "
+            "preview proposed merges without writing to the DB, which the "
+            "risk-officer requires before this sweep ever touches live "
+            "story data"
+        )
+E       AssertionError: merge_duplicate_stories(user_id) has no 'dry_run' parameter (found only ['user_id']) — there is no way to preview proposed merges without writing to the DB, which the risk-officer requires before this sweep ever touches live story data
+E       assert 'dry_run' in mappingproxy(OrderedDict({'user_id': <Parameter "user_id: 'str'">}))
+E        +  where mappingproxy(OrderedDict({'user_id': <Parameter "user_id: 'str'">})) = <Signature (user_id: 'str') -> 'dict[str, Any]'>.parameters
+
+tests/test_story_dedup_invocation.py:202: AssertionError
+____________ TestNeverDeletes.test_merge_never_deletes_a_story_row _____________
+
+self = <test_story_dedup_invocation.TestNeverDeletes object at 0x7fc1891c8f20>
+test_user_id = 'c9421dc55e285b8648cea38d0'
+
+    def test_merge_never_deletes_a_story_row(self, test_user_id):
+        """Story content is user-authored, unrecoverable career history — a
+        false merge that also hard-deletes the loser's row destroys data
+        with no way back. Proven against a REAL merge (not by reading
+        source): the losing row's id must still resolve to a row after the
+        sweep runs.
+        """
+        repo = StoryRepository()
+        older, newer = _seed_anz_pair(repo, test_user_id)
+    
+        from app.services.story_dedup_migration import merge_duplicate_stories
+    
+        result = merge_duplicate_stories(user_id=test_user_id)
+        assert result.get("merged", 0) >= 1, f"expected the seeded pair to merge, got {result!r}"
+    
+        still_present = repo.get_by_id(newer["id"], test_user_id)
+>       assert still_present is not None, (
+            f"story row {newer['id']!r} (the merge LOSER) was PHYSICALLY "
+            "DELETED by merge_duplicate_stories (see 'DELETE FROM "
+            '"StoryEntry"' + "' in story_dedup_migration.py) — this is "
+            "exactly the unrecoverable-data risk the risk-officer flagged; "
+            "a merge must archive/soft-delete the loser, never hard-DELETE it"
+        )
+E       AssertionError: story row 'cf7a2cb47257ad62f2953f565' (the merge LOSER) was PHYSICALLY DELETED by merge_duplicate_stories (see 'DELETE FROM "StoryEntry"' in story_dedup_migration.py) — this is exactly the unrecoverable-data risk the risk-officer flagged; a merge must archive/soft-delete the loser, never hard-DELETE it
+E       assert None is not None
+
+tests/test_story_dedup_invocation.py:334: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_______ TestBeforeAfterCounts.test_merge_reports_before_and_after_counts _______
+
+self = <test_story_dedup_invocation.TestBeforeAfterCounts object at 0x7fc1891c9250>
+test_user_id = 'ca4a3519a9582566e4af84b22'
+
+    def test_merge_reports_before_and_after_counts(self, test_user_id):
+        repo = StoryRepository()
+        older, newer = _seed_anz_pair(repo, test_user_id)
+        before_actual = len(repo.list_by_user(test_user_id))
+        assert before_actual == 2
+    
+        from app.services.story_dedup_migration import merge_duplicate_stories
+    
+        result = merge_duplicate_stories(user_id=test_user_id)
+    
+        for key in ("before_count", "after_count"):
+>           assert key in result, (
+                f"merge_duplicate_stories() result is missing {key!r} — "
+                "§8.1(a) demands before/after row counts as proof-of-run, "
+                f"not just a bare merged count; got keys {sorted(result)!r}"
+            )
+E           AssertionError: merge_duplicate_stories() result is missing 'before_count' — §8.1(a) demands before/after row counts as proof-of-run, not just a bare merged count; got keys ['merged']
+E           assert 'before_count' in {'merged': 1}
+
+tests/test_story_dedup_invocation.py:360: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+------------------------------ Captured log setup ------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:951 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+=============================== warnings summary ===============================
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_story_dedup_invocation.py::TestMergeShape::test_merge_preserves_oldest_row_and_unions_tags
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_story_dedup_invocation.py::TestProductionInvocationPath::test_merge_duplicate_stories_has_a_production_invocation_path
+FAILED tests/test_story_dedup_invocation.py::TestDryRun::test_dry_run_emits_proposed_merges_without_writing
+FAILED tests/test_story_dedup_invocation.py::TestNeverDeletes::test_merge_never_deletes_a_story_row
+FAILED tests/test_story_dedup_invocation.py::TestBeforeAfterCounts::test_merge_reports_before_and_after_counts
+=================== 4 failed, 2 passed, 6 warnings in 11.47s ===================

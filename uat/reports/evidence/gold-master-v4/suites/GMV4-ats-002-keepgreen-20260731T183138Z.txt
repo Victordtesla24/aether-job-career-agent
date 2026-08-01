@@ -1,0 +1,20 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 14 items
+
+tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_local_model_when_available PASSED [  7%]
+tests/test_ats_engine_semantic.py::test_semantic_similarity_uses_hf_inference_api_when_local_unavailable PASSED [ 14%]
+tests/test_ats_engine_semantic.py::test_hf_inference_response_parsed_and_clamped PASSED [ 21%]
+tests/test_ats_engine_semantic.py::test_hf_inference_error_does_not_return_silent_token_overlap PASSED [ 28%]
+tests/test_ats_engine_semantic.py::test_semantic_score_is_not_token_overlap_for_paraphrase_pair PASSED [ 35%]
+tests/test_ats_engine_semantic.py::test_engine_reports_active_scoring_path PASSED [ 42%]
+tests/test_ats_engine_semantic.py::test_ats_total_score_composition_unchanged PASSED [ 50%]
+tests/test_wc_tailoring_loop.py::test_loop_uses_discovered_default_of_five_and_stops_once_target_reached PASSED [ 57%]
+tests/test_wc_tailoring_loop.py::test_clean_gap_keywords_strips_tokenization_noise PASSED [ 64%]
+tests/test_wc_tailoring_loop.py::test_loop_embeds_clean_gap_keywords_directive_into_next_iteration PASSED [ 71%]
+tests/test_wc_tailoring_loop.py::test_loop_exits_immediately_once_target_score_is_met PASSED [ 78%]
+tests/test_wc_tailoring_loop.py::test_loop_stops_at_max_iterations_when_score_never_reaches_target PASSED [ 85%]
+tests/test_wc_tailoring_loop.py::test_loop_surfaces_honest_warning_with_best_achieved_score_when_capped_out PASSED [ 92%]
+tests/test_wc_tailoring_loop.py::test_loop_never_lets_a_fabricated_keyword_close_the_gap PASSED [100%]
+
+============================== 14 passed in 6.17s ==============================

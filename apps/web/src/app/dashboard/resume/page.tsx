@@ -30,6 +30,12 @@ type AtsScore = {
   requires_review: boolean;
   job_title?: string | null;
   company?: string | null;
+  /** GMV4-ats-002: which path produced semantic_similarity — "local"/"hf_api"
+   *  (genuine) or "degraded" (neutral placeholder, not a measurement). */
+  semantic_path?: string | null;
+  /** Unambiguous, client-branchable twin of semantic_path — true iff the
+   *  semantic component above is a placeholder, not a real measurement. */
+  semantic_degraded?: boolean;
 };
 
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
@@ -204,6 +210,18 @@ export default function ResumePage() {
   const originalIdentity = deriveIdentity(baseResume);
   const tailoredIdentity = deriveIdentity(tailoredResume);
 
+  // GMV4-ats-002 round 3: WHITELIST, computed from `semantic_path` itself
+  // rather than the boolean twin — an older cached `ats` payload that
+  // predates this field (or simply omits it) must read as NOT measured,
+  // never as "not degraded" (round-2 fail-open truthy-read bug).
+  const semanticTrusted = ats?.semantic_path === "local" || ats?.semantic_path === "hf_api";
+  // ADR-GMV4-001: the ATS Conversion Impact panel's before/after/lift are
+  // each derived from two fresh re-scores 40% built from semantic
+  // similarity (tailor_agent.py `_compute_conversion_metrics`) — when
+  // either endpoint was degraded, the panel must withhold/badge these
+  // numbers instead of presenting a delta computed off a placeholder.
+  const conversionDegraded = Boolean(conversion?.scoringDegraded);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -360,22 +378,44 @@ export default function ResumePage() {
         >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
             ATS Conversion Impact
+            {conversionDegraded ? (
+              <span
+                className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aether-muted-dim"
+                data-testid="conversion-not-measured-badge"
+              >
+                not measured
+              </span>
+            ) : null}
           </h2>
           <p className="mt-2 text-sm text-aether-muted" data-testid="conversion-before-after">
-            Before: <span className="mono font-semibold text-white">{conversion.baselineATSScore}%</span>{" "}
-            → After: <span className="mono font-semibold text-aether-green">{conversion.tailoredATSScore}%</span>
+            Before:{" "}
+            <span className="mono font-semibold text-white">
+              {conversionDegraded ? "—" : `${conversion.baselineATSScore}%`}
+            </span>{" "}
+            → After:{" "}
+            <span className="mono font-semibold text-aether-green">
+              {conversionDegraded ? "—" : `${conversion.tailoredATSScore}%`}
+            </span>
           </p>
           <p className="mt-1 text-sm" data-testid="conversion-lift">
             <MetricTooltip
               label="Estimated interview conversion improvement"
               value={
                 <span className="mono font-semibold text-aether-green">
-                  {conversion.estimatedConversionLift}
+                  {conversionDegraded ? "—" : conversion.estimatedConversionLift}
                 </span>
               }
               tooltip={`${conversion.methodology} This is an illustrative estimate, not a measured outcome.`}
             />
           </p>
+          {conversionDegraded ? (
+            <p className="mt-3 text-xs text-aether-muted-dim" data-testid="conversion-degraded-note">
+              Semantic similarity could not be measured for the before/after re-score
+              — a neutral placeholder stood in instead, so this delta and the
+              conversion lift above should be treated as directional until scoring is
+              available again.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -569,24 +609,45 @@ export default function ResumePage() {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {[
-              { label: "Keyword match (40%)", value: ats.keyword_match },
-              { label: "Semantic similarity (40%)", value: ats.semantic_similarity },
-              { label: "Experience fit (20%)", value: ats.experience_gap },
+              { label: "Keyword match (40%)", value: ats.keyword_match, degraded: false },
+              {
+                label: "Semantic similarity (40%)",
+                value: ats.semantic_similarity,
+                degraded: !semanticTrusted,
+              },
+              { label: "Experience fit (20%)", value: ats.experience_gap, degraded: false },
             ].map((row) => (
               <div key={row.label}>
                 <div className="flex items-center justify-between text-xs text-aether-muted">
-                  <span>{row.label}</span>
-                  <span className="mono">{row.value}</span>
+                  <span>
+                    {row.label}
+                    {row.degraded ? (
+                      <span
+                        className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aether-muted-dim"
+                        data-testid="semantic-not-measured-badge"
+                      >
+                        not measured
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mono">{row.degraded ? "—" : row.value}</span>
                 </div>
                 <div className="mt-1 h-1.5 rounded-full bg-white/10">
                   <div
-                    className="h-1.5 rounded-full bg-aether-indigo"
-                    style={{ width: `${Math.min(100, Math.max(0, row.value))}%` }}
+                    className={`h-1.5 rounded-full ${row.degraded ? "bg-white/20" : "bg-aether-indigo"}`}
+                    style={{ width: `${row.degraded ? 0 : Math.min(100, Math.max(0, row.value))}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
+          {!semanticTrusted ? (
+            <p className="mt-3 text-xs text-aether-muted-dim" data-testid="semantic-degraded-note">
+              Semantic similarity could not be measured for this score — a neutral
+              placeholder stood in instead, so the overall score above should be
+              treated as directional until this is available again.
+            </p>
+          ) : null}
           {ats.missing_keywords.length > 0 ? (
             <p className="mt-3 text-xs text-aether-muted-dim">
               Missing JD keywords:{" "}

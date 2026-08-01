@@ -292,6 +292,12 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     remote = bool(job.get("remote"))
     au = _is_au(job)
 
+    # GMV4-ats-002: which path produced `sem` — "local"/"hf_api" (genuine) or
+    # "degraded" (neutral placeholder). `None` only on the error fallback
+    # below, where no ATSScore was produced at all — the whitelist check
+    # below (`sem_trusted`) treats `None` the same as any other untrusted
+    # value, so this fallback path is never mistaken for a real measurement.
+    sem_path: str | None = None
     try:
         score = ATSEngine().score(resume_text, _job_text(job))
         km = float(score.keyword_match)
@@ -301,6 +307,7 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         matched = list(score.matched_keywords)
         missing = list(score.missing_keywords)
         scored = True
+        sem_path = score.semantic_path
     except Exception:  # noqa: BLE001 — never 500 the detail panel
         overall = float(job.get("fitScore") or 0.0)
         km = sem = exp = overall
@@ -311,6 +318,12 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     matched = _clean_skills(matched, entities)
     missing = _clean_skills(missing, entities)
 
+    # GMV4-ats-002 round 3: WHITELIST — only "local"/"hf_api" count as a
+    # genuine measurement of `sem`. "degraded", "untracked", any unrecognised
+    # value, and the `None` left by the error-fallback branch above must all
+    # be treated as NOT trustworthy (fails closed instead of open).
+    sem_trusted = sem_path in ("local", "hf_api")
+
     salary_fit = _salary_fit(job)
     location_match = 100 if remote else (95 if au else 70)
     career_growth = _round(0.6 * _seniority_score(title) + 0.4 * overall)
@@ -319,17 +332,21 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
                        + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0))
     north_star = _round(0.6 * overall + 0.4 * sem)
 
+    # Dimensions whose score is wholly or partly built from `sem` carry an
+    # explicit `degraded` flag when it wasn't genuinely measured, so the
+    # radar chart / dimension list can badge-or-exclude them instead of
+    # rendering a placeholder-contaminated number as fact (round-2 leak site).
     dimensions = [
         {"label": "Technical Skills", "score": _round(km)},
         {"label": "Experience Level", "score": _round(exp)},
-        {"label": "Industry Match", "score": _round(sem)},
+        {"label": "Industry Match", "score": _round(sem), "degraded": not sem_trusted},
         {"label": "Role Alignment", "score": _round(overall)},
-        {"label": "Culture Fit", "score": culture_fit},
+        {"label": "Culture Fit", "score": culture_fit, "degraded": not sem_trusted},
         {"label": "Salary Fit", "score": salary_fit},
         {"label": "Location Match", "score": location_match},
         {"label": "Career Growth", "score": career_growth},
         {"label": "Company Stability", "score": stability},
-        {"label": "North Star Align", "score": north_star},
+        {"label": "North Star Align", "score": north_star, "degraded": not sem_trusted},
     ]
 
     skills_matched = len(matched)
@@ -343,14 +360,23 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         risks.append({"label": f"{len(missing)} key skills not matched", "severity": "high"})
     if km < 50:
         risks.append({"label": f"Low keyword coverage ({_round(km)}%)", "severity": "high"})
-    if sem < 50:
+    # Built entirely from `sem` — excluded (not badged) when untrustworthy;
+    # there is no honest way to badge a single risk-severity claim inline.
+    if sem_trusted and sem < 50:
         risks.append({"label": f"Domain overlap only {_round(sem)}%", "severity": "medium"})
 
-    if scored:
+    if scored and sem_trusted:
         narrative = (
             f"Your resume covers {skills_matched} of {skills_total} keywords this "
             f"posting emphasises, with {_round(sem)}% semantic overlap and a "
             f"{_round(overall)}% overall ATS fit for {title or 'this role'}."
+        )
+    elif scored:
+        narrative = (
+            f"Your resume covers {skills_matched} of {skills_total} keywords this "
+            f"posting emphasises, and a {_round(overall)}% overall ATS fit for "
+            f"{title or 'this role'}. Semantic overlap could not be measured for "
+            "this analysis, so treat the fit figures above as directional."
         )
     else:
         narrative = (
@@ -365,6 +391,14 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         "overall": _round(overall),
         "keywordMatch": _round(km),
         "semantic": _round(sem),
+        # GMV4-ats-002: which path produced "semantic" (and everything
+        # blended from it below — Culture Fit, North Star Align, the
+        # narrative's "X% semantic overlap" clause). "degraded" means `sem`
+        # is a neutral placeholder, NOT a real measurement — a client must
+        # check this before presenting any of those derived figures as fact.
+        # Round 3: WHITELIST, matching `sem_trusted` above.
+        "semanticPath": sem_path,
+        "semanticDegraded": not sem_trusted,
         "experience": _round(exp),
         "skillsMatched": skills_matched,
         "skillsTotal": skills_total,

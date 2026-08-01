@@ -1,0 +1,77 @@
+{
+  "accountCards": 0,
+  "accountsText": "INBOXES\nAll Inboxes\nConnect Gmail",
+  "inboxListCount": 50,
+  "statsText": "This Week's Email Stats\n229\nReceived\n22\nRecruiter\n6\nAuto-drafted\n0\nSent (approved)\n0\nFollow-ups\n0h\nAvg response",
+  "triageNotice": "No threads to triage yet.",
+  "triageRunCalls": [
+    {
+      "t": 1785522601264,
+      "phase": "response",
+      "status": 200,
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/email/run"
+    }
+  ],
+  "cardCountAfterTriage": 50,
+  "emailBodyErrorPresent": false,
+  "emailBodyErrorText": null,
+  "analyzeErrorText": null,
+  "aiIntelPresentAfterAnalyze": true,
+  "draft1": "Hi Vik,\n\nThank you for letting me know your contract with the ATO is finishing soon. I have noted your portfolio website and will review your latest experience. Please send through an updated CV so I can add it to your profile and match you with any suitable opportunities.\n\nBest regards,\nJohn",
+  "draft1Error": null,
+  "draft2": "Hi Vik,\n\nThank you for the update. I have noted that your contract with the ATO is finishing in two weeks.\n\nBased on your resume, your most recent role is Scrum Master / Project Manager at the Australian Taxation Office, where you have been since March 2026. Your background also includes extensive experience as a Senior Delivery Lead / Technical Product Owner and AI/ML Strategy & Solutions Architect at ANZ, as well as roles at NAB, Microsoft, and Telstra.\n\nI will review our current opportunities for matches with your skills in technical program management, agile delivery, and AI/ML solutions architecture and reach out if I find a suitable role.\n\nBest regards,\nJohn",
+  "draftIdentical": false,
+  "sendGateModalPresent": true,
+  "sendGateClosedAfterCancel": true,
+  "sendGateConfirmClicked": false,
+  "emailAgentRunResponses": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/email/run",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/email/run",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/email/run",
+      "status": 200
+    },
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents/email/run",
+      "status": 200
+    }
+  ],
+  "sendReplyOrConfirmedSendFired": false,
+  "saveDraftDisabledWhenEmpty": true,
+  "draftCreatedResponsesBeforeFill": 0,
+  "composeModalClosedAfterSave": true,
+  "draftCreateResponses": [
+    {
+      "url": "https://5cb5f0620.abacusai.cloud/api/emails/draft",
+      "status": 201
+    }
+  ],
+  "testDraftVisibleAfterReload": true,
+  "idle60s": [
+    {
+      "t_offset_ms": 24982,
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    },
+    {
+      "t_offset_ms": 54956,
+      "url": "https://5cb5f0620.abacusai.cloud/api/approvals?status=pending",
+      "status": 200
+    },
+    {
+      "t_offset_ms": 54979,
+      "url": "https://5cb5f0620.abacusai.cloud/api/agents",
+      "status": 200
+    }
+  ],
+  "unauthUrl": "https://5cb5f0620.abacusai.cloud/login?next=%2Fdashboard%2Femail",
+  "session2_inboxListCount": 50,
+  "session2_testDraftVisible": true,
+  "session2_accountsNeedReauth": 0
+}

@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+collecting ... collected 4 items
+
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_includes_semantic_path PASSED [ 25%]
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_flags_degraded_scoring PASSED [ 50%]
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit FAILED [ 75%]
+tests/test_ats_semantic_path_propagation.py::test_degraded_score_is_never_returned_as_an_unqualified_number PASSED [100%]
+
+=================================== FAILURES ===================================
+_____ test_job_insights_does_not_blend_degraded_semantic_into_culture_fit ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f54ff1d84a0>
+
+    def test_job_insights_does_not_blend_degraded_semantic_into_culture_fit(monkeypatch):
+        """STRENGTHENED (round-2 review finding 3): the original assertion below
+        was satisfiable by ANY top-level flag key (``_degradation_flagged``
+        scans the whole payload), so it stayed green even while the "Culture
+        Fit" dimension object itself carried no signal at all — a client
+        rendering just that one dimension (e.g. a per-dimension card/tooltip)
+        has no way to know its number is a degraded placeholder. This version
+        requires the signal to be SCOPED TO CULTURE FIT SPECIFICALLY: either the
+        dimension is withheld entirely, or its own dict carries a degradation
+        key — a payload-wide flag elsewhere no longer satisfies it."""
+        score = _make_score(semantic_path="degraded", semantic_similarity=_DEGRADED_SEMANTIC_SCORE)
+        result = _call_job_insights(monkeypatch, score)
+    
+        culture_fit = _culture_fit_dimension(result)
+>       assert _culture_fit_withheld_or_flagged(result), (
+            "GET /jobs/{id}/insights blends the degraded semantic placeholder "
+            f"into a real-looking 'Culture Fit' dimension ({culture_fit}) with "
+            "NO degradation signal on that dimension itself — only a "
+            f"payload-wide flag (e.g. semanticDegraded={result.get('semanticDegraded')!r}) "
+            "which a consumer of just the dimension object would never see. "
+            f"Full payload for context: {result}"
+        )
+E       AssertionError: GET /jobs/{id}/insights blends the degraded semantic placeholder into a real-looking 'Culture Fit' dimension ({'label': 'Culture Fit', 'score': 70}) with NO degradation signal on that dimension itself — only a payload-wide flag (e.g. semanticDegraded=True) which a consumer of just the dimension object would never see. Full payload for context: {'jobId': 'job-1', 'scored': True, 'needsResume': False, 'overall': 78, 'keywordMatch': 80, 'semantic': 50, 'semanticPath': 'degraded', 'semanticDegraded': True, 'experience': 90, 'skillsMatched': 1, 'skillsTotal': 2, 'matchedSkills': ['python'], 'missingSkills': ['kubernetes'], 'skillGap': 'kubernetes', 'narrative': 'Your resume covers 1 of 2 keywords this posting emphasises, with 50% semantic overlap and a 78% overall ATS fit for Backend Engineer.', 'dimensions': [{'label': 'Technical Skills', 'score': 80}, {'label': 'Experience Level', 'score': 90}, {'label': 'Industry Match', 'score': 50}, {'label': 'Role Alignment', 'score': 78}, {'label': 'Culture Fit', 'score': 70}, {'label': 'Salary Fit', 'score': 70}, {'label': 'Location Match', 'score': 70}, {'label': 'Career Growth', 'score': 72}, {'label': 'Company Stability', 'score': 76}, {'label': 'North Star Align', 'score': 67}], 'riskSignals': [{'label': 'No salary listed', 'severity': 'medium'}], 'isAustralia': False}
+E       assert False
+E        +  where False = _culture_fit_withheld_or_flagged({'jobId': 'job-1', 'scored': True, 'needsResume': False, 'overall': 78, ...})
+
+tests/test_ats_semantic_path_propagation.py:212: AssertionError
+=============================== warnings summary ===============================
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_includes_semantic_path
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+=================== 1 failed, 3 passed, 6 warnings in 0.39s ====================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

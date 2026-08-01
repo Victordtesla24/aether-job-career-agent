@@ -33,6 +33,11 @@ import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
 interface Dimension {
   label: string;
   score: number;
+  /** GMV4-ats-002: true when this dimension is wholly or partly built from
+   *  the semantic-similarity component AND that component was not genuinely
+   *  measured (`semanticPath` not in "local"/"hf_api") — a placeholder, not
+   *  a real number. Absent/false on dimensions that never touch `semantic`. */
+  degraded?: boolean;
 }
 interface RiskSignal {
   label: string;
@@ -44,6 +49,12 @@ interface Insights {
   overall: number;
   keywordMatch: number;
   semantic: number;
+  /** GMV4-ats-002: which path produced `semantic` — "local"/"hf_api"
+   *  (genuine) or "degraded"/"untracked"/unknown (neutral placeholder). */
+  semanticPath?: string | null;
+  /** Unambiguous, client-branchable twin of semanticPath — true iff
+   *  `semantic` (and everything blended from it below) is a placeholder. */
+  semanticDegraded?: boolean;
   experience: number;
   skillsMatched: number;
   skillsTotal: number;
@@ -210,7 +221,12 @@ function RadarChart({ dims }: { dims: Dimension[] }) {
   };
   const ring = (frac: number) =>
     dims.map((_, i) => pt(i, maxR * frac).map((x) => x.toFixed(1)).join(",")).join(" ");
-  const shape = dims.map((d, i) => pt(i, (maxR * Math.max(4, d.score)) / 100).map((x) => x.toFixed(1)).join(",")).join(" ");
+  // GMV4-ats-002: a degraded dimension's `score` is a placeholder, not a
+  // measurement — floor it to the chart's minimum visible radius (same as an
+  // honest 0) instead of plotting the placeholder number as a real point.
+  const shape = dims
+    .map((d, i) => pt(i, (maxR * Math.max(4, d.degraded ? 0 : d.score)) / 100).map((x) => x.toFixed(1)).join(","))
+    .join(" ");
   return (
     <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label="10-dimensional fit radar">
       <g fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1">
@@ -482,6 +498,12 @@ export default function JobsPage() {
 
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   const selectedInsights = selected ? insights[selected.id] : undefined;
+  // GMV4-ats-002 round 3: WHITELIST — trust the semantic-derived dimensions
+  // (Industry Match / Culture Fit / North Star Align) only when the backend
+  // genuinely measured them; any other/missing `semanticPath` value reads as
+  // not measured (fails closed, matching the same rule applied server-side).
+  const insightsSemanticTrusted =
+    selectedInsights?.semanticPath === "local" || selectedInsights?.semanticPath === "hf_api";
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
 
   const runDiscovery = async () => {
@@ -1309,13 +1331,36 @@ export default function JobsPage() {
                       </div>
                       <div className="grid flex-1 grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
                         {selectedInsights.dimensions.map((d) => (
-                          <div key={d.label} title={`${d.label}: ${d.score}/100`} data-testid="fit-dimension">
+                          <div
+                            key={d.label}
+                            title={d.degraded ? `${d.label}: not measured` : `${d.label}: ${d.score}/100`}
+                            data-testid="fit-dimension"
+                          >
                             <div className="mb-1 flex justify-between text-[11px]">
-                              <span className="text-aether-muted">{d.label}</span>
-                              <span className="mono" style={{ color: ringColor(d.score) }}>{d.score}</span>
+                              <span className="text-aether-muted">
+                                {d.label}
+                                {d.degraded ? (
+                                  <span
+                                    className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aether-muted-dim"
+                                    data-testid="dimension-not-measured-badge"
+                                  >
+                                    not measured
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="mono" style={{ color: d.degraded ? undefined : ringColor(d.score) }}>
+                                {d.degraded ? "—" : d.score}
+                              </span>
                             </div>
                             <div className="h-1.5 rounded-full bg-white/[0.06]">
-                              <div className="h-1.5 rounded-full" style={{ width: `${d.score}%`, background: ringColor(d.score) }} />
+                              <div
+                                className={d.degraded ? "h-1.5 rounded-full bg-white/20" : "h-1.5 rounded-full"}
+                                style={
+                                  d.degraded
+                                    ? { width: "0%" }
+                                    : { width: `${d.score}%`, background: ringColor(d.score) }
+                                }
+                              />
                             </div>
                           </div>
                         ))}
@@ -1324,6 +1369,14 @@ export default function JobsPage() {
                   ) : (
                     <div className="h-40 animate-pulse rounded-xl bg-white/5" aria-busy="true" />
                   )}
+                  {selectedInsights && !insightsSemanticTrusted ? (
+                    <p className="mt-3 text-xs text-aether-muted-dim" data-testid="insights-semantic-degraded-note">
+                      Semantic similarity could not be measured for this analysis — a
+                      neutral placeholder stood in instead, so Industry Match, Culture
+                      Fit and North Star Align above should be treated as directional
+                      until this is available again.
+                    </p>
+                  ) : null}
                 </section>
 
                 {/* Risk Signals (jd31) */}

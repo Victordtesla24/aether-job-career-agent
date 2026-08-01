@@ -3440,6 +3440,132 @@
       "verifiedBy": "reviewer (sonnet) 2026-07-31T18:52Z",
       "openedUtc": "2026-07-31T18:55:24Z",
       "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-005",
+      "screen": "Story Bank",
+      "severity": "BLOCKER",
+      "category": "data-loss-risk",
+      "summary": "SILENT DATA LOSS ON CREATE. POST to create a story returns 201 Created while OVERWRITING an existing story. This is the paraphrase-merge seen from the user's side: a batch-2 tester observed the same mechanism and recorded it as the dedup feature working correctly (same row id returned, tags unioned, zero count delta) \u2014 but to a user who typed a NEW story and got 201, their input silently replaced different existing content. A 201 status asserts creation; nothing created occurred. Under the deliberately-loose paraphrase thresholds this can consume genuinely distinct achievements.",
+      "reproduction": [
+        "Create a story on prod whose text is a loose paraphrase of an existing one; observe 201 and the pre-existing row mutated"
+      ],
+      "expected": "Creation creates, or the user is told their entry was merged into an existing story and can undo it",
+      "observed": "201 Created returned while an existing row is overwritten",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-E fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-apps-004",
+      "screen": "Applications",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "REAL DRAG-AND-DROP DOES NOT WORK. qa-adversary found the Applications board DnD fires NO request and moves nothing. This CORRECTS the batch-1 screen-tester, which reported DnD as working \u2014 it had succeeded only via a synthetic Playwright DragEvent and honestly filed the genuine-gesture case as UNSURE. \u00a79.1 requires drag-and-drop PLUS an accessible menu; the accessible Move-to menu IS verified working on all 31 cards, so the board is usable \u2014 but the primary advertised interaction is not.",
+      "reproduction": [
+        "Drag a card between stage columns on /dashboard/applications with a real mouse gesture and watch the network tab"
+      ],
+      "expected": "Drag-and-drop performs a real stage move",
+      "observed": "No request fired; card does not move",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-F fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-jobs-004",
+      "screen": "Jobs",
+      "severity": "HIGH",
+      "category": "defect",
+      "summary": "The apply flow never renders a confirmed state: after submitting, 0 applied badges are shown on reload. Batch-1 verified POST /jobs/{id}/apply fires and the application appears in the tracker, so the write succeeds \u2014 the failure is the Jobs board never reflecting it back, leaving the user unable to tell which jobs they have applied to.",
+      "reproduction": [
+        "Apply to a job on prod, reload /dashboard/jobs, count applied badges"
+      ],
+      "expected": "Applied jobs are badged on the Jobs board after reload",
+      "observed": "0 applied badges",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-H fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-stories-006",
+      "screen": "Story Bank",
+      "severity": "MEDIUM",
+      "category": "defect",
+      "summary": "GET /api/stories?category=... ignores the category filter server-side, returning unfiltered results.",
+      "reproduction": [
+        "Call GET /api/stories?category=<any> on prod and compare against unfiltered output"
+      ],
+      "expected": "Category filter applied server-side",
+      "observed": "Filter ignored",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-B fixer-medium",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-evidence-002",
+      "screen": "Approvals",
+      "severity": "HIGH",
+      "category": "governance",
+      "summary": "THE APPROVALS SCREEN HAS NO MACHINE EVIDENCE AT ALL. qa-adversary's audit of the testers found that the Approvals report \u2014 which carries this run's original BLOCKER (GMV4-approvals-001) \u2014 rests on a narrative hand-off with no network/console JSON captured, unlike every other screen. The BLOCKER itself is independently corroborated (the synthetic row is still live and was reproduced), but the screen's OTHER claims (DELETE 200, purge honest-zero, 409/404 negative paths) are UNVERIFIED and must be re-tested before G-F closes.",
+      "reproduction": [
+        "ls uat/reports/evidence/gold-master-v3/screens/dashboard-approvals/ \u2014 screenshots only, no machine capture"
+      ],
+      "expected": "Every tested screen has machine-readable network/console evidence",
+      "observed": "Approvals has screenshots and narrative only",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "qa-adversary re-test",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-runtime-001",
+      "screen": "n/a (monitoring)",
+      "severity": "HIGH",
+      "category": "governance",
+      "summary": "NO SERVER-SIDE RUNTIME EVIDENCE EXISTS FOR THIS RUN. \u00a723.1 mandates an always-on runtime-monitor tailing journalctl for aether-api/web/worker with every ERROR/Traceback/5xx becoming a finding, and G-M requires a >=60min clean observation window. The orchestrator armed a persistent journalctl monitor at Phase 0 Step 4 which reported zero matching events all run, but uat/reports/evidence/gold-master-v3/runtime/ is EMPTY \u2014 no artifact was ever filed, so the absence of server errors is unevidenced and G-M cannot close on it.",
+      "reproduction": [
+        "ls uat/reports/evidence/gold-master-v3/runtime/ \u2014 empty"
+      ],
+      "expected": "Timestamped journalctl excerpts filed as artifacts across the observation window",
+      "observed": "Directory empty; monitor output exists only as live notifications",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
+      ],
+      "status": "OPEN",
+      "owner": "runtime-monitor + evidence",
+      "fixCommits": [],
+      "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
+      "openedUtc": "2026-08-01T00:17:37Z",
+      "run": "GOLD-MASTER-V4"
     }
   ],
   "gmv4": {

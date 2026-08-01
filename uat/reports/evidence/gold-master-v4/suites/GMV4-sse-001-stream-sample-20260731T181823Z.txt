@@ -1,0 +1,39 @@
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+HTTP 200
+  content-type: 'text/event-stream; charset=utf-8'
+  cache-control: 'no-cache'
+  x-accel-buffering: 'no'
+  connection: 'keep-alive'
+--- RAW STREAM BODY ---
+: agent-run stream evid-run-1
+
+event: snapshot
+data: {"runId": "evid-run-1", "agentName": "submission", "status": "completed", "startedAt": "2026-07-31T18:00:00", "completedAt": "2026-07-31T18:00:03", "source": "agent_run_row"}
+
+event: kanban_updated
+data: {"channel": "jobs:evid-user-1", "runId": "evid-run-1", "agentName": "submission", "basis": "run_output", "changes": [{"jobId": "job_abc", "applicationId": "app_xyz"}], "reason": "agent_run_completed"}
+
+event: complete
+data: {"runId": "evid-run-1", "agentName": "submission", "status": "completed", "startedAt": "2026-07-31T18:00:00", "completedAt": "2026-07-31T18:00:03", "source": "agent_run_row", "output": {"submitted": true, "jobId": "job_abc", "applicationId": "app_xyz", "jobSelection": "readyToApply"}}
+
+
+--- END ---
+NON-OWNER: HTTP 404 content-type='application/json' body='{"detail":"Agent run not found"}'
+--- FAILED-RUN STREAM ---
+: agent-run stream evid-run-2
+
+event: snapshot
+data: {"runId": "evid-run-2", "agentName": "submission", "status": "failed", "startedAt": "2026-07-31T18:00:00", "completedAt": "2026-07-31T18:00:03", "source": "agent_run_row"}
+
+event: failed
+data: {"runId": "evid-run-2", "agentName": "submission", "status": "failed", "startedAt": "2026-07-31T18:00:00", "completedAt": "2026-07-31T18:00:03", "source": "agent_run_row", "error": "LLM budget exhausted"}
+
+
+assert no 'event: complete': True

@@ -175,6 +175,14 @@ class TailoringLoop:
             corpus = self._corpus(resume_text, tailor_result.bullets)
             ats_score = self._ats.score(corpus, job_description)
             gap_keywords = clean_gap_keywords(list(ats_score.missing_keywords))
+            # GMV4-ats-002: which path produced this iteration's `overall` —
+            # ``ats_score.overall`` is 40% built from ``semantic_similarity``,
+            # so an iteration whose semantic component came back "degraded"
+            # (ats_engine.py's ATSScore.semantic_path) is contaminated by a
+            # neutral placeholder, not a genuine measurement. Recorded on
+            # every iteration (never just the winner) so the caller/UI can
+            # see exactly which passes were trustworthy.
+            semantic_path = getattr(ats_score, "semantic_path", "untracked")
 
             iterations.append({
                 "iteration": i,
@@ -183,6 +191,7 @@ class TailoringLoop:
                 "changes": tailor_result.changes,
                 "gapKeywords": gap_keywords,
                 "rejected": tailor_result.rejected,
+                "semanticPath": semantic_path,
             })
 
             if ats_score.overall > best_score:
@@ -199,17 +208,55 @@ class TailoringLoop:
             current_originals = tailor_result.bullets
             current_jd = self._build_directive(ats_score.overall, gap_keywords)
 
-        success = best_score >= self.target_score
+        # ADR-GMV4-001 (CONVERGE-BUT-FLAG): a degraded iteration's `overall`
+        # is 40% a neutral placeholder, not a measurement, so it can never be
+        # allowed to declare success — however cleanly it appears to clear
+        # `target_score`. The tailored bullets are still returned (the
+        # rewrite work is real and valuable even when the measurement is
+        # not); only the automated success/failure VERDICT is withheld.
+        # GMV4-ats-002 round 3: this check deliberately stays the narrower
+        # ``== "degraded"`` test rather than the whitelist used by the
+        # OTHER consumers (resumes.py/jobs.py/tailor_agent.py). Here,
+        # "no provenance tracked at all" (semantic_path missing/"untracked")
+        # means the CALLER opted out of this dimension entirely (e.g. a test
+        # double pinning loop mechanics only) — it is not evidence that
+        # scoring degraded, so it must not flip a real, converged pass to
+        # requires_review. Only the engine's own explicit "degraded" verdict
+        # — which real ``ATSEngine.score()`` calls always set unambiguously —
+        # may withhold success here.
+        any_degraded = any(it.get("semanticPath") == "degraded" for it in iterations)
+        degraded_count = sum(1 for it in iterations if it.get("semanticPath") == "degraded")
+        reached_target = best_score >= self.target_score
+        success = reached_target and not any_degraded
         requires_review = not success
         warning = None
         if requires_review:
-            warning = (
-                f"Tailoring stopped after {len(iterations)} iteration(s) "
-                f"without reaching the target ATS score of "
-                f"{self.target_score:.0f}. Best score achieved: "
-                f"{best_score:.1f}/100. Please review this resume manually "
-                "before submitting."
-            )
+            if any_degraded and reached_target:
+                warning = (
+                    f"Best score achieved: {best_score:.1f}/100, which reaches "
+                    f"the target of {self.target_score:.0f}/100 — but semantic "
+                    f"scoring was DEGRADED on {degraded_count} of "
+                    f"{len(iterations)} iteration(s) (no genuine embedding "
+                    "model or HF Inference API was available), so part of "
+                    "that score is a neutral placeholder rather than a real "
+                    "measurement. This result cannot be accepted as a "
+                    "verified pass — please review this resume manually "
+                    "before submitting."
+                )
+            else:
+                warning = (
+                    f"Tailoring stopped after {len(iterations)} iteration(s) "
+                    f"without reaching the target ATS score of "
+                    f"{self.target_score:.0f}. Best score achieved: "
+                    f"{best_score:.1f}/100. Please review this resume manually "
+                    "before submitting."
+                )
+                if any_degraded:
+                    warning += (
+                        f" Note: semantic scoring was also DEGRADED on "
+                        f"{degraded_count} of {len(iterations)} iteration(s), "
+                        "so even this best score is only partially genuine."
+                    )
 
         return TailoringLoopResult(
             iterations=iterations,

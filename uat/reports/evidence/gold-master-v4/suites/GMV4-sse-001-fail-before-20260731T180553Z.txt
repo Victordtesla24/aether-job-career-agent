@@ -1,0 +1,94 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 6 items
+
+tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type FAILED [ 16%]
+tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order FAILED [ 33%]
+tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner FAILED   [ 50%]
+tests/test_agent_run_sse.py::test_sse_emits_kanban_updated_on_channel FAILED [ 66%]
+tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete FAILED [ 83%]
+tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 FAILED   [100%]
+
+=================================== FAILURES ===================================
+_________ test_sse_endpoint_exists_and_sets_event_stream_content_type __________
+tests/test_agent_run_sse.py:123: in test_sse_endpoint_exists_and_sets_event_stream_content_type
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+E   AssertionError: expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+________________ test_sse_stream_emits_progress_events_in_order ________________
+tests/test_agent_run_sse.py:138: in test_sse_stream_emits_progress_events_in_order
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+E   AssertionError: expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+______________________ test_sse_stream_is_scoped_to_owner ______________________
+tests/test_agent_run_sse.py:164: in test_sse_stream_is_scoped_to_owner
+    assert resp_owner.status_code == 200, f"expected 200, got {resp_owner.status_code}: {resp_owner.text}"
+E   AssertionError: expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+___________________ test_sse_emits_kanban_updated_on_channel ___________________
+tests/test_agent_run_sse.py:194: in test_sse_emits_kanban_updated_on_channel
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+E   AssertionError: expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+____________________ test_sse_stream_terminates_on_complete ____________________
+tests/test_agent_run_sse.py:221: in test_sse_stream_terminates_on_complete
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+E   AssertionError: expected 200, got 404: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+______________________ test_sse_run_not_found_returns_404 ______________________
+tests/test_agent_run_sse.py:248: in test_sse_run_not_found_returns_404
+    assert body.get("detail") == "Agent run not found", (
+E   AssertionError: got FastAPI's generic unmatched-route 404 body {'detail': 'Not Found'} — the SSE route does not exist yet, so this is NOT the app's own 'Agent run not found' handler
+E   assert 'Not Found' == 'Agent run not found'
+E     
+E     - Agent run not found
+E     + Not Found
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type
+FAILED tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order
+FAILED tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner - Asse...
+FAILED tests/test_agent_run_sse.py::test_sse_emits_kanban_updated_on_channel
+FAILED tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete - ...
+FAILED tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 - Asse...
+======================== 6 failed, 6 warnings in 3.57s =========================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

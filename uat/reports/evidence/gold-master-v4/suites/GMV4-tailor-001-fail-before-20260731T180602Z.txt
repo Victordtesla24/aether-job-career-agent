@@ -1,0 +1,51 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 4 items
+
+tests/test_tailor_response_contract.py::test_tailor_response_includes_iterations FAILED [ 25%]
+tests/test_tailor_response_contract.py::test_tailor_response_includes_ats_score_before_and_after FAILED [ 50%]
+tests/test_tailor_response_contract.py::test_tailor_response_includes_gap_keywords FAILED [ 75%]
+tests/test_tailor_response_contract.py::test_tailor_sub_target_score_is_reported_honestly FAILED [100%]
+
+=================================== FAILURES ===================================
+___________________ test_tailor_response_includes_iterations ___________________
+tests/test_tailor_response_contract.py:253: in test_tailor_response_includes_iterations
+    assert "iterations" in body, (
+E   AssertionError: TailorRunResult has no 'iterations' field — response keys were: ['approval_id', 'approval_status', 'changes', 'conversionMetrics', 'rejected', 'resume_id', 'warning']
+E   assert 'iterations' in {'resume_id': 'child-1', 'changes': 2, 'rejected': [], 'conversionMetrics': {'baselineATSScore': 73.55, 'tailoredATSScore': 73.63, 'estimatedConversionLift': '+0.0%', 'methodology': 'Like-for-like ATS delta (shared context) × population baseline (2.5%)', ...}, ...}
+----------------------------- Captured stderr call -----------------------------
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 12462.88it/s]
+___________ test_tailor_response_includes_ats_score_before_and_after ___________
+tests/test_tailor_response_contract.py:294: in test_tailor_response_includes_ats_score_before_and_after
+    assert "iterations" in body, (
+E   AssertionError: conversionMetrics.tailoredATSScore is present but untraceable to any optimizer iteration — 'iterations' is missing from the response entirely. Response keys were: ['approval_id', 'approval_status', 'changes', 'conversionMetrics', 'rejected', 'resume_id', 'warning']
+E   assert 'iterations' in {'resume_id': 'child-1', 'changes': 2, 'rejected': [], 'conversionMetrics': {'baselineATSScore': 73.55, 'tailoredATSScore': 73.63, 'estimatedConversionLift': '+0.0%', 'methodology': 'Like-for-like ATS delta (shared context) × population baseline (2.5%)', ...}, ...}
+__________________ test_tailor_response_includes_gap_keywords __________________
+tests/test_tailor_response_contract.py:322: in test_tailor_response_includes_gap_keywords
+    assert "gapKeywords" in body, (
+E   AssertionError: No top-level 'gapKeywords' field for the UI chip list — response keys were: ['approval_id', 'approval_status', 'changes', 'conversionMetrics', 'rejected', 'resume_id', 'warning']
+E   assert 'gapKeywords' in {'resume_id': 'child-1', 'changes': 2, 'rejected': [], 'conversionMetrics': {'baselineATSScore': 73.55, 'tailoredATSScore': 73.91, 'estimatedConversionLift': '+0.0%', 'methodology': 'Like-for-like ATS delta (shared context) × population baseline (2.5%)', ...}, ...}
+______________ test_tailor_sub_target_score_is_reported_honestly _______________
+tests/test_tailor_response_contract.py:383: in test_tailor_sub_target_score_is_reported_honestly
+    assert "iterations" in body, (
+E   AssertionError: warning honestly says 'Best score achieved: 44.0/100' but nothing in the response lets a caller VERIFY that claim against the real iteration-by-iteration trail — 'iterations' is missing entirely. Response keys were: ['approval_id', 'approval_status', 'changes', 'conversionMetrics', 'rejected', 'resume_id', 'warning']
+E   assert 'iterations' in {'resume_id': 'child-1', 'changes': 2, 'rejected': [], 'conversionMetrics': {'baselineATSScore': 73.55, 'tailoredATSScore': 73.91, 'estimatedConversionLift': '+0.0%', 'methodology': 'Like-for-like ATS delta (shared context) × population baseline (2.5%)', ...}, ...}
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_tailor_response_contract.py::test_tailor_response_includes_iterations
+FAILED tests/test_tailor_response_contract.py::test_tailor_response_includes_ats_score_before_and_after
+FAILED tests/test_tailor_response_contract.py::test_tailor_response_includes_gap_keywords
+FAILED tests/test_tailor_response_contract.py::test_tailor_sub_target_score_is_reported_honestly
+======================== 4 failed, 5 warnings in 7.24s =========================

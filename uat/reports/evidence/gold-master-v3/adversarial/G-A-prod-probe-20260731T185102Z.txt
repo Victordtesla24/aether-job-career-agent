@@ -1,0 +1,47 @@
+G-A ADVERSARIAL PROD PROBE — GOLD-MASTER-V4 Workstream A §3.3
+captured_utc=2026-07-31T18:51:02Z
+prod=https://5cb5f0620.abacusai.cloud
+repo_head=5c8da67484ba8e0fea0d190e6f41e94d657b55af
+repo_head_subject=test(gm-v4): SSE contract amended per ADR-GMV4-002 (7/7); Culture Fit test strengthened to RED
+--- unauthenticated HTTP probes (read-only) ---
+GET / -> 307
+GET /login -> 200
+GET /pricing -> 200
+GET /terms -> 200
+GET /privacy-policy -> 200
+GET /signup -> 200
+GET /forgot-password -> 200
+GET /dashboard -> 200
+GET /admin -> 200
+--- api health ---
+{"status":"ok","version":"0.2.0"}
+--- unauthenticated api guard ---
+GET /api/agents -> 401
+GET /api/admin/users -> 401
+--- ledger snapshot ---
+MODELS-LIVE-GAPS.json mtime=2026-07-31 18:47:42.723279227 +0000
+GMV4 findings: 64
+by status: {'REWORK-COMPLETE-AWAITING-RE-REVIEW': 2, 'FIX-IN-TREE-AWAITING-REVIEW': 2, 'OPEN': 49, 'REVIEW-PASSED-AWAITING-WAVE-COMMIT-AND-DEPLOY': 1, 'CLOSED-NOT-A-DEFECT': 1, 'VERIFY-ALREADY-SATISFIED': 1, 'CONDITIONALLY-CLOSED-PENDING-OPERATOR': 1, 'REFUSED-ON-COMPLIANCE': 1, 'OPEN-HUMAN-GATED': 1, 'VERIFIED-CLOSED': 4, 'TESTS-IN-PROGRESS': 1}
+by severity: {'BLOCKER': 8, 'HIGH': 18, 'MEDIUM': 25, 'LOW': 13}
+--- deploy evidence dir ---
+deploy/ file count: 0
+runtime/ file count: 0
+submission-agent/ file count: 0
+last_deploy_sha in STATE.json: None
+
+--- appended 2026-07-31T18:52:14Z: .env KEY-NAME presence probe (values NEVER read or printed) ---
+method: grep -oE '^(NAME)=' .env  — prints the key name only; absent names simply do not appear
+AETHER_ADMIN_EMAIL = PRESENT
+AETHER_ADMIN_PASSWORD_HASH = PRESENT
+AETHER_ASYNC_GENERATION = PRESENT
+STRIPE_SECRET_KEY = PRESENT
+STRIPE_WEBHOOK_SECRET = PRESENT
+ABSENT (not matched): AETHER_DISCOVERY_FIXTURE_DIR, AETHER_ENABLE_SEEK, DOCUGENERATE_API_KEY, HF_TOKEN, YOUTUBE_DATA_API_KEY, WEBSCRAPING_AI_API_KEY, GSC_SERVICE_ACCOUNT_JSON, GOOGLE_FORMS_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY
+
+--- dead-code check: settings 'Coming soon' badge ---
+settings-client.tsx:1233 contains literal 'Coming soon' inside Toggle's optional disabled branch.
+<Toggle usages: 2; usages passing disabled: 0 (awk block scan) => badge is UNREACHABLE dead code, not a G-O violation.
+
+--- fixture-path check: apps/api/app/services/discovery/base_adapter.py:91-98 ---
+_resolve_payload() returns recorded fixture JSON whenever env AETHER_DISCOVERY_FIXTURE_DIR is set.
+AETHER_DISCOVERY_FIXTURE_DIR is ABSENT from repo-root .env and from deploy/ unit files => fixture path NOT armed in production.

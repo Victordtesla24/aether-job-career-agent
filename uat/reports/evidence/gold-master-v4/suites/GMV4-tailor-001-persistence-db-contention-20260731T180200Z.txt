@@ -1,0 +1,109 @@
+GMV4-tailor-001 §6.1(c) — test_tailor_persists_ats_score_and_iteration_to_db
+Test file: apps/api/tests/test_tailor_persistence_db.py
+Repo: /home/ubuntu/github_repos/aether-job-career-agent
+Timestamp of this record: 2026-07-31T18:02:00Z
+
+STATUS: BLOCKED — two consecutive live-DB attempts both failed for an
+INFRASTRUCTURE reason (concurrent full-suite pytest actively TRUNCATEing the
+shared `aether_test` schema), NOT for the intended code defect. Per the task
+brief's "Fail same task twice -> STOP and report for escalation" rule, no
+third attempt was made against a contended DB. The test file itself collects
+cleanly (`--collect-only` verified, 1 test collected, 0 errors) and its
+design/rationale is sound — see its module docstring for the source-code
+citations proving the defect exists (`_compute_conversion_metrics` runs AFTER
+`self._resumes.create(...)` in `apps/api/app/agents/tailor_agent.py:453-475`,
+so `conversionMetrics` is never written back to the Resume row's
+`sections` — only `tailoringIterations` is).
+
+Confirmed contention (process list at time of both attempts):
+  ubuntu   3137656  python3 -m pytest -p no:xdist --tb=short   (started 17:51, still running)
+  ubuntu   3147425  python3 -m pytest tests/test_wc_tailoring_loop.py tests/test_ats_engine_semantic.py -v ...
+  /tmp/aether-pytest.lock: held (fuser + `flock -n ... || echo LOCK_HELD` both confirm)
+
+Command (both attempts, identical):
+  timeout 120 scripts/run-tests.sh tests/test_tailor_persistence_db.py -v --tb=short --no-header
+
+=== ATTEMPT 1 (verbatim, --tb=long re-run to get the full traceback) ===
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 1 item
+
+tests/test_tailor_persistence_db.py::test_tailor_persists_ats_score_and_iteration_to_db FAILED [100%]
+
+=================================== FAILURES ===================================
+______________ test_tailor_persists_ats_score_and_iteration_to_db ______________
+...
+>               cur.execute(
+                    f"""
+                    INSERT INTO "Job" ( ... )
+                    VALUES (...)
+                    ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET ...
+                    RETURNING {_JOB_COLUMNS}, (xmax = 0) AS "wasInserted"
+                    """,
+                    (new_id(), user_id, job_raw["title"], job_raw["company"], ...),
+                )
+
+app/repositories/job.py:280:
+self = <cursor object at 0x7fb37e019350; closed: -1>
+query = 'INSERT INTO "Job" (...) ...'
+vars = ('c37dba1112b2a3473e6750f32', 'c99b94c97c73711a77612ccd3', 'Senior Backend Engineer', 'Acme', None, False, ...)
+
+    def execute(self, query: Any, vars: Any = None) -> Any:
+        try:
+>           return super().execute(query, vars)
+E           psycopg2.errors.ForeignKeyViolation: insert or update on table "Job" violates foreign key constraint "Job_userId_fkey"
+E           DETAIL:  Key (userId)=(c99b94c97c73711a77612ccd3) is not present in table "User".
+
+app/db.py:126: ForeignKeyViolation
+=========================== short test summary info ============================
+FAILED tests/test_tailor_persistence_db.py::test_tailor_persists_ats_score_and_iteration_to_db
+======================== 1 failed, 6 warnings in 0.55s =========================
+
+DIAGNOSIS: the User row this test had JUST INSERTed (via UserRepository().create())
+was gone by the time the very next statement (JobRepository().create()) ran —
+consistent with the concurrent full-suite process's `_truncate_tables()`
+(`TRUNCATE "User", "Job", "Resume", ... CASCADE`) firing between the two
+statements. This is the exact "Aether shared test-DB flakiness" category
+already on file (memory: parallel swarms sharing one aether_test schema).
+NOT a code defect in TailoringAgent/ResumeRepository.
+
+=== ATTEMPT 2 (verbatim) ===
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 1 item
+
+tests/test_tailor_persistence_db.py::test_tailor_persists_ats_score_and_iteration_to_db FAILED [100%]
+
+=================================== FAILURES ===================================
+______________ test_tailor_persists_ats_score_and_iteration_to_db ______________
+tests/test_tailor_persistence_db.py:176: in test_tailor_persists_ats_score_and_iteration_to_db
+    assert persisted is not None, "tailored resume version was not persisted at all"
+E   AssertionError: tailored resume version was not persisted at all
+E   assert None is not None
+----------------------------- Captured stderr call -----------------------------
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 13558.89it/s]
+=============================== warnings summary ===============================
+=========================== short test summary info ============================
+FAILED tests/test_tailor_persistence_db.py::test_tailor_persists_ats_score_and_iteration_to_db
+======================== 1 failed, 6 warnings in 6.53s =========================
+
+DIAGNOSIS: this run got past User+Job+base-Resume creation (no FK violation
+this time — the concurrent truncation window shifted), and `agent.run()`
+itself completed and returned a `resume_id` (TailoringAgent.run/
+ResumeRepository.create both real, unmocked DB calls) — but the IMMEDIATE
+follow-up `ResumeRepository().get_by_id(result.resume_id, user_id)` came back
+None. Same root cause: the concurrent suite's TRUNCATE landed between the
+create() and the get_by_id() a few lines later. Again NOT a code defect.
+
+=== Collection-only sanity (safe under contention — no DB I/O) ===
+Command: timeout 60 scripts/run-tests.sh tests/test_tailor_persistence_db.py --collect-only -q --no-header
+Result: "1 test collected in 0.46s" — file is syntactically valid and importable.
+
+RECOMMENDATION: re-run this ONE file (`tests/test_tailor_persistence_db.py`)
+under `flock /tmp/aether-pytest.lock scripts/run-tests.sh tests/test_tailor_persistence_db.py -v --tb=short`
+once the concurrent full-suite process (pid 3137656 at time of writing,
+started 17:51Z) has exited and the lock is free, to get a clean,
+uncontended verbatim result. Expected (per source-code analysis in the
+test's own module docstring): FAIL on the `has_persisted_score` assertion —
+`sections` will contain `tailoringIterations` (already persisted) but no
+`baselineATSScore`/`tailoredATSScore`/`conversionMetrics` key.

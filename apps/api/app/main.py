@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -154,6 +155,25 @@ def _guard_production_discovery_fixtures() -> None:
     )
 
 
+def _warm_up_ats_semantic_model() -> None:
+    """Background (non-blocking) call-out for GMV4-ats-001 §5.2 step 2.
+
+    ``ATSEngine``'s semantic-similarity component needs the
+    ``all-MiniLM-L6-v2`` model cached on disk (or ``HF_TOKEN`` set) to
+    produce a genuine score instead of an honest "degraded" result. This
+    warm-up primes that cache and logs the active path. It runs in a daemon
+    thread — never awaited by ``_lifespan`` — so a slow or offline
+    first-time model download can never delay app startup or risk
+    ``GET /api/health`` failing its liveness window.
+    """
+    from app.services.ats_engine import warm_up_semantic_model
+
+    try:
+        warm_up_semantic_model()
+    except Exception as exc:  # noqa: BLE001 — startup warm-up is best-effort
+        print(f"WARNING: ATS semantic model warm-up failed: {exc}", file=sys.stderr)
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
@@ -217,6 +237,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             f"WARNING: §14.7 admin credential rotation skipped at startup: {exc}",
             file=sys.stderr,
         )
+    threading.Thread(
+        target=_warm_up_ats_semantic_model, name="ats-semantic-warmup", daemon=True
+    ).start()
     yield
 
 

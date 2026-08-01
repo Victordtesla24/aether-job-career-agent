@@ -1,0 +1,160 @@
+GMV4-sse-001 — §22 STEP 5 ADVERSARIAL REVIEW (agent-run SSE streaming layer)
+Reviewer: reviewer sub-agent (opus tier) — NOT the author, no self-review.
+Captured: 2026-07-31T18:52:26Z. Repo: /home/ubuntu/github_repos/aether-job-career-agent
+Binding ruling read: docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md §5c (ADR-GMV4-002). [VERIFIED-WITH-FRESH-EVIDENCE — read in full this session]
+
+VERDICT: FAIL (conditional — two required changes below; core mechanism is sound)
+
+===================================================================
+NUMBERED FINDINGS
+===================================================================
+
+1. apps/api/app/services/agent_run_stream.py:167-201 (_kanban_payload) + agents.py's
+   test_agent_run_sse.py:246-266 (test 4) — UNRESOLVED HONESTY QUESTION, shipped as-is.
+   `kanban_updated` is emitted on EVERY run reaching status=="completed", regardless of
+   `agentName` — a tailoring or cover-letter run (which never touches the board) fires the
+   same `kanban_updated` event as a submission run. The payload discloses `basis`/`changes`
+   honestly, but the event NAME asserts a board change occurred; test 4 currently locks in
+   this behavior for a bare `{status:"completed"}` run with no `output`. Author self-flagged
+   UNSURE and did not resolve it. REQUIRED CHANGE: adopt interpretation (b) — withhold
+   `kanban_updated` unless `basis=="run_output"` (real jobId/applicationId present); route
+   `test-author` (never the fixer, per ADR-GMV4-002's own precedent) to rewrite test 4 to
+   monkeypatch a run with real `output`. [VERIFIED-WITH-FRESH-EVIDENCE: code read + test read]
+
+2. apps/api/app/services/agent_run_stream.py:107-112 + apps/api/app/routers/agents.py:2160-2199
+   — NO CAP on concurrent SSE streams (per-user or global), while apps/api/app/db.py:8-9
+   documents a hard 25-connection ceiling for the ENTIRE application ("The hosted PostgreSQL
+   caps concurrent connections at 25... connections are short-lived: open, use, close").
+   `get_connection()` (db.py:145-154) opens a brand-new `psycopg2.connect()` per call with NO
+   pooling. Each open stream calls `reload_run` (→ one fresh connection) every
+   `AETHER_SSE_POLL_SECONDS` (default 1.0s, agent_run_stream.py:112) for up to
+   `AETHER_SSE_MAX_STREAM_SECONDS` (default 600s, line 125). No rate limiter is wired to this
+   route (`apps/api/app/rate_limit.py` covers only login/register/checkout/portal — grepped,
+   zero hits for this route). A handful of users with 2-3 open tabs each can exhaust the
+   25-connection global ceiling and degrade/break EVERY other endpoint in the app, not just
+   this one. Also: the default poll (1.0s) is 3x TIGHTER than the "2-3s client poll" the
+   module docstring (line 8-9) claims to replace (verified actual client poll = 3000ms,
+   apps/web/src/lib/api/agents.ts:57) — the replacement claim is not accurate as shipped.
+   REQUIRED CHANGE: add a per-user (and ideally global) concurrent-stream cap before this
+   route is wired to any UI consumer; document/justify the poll-interval claim or loosen the
+   default. [VERIFIED-WITH-FRESH-EVIDENCE: db.py, rate_limit.py grep, agents.ts read]
+
+3. Minor / non-blocking — apps/api/app/services/agent_run_stream.py:297 cites the codebase's
+   existing `# noqa: BLE001` convention; nearest match is agents.py:826, not :823 as the
+   author's own accounting claimed. Trivial citation drift, not a defect.
+
+===================================================================
+ANSWERS TO 1-11
+===================================================================
+
+1. Fabrication path — NONE found. [VERIFIED-WITH-FRESH-EVIDENCE, full read of
+   iter_agent_run_events, lines 226-335] Every branch either (a) yields a frame built from a
+   freshly-reloaded row (`_run_payload`/`_terminal_frames`), (b) yields a heartbeat COMMENT
+   (not an event, carries no state claim), or (c) returns with an honest `stream_error` /
+   `stream_timeout` frame. No `sleep`-then-emit-progress pattern, no loop-counter-driven
+   event, no event fired without a corresponding `reload_run` read backing it.
+
+2. Timeout path (lines 278-291): the deadline check is inside the active-status loop and
+   ends with `return` immediately after `stream_timeout` — it never falls through to
+   `_terminal_frames`. Confirmed `complete` cannot be emitted on timeout.
+
+3. `failed` vs `complete` (lines 204-218): `_terminal_frames` branches ONLY on
+   `status_value == "completed"`; any other terminal status (i.e. `"failed"`, the only other
+   member of `TERMINAL_RUN_STATUSES`) takes the `failed` branch unconditionally. Confirmed:
+   a failed run cannot emit `complete`.
+
+4. `kanban_updated` with `changes: []` — see Finding 1. RECOMMENDATION: interpretation (b).
+   The disclosed `basis` field is good design but insufficient cover for an event NAME that
+   fires irrespective of agent type; a naive future consumer (none exists yet) reading the
+   event name alone would be misled. Ship only on `basis=="run_output"`; test 4 needs a
+   test-author-owned rewrite (ADR-GMV4-002 precedent: fixer must not touch tests).
+
+5. Security boundary — SOUND. [VERIFIED] `get_by_id` predicate is `"id"=%s AND "userId"=%s"`
+   (agent_run.py:86-95); a non-owner lookup returns 0 rows → `None` → the SAME
+   `HTTPException(404, "Agent run not found")` as a genuinely-missing run (agents.py:2185-86),
+   raised BEFORE `StreamingResponse` is ever constructed — zero SSE bytes possible for a
+   non-owner. No distinct code/body/timing path exists between "not found" and "not yours".
+
+6. Resource exhaustion — SERIOUS, see Finding 2. Judged seriously per the brief: this is not
+   a theoretical DoS, it is a documented 25-connection global ceiling against an unbounded,
+   1-poll-per-second-per-stream, 600s-lifetime, uncapped-concurrency design. Currently latent
+   only because no UI consumer exists yet (GMV4-sse-003 explicitly out of scope) — but the
+   endpoint is live and reachable today by any authenticated client/curl, so the exposure is
+   real now, not merely "someday."
+
+7. Connection lifecycle — SOUND with one caveat. Run-already-terminal-at-connect: loop body
+   never executes (0 iterations since `current` is already terminal), falls straight to
+   `_terminal_frames` — no hang [VERIFIED, lines 255, 333-334]. Disconnect: `is_disconnected()`
+   checked every poll cycle, returns silently (no frame — correct, no one to tell)
+   [VERIFIED, line 274-276]. Heartbeat 15s vs nginx `proxy_read_timeout 180s`
+   (deploy/5cb5f0620.conf:34) — 12x margin, sufficient [VERIFIED via file read].
+   `X-Accel-Buffering: no` is the correct per-response opt-out given nginx's default
+   `proxy_buffering on` and no vhost-level override — architecturally correct [INFERRED from
+   nginx semantics, not tested against a live nginx instance this session]. Server-restart
+   mid-stream: not independently tested (would require killing prod); the design is
+   reconnect-safe by construction (stateless, Postgres-only truth, replays `snapshot` on
+   reconnect) [INFERRED].
+
+8. Error handling — genuinely surfaced, not swallowed. `except Exception as exc: # noqa:
+   BLE001` (line 297) logs via `logger.exception` AND yields a `stream_error` frame carrying
+   `type(exc).__name__` and `str(exc)` (lines 298-308) — this differs from most of the
+   codebase's other BLE001 sites, which swallow into a fallback with NO client-visible detail
+   (agents.py:826, :867, :1552, :1928 etc. are all silent-degrade, not surfaced). The
+   `f"{type(exc).__name__}: {exc}"` echo pattern itself matches established codebase
+   convention (scout_agent.py:82/90, adzuna_adapter.py:98, greenhouse/ashby/lever/workable
+   adapters) [VERIFIED via grep]. No DSN/password exposure path identified: `get_connection()`
+   builds its DSN from server-side `DATABASE_URL`/`DATABASE_URL_TEST`, never user input; a
+   mid-stream `reload_run` failure is realistically a query/network-level error (timeout,
+   dropped connection), not a DSN-parse error, so `str(exc)` is unlikely to carry the
+   password [INFERRED, not exhaustively fuzzed this session].
+
+9. Route shadowing — confirmed NOT shadowed. [VERIFIED-WITH-FRESH-EVIDENCE: author's own
+   uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-route-noshadow-20260731T181907Z.txt,
+   cross-checked against the route source] `GET /agents/runs/{run_id}` and
+   `GET /agents/runs/{run_id}/stream` are distinct path templates (FastAPI path params don't
+   cross `/`), independently confirmed the poll route still returns 200 JSON / correct 404
+   body and the new route returns 200 text/event-stream on a distinct path.
+
+10. Scope creep / test integrity — CLEAN. `git diff --stat apps/api/app/routers/agents.py` =
+    53 insertions / 0 deletions: one hunk is the SSE import+route (lines 22-23, 51, 2158-2199),
+    a SEPARATE unrelated hunk is the GMV4-tailor-001 `iterations`/`gapKeywords` fix — correctly
+    NOT attributed to this diff per the task brief. `git diff f77631e 5c8da67 --
+    test_agent_run_sse.py` shows ONLY tests 1, 2 amended (monkeypatch added, assertions
+    changed to the backed 3-event sequence) plus one net-new test (buffering header); tests
+    3, 4, 5, 6 are byte-identical to the pre-ADR commit — no illegitimate weakening.
+    [VERIFIED-WITH-FRESH-EVIDENCE: git diff output, this session]
+
+11. Concurrent work — NOT attributed to this diff, confirmed via git diff hunk boundaries
+    above; `ats_engine.py`/`jobs.py`/`resumes.py`/`tailoring_loop.py`/`tailor_agent.py`/
+    `resume/page.tsx` left untouched by this review.
+
+===================================================================
+VERBATIM 7-TEST RESULT (re-run by this reviewer, foreground, bounded)
+===================================================================
+tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type PASSED [ 14%]
+tests/test_agent_run_sse.py::test_sse_response_disables_nginx_buffering PASSED [ 28%]
+tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order PASSED [ 42%]
+tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner PASSED   [ 57%]
+tests/test_agent_run_sse.py::test_sse_emits_kanban_updated_on_channel PASSED [ 71%]
+tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete PASSED [ 85%]
+tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 PASSED   [100%]
+======================== 7 passed, 6 warnings in 2.65s =========================
+[VERIFIED-WITH-FRESH-EVIDENCE: this reviewer's own run, 2026-07-31T18:5xZ]
+
+Fail-before evidence cross-checked: uat/reports/evidence/gold-master-v4/suites/
+GMV4-sse-001-fail-before-20260731T180553Z.txt shows 6/6 FAILED at 404 pre-implementation
+(genuine, legible, matches the current route). [VERIFIED]
+
+===================================================================
+CLOSING
+===================================================================
+The mechanism is honest and well-engineered: no fabricated event was found anywhere in the
+generator, terminal-state handling is airtight, ownership scoping leaks nothing, route
+shadowing is a non-issue, and TDD discipline (fail-before → pass-after, ADR-sanctioned
+test amendment only) is real and independently reproduced. FAIL is issued because (1) the
+author's own self-flagged `kanban_updated` honesty question was left unresolved and shipped
+with the weaker interpretation baked into a passing test, and (2) a concrete, evidenced
+resource-exhaustion path exists (uncapped concurrent streams against a documented 25-connection
+global ceiling) with zero mitigation and an inaccurate "replaces the poll" framing. Both are
+fixable without redesign; neither blocks GMV4-sse-002 (per-step journal) or GMV4-sse-003 (UI
+consumer) from proceeding once resolved.

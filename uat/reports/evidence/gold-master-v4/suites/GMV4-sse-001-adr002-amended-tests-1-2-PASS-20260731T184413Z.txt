@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+collecting ... collected 7 items
+
+tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type PASSED [ 14%]
+tests/test_agent_run_sse.py::test_sse_response_disables_nginx_buffering PASSED [ 28%]
+tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order PASSED [ 42%]
+tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner PASSED   [ 57%]
+tests/test_agent_run_sse.py::test_sse_emits_kanban_updated_on_channel PASSED [ 71%]
+tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete PASSED [ 85%]
+tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 PASSED   [100%]
+
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 7 passed, 6 warnings in 2.51s =========================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

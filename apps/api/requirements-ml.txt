@@ -1,5 +1,7 @@
-# Optional ML extras for the ATS engine (P2-S03). Heavy: pulls in torch.
-# Install with: pip install -r requirements-ml.txt
-# Set SENTENCE_TRANSFORMERS_HOME=/tmp/aether_models and pre-download the
-# all-MiniLM-L6-v2 model; the engine only uses it when already cached.
-sentence-transformers>=3.0
+# sentence-transformers moved to requirements.txt (GMV4-ats-001, 2026-07-31):
+# it is now a REQUIRED dependency, not optional. The ATS engine's 40%
+# semantic-similarity component is marketed to paying users as a genuine
+# embedding score; a silently-absent optional dependency was the defect
+# (it fell through to an undisclosed token-overlap approximation instead).
+# This file is kept only so an old reference to it does not hard-404;
+# nothing here needs to be installed separately anymore.

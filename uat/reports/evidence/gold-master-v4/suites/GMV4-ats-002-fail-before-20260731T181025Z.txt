@@ -1,0 +1,113 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+collecting ... collected 12 items
+
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_includes_semantic_path FAILED [  8%]
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_flags_degraded_scoring FAILED [ 16%]
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit FAILED [ 25%]
+tests/test_ats_semantic_path_propagation.py::test_degraded_score_is_never_returned_as_an_unqualified_number FAILED [ 33%]
+tests/test_tailoring_loop_degraded_guard.py::test_loop_records_semantic_path_per_iteration FAILED [ 41%]
+tests/test_tailoring_loop_degraded_guard.py::test_loop_does_not_declare_success_on_degraded_scores FAILED [ 50%]
+tests/test_tailoring_loop_degraded_guard.py::test_baseline_and_tailored_scores_are_flagged_when_degraded FAILED [ 58%]
+tests/test_tailoring_loop_degraded_guard.py::test_loop_succeeds_normally_on_genuine_scores FAILED [ 66%]
+tests/test_ats_warm_up.py::test_warm_up_downloads_and_caches_model_when_absent PASSED [ 75%]
+tests/test_ats_warm_up.py::test_warm_up_is_non_blocking_and_never_raises_into_startup FAILED [ 83%]
+tests/test_ats_warm_up.py::test_load_embedding_model_uses_local_files_only PASSED [ 91%]
+tests/test_ats_warm_up.py::test_cold_cache_degrades_honestly_rather_than_crashing PASSED [100%]
+
+=================================== FAILURES ===================================
+_______________ test_resume_ats_response_includes_semantic_path ________________
+tests/test_ats_semantic_path_propagation.py:144: in test_resume_ats_response_includes_semantic_path
+    assert "semantic_path" in resp, (
+E   AssertionError: GET /resumes/{id}/ats omits semantic_path entirely — the caller has no way to know which scoring path produced the number. payload keys: ['company', 'experience_gap', 'job_id', 'job_title', 'keyword_match', 'matched_keywords', 'missing_keywords', 'overall', 'requires_review', 'resume_id', 'semantic_similarity']
+E   assert 'semantic_path' in {'resume_id': 'resume-1', 'job_id': 'job-1', 'job_title': 'Backend Engineer', 'company': 'Acme', ...}
+_______________ test_resume_ats_response_flags_degraded_scoring ________________
+tests/test_ats_semantic_path_propagation.py:154: in test_resume_ats_response_flags_degraded_scoring
+    assert resp.get("semantic_path") == "degraded", (
+E   AssertionError: GET /resumes/{id}/ats does not carry an unambiguous degraded-scoring signal a client can branch on (not just the bare number); payload: {'resume_id': 'resume-1', 'job_id': 'job-1', 'job_title': 'Backend Engineer', 'company': 'Acme', 'overall': 78.0, 'keyword_match': 80.0, 'semantic_similarity': 50.0, 'experience_gap': 90.0, 'matched_keywords': ['python'], 'missing_keywords': ['kubernetes'], 'requires_review': False}
+E   assert None == 'degraded'
+E    +  where None = <built-in method get of dict object at 0x7f52b92569c0>('semantic_path')
+E    +    where <built-in method get of dict object at 0x7f52b92569c0> = {'resume_id': 'resume-1', 'job_id': 'job-1', 'job_title': 'Backend Engineer', 'company': 'Acme', ...}.get
+_____ test_job_insights_does_not_blend_degraded_semantic_into_culture_fit ______
+tests/test_ats_semantic_path_propagation.py:165: in test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+    assert not culture_fit_dims or _degradation_flagged(result), (
+E   AssertionError: GET /jobs/{id}/insights blends the degraded semantic placeholder into a real-looking 'Culture Fit' dimension ([{'label': 'Culture Fit', 'score': 70}]) with no degradation signal anywhere in the payload: {'jobId': 'job-1', 'scored': True, 'needsResume': False, 'overall': 78, 'keywordMatch': 80, 'semantic': 50, 'experience': 90, 'skillsMatched': 1, 'skillsTotal': 2, 'matchedSkills': ['python'], 'missingSkills': ['kubernetes'], 'skillGap': 'kubernetes', 'narrative': 'Your resume covers 1 of 2 keywords this posting emphasises, with 50% semantic overlap and a 78% overall ATS fit for Backend Engineer.', 'dimensions': [{'label': 'Technical Skills', 'score': 80}, {'label': 'Experience Level', 'score': 90}, {'label': 'Industry Match', 'score': 50}, {'label': 'Role Alignment', 'score': 78}, {'label': 'Culture Fit', 'score': 70}, {'label': 'Salary Fit', 'score': 70}, {'label': 'Location Match', 'score': 70}, {'label': 'Career Growth', 'score': 72}, {'label': 'Company Stability', 'score': 76}, {'label': 'North Star Align', 'score': 67}], 'riskSignals': [{'label': 'No salary listed', 'severity': 'medium'}], 'isAustralia': False}
+E   assert (not [{'label': 'Culture Fit', 'score': 70}] or False)
+E    +  where False = _degradation_flagged({'jobId': 'job-1', 'scored': True, 'needsResume': False, 'overall': 78, ...})
+________ test_degraded_score_is_never_returned_as_an_unqualified_number ________
+tests/test_ats_semantic_path_propagation.py:179: in test_degraded_score_is_never_returned_as_an_unqualified_number
+    assert resume_resp.get("semantic_path") == "degraded", (
+E   AssertionError: resumes ATS endpoint returned the 50.0 degraded placeholder as an unqualified number: {'resume_id': 'resume-1', 'job_id': 'job-1', 'job_title': 'Backend Engineer', 'company': 'Acme', 'overall': 78.0, 'keyword_match': 80.0, 'semantic_similarity': 50.0, 'experience_gap': 90.0, 'matched_keywords': ['python'], 'missing_keywords': ['kubernetes'], 'requires_review': False}
+E   assert None == 'degraded'
+E    +  where None = <built-in method get of dict object at 0x7f52b5110680>('semantic_path')
+E    +    where <built-in method get of dict object at 0x7f52b5110680> = {'resume_id': 'resume-1', 'job_id': 'job-1', 'job_title': 'Backend Engineer', 'company': 'Acme', ...}.get
+________________ test_loop_records_semantic_path_per_iteration _________________
+tests/test_tailoring_loop_degraded_guard.py:122: in test_loop_records_semantic_path_per_iteration
+    assert _iteration_path(iteration) is not None, (
+E   AssertionError: iteration 0 does not record which scoring path (local/hf_api/degraded) produced its score — the caller/UI has no way to know if it was fabricated: {'iteration': 1, 'score': 40.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, 'gapKeywords': [], 'rejected': []}
+E   assert None is not None
+E    +  where None = _iteration_path({'iteration': 1, 'score': 40.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, ...})
+____________ test_loop_does_not_declare_success_on_degraded_scores _____________
+tests/test_tailoring_loop_degraded_guard.py:150: in test_loop_does_not_declare_success_on_degraded_scores
+    assert result.success is False, (
+E   AssertionError: loop declared success on a score whose semantic component was the degraded (fabricated) placeholder — result.success=True, best_score=90.0, iterations=[{'iteration': 1, 'score': 90.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, 'gapKeywords': [], 'rejected': []}]
+E   assert True is False
+E    +  where True = TailoringLoopResult(iterations=[{'iteration': 1, 'score': 90.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, 'gapKeywords': [], 'rejected': []}], final_bullets=[{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], best_score=90.0, best_iteration=1, success=True, requires_review=False, warning=None).success
+_________ test_baseline_and_tailored_scores_are_flagged_when_degraded __________
+tests/test_tailoring_loop_degraded_guard.py:216: in test_baseline_and_tailored_scores_are_flagged_when_degraded
+    assert flagged or withheld, (
+E   AssertionError: baselineATSScore/tailoredATSScore/estimatedConversionLift are computed from scores where the baseline endpoint was degraded, with NO flag and NO withholding anywhere in the payload — a fabricated 'lift' presented as a real business metric: {'baselineATSScore': 40.0, 'tailoredATSScore': 78.0, 'estimatedConversionLift': '+2.4%', 'methodology': 'Like-for-like ATS delta (shared context) × population baseline (2.5%)', 'confidence': 'model-estimated'}
+E   assert (False or False)
+________________ test_loop_succeeds_normally_on_genuine_scores _________________
+tests/test_tailoring_loop_degraded_guard.py:250: in test_loop_succeeds_normally_on_genuine_scores
+    assert _iteration_path(iteration) == "local", (
+E   AssertionError: positive-control iteration is missing/mismatched semantic_path (expected 'local'): {'iteration': 1, 'score': 40.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, 'gapKeywords': [], 'rejected': []}
+E   assert None == 'local'
+E    +  where None = _iteration_path({'iteration': 1, 'score': 40.0, 'bullets': [{'text': 'Built backend services handling 500 requests per day.', 'evidenceRef': 'bullet-0'}], 'changes': 1, ...})
+__________ test_warm_up_is_non_blocking_and_never_raises_into_startup __________
+tests/test_ats_warm_up.py:153: in test_warm_up_is_non_blocking_and_never_raises_into_startup
+    path = ats_engine.warm_up_semantic_model()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/ats_engine.py:241: in warm_up_semantic_model
+    model = _load_embedding_model()
+            ^^^^^^^^^^^^^^^^^^^^^^^
+app/services/ats_engine.py:203: in _load_embedding_model
+    if not os.path.isdir(cache) or not os.listdir(cache):
+                                       ^^^^^^^^^^^^^^^^^
+tests/test_ats_warm_up.py:147: in _boom_listdir
+    raise PermissionError(f"simulated permission failure listing {path}")
+E   PermissionError: simulated permission failure listing /tmp/pytest-of-ubuntu/pytest-511/test_warm_up_is_non_blocking_a0/unlistable_cache
+
+During handling of the above exception, another exception occurred:
+tests/test_ats_warm_up.py:155: in test_warm_up_is_non_blocking_and_never_raises_into_startup
+    pytest.fail(
+E   Failed: warm_up_semantic_model() raised PermissionError: PermissionError('simulated permission failure listing /tmp/pytest-of-ubuntu/pytest-511/test_warm_up_is_non_blocking_a0/unlistable_cache') — its own docstring promises it never raises into the caller, but the path-resolution half (os.listdir(cache) inside _load_embedding_model) is unguarded
+=============================== warnings summary ===============================
+tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_includes_semantic_path
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_includes_semantic_path
+FAILED tests/test_ats_semantic_path_propagation.py::test_resume_ats_response_flags_degraded_scoring
+FAILED tests/test_ats_semantic_path_propagation.py::test_job_insights_does_not_blend_degraded_semantic_into_culture_fit
+FAILED tests/test_ats_semantic_path_propagation.py::test_degraded_score_is_never_returned_as_an_unqualified_number
+FAILED tests/test_tailoring_loop_degraded_guard.py::test_loop_records_semantic_path_per_iteration
+FAILED tests/test_tailoring_loop_degraded_guard.py::test_loop_does_not_declare_success_on_degraded_scores
+FAILED tests/test_tailoring_loop_degraded_guard.py::test_baseline_and_tailored_scores_are_flagged_when_degraded
+FAILED tests/test_tailoring_loop_degraded_guard.py::test_loop_succeeds_normally_on_genuine_scores
+FAILED tests/test_ats_warm_up.py::test_warm_up_is_non_blocking_and_never_raises_into_startup
+=================== 9 failed, 3 passed, 6 warnings in 1.50s ====================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

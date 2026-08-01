@@ -2,9 +2,9 @@
   "run": "GOLD-MASTER-V4",
   "prompt_file": "/home/ubuntu/aether-gold-master-execution-v4.md",
   "started_utc": "2026-07-31T17:07:58Z",
-  "updated_utc": "2026-07-31T17:26:22Z",
+  "updated_utc": "2026-08-01T00:18:19Z",
   "orchestrator": "claude-opus-5 (xhigh) \u2014 brain only per \u00a70.1",
-  "phase_step": "PHASE-0-COMPLETE / W-A + W-HF IN-PROGRESS",
+  "phase_step": "PAUSED \u2014 SESSION USAGE LIMIT (resets 21:20 UTC). Resume per \u00a72.3.",
   "phase_step_detail": {
     "step_0_resume_check": "DONE \u2014 no prior GOLD-MASTER-V3-STATE.json; fresh run",
     "step_1_roster": "DONE \u2014 17/17 agents written, zero `model: inherit`; manifest in GOLD-MASTER-V3-GOVERNANCE.md",
@@ -17,42 +17,42 @@
     "step_8_state_commit": "DONE \u2014 committed 0454ff1, fb7bae6"
   },
   "workstream_status": {
-    "W-A": "IN-PROGRESS (docs done; screen batch 1 running)",
-    "W-B": "NOT-STARTED",
-    "W-HF": "IN-PROGRESS (\u00a722 step 2 tests-first; fail-before proof pending)",
-    "W-C": "NOT-STARTED",
-    "W-D": "BLOCKED-PENDING-RISK-OFFICER (\u00a77.2 adjudication in flight)",
-    "W-E": "NOT-STARTED",
-    "W-F": "NOT-STARTED",
+    "W-A": "SUBSTANTIALLY COMPLETE \u2014 all 14 routes screen-tested (4 batches); GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md written (621 lines, verdict BLOCKED-ON-ITEMS); G-A adjudication artifact pending re-check",
+    "W-B": "NOT-STARTED (findings inventoried)",
+    "W-HF": "ROUND 3 IN TREE, REVIEW INCOMPLETE \u2014 rounds 1 and 2 FAILED review; round 3 implements sentinel+whitelist+4 leak sites; 12/12 + 14/14 + tsc clean self-reported; INDEPENDENT REVIEW DID NOT COMPLETE",
+    "W-C": "PARTIAL \u2014 tailor plumbing implemented and REVIEW PASSED; HTTP-boundary regression tests added; ATS>=85 target NOT met (GMV4-ats-004 BLOCKER)",
+    "W-D": "CLOSED AS REFUSED-ON-COMPLIANCE \u2014 risk-officer ruling, ADR-SEEK-V3 replaced with first-hand adjudication",
+    "W-E": "TESTS RED, FIX NOT STARTED \u2014 root cause established (zero call sites); GMV4-story-004 BLOCKER data-destruction hazard found",
+    "W-F": "NOT-STARTED \u2014 stage-move/purge exist; GMV4-apps-004 real DnD broken",
     "W-CAL": "NOT-STARTED",
     "W-YT": "NOT-STARTED",
-    "W-G": "NOT-STARTED",
-    "W-H": "NOT-STARTED",
-    "W-SUB": "NOT-STARTED",
-    "W-I": "NOT-STARTED",
+    "W-G": "NOT-STARTED (CONDITIONALLY-CLOSED, admin credential revoked)",
+    "W-H": "NOT-STARTED \u2014 GMV4-jobs-004 applied badges never render",
+    "W-SUB": "NOT-STARTED \u2014 blocked on W-C/W-E/W-H/W-I; GMV4-sse-002 per-step journal missing",
+    "W-I": "SSE IMPLEMENTED, REVIEW FAILED \u2014 GMV4-sse-005 BLOCKER connection-ceiling DoS; GMV4-sse-006 kanban_updated over-emission",
     "W-J": "NOT-STARTED",
-    "W-GSC": "NOT-STARTED",
-    "W-GF": "NOT-STARTED",
-    "W-DG": "NOT-STARTED",
-    "W-K": "NOT-STARTED",
-    "W-L": "NOT-STARTED"
+    "W-GSC": "PARTIAL \u2014 CLS already fixed (0.0794, VERIFIED-CLOSED); Lighthouse not run",
+    "W-GF": "NOT-STARTED (CONDITIONALLY-CLOSED, no credential)",
+    "W-DG": "NOT-STARTED (CONDITIONALLY-CLOSED, no credential)",
+    "W-K": "PARTIAL \u2014 2 synthetic rows deleted under approval; 12 User rows + 1 ApprovalRequest deferred",
+    "W-L": "NOT-STARTED \u2014 NOTHING DEPLOYED THIS RUN"
   },
   "waves": [],
   "findings_delta": {
-    "open": 15,
-    "closed": 0,
-    "conditionally_closed": 1,
-    "by_severity": {
-      "BLOCKER": 3,
-      "HIGH": 6,
-      "MEDIUM": 4,
-      "LOW": 2
-    }
+    "total": 73,
+    "BLOCKER": 11,
+    "HIGH": 22,
+    "MEDIUM": 27,
+    "LOW": 13,
+    "closed": 4,
+    "refused_on_compliance": 1,
+    "conditionally_closed": 2,
+    "human_gated": 1
   },
   "gates": {
     "G-A": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+      "status": "REVIEW-DOCUMENT-WRITTEN-ADJUDICATION-PENDING",
+      "evidence": "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
     },
     "G-B": {
       "status": "NOT-ADJUDICATED",
@@ -67,8 +67,8 @@
       "evidence": null
     },
     "G-D": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+      "status": "REFUSED-ON-COMPLIANCE",
+      "evidence": "docs/delivery/ADR-SEEK-V3.md"
     },
     "G-E": {
       "status": "NOT-ADJUDICATED",
@@ -107,8 +107,8 @@
       "evidence": null
     },
     "G-GSC": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+      "status": "PARTIAL \u2014 CLS closed, Lighthouse not run",
+      "evidence": "uat/reports/evidence/gold-master-v3/screens/dashboard-analytics/REPORT.md"
     },
     "G-GF": {
       "status": "NOT-ADJUDICATED",
@@ -131,8 +131,8 @@
       "evidence": null
     },
     "G-N": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+      "status": "UNADJUDICABLE \u2014 both baselines contaminated",
+      "evidence": "uat/reports/evidence/gold-master-v3/suites/BASELINE-SUITES.md"
     },
     "G-O": {
       "status": "NOT-ADJUDICATED",
@@ -150,11 +150,16 @@
   "last_commit": "6440325b363e2b9a684f54742ad02781babefe47",
   "last_deploy_sha": null,
   "next_actions": [
-    "Finish Step 7 baseline suites",
-    "W-HF: obtain fail-before proof, then implement local model + HF API path",
-    "W-A: screen batches 2-4 (remaining ~17 dashboard routes)",
-    "W-D: act on risk-officer ruling",
-    "Build SSE layer (GMV4-sse-001) as prerequisite for G-I and G-SUB"
+    "1. Re-review W-HF round 3 (rounds 1-2 FAILED; verify sentinel/whitelist, Culture Fit test now GREEN for the right reason, tailoring_loop == 'degraded' exception safety)",
+    "2. Fix GMV4-sse-005 (stream caps, poll default >=3.0s, pooled connections) and GMV4-sse-006 (withhold kanban_updated unless basis=='run_output', per ADR-GMV4-003); test-author rewrites SSE test 4",
+    "3. Complete vitest coverage for the degraded-scoring UI (zero coverage today)",
+    "4. Only then: wave-commit + deploy W-HF + W-C + W-I, then prod-verify and RE-MEASURE ATS (GMV4-ats-004) with the real scorer",
+    "5. W-E fix: entrypoint + dry-run + before/after counts + SOFT-DELETE replacing the hard DELETE (risk-officer approval required before any live run)",
+    "6. Remove the retained synthetic ApprovalRequest ccbe2e7518343e818809f8009 (GMV4-approvals-001) once qa-adversary has re-reproduced it",
+    "7. Re-test the Approvals screen with machine evidence (GMV4-evidence-002)",
+    "8. File runtime-monitor journalctl artifacts (GMV4-runtime-001) \u2014 G-M cannot close without them",
+    "9. Quiescent full-suite run with ZERO concurrent agents (GMV4-suites-002) \u2014 G-N is unadjudicable until then",
+    "10. OPERATOR: rotate the production DB role password (GMV4-secret-001)"
   ],
   "key_corrections_to_prompt_premises": [
     "\u00a71.1 test login admin/admin123 returns 401 on prod; only AETHER_CRON_* authenticates (GMV4-cred-001)",
@@ -165,5 +170,7 @@
     "\u00a716 interview_conversion_rate is already a real DB query (analytics.py:220), not a placeholder",
     "\u00a715/\u00a714.5 SSE layer does not exist at all -> G-I and G-SUB both depend on building it",
     "\u00a77.1 premise that Firecrawl/WebScraping.AI are licensed intermediaries conflicts with adopted ADR D-0034 (DECISIONS.md:1020) -> risk-officer adjudicating"
-  ]
+  ],
+  "pause_reason": "Anthropic session usage limit reached at ~19:0xZ; three in-flight agents (G-A review doc, W-HF round-3 review, vitest degraded-UI coverage) terminated mid-task. The G-A document COMPLETED before its agent died and is committed. No further sub-agents can be spawned until the limit resets.",
+  "CRITICAL_DEPLOY_WARNING": "HEAD CONTAINS UNREVIEWED AND KNOWN-DEFECTIVE CODE. DO NOT DEPLOY. Specifically: (1) GMV4-sse-005 BLOCKER \u2014 SSE streams are uncapped against a 25-connection app-wide ceiling with unpooled per-poll connections; deploying this exposes a DoS surface. (2) W-HF round 3 has NOT completed independent review (rounds 1-2 both FAILED). (3) GMV4-story-004 \u2014 merge_duplicate_stories hard-deletes under deliberately loose thresholds; it must NOT be wired up or invoked. Production is currently running the LAST DEPLOYED build and is unaffected by this tree."
 }
