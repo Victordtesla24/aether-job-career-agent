@@ -319,9 +319,59 @@ byte-identical to commit `2ecbdb0`, so the errors exist at HEAD independently of
 
 I deliberately did **not** fix them: they are outside W-CAL's scope, and
 `app/repositories/job.py` sits adjacent to the concurrent session's active job/story work.
-**This is a real CI blocker that someone must own** — flagging it rather than silently
-absorbing it, and rather than reporting "ruff clean" when the literal command in the brief
-does not pass.
+Flagging it rather than silently absorbing it, and rather than reporting "ruff clean" when
+the literal command in the brief does not pass.
+
+#### RESOLVED after W-CAL was committed — and the attribution held up
+
+The concurrent session fixed both in `c9e45d6` ("style: restore ruff-clean — 2 CI-blocking
+errors, one of them mine"), touching only `app/repositories/job.py` and
+`tests/test_ats_semantic_path_propagation.py` — neither a W-CAL file.
+
+Because that commit message attributes one error to an author, I re-checked my own
+attribution rather than let it stand unexamined `[VERIFIED 2026-08-01T23:15Z]`:
+
+```
+$ git log -L 305,305:apps/api/app/repositories/job.py
+c9e45d6 style: restore ruff-clean …                    <- the fix
+0ed302a fix(BLOCKER-006): job feed hid every live listing …   <- the origin
+```
+
+The E501 was introduced by `0ed302a` (BLOCKER-006), **two commits before W-CAL's starting
+HEAD `2ecbdb0`**. So "pre-existing, not W-CAL's" is confirmed by provenance, not just by a
+clean `git status`. The other session's "one of them mine" refers to their own BLOCKER-006
+commit — which agrees with this finding rather than contradicting it.
+
+Current state `[VERIFIED 2026-08-01T23:15Z]`:
+
+```
+$ python3 -m ruff check app/ tests/
+All checks passed!
+```
+
+`ruff check app/ tests/` is now **clean on HEAD**, so the CI gate is unblocked. W-CAL's own
+files were clean throughout.
+
+**Does `c9e45d6` invalidate W-CAL's green?** No — W-CAL's suites were measured at `b85914c`
+and HEAD moved, so I checked rather than assumed. The entire commit is cosmetic
+`[VERIFIED 2026-08-01T23:16Z]`:
+
+```
+- from app.services.ats_engine import ATSScore, _DEGRADED_SEMANTIC_SCORE
++ from app.services.ats_engine import _DEGRADED_SEMANTIC_SCORE, ATSScore
+
+- VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
++ VALUES (
++     %s, %s, %s, %s, %s, %s, %s, %s,
++     %s, %s, %s, %s, %s, %s, %s, %s,
++     NOW(), NOW()
++ )
+```
+
+An import reorder, and a SQL `VALUES` clause wrapped across lines with the **identical 16
+placeholders in the identical order** (SQL is whitespace-insensitive). Neither file is
+imported or exercised by any W-CAL test. A confirming re-run was queued behind the other
+session's full-suite run holding the pytest flock.
 
 ---
 
