@@ -113,8 +113,9 @@
     "DROPPED_FIELD_SWEEP": {
       "artifact": "uat/reports/evidence/gold-master-v3/DROPPED-API-FIELD-SWEEP.md",
       "method": "Every \"key\": in routers/*.py, minus anything appearing in apps/web/src (snake+camel). 41 candidates across 9 routers; most benign.",
-      "DROP-001": "MEDIUM/monetization \u2014 the 429 quota wall returns upgradeUrl + quotaReset; the UI reads NEITHER. A paying user who exhausts runs mid-flow gets no reset date and no upgrade route. RECORDED, NOT FIXED.",
+      "DROP-001": "FIXED @8c0ac5e. Root cause was deeper than \"no UI reads it\": ApiError flattened the whole response body into a message string, so the structured detail was unreachable at the TRANSPORT layer, and runErrorNotice had no 429 branch at all \u2014 a quota wall fell through to generic copy telling the user to \"retry in a moment\" and check RECENT RUNS, both wrong for a quota. Now surfaces the server own message + reset time + upgrade CTA; states a reset ONLY when the server sent a parseable one; spend_cap labelled \"review plan\" not \"upgrade plan\". 8/8 tests (RED at HEAD), 20/20 surrounding, lint+tsc clean.",
       "DROP-002": "LOW-MED/honesty \u2014 tailoring-loop `iterations` and `gapKeywords` are returned and never surfaced, so a sub-target ATS result cannot be shown as honest rather than clamped. RECORDED, NOT FIXED."
-    }
+    },
+    "W-CAL_oauth_risk_assessed": "W-CAL adds calendar.events to GOOGLE_SCOPES \u2014 the change most able to break existing users, since BOTH production Gmail accounts are already needs_reauth. Verified SAFE by reading google_oauth.py: include_granted_scopes=true (incremental auth) is documented as load-bearing, granted-scope state is derived from what Google ACTUALLY granted rather than what was requested, and calendar features refuse honestly when the grant is absent. Existing Gmail grants survive."
   }
 }
