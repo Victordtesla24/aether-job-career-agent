@@ -370,8 +370,18 @@ and HEAD moved, so I checked rather than assumed. The entire commit is cosmetic
 
 An import reorder, and a SQL `VALUES` clause wrapped across lines with the **identical 16
 placeholders in the identical order** (SQL is whitespace-insensitive). Neither file is
-imported or exercised by any W-CAL test. A confirming re-run was queued behind the other
-session's full-suite run holding the pytest flock.
+imported or exercised by any W-CAL test.
+
+Confirmed empirically, not just by construction — re-run on HEAD `ce489b4` (which contains
+`c9e45d6`) `[VERIFIED 2026-08-01T23:26Z]`:
+
+```
+$ flock /tmp/aether-pytest.lock -c "scripts/run-tests.sh tests/test_wcal_google_calendar.py \
+    tests/test_interviews.py tests/test_google_oauth.py tests/test_wave4c_thread_agents.py -q"
+66 passed, 11 warnings in 93.17s (0:01:33)
+```
+
+Zero failures. W-CAL's green holds on the post-`c9e45d6` tree.
 
 ---
 
