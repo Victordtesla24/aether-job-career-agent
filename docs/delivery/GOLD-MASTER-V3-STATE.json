@@ -93,6 +93,15 @@
       "verified_fallback": "52/52 persisted jobs resolve FRESH via COALESCE(updatedAt,createdAt) within 30d \u2014 ready 18/18, applied 30/30, archived 4/4. Feed restored on restart, no sweep required.",
       "verified_fail_open": "active_feed.py:148 \u2014 effective is None returns False. Missing liveness signal shows the row rather than hiding it; correct direction for a suppression filter.",
       "conclusion": "Deploy is SAFE and EFFECTIVE on current production data. Blocked only by the shared dirty tree."
-    }
+    },
+    "GMV4-email-001": {
+      "status": "FIXED @9903445 (committed, not yet deployed)",
+      "found_by": "Running the FULL frontend suite instead of only my changed files \u2014 exposed 3 tests committed RED at 8ee1f4f whose fix never landed.",
+      "defect": "Backend honestly returns needs_reauth + actionRequired + a human note; the frontend filtered chips to status===\"connected\" (zero chips for an all-expired inbox), keyed the CTA off .some(connected) (same bare \"Connect Gmail\"), and never declared note/actionRequired in the TS type so the backend wording was dropped. A paying user whose grant expired saw a pristine Email Center while every email-dependent agent silently degraded.",
+      "same_class_as_G-C": "API told the truth, the client-side type discarded it. Two independent instances of this class in one session \u2014 worth a sweep for others.",
+      "verified": "reconnect-affordance 4/4 (was 1/4), email suite 8/8, lint clean, tsc clean.",
+      "process": "Two dispatched agents each spent ~100k tokens waiting on a test run and produced nothing; orchestrator implemented it directly."
+    },
+    "SHARED_TREE_RULE": "Use `git commit --only <explicit paths>`, NEVER `git add` + `git commit`. A git add of a path list still inherits whatever a concurrent agent has staged \u2014 this swept 13 W-CAL files into an unrelated commit before being caught and reset."
   }
 }
