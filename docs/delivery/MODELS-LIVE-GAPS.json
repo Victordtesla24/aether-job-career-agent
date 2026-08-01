@@ -2055,7 +2055,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/ROUTER-MATRIX.md"
       ],
-      "status": "REVIEW-FAILED-ROUND-2-REQUIRED",
+      "status": "FIX-IN-TREE-AWAITING-RE-REVIEW",
       "owner": "W-I/W-SUB fixer-hard",
       "fixCommits": [],
       "verifiedBy": null,
@@ -3413,11 +3413,11 @@
         "Read db.py:8-9 connection ceiling, get_connection at db.py:145-154, and the stream loop at agent_run_stream.py:107-125"
       ],
       "expected": "Bounded concurrent streams that cannot exhaust the connection ceiling",
-      "observed": "Unbounded streams, unpooled per-poll connections, 1.0s default, no rate limit",
+      "observed": "Unbounded streams, unpooled per-poll connections, 1.0s default, no rate limit | ROUND 2 FIX IN TREE: poll default 1.0 -> 3.0s; admission control with global cap 8 and per-user cap 3, derived from the ceiling (25 - 8 API - 6 worker - 2 ops = 9, take 8, leave 1 permanently spare) rather than tuned to the tests. Rejection is 429 per-user / 503 global with Retry-After: 5 and a real detail; the slot is taken BEFORE the ownership lookup so a refused request does zero DB work. Slot release verified EMPIRICALLY on all six exit paths (normal terminal, 404/not-yours, cap rejection, disconnect, stream_timeout, stream_error) with an idempotent release() and a monotonic leak backstop for the one window no finally can cover. 13/13 tests, 62 regression, ruff clean.",
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-adversarial-review-VERDICT-20260731T185226Z.txt"
       ],
-      "status": "OPEN",
+      "status": "FIX-IN-TREE-AWAITING-RE-REVIEW",
       "owner": "W-I fixer-hard",
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-07-31T18:52Z",
@@ -3438,7 +3438,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-sse-001-adversarial-review-VERDICT-20260731T185226Z.txt"
       ],
-      "status": "OPEN",
+      "status": "FIX-IN-TREE-AWAITING-RE-REVIEW",
       "owner": "W-I fixer-hard + test-author",
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-07-31T18:52Z",
@@ -3676,6 +3676,48 @@
       "fixCommits": [],
       "verifiedBy": "fixer-hard (opus) 2026-08-01",
       "openedUtc": "2026-08-01T00:52:04Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-007",
+      "screen": "Agents / realtime architecture",
+      "severity": "MEDIUM",
+      "category": "gap",
+      "summary": "POLLING IS THE WRONG MECHANISM FOR \u00a714.5.5's 1-SECOND REQUIREMENT, and no tuning fixes that. \u00a714.5.5 wants a kanban change visible within 1s; \u00a75e requires a poll floor of >=3.0s because each poll opens an unpooled connection against a 25-connection app-wide ceiling. Polling cannot satisfy both \u2014 1s costs 3x the connections of 3s. ADR-GMV4-005 rules \u00a75e wins and the 1s target is a DISCLOSED miss. The design that satisfies BOTH is event-driven push (Postgres LISTEN/NOTIFY, or a pooled connection), which removes per-poll churn entirely and makes sub-second latency essentially free. Filed for a future run; G-I and G-SUB should record the 1s clause as CONDITIONALLY-CLOSED against \u00a75e rather than claimed as met.",
+      "reproduction": [
+        "Compare \u00a714.5.5's 1s clause against ADR-GMV4-005 and the poll_seconds() floor"
+      ],
+      "expected": "Sub-second kanban propagation without per-poll connection churn",
+      "observed": "3s poll floor; 1s unattainable while polling",
+      "evidence": [
+        "docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md (ADR-GMV4-005)"
+      ],
+      "status": "OPEN-DEFERRED",
+      "owner": "future run (LISTEN/NOTIFY or pooled connections)",
+      "fixCommits": [],
+      "verifiedBy": "orchestrator adjudication 2026-08-01",
+      "openedUtc": "2026-08-01T00:53:32Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-sse-008",
+      "screen": "n/a (deployment)",
+      "severity": "LOW",
+      "category": "gap",
+      "summary": "The SSE concurrency cap is PER-PROCESS. Production runs single-process uvicorn today (start-api.sh, no --workers), so per-process IS global and the 8-stream budget holds. If the deployment ever adds --workers N the real ceiling silently becomes N x 8 and AETHER_SSE_MAX_CONCURRENT_STREAMS must be divided down. Documented in StreamSlots' docstring by the implementer rather than assumed away; recorded here so a future deploy change cannot miss it.",
+      "reproduction": [
+        "Read StreamSlots docstring and start-api.sh"
+      ],
+      "expected": "Cap holds regardless of worker count",
+      "observed": "Per-process cap; correct only while single-process",
+      "evidence": [
+        "apps/api/app/services/agent_run_stream.py"
+      ],
+      "status": "OPEN-DEFERRED",
+      "owner": "W-L deployer (note in runbook)",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard self-disclosure 2026-08-01",
+      "openedUtc": "2026-08-01T00:53:32Z",
       "run": "GOLD-MASTER-V4"
     }
   ],

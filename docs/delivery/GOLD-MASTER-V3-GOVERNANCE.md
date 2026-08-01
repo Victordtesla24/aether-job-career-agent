@@ -309,6 +309,40 @@ fixture is the thing to change.
 
 ---
 
+## 5g. ORCHESTRATOR ADJUDICATION ADR-GMV4-005 — §14.5.5's 1s kanban latency vs §5e's ≥3.0s poll floor
+
+**Escalated by** the SSE `fixer-hard` with both readings, unresolved rather than guessed.
+
+**The conflict is real.** §14.5.5 requires a kanban change to reach all connected tabs "within 1s".
+§5e (this run's own safety ruling) requires the SSE poll default to be ≥3.0s, because the stream
+opens an unpooled connection per poll against a 25-connection app-wide ceiling. Polling cannot
+satisfy both: 1s latency costs 3× the connections of 3s.
+
+**Ruling: §5e wins. The 1s target is a DISCLOSED MISS, not a silent one.**
+
+Reasoning: §14.5.5 is a UX latency target; §5e is a safety constraint protecting against an
+application-wide outage. When a nice-to-have collides with an availability guarantee, the
+guarantee wins. A 3s kanban refresh is a minor UX difference no user will report; exhausting the
+connection ceiling takes the product down for everyone. The miss is documented in
+`poll_seconds()`'s docstring and an operator can buy latency back via `AETHER_SSE_POLL_SECONDS`
+at a proportional, stated connection cost.
+
+**But polling is the wrong mechanism for this requirement, and that should be said plainly.**
+The only design satisfying BOTH is event-driven push — Postgres `LISTEN/NOTIFY`, or a pooled
+connection — which eliminates per-poll connection churn entirely and would make sub-second
+latency essentially free. Filed as `GMV4-sse-007` for a future run. G-I and G-SUB should record
+the 1s clause as CONDITIONALLY-CLOSED against §5e rather than claimed as met.
+
+**Two further constraints the fixer disclosed rather than assumed, both accepted as-is:**
+- The cap is PER-PROCESS. Production runs single-process uvicorn today so per-process IS global,
+  but adding `--workers N` would silently make the real ceiling `N × 8`. Documented in
+  `StreamSlots`' docstring; must be divided down if workers are ever added.
+- No client-side 429/503 handling exists because no `EventSource` consumer exists at all. Whoever
+  builds the UI half MUST handle both codes — a naive retry loop would turn the cap into a
+  busy-wait. Carried into `GMV4-sse-003`.
+
+---
+
 ## 6. PROCESS-DEFECT-001 — sub-agents stall on background waits instead of delivering
 
 **Observed three times** (test-author W-HF, evidence baseline-suites, screen-tester batch 2),
