@@ -102,6 +102,19 @@
       "verified": "reconnect-affordance 4/4 (was 1/4), email suite 8/8, lint clean, tsc clean.",
       "process": "Two dispatched agents each spent ~100k tokens waiting on a test run and produced nothing; orchestrator implemented it directly."
     },
-    "SHARED_TREE_RULE": "Use `git commit --only <explicit paths>`, NEVER `git add` + `git commit`. A git add of a path list still inherits whatever a concurrent agent has staged \u2014 this swept 13 W-CAL files into an unrelated commit before being caught and reset."
+    "SHARED_TREE_RULE": "Use `git commit --only <explicit paths>`, NEVER `git add` + `git commit`. A git add of a path list still inherits whatever a concurrent agent has staged \u2014 this swept 13 W-CAL files into an unrelated commit before being caught and reset.",
+    "G-C_REVERT_INCIDENT": {
+      "what": "65acb40 \u2014 a commit intended to carry ONE docs file \u2014 silently reverted the entire G-C fix (3570b88). Cause: `git add <docs.json> && git commit` commits the whole INDEX, and another worker in this shared tree had staged a revert of the analytics files.",
+      "detected_by": "The dropped-API-field sweep flagged interview_conversion_rate as unreferenced in web src \u2014 a field I had just fixed. Not by any test: the reverted state is self-consistent and green.",
+      "resolved": "Restored verbatim from 3570b88 and recommitted @668ca18 with --only. 6/6 analytics tests green.",
+      "audit": "All other session commits (0ed302a, 2ecbdb0, 3570b88, b5384d3, 9903445, 70b6e80, 668ca18) verified correctly scoped. 65acb40 was the only corrupted one.",
+      "lesson": "A silent revert produced a GREEN suite \u2014 the reverted code was consistent and its tests went with it. Tests cannot detect this class; only diff/content verification can."
+    },
+    "DROPPED_FIELD_SWEEP": {
+      "artifact": "uat/reports/evidence/gold-master-v3/DROPPED-API-FIELD-SWEEP.md",
+      "method": "Every \"key\": in routers/*.py, minus anything appearing in apps/web/src (snake+camel). 41 candidates across 9 routers; most benign.",
+      "DROP-001": "MEDIUM/monetization \u2014 the 429 quota wall returns upgradeUrl + quotaReset; the UI reads NEITHER. A paying user who exhausts runs mid-flow gets no reset date and no upgrade route. RECORDED, NOT FIXED.",
+      "DROP-002": "LOW-MED/honesty \u2014 tailoring-loop `iterations` and `gapKeywords` are returned and never surfaced, so a sub-target ATS result cannot be shown as honest rather than clamped. RECORDED, NOT FIXED."
+    }
   }
 }
