@@ -50,6 +50,13 @@ export const ConversionSchema = z.object({
   applied_to_screened: z.number(),
   screened_to_interview: z.number(),
   interview_to_offer: z.number(),
+  // GOLD-MASTER V4 §6 / G-C: the backend has always computed and returned
+  // both fields (see analytics.py conversion()) — this schema simply never
+  // declared them, so zod's default z.object() behavior silently stripped
+  // them before the Analytics page ever saw them. Declaring them here is
+  // the entire fix; the value itself is untouched, API-derived data.
+  interview_conversion_rate: z.number(),
+  interview_conversion_healthy: z.boolean(),
 });
 
 export type Conversion = z.infer<typeof ConversionSchema>;
