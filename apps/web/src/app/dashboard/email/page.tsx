@@ -360,6 +360,18 @@ export default function EmailCenterPage() {
     [inbox],
   );
 
+  // GMV4-email-001. Three states, not two. The backend already distinguishes
+  // "linked but the grant expired" (`status: "needs_reauth"`, `actionRequired`,
+  // plus a human `note`) from "never linked" — the UI used to collapse both into
+  // `!connected` and render the same bare "Connect Gmail", so a user whose token
+  // expired saw an Email Center identical to a brand-new one while every
+  // email-dependent agent silently degraded.
+  const linkedButBroken = useMemo(
+    () => (inbox?.accounts ?? []).some((a) => a.status !== "connected"),
+    [inbox],
+  );
+  const allAccountsBroken = !connected && linkedButBroken;
+
   // Whether ANY thread has a real triage score yet — drives honest per-tab empty
   // copy ("Run AI Triage…" vs "No emails…").
   const anyTriaged = useMemo(
@@ -531,14 +543,22 @@ export default function EmailCenterPage() {
             All Inboxes
           </button>
 
-          {inbox.accounts
-            .filter((a) => a.status === "connected")
-            .map((a) => (
+          {/* GMV4-email-001: every linked account renders, including broken ones.
+              Filtering to `connected` here made an all-expired inbox render ZERO
+              chips — visually identical to having linked nothing at all. */}
+          {inbox.accounts.map((a) => {
+            const isConnected = a.status === "connected";
+            return (
               <div
                 key={a.id ?? a.email}
                 data-testid="inbox-account"
+                data-account-status={a.status}
                 className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${
-                  accountFilter === a.email ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
+                  !isConnected
+                    ? "border-amber-400/40 bg-amber-400/5 text-amber-100"
+                    : accountFilter === a.email
+                      ? "border-aether-coral/50 text-white"
+                      : "border-white/10 text-aether-muted"
                 }`}
               >
                 <button
@@ -546,15 +566,36 @@ export default function EmailCenterPage() {
                   onClick={() => setAccountFilter(a.email)}
                   className="flex min-w-0 items-center gap-2"
                 >
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-aether-green" />
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      isConnected ? "bg-aether-green" : "bg-amber-400"
+                    }`}
+                  />
                   <span className="min-w-0 truncate">{a.email}</span>
                   {a.isPrimary ? (
                     <span className="rounded border border-aether-violet/30 bg-aether-violet/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-aether-violet">
                       Primary
                     </span>
                   ) : null}
-                  <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+                  {/* Never claim an unread count for an inbox we can no longer read. */}
+                  {isConnected ? (
+                    <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+                  ) : null}
                 </button>
+                {/* Deliberately a label, not a per-account button: Google's consent
+                    screen decides WHICH account is re-authorized, so a per-chip
+                    "Reconnect" would imply a precision the OAuth flow cannot honour.
+                    The single CTA below is the one true reconnect action. Carries the
+                    backend's own `note` rather than wording invented here. */}
+                {!isConnected ? (
+                  <span
+                    data-testid="inbox-needs-reconnect"
+                    title={a.note ?? "Gmail authorization expired — reconnect to resume syncing."}
+                    className="mono rounded border border-amber-400/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300"
+                  >
+                    Needs reconnect
+                  </span>
+                ) : null}
                 {a.id ? (
                   <span className="flex items-center gap-1">
                     {!a.isPrimary ? (
@@ -582,21 +623,26 @@ export default function EmailCenterPage() {
                   </span>
                 ) : null}
               </div>
-            ))}
+            );
+          })}
 
           <button
             type="button"
             data-testid="connect-gmail-btn"
-            onClick={inbox.accounts.some((a) => a.status === "connected") ? addAccount : startConnect}
+            onClick={connected ? addAccount : startConnect}
             disabled={connecting}
             className="rounded-lg border border-dashed border-white/15 px-3 py-1.5 text-xs text-aether-muted-dim hover:text-white disabled:opacity-50"
           >
             <i className="fa-brands fa-google mr-1.5" aria-hidden="true" />
+            {/* GMV4-email-001: "every account expired" is NOT the same situation as
+                "nothing linked yet", and must not read identically. */}
             {connecting
               ? "Opening Google…"
-              : inbox.accounts.some((a) => a.status === "connected")
+              : connected
                 ? "Add Gmail Account"
-                : "Connect Gmail"}
+                : allAccountsBroken
+                  ? "Reconnect Gmail"
+                  : "Connect Gmail"}
           </button>
         </div>
       </div>

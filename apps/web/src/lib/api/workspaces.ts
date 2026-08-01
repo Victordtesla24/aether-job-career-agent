@@ -241,6 +241,13 @@ export interface EmailInbox {
     status: string;
     isPrimary: boolean;
     unread: number;
+    // GMV4-email-001. The API has always sent these (routers/workspaces.py) —
+    // `actionRequired` plus a human-readable `note` explaining an expired or
+    // revoked Gmail grant. They were simply never declared here, so the
+    // backend's own honest wording was discarded before any component saw it.
+    // Optional because the shape predates them.
+    actionRequired?: boolean;
+    note?: string | null;
   }>;
   stats: {
     received: number;
