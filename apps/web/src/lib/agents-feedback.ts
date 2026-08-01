@@ -282,6 +282,35 @@ export function providerCredentialErrorNotice(err: unknown, context: string): No
 }
 
 /** Actionable failure/timeout guidance (never a dead-end error). */
+/**
+ * The structured `detail` object the API client preserves on an ApiError, read
+ * structurally (this module stays React- and import-free by design). Returns
+ * `undefined` when the server sent no object — callers must never be handed a
+ * synthesized one.
+ */
+function apiErrorDetail(err: unknown): Record<string, unknown> | undefined {
+  if (typeof err !== "object" || err === null || !("detail" in err)) return undefined;
+  const d = (err as { detail: unknown }).detail;
+  return d && typeof d === "object" && !Array.isArray(d)
+    ? (d as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Human phrasing for a quota reset instant, or `null` when the server sent none
+ * or sent something unparseable. Never guesses a reset time: a wrong "runs
+ * resume tomorrow" is worse than saying nothing.
+ */
+function formatQuotaReset(iso: string | null): string | null {
+  if (!iso) return null;
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return null;
+  return `on ${when.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} at ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
 export function runErrorNotice(err: unknown, context: string): Notice {
   const status =
     typeof err === "object" && err !== null && "status" in err
@@ -291,6 +320,34 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     return {
       kind: "error",
       text: `${context} paused — the AI model is busy or its time budget was exceeded. Wait a minute and press the button again; your data is safe.`,
+    };
+  }
+  if (status === 429) {
+    // DROP-001. The plan-quota 429 (routers/agents.py) ships `message`,
+    // `quotaReset` and `upgradeUrl`, describing itself as carrying "an upgrade
+    // CTA and the period reset time so the UI can prompt an upgrade or a wait".
+    // None of it was reachable — ApiError flattened the body into a string — so
+    // a quota wall fell through to the generic branch below, which tells the
+    // user to "retry in a moment" and check RECENT RUNS. Both are wrong for a
+    // quota: retrying cannot succeed, and the runs table explains nothing.
+    const detail = apiErrorDetail(err);
+    const serverMessage =
+      typeof detail?.message === "string" && detail.message.trim()
+        ? detail.message.trim()
+        : `${context} is blocked — you've reached your plan's run quota for this period.`;
+    const resetPhrase = formatQuotaReset(
+      typeof detail?.quotaReset === "string" ? detail.quotaReset : null,
+    );
+    const upgradeUrl =
+      typeof detail?.upgradeUrl === "string" && detail.upgradeUrl ? detail.upgradeUrl : null;
+    const isSpendCap = detail?.code === "spend_cap_exceeded";
+    return {
+      kind: "error",
+      // Only state a reset time the server actually sent — never invent one.
+      text: resetPhrase ? `${serverMessage} Runs resume ${resetPhrase}.` : serverMessage,
+      ...(upgradeUrl
+        ? { href: upgradeUrl, hrefLabel: isSpendCap ? "review plan →" : "upgrade plan →" }
+        : {}),
     };
   }
   if (status === 422) {

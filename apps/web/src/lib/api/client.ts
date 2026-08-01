@@ -23,6 +23,27 @@ export function apiBaseUrl(): string {
   return "http://127.0.0.1:8000";
 }
 
+/**
+ * Structured `detail` object FastAPI attaches to an HTTPException, when the body
+ * parses as `{"detail": {...}}`.
+ *
+ * DROP-001. The plan-quota 429 (`routers/agents.py`) documents itself as carrying
+ * "an upgrade CTA (/pricing) and the period reset time so the UI can prompt an
+ * upgrade or a wait" — but every field was flattened into the message string here
+ * and lost, so no caller could ever act on it. Preserving the object is what makes
+ * an honest quota wall possible; it changes nothing for callers that ignore it.
+ */
+export interface ApiErrorDetail {
+  code?: string;
+  message?: string;
+  runsUsed?: number | null;
+  runsAllowed?: number | null;
+  /** ISO-8601 instant the quota period resets, or null when not known. */
+  quotaReset?: string | null;
+  upgradeUrl?: string | null;
+  [key: string]: unknown;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -30,10 +51,32 @@ export class ApiError extends Error {
     /** Seconds from a `Retry-After` response header, when the server sent one
      * (429 rate-limit responses on /billing/checkout and /billing/portal). */
     readonly retryAfterSeconds?: number,
+    /** Parsed `detail` object when the server sent one; `undefined` for plain
+     * string details. Never fabricated — absent means the server sent none. */
+    readonly detail?: ApiErrorDetail,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/**
+ * Lift FastAPI's structured `detail` out of a raw error body. Returns `undefined`
+ * for a non-JSON body or a plain-string detail — callers must not be handed a
+ * synthesized object that the server never sent.
+ */
+export function parseApiErrorDetail(body: string): ApiErrorDetail | undefined {
+  if (!body) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === "object" && "detail" in parsed) {
+      const d = (parsed as { detail: unknown }).detail;
+      if (d && typeof d === "object" && !Array.isArray(d)) return d as ApiErrorDetail;
+    }
+  } catch {
+    // Non-JSON body (HTML error page, plain text) — nothing structured to lift.
+  }
+  return undefined;
 }
 
 /** Human-readable "try again in …" phrasing for an ApiError's retryAfterSeconds. */
@@ -226,6 +269,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       `${options.method ?? "GET"} ${path} failed (${res.status}): ${detail}`,
       res.status,
       retryAfterSeconds,
+      parseApiErrorDetail(detail),
     );
   }
   if (res.status === 204) {
