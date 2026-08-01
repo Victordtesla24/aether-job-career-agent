@@ -302,7 +302,11 @@ class JobRepository:
                         "salaryMin", "salaryMax", "currency", "postedAt",
                         "dedupHash", "contentHash", "lastSeenAt", "updatedAt"
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        NOW(), NOW()
+                    )
                     ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET
                         "title" = EXCLUDED."title",
                         "company" = EXCLUDED."company",

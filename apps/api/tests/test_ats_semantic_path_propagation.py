@@ -33,7 +33,7 @@ honest reproduction: the defect is in what the handler DOES with a genuine
 """
 from __future__ import annotations
 
-from app.services.ats_engine import ATSScore, _DEGRADED_SEMANTIC_SCORE
+from app.services.ats_engine import _DEGRADED_SEMANTIC_SCORE, ATSScore
 
 _DEGRADATION_FLAG_KEYS = (
     "semanticPath",
