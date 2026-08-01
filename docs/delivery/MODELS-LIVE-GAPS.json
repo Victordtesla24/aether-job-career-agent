@@ -2711,7 +2711,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/PROD-DATA-INVENTORY.md"
       ],
-      "status": "FIX-IN-TREE-AWAITING-REVIEW",
+      "status": "REVIEW-FAILED-ROUND-2-IN-PROGRESS",
       "owner": "W-E ai-loop-engineer",
       "fixCommits": [
         "(uncommitted \u2014 awaiting \u00a722 step 5)"
@@ -3394,7 +3394,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-story-002-fail-before-20260731T185210Z.txt"
       ],
-      "status": "FIX-IN-TREE-AWAITING-REVIEW",
+      "status": "REVIEW-FAILED-ROUND-2-IN-PROGRESS",
       "owner": "W-E fixer-hard + risk-officer approval before ANY live run",
       "fixCommits": [
         "(uncommitted \u2014 awaiting \u00a722 step 5)"
@@ -3718,6 +3718,28 @@
       "fixCommits": [],
       "verifiedBy": "fixer-hard self-disclosure 2026-08-01",
       "openedUtc": "2026-08-01T00:53:32Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-008",
+      "screen": "Story Bank",
+      "severity": "BLOCKER",
+      "category": "data-loss-risk",
+      "summary": "THE ARCHIVE GUARANTEE IS NOT LEAK-TIGHT ON WRITES, so GMV4-story-004's core promise does not hold. The round-1 fix filtered archivedAt on READS (list_by_user, create's hash and candidate lookups) but NOT on writes: repositories/story.py:239-243 (update) and :252-255 (delete) are unfiltered. Consequences: (1) PUT /stories/{id} (routers/stories.py:178-185) rewrites an ARCHIVED row and echoes it back via _enrich(updated), so archived content resurfaces through a write-then-echo path \u2014 the very leak the choke point was meant to prevent, arriving by another door. (2) DELETE /stories/{id} (routers/stories.py:188-191) PERMANENTLY PHYSICALLY DELETES an archived row, so the owning user can destroy their own recoverable merge loser with one ordinary delete call. The reviewer connected this to the threshold ruling: keeping BULK_MIGRATION_THRESHOLDS at 0.60 was accepted as a legitimate risk trade ONLY BECAUSE merges are recoverable \u2014 and they are not, until this is closed. SECOND SEVERE FINDING in the same review: restore_merged_stories (story_dedup_migration.py:399-445) corrupts silently on partial/out-of-order restore \u2014 if survivor S absorbed D1 then D2, restoring only batch B1 overwrites S with D1's pre-merge snapshot and discards D2's still-archived merge with no error, no unrestorable entry, no warning. CLI-reachable.",
+      "reproduction": [
+        "PUT then DELETE an archived story id and observe the row rewritten and then physically removed",
+        "Merge D1 then D2 into S; restore only batch B1; observe S overwritten with pre-D1 content and D2's merge discarded"
+      ],
+      "expected": "Archived rows are unreachable by ordinary write paths; restore refuses rather than corrupting",
+      "observed": "update/delete unfiltered; partial restore silently destroys a later merge",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/ (W-E round-1 adversarial review)"
+      ],
+      "status": "ROUND-2-IN-PROGRESS",
+      "owner": "W-E fixer-hard",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-08-01",
+      "openedUtc": "2026-08-01T00:57:24Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
