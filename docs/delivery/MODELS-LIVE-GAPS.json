@@ -3444,19 +3444,19 @@
     {
       "id": "GMV4-story-005",
       "screen": "Story Bank",
-      "severity": "BLOCKER",
+      "severity": "HIGH",
       "category": "data-loss-risk",
-      "summary": "SILENT DATA LOSS ON CREATE. POST to create a story returns 201 Created while OVERWRITING an existing story. This is the paraphrase-merge seen from the user's side: a batch-2 tester observed the same mechanism and recorded it as the dedup feature working correctly (same row id returned, tags unioned, zero count delta) \u2014 but to a user who typed a NEW story and got 201, their input silently replaced different existing content. A 201 status asserts creation; nothing created occurred. Under the deliberately-loose paraphrase thresholds this can consume genuinely distinct achievements.",
+      "summary": "SEVERITY CORRECTED DOWN FROM BLOCKER AFTER FIRST-HAND PROOF. The create endpoint returns a hardcoded 201 Created (routers/stories.py:173, no merge-vs-insert branch) with NO merge indicator in the body, while repositories/story.py:105 best_paraphrase_match may fold the submission into an existing row. CRUX RESOLVED: the absorbing UPDATE at story.py:118-136 binds the NEW submission's values, so THE USER'S TYPED CONTENT IS RETAINED \u2014 it overwrites the row. What is silently destroyed is the OLD row's prior title/situation/task/action/result, with no disclosure and no undo. So this is (a) a status code that lies about what happened and (b) content loss of the ABSORBED row \u2014 not loss of the user's immediate input. Proven live by a passing test_create_merge_preserves_the_users_new_content, not assumed. SYNERGY: the concurrent W-E work adds archive columns to StoryEntry; routing this overwrite through the same archive would give the absorbed content a recovery path and close the undo gap in one design.",
       "reproduction": [
         "Create a story on prod whose text is a loose paraphrase of an existing one; observe 201 and the pre-existing row mutated"
       ],
-      "expected": "Creation creates, or the user is told their entry was merged into an existing story and can undo it",
-      "observed": "201 Created returned while an existing row is overwritten",
+      "expected": "Merge returns 200 with an explicit merged flag identifying the absorbing row; absorbed content recoverable",
+      "observed": "Hardcoded 201 Created, no merge disclosure, old row content overwritten irrecoverably",
       "evidence": [
         "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
       ],
-      "status": "OPEN",
-      "owner": "W-E fixer-hard",
+      "status": "TESTS-RED-READY-FOR-FIX",
+      "owner": "W-E fixer (AFTER the archive work lands \u2014 same file, do not run concurrently)",
       "fixCommits": [],
       "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
       "openedUtc": "2026-08-01T00:17:37Z",
@@ -3514,11 +3514,11 @@
         "Call GET /api/stories?category=<any> on prod and compare against unfiltered output"
       ],
       "expected": "Category filter applied server-side",
-      "observed": "Filter ignored",
+      "observed": "Confirmed RED: a Delivery-category row leaked into a Risk-&-Compliance-filtered response, and an unmatched category returned 1 row instead of []. `category` is not a declared query param \u2014 the filter is silently ignored and the whole collection returned, which is the dangerous shape.",
       "evidence": [
         "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
       ],
-      "status": "OPEN",
+      "status": "TESTS-RED-READY-FOR-FIX",
       "owner": "W-B fixer-medium",
       "fixCommits": [],
       "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
