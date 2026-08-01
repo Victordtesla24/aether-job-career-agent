@@ -54,7 +54,7 @@
     ],
     "code_change_not_credential": "Gmail OAuth works (3 scopes) but calendar.events is ABSENT from GOOGLE_SCOPES (google_oauth.py:54) \u2014 W-CAL prerequisite is a CODE change, not a missing credential."
   },
-  "updated_utc": "2026-08-01T01:40:00Z",
+  "updated_utc": "2026-08-01T22:40:00Z",
   "BLOCKER_006": {
     "title": "The jobs feed showed ZERO jobs to a real paying user \u2014 core journey dead",
     "severity": "CRITICAL (product value proposition unreachable)",
@@ -75,5 +75,16 @@
     "reason": "The API runs directly from the working tree, and a CONCURRENT SESSION has 1,079 insertions / 167 deletions of UNCOMMITTED production code in it (db.py, repositories/story.py, routers/jobs.py, story_dedup_migration.py, story_paraphrase.py, dashboard/jobs/page.tsx, dashboard/resume/page.tsx, lib/api/resumes.ts, plus an untracked story_dedup_sweep.py). Restarting aether-api to ship MY verified 1-commit fix would also ship ALL of that, unreviewed by me and mid-edit by them. Shipping another session unverified WIP to fix an urgent defect is how an urgent defect becomes an outage.",
     "consequence": "BLOCKER-006 remains LIVE in production until a deploy happens from a clean tree. The fix is committed and pushed, so whichever session deploys next carries it.",
     "unblock": "Either the concurrent session commits/finishes and one deploy carries both, or one session is stopped so the tree has a single owner."
+  },
+  "v4_progress": {
+    "G-C_conversion_metric": {
+      "status": "FIXED (committed; full FE suite running)",
+      "root_cause": "interview_conversion_rate was computed CORRECTLY all along (direct SQL: 0 interviews / 48 distinct submitted) and returned by the API, but ConversionSchema in apps/web/src/lib/api/analytics.ts was a z.object OMITTING the field, so zod stripped it client-side. Zero occurrences of the string existed in web source or the deployed bundle. G-C was unmet purely by a client-side schema omission.",
+      "honesty_choice": "The >=1:5 badge is driven by the API own interview_conversion_healthy floor rather than a client-side recomputation \u2014 keeps \u00a712.1 (every score chip API-derived) and avoids a misleading red \"needs improvement\" badge on an account with no applications yet.",
+      "verified": "interview-conversion-rate.test.tsx + analytics page.test.tsx 6/6 green; lint clean; tsc clean.",
+      "process_note": "The authoring agent exited before committing or writing its artifact (GOV-009 pattern). Orchestrator verified the work independently and committed it with selective staging.",
+      "stale_comment_left": "apps/api/app/routers/analytics.py:380 still claims the metric is \"shown elsewhere on the SAME analytics page\" \u2014 that claim was FALSE and is now TRUE by accident. Left unedited: the file is Python and the agent was frontend-scoped. Worth a follow-up comment correction."
+    },
+    "deploy_hold_still_active": "13 production files from the concurrent session remain uncommitted; the API runs from the working tree, so any restart ships their unverified WIP. BLOCKER-006 (users see 0 jobs) therefore remains LIVE in production despite being fixed, reviewed PASS, and pushed."
   }
 }
