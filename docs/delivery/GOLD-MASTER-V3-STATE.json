@@ -2,7 +2,7 @@
   "run": "GOLD-MASTER-V4",
   "prompt_file": "/home/ubuntu/aether-gold-master-execution-v4.md",
   "started_utc": "2026-07-31T17:07:58Z",
-  "updated_utc": "2026-08-01T00:18:19Z",
+  "updated_utc": "2026-08-01T00:27:44Z",
   "orchestrator": "claude-opus-5 (xhigh) \u2014 brain only per \u00a70.1",
   "phase_step": "PAUSED \u2014 SESSION USAGE LIMIT (resets 21:20 UTC). Resume per \u00a72.3.",
   "phase_step_detail": {
@@ -127,8 +127,8 @@
       "evidence": null
     },
     "G-M": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+      "status": "PARTIAL \u2014 error/5xx component EVIDENCED (0/0 over 7h29m); agent-run and Apply components satisfied by W-A evidence; Calendar-create component CANNOT be satisfied (W-CAL unimplemented) -> at best CONDITIONALLY-CLOSED. \u00a723.1 continuous monitoring was NOT in force (VIOL-007).",
+      "evidence": "uat/reports/evidence/gold-master-v3/runtime/G-M-EVIDENCE.md"
     },
     "G-N": {
       "status": "UNADJUDICABLE \u2014 both baselines contaminated",

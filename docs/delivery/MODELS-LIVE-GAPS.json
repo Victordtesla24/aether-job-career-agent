@@ -3556,11 +3556,11 @@
         "ls uat/reports/evidence/gold-master-v3/runtime/ \u2014 empty"
       ],
       "expected": "Continuous monitoring of the ACTUAL log sink, with in-window counts anchored to a stated time filter",
-      "observed": "Monitor read an empty journald stream all run; first artifact reported whole-file counts as window counts",
+      "observed": "Monitor read an empty journald stream all run; first artifact reported whole-file counts as window counts | CORRECTED EVIDENCE FILED: in-window 0 ERROR / 0 CRITICAL / 0 5xx / 0 restarts / 0 OOM across a MEASURED 7h29m window (2026-07-31T16:59Z -> 2026-08-01T00:28Z), with exact reproducible grep commands recorded and whole-file totals (3568 ERROR / 9 CRITICAL / 158 ASGI, dominated by historical startup contention) kept in a SEPARATE column. Last 5xx was 15:26Z, before the run started (resume-download 501 and networking 500 probes). The clean window is therefore genuinely evidenced \u2014 but by post-hoc log analysis, NOT by the \u00a723.1 monitor, which was inert throughout (VIOL-007). The governance finding stands even though the runtime result is good.",
       "evidence": [
         "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
       ],
-      "status": "OPEN",
+      "status": "EVIDENCE-FILED-GOVERNANCE-FINDING-REMAINS",
       "owner": "orchestrator (VIOL-007) + runtime-monitor re-dispatch",
       "fixCommits": [],
       "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
