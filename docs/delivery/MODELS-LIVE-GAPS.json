@@ -2031,7 +2031,7 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/services/SERVICE-REGISTRY.md"
       ],
-      "status": "REWORK-COMPLETE-AWAITING-RE-REVIEW",
+      "status": "ROUND-3-REVIEW-FAILED-ROUND-4-ESCALATED-TO-OPUS",
       "owner": "W-HF ai-loop-engineer",
       "fixCommits": [
         "(uncommitted working tree \u2014 pending \u00a722 step 5 review)"
@@ -2627,7 +2627,7 @@
       "evidence": [
         "apps/api/app/services/ats_engine.py"
       ],
-      "status": "REWORK-COMPLETE-AWAITING-RE-REVIEW",
+      "status": "ROUND-3-REVIEW-FAILED-ROUND-4-ESCALATED-TO-OPUS",
       "owner": "W-HF ai-loop-engineer (rework)",
       "fixCommits": [],
       "verifiedBy": null,
@@ -3588,6 +3588,27 @@
       "fixCommits": [],
       "verifiedBy": "orchestrator 2026-08-01T00:25Z",
       "openedUtc": "2026-08-01T00:25:29Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-ats-008",
+      "screen": "Jobs (incl. apply-confirmation modal)",
+      "severity": "BLOCKER",
+      "category": "defect",
+      "summary": "A DEGRADED PLACEHOLDER CAN BE SHOWN AS A JOB'S REAL MATCH SCORE AT THE MOMENT THE USER DECIDES TO APPLY. apps/web/src/app/dashboard/jobs/page.tsx:570-572 \u2014 startTailoring reads out.conversionMetrics.tailoredATSScore and writes it directly into job.fitScore WITHOUT checking tailoredDegraded/scoringDegraded, even though both fields are on the same object the round-3 fix added them to. job.fitScore then renders unguarded at four sites: job-card MatchRing (~1125), detail-panel MatchRing (~1286), THE APPLY-CONFIRMATION GATE SCORE (~1632), and the list-row span (~1847). A transient scoring failure therefore paints 50.0 as the job's genuine match score in the confirm-before-apply modal. Missed by rounds 1, 2 AND 3 because it is a DERIVED value \u2014 the leak is one assignment hop away from the guarded field, which is why per-site patching kept failing. Directly violates ADR-GMV4-001's binding condition that derived values must be withheld or flagged.",
+      "reproduction": [
+        "Tailor a job while semantic scoring is degraded; observe job.fitScore adopt the placeholder and render in the apply-confirmation modal"
+      ],
+      "expected": "A degraded score is never adopted as fitScore, or is flagged everywhere fitScore renders",
+      "observed": "Unguarded assignment; 4 unguarded render sites including the apply gate",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-ats-002-round3-adversarial-review-20260801T002542Z.md"
+      ],
+      "status": "OPEN",
+      "owner": "W-HF fixer-hard (round 4, ESC-002)",
+      "fixCommits": [],
+      "verifiedBy": "reviewer (sonnet) 2026-08-01T00:25Z",
+      "openedUtc": "2026-08-01T00:29:57Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
