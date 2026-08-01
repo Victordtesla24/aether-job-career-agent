@@ -38,6 +38,7 @@ import {
   fetchInterviewPrep,
   fetchInterviews,
   INTERVIEW_TYPES,
+  type CalendarResult,
   type Interview,
   type InterviewInput,
   type InterviewPrepBrief,
@@ -119,6 +120,11 @@ export default function InterviewCenterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // W-CAL: what the backend reported about the Google Calendar write for the
+  // interview that was just scheduled. Rendered verbatim — this banner never
+  // says an event was created unless `status === "created"`, which the backend
+  // sets only when Google returned a real event id.
+  const [calendarNotice, setCalendarNotice] = useState<CalendarResult | null>(null);
 
   // Interview Prep brief (ML-W4B-OBS-1) — only fetched/rendered while an
   // application is at the interview stage (see `atInterviewStage` below).
@@ -220,7 +226,11 @@ export default function InterviewCenterPage() {
     }
     setSubmitting(true);
     try {
-      await createInterview(input);
+      const created = await createInterview(input);
+      // Report EXACTLY what the backend said about the calendar — including
+      // "nothing was written". A backend that sent no calendar block at all
+      // gets no banner rather than an assumed success.
+      setCalendarNotice(created.calendar ?? null);
       setCreating(false);
       setForm(EMPTY_FORM);
       await load();
@@ -282,6 +292,48 @@ export default function InterviewCenterPage() {
           Schedule interview
         </button>
       </header>
+
+      {calendarNotice ? (
+        <div
+          data-testid={`interview-calendar-notice-${calendarNotice.status}`}
+          className={`flex items-start justify-between gap-3 rounded-xl border p-3 ${
+            calendarNotice.status === "created"
+              ? "border-aether-green/30 bg-aether-green/10"
+              : "border-aether-amber/30 bg-aether-amber/10"
+          }`}
+        >
+          <div className="space-y-1">
+            <p
+              className={`text-sm ${
+                calendarNotice.status === "created"
+                  ? "text-aether-green"
+                  : "text-aether-amber"
+              }`}
+              role={calendarNotice.status === "created" ? undefined : "alert"}
+            >
+              {calendarNotice.message}
+            </p>
+            {calendarNotice.status === "created" && calendarNotice.html_link ? (
+              <a
+                href={calendarNotice.html_link}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-xs font-semibold underline"
+                data-testid="interview-calendar-event-link"
+              >
+                Open the event in Google Calendar
+              </a>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setCalendarNotice(null)}
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/10 max-sm:min-h-[44px]"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">

@@ -72,6 +72,32 @@ import { formatAud } from "../../../lib/format";
 import { emailLooksValid } from "../../../components/auth/validation";
 
 
+/**
+ * Connected-account badge copy (W-CAL / ADR-CALENDAR-V4).
+ *
+ * This row used to render a hardcoded green "Connected" pill for EVERY entry,
+ * regardless of the `status` the backend sent — so the moment a surface could
+ * report anything other than "connected" (Google Calendar can report
+ * scope_missing / needs_reauth / unavailable), the screen would have shown a
+ * confident lie. The badge now renders the real status, and an unknown status
+ * falls through to the neutral "unavailable" styling rather than to green.
+ */
+const ACCOUNT_STATUS_LABELS: Record<string, string> = {
+  connected: "Connected",
+  scope_missing: "Not connected",
+  needs_reauth: "Reconnect needed",
+  not_connected: "Not connected",
+  unavailable: "Unverified",
+};
+
+const ACCOUNT_STATUS_STYLES: Record<string, string> = {
+  connected: "border-aether-green/25 bg-aether-green/15 text-aether-green",
+  scope_missing: "border-aether-amber/25 bg-aether-amber/15 text-aether-amber",
+  needs_reauth: "border-red-500/25 bg-red-500/15 text-red-300",
+  not_connected: "border-white/10 bg-white/5 text-aether-muted-dim",
+  unavailable: "border-white/10 bg-white/5 text-aether-muted-dim",
+};
+
 /** Matches the AUD formatter on /pricing (apps/web/src/app/pricing/page.tsx)
  * so the same plan price reads identically everywhere it's shown. */
 const STATUS_STYLE: Record<string, string> = {
@@ -1002,10 +1028,16 @@ export default function SettingsClient({
                 <h2 className="mb-3 text-[15px] font-semibold">Connected Accounts &amp; API Keys</h2>
                 <div className="space-y-2.5">
                   {data.connectedAccounts.map((a) => (
-                    <div key={a.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div key={`${a.name}-${a.detail}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
                       <div>
                         <p className="text-xs font-semibold">
-                          {a.name} <span className="ml-1 rounded-md border border-aether-green/25 bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">Connected</span>
+                          {a.name}{" "}
+                          <span
+                            data-testid={`account-status-${a.status}`}
+                            className={`ml-1 rounded-md border px-2 py-0.5 text-[10px] font-medium ${ACCOUNT_STATUS_STYLES[a.status] ?? ACCOUNT_STATUS_STYLES.unavailable}`}
+                          >
+                            {ACCOUNT_STATUS_LABELS[a.status] ?? a.status}
+                          </span>
                         </p>
                         <p className="mono mt-1 text-[11px] text-aether-muted-dim">{a.detail}</p>
                       </div>

@@ -1078,7 +1078,8 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     # Real Gmail connection (P4) — surfaced per connected inbox (GAP-D2).
     from app.repositories.gmail_account import GmailAccountRepository
 
-    for gacc in GmailAccountRepository().list_accounts(uid):
+    google_accounts = GmailAccountRepository().list_accounts(uid)
+    for gacc in google_accounts:
         gemail = gacc.get("accountEmail")
         if gemail:
             accounts.append(
@@ -1089,6 +1090,34 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
                     + (" (primary)" if gacc.get("isPrimary") else ""),
                 }
             )
+    # Real Google Calendar connection (W-CAL / ADR-CALENDAR-V4). Reported ONLY
+    # for a user who has a Google account at all — and then per GM2-EMAIL-001,
+    # from REAL token validity: an account whose stored grant lacks
+    # calendar.events is settled without a network call, and one that has it is
+    # LIVE-probed so "connected" means Google accepted the token just now, not
+    # that a row exists. A row is never enough to claim a capability.
+    if google_accounts:
+        from app.services.calendar_service import STATUS_UNAVAILABLE, connection_status
+
+        try:
+            cal = connection_status(uid)
+        except Exception as exc:  # noqa: BLE001 — settings must never 500 on this
+            # Honest third state, never an assumed "connected": we say we could
+            # not check rather than guessing either way.
+            cal = {
+                "status": STATUS_UNAVAILABLE,
+                "message": (
+                    "Google Calendar connection could not be checked just now: "
+                    f"{exc}"
+                ),
+            }
+        accounts.append(
+            {
+                "name": "Google Calendar",
+                "status": str(cal["status"]),
+                "detail": str(cal["message"]),
+            }
+        )
     result["connectedAccounts"] = accounts
     return result
 

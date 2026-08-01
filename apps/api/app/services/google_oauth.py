@@ -44,17 +44,28 @@ from __future__ import annotations
 
 import os
 import secrets
+import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timezone
 from typing import Any, NamedTuple
 
 import jwt
 
-#: Gmail + identity scopes the product requests (Gmail API enabled by the user).
+#: Google Calendar events scope (W-CAL / ADR-CALENDAR-V4). Requested ALONGSIDE
+#: the Gmail scopes under incremental authorization
+#: (``include_granted_scopes=true`` in :func:`build_consent_url`), so a user who
+#: already granted Gmail keeps that grant — Google ADDS calendar.events to the
+#: existing authorization rather than replacing it.
+CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+
+#: Gmail + identity + calendar scopes the product requests.
 GOOGLE_SCOPES: list[str] = [
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.labels",
+    CALENDAR_EVENTS_SCOPE,
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -186,6 +197,14 @@ def build_consent_url(user_id: str, login_hint: str | None = None) -> str:
     overwriting) the first (GAP-D2). An optional ``login_hint`` pre-selects a
     specific account when re-connecting a known one.
 
+    ``include_granted_scopes=true`` is INCREMENTAL AUTHORIZATION and is
+    load-bearing for W-CAL: ``calendar.events`` joined ``GOOGLE_SCOPES`` after
+    users had already consented to the three Gmail scopes, and without this
+    flag Google would issue a token carrying ONLY the newly-consented scopes —
+    silently breaking every existing email sync. With it, Google ADDS the new
+    scope to the account's existing authorization and returns a token covering
+    both. Do not remove it.
+
     Per ADR-PC-1, the PKCE ``code_verifier`` is generated explicitly (rather
     than relying on ``Flow.authorization_url``'s autogeneration) so it is
     known *before* the state JWT is built and can be carried in it — the
@@ -243,6 +262,66 @@ def _resolve_email(creds: Any) -> str | None:
         return None
 
 
+#: Serializes the (process-global) OAUTHLIB_RELAX_TOKEN_SCOPE window below so
+#: two concurrent callbacks cannot interleave set/restore and leave it stuck.
+_RELAX_LOCK = threading.Lock()
+_RELAX_ENV = "OAUTHLIB_RELAX_TOKEN_SCOPE"
+
+
+@contextmanager
+def _relaxed_token_scope() -> Iterator[None]:
+    """Allow the token response's scope set to differ from the requested one,
+    for the duration of ONE token exchange.
+
+    Why this is required (W-CAL / ADR-CALENDAR-V4): ``oauthlib`` raises a bare
+    ``Warning`` from ``validate_token_parameters`` whenever the granted scope
+    set != the requested scope set, unless ``OAUTHLIB_RELAX_TOKEN_SCOPE`` is
+    set. Two things make that difference the NORMAL case here:
+
+    * ``include_granted_scopes=true`` (incremental auth) makes Google return
+      previously-granted scopes that this request never asked for;
+    * Google's granular consent screen lets a user tick Gmail and UNTICK
+      Calendar, so the grant is a strict subset of the request.
+
+    Without this, adding ``calendar.events`` would turn "user declined
+    Calendar" into "token exchange exploded" — and the user would lose their
+    Gmail connection entirely. Relaxing the check does NOT relax honesty: the
+    scopes persisted below come from ``credentials.granted_scopes`` (what
+    Google really granted), never from what we asked for, and every calendar
+    feature gates on that stored truth.
+
+    Scoped, restored, and lock-serialized so it never leaks process-wide.
+    """
+    with _RELAX_LOCK:
+        previous = os.environ.get(_RELAX_ENV)
+        os.environ[_RELAX_ENV] = "1"
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop(_RELAX_ENV, None)
+            else:
+                os.environ[_RELAX_ENV] = previous
+
+
+def granted_scope_string(creds: Any) -> str:
+    """The scopes Google ACTUALLY granted, as a space-separated string.
+
+    ``google-auth`` exposes two different things and they are NOT the same:
+    ``credentials.scopes`` is the list we REQUESTED (copied verbatim off the
+    session), while ``credentials.granted_scopes`` is parsed from the token
+    response's own ``scope`` field. Persisting the requested set would record a
+    Calendar grant for a user who declined it — a fabricated capability that
+    every downstream "Calendar connected" check would then repeat. Falls back
+    to the requested set only when the token response carried no ``scope`` at
+    all (older/edge responses), which is the pre-W-CAL behaviour.
+    """
+    granted = getattr(creds, "granted_scopes", None)
+    if granted:
+        return " ".join(granted)
+    return " ".join(getattr(creds, "scopes", None) or GOOGLE_SCOPES)
+
+
 def exchange_code(code: str, state: str) -> dict[str, Any]:
     """Validate ``state``, exchange ``code`` for tokens, and return a normalized
     credential dict (including the app ``user_id`` recovered from state)."""
@@ -260,7 +339,8 @@ def exchange_code(code: str, state: str) -> dict[str, Any]:
             # "(invalid_grant) Missing code verifier". The verifier is not a
             # long-term secret; token exchange still requires client_secret.
             flow.code_verifier = claims.code_verifier
-        flow.fetch_token(code=code)
+        with _relaxed_token_scope():
+            flow.fetch_token(code=code)
         creds = flow.credentials
     except OAuthError:
         raise
@@ -281,5 +361,8 @@ def exchange_code(code: str, state: str) -> dict[str, Any]:
         "refresh_token": creds.refresh_token,
         "access_token": creds.token,
         "expires_at": expires_at,
-        "scopes": " ".join(creds.scopes or GOOGLE_SCOPES),
+        # W-CAL: the GRANTED scopes, never the requested ones (see
+        # granted_scope_string) — a declined Calendar consent must be stored as
+        # declined so the calendar features refuse honestly.
+        "scopes": granted_scope_string(creds),
     }

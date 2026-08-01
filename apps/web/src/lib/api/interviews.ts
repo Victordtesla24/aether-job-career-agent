@@ -45,6 +45,27 @@ export const ACTIVE_INTERVIEW_STATUSES: readonly InterviewStatus[] = [
   "rescheduled",
 ];
 
+/**
+ * Outcome of the Google Calendar write attempted when an interview is created
+ * (W-CAL / ADR-CALENDAR-V4). `status` is the backend's own honest verdict —
+ * `event_id` is non-null ONLY when Google returned an id, so the UI can never
+ * announce an event that does not exist.
+ */
+export const CalendarResultSchema = z.object({
+  status: z.enum([
+    "created",
+    "not_connected",
+    "scope_missing",
+    "needs_reauth",
+    "failed",
+  ]),
+  event_id: z.string().nullable(),
+  html_link: z.string().nullable(),
+  message: z.string(),
+});
+
+export type CalendarResult = z.infer<typeof CalendarResultSchema>;
+
 export const InterviewSchema = z.object({
   id: z.string(),
   user_id: z.string(),
@@ -60,9 +81,24 @@ export const InterviewSchema = z.object({
   contact_email: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+  // W-CAL calendar linkage. Optional so a response produced before the
+  // additive columns existed still parses; nullable because "no event" is the
+  // honest value whenever the calendar leg did not succeed.
+  calendar_event_id: z.string().nullable().optional(),
+  calendar_html_link: z.string().nullable().optional(),
+  calendar_sync_status: z.string().nullable().optional(),
+  calendar_synced_at: z.string().nullable().optional(),
 });
 
 export type Interview = z.infer<typeof InterviewSchema>;
+
+/** POST /interviews also reports what happened on the calendar, in the same
+ * response. Optional so a backend that has not shipped W-CAL still parses. */
+export const CreatedInterviewSchema = InterviewSchema.extend({
+  calendar: CalendarResultSchema.optional(),
+});
+
+export type CreatedInterview = z.infer<typeof CreatedInterviewSchema>;
 
 /** Payload for scheduling a new interview (POST /interviews). */
 export interface InterviewInput {
@@ -85,8 +121,8 @@ export async function fetchInterviews(options: RequestOptions = {}): Promise<Int
 export async function createInterview(
   input: InterviewInput,
   options: RequestOptions = {},
-): Promise<Interview> {
-  return InterviewSchema.parse(
+): Promise<CreatedInterview> {
+  return CreatedInterviewSchema.parse(
     await apiRequest<unknown>("/interviews", { ...options, method: "POST", body: input }),
   );
 }

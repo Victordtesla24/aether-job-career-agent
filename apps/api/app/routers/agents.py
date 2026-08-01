@@ -291,17 +291,19 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "postings per week by discovery date. No external market-data feed. "
             "Says \"not enough data\" below the sample threshold instead of "
             "reporting a flat trend. Deterministic, no LLM cost."},
-    # ADR-AG-1 (wave-4C): "calendar coordination" claimed a calendar integration
-    # that does not exist (no Calendar OAuth, no free/busy read, no event write).
-    # The honest scope is DRAFT reply text on a real interview-stage thread.
+    # ADR-AG-1 (wave-4C) forbade any calendar claim because no Calendar OAuth
+    # existed. ADR-CALENDAR-V4 (W-CAL) supersedes that: calendar.events is now
+    # really requested, so the capability is CONDITIONAL on this user's own
+    # grant — and the copy says so in both directions rather than picking one.
     {"key": "scheduling", "name": "Scheduling Agent", "icon": "fa-calendar-check",
      "accent": "green", "backend": "scheduling", "recommended": "gpt-4o-mini",
      "tip": "Drafts your reply on an email thread attached to an application that "
-            "is really at the Interview stage. Aether reads and writes NO calendar, "
-            "so it proposes only the availability you pass it and otherwise asks the "
-            "sender for windows — it never invents a time, never books anything and "
-            "never sends. Send the draft from the Email Center when you are happy "
-            "with it."},
+            "is really at the Interview stage. With Google Calendar connected it "
+            "proposes windows your real free/busy shows as free; without it Aether "
+            "reads no calendar for you and proposes only the availability you pass "
+            "it, otherwise asking the sender for windows — it never invents a time, "
+            "never books anything and never sends. Send the draft from the Email "
+            "Center when you are happy with it."},
     # ADR-AG-1 (wave-4C): the scope was real, but the tip described a capability
     # ("scoring of replies") without saying what it reads or how it degrades.
     {"key": "sentimentAnalysis", "name": "Sentiment Analysis Agent", "icon": "fa-face-smile",
@@ -1738,9 +1740,11 @@ def _agent_callable(
         from app.agents.scheduling_agent import SchedulingAgent
 
         thread_id = params.get("thread_id")
-        # ``proposed_times`` are the CALLER'S OWN availability windows. Aether reads
-        # no calendar, so this is the only source of a concrete time — the agent
-        # bounds/de-duplicates them and proposes nothing else.
+        # ``proposed_times`` are the CALLER'S OWN availability windows and always
+        # take precedence. Since W-CAL (ADR-CALENDAR-V4) they are no longer the
+        # ONLY source of a concrete time: with Google Calendar connected the
+        # agent falls back to windows read from real free/busy. With neither, it
+        # still proposes nothing of its own.
         proposed = params.get("proposed_times")
         return "scheduling", (
             lambda: SchedulingAgent().run(
