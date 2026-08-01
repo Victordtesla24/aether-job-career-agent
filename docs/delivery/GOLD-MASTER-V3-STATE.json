@@ -53,5 +53,27 @@
       "YouTube Data"
     ],
     "code_change_not_credential": "Gmail OAuth works (3 scopes) but calendar.events is ABSENT from GOOGLE_SCOPES (google_oauth.py:54) \u2014 W-CAL prerequisite is a CODE change, not a missing credential."
+  },
+  "updated_utc": "2026-08-01T01:40:00Z",
+  "BLOCKER_006": {
+    "title": "The jobs feed showed ZERO jobs to a real paying user \u2014 core journey dead",
+    "severity": "CRITICAL (product value proposition unreachable)",
+    "status": "FIXED + INDEPENDENTLY REVIEWED (PASS) + PUSHED \u2014 DELIBERATELY NOT DEPLOYED (see deploy_hold)",
+    "commit": "0ed302a",
+    "root_cause": "NOT a threshold problem \u2014 the filter PREMISE was invalid. active_feed.py:38/87-92/108/137 suppressed on posting age as a proxy for \"dead\". But Ashby/Lever/Greenhouse board APIs publish ONLY roles that are still OPEN, so posting age carries zero information about deadness for exactly the sources this product uses. Widening the window would have swapped one wrong threshold for another.",
+    "independently_verified": "Reviewer hit the live boards itself: Lever plenti epoch-ms decode matched the persisted row to the millisecond for a posting live on the board TODAY; Ashby harvey serves 360 currently-open roles with publishedAt back to 2024-03-08.",
+    "fix": "Suppress on real liveness (new additive Job.lastSeenAt, stamped by the sweep on every re-sighting) and display real age. 0 -> 18 jobs.",
+    "bonus_honesty_defect_found": "The job card previously rendered timeAgo(job.createdAt) \u2014 OUR DISCOVERY DATE \u2014 unlabelled, as if it were the posting date. A 187-day-old listing was shown to users as \"12d ago\". Now \"Posted 187 days ago\" with \"Still listed at the source 2m ago\" on hover. Empty boards now explain themselves instead of telling the user to sync jobs they already have.",
+    "review": "PASS. 3 tests re-expressed against the liveness predicate were verified equal-or-STRONGER, never weaker; tamper-test forced is_stale() false and exactly those 3 failed while 25 others stayed green; reverted with sha256 + git-diff-empty proof. Migration additive (ADD COLUMN IF NOT EXISTS, advisory-locked, no DROP/ALTER TYPE). Scope clean.",
+    "my_corrections": [
+      "I called the >30d filter a threshold bug \u2014 it was an invalid PREMISE.",
+      "I called {\"persisted\":0,\"updated\":36} a compounding failure \u2014 it is CORRECT behaviour (re-confirming open roles). The real constraint is a narrow configured board catalogue: a separate supply finding, not a bug."
+    ]
+  },
+  "deploy_hold": {
+    "decision": "NOT DEPLOYING",
+    "reason": "The API runs directly from the working tree, and a CONCURRENT SESSION has 1,079 insertions / 167 deletions of UNCOMMITTED production code in it (db.py, repositories/story.py, routers/jobs.py, story_dedup_migration.py, story_paraphrase.py, dashboard/jobs/page.tsx, dashboard/resume/page.tsx, lib/api/resumes.ts, plus an untracked story_dedup_sweep.py). Restarting aether-api to ship MY verified 1-commit fix would also ship ALL of that, unreviewed by me and mid-edit by them. Shipping another session unverified WIP to fix an urgent defect is how an urgent defect becomes an outage.",
+    "consequence": "BLOCKER-006 remains LIVE in production until a deploy happens from a clean tree. The fix is committed and pushed, so whichever session deploys next carries it.",
+    "unblock": "Either the concurrent session commits/finishes and one deploy carries both, or one session is stopped so the tree has a single owner."
   }
 }
