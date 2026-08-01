@@ -1,176 +1,57 @@
 {
   "run": "GOLD-MASTER-V4",
-  "prompt_file": "/home/ubuntu/aether-gold-master-execution-v4.md",
-  "started_utc": "2026-07-31T17:07:58Z",
-  "updated_utc": "2026-08-01T00:27:44Z",
-  "orchestrator": "claude-opus-5 (xhigh) \u2014 brain only per \u00a70.1",
-  "phase_step": "PAUSED \u2014 SESSION USAGE LIMIT (resets 21:20 UTC). Resume per \u00a72.3.",
-  "phase_step_detail": {
-    "step_0_resume_check": "DONE \u2014 no prior GOLD-MASTER-V3-STATE.json; fresh run",
-    "step_1_roster": "DONE \u2014 17/17 agents written, zero `model: inherit`; manifest in GOLD-MASTER-V3-GOVERNANCE.md",
-    "step_2_runbook_drift": "DONE \u2014 RUNBOOK-DRIFT-VERIFICATION.md; 55 MATCH / 1 DRIFT (README.md:151 route count 28 vs 29)",
-    "step_3_prod_baseline": "DONE (2nd attempt) \u2014 BASELINE-SWEEP-AUTH.md; auth proven 3 ways; 27 routes; 0 console errors in sweep. 1st attempt VOIDED (VIOL-001, unauthenticated).",
-    "step_4_monitors": "DONE \u2014 persistent journalctl monitor armed on aether-api/web/worker (\u00a723.1 patterns)",
-    "step_5_service_probe": "DONE \u2014 SERVICE-REGISTRY.md; 5 LIVE / 7 CONDITIONALLY-CLOSED",
-    "step_6_matrices": "DONE \u2014 SCREEN-MATRIX, ROUTER-MATRIX, FILE-CENSUS, REFERENCE-GRAPH, INCOMPLETE-FEATURE-INVENTORY, WIREFRAME-PROMISES, FEATURE-COMPLETENESS-MATRIX, GMV2-CLAIM-LEDGER (39 claims UNVERIFIED-THIS-RUN)",
-    "step_7_baseline_suites": "IN-PROGRESS (long-running)",
-    "step_8_state_commit": "DONE \u2014 committed 0454ff1, fb7bae6"
-  },
-  "workstream_status": {
-    "W-A": "SUBSTANTIALLY COMPLETE \u2014 all 14 routes screen-tested (4 batches); GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md written (621 lines, verdict BLOCKED-ON-ITEMS); G-A adjudication artifact pending re-check",
-    "W-B": "NOT-STARTED (findings inventoried)",
-    "W-HF": "ROUND 3 IN TREE, REVIEW INCOMPLETE \u2014 rounds 1 and 2 FAILED review; round 3 implements sentinel+whitelist+4 leak sites; 12/12 + 14/14 + tsc clean self-reported; INDEPENDENT REVIEW DID NOT COMPLETE",
-    "W-C": "PARTIAL \u2014 tailor plumbing implemented and REVIEW PASSED; HTTP-boundary regression tests added; ATS>=85 target NOT met (GMV4-ats-004 BLOCKER)",
-    "W-D": "CLOSED AS REFUSED-ON-COMPLIANCE \u2014 risk-officer ruling, ADR-SEEK-V3 replaced with first-hand adjudication",
-    "W-E": "TESTS RED, FIX NOT STARTED \u2014 root cause established (zero call sites); GMV4-story-004 BLOCKER data-destruction hazard found",
-    "W-F": "NOT-STARTED \u2014 stage-move/purge exist; GMV4-apps-004 real DnD broken",
-    "W-CAL": "NOT-STARTED",
-    "W-YT": "NOT-STARTED",
-    "W-G": "NOT-STARTED (CONDITIONALLY-CLOSED, admin credential revoked)",
-    "W-H": "NOT-STARTED \u2014 GMV4-jobs-004 applied badges never render",
-    "W-SUB": "NOT-STARTED \u2014 blocked on W-C/W-E/W-H/W-I; GMV4-sse-002 per-step journal missing",
-    "W-I": "SSE IMPLEMENTED, REVIEW FAILED \u2014 GMV4-sse-005 BLOCKER connection-ceiling DoS; GMV4-sse-006 kanban_updated over-emission",
-    "W-J": "NOT-STARTED",
-    "W-GSC": "PARTIAL \u2014 CLS already fixed (0.0794, VERIFIED-CLOSED); Lighthouse not run",
-    "W-GF": "NOT-STARTED (CONDITIONALLY-CLOSED, no credential)",
-    "W-DG": "NOT-STARTED (CONDITIONALLY-CLOSED, no credential)",
-    "W-K": "PARTIAL \u2014 2 synthetic rows deleted under approval; 12 User rows + 1 ApprovalRequest deferred",
-    "W-L": "NOT-STARTED \u2014 NOTHING DEPLOYED THIS RUN"
-  },
-  "waves": [],
-  "findings_delta": {
-    "total": 73,
-    "BLOCKER": 11,
-    "HIGH": 22,
-    "MEDIUM": 27,
-    "LOW": 13,
-    "closed": 4,
-    "refused_on_compliance": 1,
-    "conditionally_closed": 2,
-    "human_gated": 1
-  },
-  "gates": {
-    "G-A": {
-      "status": "REVIEW-DOCUMENT-WRITTEN-ADJUDICATION-PENDING",
-      "evidence": "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
-    },
-    "G-B": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-HF": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-C": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-D": {
-      "status": "REFUSED-ON-COMPLIANCE",
-      "evidence": "docs/delivery/ADR-SEEK-V3.md"
-    },
-    "G-E": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-F": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-CAL": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-YT": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-G": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-H": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-SUB": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-I": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-J": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-GSC": {
-      "status": "PARTIAL \u2014 CLS closed, Lighthouse not run",
-      "evidence": "uat/reports/evidence/gold-master-v3/screens/dashboard-analytics/REPORT.md"
-    },
-    "G-GF": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-DG": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-K": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-L": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-M": {
-      "status": "PARTIAL \u2014 error/5xx component EVIDENCED (0/0 over 7h29m); agent-run and Apply components satisfied by W-A evidence; Calendar-create component CANNOT be satisfied (W-CAL unimplemented) -> at best CONDITIONALLY-CLOSED. \u00a723.1 continuous monitoring was NOT in force (VIOL-007).",
-      "evidence": "uat/reports/evidence/gold-master-v3/runtime/G-M-EVIDENCE.md"
-    },
-    "G-N": {
-      "status": "UNADJUDICABLE \u2014 both baselines contaminated",
-      "evidence": "uat/reports/evidence/gold-master-v3/suites/BASELINE-SUITES.md"
-    },
-    "G-O": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-P": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
-    },
-    "G-FINAL": {
-      "status": "NOT-ADJUDICATED",
-      "evidence": null
+  "prompt": "/home/ubuntu/aether-gold-master-execution-v4.md",
+  "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
+  "started_utc": "2026-08-01T00:10:00Z",
+  "predecessor": "GOLD-MASTER-V2 complete \u2014 74 commits deployed, 14/16 gates closed or adjudicated, launch declaration NO (BLOCKER-003 unrotated credential, on hold at operator request).",
+  "phase_step": "PHASE 0 \u2014 service registry probed; Seek re-adjudicated; ground-truth corrections filed",
+  "orchestrator_verifications": [
+    {
+      "id": "V4-VERIFY-001",
+      "claim": "svc-integrator reported \"URGENT: Stripe live key rejected as invalid by the Stripe API; production payment flows will fail; regenerate at dashboard.stripe.com\".",
+      "verdict": "FALSE ALARM \u2014 REFUTED by direct probe. GET https://api.stripe.com/v1/prices?limit=1 with the configured STRIPE_SECRET_KEY returns HTTP 200 and a live AUD price (unit_amount 64900 = A$649.00, livemode true). The key authenticates correctly.",
+      "why_it_matters": "Relaying this would have led the operator to regenerate a WORKING production payment key, risking real billing breakage. Corroborated by GMV2 evidence in which a real cs_live_ Checkout Session was created end-to-end with this same key.",
+      "verified_at": "2026-08-01T00:0xZ"
     }
+  ],
+  "seek_ruling": {
+    "status": "REFUSED (second binding refusal)",
+    "adr": "docs/delivery/ADR-SEEK-V3.md",
+    "log": "uat/reports/evidence/gold-master-v3/services/seek-webscraping-adjudication.md",
+    "new_evidence_STRENGTHENS_refusal": [
+      "WebScraping.AI ToS \u00a76.2(a) requires the customer to WARRANT it \"is authorized to instruct us to access each Target Website\" \u2014 a warranty Aether cannot truthfully give.",
+      "ToS \u00a76.6(h) prohibits continuing requests against targets that returned failure/unavailability indications \u2014 the repo records exactly that (403s, interstitials, redirect traps).",
+      "v4 \u00a77.3 HARD-CODES &proxy=residential, which the vendor own docs define as the mode for \"bypass anti-bot protection\". The circumvention the prior ruling had to INFER is written into this proposal configuration string.",
+      "Zero occurrences of \"licensed intermediar\"/\"license from\"/\"permission from\"/\"robots.txt\" across WebScraping.AI ToS, docs, FAQ, homepage AND its own job-listing-aggregation marketing page. It self-describes as \"a web scraping platform\" offering \"Job scraping at scale\".",
+      "Seek robots.txt byte-identical to the prior ruling (sha256 32fbbb98f660e636...), still naming anthropic-ai in the disallowed group for */job/.",
+      "WEBSCRAPING_AI_API_KEY does not exist in .env OR IMDS \u2014 v4 \u00a70.6 claim that it is \"in .env\" is false, so W-D is not executable as written regardless of permission."
+    ],
+    "g_d_restated": "Seek remains compliance-gated OFF; AU sourcing volume is served by licensed sources. The gate PASSES when Seek is verifiably OFF, not when Seek returns listings.",
+    "escalation_note": "This is the SECOND run to instruct this action on a premise its own vendor terms refute. The risk-officer advises that a THIRD instance be escalated to the human owner with all three rulings rather than commissioning a fourth adjudication."
   },
-  "last_commit": "6440325b363e2b9a684f54742ad02781babefe47",
-  "last_deploy_sha": null,
-  "next_actions": [
-    "1. Re-review W-HF round 3 (rounds 1-2 FAILED; verify sentinel/whitelist, Culture Fit test now GREEN for the right reason, tailoring_loop == 'degraded' exception safety)",
-    "2. Fix GMV4-sse-005 (stream caps, poll default >=3.0s, pooled connections) and GMV4-sse-006 (withhold kanban_updated unless basis=='run_output', per ADR-GMV4-003); test-author rewrites SSE test 4",
-    "3. Complete vitest coverage for the degraded-scoring UI (zero coverage today)",
-    "4. Only then: wave-commit + deploy W-HF + W-C + W-I, then prod-verify and RE-MEASURE ATS (GMV4-ats-004) with the real scorer",
-    "5. W-E fix: entrypoint + dry-run + before/after counts + SOFT-DELETE replacing the hard DELETE (risk-officer approval required before any live run)",
-    "6. Remove the retained synthetic ApprovalRequest ccbe2e7518343e818809f8009 (GMV4-approvals-001) once qa-adversary has re-reproduced it",
-    "7. Re-test the Approvals screen with machine evidence (GMV4-evidence-002)",
-    "8. File runtime-monitor journalctl artifacts (GMV4-runtime-001) \u2014 G-M cannot close without them",
-    "9. Quiescent full-suite run with ZERO concurrent agents (GMV4-suites-002) \u2014 G-N is unadjudicable until then",
-    "10. OPERATOR: rotate the production DB role password (GMV4-secret-001)"
+  "v4_ground_truth_corrections": [
+    "\u00a71.1 \"Test login: admin/admin123 (non-admin user)\" \u2014 FALSE AND HAZARDOUS. That credential granted FULL ADMIN plus other users PII (GMV2 BLOCKER-001) and is now REJECTED outright. Agents told to use it will fail. Use AETHER_CRON_EMAIL + its password for a pro-entitled non-admin session.",
+    "\u00a71.2 \"Admin router \u2014 no admin login UI entry point yet\" \u2014 FALSE. /admin-login is LIVE and returns 200 (GMV2 W-G, commit 2bdb060).",
+    "\u00a71.2 \"Applications tracker \u2014 read-only kanban; no stage-move endpoint\" \u2014 FALSE. PATCH /applications/{id}/stage shipped as the canonical endpoint with a shared transition service (GMV2 W-F); the per-card Move-to menu was verified keyboard-operable on production.",
+    "\u00a71.2 tailoring_loop.py and story_dedup_migration.py exist \u2014 TRUE, correctly flagged for re-verification."
   ],
-  "key_corrections_to_prompt_premises": [
-    "\u00a71.1 test login admin/admin123 returns 401 on prod; only AETHER_CRON_* authenticates (GMV4-cred-001)",
-    "\u00a79.1/\u00a79.2 stage-move + approvals purge ALREADY EXIST (applications.py:255, approvals.py:152/179) -> re-verify not implement",
-    "\u00a76 tailor endpoint is POST /agents/tailor/run (agents.py:2292), not POST /jobs/{id}/tailor",
-    "\u00a714.1/\u00a714.3 premise that submission has approvalRequired:true is FALSE (agents.py:95-98) -> gate must be ADDED",
-    "\u00a712 admin UI routes already exist; blocked from live verification by BLOCKER-001 admin credential revocation",
-    "\u00a716 interview_conversion_rate is already a real DB query (analytics.py:220), not a placeholder",
-    "\u00a715/\u00a714.5 SSE layer does not exist at all -> G-I and G-SUB both depend on building it",
-    "\u00a77.1 premise that Firecrawl/WebScraping.AI are licensed intermediaries conflicts with adopted ADR D-0034 (DECISIONS.md:1020) -> risk-officer adjudicating"
-  ],
-  "pause_reason": "Anthropic session usage limit reached at ~19:0xZ; three in-flight agents (G-A review doc, W-HF round-3 review, vitest degraded-UI coverage) terminated mid-task. The G-A document COMPLETED before its agent died and is committed. No further sub-agents can be spawned until the limit resets.",
-  "CRITICAL_DEPLOY_WARNING": "HEAD CONTAINS UNREVIEWED AND KNOWN-DEFECTIVE CODE. DO NOT DEPLOY. Specifically: (1) GMV4-sse-005 BLOCKER \u2014 SSE streams are uncapped against a 25-connection app-wide ceiling with unpooled per-poll connections; deploying this exposes a DoS surface. (2) W-HF round 3 has NOT completed independent review (rounds 1-2 both FAILED). (3) GMV4-story-004 \u2014 merge_duplicate_stories hard-deletes under deliberately loose thresholds; it must NOT be wired up or invoked. Production is currently running the LAST DEPLOYED build and is unaffected by this tree."
+  "service_registry": {
+    "artifact": "uat/reports/evidence/gold-master-v3/services/SERVICE-REGISTRY.md",
+    "working": [
+      "GitHub (repo/workflow/gist/read:org)",
+      "OpenRouter (337 models)",
+      "Firecrawl (via IMDS)",
+      "Stripe (VERIFIED WORKING by orchestrator \u2014 svc-integrator false alarm corrected)"
+    ],
+    "absent_conditionally_closed": [
+      "DocuGenerate",
+      "Google Cloud/GCS",
+      "Google Search Console",
+      "Hugging Face",
+      "WebScraping.AI",
+      "Google Forms",
+      "YouTube Data"
+    ],
+    "code_change_not_credential": "Gmail OAuth works (3 scopes) but calendar.events is ABSENT from GOOGLE_SCOPES (google_oauth.py:54) \u2014 W-CAL prerequisite is a CODE change, not a missing credential."
+  }
 }
