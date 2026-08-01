@@ -2711,9 +2711,11 @@
       "evidence": [
         "uat/reports/evidence/gold-master-v3/PROD-DATA-INVENTORY.md"
       ],
-      "status": "TESTS-RED-READY-FOR-FIX",
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
       "owner": "W-E ai-loop-engineer",
-      "fixCommits": [],
+      "fixCommits": [
+        "(uncommitted \u2014 awaiting \u00a722 step 5)"
+      ],
       "verifiedBy": "risk-officer (opus) 2026-07-31",
       "openedUtc": "2026-07-31T17:54:27Z",
       "run": "GOLD-MASTER-V4"
@@ -3388,13 +3390,15 @@
         "Read story_dedup_migration.py:111 and story_paraphrase.py:120-136"
       ],
       "expected": "Bulk de-dup is recoverable (soft-delete/archive), dry-run first, human-reviewed, and never over-matches destructively",
-      "observed": "Hard DELETE under deliberately loose thresholds; unreachable only by accident",
+      "observed": "Hard DELETE under deliberately loose thresholds; unreachable only by accident | FIX IN TREE: hard DELETE replaced with archive (archivedAt/mergedIntoId/mergeSnapshot via additive lazy DDL, advisory lock 9380710314, no backfill needed since NULL already means live). mergeSnapshot captures the SURVIVOR's pre-merge content \u2014 archiving the loser preserves the loser, but the survivor is what the union mutates. restore_merged_stories() reverses a batch exactly (verified: titles restored, tags and metrics de-unioned), on the reasoning that 'recoverable without recovery code is a claim, not a capability'. Dry-run is the default and opens no connection; a pure _plan_merges() means the reviewed plan IS the executed plan, with a digest re-verified at apply. Writing requires --apply AND a plan file AND a hand-filled reviewed_by AND --confirm-user-id. A CLI was chosen over an admin route because an HTTP route is reachable by any admin token whereas a CLI needs host shell access \u2014 which is what 'cron-account-only' actually means. THRESHOLD RULING: 0.60 KEPT, not tightened \u2014 the verified-real ANZ cluster measures title Jaccard 0.6667, inside the 0.60-0.70 band, so tightening would silently miss the very duplicates this workstream exists to fix; the looseness is now bounded by an ENFORCED human gate rather than an assumed one, and --conservative ships as the alternative. 6/6 contract tests pass.",
       "evidence": [
         "uat/reports/evidence/gold-master-v4/suites/GMV4-story-002-fail-before-20260731T185210Z.txt"
       ],
-      "status": "OPEN",
+      "status": "FIX-IN-TREE-AWAITING-REVIEW",
       "owner": "W-E fixer-hard + risk-officer approval before ANY live run",
-      "fixCommits": [],
+      "fixCommits": [
+        "(uncommitted \u2014 awaiting \u00a722 step 5)"
+      ],
       "verifiedBy": "test-author 2026-07-31T18:52Z",
       "openedUtc": "2026-07-31T18:53:20Z",
       "run": "GOLD-MASTER-V4"
@@ -3609,6 +3613,27 @@
       "fixCommits": [],
       "verifiedBy": "reviewer (sonnet) 2026-08-01T00:25Z",
       "openedUtc": "2026-08-01T00:29:57Z",
+      "run": "GOLD-MASTER-V4"
+    },
+    {
+      "id": "GMV4-story-007",
+      "screen": "n/a (test quality)",
+      "severity": "LOW",
+      "category": "test-coverage",
+      "summary": "Self-reported by the W-E fixer: TestDryRun's fixture pair scores title Jaccard 0.4444 (shared 4, union 9) against the 0.60 floor, so `proposed` is legitimately [] and the test never exercises a NON-EMPTY proposal list \u2014 which its own docstring implies was the intent. The test still passes and genuinely pins the dry_run parameter and the zero-write property, so it is not worthless. The fixer did NOT modify it (correct under \u00a70.4) and covered the gap with independent evidence of a real qualifying pair producing one scored proposal. A test-author should decide whether to recalibrate the fixture above 0.60.",
+      "reproduction": [
+        "Compute title Jaccard for the TestDryRun fixture pair and compare against BULK_MIGRATION_THRESHOLDS"
+      ],
+      "expected": "The dry-run test exercises a non-empty proposal list",
+      "observed": "Fixture scores below threshold; proposed is []",
+      "evidence": [
+        "uat/reports/evidence/gold-master-v4/suites/GMV4-story-002-004-pass-after-20260801T004610Z.txt"
+      ],
+      "status": "OPEN",
+      "owner": "test-author (post-review)",
+      "fixCommits": [],
+      "verifiedBy": "fixer-hard self-report 2026-08-01",
+      "openedUtc": "2026-08-01T00:49:11Z",
       "run": "GOLD-MASTER-V4"
     }
   ],
