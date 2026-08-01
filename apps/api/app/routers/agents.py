@@ -48,7 +48,13 @@ from app.repositories.user_provider_credential import (
     _ensure_user_agent_tables,
 )
 from app.services import credential_vault
-from app.services.agent_run_stream import SSE_HEADERS, iter_agent_run_events
+from app.services.agent_run_stream import (
+    SSE_HEADERS,
+    StreamCapExceeded,
+    StreamSlots,
+    iter_agent_run_events,
+    release_slot_when_done,
+)
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
     LLM_UNAVAILABLE_USER_MESSAGE,
@@ -2180,18 +2186,60 @@ async def stream_run(
     six-step submission vocabulary, because four of those six steps have no
     recorded backing in this codebase and a timer-driven sequence of them would
     be a fabricated progress animation.
+
+    CONCURRENCY (GMV4-sse-005, governance §5e). Every open stream re-reads its
+    row on its own short-lived database connection, against an app-wide
+    25-connection ceiling (``app/db.py:8-9``), so admission is capped per user
+    AND globally by ``app.state.sse_stream_slots``. A refused stream gets an
+    explicit ``429``/``503`` carrying a real reason — never a hang, never an
+    empty 200 dressed up as a live stream. The slot is taken BEFORE the
+    ownership lookup so a refused request does no database work at all, and is
+    released on every exit path (see below).
     """
+    slots: StreamSlots = request.app.state.sse_stream_slots
+    try:
+        token = slots.acquire(current_user["id"])
+    except StreamCapExceeded as exc:
+        logger.warning(
+            "agent-run stream refused (%s cap %s) user=%s run=%s",
+            exc.scope, exc.limit, current_user["id"], run_id,
+        )
+        # Per-user breach is the caller's own doing (429); a global breach is
+        # the server being out of capacity (503). Both carry the real reason.
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS
+            if exc.scope == "user"
+            else status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.message,
+            headers={"Retry-After": "5"},
+        ) from None
+
     repo = AgentRunRepository()
-    run = await run_in_threadpool(repo.get_by_id, run_id, current_user["id"])
-    if run is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent run not found")
+    try:
+        run = await run_in_threadpool(repo.get_by_id, run_id, current_user["id"])
+        if run is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent run not found")
+    except BaseException:
+        # No StreamingResponse gets built on this path, so no generator
+        # ``finally`` can ever run — release here or every 404 (and every
+        # failed lookup, and any cancellation) permanently burns a slot.
+        slots.release(token)
+        raise
+
     return StreamingResponse(
-        iter_agent_run_events(
-            run=run,
-            run_id=run_id,
-            user_id=current_user["id"],
-            reload_run=repo.get_by_id,
-            is_disconnected=request.is_disconnected,
+        # The slot is released when the generator finishes for ANY reason:
+        # terminal status, stream_timeout, stream_error, client disconnect, or
+        # an exception. ``release`` is idempotent, so the unwind above and this
+        # wrapper can never double-free.
+        release_slot_when_done(
+            iter_agent_run_events(
+                run=run,
+                run_id=run_id,
+                user_id=current_user["id"],
+                reload_run=repo.get_by_id,
+                is_disconnected=request.is_disconnected,
+            ),
+            lambda: slots.release(token),
         ),
         media_type="text/event-stream",
         headers=SSE_HEADERS,

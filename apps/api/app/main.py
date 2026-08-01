@@ -42,6 +42,7 @@ from app.routers import (
     stories,
     workspaces,
 )
+from app.services.agent_run_stream import StreamSlots
 from app.services.llm_client import get_mode
 from app.services.resume_grounding import MissingResumeError
 
@@ -289,6 +290,14 @@ def create_app() -> FastAPI:
     app.state.portal_rate_limiter = SlidingWindowRateLimiter(
         max_calls=10, window_seconds=60 * 60.0
     )
+    # Concurrent-SSE-stream admission control (GMV4-sse-005, governance §5e).
+    # Same per-app ownership rationale as the limiters above. Each open
+    # agent-run stream re-reads its row on its own short-lived connection, so
+    # an UNCAPPED stream count could exhaust the app-wide 25-connection
+    # PostgreSQL ceiling (app/db.py:8-9) and starve every other endpoint. See
+    # app.services.agent_run_stream.DEFAULT_MAX_CONCURRENT_STREAMS for the
+    # arithmetic behind the numbers.
+    app.state.sse_stream_slots = StreamSlots()
 
     # Permit the Next.js dashboard (and other same-origin tooling) to call the
     # API during development. Origins are tightened per-environment later.
