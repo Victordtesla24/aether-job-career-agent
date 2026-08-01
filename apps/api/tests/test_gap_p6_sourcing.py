@@ -282,17 +282,39 @@ class TestActiveFeedPure:
         c = job_fingerprint("Real Co Pty Ltd", "Product Owner", "Melbourne, VIC")
         assert a != c
 
-    def test_is_stale_uses_posted_date(self):
+    def test_is_stale_uses_last_confirmed_sighting_not_posted_date(self):
+        """CONTRACT CHANGE, BLOCKER-006 (2026-08-01).
+
+        This test previously asserted ``is_stale`` off ``postedAt``. That was
+        the defect, not the spec: an ATS board API publishes only roles that
+        are still open, so posting age says nothing about whether the user can
+        apply — and every one of a paying user's 18 actionable rows was hidden
+        for being 36-187 days old while the sweep re-confirmed all of them on
+        their boards seconds earlier.
+
+        The INTENT of the original test is preserved below and still enforced:
+        a listing that can no longer be reached IS suppressed. What changed is
+        the evidence used — the last confirmed sighting instead of a proxy.
+        """
         from app.services.discovery.active_feed import is_stale
 
         now = datetime(2026, 7, 16)
-        fresh = {"postedAt": now - timedelta(days=5)}
-        stale = {"postedAt": now - timedelta(days=60)}
-        unknown = {"postedAt": None, "updatedAt": None, "createdAt": None}
-        assert is_stale(stale, now=now) is True
-        assert is_stale(fresh, now=now) is False
+        confirmed = {"lastSeenAt": now - timedelta(days=5)}
+        vanished = {"lastSeenAt": now - timedelta(days=60)}
+        unknown = {
+            "postedAt": None, "lastSeenAt": None,
+            "updatedAt": None, "createdAt": None,
+        }
+        assert is_stale(vanished, now=now) is True
+        assert is_stale(confirmed, now=now) is False
         # Unknown date can't be PROVEN stale — kept (never fabricate staleness).
         assert is_stale(unknown, now=now) is False
+        # An old advertisement that the source still carries is NOT stale.
+        assert is_stale(
+            {"postedAt": now - timedelta(days=180),
+             "lastSeenAt": now - timedelta(minutes=1)},
+            now=now,
+        ) is False
 
     def test_active_feed_excludes_prohibited_source(self):
         from app.services.discovery.active_feed import active_feed
@@ -309,17 +331,26 @@ class TestActiveFeedPure:
         feed = active_feed(rows, now=now)
         assert [j["source"] for j in feed] == ["greenhouse"]
 
-    def test_active_feed_excludes_stale(self):
+    def test_active_feed_excludes_listings_the_source_no_longer_carries(self):
+        """BLOCKER-006: suppression keys off the sighting, not the ad's age.
+
+        Row 1 is the case this filter exists for — nothing has seen it at its
+        source for 60 days, so its apply link is probably dead. Row 2 was
+        advertised 200 days ago but the board still returned it a minute ago,
+        so it is applicable and must survive.
+        """
         from app.services.discovery.active_feed import active_feed
 
         now = datetime(2026, 7, 16)
         rows = [
             {"source": "greenhouse", "company": "A", "title": "Delivery Manager",
              "location": "Melbourne", "sourceUrl": "https://gh/1",
-             "postedAt": now - timedelta(days=60)},
+             "postedAt": now - timedelta(days=2),
+             "lastSeenAt": now - timedelta(days=60)},
             {"source": "greenhouse", "company": "B", "title": "Program Manager",
              "location": "Sydney", "sourceUrl": "https://gh/2",
-             "postedAt": now - timedelta(days=2)},
+             "postedAt": now - timedelta(days=200),
+             "lastSeenAt": now - timedelta(minutes=1)},
         ]
         feed = active_feed(rows, now=now)
         assert [j["sourceUrl"] for j in feed] == ["https://gh/2"]
@@ -344,36 +375,67 @@ class TestActiveFeedPure:
 
 class TestJobsFeedEndpoint:
     def _insert_job(self, client, headers, *, source, title, posted_days_ago,
-                    url=None, company="Acme Co", location="Melbourne, VIC"):
+                    url=None, company="Acme Co", location="Melbourne, VIC",
+                    last_seen_days_ago=0):
+        """Persist one job. ``last_seen_days_ago`` ages the SIGHTING only.
+
+        ``JobRepository.create`` stamps ``lastSeenAt = NOW()`` because reaching
+        it means a sweep just found the listing at its source; a test that
+        wants the "source no longer carries this" case has to age that stamp
+        explicitly, which is exactly the point of BLOCKER-006.
+        """
+        from app.db import get_connection
         from app.repositories.job import JobRepository
 
         me = client.get("/auth/me", headers=headers).json()
         posted = (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
-        JobRepository().create(me["id"], {
+        row = JobRepository().create(me["id"], {
             "title": title, "company": company, "location": location,
             "remote": False, "description": "Lead delivery across teams.",
             "requirements": [], "source": source,
             "sourceUrl": url or f"https://{source}.example/{uuid.uuid4().hex[:8]}",
             "postedAt": posted,
         })
+        if last_seen_days_ago:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'UPDATE "Job" SET "lastSeenAt" = NOW() - (INTERVAL '
+                        "'1 day' * %s), \"updatedAt\" = NOW() - (INTERVAL "
+                        "'1 day' * %s) WHERE \"id\" = %s",
+                        (last_seen_days_ago, last_seen_days_ago, row["id"]),
+                    )
+                conn.commit()
+        return row
 
     def test_default_feed_hides_seek_and_stale_include_stale_shows_them(
         self, client, auth_headers
     ):
-        # A live compliant job, a dead Seek job, and a stale compliant job.
+        # A live compliant job, a dead Seek job, and a compliant job whose
+        # source has stopped returning it (BLOCKER-006: that — not the ad's
+        # age — is what makes a row unusable).
         self._insert_job(client, auth_headers, source="greenhouse",
                          title="Delivery Manager", posted_days_ago=3)
         self._insert_job(client, auth_headers, source="seek",
                          title="Program Manager", posted_days_ago=1)
         self._insert_job(client, auth_headers, source="lever",
-                         title="Product Owner", posted_days_ago=60)
+                         title="Product Owner", posted_days_ago=60,
+                         last_seen_days_ago=60)
+        # Advertised long ago, still on the board — must stay applicable.
+        self._insert_job(client, auth_headers, source="ashby",
+                         title="Staff Product Manager", posted_days_ago=150)
 
         default = client.get("/jobs", headers=auth_headers).json()
         sources = {j["source"] for j in default}
         assert "seek" not in sources, "dead Seek rows must not be in the active feed"
         titles = {j["title"] for j in default}
         assert "Delivery Manager" in titles
-        assert "Product Owner" not in titles, "stale (>30d) rows must be excluded"
+        assert "Staff Product Manager" in titles, (
+            "a 150-day-old advertisement the board still carries is live"
+        )
+        assert "Product Owner" not in titles, (
+            "a listing unseen at its source for 60 days must be excluded"
+        )
 
         full = client.get("/jobs?include_stale=true", headers=auth_headers).json()
         # History is preserved (not deleted) and reachable with include_stale.

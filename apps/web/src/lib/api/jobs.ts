@@ -52,6 +52,23 @@ export const JobSchema = z.object({
   // explain an otherwise-silent ~24h autopilot pause instead of the job just
   // going quiet with no in-app explanation.
   autopilotSuppressedUntil: z.string().nullish(),
+  // BLOCKER-006. The active feed no longer hides a listing for being old — an
+  // ATS board only publishes roles that are still open, so posting age says
+  // nothing about whether the user can apply. These two server-computed facts
+  // are what keep that honest, and they are the ONLY age signals the UI may
+  // present as the posting's age:
+  //   postedAgeDays   — whole days since the role was advertised, or null when
+  //                     `postedAt` is unknown. Never substituted with the
+  //                     discovery date (`createdAt`), which is what the job
+  //                     card used to show — it labelled a 187-day-old listing
+  //                     "11d ago".
+  //   lastConfirmedAt — when the sourcing sweep last found this listing still
+  //                     published at its source; null when no sighting is on
+  //                     record. This, not the posting date, is what decides
+  //                     whether a row is in the active feed.
+  postedAgeDays: z.number().nullish(),
+  lastConfirmedAt: z.string().nullish(),
+  lastSeenAt: z.string().nullish(),
 });
 
 export type Job = z.infer<typeof JobSchema>;

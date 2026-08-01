@@ -150,6 +150,31 @@ function ringColor(v: number): string {
 }
 
 /**
+ * BLOCKER-006 — the honest age line on a job card.
+ *
+ * The card used to render `timeAgo(job.createdAt)`: the date WE discovered the
+ * row, unlabelled. A role advertised 187 days ago that the scout first saw 11
+ * days ago therefore read "11d ago". That was survivable only while the feed
+ * silently dropped everything older than 30 days; now that genuinely-live old
+ * listings are shown (an ATS board only publishes open roles), presenting one
+ * as freshly posted would be the dishonest half of the trade.
+ *
+ * So: state the posting age when the server knows it, and when it does not,
+ * say which date is actually being shown rather than passing the discovery
+ * date off as the posting date.
+ */
+function listingAgeLabel(job: Job): string {
+  const days = job.postedAgeDays;
+  if (typeof days === "number") {
+    if (days < 1) return "Posted today";
+    if (days === 1) return "Posted 1 day ago";
+    return `Posted ${days} days ago`;
+  }
+  const discovered = timeAgo(job.createdAt);
+  return discovered ? `Found ${discovered}` : "";
+}
+
+/**
  * QA #4 residual (ML-W25) — the board-sweep autopilot's cover-failure
  * backoff (RT-007/ML-W19) correctly stops retrying a job for up to 24h once
  * it accrues repeated letterless coverLetter runs, but until now nothing in
@@ -332,6 +357,34 @@ export default function JobsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // BLOCKER-006 — never show an empty board without saying what happened to
+  // the rows that ARE persisted. The active feed hides listings whose source
+  // has stopped returning them, plus applied/archived ones; when that leaves
+  // nothing, "Run Sync to let the Scout agent find matching roles" is wrong
+  // (a production user with 52 persisted rows saw exactly that). Ask the
+  // history view — the same endpoint, unfiltered — for the real count, and
+  // only when the board is actually empty so the normal path costs nothing.
+  const [historyCount, setHistoryCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (jobs === null || jobs.length > 0) {
+      setHistoryCount(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const all = await apiRequest<Job[]>("/jobs?include_stale=true");
+        if (!cancelled) setHistoryCount(all.length);
+      } catch {
+        // Leave the count unknown rather than assert a number we don't have.
+        if (!cancelled) setHistoryCount(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobs]);
 
   // Real-time board sync (HOTFIX realtime-board-refresh): agents (scout,
   // fit-scorer, tailor, board sweep) mutate Job rows server-side outside any
@@ -1018,10 +1071,24 @@ export default function JobsPage() {
         <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="jobs-empty-state">
           <p className="text-lg font-semibold">No matching jobs</p>
           <p className="mt-1 text-sm text-aether-muted">
-            {(jobs ?? []).length === 0
-              ? "Run Sync to let the Scout agent find matching roles."
-              : "No roles match the current market and filters — try Clear all."}
+            {(jobs ?? []).length > 0
+              ? "No roles match the current market and filters — try Clear all."
+              : historyCount && historyCount > 0
+                ? `None of your ${historyCount} saved roles are on the active board right now — they have been applied to, archived, or their source has stopped listing them.`
+                : "Run Sync to let the Scout agent find matching roles."}
           </p>
+          {/* BLOCKER-006: an empty board with rows in history is a filtered
+              state, not an empty account — link to the unfiltered view rather
+              than telling the user to sync jobs they already have. */}
+          {(jobs ?? []).length === 0 && historyCount && historyCount > 0 ? (
+            <a
+              href="/dashboard/applications"
+              data-testid="jobs-empty-history-link"
+              className="mt-3 inline-block text-sm text-aether-coral underline underline-offset-4"
+            >
+              View all {historyCount} in your application history
+            </a>
+          ) : null}
         </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-5">
@@ -1163,7 +1230,17 @@ export default function JobsPage() {
                                   {SOURCE_LABEL[job.source] ?? job.source}
                                 </span>
                               )}
-                              <span className="shrink-0">{timeAgo(job.createdAt)}</span>
+                              <span
+                                className="shrink-0"
+                                data-testid="job-listing-age"
+                                title={
+                                  job.lastConfirmedAt
+                                    ? `Still listed at the source ${timeAgo(job.lastConfirmedAt)}`
+                                    : undefined
+                                }
+                              >
+                                {listingAgeLabel(job)}
+                              </span>
                             </span>
                           </div>
                           {autopilotSuppressionHint(job) ? (

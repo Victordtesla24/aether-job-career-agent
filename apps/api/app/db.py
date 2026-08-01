@@ -450,6 +450,75 @@ def ensure_job_dedup_columns() -> None:
     _job_dedup_columns_ready = True
 
 
+#: Guard so the additive ``Job.lastSeenAt`` column is only ensured once per
+#: worker process (see ``ensure_job_last_seen_column``).
+_job_last_seen_column_ready = False
+
+
+def ensure_job_last_seen_column() -> None:
+    """Idempotently add the additive ``Job.lastSeenAt`` column on first use.
+
+    BLOCKER-006. ``lastSeenAt`` is the wall-clock time a discovery sweep last
+    found this listing STILL PUBLISHED at its source. It is written only by
+    ``JobRepository.create`` — the single entry point every adapter's results
+    flow through — so it means exactly one thing and nothing else.
+
+    It exists because the active feed previously used the POSTING DATE
+    (``postedAt``) as a proxy for "this listing is dead", which is invalid for
+    the ATS-native boards this product sources from: those APIs publish only
+    roles that are still open, so a role first posted 187 days ago and
+    returned by the board 40 seconds ago is fully applicable. Using posting
+    age hid every such role and emptied a paying user's feed.
+
+    ``updatedAt`` cannot stand in for this: it is also bumped by user actions
+    (save toggle, status advance, fit-score writes), so a job the user merely
+    saved would look "re-confirmed at source" when nothing of the sort
+    happened. ``lastSeenAt`` is written by the sourcing path alone.
+
+    BACKFILL: none, deliberately. ``ADD COLUMN IF NOT EXISTS`` with no DEFAULT
+    is metadata-only on PostgreSQL, so every pre-existing row reads NULL.
+    NULL means "we have never recorded a sighting", and
+    ``active_feed._liveness_date`` falls back to ``updatedAt`` then
+    ``createdAt`` for those rows — both are honest lower bounds on when the
+    system last had contact with the row, and both are superseded the first
+    time the 30-minute sweep re-confirms the listing. Writing a backfill
+    UPDATE would instead assert a sighting that never happened.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers
+    so the DDL cannot race; ``TRUNCATE`` never drops columns, so the
+    process-wide latch survives test teardown. Lazy DDL per ADR-TR-1 (there is
+    no migration runner in this repo) — mirrors ``ensure_job_dedup_columns``.
+
+    MUST be called by EVERY path that reads or writes the column before the
+    statement that names it — a path that skipped the equivalent call for
+    ``contentHash`` raised ``psycopg2.UndefinedColumn`` -> HTTP 500 on first
+    use (WIP-BRANCH-AUDIT-2026-07-29 blocker #2).
+    """
+    global _job_last_seen_column_ready
+    if _job_last_seen_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Job'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'lastSeenAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _job_last_seen_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260801,))
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "lastSeenAt" timestamptz'
+            )
+        conn.commit()
+    _job_last_seen_column_ready = True
+
+
 #: Guard so the additive ``StoryEntry`` dedup column is only ensured once per
 #: worker process (see ``ensure_story_dedup_column``).
 _story_dedup_column_ready = False

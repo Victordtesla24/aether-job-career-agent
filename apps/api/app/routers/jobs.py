@@ -26,7 +26,7 @@ from app.agents.cover_letter_agent import (
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.job import VALID_STATUSES, JobRepository
-from app.services.discovery.active_feed import active_feed
+from app.services.discovery.active_feed import active_feed, annotate_listing_age
 
 router = APIRouter()
 
@@ -77,23 +77,40 @@ def list_jobs(
     saved: bool | None = Query(default=None),
     sort: str = Query(default="createdAt"),
     include_stale: bool = Query(default=False),
+    include_stale_camel: bool | None = Query(default=None, alias="includeStale"),
 ) -> list[dict[str, Any]]:
     """List the authenticated user's discovered jobs, with optional filters.
 
     By default this is the ACTIVE feed (GAP-P6-DATA-001): rows from a dead /
-    ToS-non-compliant source (Seek) and rows older than the freshness window
-    (>30d STALE) are hidden, and a role cross-posted to two boards is shown
-    once — so paying users never see the dead Seek cards probe-13 found. History
-    is never deleted; ``include_stale=true`` returns the unfiltered set.
+    ToS-non-compliant source (Seek), rows the sourcing pipeline can no longer
+    find at their source (>30d since the last confirmed sighting), and rows in
+    a terminal status are hidden, and a role cross-posted to two boards is
+    shown once — so paying users never see the dead Seek cards probe-13 found.
+    History is never deleted; ``include_stale=true`` returns the unfiltered set.
+
+    BLOCKER-006: suppression is driven by the last confirmed sighting, NOT by
+    the posting date. Every row carries ``postedAgeDays`` and
+    ``lastConfirmedAt`` so a still-open role first advertised months ago is
+    shown with its real age instead of being hidden or misdated.
+
+    ``includeStale`` is accepted as an alias for ``include_stale``: every
+    other field on this API is camelCase, and the snake_case-only spelling
+    made a caller's ``?includeStale=true`` return a silently filtered 200.
     """
     if status is not None and status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail=f"Invalid status '{status}'")
+    if include_stale_camel is not None:
+        include_stale = include_stale or include_stale_camel
     if source is not None:
         _validate_source_filter(source, include_stale)
     jobs = JobRepository().list_by_user(
         current_user["id"], status=status, source=source, saved=saved, sort=sort
     )
-    if not include_stale:
+    if include_stale:
+        # The history view states the same two age facts as the active feed —
+        # an archived listing must not read as freshly posted either.
+        jobs = [annotate_listing_age(job) for job in jobs]
+    else:
         jobs = active_feed(jobs)
     return [_public(job) for job in jobs]
 
@@ -103,7 +120,9 @@ def get_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     job = JobRepository().get_by_id(job_id, current_user["id"])
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _public(job)
+    # Same two age facts as the feed, so the detail panel and the card can
+    # never disagree about how old a listing is (BLOCKER-006).
+    return _public(annotate_listing_age(job))
 
 
 # ---------------------------------------------------------------------------

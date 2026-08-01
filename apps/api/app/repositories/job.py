@@ -8,6 +8,7 @@ from typing import Any
 from app.db import (
     ensure_job_cover_suppression_column,
     ensure_job_dedup_columns,
+    ensure_job_last_seen_column,
     get_connection,
     new_id,
     rows_to_dicts,
@@ -25,6 +26,13 @@ _JOB_COLUMNS = (
     '"sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", '
     '"createdAt", "updatedAt"'
 )
+
+#: Read projection = the write projection plus ``lastSeenAt`` (BLOCKER-006):
+#: the time a discovery sweep last found this listing still published at its
+#: source. Only the READ paths need it (the active feed decides liveness from
+#: it, and the UI states it), so the ``RETURNING`` clauses of create/update
+#: stay on ``_JOB_COLUMNS`` and need no extra DDL guard.
+_JOB_READ_COLUMNS = _JOB_COLUMNS + ', "lastSeenAt"'
 
 _TAILORED_RESUME_SUBQUERY = (
     '(SELECT r."id" FROM "Resume" r '
@@ -206,8 +214,16 @@ class JobRepository:
            treated as an update (returning wasInserted=False).
         3. A ``contentHash`` (sha256 of first 500 chars of description) is
            stored as a secondary dedup signal for future use.
+
+        Every call — insert OR re-discovery of an already-persisted listing —
+        stamps ``lastSeenAt = NOW()`` (BLOCKER-006). This method is the single
+        path every adapter's results flow through, so reaching it is proof the
+        source returned this listing on this sweep, i.e. it is still published
+        and still applicable. ``postedAt`` is never bumped: the posting date
+        and the sighting are different facts and the UI states both.
         """
         ensure_job_dedup_columns()
+        ensure_job_last_seen_column()
 
         requirements = json.dumps(job_raw.get("requirements") or [])
         raw_source_url = job_raw.get("sourceUrl")
@@ -251,6 +267,7 @@ class JobRepository:
                                 "postedAt" = COALESCE(%s, "Job"."postedAt"),
                                 "sourceUrl" = %s,
                                 "contentHash" = COALESCE(%s, "Job"."contentHash"),
+                                "lastSeenAt" = NOW(),
                                 "updatedAt" = NOW()
                             WHERE "id" = %s
                             RETURNING """
@@ -283,9 +300,9 @@ class JobRepository:
                         "id", "userId", "title", "company", "location", "remote",
                         "description", "requirements", "source", "sourceUrl",
                         "salaryMin", "salaryMax", "currency", "postedAt",
-                        "dedupHash", "contentHash", "updatedAt"
+                        "dedupHash", "contentHash", "lastSeenAt", "updatedAt"
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                     ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET
                         "title" = EXCLUDED."title",
                         "company" = EXCLUDED."company",
@@ -299,6 +316,7 @@ class JobRepository:
                         "postedAt" = COALESCE(EXCLUDED."postedAt", "Job"."postedAt"),
                         "dedupHash" = COALESCE(EXCLUDED."dedupHash", "Job"."dedupHash"),
                         "contentHash" = COALESCE(EXCLUDED."contentHash", "Job"."contentHash"),
+                        "lastSeenAt" = NOW(),
                         "updatedAt" = NOW()
                     RETURNING {_JOB_COLUMNS}, (xmax = 0) AS "wasInserted"
                     """,
@@ -352,10 +370,11 @@ class JobRepository:
             "company": '"company"',
         }.get(sort, '"createdAt"')
         ensure_job_cover_suppression_column()
+        ensure_job_last_seen_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
+                    f'SELECT {_JOB_READ_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
                     f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
                     f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE {" AND ".join(clauses)} '
@@ -366,10 +385,11 @@ class JobRepository:
 
     def get_by_id(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         ensure_job_cover_suppression_column()
+        ensure_job_last_seen_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_JOB_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
+                    f'SELECT {_JOB_READ_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
                     f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
                     f'{_autopilot_suppressed_until_subquery()} '
                     f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
