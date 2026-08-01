@@ -1,0 +1,145 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/abacus-python/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.2
+collecting ... collected 8 items
+
+tests/test_agent_run_sse.py::test_sse_endpoint_exists_and_sets_event_stream_content_type PASSED [ 12%]
+tests/test_agent_run_sse.py::test_sse_response_disables_nginx_buffering PASSED [ 25%]
+tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order FAILED [ 37%]
+tests/test_agent_run_sse.py::test_sse_stream_is_scoped_to_owner PASSED   [ 50%]
+tests/test_agent_run_sse.py::test_kanban_updated_emitted_when_run_output_records_a_board_change PASSED [ 62%]
+tests/test_agent_run_sse.py::test_kanban_updated_withheld_when_run_touched_no_board FAILED [ 75%]
+tests/test_agent_run_sse.py::test_sse_stream_terminates_on_complete PASSED [ 87%]
+tests/test_agent_run_sse.py::test_sse_run_not_found_returns_404 PASSED   [100%]
+
+=================================== FAILURES ===================================
+________________ test_sse_stream_emits_progress_events_in_order ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c20448f20>
+
+    def test_sse_stream_emits_progress_events_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Asserts the ORDER of events that are actually backed by persisted
+        state for a completed, owned run — not the aspirational §14.5.5 six-step
+        script.
+    
+        ADR-GMV4-002: the original version demanded a fixed six-step sequence
+        (``scanning_queue`` .. ``complete``) for a run with NO monkeypatch (i.e.
+        a run that does not exist) — scripted progress with no execution behind
+        it (§0.5 auto-FAIL).
+    
+        ADR-GMV4-003 (§5d, superseding the ADR-GMV4-002 rewrite of this test):
+        the mocked run here has ``status: "completed"`` and NO ``output`` at all
+        — i.e. it never recorded a board-affecting write
+        (``_kanban_payload``'s ``basis`` would be ``"run_completed"``, not
+        ``"run_output"``). Per the binding ruling, ``kanban_updated`` MUST be
+        WITHHELD for exactly this case — emitting it would falsely claim a board
+        change to every connected client. So the exhaustive, ordered sequence
+        for THIS scenario is ``snapshot`` (real state at connect) then
+        ``complete`` (real persisted terminal status) — no ``kanban_updated``.
+        See ``test_kanban_updated_emitted_when_run_output_records_a_board_change``
+        for the sequence when the run DID touch the board. This list is
+        exhaustive (not merely ordered-subset), so it still has teeth: it fails
+        if the endpoint stops emitting either real event, reorders them, or
+        reintroduces ``kanban_updated`` for a run that never touched the board.
+        """
+        run_id = "run-order-1"
+        monkeypatch.setattr(
+            AgentRunRepository,
+            "get_by_id",
+            lambda self, rid, uid: {"id": run_id, "userId": OWNER_USER["id"], "status": "completed"},
+        )
+    
+        with _client_as(OWNER_USER) as client:
+            resp = client.get(f"/agents/runs/{run_id}/stream")
+    
+        assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+        events = _parse_sse_events(resp.text)
+        event_names = [e["event"] for e in events]
+>       assert event_names == ["snapshot", "complete"], event_names
+E       AssertionError: ['snapshot', 'kanban_updated', 'complete']
+E       assert ['snapshot', ...', 'complete'] == ['snapshot', 'complete']
+E         
+E         At index 1 diff: 'kanban_updated' != 'complete'
+E         Left contains one more item: 'complete'
+E         
+E         Full diff:
+E           [
+E               'snapshot',...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_agent_run_sse.py:228: AssertionError
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+____________ test_kanban_updated_withheld_when_run_touched_no_board ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c2044a090>
+
+    def test_kanban_updated_withheld_when_run_touched_no_board(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ADR-GMV4-003's binding ruling: a completed run whose persisted
+        ``output`` records NO board-affecting write (a tailoring/cover-letter
+        run's ordinary output shape — no ``jobId``/``applicationId`` anywhere)
+        must NOT emit ``kanban_updated`` at all. The event NAME asserts a kanban
+        change; emitting it here would be false to every connected client even
+        with an empty ``changes`` list attached. MUST FAIL against current code,
+        which emits ``kanban_updated`` unconditionally for every completed run
+        (``app.services.agent_run_stream._terminal_frames``)."""
+        run_id = "run-kanban-noboard-1"
+        monkeypatch.setattr(
+            AgentRunRepository,
+            "get_by_id",
+            lambda self, rid, uid: {
+                "id": run_id,
+                "userId": OWNER_USER["id"],
+                "status": "completed",
+                "output": {"tailoredResumeId": "resume-1", "atsScore": 82},
+            },
+        )
+    
+        with _client_as(OWNER_USER) as client:
+            resp = client.get(f"/agents/runs/{run_id}/stream")
+    
+        assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+        events = _parse_sse_events(resp.text)
+        event_names = [e["event"] for e in events]
+        kanban_events = [e for e in events if e["event"] == "kanban_updated"]
+>       assert not kanban_events, (
+            "ADR-GMV4-003: kanban_updated must be WITHHELD when the run never "
+            f"touched the board — got {kanban_events!r}; full stream: {events!r}"
+        )
+E       AssertionError: ADR-GMV4-003: kanban_updated must be WITHHELD when the run never touched the board — got [{'event': 'kanban_updated', 'data': {'channel': 'jobs:sse-owner-1', 'runId': 'run-kanban-noboard-1', 'agentName': None, 'basis': 'run_completed', 'changes': [], 'reason': 'agent_run_completed'}}]; full stream: [{'event': 'snapshot', 'data': {'runId': 'run-kanban-noboard-1', 'agentName': None, 'status': 'completed', 'startedAt': None, 'completedAt': None, 'source': 'agent_run_row'}}, {'event': 'kanban_updated', 'data': {'channel': 'jobs:sse-owner-1', 'runId': 'run-kanban-noboard-1', 'agentName': None, 'basis': 'run_completed', 'changes': [], 'reason': 'agent_run_completed'}}, {'event': 'complete', 'data': {'runId': 'run-kanban-noboard-1', 'agentName': None, 'status': 'completed', 'startedAt': None, 'completedAt': None, 'source': 'agent_run_row', 'output': {'tailoredResumeId': 'resume-1', 'atsScore': 82}}}]
+E       assert not [{'event': 'kanban_updated', 'data': {'channel': 'jobs:sse-owner-1', 'runId': 'run-kanban-noboard-1', 'agentName': None, 'basis': 'run_completed', ...}}]
+
+tests/test_agent_run_sse.py:337: AssertionError
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_agent_run_sse.py::test_sse_stream_emits_progress_events_in_order
+FAILED tests/test_agent_run_sse.py::test_kanban_updated_withheld_when_run_touched_no_board
+=================== 2 failed, 6 passed, 6 warnings in 4.21s ====================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

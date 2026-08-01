@@ -41,11 +41,27 @@ so it cannot pass merely because the route is missing.
 
 No ``Workspace`` model exists in this codebase (``packages/db/src/schema.prisma``
 has no such model — confirmed via ``grep -n '^model ' schema.prisma``); every
-table's tenancy/isolation key is ``userId``. ``test_sse_emits_kanban_updated_on_channel``
-therefore treats the owning user's id as the ``{workspace_id}`` in
-``jobs:{workspace_id}`` (§14.5.5/§15.1) — documented ASSUMPTION, not verified
-against a spec doc, since this repo has no separate workspace concept to
-verify against.
+table's tenancy/isolation key is ``userId``. The kanban tests below therefore
+treat the owning user's id as the ``{workspace_id}`` in ``jobs:{workspace_id}``
+(§14.5.5/§15.1) — documented ASSUMPTION, not verified against a spec doc,
+since this repo has no separate workspace concept to verify against.
+
+ADR-GMV4-003 (docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md §5d, 2026-08-01
+orchestrator adjudication): ``kanban_updated`` must be WITHHELD unless the
+run's persisted output records a real board change (``basis ==
+"run_output"`` in ``app.services.agent_run_stream._kanban_payload``).
+Emitting the event for a run that never touched the board is false to every
+connected client, even with ``changes: []`` attached — the event NAME itself
+asserts a kanban change. The former single test
+``test_sse_emits_kanban_updated_on_channel`` REQUIRED the event for a bare
+``{status:"completed"}`` run with no board-affecting output — that was the
+weaker, now-overruled reading; it is replaced below by
+``test_kanban_updated_emitted_when_run_output_records_a_board_change`` (the
+event fires, carrying the real ids) and
+``test_kanban_updated_withheld_when_run_touched_no_board`` (the event is
+absent). Test 2's asserted event sequence is updated to match: a completed
+run with no board-affecting output now yields ``["snapshot", "complete"]``,
+not the three-event sequence.
 """
 from __future__ import annotations
 
@@ -179,18 +195,22 @@ def test_sse_stream_emits_progress_events_in_order(monkeypatch: pytest.MonkeyPat
     ADR-GMV4-002: the original version demanded a fixed six-step sequence
     (``scanning_queue`` .. ``complete``) for a run with NO monkeypatch (i.e.
     a run that does not exist) — scripted progress with no execution behind
-    it (§0.5 auto-FAIL) — and its exact-list equality additionally forbade
-    ``kanban_updated``, which test 4 simultaneously requires for an
-    equivalent completed run. This version monkeypatches a real completed
-    run, exactly as tests 3-5 do, and asserts the order of the frames
-    ``app.services.agent_run_stream`` actually emits for that state:
-    ``snapshot`` (real state at connect), ``kanban_updated`` (real
-    scope-invalidation signal, honestly labelled with its basis — see
-    ``_kanban_payload``), then ``complete`` (real persisted terminal
-    status). This list is exhaustive for this scenario (not merely
-    ordered-subset), so it still has teeth: it fails if the endpoint stops
-    emitting any of these, reorders them, or reintroduces exact-list
-    equality that would exclude a REAL event again.
+    it (§0.5 auto-FAIL).
+
+    ADR-GMV4-003 (§5d, superseding the ADR-GMV4-002 rewrite of this test):
+    the mocked run here has ``status: "completed"`` and NO ``output`` at all
+    — i.e. it never recorded a board-affecting write
+    (``_kanban_payload``'s ``basis`` would be ``"run_completed"``, not
+    ``"run_output"``). Per the binding ruling, ``kanban_updated`` MUST be
+    WITHHELD for exactly this case — emitting it would falsely claim a board
+    change to every connected client. So the exhaustive, ordered sequence
+    for THIS scenario is ``snapshot`` (real state at connect) then
+    ``complete`` (real persisted terminal status) — no ``kanban_updated``.
+    See ``test_kanban_updated_emitted_when_run_output_records_a_board_change``
+    for the sequence when the run DID touch the board. This list is
+    exhaustive (not merely ordered-subset), so it still has teeth: it fails
+    if the endpoint stops emitting either real event, reorders them, or
+    reintroduces ``kanban_updated`` for a run that never touched the board.
     """
     run_id = "run-order-1"
     monkeypatch.setattr(
@@ -205,7 +225,7 @@ def test_sse_stream_emits_progress_events_in_order(monkeypatch: pytest.MonkeyPat
     assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
     events = _parse_sse_events(resp.text)
     event_names = [e["event"] for e in events]
-    assert event_names == ["snapshot", "kanban_updated", "complete"], event_names
+    assert event_names == ["snapshot", "complete"], event_names
 
 
 # --- 3. ownership boundary -----------------------------------------------------
@@ -240,19 +260,30 @@ def test_sse_stream_is_scoped_to_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "event:" not in resp_other.text, "non-owner response must never leak SSE payload"
 
 
-# --- 4. kanban_updated broadcast ----------------------------------------------
+# --- 4. kanban_updated broadcast (ADR-GMV4-003, §5d) ---------------------------
 
 
-def test_sse_emits_kanban_updated_on_channel(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A kanban advance during the run must emit ``kanban_updated`` carrying
-    the workspace scope (``channel: "jobs:{workspace_id}"``) — see module
-    docstring for the documented ``workspace_id == owning user id`` mapping
-    (this codebase has no separate Workspace model)."""
-    run_id = "run-kanban-1"
+def test_kanban_updated_emitted_when_run_output_records_a_board_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completed run whose persisted ``output`` records a real board write
+    (``jobId``/``applicationId`` — the shape the Submission Agent returns)
+    MUST emit ``kanban_updated`` on the workspace channel
+    (``channel: "jobs:{workspace_id}"`` — see module docstring for the
+    documented ``workspace_id == owning user id`` mapping), carrying those
+    REAL ids and ``basis: "run_output"`` (ADR-GMV4-003's positive case —
+    board really changed, so the event honestly may fire)."""
+    run_id = "run-kanban-board-1"
+    output = {"jobId": "job-real-42", "applicationId": "app-real-99"}
     monkeypatch.setattr(
         AgentRunRepository,
         "get_by_id",
-        lambda self, rid, uid: {"id": run_id, "userId": OWNER_USER["id"], "status": "completed"},
+        lambda self, rid, uid: {
+            "id": run_id,
+            "userId": OWNER_USER["id"],
+            "status": "completed",
+            "output": output,
+        },
     )
 
     with _client_as(OWNER_USER) as client:
@@ -262,8 +293,52 @@ def test_sse_emits_kanban_updated_on_channel(monkeypatch: pytest.MonkeyPatch) ->
     events = _parse_sse_events(resp.text)
     kanban_events = [e for e in events if e["event"] == "kanban_updated"]
     assert kanban_events, f"no 'kanban_updated' event in stream; events were {events}"
-    channel = kanban_events[0]["data"].get("channel") if isinstance(kanban_events[0]["data"], dict) else None
-    assert channel == f"jobs:{OWNER_USER['id']}", channel
+    data = kanban_events[0]["data"]
+    assert isinstance(data, dict), data
+    assert data.get("channel") == f"jobs:{OWNER_USER['id']}", data
+    assert data.get("basis") == "run_output", (
+        f"a board-affecting run must be labelled basis='run_output' — got {data!r}"
+    )
+    assert data.get("changes") == [output], (
+        f"kanban_updated must carry the REAL ids the run recorded — got {data!r}"
+    )
+
+
+def test_kanban_updated_withheld_when_run_touched_no_board(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-GMV4-003's binding ruling: a completed run whose persisted
+    ``output`` records NO board-affecting write (a tailoring/cover-letter
+    run's ordinary output shape — no ``jobId``/``applicationId`` anywhere)
+    must NOT emit ``kanban_updated`` at all. The event NAME asserts a kanban
+    change; emitting it here would be false to every connected client even
+    with an empty ``changes`` list attached. MUST FAIL against current code,
+    which emits ``kanban_updated`` unconditionally for every completed run
+    (``app.services.agent_run_stream._terminal_frames``)."""
+    run_id = "run-kanban-noboard-1"
+    monkeypatch.setattr(
+        AgentRunRepository,
+        "get_by_id",
+        lambda self, rid, uid: {
+            "id": run_id,
+            "userId": OWNER_USER["id"],
+            "status": "completed",
+            "output": {"tailoredResumeId": "resume-1", "atsScore": 82},
+        },
+    )
+
+    with _client_as(OWNER_USER) as client:
+        resp = client.get(f"/agents/runs/{run_id}/stream")
+
+    assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
+    events = _parse_sse_events(resp.text)
+    event_names = [e["event"] for e in events]
+    kanban_events = [e for e in events if e["event"] == "kanban_updated"]
+    assert not kanban_events, (
+        "ADR-GMV4-003: kanban_updated must be WITHHELD when the run never "
+        f"touched the board — got {kanban_events!r}; full stream: {events!r}"
+    )
+    assert event_names == ["snapshot", "complete"], event_names
 
 
 # --- 5. terminates on complete -------------------------------------------------

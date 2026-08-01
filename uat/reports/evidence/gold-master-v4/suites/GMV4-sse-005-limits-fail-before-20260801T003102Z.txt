@@ -1,0 +1,202 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/abacus-python/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/github_repos/aether-job-career-agent/apps/api
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.2
+collecting ... collected 5 items
+
+tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_per_user FAILED [ 20%]
+tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_globally FAILED [ 40%]
+tests/test_agent_run_sse_limits.py::test_stream_rejection_is_honest_not_a_silent_hang FAILED [ 60%]
+tests/test_agent_run_sse_limits.py::test_default_poll_interval_is_not_more_aggressive_than_the_client_poll FAILED [ 80%]
+tests/test_agent_run_sse_limits.py::test_stream_releases_its_db_connection_on_disconnect PASSED [100%]
+
+=================================== FAILURES ===================================
+_________________ test_concurrent_streams_are_capped_per_user __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3044f6b4a0>
+
+    def test_concurrent_streams_are_capped_per_user(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Beyond some per-user cap, an additional stream for the SAME user must
+        be rejected. MUST FAIL today: no per-user cap exists, so all N
+        concurrent streams for one user succeed."""
+        monkeypatch.setenv("AETHER_SSE_POLL_SECONDS", "0.1")
+        monkeypatch.setenv("AETHER_SSE_MAX_STREAM_SECONDS", "5")
+        monkeypatch.setattr(AgentRunRepository, "get_by_id", _always_running)
+    
+        n = 8  # comfortably above any sane per-user cap
+        with _client_fixed_user(OWNER_USER) as client:
+            requests = [(f"/agents/runs/cap-user-run-{i}/stream", {}) for i in range(n)]
+            results, hung = _fire_concurrent(client, requests, join_timeout=20.0)
+    
+        assert not hung, (
+            f"{len(hung)} of {n} same-user concurrent streams never returned at "
+            f"all within the bounded join (real hang), indices={hung}"
+        )
+        assert len(results) == n, f"expected {n} results, got {len(results)}: {results}"
+        statuses = [r[1] for r in results]
+        rejected = [r for r in results if r[1] in (429, 503)]
+>       assert rejected, (
+            f"none of {n} concurrent streams opened by the SAME user were "
+            f"rejected -- no per-user concurrent-stream cap exists yet "
+            f"(GMV4-sse-005, BLOCKER, §5e); statuses={statuses}"
+        )
+E       AssertionError: none of 8 concurrent streams opened by the SAME user were rejected -- no per-user concurrent-stream cap exists yet (GMV4-sse-005, BLOCKER, §5e); statuses=[200, 200, 200, 200, 200, 200, 200, 200]
+E       assert []
+
+tests/test_agent_run_sse_limits.py:162: AssertionError
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_________________ test_concurrent_streams_are_capped_globally __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2fcc151a60>
+
+    def test_concurrent_streams_are_capped_globally(monkeypatch: pytest.MonkeyPatch) -> None:
+        """A GLOBAL cap must exist, sitting below the app-wide 25-connection
+        ceiling WITH HEADROOM, independent of per-user identity. MUST FAIL
+        today: no global cap exists, so all N distinct-user streams succeed
+        simultaneously."""
+        monkeypatch.setenv("AETHER_SSE_POLL_SECONDS", "0.1")
+        monkeypatch.setenv("AETHER_SSE_MAX_STREAM_SECONDS", "5")
+        monkeypatch.setattr(AgentRunRepository, "get_by_id", _always_running)
+    
+        n = 24  # near the 25-connection ceiling; each request is a DISTINCT user
+        with _client_multi_user() as client:
+            requests = [
+                (f"/agents/runs/cap-global-run-{i}/stream", {"x-test-user-id": f"cap-global-user-{i}"})
+                for i in range(n)
+            ]
+            results, hung = _fire_concurrent(client, requests, join_timeout=25.0)
+    
+        assert not hung, (
+            f"{len(hung)} of {n} distinct-user concurrent streams never "
+            f"returned at all within the bounded join (real hang), indices={hung}"
+        )
+        assert len(results) == n, f"expected {n} results, got {len(results)}: {results}"
+        statuses = [r[1] for r in results]
+        rejected = [r for r in results if r[1] in (429, 503)]
+>       assert rejected, (
+            f"{n} concurrent streams from {n} DISTINCT users (deliberately "
+            f"bypassing any per-user cap) all succeeded -- no GLOBAL "
+            f"concurrent-stream cap exists yet (GMV4-sse-005, BLOCKER, §5e); "
+            f"statuses={statuses}"
+        )
+E       AssertionError: 24 concurrent streams from 24 DISTINCT users (deliberately bypassing any per-user cap) all succeeded -- no GLOBAL concurrent-stream cap exists yet (GMV4-sse-005, BLOCKER, §5e); statuses=[200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]
+E       assert []
+
+tests/test_agent_run_sse_limits.py:193: AssertionError
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s][ALoading weights: 100%|██████████| 103/103 [00:00<00:00, 3231.14it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 2902.40it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 14938.22it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 6943.77it/s]
+------------------------------ Captured log call -------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:951 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING  app.services.ats_engine:ats_engine.py:271 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+WARNING  app.services.ats_engine:ats_engine.py:271 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+______________ test_stream_rejection_is_honest_not_a_silent_hang _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f30449401d0>
+
+    def test_stream_rejection_is_honest_not_a_silent_hang(monkeypatch: pytest.MonkeyPatch) -> None:
+        """When the cap is exceeded, rejection must be an explicit 429/503 with a
+        real message, returned FAST -- never a hang, never an empty 200 stream
+        pretending to be a real success. MUST FAIL today: with no cap, nothing
+        is ever rejected, so the honesty invariant has nothing to check against."""
+        monkeypatch.setenv("AETHER_SSE_POLL_SECONDS", "0.1")
+        monkeypatch.setenv("AETHER_SSE_MAX_STREAM_SECONDS", "5")
+        monkeypatch.setattr(AgentRunRepository, "get_by_id", _always_running)
+    
+        n = 8
+        with _client_fixed_user(OWNER_USER) as client:
+            requests = [(f"/agents/runs/honest-run-{i}/stream", {}) for i in range(n)]
+            results, hung = _fire_concurrent(client, requests, join_timeout=20.0)
+    
+        # The single strongest assertion this test makes: a real hang (a request
+        # that never comes back at all) is the worst failure mode here.
+        assert not hung, (
+            f"{len(hung)} of {n} oversubscribed same-user streams NEVER "
+            f"returned within the bounded join -- a silent hang is the worst "
+            f"failure mode for a rejection path (§5e); indices={hung}"
+        )
+        assert len(results) == n, f"expected {n} results, got {len(results)}: {results}"
+    
+        for i, status, _elapsed, body in results:
+            assert status in (200, 429, 503), f"unexpected status {status} for request {i}: {body[:200]!r}"
+            if status == 200:
+                assert body.strip(), (
+                    f"request {i} returned 200 with an EMPTY stream body -- a "
+                    f"silently-empty stream is as dishonest as a hang"
+                )
+    
+        rejected = [r for r in results if r[1] in (429, 503)]
+>       assert rejected, (
+            f"no request was rejected among {n} oversubscribed concurrent "
+            f"streams for one user -- no connection-ceiling cap exists yet "
+            f"(GMV4-sse-005, BLOCKER); statuses={[r[1] for r in results]}"
+        )
+E       AssertionError: no request was rejected among 8 oversubscribed concurrent streams for one user -- no connection-ceiling cap exists yet (GMV4-sse-005, BLOCKER); statuses=[200, 200, 200, 200, 200, 200, 200, 200]
+E       assert []
+
+tests/test_agent_run_sse_limits.py:243: AssertionError
+----------------------------- Captured stderr call -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 25490.52it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8542.88it/s]
+------------------------------ Captured log call -------------------------------
+WARNING  app.services.ats_engine:ats_engine.py:271 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+____ test_default_poll_interval_is_not_more_aggressive_than_the_client_poll ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3044da3b90>
+
+    def test_default_poll_interval_is_not_more_aggressive_than_the_client_poll(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """§5e binding requirement: the default ``AETHER_SSE_POLL_SECONDS`` must
+        be >= 3.0s, matching the real client poll
+        (``apps/web/src/lib/api/agents.ts:57``, ``JOB_POLL_INTERVAL_MS = 3000``).
+        MUST FAIL today: the coded default is 1.0s."""
+        monkeypatch.delenv("AETHER_SSE_POLL_SECONDS", raising=False)
+        value = agent_run_stream.poll_seconds()
+>       assert value >= 3.0, (
+            f"AETHER_SSE_POLL_SECONDS default resolved to {value}s -- MORE "
+            f"aggressive than the real client poll of 3000ms "
+            f"(apps/web/src/lib/api/agents.ts:57); §5e requires the default be "
+            f">= 3.0s."
+        )
+E       AssertionError: AETHER_SSE_POLL_SECONDS default resolved to 1.0s -- MORE aggressive than the real client poll of 3000ms (apps/web/src/lib/api/agents.ts:57); §5e requires the default be >= 3.0s.
+E       assert 1.0 >= 3.0
+
+tests/test_agent_run_sse_limits.py:278: AssertionError
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_per_user
+FAILED tests/test_agent_run_sse_limits.py::test_concurrent_streams_are_capped_globally
+FAILED tests/test_agent_run_sse_limits.py::test_stream_rejection_is_honest_not_a_silent_hang
+FAILED tests/test_agent_run_sse_limits.py::test_default_poll_interval_is_not_more_aggressive_than_the_client_poll
+=================== 4 failed, 1 passed, 6 warnings in 28.75s ===================
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
