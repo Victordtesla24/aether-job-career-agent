@@ -3259,12 +3259,12 @@
         "Load /dashboard/email with both Gmail accounts at needs_reauth (current prod state)"
       ],
       "expected": "Accounts needing reconnection are visibly flagged with a reconnect action",
-      "observed": "No chip renders at all; generic 'Connect Gmail' CTA; no reauth wording anywhere",
+      "observed": "No chip renders at all; generic 'Connect Gmail' CTA; no reauth wording anywhere | CONFIRMED by 3 RED component tests. Root cause is purely frontend: email/page.tsx:534-536 filters accounts with .filter(a.status === 'connected') and the CTA label at 587-600 checks the same predicate, so a needs_reauth account renders NO chip and falls through to a generic CTA. The backend ALREADY sends needs_reauth/actionRequired plus a reconnect note (workspaces.py:628-649) \u2014 the data is there and discarded. Sharpest symptom: 'no accounts linked' and 'accounts linked but broken' render BYTE-IDENTICAL 'Connect Gmail' text, so the user cannot distinguish never-connected from broken.",
       "evidence": [
         "uat/reports/evidence/gold-master-v3/screens/dashboard-email/01-cold-load.png",
         "uat/reports/evidence/gold-master-v3/screens/dashboard-email/inbox.json"
       ],
-      "status": "OPEN",
+      "status": "TESTS-RED-READY-FOR-FIX",
       "owner": "W-B fixer-medium",
       "fixCommits": [],
       "verifiedBy": "screen-tester batch4 2026-07-31",
@@ -3469,19 +3469,19 @@
     {
       "id": "GMV4-apps-004",
       "screen": "Applications",
-      "severity": "HIGH",
+      "severity": "MEDIUM",
       "category": "defect",
-      "summary": "REAL DRAG-AND-DROP DOES NOT WORK. qa-adversary found the Applications board DnD fires NO request and moves nothing. This CORRECTS the batch-1 screen-tester, which reported DnD as working \u2014 it had succeeded only via a synthetic Playwright DragEvent and honestly filed the genuine-gesture case as UNSURE. \u00a79.1 requires drag-and-drop PLUS an accessible menu; the accessible Move-to menu IS verified working on all 31 cards, so the board is usable \u2014 but the primary advertised interaction is not.",
+      "summary": "ORCHESTRATOR CORRECTION \u2014 DOWNGRADED FROM CONFIRMED HIGH TO UNSURE. I recorded this as a confirmed defect on an adversarial reviewer's production observation that real drag-and-drop fires no request. Component-level tests now PASS: the handlers are neither absent nor miswired. Native HTML5 DnD is correctly wired \u2014 card draggable + onDragStart (applications/page.tsx:891-892, handler 620-626 dataTransfer.setData), column onDragOver/onDrop (864-868, handler 628-646 getData -> moveCard -> POST /applications/{id}/move) \u2014 and driving a genuine dragstart->dragover->drop sequence with one persistent dataTransfer triggers both the move request and correct rollback on rejection. TWO HYPOTHESES remain for the production observation, one benign and one real: (A) Chromium's native HTML5 DnD backend is flaky under CDP-simulated mouse sequences \u2014 an automation-layer limitation, no product defect; (B) the draggable <article> (888-903) contains nested interactive descendants \u2014 the title <button> (943-953) and MoveMenu's button (977-981) \u2014 and a genuine mousedown landing on either can prevent native drag-initiation from the ancestor, a known HTML5-DnD gotcha and a REAL defect. Disambiguation requires a Playwright run on production dragging from a non-interactive region of the card versus from the title/menu area. The accessible Move-to menu is separately VERIFIED working on all 31 cards, so the board remains usable either way.",
       "reproduction": [
         "Drag a card between stage columns on /dashboard/applications with a real mouse gesture and watch the network tab"
       ],
-      "expected": "Drag-and-drop performs a real stage move",
-      "observed": "No request fired; card does not move",
+      "expected": "Real drag-and-drop performs a stage move, or the gap is proven to be an automation artifact",
+      "observed": "Component tests pass; production gesture reportedly does nothing; cause not yet disambiguated",
       "evidence": [
         "docs/delivery/GOLD-MASTER-V3-ADVERSARIAL-REVIEW.md"
       ],
-      "status": "OPEN",
-      "owner": "W-F fixer-medium",
+      "status": "UNSURE-NEEDS-DISAMBIGUATION",
+      "owner": "screen-tester (Playwright disambiguation)",
       "fixCommits": [],
       "verifiedBy": "qa-adversary (opus) 2026-07-31T18:51Z",
       "openedUtc": "2026-08-01T00:17:37Z",
