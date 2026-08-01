@@ -48,8 +48,6 @@ const CONVERSION_FIXTURE = {
   applied_to_screened: 60,
   screened_to_interview: 66.67,
   interview_to_offer: 50,
-  interview_conversion_rate: 40,
-  interview_conversion_healthy: true,
 };
 
 const DASHBOARD_FIXTURE = {

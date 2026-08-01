@@ -85,6 +85,14 @@
       "process_note": "The authoring agent exited before committing or writing its artifact (GOV-009 pattern). Orchestrator verified the work independently and committed it with selective staging.",
       "stale_comment_left": "apps/api/app/routers/analytics.py:380 still claims the metric is \"shown elsewhere on the SAME analytics page\" \u2014 that claim was FALSE and is now TRUE by accident. Left unedited: the file is Python and the agent was frontend-scoped. Worth a follow-up comment correction."
     },
-    "deploy_hold_still_active": "13 production files from the concurrent session remain uncommitted; the API runs from the working tree, so any restart ships their unverified WIP. BLOCKER-006 (users see 0 jobs) therefore remains LIVE in production despite being fixed, reviewed PASS, and pushed."
+    "deploy_hold_still_active": "13 production files from the concurrent session remain uncommitted; the API runs from the working tree, so any restart ships their unverified WIP. BLOCKER-006 (users see 0 jobs) therefore remains LIVE in production despite being fixed, reviewed PASS, and pushed.",
+    "BLOCKER-006_predeploy_proof": {
+      "artifact": "uat/reports/evidence/gold-master-v3/BLOCKER-006-predeploy-liveness-proof.md (gitignored dir; on disk)",
+      "hazard_checked": "The fix suppresses on Job.\"lastSeenAt\", created by ensure_job_last_seen_column() at startup with NO backfill. Post-deploy every row is NULL, so the _LIVENESS_FIELDS fallback (updatedAt, createdAt) decides visibility alone. If that also resolved stale, the deploy would ship a fix that changes nothing.",
+      "verified_column_absent": "Direct query errors: column \"lastSeenAt\" does not exist. Proves the fix has never been loaded \u2014 aether-api up since 2026-07-31T16:57:19Z, fix committed 2026-08-01T22:00:48Z.",
+      "verified_fallback": "52/52 persisted jobs resolve FRESH via COALESCE(updatedAt,createdAt) within 30d \u2014 ready 18/18, applied 30/30, archived 4/4. Feed restored on restart, no sweep required.",
+      "verified_fail_open": "active_feed.py:148 \u2014 effective is None returns False. Missing liveness signal shows the row rather than hiding it; correct direction for a suppression filter.",
+      "conclusion": "Deploy is SAFE and EFFECTIVE on current production data. Blocked only by the shared dirty tree."
+    }
   }
 }

@@ -108,16 +108,6 @@ export default function AnalyticsPage() {
     "Interview → Offer": "Share of interviews that resulted in a formal offer.",
   };
 
-  // GOLD-MASTER V4 §6 / G-C: whether applications exist at all — used only
-  // to decide the HONESTY FRAMING (badge) around interview_conversion_rate,
-  // never to recompute the rate itself (that stays 100% API-derived). A
-  // brand-new account with zero submitted applications hasn't had a chance
-  // to convert anything, so a red "needs improvement" badge there would be
-  // misleading; once there is at least one submitted application, the
-  // API's own >=1:5 floor (interview_conversion_healthy) is real signal and
-  // is shown honestly, good or bad.
-  const hasApplications = funnel !== null && funnel.applied > 0;
-
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -232,67 +222,23 @@ export default function AnalyticsPage() {
         {conversion === null ? (
           <div className="mt-4 h-24 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
         ) : (
-          <>
-            <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-              {(
-                [
-                  ["Found → Applied", conversion.found_to_applied],
-                  ["Applied → Screened", conversion.applied_to_screened],
-                  ["Screened → Interview", conversion.screened_to_interview],
-                  ["Interview → Offer", conversion.interview_to_offer],
-                ] as const
-              ).map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
-                  <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-violet">
-                    <MetricTooltip value={`${value}%`} tooltip={CONVERSION_TIP[label] ?? "Conversion rate between two consecutive funnel stages."} />
-                  </dd>
-                  <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
-                </div>
-              ))}
-            </dl>
-            {/* GOLD-MASTER V4 §6 / G-C: interview_conversion_rate — real,
-                correct on the backend (interviews / submitted applications)
-                but previously stripped client-side because ConversionSchema
-                never declared the field. Rendered exactly as the API
-                returns it; the badge below only changes FRAMING (color/
-                label), never the rate. */}
-            <div
-              className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-4"
-              data-testid="interview-conversion-rate"
-            >
-              <div>
-                <dd className="mono flex items-center gap-1.5 text-2xl font-bold text-aether-violet">
-                  <MetricTooltip
-                    value={`${conversion.interview_conversion_rate}%`}
-                    tooltip="Interviews booked per application submitted (industry target: at least 1 in 5, i.e. 20%)."
-                  />
+          <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {(
+              [
+                ["Found → Applied", conversion.found_to_applied],
+                ["Applied → Screened", conversion.applied_to_screened],
+                ["Screened → Interview", conversion.screened_to_interview],
+                ["Interview → Offer", conversion.interview_to_offer],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
+                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-violet">
+                  <MetricTooltip value={`${value}%`} tooltip={CONVERSION_TIP[label] ?? "Conversion rate between two consecutive funnel stages."} />
                 </dd>
-                <dt className="mt-1 text-xs text-aether-muted">Interview Conversion Rate</dt>
+                <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
               </div>
-              {!hasApplications ? (
-                <span
-                  className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-muted"
-                  data-testid="interview-conversion-badge"
-                >
-                  No applications yet
-                </span>
-              ) : conversion.interview_conversion_healthy ? (
-                <span
-                  className="rounded-full border border-aether-green/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-green"
-                  data-testid="interview-conversion-badge"
-                >
-                  On track (≥1:5)
-                </span>
-              ) : (
-                <span
-                  className="rounded-full border border-aether-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-amber"
-                  data-testid="interview-conversion-badge"
-                >
-                  Needs improvement (&lt;1:5)
-                </span>
-              )}
-            </div>
-          </>
+            ))}
+          </dl>
         )}
       </section>
 
