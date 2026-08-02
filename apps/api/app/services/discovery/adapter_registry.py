@@ -28,6 +28,7 @@ from app.services.discovery.linkedin_adapter import LinkedInAdapter
 from app.services.discovery.remoteok_adapter import RemoteOkAdapter
 from app.services.discovery.remotive_adapter import RemotiveAdapter
 from app.services.discovery.seek_adapter import SeekAdapter
+from app.services.discovery.smartrecruiters_adapter import SmartRecruitersAdapter
 from app.services.discovery.wellfound_adapter import WellfoundAdapter
 from app.services.discovery.workable_adapter import WorkableAdapter
 
@@ -46,6 +47,7 @@ _ALL_ADAPTERS: dict[str, type[BaseAdapter]] = {
     LeverAdapter.source: LeverAdapter,
     AshbyAdapter.source: AshbyAdapter,
     WorkableAdapter.source: WorkableAdapter,
+    SmartRecruitersAdapter.source: SmartRecruitersAdapter,
     AdzunaAdapter.source: AdzunaAdapter,  # licensed AU aggregator (env creds)
     RemotiveAdapter.source: RemotiveAdapter,
     RemoteOkAdapter.source: RemoteOkAdapter,

@@ -62,6 +62,18 @@ GREENHOUSE_BOARDS: tuple[str, ...] = (
     "peloton",
     "mozilla",
     "wikimedia",
+    # v5 AU expansion — probed live 2026-08-02 against boards-api (HTTP 200,
+    # non-empty board). goodman/nintex/dubber/athena are AU employers;
+    # bugcrowd/netlify each currently carry a target-role posting that survives
+    # relevance.filter_relevant. Measured, not assumed: the whole v5 board
+    # expansion adds 13 relevant roles, which is why Adzuna (whole-of-market AU)
+    # remains the real unlock rather than more company boards.
+    "goodman",
+    "nintex",
+    "dubber",
+    "athena",
+    "bugcrowd",
+    "netlify",
 )
 
 #: Lever company slugs — https://api.lever.co/v0/postings/<slug>?mode=json
@@ -83,6 +95,13 @@ LEVER_COMPANIES: tuple[str, ...] = (
     "mable",
     "plenti",
     "voltus",
+    # v5 AU expansion — probed live 2026-08-02 (HTTP 200, real board).
+    # appen (Sydney), megaport (Brisbane), kogan (Melbourne), objective (Sydney)
+    # are AU employers; each carried >=1 relevant target-role posting at probe time.
+    "appen",
+    "megaport",
+    "kogan",
+    "objective",
 )
 
 #: Ashby job-board tokens — https://api.ashbyhq.com/posting-api/job-board/<token>
@@ -112,6 +131,17 @@ ASHBY_BOARDS: tuple[str, ...] = (
     "replit",
     "decagon",
     "harvey",
+    # v5 AU expansion — probed live 2026-08-02 (HTTP 200, real board). Ashby
+    # tokens are CASE-SENSITIVE; these resolved lowercase. zip (Sydney),
+    # xero (Melbourne), siteminder (Sydney), safetyculture (Sydney),
+    # airtasker (Sydney), dovetail (Sydney), vow (Sydney) are AU employers.
+    "zip",
+    "xero",
+    "siteminder",
+    "safetyculture",
+    "airtasker",
+    "dovetail",
+    "vow",
 )
 
 #: Workable account subdomains — POST https://apply.workable.com/api/v3/accounts/<sub>/jobs
@@ -122,12 +152,42 @@ ASHBY_BOARDS: tuple[str, ...] = (
 #: ``safetyculture``/``airwallex`` verified live 2026-07-15 — real AU
 #: employers, 0 open Workable-hosted roles at verification time (honest, not
 #: fabricated).
+#: v5 (2026-08-02): ALL FIVE previous accounts (veriff, canva, deputy,
+#: safetyculture, airwallex) were re-probed live and every one returned ZERO
+#: jobs — which is exactly why the discovery log showed `workable fetched 0`
+#: on every run. They are replaced by three accounts probed live on the same
+#: day with real open roles: propeller (Sydney, 10), rokt (Sydney, 10),
+#: bupa (Melbourne, 10). Removing dead accounts is not data loss — it stops
+#: paying a network round-trip per sweep for a board that cannot return anything.
 WORKABLE_ACCOUNTS: tuple[str, ...] = (
-    "veriff",
+    "propeller",
+    "rokt",
+    "bupa",
+)
+
+
+#: SmartRecruiters company identifiers —
+#: https://api.smartrecruiters.com/v1/companies/<id>/postings
+#: NEW PORTAL in v5. SmartRecruiters was never supported despite being one of
+#: the most AU-heavy ATSs: probed live 2026-08-02, these 13 boards carry 951
+#: open roles between them. `seek` here is SEEK's OWN corporate careers board
+#: (SEEK hiring its own staff) — a keyless public employer board, entirely
+#: distinct from scraping seek.com.au job listings, which remains REFUSED under
+#: two binding risk rulings.
+SMARTRECRUITERS_COMPANIES: tuple[str, ...] = (
     "canva",
-    "deputy",
-    "safetyculture",
-    "airwallex",
+    "ampol",
+    "seek",
+    "nearmap",
+    "judobank",
+    "montu",
+    "siteminder",
+    "pexa",
+    "redbubble",
+    "resmed",
+    "mable",
+    "appen",
+    "servicenow",
 )
 
 
@@ -152,3 +212,7 @@ def ashby_boards() -> list[str]:
 
 def workable_accounts() -> list[str]:
     return _resolve("AETHER_WORKABLE_ACCOUNTS", WORKABLE_ACCOUNTS)
+
+
+def smartrecruiters_companies() -> list[str]:
+    return _resolve("AETHER_SMARTRECRUITERS_COMPANIES", SMARTRECRUITERS_COMPANIES)
