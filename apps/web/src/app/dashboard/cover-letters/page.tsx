@@ -14,6 +14,7 @@ import { EvidenceTracePanel } from "../../../components/cover-letters/EvidenceTr
 import { KeywordCoveragePanel } from "../../../components/cover-letters/KeywordCoveragePanel";
 import { RejectionPanel } from "../../../components/cover-letters/RejectionPanel";
 import { VersionsPanel } from "../../../components/cover-letters/VersionsPanel";
+import { LetterQualityPanel } from "../../../components/cover-letters/LetterQualityPanel";
 import { VoiceDnaPanel } from "../../../components/cover-letters/VoiceDnaPanel";
 import {
   downloadCoverLetterPdf,
@@ -491,6 +492,14 @@ export default function CoverLettersPage() {
             />
             <KeywordCoveragePanel
               keywords={selectedInsights?.keywords ?? null}
+              loading={insightsLoading}
+            />
+            {/* W-TAILOR-CONVERGE item 4/5: the persisted, deterministic quality
+                score of THIS letter (first draft vs shipped), served from
+                Application.coverLetterQuality — so it survives a reload
+                instead of living only in the run response. */}
+            <LetterQualityPanel
+              quality={selectedInsights?.quality ?? null}
               loading={insightsLoading}
             />
             <ActionsPanel

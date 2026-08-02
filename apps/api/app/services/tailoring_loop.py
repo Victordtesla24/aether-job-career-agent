@@ -22,23 +22,43 @@ loop's score-tracking already prefers whichever iteration scored highest, so
 a run that can never close a gap truthfully honestly reports failure rather
 than fabricating its way to 85.
 
-Design note on the retry directive: it is intentionally SELF-CONTAINED — it
-never re-embeds the original job description's raw prose. Ordinary JD prose
-routinely contains contraction fragments ("we're" tokenizes to "re" on the
-apostrophe) and generic words ("about") that are not in
-``app.services.ats_engine._STOPWORDS``; re-emitting that prose into a
-"cleaned" directive would silently reintroduce exactly the tokenization noise
-this module exists to strip. The directive instead names the score gap and
-the CLEAN gap keywords directly — which is also strictly more actionable for
-the model than repeating prose it already saw on the first pass.
+Design note on the retry directive (REVISED, W-TAILOR-CONVERGE): the directive
+is APPENDED to the real job description under :data:`DIRECTIVE_MARKER` — it is
+never SUBSTITUTED for it. The original design passed the directive ALONE as
+``ResumeTailorService.tailor``'s ``job_description`` argument, which made
+every pass after the first blind to the actual posting: not only did the
+rewrite prompt lose the role, but ``select_bullets_to_tailor`` then ranked
+bullets against the directive's own boilerplate. The noise concern that
+motivated the original design (ordinary JD prose contains contraction
+fragments — "we're" tokenizes to "re" on the apostrophe — and generic words
+like "about" that are not in ``app.services.ats_engine._STOPWORDS``) is
+handled where it actually matters: :func:`clean_gap_keywords` still strips
+that noise out of the KEYWORD LIST the directive asks for. Reproducing the
+posting verbatim above the directive cannot poison that list, because the
+list is derived from ``ATSScore.missing_keywords``, not from the directive
+text.
+
+Second design note (W-TAILOR-CONVERGE): the directive only ever asks for gap
+keywords the candidate's OWN EVIDENCE already contains
+(:func:`split_gap_keywords`). A JD keyword absent from the résumé, story bank
+and career data cannot be added without fabricating, so the entailment guard
+would reject the rewrite anyway — asking for it just burns an iteration and
+pushes the model toward exactly the invention the guard exists to stop. Those
+keywords are reported as ``unreachable_keywords`` and named in the honest
+sub-target warning instead. This is strictly STRICTER than before; the guard
+itself is untouched.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.services.ats_engine import _STOPWORDS as _ATS_STOPWORDS
-from app.services.resume_tailor import strip_bullet_lines
+from app.services.llm_client import LLMUnavailableError
+from app.services.resume_tailor import _evidence_index, _stem, strip_bullet_lines
+
+_logger = logging.getLogger(__name__)
 
 #: §5.3 item 1: no existing cap governs a *multi-pass* tailoring loop —
 #: ``AETHER_LLM_BUDGET_SECONDS`` / ``get_budget_seconds()`` bounds a single
@@ -61,6 +81,12 @@ _CONTRACTION_FRAGMENTS = frozenset({"re", "ll", "ve", "d", "m", "s", "t"})
 #: Generic non-skill words the docstring/tests call out explicitly — carry no
 #: checkable skill signal even though they are not in ``ats_engine._STOPWORDS``.
 _GENERIC_NOISE = frozenset({"use", "uses", "used", "using", "about"})
+
+#: Header that separates the (verbatim) job description from the loop's own
+#: retry directive inside the ``job_description`` argument handed to
+#: ``ResumeTailorService.tailor`` on iteration 2+. Exported so callers/tests
+#: can split the two halves apart deterministically.
+DIRECTIVE_MARKER = "--- AETHER TAILORING DIRECTIVE ---"
 
 
 def clean_gap_keywords(raw: list[str]) -> list[str]:
@@ -87,6 +113,37 @@ def clean_gap_keywords(raw: list[str]) -> list[str]:
         seen.add(token)
         cleaned.append(token)
     return cleaned
+
+
+def split_gap_keywords(
+    keywords: list[str], evidence_corpus: str
+) -> tuple[list[str], list[str]]:
+    """Partition cleaned gap keywords into ``(supported, unsupported)``.
+
+    "Supported" means the keyword (or its stem) is genuinely present in the
+    candidate's own evidence corpus — their résumé text plus any Story Bank /
+    career-data evidence. That is EXACTLY the precondition
+    ``ResumeTailorService``'s deterministic anti-fabrication guard checks
+    before it will accept a rewritten bullet containing that token (it builds
+    the same token+stem index via ``_evidence_index``), so this partition
+    predicts, rather than second-guesses, what the guard will allow.
+
+    A keyword in the UNSUPPORTED half is not "hard" — it is impossible to add
+    truthfully. Naming it in a retry directive can only produce a rewrite the
+    guard rejects. The loop therefore stops asking for it and reports it as
+    unreachable, which is strictly stricter than the previous behaviour: the
+    guard is never consulted less, only asked to reject less.
+    """
+    stems, _numbers = _evidence_index(evidence_corpus or "")
+    supported: list[str] = []
+    unsupported: list[str] = []
+    for keyword in keywords:
+        token = keyword.lower()
+        if token in stems or _stem(token) in stems:
+            supported.append(keyword)
+        else:
+            unsupported.append(keyword)
+    return supported, unsupported
 
 
 class _TailorServiceLike(Protocol):
@@ -124,6 +181,18 @@ class TailoringLoopResult:
     requires_review: bool = True
     #: Populated iff ``requires_review``; always names the best score achieved.
     warning: str | None = None
+    #: W-TAILOR-CONVERGE: JD keywords still missing at the end of the run that
+    #: the candidate's evidence does NOT support — no truthful rewrite can
+    #: ever add them, so they are a permanent, honest ceiling on
+    #: ``keyword_match`` for this résumé/posting pair, not a loop failure.
+    #: Order-preserving, taken from the best-scoring iteration.
+    unreachable_keywords: list[str] = field(default_factory=list)
+    #: Why the loop stopped: ``"target_reached"``, ``"iteration_cap"``, or
+    #: ``"llm_budget_exhausted"`` (a live generation ran out of wall-clock
+    #: budget part-way through, so fewer passes ran than the cap allowed).
+    #: Never a euphemism — a capped-out or cut-short run says so, and the
+    #: warning repeats it in words.
+    stop_reason: str = "iteration_cap"
 
 
 class TailoringLoop:
@@ -164,17 +233,76 @@ class TailoringLoop:
 
         current_originals = originals
         current_jd = job_description
+        # W-TAILOR-CONVERGE: the ONLY corpus a truthful rewrite may draw on —
+        # the same text the fabrication/entailment guards treat as evidence.
+        # Used to decide which gap keywords are actually closable.
+        evidence_corpus = "\n".join(p for p in (resume_text, evidence_extra) if p)
+        # Refs already rewritten by an earlier pass, so the service's top-K
+        # selector can give untouched bullets their turn instead of handing the
+        # model the same k bullets on every iteration (see
+        # ``select_bullets_to_tailor``). Only forwarded when the injected
+        # service actually accepts it, so lightweight test doubles that pin
+        # loop mechanics with the historic 4-argument signature keep working.
+        already_tailored: set[str] = set()
+        supports_rotation = self._service_accepts("already_tailored_refs")
+        stop_reason = "iteration_cap"
+        llm_error: str | None = None
 
         for i in range(1, self.max_iterations + 1):
-            tailor_result = self._service.tailor(
-                resume_text,
-                current_jd,
-                originals=current_originals,
-                evidence_extra=evidence_extra,
+            extra_kwargs: dict[str, Any] = (
+                {"already_tailored_refs": frozenset(already_tailored)}
+                if supports_rotation
+                else {}
             )
+            try:
+                tailor_result = self._service.tailor(
+                    resume_text,
+                    current_jd,
+                    originals=current_originals,
+                    evidence_extra=evidence_extra,
+                    **extra_kwargs,
+                )
+            except LLMUnavailableError as exc:
+                # W-TAILOR-CONVERGE. Measured live (2026-08-02, Megaport
+                # "Technical Business Analyst", real deepseek-v4-pro calls): a
+                # 5-iteration loop does not always fit inside the worker's
+                # 300 s budget, and a single slow generation then raises
+                # ``LLM call exceeded hard budget of 68.6s``. That exception
+                # used to escape the loop and destroy EVERY completed
+                # iteration's work — a run that had already produced a real,
+                # guard-passed, higher-scoring résumé came back to the user as
+                # a 503 with nothing to show.
+                #
+                # Iteration 1 has nothing to keep, so it still propagates (the
+                # caller refunds the reserved run and reports the outage
+                # honestly). From iteration 2 on we STOP and return the best
+                # draft actually achieved, with a stop reason that names the
+                # cause. This is not a silent degrade: ``success`` is still
+                # decided purely by ``best_score >= target_score``, and the
+                # warning below states plainly that the run was cut short.
+                if i == 1:
+                    raise
+                _logger.warning(
+                    "TailoringLoop stopping at iteration %d of %d: %s",
+                    i, self.max_iterations, exc,
+                )
+                stop_reason = "llm_budget_exhausted"
+                llm_error = str(exc)
+                break
+            prior_text = {
+                b.get("evidenceRef"): b.get("text")
+                for b in (tailor_result.originals or [])
+            }
+            for cur in tailor_result.bullets:
+                ref = cur.get("evidenceRef")
+                if ref and ref in prior_text and cur.get("text") != prior_text[ref]:
+                    already_tailored.add(ref)
             corpus = self._corpus(resume_text, tailor_result.bullets)
             ats_score = self._ats.score(corpus, job_description)
             gap_keywords = clean_gap_keywords(list(ats_score.missing_keywords))
+            supported_gaps, unsupported_gaps = split_gap_keywords(
+                gap_keywords, evidence_corpus
+            )
             # GMV4-ats-002: which path produced this iteration's `overall` —
             # ``ats_score.overall`` is 40% built from ``semantic_similarity``,
             # so an iteration whose semantic component came back "degraded"
@@ -190,6 +318,11 @@ class TailoringLoop:
                 "bullets": tailor_result.bullets,
                 "changes": tailor_result.changes,
                 "gapKeywords": gap_keywords,
+                #: The closable half — keywords the candidate's own evidence
+                #: already proves, so a truthful rewrite can surface them.
+                "supportedGapKeywords": supported_gaps,
+                #: The half no truthful rewrite can ever close.
+                "unsupportedGapKeywords": unsupported_gaps,
                 "rejected": tailor_result.rejected,
                 "semanticPath": semantic_path,
             })
@@ -200,13 +333,23 @@ class TailoringLoop:
                 best_iteration = i
 
             if ats_score.overall >= self.target_score:
+                stop_reason = "target_reached"
                 break
 
-            # Prepare the next pass: feed this iteration's output forward as
-            # the new baseline, plus a directive naming the score gap and the
-            # clean gap keywords (never the raw JD prose — see module docstring).
-            current_originals = tailor_result.bullets
-            current_jd = self._build_directive(ats_score.overall, gap_keywords)
+            # Prepare the next pass. Seed it with the BEST draft so far, not
+            # simply the latest: when an iteration scores WORSE than an earlier
+            # one, feeding its output forward compounds the regression, and the
+            # run ultimately returns the best draft anyway — so every later pass
+            # was refining text that would be thrown away.
+            current_originals = best_bullets
+            # The real posting is kept VERBATIM and the directive appended
+            # under DIRECTIVE_MARKER — a pass that cannot see the job
+            # description can neither mirror its terminology nor let the top-K
+            # selector rank bullets against the actual role.
+            current_jd = (
+                f"{job_description}\n\n"
+                f"{self._build_directive(ats_score.overall, supported_gaps, unsupported_gaps)}"
+            )
 
         # ADR-GMV4-001 (CONVERGE-BUT-FLAG): a degraded iteration's `overall`
         # is 40% a neutral placeholder, not a measurement, so it can never be
@@ -224,6 +367,16 @@ class TailoringLoop:
         # requires_review. Only the engine's own explicit "degraded" verdict
         # — which real ``ATSEngine.score()`` calls always set unambiguously —
         # may withhold success here.
+        # W-TAILOR-CONVERGE: the JD keywords still missing at the end of the
+        # WINNING pass that the candidate's evidence cannot support. These are
+        # a real, permanent ceiling on ``keyword_match`` for this pairing —
+        # naming them is what makes a sub-target result honest rather than a
+        # bare "we tried 5 times".
+        unreachable_keywords: list[str] = []
+        if best_iteration:
+            unreachable_keywords = list(
+                iterations[best_iteration - 1].get("unsupportedGapKeywords") or []
+            )
         any_degraded = any(it.get("semanticPath") == "degraded" for it in iterations)
         degraded_count = sum(1 for it in iterations if it.get("semanticPath") == "degraded")
         reached_target = best_score >= self.target_score
@@ -251,6 +404,26 @@ class TailoringLoop:
                     f"{best_score:.1f}/100. Please review this resume manually "
                     "before submitting."
                 )
+                if stop_reason == "llm_budget_exhausted":
+                    warning += (
+                        " The run was also CUT SHORT before its iteration "
+                        "budget was spent because the writing model ran out "
+                        f"of time ({llm_error}) — the score above is what the "
+                        "completed passes actually achieved, not an estimate "
+                        "of what further passes would have reached."
+                    )
+                if unreachable_keywords:
+                    shown = ", ".join(unreachable_keywords[:12])
+                    more = len(unreachable_keywords) - 12
+                    if more > 0:
+                        shown += f" (+{more} more)"
+                    warning += (
+                        " The remaining gap is not something a rewrite can "
+                        "close: these job-description keywords appear nowhere "
+                        "in your résumé, story bank or career data, so adding "
+                        "them would be fabrication and was refused — "
+                        f"{shown}."
+                    )
                 if any_degraded:
                     warning += (
                         f" Note: semantic scoring was also DEGRADED on "
@@ -266,9 +439,33 @@ class TailoringLoop:
             success=success,
             requires_review=requires_review,
             warning=warning,
+            unreachable_keywords=unreachable_keywords,
+            stop_reason=stop_reason,
         )
 
     # -- internals -------------------------------------------------------
+
+    def _service_accepts(self, parameter: str) -> bool:
+        """True when the injected tailor service's ``tailor`` really accepts
+        ``parameter`` (or absorbs it via ``**kwargs``).
+
+        ``service`` is duck-typed (see the class docstring): production wires
+        the real :class:`~app.services.resume_tailor.ResumeTailorService`,
+        while tests pin loop mechanics with small stubs written against the
+        historic 4-argument signature. Introspecting once — instead of
+        catching ``TypeError`` around the call, which would also swallow a
+        genuine ``TypeError`` raised INSIDE a real tailoring pass — keeps both
+        working without ever hiding a real failure.
+        """
+        import inspect
+
+        try:
+            params = inspect.signature(self._service.tailor).parameters
+        except (TypeError, ValueError):  # pragma: no cover — exotic callables
+            return False
+        if parameter in params:
+            return True
+        return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
     @staticmethod
     def _corpus(resume_text: str, bullets: list[dict[str, str]]) -> str:
@@ -280,30 +477,59 @@ class TailoringLoop:
         bullet_text = "\n".join(b.get("text", "") for b in bullets)
         return f"{context}\n{bullet_text}" if context else bullet_text
 
-    def _build_directive(self, score: float, gap_keywords: list[str]) -> str:
-        """A self-contained retry directive naming the score gap and the
-        clean gap keywords still missing — never the raw original JD prose
-        (see module docstring: that would reintroduce tokenization noise)."""
+    def _build_directive(
+        self,
+        score: float,
+        supported_gaps: list[str],
+        unsupported_gaps: list[str],
+    ) -> str:
+        """The retry directive appended BELOW the verbatim job description.
+
+        It names the score gap and — crucially — only the gap keywords the
+        candidate's own evidence already proves. Keywords the evidence cannot
+        support are listed explicitly as forbidden, so the model is told not
+        to reach for them rather than being left to guess (which previously
+        produced a steady stream of rewrites the entailment guard rejected).
+        """
         gap = max(0.0, self.target_score - score)
         lines = [
-            "TAILORING DIRECTIVE (iterative refinement retry).",
+            DIRECTIVE_MARKER,
+            "Iterative refinement retry. The job description above is "
+            "unchanged and still authoritative.",
             f"The previous draft scored {score:.1f}/100 against an ATS "
             f"target of {self.target_score:.0f}/100 (a gap of {gap:.1f} "
             "points).",
         ]
-        if gap_keywords:
+        if supported_gaps:
             lines.append(
                 "Close the gap by TRUTHFULLY surfacing these still-missing, "
-                "job-relevant keywords wherever the candidate's own "
-                "evidence genuinely supports them. NEVER invent or "
-                "fabricate a skill, tool or achievement the candidate does "
-                "not have — an unsupported keyword must stay out: "
-                + ", ".join(gap_keywords)
+                "job-relevant keywords, each of which the candidate's own "
+                "evidence already proves — rewrite the bullets where that "
+                "evidence lives so the job description's own word for it "
+                "appears: "
+                + ", ".join(supported_gaps)
                 + "."
             )
         else:
             lines.append(
-                "Continue strengthening the resume's alignment with the "
-                "role using only truthful, evidence-backed language."
+                "Every job-relevant keyword the candidate's evidence supports "
+                "is already present. Continue strengthening the resume's "
+                "alignment with the role using only truthful, evidence-backed "
+                "language — do not add new claims."
             )
+        # Always restate the prohibition, and name the specific terms that
+        # trip it, whether or not there is anything left to close.
+        forbidden = (
+            "NEVER invent or fabricate a skill, tool, employer, certification "
+            "or achievement the candidate does not have."
+        )
+        if unsupported_gaps:
+            forbidden += (
+                " In particular, the job description mentions the following, "
+                "and the candidate's evidence proves NONE of them — they must "
+                "stay out of the resume entirely: "
+                + ", ".join(unsupported_gaps)
+                + "."
+            )
+        lines.append(forbidden)
         return "\n".join(lines)

@@ -2482,6 +2482,12 @@ def run_tailor(
         # backend's output shape — ``_dispatch`` for "tailor" always sets both.
         "iterations": output.get("iterations", []),
         "gapKeywords": output.get("gapKeywords", []),
+        # W-TAILOR-CONVERGE: the run's honest verdict + headline numbers —
+        # target, best score, which iteration won, why the loop stopped, and
+        # the JD keywords no truthful rewrite could ever add. Identical to the
+        # dict persisted on the Resume row, so the response and a later reload
+        # always agree.
+        "tailoringSummary": output.get("tailoringSummary", {}),
     }
 
 
@@ -2531,6 +2537,12 @@ def run_cover_letter(
         "cover_letter": output["cover_letter"],
         "approval_id": output["approval_id"],
         "approval_status": output["approval_status"],
+        # W-TAILOR-CONVERGE item 4: the deterministic quality breakdown of the
+        # letter actually stored (initial-draft vs shipped score, the passes
+        # behind it, and the JD keywords the candidate's evidence cannot
+        # support). Identical to Application.coverLetterQuality, so the studio
+        # shows the same numbers before and after a reload.
+        "quality": output.get("quality", {}),
     }
 
 

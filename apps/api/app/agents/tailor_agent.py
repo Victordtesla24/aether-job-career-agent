@@ -327,6 +327,13 @@ class TailorRunResult:
     #: record ``TailoringAgent.run`` already selects to persist the tailored
     #: version, so the chip list always matches what was actually produced.
     gapKeywords: list[str] = field(default_factory=list)
+    #: W-TAILOR-CONVERGE: the run's honest verdict + headline numbers, the
+    #: SAME dict persisted to ``Resume.sections["tailoringSummary"]`` — so the
+    #: response and a later page load can never tell different stories.
+    #: Keys: targetScore, bestScore, bestIteration, iterationsRun,
+    #: reachedTarget, stopReason, requiresReview, warning,
+    #: unreachableKeywords, gapKeywords, netChanges.
+    tailoringSummary: dict[str, Any] = field(default_factory=dict)
 
 
 class TailoringAgent:
@@ -455,6 +462,34 @@ class TailoringAgent:
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )
         best = loop_result.iterations[loop_result.best_iteration - 1]
+        # The TRUE pre-loop baseline (post-dedup), structured exactly as
+        # ``ResumeTailorService.tailor`` structures ``originals`` internally —
+        # used below for an honest before/after diff even when a LATER
+        # iteration (not the first) ends up the best-scoring one.
+        baseline_bullets = ResumeTailorService._structure_originals(
+            parent_bullets, resume_text
+        )
+        # W-TAILOR-CONVERGE: report the CUMULATIVE net change — how many
+        # bullets in the returned version actually differ from the parent —
+        # rather than ``best["changes"]``, which counts only the winning
+        # iteration's own edits against the draft it started from. With the
+        # loop now seeding each pass from the best draft so far, a run that
+        # rewrote 3 bullets in pass 1 and 2 more in pass 4 has genuinely
+        # changed 5 bullets; reporting the last pass's 2 understated the work
+        # and (worse) could raise ``NoChangesApplied`` on a run that really
+        # did change the résumé.
+        _baseline_text = {b.get("evidenceRef"): b.get("text") for b in baseline_bullets}
+        if any(b.get("evidenceRef") in _baseline_text for b in loop_result.final_bullets):
+            net_changes = sum(
+                1
+                for b in loop_result.final_bullets
+                if b.get("evidenceRef") in _baseline_text
+                and b.get("text") != _baseline_text[b.get("evidenceRef")]
+            )
+        else:
+            # No ref overlap at all (the service re-keyed everything) — the
+            # per-iteration count is then the only honest figure available.
+            net_changes = best["changes"]
 
         # MV-resume-studio-003: when the fabrication/entailment guards reject
         # EVERY proposed rewrite across every iteration the tailored bullets of
@@ -465,7 +500,7 @@ class TailoringAgent:
         # created, NO approval is opened, and the reserved run is refunded (the
         # caller's _execute_reserved_run refunds on any exception). Honest
         # outcome: the résumé is unchanged and the user is not charged.
-        if best["changes"] == 0:
+        if net_changes == 0:
             raise NoChangesApplied(rejected=best["rejected"])
 
         # GAP-P6-TAIL-002: regenerate the persisted raw_text from the TAILORED
@@ -474,13 +509,42 @@ class TailoringAgent:
         # reflects the tailored score, matching the PDF and the run's reported
         # tailoredATSScore instead of reverting to the stale baseline.
         tailored_raw_text = render_tailored_raw_text(resume_text, loop_result.final_bullets)
-        # The TRUE pre-loop baseline (post-dedup), structured exactly as
-        # ``ResumeTailorService.tailor`` structures ``originals`` internally —
-        # used below for an honest before/after diff even when a LATER
-        # iteration (not the first) ends up the best-scoring one.
-        baseline_bullets = ResumeTailorService._structure_originals(
-            parent_bullets, resume_text
+        # GMV4-tailor-001 §6.1(c) — PERSISTENCE. This block MUST run BEFORE
+        # ``self._resumes.create(...)``. It previously ran after, and its
+        # result was only ever assigned to the in-memory ``TailorRunResult``,
+        # so the before/after ATS scores existed for exactly one HTTP response
+        # and a page reload had nothing to show. Computing it first lets the
+        # very same dict be written into the Resume row below.
+        conversion_metrics = _compute_conversion_metrics(
+            resume_text, baseline_bullets, loop_result.final_bullets, jd,
         )
+        # §5.3.1 point 5: surface the loop's own honest verdict on this run —
+        # wired to the same "needs a human look" concept ``ATSScore.
+        # requires_review`` already computes, never silently dropped. Round 3
+        # fix: OR in ``conversion_metrics["scoringDegraded"]`` rather than
+        # overwriting — ``_compute_conversion_metrics`` re-scores baseline/
+        # tailored with two FRESH ``ATSEngine().score()`` calls made after the
+        # loop finished, so a transient degradation there is a distinct event
+        # the loop's own verdict cannot see. Discarding it (the round-2 bug)
+        # meant a degraded conversion re-score produced no warning anywhere.
+        conversion_metrics["requires_review"] = (
+            loop_result.requires_review or bool(conversion_metrics.get("scoringDegraded"))
+        )
+        # The run's honest verdict, persisted alongside the numbers so a
+        # reload can repeat it word for word instead of showing a bare score.
+        tailoring_summary = {
+            "targetScore": loop.target_score,
+            "bestScore": loop_result.best_score,
+            "bestIteration": loop_result.best_iteration,
+            "iterationsRun": len(loop_result.iterations),
+            "reachedTarget": loop_result.success,
+            "stopReason": loop_result.stop_reason,
+            "requiresReview": loop_result.requires_review,
+            "warning": loop_result.warning,
+            "unreachableKeywords": loop_result.unreachable_keywords,
+            "gapKeywords": best["gapKeywords"],
+            "netChanges": net_changes,
+        }
         # MV-resume-studio-001: a freshly tailored version is created ``pending`` —
         # it stays under human review until its ApprovalRequest (below) is
         # approved, at which point ApprovalRepository flips it to ``approved``.
@@ -495,6 +559,13 @@ class TailoringAgent:
                 # numbers from conversionMetrics below; this is the
                 # per-iteration detail behind them).
                 "tailoringIterations": loop_result.iterations,
+                # §6.1(c): the ats_score SUMMARY must survive a reload, not
+                # just ride along in one HTTP response. Same dict returned to
+                # the caller below, so the API and the DB can never disagree.
+                "conversionMetrics": conversion_metrics,
+                "baselineATSScore": conversion_metrics["baselineATSScore"],
+                "tailoredATSScore": conversion_metrics["tailoredATSScore"],
+                "tailoringSummary": tailoring_summary,
             },
             base["formatHash"],  # source PDF untouched → hash carried through
             label=f"Tailored — {job['title']} @ {job['company']}",
@@ -502,22 +573,6 @@ class TailoringAgent:
             parent_id=base["id"],
             source_job_id=job_id,
             approval_status="pending",
-        )
-        conversion_metrics = _compute_conversion_metrics(
-            resume_text, baseline_bullets, loop_result.final_bullets,
-            job.get("description") or "",
-        )
-        # §5.3.1 point 5: surface the loop's own honest verdict on this run —
-        # wired to the same "needs a human look" concept ``ATSScore.
-        # requires_review`` already computes, never silently dropped. Round 3
-        # fix: OR in ``conversion_metrics["scoringDegraded"]`` rather than
-        # overwriting — ``_compute_conversion_metrics`` re-scores baseline/
-        # tailored with two FRESH ``ATSEngine().score()`` calls made after the
-        # loop finished, so a transient degradation there is a distinct event
-        # the loop's own verdict cannot see. Discarding it (the round-2 bug)
-        # meant a degraded conversion re-score produced no warning anywhere.
-        conversion_metrics["requires_review"] = (
-            loop_result.requires_review or bool(conversion_metrics.get("scoringDegraded"))
         )
         # MV-resume-studio-001: open a REAL pending ApprovalRequest (mirroring the
         # cover letter agent) so the run's ``approvalRequired: true`` flag is backed
@@ -531,7 +586,7 @@ class TailoringAgent:
         loop_as_result = TailorResult(
             bullets=loop_result.final_bullets,
             originals=baseline_bullets,
-            changes=best["changes"],
+            changes=net_changes,
             rejected=best["rejected"],
         )
         approval = self._approvals.create(
@@ -558,7 +613,7 @@ class TailoringAgent:
         )
         return TailorRunResult(
             resume_id=tailored["id"],
-            changes=best["changes"],
+            changes=net_changes,
             rejected=best["rejected"],
             conversionMetrics=conversion_metrics,
             approval_id=approval["id"],
@@ -566,4 +621,5 @@ class TailoringAgent:
             warning=loop_result.warning,
             iterations=loop_result.iterations,
             gapKeywords=best["gapKeywords"],
+            tailoringSummary=tailoring_summary,
         )

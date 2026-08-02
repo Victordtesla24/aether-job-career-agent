@@ -2015,6 +2015,7 @@ def select_bullets_to_tailor(
     resume_text: str,
     evidence_extra: str = "",
     max_bullets: int | None = None,
+    already_tailored_refs: "set[str] | frozenset[str] | None" = None,
 ) -> list[dict[str, str]]:
     """Deterministically pick the ``<= K`` highest-impact bullets to rewrite
     (GAP-P6-TAIL-005), returned in document order.
@@ -2037,15 +2038,31 @@ def select_bullets_to_tailor(
     the strict per-context fabrication guard and entailment pass still run over
     whatever the model returns, so an over-selected bullet that cannot be
     truthfully improved simply comes back unchanged.
+
+    ``already_tailored_refs`` (W-TAILOR-CONVERGE) — refs an EARLIER pass of the
+    same :class:`~app.services.tailoring_loop.TailoringLoop` run has already
+    had rewritten. Because this ranking is deterministic and its inputs
+    (``jd_key_stems``, ``resume_stems``, the scoped evidence) do not change
+    between passes, a multi-iteration run otherwise re-selects the SAME ``k``
+    bullets every single time — measured live on résumé
+    ``c875546f41138d92c60ceb428``: 25 bullets, ``k=8``, and exactly 8 distinct
+    bullets ever changed across all 5 iterations while the other 17 stayed
+    frozen. Passing the already-rewritten refs demotes them BELOW every
+    untouched bullet (it never excludes them — if the cap still has room they
+    are re-selected and can be improved further), so successive passes work
+    through the whole résumé instead of re-polishing one eighth of it. This
+    only changes which bullets are SHOWN to the model; the fabrication and
+    entailment guards adjudicate whatever comes back exactly as before.
     """
     ordered = list(structured)
     k = get_tailor_max_bullets() if max_bullets is None else max_bullets
     if k <= 0 or len(ordered) <= k:
         return ordered
+    done = frozenset(already_tailored_refs or ())
     jd_key_stems = {_stem(t) for t in _ats_content_tokens(job_description)}
     resume_stems, _ = _evidence_index(resume_text)
     scoped = _scoped_evidence_map(ordered, resume_text, evidence_extra)
-    ranked: list[tuple[int, int, int, str]] = []
+    ranked: list[tuple[int, int, int, int, str]] = []
     for idx, b in enumerate(ordered):
         ref = b["evidenceRef"]
         ev_stems, _ = scoped.get(ref, (resume_stems, set()))
@@ -2054,9 +2071,9 @@ def select_bullets_to_tailor(
         )
         bullet_stems = {_stem(t) for t in _ats_content_tokens(b["text"])}
         jd_overlap = len(jd_key_stems & bullet_stems)
-        ranked.append((addable, jd_overlap, idx, ref))
-    ranked.sort(key=lambda r: (-r[0], -r[1], r[2]))
-    chosen_refs = {r[3] for r in ranked[:k]}
+        ranked.append((1 if ref in done else 0, addable, jd_overlap, idx, ref))
+    ranked.sort(key=lambda r: (r[0], -r[1], -r[2], r[3]))
+    chosen_refs = {r[4] for r in ranked[:k]}
     return [b for b in ordered if b["evidenceRef"] in chosen_refs]
 
 
@@ -2086,6 +2103,7 @@ class ResumeTailorService:
         job_description: str,
         originals: Sequence[dict[str, str] | str] | None = None,
         evidence_extra: str = "",
+        already_tailored_refs: "set[str] | frozenset[str] | None" = None,
     ) -> TailorResult:
         """Tailor ``originals`` bullets (or bullets extracted from
         ``resume_text``) against ``job_description``.
@@ -2100,6 +2118,11 @@ class ResumeTailorService:
         rewrite may legitimately reference a skill proven by the user's repos,
         while genuinely invented claims are still rejected. Empty by default,
         so users with no career data see identical behaviour to before.
+
+        ``already_tailored_refs`` (W-TAILOR-CONVERGE) is forwarded verbatim to
+        :func:`select_bullets_to_tailor` so a multi-pass loop stops re-showing
+        the model the same top-K bullets while the rest of the résumé stays
+        frozen. It affects SELECTION ONLY — never the guards.
         """
         structured = self._structure_originals(originals, resume_text)
         # GAP-P6-TAIL-005: cap the rewrite to the top-K highest-impact bullets
@@ -2109,7 +2132,8 @@ class ResumeTailorService:
         # included. Only the selected bullets are shown to the model and are
         # eligible to change; the rest pass through unchanged (content-only).
         selected = select_bullets_to_tailor(
-            structured, job_description, resume_text, evidence_extra
+            structured, job_description, resume_text, evidence_extra,
+            already_tailored_refs=already_tailored_refs,
         )
         selected_refs = {b["evidenceRef"] for b in selected}
         user_prompt = (

@@ -25,6 +25,23 @@ from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
+from app.services.cover_letter_quality import (
+    BANNED_OPENERS as _quality_banned_openers,
+)
+from app.services.cover_letter_quality import (
+    CONFIDENCE_STOPWORDS as _quality_confidence_stopwords,
+)
+from app.services.cover_letter_quality import (
+    CONTENT_WORD_RE as _quality_content_word_re,
+)
+from app.services.cover_letter_quality import CTA_CUES as _quality_cta_cues
+from app.services.cover_letter_quality import (
+    grounding_confidence as _quality_grounding_confidence,
+)
+from app.services.cover_letter_quality import score_cover_letter
+from app.services.cover_letter_quality import (
+    split_paragraphs as _quality_split_paragraphs,
+)
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLMClient,
@@ -32,10 +49,20 @@ from app.services.llm_client import (
     LLMUnavailableError,
     get_cover_budget_seconds,
     get_model,
+    remaining_budget_seconds,
     shared_budget,
 )
 from app.services.resume_grounding import require_user_resume_text
 from app.services.resume_tailor import unsupported_claim_tokens
+
+#: Minimum wall-clock budget (seconds) that must remain inside the cover
+#: window before the OPTIONAL quality-improvement pass is attempted. A cover
+#: draft is one long generation; firing it with less than this left produces a
+#: doomed call that burns the rest of the budget and 503s the request, which is
+#: exactly the starvation failure GAP-P6-COV-002 fixed. Skipping the pass is
+#: always safe — the already-clean letter ships and its honest score is
+#: recorded with ``reachedTarget: false``.
+_QUALITY_PASS_MIN_SECONDS = 45.0
 
 SYSTEM_PROMPT = (
     "You are a truthful cover-letter writer of elite craft: powerful, "
@@ -696,26 +723,13 @@ def strip_injection_compliance(text: str) -> str:
 
 
 #: Generic openers the §10.2 output standards forbid — checked lowercase.
-_BANNED_PHRASES = (
-    "i am writing to express my interest",
-    "i am writing to apply",
-    "please accept this letter",
-    "i would like to apply for",
-)
+#: Single source of truth lives in ``app.services.cover_letter_quality`` so the
+#: run's structural GATE and the persisted quality SCORE can never drift apart
+#: (W-TAILOR-CONVERGE); re-bound here under the historic private names.
+_BANNED_PHRASES = _quality_banned_openers
 
 #: Signals that a closing paragraph contains a real call-to-action (§10.2).
-_CTA_CUES = (
-    "discuss",
-    "interview",
-    "conversation",
-    "call",
-    "meet",
-    "connect",
-    "welcome the opportunity",
-    "look forward",
-    "available",
-    "speak",
-)
+_CTA_CUES = _quality_cta_cues
 
 #: The base resume's professional focus — a grounded descriptor used to open
 #: the deterministic §10.2 hook. It joins the guard's evidence corpus as
@@ -729,13 +743,10 @@ def letter_date() -> str:
     return f"{d.day} {d.strftime('%B %Y')}"
 
 
-def split_paragraphs(body: str) -> list[str]:
-    """Split a drafted body into non-empty paragraphs (blank-line delimited,
-    falling back to single line breaks when the model omits blank lines)."""
-    paras = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
-    if len(paras) == 1 and "\n" in body:
-        paras = [p.strip() for p in body.split("\n") if p.strip()]
-    return paras
+#: Re-exported from ``app.services.cover_letter_quality`` (same function, one
+#: definition) so existing importers of ``cover_letter_agent.split_paragraphs``
+#: keep working unchanged.
+split_paragraphs = _quality_split_paragraphs
 
 
 def current_position(target_role: str | None) -> str:
@@ -972,35 +983,19 @@ def enforce_first_person(body: str, signer: str) -> str:
 
 
 #: Content-word tokenizer for the grounding metric (mirrors the studio's voice
-#: metrics). Short words and connectives carry no grounding signal.
-_CONTENT_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#./-]*")
-_CONFIDENCE_STOPWORDS = frozenset(
-    """
-    a an and are as at be been by for from has have i in is it its my of on or
-    our that the their this to was we were will with you your who what how when
-    across own more most very than then also both each am me not can could would
-    should into out about over under they them he she his her role letter
-    """.split()
-)
+#: metrics). Short words and connectives carry no grounding signal. Defined
+#: once in ``app.services.cover_letter_quality`` — the module that also builds
+#: the persisted quality score from it — and re-bound here so the Studio's
+#: displayed confidence and the stored score are literally the same number.
+_CONTENT_WORD_RE = _quality_content_word_re
+_CONFIDENCE_STOPWORDS = _quality_confidence_stopwords
 
-
-def grounding_confidence(letter: str, corpus: str) -> int:
-    """Share (0-100) of the letter's content words backed by the evidence corpus.
-
-    The SAME evidence-authenticity signal the Cover Letter Studio surfaces
-    (cover_letters._voice_metrics, cl03): a real, deterministic measurement of
-    the finished artifact — never a fabricated or random score. A guard-passed
-    letter, whose every entity/metric already traces to the corpus, sits high."""
-    corpus_tokens = {t.lower() for t in _CONTENT_WORD_RE.findall(corpus)}
-    words = [
-        t
-        for t in _CONTENT_WORD_RE.findall(letter)
-        if len(t) >= 3 and t.lower() not in _CONFIDENCE_STOPWORDS
-    ]
-    if not words:
-        return 0
-    supported = sum(1 for w in words if w.lower() in corpus_tokens)
-    return round(100 * supported / len(words))
+#: Share (0-100) of the letter's content words backed by the evidence corpus:
+#: the SAME evidence-authenticity signal the Cover Letter Studio surfaces
+#: (cover_letters._voice_metrics, cl03) and the ``grounding`` component of the
+#: persisted quality score. A real, deterministic measurement of the finished
+#: artifact — never a fabricated or random score.
+grounding_confidence = _quality_grounding_confidence
 
 
 def build_approval_extras(letter: str, job: dict[str, Any], corpus: str) -> dict[str, Any]:
@@ -1051,6 +1046,11 @@ class CoverLetterResult:
     flagged: list[str] = field(default_factory=list)
     cover_letter_unavailable: bool = False
     message: str = ""
+    #: W-TAILOR-CONVERGE item 4: the deterministic quality breakdown of the
+    #: SHIPPED letter plus the per-pass history behind it — the SAME dict
+    #: persisted to ``Application.coverLetterQuality``, so the response and a
+    #: later reload can never disagree. Empty only when no letter was produced.
+    quality: dict[str, Any] = field(default_factory=dict)
 
 
 class FabricationError(RuntimeError):
@@ -1526,6 +1526,18 @@ class CoverLetterAgent:
                         "again in a moment."
                     ),
                 )
+            # W-TAILOR-CONVERGE item 4: the letter had NO quality measurement
+            # of any kind. Score the FIRST draft now, before any corrective
+            # retry, so the run has a genuine "before" to compare the shipped
+            # letter against. Deterministic and LLM-free, so this costs nothing
+            # and cannot itself fail the run.
+            quality_iterations: list[dict[str, Any]] = []
+            first_quality = score_cover_letter(
+                body, jd_body, claim_evidence,
+                job_title=job["title"], company=job["company"],
+            )
+            quality_iterations.append({"iteration": 1, "stage": "initial_draft",
+                                       **first_quality.as_dict()})
             all_flagged: list[str] = list(flagged)
             all_claims: list[str] = list(claim_flags)
             for attempt in ("retry", "retry2"):
@@ -1595,6 +1607,91 @@ class CoverLetterAgent:
                     break
                 all_flagged.extend(t for t in flagged if t not in all_flagged)
                 all_claims.extend(t for t in claim_flags if t not in all_claims)
+                retry_quality = score_cover_letter(
+                    body, jd_body, claim_evidence,
+                    job_title=job["title"], company=job["company"],
+                )
+                quality_iterations.append({
+                    "iteration": len(quality_iterations) + 1,
+                    "stage": attempt,
+                    **retry_quality.as_dict(),
+                })
+
+            # W-TAILOR-CONVERGE item 4 — the QUALITY iteration. The guard loop
+            # above only ever fires on a VIOLATION; a letter that is clean but
+            # weak (it never mentions skills the candidate genuinely has and
+            # the posting explicitly asks for) previously shipped as-is with
+            # nothing measured. One extra, budget-guarded pass targets exactly
+            # the ``missing_keywords`` the score identified — every one of
+            # which the candidate's own evidence already proves, so this can
+            # never push the model toward fabrication (the unreachable
+            # keywords are named as forbidden, and the fabrication, claim and
+            # structural guards below still adjudicate the result unchanged).
+            # The improved draft is kept ONLY if it is clean AND scores
+            # strictly higher; otherwise the earlier letter stands.
+            best_quality = quality_iterations[-1]
+            if (
+                not flagged and not claim_flags and not issues and not meta
+                and not best_quality["reachedTarget"]
+                and best_quality["missingKeywords"]
+                and remaining_budget_seconds() >= _QUALITY_PASS_MIN_SECONDS
+            ):
+                improve_prompt = (
+                    f"{base_prompt}\n\nIMPORTANT: your previous draft is factually "
+                    "clean but under-sells the candidate against this posting. "
+                    "Rewrite it so it TRUTHFULLY surfaces the following, each of "
+                    "which the candidate's own résumé/story bank/career evidence "
+                    "already proves — use the posting's own word for it where the "
+                    "evidence supports it: "
+                    + ", ".join(best_quality["missingKeywords"])
+                    + ". Keep every existing grounded claim, keep the three-"
+                    "paragraph structure and the call-to-action, and change "
+                    "nothing else. NEVER add a skill, tool, employer or metric "
+                    "the candidate's evidence does not prove"
+                    + (
+                        " — in particular the posting mentions "
+                        + ", ".join(best_quality["unreachableKeywords"][:10])
+                        + ", which their evidence does NOT support; those must "
+                        "stay out."
+                        if best_quality["unreachableKeywords"]
+                        else "."
+                    )
+                )
+                try:
+                    (
+                        cand_letter, cand_body, cand_flagged, cand_claims,
+                        cand_issues, cand_meta,
+                    ) = self._draft(
+                        improve_prompt, job, corpus, signer, position,
+                        fixture_key="quality", claim_evidence=claim_evidence,
+                        jd_risk=jd_risk, jd_body=jd_body,
+                        injection_payloads=injection_payloads,
+                        untrusted_text=raw_description,
+                        provenance_evidence=provenance_evidence,
+                    )
+                except (LLMUnavailableError, LLMFixtureMissingError):
+                    # An improvement pass is strictly optional — a failure here
+                    # must never cost the user the clean letter they already
+                    # have, and must never be reported as a better score.
+                    cand_letter = None
+                if cand_letter is not None:
+                    cand_quality = score_cover_letter(
+                        cand_body, jd_body, claim_evidence,
+                        job_title=job["title"], company=job["company"],
+                    )
+                    clean = not (cand_flagged or cand_claims or cand_issues or cand_meta)
+                    accepted = clean and cand_quality.overall > best_quality["overall"]
+                    quality_iterations.append({
+                        "iteration": len(quality_iterations) + 1,
+                        "stage": "quality_pass",
+                        "accepted": accepted,
+                        "guardClean": clean,
+                        **cand_quality.as_dict(),
+                    })
+                    if accepted:
+                        letter, body = cand_letter, cand_body
+                        flagged, claim_flags = cand_flagged, cand_claims
+                        issues, meta = cand_issues, cand_meta
         if flagged:
             raise FabricationError(flagged)
         if claim_flags:
@@ -1664,7 +1761,40 @@ class CoverLetterAgent:
         # draft-creation time, instead of always attaching base and relying
         # solely on submit_application's promotion-time repair.
         draft_resume = TailoringAgent().resume_for_job(user_id, job_id)
-        stored = self._letters.create(user_id, job_id, draft_resume["id"], letter)
+        # W-TAILOR-CONVERGE item 4: score the letter that is ACTUALLY being
+        # shipped — after every deterministic post-process (banned-opener
+        # strip, first-person enforcement, injection strip) — so the persisted
+        # number describes the stored text, never an intermediate draft. The
+        # first entry of ``passes`` is the initial draft's score, giving a real
+        # before/after that survives a reload.
+        final_quality = score_cover_letter(
+            body, jd_body, claim_evidence,
+            job_title=job["title"], company=job["company"],
+        )
+        initial = quality_iterations[0] if quality_iterations else final_quality.as_dict()
+        letter_quality: dict[str, Any] = {
+            **final_quality.as_dict(),
+            "initialScore": initial["overall"],
+            "finalScore": final_quality.overall,
+            "delta": round(final_quality.overall - float(initial["overall"]), 2),
+            "passes": quality_iterations + [
+                {
+                    "iteration": len(quality_iterations) + 1,
+                    "stage": "shipped",
+                    **final_quality.as_dict(),
+                }
+            ],
+            "methodology": (
+                "Deterministic: 40% coverage of the evidence-supported job-"
+                "description keywords, 40% evidence grounding of the letter's "
+                "content words, 20% the letter-format contract. Job-description "
+                "keywords the candidate's evidence does not support are excluded "
+                "and reported as unreachable — no truthful letter can contain them."
+            ),
+        }
+        stored = self._letters.create(
+            user_id, job_id, draft_resume["id"], letter, quality=letter_quality
+        )
         approval = self._approvals.create(
             user_id,
             "application_submit",
@@ -1696,5 +1826,6 @@ class CoverLetterAgent:
             approval_id=approval["id"],
             approval_status=approval["status"],
             flagged=[],
+            quality=letter_quality,
         )
 

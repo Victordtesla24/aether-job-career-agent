@@ -210,6 +210,21 @@ READ_TIMEOUT = 30.0
 _MIN_ATTEMPT_SECONDS = 5.0
 
 
+def remaining_budget_seconds() -> float:
+    """Seconds left in the CURRENTLY-ACTIVE shared LLM budget window.
+
+    Returns ``0.0`` when no :func:`shared_budget` window is active, so an
+    OPTIONAL extra live call (e.g. the cover letter's quality-improvement
+    pass) never fires outside a window that has actually reserved time for it.
+    Read-only: unlike ``LLMClient._remaining_budget`` it never ARMS a deadline
+    as a side effect, so merely asking cannot start a clock.
+    """
+    shared = _shared_deadline.get()
+    if shared is None:
+        return 0.0
+    return max(0.0, shared - time.monotonic())
+
+
 def get_budget_seconds() -> float:
     """Overall wall-clock budget for ALL live LLM calls in one client's life.
 

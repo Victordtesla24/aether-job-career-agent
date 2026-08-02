@@ -78,7 +78,15 @@ _PREEXISTING_KEYS = {
     "approval_status",
     "warning",
 }
-_NEW_KEYS = {"iterations", "gapKeywords"}
+#: ``tailoringSummary`` added by W-TAILOR-CONVERGE (2026-08-02): the run's
+#: honest verdict + headline numbers (targetScore, bestScore, bestIteration,
+#: iterationsRun, reachedTarget, stopReason, requiresReview, warning,
+#: unreachableKeywords, gapKeywords, netChanges). It is the SAME dict the agent
+#: persists to ``Resume.sections["tailoringSummary"]``, so the sync response
+#: and a later page load cannot tell different stories — which is the whole
+#: point of this contract test, hence it belongs in the expected key set
+#: rather than being an "unexpected" leak.
+_NEW_KEYS = {"iterations", "gapKeywords", "tailoringSummary"}
 
 
 def _make_result(**overrides: Any) -> TailorRunResult:

@@ -174,8 +174,29 @@ def test_loop_embeds_clean_gap_keywords_directive_into_next_iteration():
     keywords — this is what is supposed to drive convergence. The directive
     must not carry the tokenization noise a naive pass-through of
     ``ATSScore.missing_keywords`` would (see the previous test / module
-    docstring for the live reproduction of that noise)."""
-    from app.services.tailoring_loop import TailoringLoop
+    docstring for the live reproduction of that noise).
+
+    AMENDED (W-TAILOR-CONVERGE, 2026-08-02). This test originally required the
+    directive to REPLACE the job description outright, which is what the
+    implementation did. Measured live, that was the loop's biggest defect:
+    with the posting gone from iteration 2 onward, ``select_bullets_to_tailor``
+    ranked bullets against the directive's own boilerplate and the rewrite
+    prompt could no longer mirror the role's terminology at all (résumé
+    ``c875546f41138d92c60ceb428``: 5 iterations, +4.2 ATS points total, and
+    only 8 of 25 bullets ever eligible).
+
+    The noise requirement the test exists to protect is UNCHANGED and still
+    asserted — it now applies to the DIRECTIVE SECTION, which is the only part
+    the loop authors. The posting itself is reproduced verbatim above the
+    marker, and reproducing it cannot reintroduce tokenization noise into the
+    keyword list, because that list comes from ``ATSScore.missing_keywords``
+    via ``clean_gap_keywords`` — never from the directive text.
+
+    NOTE the JD deliberately contains "we're" and "about": if a future change
+    reverted to splicing raw JD prose into the KEYWORD REQUEST, the
+    ``surface`` assertions below would catch it.
+    """
+    from app.services.tailoring_loop import DIRECTIVE_MARKER, TailoringLoop
 
     service = _CountingService()
     ats = _StepwiseATS(
@@ -183,18 +204,27 @@ def test_loop_embeds_clean_gap_keywords_directive_into_next_iteration():
         missing_keywords=["about", "ll", "re", "use", "kubernetes", "kafka"],
     )
     loop = TailoringLoop(service=service, ats_engine=ats, max_iterations=3)
-    loop.run(_RESUME, _JD, originals=_ORIGINALS)
+    # ``evidence_extra`` carries the candidate's real evidence for both skills,
+    # so both are genuinely closable and both belong in the directive.
+    loop.run(
+        _RESUME, _JD, originals=_ORIGINALS,
+        evidence_extra="Ran Kubernetes clusters and Kafka pipelines in production.",
+    )
 
     assert service.calls == 3
     assert service.jd_by_call[0] == _JD, "first pass must not be altered"
-    directive_2 = service.jd_by_call[1].lower()
-    assert directive_2 != _JD.lower(), "no gap-keyword directive was added for iteration 2"
+    full_2 = service.jd_by_call[1]
+    assert _JD in full_2, "iteration 2 lost the real job description"
+    assert DIRECTIVE_MARKER in full_2, "no gap-keyword directive was added for iteration 2"
+    directive_2 = full_2.split(DIRECTIVE_MARKER, 1)[1].lower()
+    # The keyword REQUEST — everything before the standing prohibition.
+    surface = directive_2.split("never invent")[0]
     for keyword in ("kubernetes", "kafka"):
-        assert re.search(rf"\b{keyword}\b", directive_2), (
+        assert re.search(rf"\b{keyword}\b", surface), (
             f"gap keyword {keyword!r} missing from iteration-2 directive: {directive_2}"
         )
     for noise in ("about", "ll", "re", "use"):
-        assert not re.search(rf"\b{noise}\b", directive_2), (
+        assert not re.search(rf"\b{noise}\b", surface), (
             f"tokenization noise {noise!r} leaked into iteration-2 directive: {directive_2}"
         )
 

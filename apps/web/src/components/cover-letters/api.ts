@@ -36,6 +36,30 @@ export const LetterInsightsSchema = z.object({
       current: z.boolean(),
     }),
   ),
+  /**
+   * W-TAILOR-CONVERGE item 4/5 — the PERSISTED, deterministic quality score of
+   * this exact letter, straight from `Application.coverLetterQuality`
+   * (apps/api/app/services/cover_letter_quality.py). `null` for letters
+   * generated before scoring existed: no score was ever measured for them, and
+   * the UI must show "not measured" rather than invent one.
+   */
+  quality: z
+    .object({
+      overall: z.number(),
+      jdAlignment: z.number(),
+      grounding: z.number(),
+      structure: z.number(),
+      targetScore: z.number(),
+      reachedTarget: z.boolean(),
+      jdAlignmentMeasured: z.boolean(),
+      missingKeywords: z.array(z.string()),
+      unreachableKeywords: z.array(z.string()),
+      initialScore: z.number(),
+      finalScore: z.number(),
+      delta: z.number(),
+      methodology: z.string(),
+    })
+    .nullish(),
 });
 export type LetterInsights = z.infer<typeof LetterInsightsSchema>;
 

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
+import { conversionImpactFrom, type ConversionImpact } from "../../../lib/scoring/provenance";
 import {
   downloadResume,
   fetchResumeDiff,
@@ -87,7 +88,7 @@ export default function ResumePage() {
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
-  const [conversion, setConversion] = useState<ConversionMetrics | null>(null);
+  const [conversion, setConversion] = useState<ConversionImpact | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -138,7 +139,10 @@ export default function ResumePage() {
             "No changes could be applied — your résumé is unchanged and you were not charged.",
         );
       } else {
-        setConversion(result.conversionMetrics ?? null);
+        // GMV4-ats-002 round 4: normalise at the boundary. The union's
+        // degraded arm carries no numbers, so the panel below physically
+        // cannot render one without ruling that arm out first.
+        setConversion(conversionImpactFrom(result.conversionMetrics));
         // §5.3.1 pt 5: surface the TailoringLoop's own honest sub-85 message
         // verbatim when the loop stopped short of the 85 target — never when
         // the run actually reached it (warning is null on a clean run).
@@ -174,6 +178,24 @@ export default function ResumePage() {
     setDiff(null);
     setAts(null);
     setDownloadNote(null);
+    // W-TAILOR-CONVERGE item 5: the before/after ATS panel used to exist only
+    // in transient state populated by the tailor RUN response, so a reload (or
+    // simply opening an older version) showed nothing. The tailoring agent now
+    // persists the same `conversionMetrics` + `tailoringSummary` onto the
+    // Resume row, so re-hydrate both from the record itself. Strictly
+    // API-derived — nothing is recomputed in the browser, and a version with
+    // no stored metrics (any version tailored before this landed) clears the
+    // panel rather than showing a neighbouring version's numbers.
+    const stored = resume.sections as {
+      conversionMetrics?: unknown;
+      tailoringSummary?: { warning?: string | null } | null;
+    };
+    setConversion(
+      stored.conversionMetrics
+        ? conversionImpactFrom(stored.conversionMetrics as ConversionMetrics)
+        : null,
+    );
+    setTailorWarning(stored.tailoringSummary?.warning ?? null);
     try {
       setDiff(await fetchResumeDiff(resume.id));
     } catch {
@@ -220,7 +242,7 @@ export default function ResumePage() {
   // similarity (tailor_agent.py `_compute_conversion_metrics`) — when
   // either endpoint was degraded, the panel must withhold/badge these
   // numbers instead of presenting a delta computed off a placeholder.
-  const conversionDegraded = Boolean(conversion?.scoringDegraded);
+  const conversionDegraded = conversion?.provenance === "degraded";
 
   return (
     <div className="space-y-6">
@@ -390,11 +412,11 @@ export default function ResumePage() {
           <p className="mt-2 text-sm text-aether-muted" data-testid="conversion-before-after">
             Before:{" "}
             <span className="mono font-semibold text-white">
-              {conversionDegraded ? "—" : `${conversion.baselineATSScore}%`}
+              {conversion.provenance === "degraded" ? "—" : `${conversion.baselineATSScore}%`}
             </span>{" "}
             → After:{" "}
             <span className="mono font-semibold text-aether-green">
-              {conversionDegraded ? "—" : `${conversion.tailoredATSScore}%`}
+              {conversion.provenance === "degraded" ? "—" : `${conversion.tailoredATSScore}%`}
             </span>
           </p>
           <p className="mt-1 text-sm" data-testid="conversion-lift">
@@ -402,7 +424,7 @@ export default function ResumePage() {
               label="Estimated interview conversion improvement"
               value={
                 <span className="mono font-semibold text-aether-green">
-                  {conversionDegraded ? "—" : conversion.estimatedConversionLift}
+                  {conversion.provenance === "degraded" ? "—" : conversion.estimatedConversionLift}
                 </span>
               }
               tooltip={`${conversion.methodology} This is an illustrative estimate, not a measured outcome.`}

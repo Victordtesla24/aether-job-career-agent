@@ -191,4 +191,59 @@ describe("Resume Studio — ATS Conversion Impact panel degraded-scoring UI", ()
       /Semantic similarity could not be measured for the before\/after re-score/,
     );
   });
+
+  // ADR-GMV4-004(2) (docs/delivery/GOLD-MASTER-V3-GOVERNANCE.md §5f) —
+  // intended-red contract. `conversionImpactFrom` (lib/scoring/provenance.ts)
+  // currently has a third `"unattested"` arm that carries numbers through
+  // when NO provenance flags are present at all, on the theory that an
+  // absent flag set is merely "no claim was made" rather than "untrusted".
+  // The ruling is FAIL CLOSED: a payload that never attested its provenance
+  // must render exactly like a degraded one, not like a measured one. This
+  // RESOLVED (W-TAILOR-CONVERGE, 2026-08-02): the "unattested" arm is gone —
+  // `conversionImpactFrom` now returns "degraded" for any payload that does
+  // not carry all three provenance flags explicitly false, so this test is
+  // GREEN rather than a tracked expected failure.
+  it("treats conversionMetrics with NO provenance flags as untrusted", async () => {
+    fetchResumes.mockResolvedValue([]);
+    fetchResumeDiff.mockResolvedValue({ resume_id: "r1", parent_id: null, changes: [] });
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/jobs") return [JOB];
+      throw new Error(`unexpected apiRequest(${path})`);
+    });
+    runTailorAgent.mockResolvedValue({
+      resume_id: "resume-after-tailor",
+      changes: 2,
+      rejected: [],
+      conversionMetrics: {
+        baselineATSScore: 60,
+        tailoredATSScore: 88,
+        estimatedConversionLift: "+2.0x",
+        methodology: "measured",
+        confidence: "medium",
+        // Deliberately NO baselineDegraded / tailoredDegraded /
+        // scoringDegraded keys at all — not even `undefined` values, the
+        // keys themselves are absent, matching the "unattested" case.
+      },
+      noChangesApplied: false,
+    });
+
+    render(<ResumePage />);
+    const select = await screen.findByTestId("tailor-job-select");
+    fireEvent.change(select, { target: { value: "job-1" } });
+    fireEvent.click(screen.getByTestId("run-tailor-btn"));
+    await waitFor(() => expect(runTailorAgent).toHaveBeenCalledWith("job-1"));
+
+    const panel = await screen.findByTestId("conversion-metrics");
+
+    // Must be badged "not measured" exactly like the degraded case.
+    expect(within(panel).getByTestId("conversion-not-measured-badge")).toBeTruthy();
+
+    // Must NOT render the raw numbers as trustworthy figures.
+    const banner = within(panel).getByTestId("conversion-before-after");
+    expect(banner.textContent).not.toMatch(/60/);
+    expect(banner.textContent).not.toMatch(/88/);
+
+    const lift = within(panel).getByTestId("conversion-lift");
+    expect(lift.textContent).not.toMatch(/2\.0x/);
+  });
 });

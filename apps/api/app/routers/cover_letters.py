@@ -618,6 +618,12 @@ def cover_letter_insights(letter_id: str, current_user: CurrentUser) -> dict[str
         "keywords": _keyword_coverage(text, job),
         "voice": _voice_metrics(text, corpus),
         "versions": versions,
+        # W-TAILOR-CONVERGE item 4: the PERSISTED quality breakdown of this
+        # exact letter — initial-draft vs shipped score, the passes behind it,
+        # and the JD keywords the candidate's evidence cannot support. ``None``
+        # for letters generated before scoring existed: no score was ever
+        # measured for them and none is invented on read.
+        "quality": letter.get("coverLetterQuality"),
     }
 
 

@@ -649,6 +649,87 @@ def ensure_story_archive_columns() -> None:
     _story_archive_columns_ready = True
 
 
+#: Guard so the additive ``StoryEntry.achievementKey`` column + its partial
+#: unique index are only ensured once per worker process.
+_story_achievement_column_ready = False
+
+
+def ensure_story_achievement_column() -> None:
+    """Idempotently add ``StoryEntry.achievementKey`` and its uniqueness index.
+
+    STORY-BANK-REBUILD-2026-08-02. Audited live: 43 story rows describing ~10
+    distinct achievements. The extractor had no stable identity for "which
+    achievement is this story about", so every re-run's reworded re-telling
+    inserted a new row (the exact sha256 ``contentHash`` is defeated by one
+    changed word, and the fuzzy paraphrase preset needs title Jaccard >= 0.70
+    while the real duplicates' MEDIAN is 0.333).
+
+    ``achievementKey`` (``app.services.resume_bullets.achievement_key``) is a
+    per-user sha256 of the résumé bullet the story is drawn from, so two
+    stories about the same achievement share a key however far their prose
+    drifts, and dedup becomes an exact lookup instead of a heuristic.
+
+    The PARTIAL UNIQUE INDEX is what makes that a guarantee rather than a
+    convention: no code path — not a future router, not a bulk import, not a
+    concurrent double-run of the extractor — can create a second LIVE row for
+    one achievement. It is deliberately partial on BOTH predicates:
+
+    * ``"achievementKey" IS NOT NULL`` — pre-existing rows and hand-authored
+      stories created through ``POST /stories`` carry no key and are exempt;
+      the index constrains only source-grounded rows.
+    * ``"archivedAt" IS NULL`` — an archived row is a merge/clear loser held
+      for recovery (``ensure_story_archive_columns``). It must NOT block a
+      fresh live row for the same achievement, otherwise clearing the bank
+      and regenerating it would deadlock against its own backups.
+
+    ``ADD COLUMN IF NOT EXISTS text`` with no default is a metadata-only
+    change on PostgreSQL; ``CREATE UNIQUE INDEX IF NOT EXISTS`` over an
+    all-NULL column builds instantly. A transaction-scoped advisory lock
+    serializes concurrent first-hit callers so the DDL cannot race, and
+    ``TRUNCATE`` never drops columns or indexes, so the process-wide latch
+    survives test teardown. Lazy DDL per ADR-TR-1 — mirrors
+    ``ensure_story_dedup_column``.
+
+    MUST be called by every path that reads or writes the column, before the
+    statement that names it (skipping it is WIP-BRANCH-AUDIT-2026-07-29
+    blocker #2's failure mode: ``UndefinedColumn`` -> HTTP 500 on first use).
+    """
+    global _story_achievement_column_ready
+    if _story_achievement_column_ready:
+        return
+    # The partial index predicates ``"archivedAt"``, so that column must
+    # already exist — ensure it here rather than relying on call ordering.
+    ensure_story_archive_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'StoryEntry'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'achievementKey'"
+            )
+            row = cur.fetchone()
+            has_column = bool(row and row[0] == 1)
+            if not has_column:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (9380710315,))
+                cur.execute(
+                    'ALTER TABLE "StoryEntry" '
+                    'ADD COLUMN IF NOT EXISTS "achievementKey" text'
+                )
+            # The index is ensured on EVERY first-hit (not only when the
+            # column was just created), so a schema that already has the
+            # column from an earlier deploy still acquires the guarantee.
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (9380710316,))
+            cur.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS'
+                ' "StoryEntry_userId_achievementKey_live_key"'
+                ' ON "StoryEntry" ("userId", "achievementKey")'
+                ' WHERE "achievementKey" IS NOT NULL AND "archivedAt" IS NULL'
+            )
+        conn.commit()
+    _story_achievement_column_ready = True
+
+
 #: Guard so the additive ``Job.coverFailureClearedAt`` column is only ensured
 #: once per worker process (see ``ensure_job_cover_suppression_column``).
 _job_cover_suppression_column_ready = False
@@ -971,3 +1052,60 @@ def ensure_application_transmission_columns() -> None:
                 )
         conn.commit()
     _application_transmission_columns_ready = True
+
+
+#: Guard so the additive ``Application.coverLetterQuality`` column is only
+#: ensured once per worker process (see ``ensure_cover_letter_quality_columns``).
+_cover_letter_quality_columns_ready = False
+
+
+def ensure_cover_letter_quality_columns() -> None:
+    """Idempotently add the additive ``Application.coverLetterQuality`` column
+    (W-TAILOR-CONVERGE item 4).
+
+    Cover letters live on the ``Application`` row (``coverLetter`` text) and
+    have never carried a quality measurement of any kind — the letter was
+    drafted, guarded and stored with nothing recording how good it was, so the
+    Studio had no before/after to show and a reload had no score to render.
+
+    ``coverLetterQuality`` (jsonb, NULL) holds the deterministic
+    :class:`app.services.cover_letter_quality.CoverLetterQuality` breakdown of
+    the SHIPPED letter plus the per-pass history behind it. NULL is the
+    CORRECT, honest value for every pre-existing letter: those were generated
+    before any scoring existed, so no score for them was ever measured and none
+    is invented here — no backfill UPDATE is performed. Recomputing one
+    retroactively would also be misleading, since it would score the stored
+    text against today's evidence corpus rather than the one the letter was
+    written from.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite; the
+    metadata-only ``ADD COLUMN`` is fast and safe on the production table. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes this column, before the
+    statement that names it.
+    """
+    global _cover_letter_quality_columns_ready
+    if _cover_letter_quality_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'coverLetterQuality'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _cover_letter_quality_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260804,))
+            cur.execute(
+                'ALTER TABLE "Application" '
+                'ADD COLUMN IF NOT EXISTS "coverLetterQuality" jsonb'
+            )
+        conn.commit()
+    _cover_letter_quality_columns_ready = True

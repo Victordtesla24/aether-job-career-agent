@@ -56,21 +56,17 @@ export interface RawConversionMetrics {
  *                    embedding-backed measurement.
  * - `"degraded"`   — at least one flag was true: the number is 40% neutral
  *                    placeholder and MUST NOT be presented as a measurement.
- * - `"unattested"` — the payload carried NO provenance fields at all. This is
- *                    NOT reachable from the current API: `_compute_conversion_
- *                    metrics` always emits all three flags. It exists so that
- *                    a payload which never made a provenance claim is not
- *                    silently relabelled as one that claimed "measured" — and
- *                    so that consumers must still handle `"degraded"`
- *                    explicitly before they can touch a number.
  *
- * Two-state would be preferable. It is blocked today by five tracked vitest
- * fixtures whose `conversionMetrics` predate the provenance fields; see
- * GMV4-ats-CONSUMER-INVENTORY.md "UNSURE-3" for the exact list and the
- * one-line change that collapses `"unattested"` into `"degraded"` once
- * `test-author` has amended them.
+ * COLLAPSED TO TWO STATES (W-TAILOR-CONVERGE, 2026-08-02). A third
+ * `"unattested"` arm used to exist for payloads carrying NO provenance fields
+ * at all, and it CARRIED THE NUMBERS THROUGH — so a `conversionMetrics` blob
+ * with no flags rendered "Before 60% → After 88%" as if measured, which is the
+ * exact leak this module exists to prevent. It was kept only while five vitest
+ * fixtures predated the provenance fields; those fixtures now all state their
+ * provenance, so the arm is gone and an unattested payload FAILS CLOSED to
+ * `"degraded"`, like every other unrecognised shape.
  */
-export type ConversionProvenance = "measured" | "degraded" | "unattested";
+export type ConversionProvenance = "measured" | "degraded";
 
 /** Context that is equally true whether or not scoring was measured. */
 interface ConversionContext {
@@ -86,7 +82,7 @@ interface ConversionContext {
  */
 export type ConversionImpact =
   | (ConversionContext & {
-      readonly provenance: "measured" | "unattested";
+      readonly provenance: "measured";
       readonly baselineATSScore: number;
       readonly tailoredATSScore: number;
       readonly estimatedConversionLift: string;
@@ -108,12 +104,11 @@ export function conversionImpactFrom(
     typeof baselineATSScore === "number" &&
     typeof tailoredATSScore === "number" &&
     typeof estimatedConversionLift === "string";
+  // "measured" requires every flag PRESENT and explicitly false. Everything
+  // else — a partial flag set, any true flag, NO flags at all, a missing
+  // number — is "degraded".
   const provenance: ConversionProvenance =
-    !numbersPresent || (attested && !allExplicitlyFalse)
-      ? "degraded"
-      : attested
-        ? "measured"
-        : "unattested";
+    numbersPresent && attested && allExplicitlyFalse ? "measured" : "degraded";
   const context: ConversionContext = {
     methodology: raw.methodology ?? "",
     confidence: raw.confidence ?? "",
