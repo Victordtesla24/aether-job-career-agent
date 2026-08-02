@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
@@ -140,11 +140,23 @@ def _enrich(story: dict[str, Any]) -> dict[str, Any]:
 def list_stories(
     current_user: CurrentUser,
     job_id: str | None = Query(default=None),
+    category: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
     """§7.3.4: when ``job_id`` is supplied, each row also carries
     ``relevance_score`` (§7.3.3) against that job's title+description —
-    previously silently ignored (no query params were read at all)."""
+    previously silently ignored (no query params were read at all).
+
+    GMV4-stories-006: ``category`` filters server-side on the SAME derived
+    category ``_enrich`` puts on every row, so the list and the filter can
+    never disagree. FastAPI silently accepts unknown query params, so before
+    this existed ``?category=Leadership`` returned every story — a filter that
+    looks applied and is not. An unmatched category returns an EMPTY list,
+    never the whole collection: showing every other category's stories to a
+    user who filtered to one is the dangerous failure direction."""
     rows = [_enrich(r) for r in StoryRepository().list_by_user(current_user["id"])]
+    if category is not None:
+        wanted = category.strip().casefold()
+        rows = [r for r in rows if str(r["category"]).casefold() == wanted]
     if job_id:
         job = JobRepository().get_by_id(job_id, current_user["id"])
         if job is None:
@@ -171,8 +183,27 @@ def story_stats(current_user: CurrentUser) -> dict[str, Any]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_story(body: StoryCreate, current_user: CurrentUser) -> dict[str, Any]:
-    return _enrich(StoryRepository().create(current_user["id"], body.model_dump()))
+def create_story(
+    body: StoryCreate, current_user: CurrentUser, response: Response
+) -> dict[str, Any]:
+    """GMV4-story-005: a save that was MERGED into an existing story answers
+    ``200 OK`` with ``"merged": true``, not ``201 Created``.
+
+    ``201`` asserts a new resource now exists at a new URI. When the
+    create-time paraphrase/achievement-key guard folds the submission into a
+    row the user already had, nothing was created — and the row that WAS
+    touched is a different story than the one they thought they were writing.
+    Reporting ``201`` with no disclosure made that indistinguishable from a
+    genuine create, so the client had no way to tell the user their save
+    changed pre-existing content. ``409`` was rejected: the save succeeded and
+    the user's own newly typed text is what survives the merge, so this is a
+    successful outcome to disclose, not an error to resolve."""
+    created, merged = StoryRepository().create_with_outcome(
+        current_user["id"], body.model_dump()
+    )
+    if merged:
+        response.status_code = status.HTTP_200_OK
+    return {**_enrich(created), "merged": merged}
 
 
 @router.put("/{story_id}")
