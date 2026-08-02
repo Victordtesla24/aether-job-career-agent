@@ -132,6 +132,16 @@
       ],
       "author_honesty_note": "A late run showed 1 failure the author diagnosed as self-inflicted (editing routers/agents.py while a pytest batch was in flight; inspect.getsource resolves via linecache, so an on-disk edit shifts line numbers). Proven not a real regression via a frozen-file re-run with md5sums recorded before and after: 170 passed, 1 skipped, 0 failed. Recorded rather than silently re-run to green."
     },
-    "CI_ruff": "FIXED @c9e45d6. ruff check app/ tests/ was failing on 2 errors that would have failed the W-L CI-green gate. One was MINE: BLOCKER-006 (0ed302a) added \"lastSeenAt\" to the INSERT column list, pushing job.py:305 to 105 chars. Wrapped; placeholder count unchanged (16 %s + 2 NOW() = 18 columns). The other was an unsorted import block, auto-fixed. Now: \"All checks passed!\""
+    "CI_ruff": "FIXED @c9e45d6. ruff check app/ tests/ was failing on 2 errors that would have failed the W-L CI-green gate. One was MINE: BLOCKER-006 (0ed302a) added \"lastSeenAt\" to the INSERT column list, pushing job.py:305 to 105 chars. Wrapped; placeholder count unchanged (16 %s + 2 NOW() = 18 columns). The other was an unsorted import block, auto-fixed. Now: \"All checks passed!\"",
+    "BLOCKER-006": {
+      "status": "DEPLOYED + VERIFIED IN PRODUCTION 2026-08-02T00:00:21Z (HEAD cce3ef9)",
+      "result": "jobs feed 0 -> 18 on BOTH the direct API and the public URL; all 18 ready; 0 API errors since restart; lastSeenAt column created at startup as designed.",
+      "broken_since": "2026-07-31T16:57:19Z (previous API start) \u2014 over a day before the fix was even committed.",
+      "prediction_held": "Pre-deploy proof predicted 18/18 ready visible via the updatedAt/createdAt fallback with lastSeenAt NULL and no sweep required. Observed exactly that.",
+      "gate": "Full backend suite 8 failed / 2157 passed / 1 skipped. Each failure attributed rather than waved through: 3 fail identically at 6440325 (the commit production was RUNNING, tested in a detached worktree), 4 were committed deliberately RED at 4ac8740 with no fix, 1 is a new test whose file does not exist at 6440325. 8 failures, 0 regressions. All deterministic in 19s isolated \u2014 not shared-DB flakiness.",
+      "concurrent_session_cleared": "The suite ran WITH their 5 uncommitted API files; identical failures at clean HEAD prove those files break nothing.",
+      "duplicate_scare_REFUTED": "18 cards / 16 distinct title+company with matching contentHash looked like a dedupe failure. It is NOT: job_fingerprint keys on company+title+LOCATION and the pairs differ (Dallas vs Remote; Australia vs Remote) \u2014 separate Ashby postings, separate URLs. Showing both is correct; \"fixing\" it would have caused data loss."
+    },
+    "WEB_NOT_DEPLOYED": "G-C, GMV4-email-001 and DROP-001 are committed but NOT live: a pnpm build in the live tree would bake in a concurrent session uncommitted UI work that currently fails 2 of its own tests, and runbook \u00a70.3 documents a prior build-clobber incident from exactly that."
   }
 }
