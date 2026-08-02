@@ -66,6 +66,17 @@ def _mask_email(email: Optional[str]) -> Optional[str]:
     return f"{masked}@{domain}"
 
 
+def mask_account_email(email: Optional[str]) -> Optional[str]:
+    """Public form of :func:`_mask_email` for callers OUTSIDE this module.
+
+    Added for the job-alert intake summary (W-ALERT), which records which
+    mailbox each count came from in ``AgentRun.output`` — a durable row admin
+    surfaces can read, so the address is masked there exactly as it is on every
+    other multi-account surface (:meth:`GmailAccountRepository.list_public`).
+    """
+    return _mask_email(email)
+
+
 def _encrypt_optional(secret: Optional[str]) -> Optional[str]:
     """Encrypt a non-empty token to ciphertext; pass ``None``/empty through so an
     absent token stays absent (never a spurious ciphertext)."""

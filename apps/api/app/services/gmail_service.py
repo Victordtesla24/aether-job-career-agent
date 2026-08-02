@@ -338,6 +338,35 @@ def _decode_body(payload: dict[str, Any]) -> str:
     return (walk(payload) or "").strip()
 
 
+def _decode_bodies(payload: dict[str, Any]) -> tuple[str, str]:
+    """Both alternatives of a MIME message: ``(text/plain, text/html)``.
+
+    ``_decode_body`` above returns the FIRST text/plain part it finds, which is
+    all the inbox needs. The job-alert parser needs both: HTML alert mail keeps
+    the real apply URL in an anchor href, while SEEK does the opposite — its
+    HTML routes every card through a per-recipient click tracker and only the
+    text/plain alternative carries the genuine ``au.seek.com/job/<id>`` URL.
+    Returns ``("", "")`` for a payload with neither; never raises.
+    """
+    found: dict[str, str] = {}
+
+    def walk(part: dict[str, Any]) -> None:
+        mime = (part.get("mimeType") or "").lower()
+        data = (part.get("body") or {}).get("data")
+        if data and mime in ("text/plain", "text/html") and mime not in found:
+            try:
+                found[mime] = base64.urlsafe_b64decode(data.encode()).decode(
+                    "utf-8", errors="replace"
+                )
+            except Exception:  # noqa: BLE001 — a malformed part must not kill the scan
+                logger.info("Gmail message part %s could not be decoded", mime)
+        for sub in part.get("parts") or []:
+            walk(sub)
+
+    walk(payload or {})
+    return found.get("text/plain", ""), found.get("text/html", "")
+
+
 class GmailService:
     """Per-user Gmail client. Construct with the app ``user_id``."""
 
@@ -652,6 +681,86 @@ class GmailService:
             "receivedAt": _header(headers, "Date"),
             "labelIds": latest.get("labelIds", []),
             "messageCount": len(messages),
+        }
+
+    # ------------------------------------------------- message-level reading
+    #: Hard ceiling on one job-alert scan, so a huge mailbox can never turn one
+    #: agent run into thousands of Gmail calls.
+    MAX_SCAN_MESSAGES = 500
+
+    def list_message_headers(
+        self, query: str | None = None, max_results: int = 100
+    ) -> list[dict[str, Any]]:
+        """``[{"id", "from", "subject", "date"}]`` for messages matching ``query``.
+
+        METADATA format on purpose: identifying job-alert mail only needs the
+        From and Subject headers, and a metadata fetch is a fraction of the
+        Gmail quota cost of a full fetch. The full body is pulled (by
+        :meth:`get_message_bodies`) ONLY for the messages that turn out to be
+        alerts, which in the operator's own mailbox is 2 of 41.
+        """
+        max_results = max(1, min(int(max_results), self.MAX_SCAN_MESSAGES))
+        try:
+            svc = self._client()
+            resp = (
+                svc.users()
+                .messages()
+                .list(userId="me", q=query, maxResults=max_results)
+                .execute()
+            )
+            headers: list[dict[str, Any]] = []
+            for item in resp.get("messages", []) or []:
+                msg = (
+                    svc.users()
+                    .messages()
+                    .get(
+                        userId="me",
+                        id=item["id"],
+                        format="metadata",
+                        metadataHeaders=["From", "Subject", "Date"],
+                    )
+                    .execute()
+                )
+                raw = (msg.get("payload") or {}).get("headers", [])
+                headers.append(
+                    {
+                        "id": msg.get("id"),
+                        "from": _header(raw, "From"),
+                        "subject": _header(raw, "Subject"),
+                        "date": _header(raw, "Date"),
+                    }
+                )
+            return headers
+        except GmailError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise GmailError(f"Gmail message list failed: {exc}") from exc
+
+    def get_message_bodies(self, message_id: str) -> dict[str, Any]:
+        """One message's headers plus BOTH body alternatives
+        (``{"id", "from", "subject", "date", "text", "html"}``)."""
+        try:
+            svc = self._client()
+            msg = (
+                svc.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+                .execute()
+            )
+        except GmailError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise GmailError(f"Gmail message fetch failed: {exc}") from exc
+        payload = msg.get("payload") or {}
+        raw = payload.get("headers", [])
+        text, html = _decode_bodies(payload)
+        return {
+            "id": msg.get("id"),
+            "from": _header(raw, "From"),
+            "subject": _header(raw, "Subject"),
+            "date": _header(raw, "Date"),
+            "text": text,
+            "html": html,
         }
 
     def list_labels(self) -> list[dict[str, Any]]:

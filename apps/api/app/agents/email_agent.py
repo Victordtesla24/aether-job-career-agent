@@ -11,6 +11,15 @@ Modes (``run(user_id, mode=...)``):
 - ``draft_follow_up`` — draft a silence-triggered outbound nudge on an existing
                   thread (subsumes the retired standalone Follow-up agent). Same
                   evidence grounding + FabricationGuard as ``draft_reply``.
+- ``job_alerts`` — scan EVERY connected mailbox for the candidate's own
+                  automated job-alert emails (SEEK, LinkedIn, Indeed, Workforce
+                  Australia, recruitment agencies), extract the individual
+                  postings out of them and persist each one as a real ``Job``
+                  row through ``JobRepository.create``. Fully deterministic —
+                  no LLM call at all (``llm_called=False``). See
+                  :mod:`app.services.job_alert_parser` for the anti-fabrication
+                  rules; this mode never writes a posting whose title, company
+                  and apply URL were not all genuinely read out of the email.
 - ``insights``  — produce the AI-intelligence view-model (score + breakdown +
                   summary) the Email Center's intelligence panel renders.
 - ``apply_labels`` — apply/remove Gmail labels on a thread's latest message.
@@ -30,7 +39,10 @@ from typing import Any, Optional
 
 from app.db import get_connection, rows_to_dicts
 from app.repositories.approval import ApprovalRepository
-from app.repositories.gmail_account import GmailAccountRepository
+from app.repositories.gmail_account import (
+    GmailAccountRepository,
+    mask_account_email,
+)
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
 from app.services.resume_grounding import resolve_user_resume_text
@@ -91,6 +103,46 @@ class EmailAgentResult:
     flagged: list[str] = field(default_factory=list)
 
 
+@dataclass
+class JobAlertIntakeResult:
+    """Outcome of one ``job_alerts`` run — every number is a real count.
+
+    A separate dataclass (not extra fields on :class:`EmailAgentResult`) so the
+    six existing modes' output shape is untouched. ``_to_output`` in the agents
+    router serialises any dataclass, so this appears in AgentRun history exactly
+    like every other agent's output.
+    """
+
+    mode: str = "job_alerts"
+    connected: bool = False
+    degraded: bool = False
+    #: ALWAYS False — the parser is regex + HTML, never a model call. The router
+    #: reads and strips this flag to price the run at zero.
+    llm_called: bool = False
+    message: str = ""
+    #: Mailboxes actually scanned.
+    accounts_scanned: int = 0
+    #: Messages whose From/Subject were examined.
+    messages_scanned: int = 0
+    #: Messages recognised as genuine job alerts.
+    alert_emails: int = 0
+    #: Individual postings read out of those alerts.
+    postings_extracted: int = 0
+    #: Postings deliberately DROPPED because a required field (title, company or
+    #: a real apply URL) was not present — never back-filled.
+    postings_skipped: int = 0
+    #: New ``Job`` rows written.
+    jobs_created: int = 0
+    #: Already-known listings re-confirmed (``lastSeenAt`` refreshed).
+    jobs_updated: int = 0
+    #: ``{platform: alert_email_count}``.
+    platforms: dict[str, int] = field(default_factory=dict)
+    #: Per-mailbox breakdown, including honest per-account errors.
+    per_account: list[dict[str, Any]] = field(default_factory=list)
+    #: Plain-English notes (why an alert produced nothing, per platform).
+    notes: list[str] = field(default_factory=list)
+
+
 class EmailAgentError(ValueError):
     """A mode-specific precondition failed (e.g. missing thread_id or unknown
     mode). Subclasses ``ValueError`` so the /agents/email/run endpoint maps it
@@ -105,6 +157,7 @@ class EmailAgent:
         approvals: ApprovalRepository | None = None,
         credentials: GmailAccountRepository | None = None,
         gmail: Any = None,
+        jobs: Any = None,
     ) -> None:
         self._llm = llm or LLMClient()
         self._guard = guard or FabricationGuard()
@@ -113,14 +166,28 @@ class EmailAgent:
         #: Optional injected GmailService (tests pass a fake); resolved lazily
         #: in production so importing this module needs no google libs.
         self._gmail = gmail
+        #: Job store used by ``job_alerts``. Injectable for tests; resolved
+        #: lazily so the six pre-existing modes never construct it.
+        self._jobs = jobs
 
     # ------------------------------------------------------------------ util
-    def _gmail_for(self, user_id: str) -> Any:
+    def _gmail_for(self, user_id: str, account_id: str | None = None) -> Any:
         if self._gmail is not None:
+            # An injected client may be per-account (a factory) or a single
+            # object; support both so a test can fake either shape.
+            if account_id is not None and callable(getattr(self._gmail, "for_account", None)):
+                return self._gmail.for_account(account_id)
             return self._gmail
         from app.services.gmail_service import GmailService
 
-        return GmailService(user_id)
+        return GmailService(user_id, account_id=account_id)
+
+    def _job_repository(self) -> Any:
+        if self._jobs is None:
+            from app.repositories.job import JobRepository
+
+            self._jobs = JobRepository()
+        return self._jobs
 
     def _is_connected(self, user_id: str) -> bool:
         return self._credentials.is_connected(user_id)
@@ -210,9 +277,13 @@ class EmailAgent:
         return resolve_user_resume_text(user_id, allow_operator_fallback=False)
 
     # ---------------------------------------------------------------- run
-    def run(self, user_id: str, mode: str = "triage", **params: Any) -> EmailAgentResult:
+    def run(
+        self, user_id: str, mode: str = "triage", **params: Any
+    ) -> "EmailAgentResult | JobAlertIntakeResult":
         if mode == "triage":
             return self._triage(user_id)
+        if mode in ("job_alerts", "job-alerts"):
+            return self._job_alerts(user_id, params)
         if mode == "draft_reply":
             return self._compose_draft(user_id, params, mode="draft_reply")
         if mode == "draft_follow_up":
@@ -319,6 +390,176 @@ class EmailAgent:
             categories=categories,
             message=f"Triaged {triaged} emails into {len(categories)} categories.",
         )
+
+    # ----------------------------------------------------------- job_alerts
+    #: Bounds on the scan window and the per-mailbox message budget. Deliberate
+    #: ceilings: one agent run must never turn into an unbounded Gmail crawl.
+    _ALERT_DEFAULT_DAYS = 7
+    _ALERT_MAX_DAYS = 30
+    _ALERT_DEFAULT_MAX_MESSAGES = 200
+    _ALERT_MAX_MESSAGES = 500
+
+    @staticmethod
+    def _bounded_int(value: Any, default: int, low: int, high: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(low, min(parsed, high))
+
+    def _job_alerts(self, user_id: str, params: dict[str, Any]) -> JobAlertIntakeResult:
+        """Turn the candidate's OWN job-alert emails into real ``Job`` rows.
+
+        Reads every connected mailbox (not just the primary — the operator has
+        two, and the alerts land in the secondary one), recognises the automated
+        alert senders, extracts each individual posting, and persists it through
+        the EXISTING :meth:`JobRepository.create` path so sourceUrl
+        normalisation, the ``(userId, sourceUrl)`` upsert, ``dedupHash``,
+        ``contentHash`` and ``lastSeenAt`` all apply exactly as they do for a
+        board adapter.
+
+        Everything degrades honestly: a mailbox whose grant has expired is
+        recorded as a per-account error and the other mailbox still runs; an
+        alert that yields nothing records WHY. Nothing is ever invented — the
+        anti-fabrication rules live in :mod:`app.services.job_alert_parser`.
+        """
+        from app.services.job_alert_parser import (
+            detect_alert_platform,
+            parse_job_alert,
+        )
+
+        days = self._bounded_int(
+            params.get("days"), self._ALERT_DEFAULT_DAYS, 1, self._ALERT_MAX_DAYS
+        )
+        budget = self._bounded_int(
+            params.get("max_messages"),
+            self._ALERT_DEFAULT_MAX_MESSAGES,
+            1,
+            self._ALERT_MAX_MESSAGES,
+        )
+        result = JobAlertIntakeResult(connected=self._is_connected(user_id))
+        accounts = self._connected_accounts(user_id, params.get("account_id"))
+        if not accounts:
+            result.degraded = True
+            result.message = (
+                "Connect Gmail to read your job-alert emails — no mailbox is "
+                "connected, so there is nothing to scan."
+            )
+            return result
+
+        jobs = self._job_repository()
+        query = f"newer_than:{days}d"
+        for account in accounts:
+            account_id = account.get("id")
+            summary: dict[str, Any] = {
+                "accountId": account_id,
+                # MASKED: this summary is persisted durably in AgentRun.output,
+                # which admin surfaces can read. The account id already
+                # identifies the mailbox unambiguously for the owner.
+                "email": mask_account_email(account.get("accountEmail")),
+                "messagesScanned": 0,
+                "alertEmails": 0,
+                "postingsExtracted": 0,
+                "postingsSkipped": 0,
+                "jobsCreated": 0,
+                "jobsUpdated": 0,
+                "error": None,
+            }
+            result.accounts_scanned += 1
+            gmail = self._gmail_for(user_id, account_id=account_id)
+            try:
+                headers = gmail.list_message_headers(query=query, max_results=budget)
+            except Exception as exc:  # noqa: BLE001 — one dead mailbox must not kill the scan
+                summary["error"] = f"{type(exc).__name__}: {exc}"
+                result.per_account.append(summary)
+                continue
+
+            for header in headers:
+                summary["messagesScanned"] += 1
+                result.messages_scanned += 1
+                platform = detect_alert_platform(
+                    header.get("from", ""), header.get("subject", "")
+                )
+                if platform is None:
+                    continue
+                summary["alertEmails"] += 1
+                result.alert_emails += 1
+                result.platforms[platform] = result.platforms.get(platform, 0) + 1
+                try:
+                    body = gmail.get_message_bodies(header["id"])
+                except Exception as exc:  # noqa: BLE001 — skip this message, keep going
+                    result.notes.append(
+                        f"{platform}: could not read message body ({exc})."
+                    )
+                    continue
+                parsed = parse_job_alert(
+                    from_header=body.get("from") or header.get("from", ""),
+                    subject=body.get("subject") or header.get("subject", ""),
+                    text=body.get("text") or None,
+                    html=body.get("html") or None,
+                )
+                summary["postingsExtracted"] += len(parsed.postings)
+                summary["postingsSkipped"] += parsed.skipped
+                result.postings_extracted += len(parsed.postings)
+                result.postings_skipped += parsed.skipped
+                if parsed.reason and not parsed.postings:
+                    result.notes.append(parsed.reason)
+                for posting in parsed.postings:
+                    try:
+                        row = jobs.create(user_id, posting.to_job_raw())
+                    except Exception as exc:  # noqa: BLE001 — one bad row never fails the run
+                        result.notes.append(
+                            f"{posting.source_url}: could not be persisted ({exc})."
+                        )
+                        continue
+                    if isinstance(row, dict) and row.get("wasInserted") is False:
+                        summary["jobsUpdated"] += 1
+                        result.jobs_updated += 1
+                    else:
+                        summary["jobsCreated"] += 1
+                        result.jobs_created += 1
+            result.per_account.append(summary)
+
+        errored = [a for a in result.per_account if a.get("error")]
+        result.degraded = bool(errored)
+        if result.alert_emails == 0:
+            result.message = (
+                f"Scanned {result.messages_scanned} message(s) across "
+                f"{result.accounts_scanned} mailbox(es) from the last {days} "
+                "day(s) — no job-alert emails were found."
+            )
+        else:
+            result.message = (
+                f"Read {result.alert_emails} job-alert email(s) across "
+                f"{result.accounts_scanned} mailbox(es): {result.postings_extracted} "
+                f"posting(s) extracted, {result.jobs_created} new job(s) added, "
+                f"{result.jobs_updated} already known, {result.postings_skipped} "
+                "skipped for missing data."
+            )
+        if errored:
+            result.message += (
+                f" {len(errored)} mailbox(es) could not be read — reconnect them."
+            )
+        return result
+
+    def _connected_accounts(
+        self, user_id: str, account_id: Any = None
+    ) -> list[dict[str, Any]]:
+        """Every connected mailbox for ``user_id`` (or just the named one).
+
+        Falls back to the single-account ``get()`` shape when the injected
+        credential store predates ``list_accounts`` (test fakes).
+        """
+        lister = getattr(self._credentials, "list_accounts", None)
+        accounts: list[dict[str, Any]] = []
+        if callable(lister):
+            accounts = list(lister(user_id) or [])
+        elif callable(getattr(self._credentials, "get", None)):
+            row = self._credentials.get(user_id)
+            accounts = [row] if row else []
+        if account_id:
+            accounts = [a for a in accounts if a.get("id") == account_id]
+        return accounts
 
     # ------------------------------------------------ draft_reply / follow_up
     def _compose_draft(

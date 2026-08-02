@@ -1154,7 +1154,7 @@ def _execute_reserved_run(
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
-    output["approvalRequired"] = agent_name in _APPROVAL_GATED
+    output["approvalRequired"] = _run_is_approval_gated(agent_name, params)
     output["billingAudit"] = audit
     # An honest "no letter produced" degrade: the cover-letter agent hit an
     # LLMUnavailableError on its FIRST draft and returned a coverLetterUnavailable
@@ -1339,10 +1339,43 @@ def _interview_prep_will_call_llm(params: dict[str, Any]) -> bool:
 
 
 #: ``emailAgent`` modes that provably construct NO LLM call at all: ``send``
-#: creates a pending ``email_send`` ApprovalRequest and ``apply_labels`` mutates
-#: Gmail labels (or degrades honestly when Gmail is not connected). Both are
-#: decidable from the params alone, so they are never even reserved.
-_EMAIL_AGENT_NO_LLM_MODES = frozenset({"send", "apply_labels"})
+#: creates a pending ``email_send`` ApprovalRequest, ``apply_labels`` mutates
+#: Gmail labels (or degrades honestly when Gmail is not connected), and
+#: ``job_alerts`` reads job-alert mail with a deterministic regex/HTML parser
+#: (``app.services.job_alert_parser`` — no model, by design: an LLM guessing an
+#: employer name out of an email is exactly the fabrication this product
+#: refuses). All three are decidable from the params alone, so they are never
+#: even reserved.
+_EMAIL_AGENT_NO_LLM_MODES = frozenset(
+    {"send", "apply_labels", "job_alerts", "job-alerts"}
+)
+
+#: The ONLY ``emailAgent`` mode that actually opens an ``ApprovalRequest``.
+#: ``emailAgent`` is listed in :data:`_APPROVAL_GATED` because its terminal
+#: OUTBOUND act is gated — but the gate is created by ``send`` alone. Every
+#: other mode (triage, draft_reply, draft_follow_up, insights, apply_labels,
+#: job_alerts) creates no approval row at all, so stamping
+#: ``approvalRequired: true`` on them was a DECORATIVE flag — exactly what the
+#: MV-resume-studio-001 ruling forbids ("``approvalRequired: true`` must be
+#: backed by a real ApprovalRequest, not a decorative flag"). It was harmless
+#: while every emailAgent mode produced text a human had to send by hand; it
+#: became actively misleading with ``job_alerts``, whose 45 persisted Job rows
+#: are final and await nothing.
+_EMAIL_AGENT_APPROVAL_MODES = frozenset({"send"})
+
+
+def _run_is_approval_gated(agent_name: str, params: dict[str, Any]) -> bool:
+    """Whether THIS run's terminal act is held behind a human approval.
+
+    Agent-level for every backend except ``emailAgent``, whose approval gate is
+    MODE-level (see :data:`_EMAIL_AGENT_APPROVAL_MODES`).
+    """
+    if agent_name not in _APPROVAL_GATED:
+        return False
+    if agent_name == "emailAgent":
+        mode = str(params.get("mode") or "triage").strip()
+        return mode in _EMAIL_AGENT_APPROVAL_MODES
+    return True
 
 
 def _email_agent_will_call_llm(params: dict[str, Any]) -> bool:
@@ -2517,16 +2550,27 @@ class EmailAgentRequest(BaseModel):
     #: execute time). Only ids travel — never the bytes.
     attach_resume_id: str | None = None
     attach_cover_letter_id: str | None = None
+    # --- job_alerts mode -------------------------------------------------
+    #: How far back to scan each mailbox (days, 1-30; default 7).
+    days: int | None = None
+    #: Per-mailbox message budget for the scan (1-500; default 200).
+    max_messages: int | None = None
+    #: Restrict the scan to ONE connected mailbox. Omit to scan them all.
+    account_id: str | None = None
 
 
 @router.post("/email/run")
 def run_email_agent(body: EmailAgentRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Run the Email Agent: triage / draft_reply / insights / send (P4).
+    """Run the Email Agent: triage / draft_reply / insights / send /
+    job_alerts (P4, W-ALERT).
 
     Gmail-backed when the user has connected Gmail; otherwise degrades honestly
     to local ``EmailThread`` rows (never fabricates inbox data). ``send`` mode
     never sends directly — it opens a pending ``email_send`` approval so the
     human-in-the-loop gate always adjudicates a real outbound email.
+    ``job_alerts`` reads the candidate's OWN automated job-alert mail across
+    every connected mailbox and persists each extracted posting as a real
+    ``Job`` row (deterministic, no LLM, nothing invented).
     """
     params = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
