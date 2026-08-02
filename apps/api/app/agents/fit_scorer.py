@@ -31,6 +31,24 @@ def get_base_resume_path() -> Path:
 class FitScoreResult:
     scored: int = 0
     errors: list[str] = field(default_factory=list)
+    #: Postings left UNSCORED because they carry too little real text for a
+    #: score to mean anything (v5). Not a failure — an honest refusal.
+    skipped_no_evidence: int = 0
+
+
+#: Minimum characters of real posting text before a fit score means anything.
+#: MEASURED, not guessed (2026-08-02, production): rows with <200 chars of
+#: description scored avg 58.9 / max 78.6, while rows carrying a real
+#: description scored avg 40.8 / max 56.5. A posting with an EMPTY description
+#: scored 74.63 — the highest on the board. With almost no text the engine has
+#: nearly nothing to mismatch, so emptiness reads as a perfect fit and the
+#: least-informative jobs float to the top of the user's board.
+MIN_SCORABLE_CHARS = 200
+
+
+def has_scorable_evidence(job_text: str) -> bool:
+    """True when a posting carries enough real text for a score to mean anything."""
+    return len((job_text or "").strip()) >= MIN_SCORABLE_CHARS
 
 
 class FitScorerAgent:
@@ -61,6 +79,13 @@ class FitScorerAgent:
                 continue
             try:
                 jd = self._job_text(job)
+                if not has_scorable_evidence(jd):
+                    # HONEST REFUSAL: leave fitScore NULL rather than persist a
+                    # spuriously-high number derived from a teaser line. The job
+                    # still shows on the board — it is simply unranked, which is
+                    # the truth, instead of being ranked top on no evidence.
+                    result.skipped_no_evidence += 1
+                    continue
                 score = self._engine.score(resume_text, jd)
                 self._repository.update_fit_score(job["id"], score.overall, score.overall)
                 # RT-005: a scored job has been evaluated — its board card
@@ -75,6 +100,11 @@ class FitScorerAgent:
 
     @staticmethod
     def _job_text(job: dict[str, Any]) -> str:
+        """Text scored against the résumé.
+
+        NOTE (v5): callers must check :func:`has_scorable_evidence` first — a
+        posting with almost no description scores spuriously HIGH, because the
+        engine has nearly no tokens to mismatch against."""
         requirements = job.get("requirements")
         if isinstance(requirements, str):
             try:

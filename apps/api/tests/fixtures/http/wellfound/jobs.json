@@ -3,32 +3,53 @@
     {
       "id": "12345",
       "title": "Lead Business Analyst",
-      "company": {"name": "Canva", "slug": "canva"},
+      "company": {
+        "name": "Canva",
+        "slug": "canva"
+      },
       "url": "https://wellfound.com/jobs/12345-lead-business-analyst",
       "remote": false,
-      "locations": [{"name": "Sydney"}],
+      "locations": [
+        {
+          "name": "Sydney"
+        }
+      ],
       "liveStartAt": "2026-07-06T00:00:00Z",
-      "description": "Drive requirements analysis across product squads."
+      "description": "Drive requirements analysis across product squads. You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
     },
     {
       "id": "12346",
       "title": "Delivery Manager",
-      "company": {"name": "Airwallex", "slug": "airwallex"},
+      "company": {
+        "name": "Airwallex",
+        "slug": "airwallex"
+      },
       "url": "https://wellfound.com/jobs/12346-delivery-manager",
       "remote": true,
-      "locations": [{"name": "Remote"}],
+      "locations": [
+        {
+          "name": "Remote"
+        }
+      ],
       "liveStartAt": "2026-07-05T00:00:00Z",
-      "description": "Own delivery for the payments platform."
+      "description": "Own delivery for the payments platform. You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
     },
     {
       "id": "12347",
       "title": "Software Engineer",
-      "company": {"name": "SafetyCulture", "slug": "safetyculture"},
+      "company": {
+        "name": "SafetyCulture",
+        "slug": "safetyculture"
+      },
       "url": "https://wellfound.com/jobs/12347-software-engineer",
       "remote": false,
-      "locations": [{"name": "Sydney"}],
+      "locations": [
+        {
+          "name": "Sydney"
+        }
+      ],
       "liveStartAt": "2026-07-04T00:00:00Z",
-      "description": "Build features in TypeScript and Go."
+      "description": "Build features in TypeScript and Go. You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
     }
   ]
 }

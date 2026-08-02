@@ -3,7 +3,9 @@
     {
       "entityUrn": "urn:li:jobPosting:4056231877",
       "title": "Staff Backend Engineer",
-      "companyDetails": { "name": "SafetyCulture" },
+      "companyDetails": {
+        "name": "SafetyCulture"
+      },
       "formattedLocation": "Sydney, New South Wales, Australia",
       "workplaceType": "Hybrid",
       "description": {
@@ -15,7 +17,9 @@
     {
       "entityUrn": "urn:li:jobPosting:4058812340",
       "title": "Data Platform Engineer",
-      "companyDetails": { "name": "REA Group" },
+      "companyDetails": {
+        "name": "REA Group"
+      },
       "formattedLocation": "Melbourne, Victoria, Australia",
       "workplaceType": "Remote",
       "description": {

@@ -3,9 +3,13 @@
     {
       "id": "82650341",
       "title": "Senior Software Engineer (Python)",
-      "advertiser": { "description": "Canva" },
+      "advertiser": {
+        "description": "Canva You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
+      },
       "location": "Sydney NSW",
-      "workArrangements": { "displayText": "Hybrid" },
+      "workArrangements": {
+        "displayText": "Hybrid"
+      },
       "teaser": "Build the backend platform powering design collaboration for 200M+ users.",
       "bulletPoints": [
         "5+ years building production Python services",
@@ -19,9 +23,13 @@
     {
       "id": "82655902",
       "title": "Machine Learning Engineer",
-      "advertiser": { "description": "Atlassian" },
+      "advertiser": {
+        "description": "Atlassian You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
+      },
       "location": "Melbourne VIC",
-      "workArrangements": { "displayText": "Remote" },
+      "workArrangements": {
+        "displayText": "Remote"
+      },
       "teaser": "Ship LLM-powered features across the Jira and Confluence product suite.",
       "bulletPoints": [
         "3+ years of applied ML experience",
@@ -35,9 +43,13 @@
     {
       "id": "82661174",
       "title": "Senior Business Analyst",
-      "advertiser": { "description": "Real Employer Pty Ltd" },
+      "advertiser": {
+        "description": "Real Employer Pty Ltd You will lead requirements discovery and delivery for a cross-functional squad, partnering with product, engineering and design. Responsibilities include running stakeholder workshops, defining acceptance criteria, maintaining the delivery roadmap, tracking dependencies and risks, and supporting release readiness. You will work in an agile environment with two-week iterations, facilitate ceremonies, and report progress to senior stakeholders. Experience with large-scale platform modernisation, data-informed prioritisation and vendor management is highly regarded."
+      },
       "location": "Melbourne VIC",
-      "workArrangements": { "displayText": "Hybrid" },
+      "workArrangements": {
+        "displayText": "Hybrid"
+      },
       "teaser": "Lead requirements analysis for a portfolio of delivery squads.",
       "bulletPoints": [
         "8+ years business analysis in financial services",
