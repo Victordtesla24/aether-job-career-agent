@@ -38,9 +38,14 @@ Run under the shared test DB lock:
 """
 from __future__ import annotations
 
+import pytest
 from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
 
-from app.agents.cover_letter_agent import CoverLetterAgent, enforce_first_person
+from app.agents.cover_letter_agent import (
+    CoverLetterAgent,
+    PlaceholderSignerError,
+    enforce_first_person,
+)
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient
@@ -164,13 +169,24 @@ class TestEnforceFirstPersonHookGrammar:
         rewritten = enforce_first_person(hook, "Vikram Sarkar")
         assert rewritten == hook, f"unrelated name must never rewrite the hook: {rewritten!r}"
 
-    def test_run_ships_broken_hook_for_administrator_seed_account(
+    def test_run_ships_broken_hook_for_name_role_collision(
         self, client, auth_headers
     ):
-        """End-to-end: the exact production scenario -- an account whose name
-        AND configured targetRole are both "Administrator" -- reproduced
-        through the full ``CoverLetterAgent.run()`` pipeline (guard,
-        structural gate, voice-fix all running unmodified)."""
+        """End-to-end: the name/title-noun collision reproduced through the
+        full ``CoverLetterAgent.run()`` pipeline (guard, structural gate,
+        voice-fix all running unmodified).
+
+        W-CLEAN (2026-08-02): this used to drive the collision with the literal
+        seed identity ``"Administrator"``. Production then showed 7 submitted
+        cover letters actually SIGNED "Administrator" (``seed_demo.ADMIN_NAME``
+        leaking onto an employer-facing document), so that string is now
+        refused up front by the BLOCKER-002 placeholder-signer guard — see
+        ``test_wclean_fixture_marker_audit.py``, which pins the refusal, and
+        ``test_run_refuses_the_administrator_seed_identity`` below. The
+        grammar property under test is a property of a name COLLIDING WITH A
+        JOB-TITLE NOUN, not of that particular literal, so it is re-driven here
+        with "Baker" — a real surname that is also an ordinary occupation
+        noun, i.e. a case a paying customer can genuinely present."""
         job = {
             "title": "Senior Platform Engineer",
             "company": "Culture Amp",
@@ -198,16 +214,47 @@ class TestEnforceFirstPersonHookGrammar:
         seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
         me = client.get("/auth/me", headers=auth_headers).json()
         user_id = me["id"]
-        job_id = _seed_job(user_id, "admin-collision", job)
+        job_id = _seed_job(user_id, "name-role-collision", job)
         agent = CoverLetterAgent(
             llm=_StubLLM(hook_reason, body),
             guard=FabricationGuard(),
-            users=_UserRepoStub(name="Administrator", target_role="Administrator"),
+            users=_UserRepoStub(name="Baker", target_role="Baker"),
         )
         result = agent.run(user_id, job_id)
         assert "as an I am" not in result.cover_letter, (
             f"broken hook grammar shipped in the final letter: {result.cover_letter!r}"
         )
+        assert "as a I am" not in result.cover_letter, (
+            f"broken hook grammar shipped in the final letter: {result.cover_letter!r}"
+        )
+
+    def test_run_refuses_the_administrator_seed_identity(
+        self, client, auth_headers
+    ):
+        """W-CLEAN: the production incident this file's collision case came
+        from. ``scripts/seed_demo.ADMIN_NAME`` is the literal string
+        "Administrator"; 7 submitted production cover letters were signed with
+        it. Generation must now refuse BEFORE any LLM call rather than compose
+        a letter an employer would read as coming from nobody."""
+        job = {
+            "title": "Senior Platform Engineer",
+            "company": "Culture Amp",
+            "description": (
+                "We need a senior engineer who can own sprint cadence and PI "
+                "Planning for multiple squads."
+            ),
+        }
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
+        me = client.get("/auth/me", headers=auth_headers).json()
+        user_id = me["id"]
+        job_id = _seed_job(user_id, "admin-identity", job)
+        agent = CoverLetterAgent(
+            llm=_StubLLM("unused", "unused"),
+            guard=FabricationGuard(),
+            users=_UserRepoStub(name="Administrator", target_role="Administrator"),
+        )
+        with pytest.raises(PlaceholderSignerError):
+            agent.run(user_id, job_id)
 
 
 # ===========================================================================

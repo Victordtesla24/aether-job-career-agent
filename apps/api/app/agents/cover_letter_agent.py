@@ -1101,7 +1101,27 @@ class StructuralError(RuntimeError):
 #: possible match of the old over-broad rule) and is justified because
 #: `_PLACEHOLDER_DIGIT_RUN_RE` still covers the timestamped/auto-generated
 #: shapes that motivated the guard in the first place.
-_PLACEHOLDER_NAME_TOKENS = frozenset({"test", "probe", "gap"})
+#: W-CLEAN (production audit 2026-08-02): the token set above knows QA
+#: identities but not SYSTEM identities, and production paid for the gap —
+#: SEVEN ``Application`` rows (all ``submitted``, owner
+#: ``c6c8d0163d973a8048e7e33b8``) carried genuine letter bodies that signed off
+#: ``Administrator``. That string is not a coincidence: it is literally
+#: ``scripts/seed_demo.ADMIN_NAME``, the name the bootstrap admin account is
+#: seeded with. Every layer waved it through — the write-time refusal here, the
+#: stored-body read-time check (``stored_letter_has_placeholder_signer``) and
+#: the PDF/DOCX export gates in ``routers/cover_letters.py`` — so a document
+#: addressed to a named employer would have gone out signed by nobody.
+#:
+#: ``admin``/``administrator`` are added as WHOLE TOKENS under the same
+#: structural rule, which is what keeps the false-positive surface flat: the
+#: real surnames "Badminton" and "Admira" both CONTAIN "admin" as a substring
+#: and are unaffected, because neither tokenizes to a bare "admin"
+#: (see ``tests/test_wclean_fixture_marker_audit.py``).
+#: Residual false-positive risk: a person whose name is exactly the bare token
+#: "Admin" or "Administrator" — no such human name exists.
+_PLACEHOLDER_NAME_TOKENS = frozenset(
+    {"test", "probe", "gap", "admin", "administrator"}
+)
 _PLACEHOLDER_DIGIT_RUN_RE = re.compile(r"\d{8,}")
 #: Split on runs of non-alphanumeric characters (space/hyphen/underscore/
 #: punctuation) OR at a camelCase boundary (lowercase-or-digit immediately

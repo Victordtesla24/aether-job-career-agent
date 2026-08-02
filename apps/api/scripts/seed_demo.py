@@ -1,14 +1,37 @@
-"""Seed the canonical demo funnel: 847 → 412 → 156 → 23 → 4 (P2-S10).
-
-Creates (or reuses) a demo user and populates Jobs + Applications so the
-dashboard funnel matches the approved wireframe numbers. Idempotent: existing
-demo rows are wiped and re-seeded on every run.
+"""Provision the platform-owner ``admin`` account.
 
 Usage: cd apps/api && python scripts/seed_demo.py
+
+W-CLEAN (2026-08-02) — REMOVED: the demo-funnel generator
+-----------------------------------------------------------
+This module used to carry a ``main()`` that "seeded the canonical demo funnel
+847 → 412 → 156 → 23 → 4". What it actually did, against whichever database the
+repo-root ``.env`` names — i.e. **production**, because ``main()`` loaded that
+``.env`` itself:
+
+    DELETE FROM "Application" WHERE "userId" = <the production owner>
+    DELETE FROM "Job"         WHERE "userId" = <the production owner>
+
+...followed by INSERTing 847 fabricated ``Job`` rows ("Demo-seeded job posting
+for the analytics funnel.", ``https://demo.aether.dev/jobs/N``, random
+companies/titles/ATS scores) and 412 fabricated ``Application`` rows with
+invented statuses (4 offer / 19 interview / 133 screening / 256 submitted), plus
+a "Demo seed resume" with empty sections. Its ``DEMO_EMAIL`` constant was the
+production owner's real address.
+
+So a single ``python scripts/seed_demo.py`` would have destroyed the owner's
+real applications and job pipeline and replaced the dashboard, the funnel and
+every analytics number with fabricated data — the precise failure mode
+``scripts/run-tests.sh`` exists to prevent for the test suite. Nothing in the
+app, the deploy path or the test suite ever called it; only
+``seed_admin_user``/``ADMIN_EMAIL`` are imported (by ``tests/test_auth.py`` and
+``tests/test_gap_p6_admin.py``). It was pure standing hazard and is deleted.
+
+``tests/test_wclean_fixture_marker_audit.py::
+test_seed_demo_has_no_fabricated_funnel_generator`` keeps it deleted.
 """
 from __future__ import annotations
 
-import random
 import sys
 from pathlib import Path
 
@@ -49,14 +72,17 @@ def _load_root_env_into_environ() -> None:
 
 from app.db import ensure_user_profile_columns, get_connection, new_id  # noqa: E402
 from app.repositories.admin import _weak_password_matching  # noqa: E402
-from app.repositories.user import UserRepository  # noqa: E402
 from app.security import hash_password  # noqa: E402
-
-DEMO_EMAIL = "sarkar.vikram@gmail.com"
 
 # Admin account seeded for the platform owner (login-by-username feature).
 ADMIN_USERNAME = "admin"
 ADMIN_EMAIL = "admin@aether.local"
+#: An operations identity, deliberately NOT a person's name. Since W-CLEAN it is
+#: also a refused signer: ``cover_letter_agent._looks_like_placeholder_name``
+#: treats a bare "administrator"/"admin" token as a placeholder identity, so this
+#: account cannot generate a candidate-facing cover letter at all. That is the
+#: intended behaviour — 7 production letters were signed with this exact string
+#: before the guard knew about it.
 ADMIN_NAME = "Administrator"
 
 
@@ -135,109 +161,15 @@ def seed_admin_user() -> str:
             row = cur.fetchone()
     return row[0] if row else admin_id
 
-FUNNEL = {"jobs_found": 847, "applied": 412, "screened": 156, "interviewed": 23, "offers": 4}
-
-COMPANIES = ["Canva", "Atlassian", "SafetyCulture", "REA Group", "Deputy", "Culture Amp",
-             "Airwallex", "Linktree", "Immutable", "Octopus Deploy"]
-TITLES = ["Senior Software Engineer", "Staff Engineer", "ML Engineer", "Platform Engineer",
-          "Backend Engineer", "Full Stack Developer", "DevOps Engineer", "Data Engineer"]
-
-
-def _demo_password() -> str:
-    """Resolve the demo user's password from the environment (GAP-P4-068).
-
-    Never hardcode a real credential in shipped tooling. Reads
-    SEED_DEMO_PASSWORD first (dedicated override), falling back to
-    LOGIN_PASSWORD (the same repo .env var the login flow and uat tooling
-    already use) so a single `.env` is sufficient for a normal seed run.
-    """
-    password = os.environ.get("SEED_DEMO_PASSWORD") or os.environ.get("LOGIN_PASSWORD")
-    if not password:
-        raise SystemExit(
-            "SEED_DEMO_PASSWORD or LOGIN_PASSWORD must be set (as an env var, or in the "
-            "repo-root .env) to seed the demo user's password. Refusing to hardcode a "
-            "default credential."
-        )
-    return password
-
 
 def main() -> None:
-    # Standalone run: pull DATABASE_URL / passwords from the repo-root .env.
-    # (Never at import time — see _load_root_env_into_environ's docstring.)
+    """Standalone entrypoint: provision the ``admin`` account, nothing else.
+
+    Pulls ``DATABASE_URL`` / ``ADMIN_PASSWORD`` from the repo-root ``.env``
+    (never at import time — see ``_load_root_env_into_environ``'s docstring).
+    """
     _load_root_env_into_environ()
-    random.seed(42)
-    # Provision the admin account first (idempotent, independent of the demo
-    # funnel below) so a standard seed run always yields a usable admin login.
     seed_admin_user()
-    users = UserRepository()
-    user = users.get_by_email(DEMO_EMAIL)
-    if user is None:
-        user = users.create(DEMO_EMAIL, hash_password(_demo_password()))
-        print(f"created demo user {DEMO_EMAIL}")
-    user_id = user["id"]
-
-    # Application statuses: 4 offer, 19 interview, 133 screening, 256 submitted
-    statuses = (["offer"] * 4 + ["interview"] * 19 + ["screening"] * 133 + ["submitted"] * 256)
-    assert len(statuses) == FUNNEL["applied"]
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('DELETE FROM "Application" WHERE "userId" = %s', (user_id,))
-            cur.execute('DELETE FROM "Job" WHERE "userId" = %s', (user_id,))
-            cur.execute(
-                'DELETE FROM "Resume" WHERE "userId" = %s AND "label" = %s',
-                (user_id, "Demo seed resume"),
-            )
-
-            job_rows = []
-            for i in range(FUNNEL["jobs_found"]):
-                job_rows.append((
-                    new_id(), user_id,
-                    f"{random.choice(TITLES)}",
-                    random.choice(COMPANIES),
-                    "Demo-seeded job posting for the analytics funnel.",
-                    random.choice(["seek", "linkedin", "indeed"]),
-                    f"https://demo.aether.dev/jobs/{i}",
-                    round(random.uniform(35, 95), 1),
-                    random.randint(0, 85),
-                ))
-            cur.executemany(
-                '''
-                INSERT INTO "Job" ("id", "userId", "title", "company", "description",
-                    "source", "sourceUrl", "atsScore", "createdAt", "updatedAt")
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
-                        NOW() - make_interval(days => %s), NOW())
-                ''',
-                job_rows,
-            )
-
-            cur.execute(
-                '''
-                INSERT INTO "Resume"
-                    ("id", "userId", "label", "sections", "formatHash", "updatedAt")
-                VALUES (%s, %s, %s, '{}', 'demo-seed-hash', NOW()) RETURNING "id"
-                ''',
-                (new_id(), user_id, "Demo seed resume"),
-            )
-            resume_id = cur.fetchone()[0]
-
-            app_rows = [
-                (new_id(), user_id, job_rows[i][0], resume_id, status_,
-                 random.randint(0, 85))
-                for i, status_ in enumerate(statuses)
-            ]
-            cur.executemany(
-                '''
-                INSERT INTO "Application" ("id", "userId", "jobId", "resumeId", "status",
-                    "createdAt", "updatedAt")
-                VALUES (%s, %s, %s, %s, %s::"ApplicationStatus",
-                        NOW() - make_interval(days => %s), NOW())
-                ''',
-                app_rows,
-            )
-        conn.commit()
-
-    print(f"seeded funnel for {DEMO_EMAIL}: {FUNNEL}")
 
 
 if __name__ == "__main__":
