@@ -30,6 +30,7 @@ import {
 import { apiRequest } from "../../../lib/api/client";
 import { coverLetterDegraded } from "../../../components/dashboard/feed";
 import Orchestration from "../../../components/agents/Orchestration";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
 import ModelPicker from "../../../components/agents/ModelPicker";
 import ProviderConfigModal from "../../../components/agents/ProviderConfigModal";
@@ -142,6 +143,14 @@ export default function AgentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. The in-flight poll below only runs
+  // while THIS tab started a run; a run started by the scheduler, the worker or
+  // another tab left these cards frozen. `agentRuns` watches the AgentRun row's
+  // own createdAt/startedAt/completedAt, so every genuine transition lands here.
+  useRealtimeResources(["agentRuns"], () => {
+    void load();
+  });
 
   // Load the live model catalog once for the per-agent pickers, WITH its
   // freshness envelope (ML-catalog-008/N1): the GET .../models response already

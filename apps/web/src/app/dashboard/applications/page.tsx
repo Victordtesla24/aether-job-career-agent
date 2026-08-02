@@ -19,6 +19,7 @@ import { createApproval, fetchApprovals, type Approval } from "../../../lib/api/
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   clearPipeline,
   fetchAgentConfig,
@@ -494,6 +495,14 @@ export default function ApplicationsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. The board's cards are built from Job
+  // AND Application rows, and the approvals queue gates the last stages, so all
+  // three are subscribed: a stage advanced by an agent (or by another tab)
+  // lands here as soon as the server observes it rather than on the next poll.
+  useRealtimeResources(["applications", "jobs", "approvals"], () => {
+    void load();
+  });
 
   // Real-time board sync (HOTFIX realtime-board-refresh): the pipeline's
   // first 3 stages (Discovered/Evaluating/Tailoring) are agent-driven —

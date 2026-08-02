@@ -9,9 +9,10 @@
  * REQ-TM-10 — nothing is hardcoded (funnel is data-driven per audit D11).
  */
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
+import { useRealtimeResources } from "../../hooks/useRealtime";
 import MarketPulse from "../../components/analytics/MarketPulse";
 import {
   agentDisplayName,
@@ -89,31 +90,48 @@ function describeApprovalError(e: unknown, action: "approve" | "reject"): string
   return `Couldn't ${action} this request — please try again.`;
 }
 
-/** Load-once state with an explicit error channel (no fake-empty states). */
+/**
+ * Widget state with an explicit error channel (no fake-empty states).
+ *
+ * W-RT: this was load-ONCE — it fetched on mount and had no way to fetch again,
+ * which is why the whole home screen froze at whatever was true when it opened.
+ * It now exposes `reload`, so the shared realtime channel can refresh exactly
+ * the widgets whose underlying rows really changed.
+ */
 function useLoad<T>(load: () => Promise<T>): {
   data: T | null;
   error: string | null;
   setData: (value: T) => void;
+  reload: () => void;
 } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
-  useEffect(() => {
-    let alive = true;
+  const aliveRef = useRef(true);
+
+  const reload = useCallback(() => {
     loadRef
       .current()
       .then((value) => {
-        if (alive) setData(value);
+        if (aliveRef.current) {
+          setData(value);
+          setError(null);
+        }
       })
       .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : "request failed");
+        if (aliveRef.current) setError(e instanceof Error ? e.message : "request failed");
       });
-    return () => {
-      alive = false;
-    };
   }, []);
-  return { data, error, setData };
+
+  useEffect(() => {
+    aliveRef.current = true;
+    reload();
+    return () => {
+      aliveRef.current = false;
+    };
+  }, [reload]);
+  return { data, error, setData, reload };
 }
 
 function WidgetError({ children }: { children: React.ReactNode }) {
@@ -134,6 +152,21 @@ export default function DashboardPage() {
     fetchNetworkingSummary().then((n) => n.crmSummary),
   );
   const approvals = useLoad<Approval[]>(() => fetchApprovals("pending"));
+
+  // W-RT — the shared realtime channel. Each widget is refreshed by the
+  // resource it is actually built from, so an agent run does not blanket-refetch
+  // the whole page and a change to one table cannot silently leave another
+  // widget's numbers behind. `funnel`/`weekly` are derived from Jobs +
+  // Applications, so they follow both.
+  useRealtimeResources(["jobs", "applications"], () => {
+    funnel.reload();
+    weekly.reload();
+  });
+  useRealtimeResources(["jobs"], () => jobs.reload());
+  useRealtimeResources(["agentRuns"], () => runs.reload());
+  useRealtimeResources(["stories"], () => stories.reload());
+  useRealtimeResources(["contacts", "outreach"], () => crm.reload());
+  useRealtimeResources(["approvals"], () => approvals.reload());
 
   const [feedFilter, setFeedFilter] = useState<(typeof FEED_FILTERS)[number]>("All");
   const [busyApprovalId, setBusyApprovalId] = useState<string | null>(null);

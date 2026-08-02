@@ -25,6 +25,7 @@ import {
   type EmailMessage,
 } from "../../../lib/api/workspaces";
 import { runAgent } from "../../../lib/api/agents";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
 import { connectAnotherGmail, disconnectAccount, setPrimaryAccount } from "../../../lib/api/emails";
 
@@ -208,6 +209,14 @@ export default function EmailCenterPage() {
       .then((data) => setInbox(data))
       .catch(() => {});
   }, []);
+
+  // W-RT — the shared realtime channel. The Email Center used to fetch ONCE on
+  // mount, so a thread synced or triaged by the email agent stayed invisible
+  // until a manual reload. `emails` watches the EmailThread rows this inbox is
+  // built from.
+  useRealtimeResources(["emails"], () => {
+    refreshInbox();
+  });
 
   // Run the REAL emailAgent triage over the inbox (one batch LLM call) so the
   // list scores + Priority/Follow-Up/Auto tabs populate. User-initiated — never

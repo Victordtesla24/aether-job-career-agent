@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { usePolling } from "../../../hooks/usePolling";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { extractorTriggerState } from "../../../components/stories/logic";
 import { StoryAside } from "../../../components/stories/story-aside";
 import { StoryCard } from "../../../components/stories/story-card";
@@ -67,6 +68,14 @@ export default function StoryBankPage() {
   // restartKey) and re-fetches every 20s so this screen is no longer
   // load-once (ML-realtime gap).
   usePolling(() => load(filter), 20_000, { restartKey: filter });
+
+  // W-RT — the shared realtime channel, on top of that poll: a story written by
+  // the story agent now appears as soon as the server observes the row instead
+  // of up to 20s later. The poll stays as the fallback for when the stream is
+  // not connected; the status badge says which one is carrying the screen.
+  useRealtimeResources(["stories"], () => {
+    void load(filter);
+  });
 
   const effectiveStories = useMemo(
     () => (demoEmpty ? [] : (stories ?? [])),

@@ -33,6 +33,7 @@ import {
   type NetworkingSummary,
 } from "../../../lib/api/workspaces";
 import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "./lib";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 
 const EMPTY_FORM = { name: "", role: "", company: "" };
 
@@ -64,11 +65,23 @@ export default function NetworkingPage() {
     }
   }, []);
 
-  useEffect(() => {
+  const loadSummary = useCallback(() => {
     fetchNetworkingSummary()
       .then(setData)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load networking data"));
   }, []);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  // W-RT — the shared realtime channel. This screen used to fetch ONCE on
+  // mount, so a contact or outreach task written by the networking agent never
+  // showed up without a manual reload. Both tables behind the summary are
+  // subscribed.
+  useRealtimeResources(["contacts", "outreach"], () => {
+    loadSummary();
+  });
 
   // Contact detail: fetch on demand via the real GET /networking/contacts/{id}
   // endpoint whenever a card is selected.

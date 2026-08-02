@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActionsPanel } from "../../../components/cover-letters/ActionsPanel";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { EvidenceTracePanel } from "../../../components/cover-letters/EvidenceTracePanel";
 import { KeywordCoveragePanel } from "../../../components/cover-letters/KeywordCoveragePanel";
 import { RejectionPanel } from "../../../components/cover-letters/RejectionPanel";
@@ -144,6 +145,14 @@ export default function CoverLettersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. This screen used to fetch ONCE on
+  // mount, so a letter drafted by the cover-letter agent never appeared until
+  // the user reloaded. `coverLetters` watches exactly the rows this list is
+  // built from (Applications carrying a letter).
+  useRealtimeResources(["coverLetters"], () => {
+    void load();
+  });
 
   // The rail is driven by the selected (expanded) letter's insights.
   useEffect(() => {

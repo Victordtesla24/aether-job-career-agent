@@ -32,6 +32,7 @@ from app.routers import (
     billing,
     cover_letters,
     emails,
+    events,
     google_oauth,
     health,
     interviews,
@@ -340,6 +341,11 @@ def create_app() -> FastAPI:
     app.include_router(offers.router, prefix="/offers", tags=["offers"])
     app.include_router(billing.router, prefix="/billing", tags=["billing"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    # The dashboard's ONE shared realtime channel (W-RT). Shares
+    # ``app.state.sse_stream_slots`` with the agent-run stream above, so both
+    # kinds of stream draw on a single global budget against the database's
+    # 25-connection ceiling rather than each having an uncapped pool.
+    app.include_router(events.router, prefix="/events", tags=["events"])
 
     return app
 

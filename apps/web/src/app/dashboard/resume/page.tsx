@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import MetricTooltip from "../../../components/MetricTooltip";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { conversionImpactFrom, type ConversionImpact } from "../../../lib/scoring/provenance";
@@ -113,6 +114,14 @@ export default function ResumePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. Before this, the Résumé screen fetched
+  // ONCE on mount and never again: a résumé tailored by an agent (or by the
+  // Jobs board in another tab) was invisible here until a manual reload. It
+  // also renders the Jobs list in the tailor picker, so both are subscribed.
+  useRealtimeResources(["resumes", "jobs"], () => {
+    void load();
+  });
 
   // Deep link from the Jobs board: /dashboard/resume?job=<id> preselects the
   // target job in the tailor dropdown (audit defect D4).

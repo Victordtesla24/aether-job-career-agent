@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AddOfferModal } from "../../../components/offers/AddOfferModal";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { EmptyState } from "../../../components/offers/EmptyState";
 import { NegotiationCoach } from "../../../components/offers/NegotiationCoach";
 import { OfferCard } from "../../../components/offers/OfferCard";
@@ -36,6 +37,16 @@ export default function OffersPage() {
       setError(e instanceof Error ? e.message : "Failed to load offers"),
     );
   }, [load]);
+
+  // W-RT — the shared realtime channel. The comparison payload combines
+  // persisted Offer rows with Applications that reached the offer stage, so
+  // both are subscribed: an application advanced to `offer` changes this screen
+  // even though no Offer row was written.
+  useRealtimeResources(["offers", "applications"], () => {
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : "Failed to load offers"),
+    );
+  });
 
   // Persist the offer, then refetch so the grid AND the recomputed negotiation
   // coach reflect the real backend state. Errors propagate to the modal, which

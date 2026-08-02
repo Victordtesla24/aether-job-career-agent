@@ -307,12 +307,19 @@ class StreamSlots:
                 raise StreamCapExceeded(
                     scope="global",
                     limit=global_limit,
+                    # W-RT: this budget is now SHARED between the agent-run
+                    # stream and the workspace realtime channel, so the wording
+                    # must fit both. It used to say "agent-run stream capacity"
+                    # and point at GET /agents/runs/{run_id}; told to a
+                    # dashboard user whose live-update stream was refused, both
+                    # were false — they may have started no run at all.
                     message=(
-                        f"The server is at its live agent-run stream capacity "
+                        f"The server is at its live-stream capacity "
                         f"({global_limit} concurrent streams) — a deliberate cap "
                         f"protecting the database's connection ceiling. Retry in a "
-                        f"few seconds. Your run is unaffected and its status is "
-                        f"still readable at GET /agents/runs/{{run_id}}."
+                        f"few seconds. Nothing is wrong with your data: every "
+                        f"screen still loads and refreshes normally without the "
+                        f"live stream."
                     ),
                 )
             mine = sum(1 for slot in self._slots.values() if slot.user_id == user_id)
@@ -320,11 +327,13 @@ class StreamSlots:
                 raise StreamCapExceeded(
                     scope="user",
                     limit=user_limit,
+                    # Same W-RT correction as the global message above.
                     message=(
-                        f"Too many live agent-run streams open for this account "
+                        f"Too many live streams open for this account "
                         f"({user_limit} at a time). Close another open tab or retry "
-                        f"in a few seconds. Your run is unaffected and its status is "
-                        f"still readable at GET /agents/runs/{{run_id}}."
+                        f"in a few seconds. Nothing is wrong with your data: every "
+                        f"screen still loads and refreshes normally without the "
+                        f"live stream."
                     ),
                 )
             token = next(self._tokens)

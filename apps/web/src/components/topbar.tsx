@@ -19,6 +19,7 @@ import { fetchSettings } from "../lib/api/workspaces";
 import { apiRequest } from "../lib/api/client";
 import { fetchMe } from "../lib/api/admin";
 import { UserMenu } from "./user-menu";
+import { RealtimeStatusBadge } from "./realtime/RealtimeStatusBadge";
 
 export interface SearchHit {
   kind: "job" | "application" | "agent";
@@ -318,6 +319,12 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             </ul>
           ) : null}
         </div>
+        {/* W-RT — the honest state of the shared realtime channel. Present on
+            every dashboard screen so a user can always tell whether what they
+            are looking at is being kept current or has quietly gone stale.
+            Hidden on screens that subscribe to nothing, where there is genuinely
+            nothing to report. */}
+        <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
         <Link
           href="/dashboard/approvals"
           aria-label={

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import MarketPulse from "../../../components/analytics/MarketPulse";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import MetricTooltip from "../../../components/MetricTooltip";
 import {
   fetchAgentRoi,
@@ -69,6 +70,14 @@ export default function AnalyticsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. Every figure on this screen is derived
+  // from Jobs, Applications, Résumés and Agent runs, and none of them was
+  // refreshed after mount: the funnel could sit at yesterday's numbers all day.
+  // Subscribing to the four source resources keeps the derived views honest.
+  useRealtimeResources(["applications", "jobs", "resumes", "agentRuns"], () => {
+    void load();
+  });
 
   const funnelStages = funnel
     ? ([

@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchApplications, type Application } from "../../../lib/api/applications";
 import { runAgent } from "../../../lib/api/agents";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   ACTIVE_INTERVIEW_STATUSES,
   cancelInterview,
@@ -176,6 +177,15 @@ export default function InterviewCenterPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. This screen used to fetch ONCE on
+  // mount. It renders scheduled interviews plus the interview-stage
+  // applications that gate the prep panel, so both are subscribed: an interview
+  // booked by the calendar path, or an application advanced to `interview` by an
+  // agent, now shows up without a manual reload.
+  useRealtimeResources(["interviews", "applications"], () => {
+    void load();
+  });
 
   const appLabels = useMemo(() => {
     const map = new Map<string, { title: string; company: string }>();

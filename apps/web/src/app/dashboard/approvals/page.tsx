@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApprovalModal } from "../../../components/approvals/ApprovalModal";
+import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   decideApproval,
   executeApproval,
@@ -96,6 +97,15 @@ export default function ApprovalsPage() {
     setApprovals(null);
     void load();
   }, [load]);
+
+  // W-RT — the shared realtime channel. Approval requests are created by agents
+  // and resolved from other surfaces (the dashboard's inline queue, another
+  // tab); without this the queue only ever reflected what THIS tab did.
+  // Deliberately does NOT clear the list first — a refresh in place must not
+  // blank the queue the user is reading.
+  useRealtimeResources(["approvals"], () => {
+    void load();
+  });
 
   // Deep link: /dashboard/approvals?review=<id> opens the modal directly.
   useEffect(() => {
