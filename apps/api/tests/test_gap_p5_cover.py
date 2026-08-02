@@ -241,4 +241,10 @@ class TestInjectionStillGuarded:
         letter = _run(client, auth_headers, _INJECTED_JOB, "injection-guard", llm)
         assert "EFFUSIVE" not in letter
         assert "RMX-9" not in letter
-        assert llm.calls == 1
+        # W-TAILOR-CONVERGE item 4 (2026-08-02): a clean-but-sub-target letter
+        # now gets ONE budget-guarded quality-improvement pass, so a run makes
+        # up to 2 drafting calls where it previously made exactly 1. The
+        # SUBJECT of this test — that the injected instruction never survives
+        # into the shipped letter — is asserted above and is unchanged; only
+        # the call count moved, and it is bounded (never unbounded retries).
+        assert llm.calls <= 2, llm.calls

@@ -47,6 +47,14 @@ const CONVERSION_FIXTURE = {
   applied_to_screened: 25.0,
   screened_to_interview: 14.7,
   interview_to_offer: 12.5,
+  // GOLD-MASTER V4 §6 / G-C (668ca18): `ConversionSchema` now DECLARES the two
+  // fields `GET /analytics/conversion` has always returned
+  // (analytics.py::conversion -> interview_conversion_rate =
+  // rate(interviewed, submitted), and its healthy flag). This fixture stands in
+  // for that endpoint's payload, so it must carry them too — otherwise the
+  // client test asserts against a response shape the API never sends.
+  interview_conversion_rate: 14.7,
+  interview_conversion_healthy: false,
 };
 
 function mockFetchOnce(body: unknown, status = 200) {
