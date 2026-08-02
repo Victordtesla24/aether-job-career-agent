@@ -1,7 +1,7 @@
 """W-CLEAN — regression guard: no fixture / test / probe / placeholder residue
 may exist in user-visible columns.
 
-Written RED against HEAD on 2026-08-02, reproducing four classes of
+Written RED against HEAD on 2026-08-02, reproducing six classes of
 contamination found at rest in the production ``aether`` schema:
 
 1. ``Application.coverLetter`` — 7 rows, all ``submitted``, whose letter body
@@ -38,8 +38,10 @@ defect in the rule.
 """
 from __future__ import annotations
 
+import ast
 import json
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -544,6 +546,53 @@ def test_reintroduced_fixture_rows_are_caught_by_the_db_scan(
 # ===========================================================================
 
 
+#: SQL and content literals that only the deleted demo-funnel generator emits.
+_FORBIDDEN_SEED_LITERALS = (
+    'DELETE FROM "Application"',
+    'DELETE FROM "Job"',
+    'INSERT INTO "Job"',
+    'INSERT INTO "Application"',
+    "Demo-seeded job posting",
+    "demo.aether.dev",
+    "demo-seed-hash",
+    "Demo seed resume",
+)
+
+#: Module-level names that only the generator defines.
+_FORBIDDEN_SEED_NAMES = {"FUNNEL", "COMPANIES", "TITLES", "DEMO_EMAIL"}
+
+
+def _executable_string_literals(tree: ast.Module) -> list[str]:
+    """Every string constant in ``tree`` EXCEPT docstrings.
+
+    Scanning raw source text cannot work here: ``seed_demo``'s module docstring
+    is the written record of what the deleted generator did and necessarily
+    quotes the SQL below. Only code can reintroduce the hazard, so only code is
+    inspected.
+    """
+    docstring_nodes = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ) or not body:
+            continue
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            docstring_nodes.add(id(first.value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstring_nodes
+    ]
+
+
 def test_seed_demo_has_no_fabricated_funnel_generator():
     """``scripts/seed_demo.py`` used to carry a ``main()`` that DELETEd every
     ``Application``/``Job`` row belonging to the production owner's email and
@@ -553,22 +602,31 @@ def test_seed_demo_has_no_fabricated_funnel_generator():
 
     Nothing imports it but ``seed_admin_user``; the funnel generator is pure
     hazard and must stay deleted."""
-    from pathlib import Path
-
     source = (
         Path(__file__).resolve().parents[1] / "scripts" / "seed_demo.py"
     ).read_text(encoding="utf-8")
-    for forbidden in (
-        'DELETE FROM "Application"',
-        'DELETE FROM "Job"',
-        "Demo-seeded job posting",
-        "demo.aether.dev",
-        "demo-seed-hash",
-        "Demo seed resume",
-        "FUNNEL",
-    ):
-        assert forbidden not in source, (
-            f"scripts/seed_demo.py must not contain {forbidden!r}: the demo-funnel "
-            "generator injects fabricated Jobs/Applications into — and deletes the "
-            "real rows of — whichever database the repo-root .env points at."
+    tree = ast.parse(source)
+
+    literals = _executable_string_literals(tree)
+    for forbidden in _FORBIDDEN_SEED_LITERALS:
+        offenders = [text for text in literals if forbidden in text]
+        assert offenders == [], (
+            f"scripts/seed_demo.py executes a statement containing {forbidden!r}: "
+            "the demo-funnel generator injects fabricated Jobs/Applications into "
+            "— and deletes the real rows of — whichever database the repo-root "
+            f".env points at. Offending literal(s): {offenders}"
         )
+
+    assigned = {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    reintroduced = assigned & _FORBIDDEN_SEED_NAMES
+    assert reintroduced == set(), (
+        f"scripts/seed_demo.py re-defines {sorted(reintroduced)} — the fabricated "
+        "demo-funnel constants (847/412 counts, fake companies/titles, and the "
+        "production owner's email as DEMO_EMAIL)."
+    )
