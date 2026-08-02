@@ -130,4 +130,4 @@ class SmartRecruitersAdapter(BaseAdapter):
                         postedAt=str(item.get("releasedDate") or ""),
                     )
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

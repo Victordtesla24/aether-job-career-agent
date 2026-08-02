@@ -21,6 +21,7 @@ from typing import Any
 
 from app.repositories.job import JobRepository
 from app.repositories.job_source_status import JobSourceStatusRepository
+from app.services.discovery import qualification
 from app.services.discovery.adapter_registry import ADAPTERS
 from app.services.discovery.base_adapter import SourceBlockedError
 
@@ -34,6 +35,9 @@ class ScoutResult:
     persisted: int = 0
     updated: int = 0
     errors: list[str] = field(default_factory=list)
+    #: v5 agent-qualification accounting — how the board decision was actually
+    #: made this run. Surfaced so "we considered everything" is never implied.
+    qualification: dict[str, Any] = field(default_factory=dict)
     #: One entry per source: {source, fetched, persisted, updated, error, status}.
     per_source: list[dict[str, Any]] = field(default_factory=list)
 
@@ -51,6 +55,42 @@ class ScoutAgent:
 
     def run(self, user_id: str, query: str, location: str) -> ScoutResult:
         result = ScoutResult()
+        # v5: role fit is decided HERE, against the user's real résumé, not by a
+        # title regex inside an adapter. Adapters now return every posting the
+        # user could actually take (location gate only); qualification scores the
+        # rest with the real ATS engine. Résumé load is best-effort — with none,
+        # qualification falls back to the title fast path and says so.
+        resume_text = ""
+        engine = None
+        try:
+            from app.services.ats_engine import ATSEngine
+            from app.services.resume_grounding import require_user_resume_text
+
+            resume_text = require_user_resume_text(
+                user_id, "Add your resume so discovered jobs can be scored against it."
+            )
+            engine = ATSEngine()
+        except Exception as exc:  # noqa: BLE001 — never sink a sweep over scoring setup
+            logger.warning(
+                "scout: qualification degraded to the title fast path (%s: %s)",
+                type(exc).__name__, exc,
+            )
+        # The decider's cut comes from this user's REAL existing board scores,
+        # not a constant. Best-effort: absent history it falls back to the live
+        # distribution of the batch actually fetched.
+        history_scores: list[float] = []
+        try:
+            history_scores = [
+                float(j["fitScore"])
+                for j in self._repository.list_by_user(user_id)
+                if j.get("fitScore") is not None
+            ]
+        except Exception as exc:  # noqa: BLE001 — history is an optimisation, not a gate
+            logger.warning("scout: could not load score history (%s)", exc)
+        qual_totals: dict[str, Any] = {
+            "qualified": 0, "judged": 0, "rejected": 0,
+            "unjudged": 0, "errors": [], "decisionBasis": "",
+        }
         # Cross-source dedupe within a run: (company, title, apply URL).
         seen: set[tuple[str, str, str]] = set()
         for source, adapter_cls in ADAPTERS.items():
@@ -97,6 +137,29 @@ class ScoutAgent:
                 continue
 
             src["fetched"] = len(jobs)
+            # Agent qualification: decide which of these the user should see.
+            qres = qualification.qualify(
+                jobs,
+                resume_text=resume_text,
+                engine=engine,
+                history_scores=history_scores,
+            )
+            # Persist what the agent QUALIFIED plus anything it could not judge.
+            # A posting is only ever dropped on real evidence (scored below this
+            # user's own bar) — never because we lacked a résumé, an engine, or
+            # compute budget. Unjudged rows persist unranked and are scored on a
+            # later sweep by fitScorer.
+            jobs = list(qres.qualified) + list(qres.unjudged_jobs)
+            src["qualified"] = len(qres.qualified)
+            src["unjudged"] = len(qres.unjudged_jobs)
+            for key, value in qres.as_dict().items():
+                if key == "errors":
+                    qual_totals["errors"].extend(value)
+                elif key == "decisionBasis":
+                    if value:
+                        qual_totals["decisionBasis"] = value
+                else:
+                    qual_totals[key] = qual_totals.get(key, 0) + value
             no_source_url = 0
             for job in jobs:
                 if not job.get("sourceUrl"):
@@ -135,6 +198,7 @@ class ScoutAgent:
                 )
             result.per_source.append(src)
             self._record_status(user_id, src)
+        result.qualification = qual_totals
         return result
 
     def _record_status(self, user_id: str, src: dict[str, Any]) -> None:

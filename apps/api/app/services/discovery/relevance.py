@@ -116,6 +116,34 @@ def is_relevant(job: JobRaw) -> bool:
     return score > 0
 
 
+def is_applicable(job: JobRaw) -> bool:
+    """Location-only gate — the ONE constraint an adapter can honestly enforce.
+
+    v5: adapters no longer decide whether a posting is a good ROLE fit. That
+    needs the candidate's résumé, which an adapter does not have, and the title
+    regex was measurably throwing away 189 of 200 location-valid Melbourne
+    postings before the scoring agent ever saw them. Role fit is now decided by
+    ``services.discovery.qualification`` against the real résumé.
+
+    A region lock stated in the TITLE (e.g. "Engagement Manager - EMEA" at
+    location "Remote") still disqualifies, because that is a location fact.
+    """
+    score = location_score(job.get("location"), bool(job.get("remote")))
+    if score == 1 and _BLOCKED_RE.search(job.get("title", "")):
+        return False
+    return score > 0
+
+
+def filter_applicable(jobs: list[JobRaw]) -> list[JobRaw]:
+    """Keep every posting a Melbourne candidate could actually take, AU first."""
+    kept = [job for job in jobs if is_applicable(job)]
+    kept.sort(
+        key=lambda j: location_score(j.get("location"), bool(j.get("remote"))),
+        reverse=True,
+    )
+    return kept
+
+
 def filter_relevant(jobs: list[JobRaw]) -> list[JobRaw]:
     """Keep relevant postings, AU locations first."""
     kept = [job for job in jobs if is_relevant(job)]

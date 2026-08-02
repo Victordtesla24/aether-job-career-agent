@@ -119,7 +119,24 @@ class TestAdzunaAdapter:
             assert job["title"].strip()
             assert job["company"].strip()
             assert isinstance(job["remote"], bool)
-            # Engineering noise in the fixture is filtered by relevance.
+        # v5: engineering noise is no longer dropped by the ADAPTER (which gates
+        # on location only) — it is rejected by discovery.qualification against
+        # the user's real résumé. Proven here end to end so the guarantee is not
+        # merely relocated on paper. See tests/test_v5_agent_qualification.py.
+        from app.services.discovery import qualification
+
+        class _DeliveryResumeEngine:
+            def score(self, resume_text, job_text):
+                low = job_text.lower()
+                return type("S", (), {"overall": 5.0 if "software engineer" in low else 75.0})()
+
+        res = qualification.qualify(
+            jobs,
+            resume_text="delivery lead résumé",
+            engine=_DeliveryResumeEngine(),
+            history_scores=[70.0] * 5,
+        )
+        for job in res.qualified:
             assert "software engineer" not in job["title"].lower()
 
     def test_api_failure_raises_adapter_error(self, monkeypatch):

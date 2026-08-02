@@ -87,4 +87,4 @@ class AshbyAdapter(BaseAdapter):
                         postedAt=str(item.get("publishedAt") or ""),
                     )
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

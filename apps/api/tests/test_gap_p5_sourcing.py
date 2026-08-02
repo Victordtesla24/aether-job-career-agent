@@ -59,11 +59,37 @@ class TestNewAdapters:
             assert isinstance(job["description"], str)
 
     @pytest.mark.parametrize("source", NEW_SOURCES)
-    def test_filters_out_irrelevant_engineering_roles(self, source):
+    def test_engineering_noise_is_rejected_by_qualification_not_the_adapter(self, source):
+        """v5 CONTRACT CHANGE. Adapters gate on LOCATION only; role fit is decided
+        by ``discovery.qualification`` against the user's real résumé.
+
+        The old assertion (adapter drops "software engineer") encoded a title
+        regex that was measurably discarding 189 of 200 real Melbourne postings
+        before anything could score them. The GUARANTEE still holds end to end —
+        engineering noise must not reach the board — it is simply enforced where
+        the résumé is actually available. This test proves both halves."""
+        from app.services.discovery import qualification
+
         jobs = _adapter(source)(fixture=_load_fixture(source)).fetch(
             query="delivery lead", location="Melbourne, Australia"
         )
-        for job in jobs:
+
+        class _DeliveryResumeEngine:
+            """Stands in for ATSEngine: a delivery-lead résumé scores engineering
+            titles poorly and delivery titles well."""
+
+            def score(self, resume_text, job_text):
+                low = job_text.lower()
+                bad = any(t in low for t in ("software engineer", "backend engineer"))
+                return type("S", (), {"overall": 5.0 if bad else 75.0})()
+
+        res = qualification.qualify(
+            jobs,
+            resume_text="delivery lead résumé",
+            engine=_DeliveryResumeEngine(),
+            history_scores=[70.0] * 5,
+        )
+        for job in res.qualified:
             assert "software engineer" not in job["title"].lower()
             assert "backend engineer" not in job["title"].lower()
 

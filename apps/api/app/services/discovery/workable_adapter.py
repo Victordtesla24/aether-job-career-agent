@@ -114,4 +114,4 @@ class WorkableAdapter(BaseAdapter):
                         postedAt=str(item.get("published_on") or item.get("created_at") or ""),
                     )
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

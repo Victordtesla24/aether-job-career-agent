@@ -101,4 +101,4 @@ class LeverAdapter(BaseAdapter):
                         postedAt=_posted_at(item.get("createdAt")),
                     )
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

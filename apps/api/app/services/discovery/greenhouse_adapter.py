@@ -89,4 +89,4 @@ class GreenhouseAdapter(BaseAdapter):
                         postedAt=str(item.get("updated_at") or ""),
                     )
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

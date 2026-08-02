@@ -138,4 +138,4 @@ class AdzunaAdapter(BaseAdapter):
                     currency="AUD" if (salary_min is not None or salary_max is not None) else None,
                 )
             )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

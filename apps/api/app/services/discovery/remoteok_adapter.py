@@ -51,4 +51,4 @@ class RemoteOkAdapter(BaseAdapter):
                     postedAt=str(item.get("date") or ""),
                 )
             )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

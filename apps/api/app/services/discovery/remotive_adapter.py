@@ -60,4 +60,4 @@ class RemotiveAdapter(BaseAdapter):
                     postedAt=str(item.get("publication_date") or ""),
                 )
             )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)

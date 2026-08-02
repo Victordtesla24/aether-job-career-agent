@@ -94,4 +94,4 @@ class WellfoundAdapter(BaseAdapter):
                     "wellfound: parse error on item (title=%r): %s",
                     str(item.get("title") or "")[:80], exc,
                 )
-        return relevance.filter_relevant(jobs)
+        return relevance.filter_applicable(jobs)
