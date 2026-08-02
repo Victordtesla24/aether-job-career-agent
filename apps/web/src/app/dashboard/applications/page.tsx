@@ -234,6 +234,57 @@ function MoveMenu({
   );
 }
 
+/**
+ * W-SUB — says whether Aether actually TRANSMITTED this application.
+ *
+ * Ground truth this exists to correct: `Application.status = "submitted"`
+ * records that the application was marked submitted, not that anything was
+ * sent. Before W-SUB nothing in the product could send an application at all,
+ * yet 86 production rows sat in the Submitted column with no qualification —
+ * the product's biggest false claim.
+ *
+ * History is not rewritten and the card is not moved. The badge simply states
+ * which happened. Renders nothing when the API did not supply the field (an
+ * older build), because inventing either answer is exactly the failure mode
+ * being fixed.
+ */
+function SubmissionBadge({ app }: { app?: TrackerApplication }) {
+  if (!app || app.transmitted == null) return null;
+  if (app.transmitted) {
+    return (
+      <span
+        data-testid="submission-transmitted-badge"
+        title={
+          app.transmittedTo
+            ? `Emailed to ${app.transmittedTo}${
+                app.transmittedAt ? ` on ${shortDate(app.transmittedAt)}` : ""
+              }. Check your Gmail Sent folder for the copy.`
+            : "Sent by Aether."
+        }
+        className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-green/15 px-2 py-0.5 text-[10px] text-aether-green"
+      >
+        <i className="fa-solid fa-paper-plane text-[9px]" aria-hidden="true" />
+        Sent by Aether
+      </span>
+    );
+  }
+  return (
+    <span
+      data-testid="submission-not-transmitted-badge"
+      title={
+        "Aether did not send this application — it is recorded as prepared. " +
+        (app.autoSubmittable
+          ? "Approve it in Approvals to email it to the employer."
+          : "This posting publishes no application email address, so it must be submitted on the employer's site.")
+      }
+      className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow"
+    >
+      <i className="fa-solid fa-circle-info text-[9px]" aria-hidden="true" />
+      Not sent by Aether
+    </span>
+  );
+}
+
 /** Stage-specific card footer line/badge (wireframe card-at13..at25). */
 function CardMeta({
   card,
@@ -301,12 +352,22 @@ function CardMeta({
         </span>
       );
     case "submitted":
-      return meta.followUpSentAt ? (
-        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
-          <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
-          Follow-up sent ✓
-        </div>
-      ) : null;
+      // W-SUB — the single most-repeated false claim in this product was the
+      // Submitted column: 86 rows read "submitted" while Aether had never
+      // transmitted anything anywhere. The stored status is history and is
+      // NOT rewritten; what changes is that the card now states which of the
+      // two very different things actually happened.
+      return (
+        <>
+          <SubmissionBadge app={card.app} />
+          {meta.followUpSentAt ? (
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
+              <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
+              Follow-up sent ✓
+            </div>
+          ) : null}
+        </>
+      );
     case "in-review":
       return meta.autoFollowUpInDays != null ? (
         <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-yellow">
@@ -806,6 +867,29 @@ export default function ApplicationsPage() {
               <i className="fa-solid fa-xmark" aria-hidden="true" />
             </button>
           </div>
+          {/* W-SUB: the detail panel states, in words, whether Aether
+              actually transmitted this application — the claim the "status:
+              submitted" line above cannot make on its own. */}
+          {detail.transmitted != null ? (
+            <p
+              data-testid="application-transmission-line"
+              className={`mt-2 text-xs ${
+                detail.transmitted ? "text-aether-green" : "text-aether-yellow"
+              }`}
+            >
+              {detail.transmitted
+                ? `Sent by Aether to ${detail.transmittedTo ?? "the employer"}${
+                    detail.transmittedAt ? ` on ${shortDate(detail.transmittedAt)}` : ""
+                  }${
+                    detail.transmissionRef
+                      ? ` · message ${detail.transmissionRef} (in your Gmail Sent folder)`
+                      : ""
+                  }`
+                : detail.autoSubmittable
+                  ? "Not sent by Aether — prepared only. Approve it in Approvals to email it to the employer."
+                  : "Not sent by Aether — prepared only. This posting publishes no application email address, so it must be submitted on the employer's own site."}
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {detail.applyUrl && !detail.applyUrl.includes("demo.aether.dev") ? (
               <a

@@ -47,6 +47,16 @@ def _validate_source_filter(source: str, include_stale: bool) -> None:
     by a known-but-unavailable source.
     """
     from app.services.discovery.adapter_registry import source_availability
+    from app.services.job_alert_parser import ALERT_SOURCES
+
+    # Inbox-sourced provenance (W-ALERT) is a real, always-available channel
+    # that is NOT a discovery adapter: those rows are read out of the user's own
+    # job-alert emails, so they must never appear in the scout's
+    # ``source_availability`` (which describes board fetchers) yet must still be
+    # filterable here — otherwise the honest provenance the UI shows on the card
+    # is a filter value the API rejects with 422.
+    if source in ALERT_SOURCES:
+        return
 
     rows = {row["source"]: row for row in source_availability()}
     if source not in rows:
@@ -54,7 +64,7 @@ def _validate_source_filter(source: str, include_stale: bool) -> None:
             status_code=422,
             detail=(
                 f"Unknown source '{source}'. Known sources: "
-                f"{', '.join(sorted(rows))}"
+                f"{', '.join(sorted(set(rows) | set(ALERT_SOURCES)))}"
             ),
         )
     row = rows[source]
@@ -201,6 +211,26 @@ def _round(v: float) -> int:
     return int(max(0, min(100, round(v))))
 
 
+def _dimension(label: str, score: int, *, degraded: bool) -> dict[str, Any]:
+    """Build one ``dimensions[]`` entry, STRUCTURALLY forcing a provenance call.
+
+    GMV4-ats-002 / ADR-GMV4-001. ``degraded`` is keyword-only and has NO
+    default, so a dimension cannot be added to either builder below without
+    the author stating, in code, whether its score is a genuine measurement
+    or is (wholly or partly) the neutral ``_DEGRADED_SEMANTIC_SCORE``
+    placeholder. Rounds 1-3 each shipped a dimension that simply omitted the
+    key; an omitted key is indistinguishable from ``degraded: False`` on the
+    wire, which is exactly how "Role Alignment" and "Career Growth" — both
+    built from ``ATSScore.overall``, itself 40% semantic — went three review
+    rounds asserting a placeholder as fact.
+
+    Emitting the key on EVERY dimension (never omitting it for the clean ones)
+    is also what lets the client fail CLOSED on an absent flag
+    (``apps/web/src/lib/scoring/provenance.ts::fitDimensionsFrom``).
+    """
+    return {"label": label, "score": score, "degraded": degraded}
+
+
 #: Non-skill tokens the ATS keyword extractor surfaces (entity/boilerplate) that
 #: read poorly as "skills" — dropped from the displayed tags/gap only.
 _SKILL_NOISE = {
@@ -255,17 +285,22 @@ def _empty_insights(job: dict[str, Any]) -> dict[str, Any]:
     location_match = 100 if remote else (95 if au else 70)
     stability = _round(_SOURCE_STABILITY.get(str(job.get("source", "")).lower(), 76)
                        + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0))
+    # A no-résumé caller has no measurement for any résumé-dependent
+    # dimension: those zeros are placeholders, not scores of 0. They are
+    # marked degraded so the UI shows "—" rather than a bottomed-out radar
+    # that reads as "you match nothing". The three résumé-INDEPENDENT
+    # dimensions are genuine and stay measured.
     dimensions = [
-        {"label": "Technical Skills", "score": 0},
-        {"label": "Experience Level", "score": 0},
-        {"label": "Industry Match", "score": 0},
-        {"label": "Role Alignment", "score": 0},
-        {"label": "Culture Fit", "score": 0},
-        {"label": "Salary Fit", "score": salary_fit},
-        {"label": "Location Match", "score": location_match},
-        {"label": "Career Growth", "score": 0},
-        {"label": "Company Stability", "score": stability},
-        {"label": "North Star Align", "score": 0},
+        _dimension("Technical Skills", 0, degraded=True),
+        _dimension("Experience Level", 0, degraded=True),
+        _dimension("Industry Match", 0, degraded=True),
+        _dimension("Role Alignment", 0, degraded=True),
+        _dimension("Culture Fit", 0, degraded=True),
+        _dimension("Salary Fit", salary_fit, degraded=False),
+        _dimension("Location Match", location_match, degraded=False),
+        _dimension("Career Growth", 0, degraded=True),
+        _dimension("Company Stability", stability, degraded=False),
+        _dimension("North Star Align", 0, degraded=True),
     ]
     risks: list[dict[str, str]] = []
     if job.get("salaryMin") is None and job.get("salaryMax") is None:
@@ -351,21 +386,26 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
                        + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0))
     north_star = _round(0.6 * overall + 0.4 * sem)
 
-    # Dimensions whose score is wholly or partly built from `sem` carry an
-    # explicit `degraded` flag when it wasn't genuinely measured, so the
-    # radar chart / dimension list can badge-or-exclude them instead of
-    # rendering a placeholder-contaminated number as fact (round-2 leak site).
+    # Every dimension states its provenance explicitly (`_dimension` makes
+    # that mandatory), so the radar chart / dimension list can badge-or-
+    # exclude a placeholder-contaminated number instead of rendering it as
+    # fact. Round 4 (ESC-002): contamination is TRANSITIVE and was previously
+    # traced only one hop. `overall` is itself 0.4*keyword + 0.4*semantic +
+    # 0.2*experience (ats_engine.py), so "Role Alignment" (= overall) and
+    # "Career Growth" (0.6*seniority + 0.4*overall) are 40% and 16%
+    # placeholder respectively when `sem` was not measured — they now carry
+    # the same flag as the directly-semantic three.
     dimensions = [
-        {"label": "Technical Skills", "score": _round(km)},
-        {"label": "Experience Level", "score": _round(exp)},
-        {"label": "Industry Match", "score": _round(sem), "degraded": not sem_trusted},
-        {"label": "Role Alignment", "score": _round(overall)},
-        {"label": "Culture Fit", "score": culture_fit, "degraded": not sem_trusted},
-        {"label": "Salary Fit", "score": salary_fit},
-        {"label": "Location Match", "score": location_match},
-        {"label": "Career Growth", "score": career_growth},
-        {"label": "Company Stability", "score": stability},
-        {"label": "North Star Align", "score": north_star, "degraded": not sem_trusted},
+        _dimension("Technical Skills", _round(km), degraded=False),
+        _dimension("Experience Level", _round(exp), degraded=False),
+        _dimension("Industry Match", _round(sem), degraded=not sem_trusted),
+        _dimension("Role Alignment", _round(overall), degraded=not sem_trusted),
+        _dimension("Culture Fit", culture_fit, degraded=not sem_trusted),
+        _dimension("Salary Fit", salary_fit, degraded=False),
+        _dimension("Location Match", location_match, degraded=False),
+        _dimension("Career Growth", career_growth, degraded=not sem_trusted),
+        _dimension("Company Stability", stability, degraded=False),
+        _dimension("North Star Align", north_star, degraded=not sem_trusted),
     ]
 
     skills_matched = len(matched)
@@ -645,7 +685,89 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
-    return {"job": updated, "applicationId": application_id}
+    submission = _queue_or_report_submission(user_id, job_id, application_id, resume_id)
+    return {"job": updated, "applicationId": application_id, "submission": submission}
+
+
+def _queue_or_report_submission(
+    user_id: str, job_id: str, application_id: str, resume_id: str | None
+) -> dict[str, Any]:
+    """W-SUB — queue a REAL transmission for this application, or say why not.
+
+    Applying has always meant "the user marked this as applied"; it has never
+    transmitted anything, because nothing in the product could. Now, when the
+    posting itself publishes an application address, applying additionally
+    raises an ``application_submit`` approval whose execution genuinely emails
+    the résumé and cover letter to that address.
+
+    The approval gate is preserved exactly: the card is created ``pending``
+    and sends nothing until the user approves it (or has explicitly enabled
+    autonomous mode, which is recorded on the card). When the posting
+    publishes no address the honest answer is returned — ``queued: false``
+    with a reason — and no card, no promise and no claim of a submission is
+    made anywhere.
+    """
+    from app.services.application_submission import (
+        queue_submission_approval,
+        resolve_job_apply_recipient,
+    )
+
+    recipient = resolve_job_apply_recipient(user_id, job_id)
+    if recipient is None:
+        return {
+            "queued": False,
+            "autoSubmittable": False,
+            "reason": "no_published_recipient",
+            "message": (
+                "This posting publishes no application email address, so Aether "
+                "cannot submit it for you. Apply on the employer's site — this "
+                "application is recorded as prepared, not transmitted."
+            ),
+        }
+    approval = queue_submission_approval(user_id, job_id, application_id, resume_id)
+    if approval is None:  # raced with a delete of the application row
+        return {
+            "queued": False,
+            "autoSubmittable": True,
+            "reason": "application_unavailable",
+            "message": "Could not queue this application for sending.",
+        }
+    # The ONLY way a send happens without a human decision — and only because
+    # the user turned the approval gate off in their own Settings. The
+    # authorisation is still written down as an approved ApprovalRequest
+    # before anything leaves, and the single-shot executedAt claim still makes
+    # a double-send impossible.
+    from app.services.application_submission import maybe_autonomous_transmit
+
+    autonomous = maybe_autonomous_transmit(user_id, approval)
+    if autonomous is not None:
+        transmitted = autonomous.get("status") == "transmitted"
+        return {
+            "queued": True,
+            "autoSubmittable": True,
+            "approvalId": approval["id"],
+            "autonomous": True,
+            "transmitted": transmitted,
+            "recipient": recipient["email"],
+            "recipientSource": recipient["source"],
+            "message": (
+                f"Sent to {recipient['email']} (autonomous mode is on)."
+                if transmitted
+                else autonomous.get("message", "Nothing was sent.")
+            ),
+            **({"gmailMessageId": autonomous.get("gmailMessageId")} if transmitted else {}),
+        }
+    return {
+        "queued": True,
+        "autoSubmittable": True,
+        "approvalId": approval["id"],
+        "recipient": recipient["email"],
+        "recipientSource": recipient["source"],
+        "message": (
+            f"Queued for sending to {recipient['email']} — approve it in "
+            "Approvals to transmit. Nothing has been sent yet."
+        ),
+    }
 
 
 @router.post("/{job_id}/apply")
@@ -659,7 +781,13 @@ def apply_to_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]:
     (GM2-AGENTS-001) now also performs.
     """
     result = submit_application_for_job(current_user["id"], job_id)
-    return {"job": _public(result["job"]), "applicationId": result["applicationId"]}
+    return {
+        "job": _public(result["job"]),
+        "applicationId": result["applicationId"],
+        # W-SUB: whether a REAL transmission was queued, or the honest reason
+        # it could not be. Never a bare success that implies a send.
+        "submission": result.get("submission"),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -251,9 +251,21 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     """Execute the high-risk action behind an approval.
 
     Blocked with 403 unless the approval is *approved*, and 409 if expired.
-    The actual side-effect (submit application / send email) is dispatched by
-    payload kind; submission integrations land in a later phase, so this
-    records the action as executed.
+    The real side-effect is dispatched by ``type`` and, for
+    ``application_submit``, by ``payload.kind``:
+
+    * ``email_send`` -> :func:`_execute_email_send` (a real Gmail send);
+    * ``application_submit`` with ``kind="submission"`` -> W-SUB: a REAL
+      application email with the tailored résumé and cover letter attached
+      (:func:`_execute_application_submit`);
+    * ``application_submit`` with any other kind (``resume_tailor`` /
+      ``cover_letter`` — the artifact-approval cards that share this enum
+      type) -> the decision is recorded and NOTHING is transmitted, which the
+      response now states explicitly (``transmitted: false`` plus the reason)
+      instead of implying a submission that never happened. Before W-SUB this
+      branch answered a bare ``{"status": "executed"}`` for EVERY
+      ``application_submit`` approval while doing nothing at all — the
+      response that made 133 never-executed approvals look actioned.
     """
     user_id = current_user["id"]
     approval = ApprovalService().assert_action_allowed(approval_id, user_id)
@@ -269,13 +281,77 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     try:
         if approval["type"] == "email_send":
             return _execute_email_send(approval, current_user)
-        return {"status": "executed", "approval_id": approval["id"], "type": approval["type"]}
+        payload = ApprovalRepository._payload_dict(approval)
+        if approval["type"] == "application_submit" and payload.get("kind") == "submission":
+            return _execute_application_submit(approval, current_user)
+        return {
+            "status": "executed",
+            "approval_id": approval["id"],
+            "type": approval["type"],
+            # HONEST: this branch approves an ARTIFACT (a tailored résumé, a
+            # cover letter). It transmits nothing, and no longer lets the
+            # caller infer that it did.
+            "transmitted": False,
+            "detail": (
+                "Decision recorded. Nothing was transmitted — this approval "
+                "covers a document, not a submission."
+            ),
+        }
     except Exception:
         # The side-effect failed (e.g. Gmail not connected / send error). Release
         # the claim so the honest 4xx/5xx surfaces AND the user can retry once the
         # underlying problem is fixed — a failed attempt never burns the approval.
         repo.release_execution(approval_id, user_id)
         raise
+
+
+def _execute_application_submit(
+    approval: dict[str, Any], current_user: dict[str, Any]
+) -> dict[str, Any]:
+    """W-SUB — REALLY submit the application behind an approved request.
+
+    Builds the email, attaches the tailored résumé and the cover letter as
+    genuine PDF bytes (rendered by the same in-process download handlers the
+    user's own download buttons use), sends it through the single Gmail seam,
+    records the transmission on the ``Application`` row and advances the stage.
+
+    Every failure mode is an honest refusal with NOTHING sent:
+
+    * 422 — the posting publishes no application address (so Aether cannot
+      submit it; the user is told to apply on the employer's site), the
+      application vanished, or no documents could be attached;
+    * 409 — no Gmail account connected, or an expired grant;
+    * 502 — Gmail accepted the request but failed to send.
+
+    The caller's ``except`` releases the ``executedAt`` claim on all three, so
+    a refusal never burns the approval and a fixed problem can be retried.
+    """
+    from app.services.application_submission import (
+        SubmissionRefused,
+        SubmissionTransportError,
+        transmit_application,
+    )
+
+    try:
+        return transmit_application(current_user, approval)
+    except SubmissionRefused as exc:
+        code = (
+            http_status.HTTP_409_CONFLICT
+            if exc.reason in {"no_email_provider_connected", "not_approved"}
+            else http_status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        raise HTTPException(
+            code, detail={"error": exc.reason, "message": exc.message}
+        ) from None
+    except SubmissionTransportError as exc:
+        code = (
+            http_status.HTTP_409_CONFLICT
+            if exc.reason == "gmail_auth_failed"
+            else http_status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(
+            code, detail={"error": exc.reason, "message": exc.message}
+        ) from None
 
 
 def _execute_email_send(

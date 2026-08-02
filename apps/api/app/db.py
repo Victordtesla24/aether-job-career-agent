@@ -570,6 +570,85 @@ def ensure_story_dedup_column() -> None:
     _story_dedup_column_ready = True
 
 
+#: Guard so the additive ``StoryEntry`` archive columns are only ensured once
+#: per worker process (see ``ensure_story_archive_columns``).
+_story_archive_columns_ready = False
+
+
+def ensure_story_archive_columns() -> None:
+    """Idempotently add the additive ``StoryEntry`` merge-archive columns.
+
+    GMV4-story-004: the bulk paraphrase de-dup sweep
+    (``app.services.story_dedup_migration.merge_duplicate_stories``) used to
+    ``DELETE`` the losing row of every merge. Story content is user-authored
+    career history that cannot be regenerated, and the sweep is driven by a
+    deliberately permissive similarity preset — an over-matching heuristic
+    wired to an irreversible DELETE. These three columns replace that DELETE
+    with a RECOVERABLE archive:
+
+    * ``archivedAt`` (timestamptz) — NULL means LIVE. Set when a row is
+      merged away; every live read path filters ``"archivedAt" IS NULL``.
+    * ``mergedIntoId`` (text) — the surviving row's id, so an archived row
+      always points at where its content went.
+    * ``mergeSnapshot`` (jsonb) — the full pre-merge capture the risk
+      officer requires: the SURVIVOR's content as it stood *before* being
+      overwritten (the only part of a merge that is otherwise destroyed —
+      the loser's own columns are left untouched in place), plus the
+      similarity signals, thresholds, batch id and executing account that
+      produced the decision. This is what makes ``restore_merged_stories``
+      able to reverse a merge exactly.
+
+    BACKFILL: none is required, and none is performed — by construction.
+    ``ADD COLUMN IF NOT EXISTS`` with no DEFAULT is a metadata-only change on
+    PostgreSQL; every pre-existing row therefore reads ``archivedAt = NULL``,
+    which is precisely the correct value for a row that has never been merged
+    away, and every reader treats NULL as live. Writing a backfill UPDATE
+    would rewrite every row to the value it already has.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers
+    so the DDL cannot race; ``TRUNCATE`` never drops columns, so the
+    process-wide latch survives test teardown. Lazy DDL per ADR-TR-1 (there
+    is no migration runner in this repo) — mirrors
+    ``ensure_story_dedup_column``.
+
+    MUST be called by EVERY path that reads or writes these columns, before
+    the statement that names them — a path that skipped the equivalent call
+    for ``contentHash`` raised ``psycopg2.UndefinedColumn`` -> HTTP 500 on
+    first use (WIP-BRANCH-AUDIT-2026-07-29 blocker #2).
+    """
+    global _story_archive_columns_ready
+    if _story_archive_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'StoryEntry'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('archivedAt', 'mergedIntoId', 'mergeSnapshot')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _story_archive_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (9380710314,))
+            cur.execute(
+                'ALTER TABLE "StoryEntry" '
+                'ADD COLUMN IF NOT EXISTS "archivedAt" timestamptz'
+            )
+            cur.execute(
+                'ALTER TABLE "StoryEntry" '
+                'ADD COLUMN IF NOT EXISTS "mergedIntoId" text'
+            )
+            cur.execute(
+                'ALTER TABLE "StoryEntry" '
+                'ADD COLUMN IF NOT EXISTS "mergeSnapshot" jsonb'
+            )
+        conn.commit()
+    _story_archive_columns_ready = True
+
+
 #: Guard so the additive ``Job.coverFailureClearedAt`` column is only ensured
 #: once per worker process (see ``ensure_job_cover_suppression_column``).
 _job_cover_suppression_column_ready = False
@@ -744,3 +823,151 @@ def ensure_application_unique_active_index() -> None:
             )
         conn.commit()
     _application_unique_active_index_ready = True
+
+
+#: Guard so the additive ``Job`` apply-recipient columns are only ensured once
+#: per worker process (see ``ensure_job_apply_contact_columns``).
+_job_apply_contact_columns_ready = False
+
+
+def ensure_job_apply_contact_columns() -> None:
+    """Idempotently add the additive ``Job`` apply-recipient columns (W-SUB).
+
+    Until this landed, ``Job`` carried NO employer/recruiter/apply address of
+    any kind, so the "submission" half of the product had literally nowhere to
+    send an application — which is why ``POST /approvals/{id}/execute``
+    answered ``{"status": "executed"}`` without transmitting anything and 86
+    ``Application`` rows read "submitted" to the user while nothing had ever
+    left the system.
+
+    * ``applyEmail`` (text) — the recipient an application may be emailed to.
+      Written ONLY from real posting data (see
+      ``app.services.application_submission.derive_apply_recipient``): today
+      the only genuine source in this schema is an address published in the
+      posting's own ``description``. NULL means "no genuine recipient is
+      known", which makes the job NOT auto-submittable — the honest state, and
+      the state of every job in production at the time of writing (a live
+      probe found 0 of 66 job descriptions containing a ``mailto:``).
+    * ``applyEmailSource`` (text) — provenance of that address
+      (``description_mailto`` / ``description_text``), so the UI and any audit
+      can say WHERE the address came from rather than asserting it.
+    * ``applyContactCheckedAt`` (timestamptz) — when derivation last ran. NULL
+      means "never looked", which is DISTINCT from "looked and found nothing"
+      (checked + ``applyEmail IS NULL``). Without this column a re-check could
+      not tell those apart, and the UI would have to guess.
+
+    BACKFILL: performed by derivation, never by assertion. ``ADD COLUMN IF NOT
+    EXISTS`` with no DEFAULT is a metadata-only change on PostgreSQL, so every
+    pre-existing row reads NULL = "never checked". The real backfill is
+    ``apps/api/scripts/backfill_job_apply_email.py``, which runs the SAME
+    derivation over stored descriptions and writes only what it can actually
+    find. There is deliberately no heuristic "guess the company's careers
+    address" fallback: inventing ``careers@<company>.com`` would be fabricated
+    data pointed at a real third party.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers
+    so the DDL cannot race; ``TRUNCATE`` never drops columns, so the
+    process-wide latch survives test teardown. Lazy DDL per ADR-TR-1 (there is
+    no migration runner in this repo) — mirrors ``ensure_job_last_seen_column``.
+
+    MUST be called by EVERY path that reads or writes these columns, before
+    the statement that names them.
+    """
+    global _job_apply_contact_columns_ready
+    if _job_apply_contact_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Job'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('applyEmail', 'applyEmailSource',"
+                " 'applyContactCheckedAt')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _job_apply_contact_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260802,))
+            cur.execute('ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "applyEmail" text')
+            cur.execute(
+                'ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "applyEmailSource" text'
+            )
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "applyContactCheckedAt" timestamptz'
+            )
+        conn.commit()
+    _job_apply_contact_columns_ready = True
+
+
+#: Guard so the additive ``Application`` transmission columns are only ensured
+#: once per worker process (see ``ensure_application_transmission_columns``).
+_application_transmission_columns_ready = False
+
+
+def ensure_application_transmission_columns() -> None:
+    """Idempotently add the additive ``Application`` transmission columns (W-SUB).
+
+    ``Application.status = 'submitted'`` has always meant "the user (or an
+    agent) marked this application as submitted" — it has NEVER meant "Aether
+    transmitted it", because nothing in the product could transmit anything.
+    These columns are what makes the difference RECORDABLE, so the UI can stop
+    telling the user something false without deleting or rewriting a single
+    historical row:
+
+    * ``transmittedAt`` (timestamptz) — NULL means Aether never sent this
+      application anywhere. That is the CORRECT value for all 86 pre-existing
+      'submitted' rows, and it is why no backfill UPDATE is performed: the
+      metadata-only ``ADD COLUMN`` already gives every historical row its true
+      value. Writing anything else would be the fabrication this work exists
+      to remove.
+    * ``transmittedTo`` (text) — the exact recipient address the message went
+      to.
+    * ``transmissionChannel`` (text) — how it left ('gmail').
+    * ``transmissionRef`` (text) — the provider's message id, so a claim of
+      delivery is checkable against the user's own Sent folder rather than
+      being taken on trust.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite, and NOT a new
+    ``ApplicationStatus`` enum member (the enum is referenced by every board
+    query, the sankey and the stage-transition matrix; the honest distinction
+    is a property of the row, not a new kanban column). A transaction-scoped
+    advisory lock serializes concurrent first-hit callers so the DDL cannot
+    race; ``TRUNCATE`` never drops columns, so the process-wide latch survives
+    test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes these columns, before
+    the statement that names them.
+    """
+    global _application_transmission_columns_ready
+    if _application_transmission_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('transmittedAt', 'transmittedTo',"
+                " 'transmissionChannel', 'transmissionRef')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 4:
+                _application_transmission_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260803,))
+            for column, coltype in (
+                ("transmittedAt", "timestamptz"),
+                ("transmittedTo", "text"),
+                ("transmissionChannel", "text"),
+                ("transmissionRef", "text"),
+            ):
+                cur.execute(
+                    f'ALTER TABLE "Application" '
+                    f'ADD COLUMN IF NOT EXISTS "{column}" {coltype}'
+                )
+        conn.commit()
+    _application_transmission_columns_ready = True

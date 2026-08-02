@@ -14,6 +14,27 @@ export const ApplicationSchema = z.object({
   applyUrl: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // W-SUB — the truth about transmission, which `status` alone cannot carry.
+  //
+  // `status: "submitted"` has always meant "marked as submitted"; it has NEVER
+  // meant "Aether emailed this to the employer", because until W-SUB nothing
+  // in the product could send an application at all. These fields make the
+  // difference visible instead of letting the stage label imply a send:
+  //   transmitted      — did a message actually leave the system?
+  //   submissionState  — "transmitted" | "not_transmitted"
+  //   transmittedTo/At — checkable evidence for a positive claim
+  //   autoSubmittable  — does the posting publish an address we could send to?
+  // Nullish-tolerant so an older API build (or a cached response) degrades to
+  // "unknown" rather than throwing — the UI treats absent as "don't claim".
+  transmitted: z.boolean().nullish(),
+  submissionState: z.enum(["transmitted", "not_transmitted"]).nullish(),
+  transmittedAt: z.string().nullish(),
+  transmittedTo: z.string().nullish(),
+  transmissionChannel: z.string().nullish(),
+  transmissionRef: z.string().nullish(),
+  autoSubmittable: z.boolean().nullish(),
+  applyEmail: z.string().nullish(),
+  applyEmailSource: z.string().nullish(),
 });
 
 export type Application = z.infer<typeof ApplicationSchema>;

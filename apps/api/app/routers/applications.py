@@ -10,7 +10,13 @@ import psycopg2
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.db import ensure_application_unique_active_index, get_connection, rows_to_dicts
+from app.db import (
+    ensure_application_transmission_columns,
+    ensure_application_unique_active_index,
+    ensure_job_apply_contact_columns,
+    get_connection,
+    rows_to_dicts,
+)
 from app.middleware.auth import CurrentUser
 from app.routers.analytics import get_application_counts
 from app.services.stage_transitions import move_application_stage, move_job_stage
@@ -24,11 +30,33 @@ _STATUSES = frozenset(
     {"draft", "submitted", "screening", "interview", "offer", "rejected", "withdrawn"}
 )
 
+#: W-SUB: the transmission columns and the job's derived apply address travel
+#: with EVERY application read, so no caller can render a "submitted" card
+#: without also having the fact of whether anything was actually transmitted.
+#: See ``app.services.application_submission.submission_view``.
 _COLUMNS = (
     'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
     'a."answers", a."createdAt", a."updatedAt", j."title" AS "jobTitle", '
-    'j."company", j."sourceUrl" AS "applyUrl", j."fitScore"'
+    'j."company", j."sourceUrl" AS "applyUrl", j."fitScore", '
+    'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
+    'a."transmissionRef", j."applyEmail", j."applyEmailSource"'
 )
+
+
+def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach the truthful submission block to each application row (W-SUB).
+
+    ``Application.status`` is left EXACTLY as stored — history is never
+    rewritten. What is added is the answer to the question the status alone
+    cannot answer: did Aether actually transmit this application anywhere?
+    For all 86 pre-existing 'submitted' rows the answer is a recorded, honest
+    ``transmitted: false``.
+    """
+    from app.services.application_submission import submission_view
+
+    for row in rows:
+        row.update(submission_view(row))
+    return rows
 
 router = APIRouter()
 
@@ -150,6 +178,12 @@ def list_applications(
         clauses.append('j."status" = %s::"JobStatus"')
         params.append("applied")
     where = " AND ".join(clauses)
+    # W-SUB: ``_COLUMNS`` now names the additive transmission / apply-address
+    # columns, so the lazy DDL MUST run before the statement that reads them
+    # (ADR-TR-1 — a path that skipped the equivalent call for ``contentHash``
+    # raised UndefinedColumn -> HTTP 500 on first use).
+    ensure_application_transmission_columns()
+    ensure_job_apply_contact_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             # RT-004: ONE board card per job, however many letter-version rows
@@ -191,11 +225,13 @@ def list_applications(
                 ''',
                 params + params,
             )
-            return rows_to_dicts(cur)
+            return _with_submission(rows_to_dicts(cur))
 
 
 @router.get("/{application_id}")
 def get_application(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    ensure_application_transmission_columns()
+    ensure_job_apply_contact_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -207,7 +243,7 @@ def get_application(application_id: str, current_user: CurrentUser) -> dict[str,
             rows = rows_to_dicts(cur)
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
-    return rows[0]
+    return _with_submission(rows)[0]
 
 
 class SubmitRequest(BaseModel):
