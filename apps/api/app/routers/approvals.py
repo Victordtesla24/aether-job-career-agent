@@ -284,8 +284,22 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
         payload = ApprovalRepository._payload_dict(approval)
         if approval["type"] == "application_submit" and payload.get("kind") == "submission":
             return _execute_application_submit(approval, current_user)
+        # BLOCKER (v5 adversarial review): `claim_execution` stamps
+        # ``executedAt = NOW()`` BEFORE any work happens, so reaching this
+        # non-transmitting branch left the row reading "executed" while nothing
+        # was sent — reintroducing the exact state this workstream existed to
+        # remove (133 approvals stamped executed, 0 transmissions).
+        #
+        # ``executedAt`` means "the real side-effect fired", never "a decision
+        # was recorded". Nothing was transmitted here, so the claim is released.
+        # Releasing also keeps the approval retryable, which matters for an
+        # ``application_submit`` that arrives without a submission payload: the
+        # user can fix the payload and execute for real instead of finding it
+        # permanently burnt.
+        repo.release_execution(approval_id, user_id)
+        is_submit = approval["type"] == "application_submit"
         return {
-            "status": "executed",
+            "status": "recorded",
             "approval_id": approval["id"],
             "type": approval["type"],
             # HONEST: this branch approves an ARTIFACT (a tailored résumé, a
@@ -294,6 +308,10 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
             "transmitted": False,
             "detail": (
                 "Decision recorded. Nothing was transmitted — this approval "
+                "request carries no submission payload, so there was nothing "
+                "to send. Re-run the submission to generate one."
+                if is_submit
+                else "Decision recorded. Nothing was transmitted — this approval "
                 "covers a document, not a submission."
             ),
         }
