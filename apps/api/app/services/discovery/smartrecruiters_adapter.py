@@ -31,10 +31,47 @@ _PAGE_LIMIT = 100
 #: rather than silent: exceeding it is logged (§"no silent caps").
 _MAX_PAGES = 5
 
+#: Ceiling on per-posting DETAIL fetches per sweep. The postings LIST carries no
+#: description at all (verified live 2026-08-02: list keys are name/location/
+#: company/ref/... with no jobAd), so the real text only exists on
+#: ``/postings/{id}``. Without it every SmartRecruiters row persisted a 0-char
+#: description, and a 0-char description scores spuriously HIGH — an empty
+#: posting hit 74.63, the top of the board. Detail is fetched ONLY for postings
+#: that already passed the location gate, and the cap is logged when reached.
+_MAX_DETAIL_FETCHES = 40
+
+
+def _location_of(item: dict[str, Any]) -> str:
+    loc = item.get("location") or {}
+    return ", ".join(
+        str(part)
+        for part in (loc.get("city"), loc.get("region"), loc.get("country"))
+        if part
+    )
+
 
 def configured_companies() -> list[str]:
     """Curated company identifiers (overridable via ``AETHER_SMARTRECRUITERS_COMPANIES``)."""
     return portals.smartrecruiters_companies()
+
+
+def _ad_text(item: dict[str, Any]) -> str | None:
+    """Real advert text from the DETAIL payload's jobAd sections.
+
+    Joins the sections that describe the ROLE. Returns None when the ad is
+    genuinely absent — an empty description is surfaced honestly and is then
+    refused by the fit scorer's evidence gate rather than scored on nothing.
+    """
+    ad = item.get("jobAd")
+    if not isinstance(ad, dict):
+        return None
+    sections = ad.get("sections") or {}
+    parts = [
+        (sections.get(name) or {}).get("text")
+        for name in ("jobDescription", "qualifications", "additionalInformation")
+    ]
+    joined = "\n".join(p for p in parts if isinstance(p, str) and p.strip())
+    return joined or None
 
 
 class SmartRecruitersAdapter(BaseAdapter):
@@ -71,7 +108,46 @@ class SmartRecruitersAdapter(BaseAdapter):
                 logger.warning("smartrecruiters: company %s failed: %s", company, exc)
                 failures.append(f"{company}: {type(exc).__name__}: {exc}")
                 continue
-            boards.append({"company": company, "jobs": items})
+            # The list has no description. Fetch detail ONLY for postings a
+            # Melbourne candidate could actually take, so one board cannot burn
+            # the budget on roles that will be discarded anyway.
+            applicable = [
+                item
+                for item in items
+                if relevance.location_score(
+                    _location_of(item), bool((item.get("location") or {}).get("remote"))
+                )
+                > 0
+            ]
+            enriched: list[dict[str, Any]] = []
+            for item in applicable:
+                if len(enriched) >= _MAX_DETAIL_FETCHES:
+                    logger.info(
+                        "smartrecruiters: %s hit the %d detail-fetch cap — %d applicable "
+                        "posting(s) kept WITHOUT a description this sweep",
+                        company, _MAX_DETAIL_FETCHES, len(applicable) - len(enriched),
+                    )
+                    enriched.extend(applicable[len(enriched):])
+                    break
+                posting_id = str(item.get("id") or "").strip()
+                if not posting_id:
+                    enriched.append(item)
+                    continue
+                try:
+                    detail = fetch_json(
+                        f"https://api.smartrecruiters.com/v1/companies/{company}"
+                        f"/postings/{posting_id}"
+                    )
+                    # Merge the REAL ad in; never fabricate one when absent.
+                    if isinstance(detail, dict) and detail.get("jobAd"):
+                        item = {**item, "jobAd": detail["jobAd"]}
+                except Exception as exc:  # noqa: BLE001 — one posting must not sink the board
+                    logger.warning(
+                        "smartrecruiters: detail fetch failed for %s/%s: %s",
+                        company, posting_id, exc,
+                    )
+                enriched.append(item)
+            boards.append({"company": company, "jobs": enriched})
         # Mirrors GAP-SRC-002 in the Greenhouse adapter: configured-but-all-failed
         # is a real outage, not an honest empty result. A board that fetched OK
         # with zero open roles keeps ``boards`` non-empty, so "fetched 0" stays ok.
@@ -116,13 +192,7 @@ class SmartRecruitersAdapter(BaseAdapter):
                         location=location,
                         remote=remote or "remote" in location.lower(),
                         description=relevance.snippet(
-                            (item.get("jobAd") or {})
-                            .get("sections", {})
-                            .get("jobDescription", {})
-                            .get("text")
-                            if isinstance(item.get("jobAd"), dict)
-                            else None,
-                            limit=relevance.DESCRIPTION_STORAGE_LIMIT,
+                            _ad_text(item), limit=relevance.DESCRIPTION_STORAGE_LIMIT
                         ),
                         requirements=[],
                         source=self.source,
