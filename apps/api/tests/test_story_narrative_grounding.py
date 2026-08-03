@@ -391,3 +391,177 @@ class TestOrganisationBinding:
         result = agent.run(user_id)
         assert result.created == 0, result.dropped
         assert any("Globex" in reason for reason in result.dropped), result.dropped
+
+
+# ---------------------------------------------------------------------------
+# 6. STORY-ORG-SUBSTRING-2026-08-03 — the binding must be an IDENTITY test
+# ---------------------------------------------------------------------------
+
+
+class TestOrganisationSubstringCollision:
+    """A match in EITHER direction is not a binding, it is a collision.
+
+    ``organisation_matches`` was word-boundary aware but still accepted
+    ``wanted in known or known in wanted`` over the whole normalized name, so:
+
+    * any organisation whose name is a word-run INSIDE a genuine employer's
+      name passed ("Apple" against "Apple Bank for Savings"), and
+    * any organisation whose name CONTAINS a genuine employer's name passed
+      ("ANZ Stadium" against "ANZ").
+
+    Both let a story claim an employer the cited bullet does not evidence,
+    with a guard in front of it. Names are now compared as whole normalized
+    token sequences: an employer's own printed short form ("(ATO)") and its
+    legal form ("Pty Ltd") are the ONLY things normalized away.
+    """
+
+    @staticmethod
+    def _matches(organisation: str, employers: list[str]) -> bool:
+        from app.services.resume_bullets import organisation_matches
+
+        return organisation_matches(organisation, employers)
+
+    # -- the collisions, which must now be refused -------------------------
+
+    def test_a_short_name_inside_a_longer_employer_is_refused(self) -> None:
+        """Apple Bank for Savings is a New York savings bank. Apple is not it,
+        and a résumé that evidences the first evidences nothing about the
+        second — but ``wanted in known`` accepted it."""
+        assert self._matches("Apple", ["Apple Bank for Savings"]) is False
+
+    def test_an_employer_name_inside_a_longer_claim_is_refused(self) -> None:
+        """ANZ Stadium is a venue, not the bank on this résumé —
+        ``known in wanted`` accepted it."""
+        assert self._matches("ANZ Stadium", ["ANZ"]) is False
+
+    def test_a_truncated_employer_name_is_refused(self) -> None:
+        assert (
+            self._matches(
+                "Australian Taxation", ["Australian Taxation Office (ATO)"]
+            )
+            is False
+        )
+
+    def test_a_word_run_inside_a_live_employer_is_refused(self) -> None:
+        """Straight off the owner's production résumé: "National Australia
+        Bank (NAB)" contains the word-run "Australia Bank", which names no
+        employer this résumé evidences."""
+        assert self._matches("Australia Bank", ["National Australia Bank (NAB)"]) is False
+
+    def test_a_parenthetical_region_does_not_borrow_an_employer(self) -> None:
+        """"(ANZ)" after a firm's name is the Australia/New-Zealand REGION.
+        Reading a claim's parenthetical as a second name for the claim would
+        hand "Deloitte" the ANZ bullet."""
+        assert self._matches("Deloitte (ANZ)", ["ANZ"]) is False
+
+    def test_an_acronym_the_resume_never_prints_is_refused(self) -> None:
+        """Nothing is inferred: "NAB" names "National Australia Bank" only
+        because the résumé itself prints the "(NAB)"."""
+        assert self._matches("NAB", ["National Australia Bank"]) is False
+
+    # -- what must keep working -------------------------------------------
+
+    def test_the_employers_own_printed_short_form_still_matches(self) -> None:
+        assert self._matches("ATO", ["Australian Taxation Office (ATO)"]) is True
+        assert (
+            self._matches("Australian Taxation Office", ["Australian Taxation Office (ATO)"])
+            is True
+        )
+        assert (
+            self._matches(
+                "Australian Taxation Office (ATO)", ["ANZ", "Australian Taxation Office (ATO)"]
+            )
+            is True
+        )
+
+    def test_case_punctuation_and_legal_form_do_not_change_identity(self) -> None:
+        assert self._matches("microsoft", ["Microsoft Inc."]) is True
+        assert self._matches("Microsoft Pty Ltd", ["Microsoft"]) is True
+        assert self._matches("The Warehouse", ["Warehouse"]) is True
+
+    def test_an_empty_or_unknown_organisation_is_refused(self) -> None:
+        assert self._matches("", ["ANZ"]) is False
+        assert self._matches("   ", ["ANZ"]) is False
+        assert self._matches("Globex", ["ANZ"]) is False
+        assert self._matches("AN", ["ANZ"]) is False
+        assert self._matches("ANZ", []) is False
+
+
+class TestOrganisationCollisionEndToEnd:
+    """The collision, through the actual extractor, on the actual résumé."""
+
+    @staticmethod
+    def _anz_story(**over: Any) -> dict[str, Any]:
+        """A story fully evidenced by B3 — the ANZ delivery-leadership bullet
+        ($5M portfolio, 5+ squads, up to 40 resources)."""
+        story = {
+            "sourceBulletId": "B3",
+            "organisation": "ANZ",
+            "title": "Directing a delivery portfolio across cross-functional squads",
+            "situation": (
+                "The division ran a program portfolio valued at over $5M across 5+ "
+                "cross-functional squads, with up to 40 people including offshore "
+                "teams, and releases kept slipping their agreed dates."
+            ),
+            "task": (
+                "I was accountable for the whole portfolio landing on time and at "
+                "the quality bar, across every squad and both onshore and offshore "
+                "delivery teams."
+            ),
+            "action": (
+                "I directed the portfolio end to end, running the planning cadence "
+                "and the dependency management across all of the squads and their "
+                "offshore counterparts."
+            ),
+            "result": (
+                "The portfolio delivered on time at high quality, with all 5+ "
+                "squads and the 40 people across them working to one release plan."
+            ),
+            "metrics": {"Portfolio value": "over $5M", "Squads": "5+"},
+            "tags": ["delivery-leadership"],
+        }
+        story.update(over)
+        return story
+
+    def test_the_control_story_is_accepted(self, extractor, user_id) -> None:
+        agent, _ = extractor([self._anz_story()])
+        result = agent.run(user_id)
+        assert result.created == 1, result.dropped
+
+    def test_an_organisation_that_merely_contains_the_employer_is_rejected(
+        self, extractor, user_id
+    ) -> None:
+        """The résumé evidences ANZ. It evidences nothing about ANZ Stadium,
+        and the bidirectional guard shipped this as "grounded"."""
+        agent, _ = extractor([self._anz_story(organisation="ANZ Stadium")])
+        result = agent.run(user_id)
+        assert result.created == 0, result.dropped
+        assert any("ANZ Stadium" in reason for reason in result.dropped), result.dropped
+
+
+class TestWholeResumeFallbackIsWordBound:
+    """When a bullet has no employer header of its own, the fallback must not
+    be a raw substring test over the whole résumé either."""
+
+    @staticmethod
+    def _reason(organisation: str, all_employers: list[str]) -> str | None:
+        from app.agents.story_extractor import StoryExtractorAgent
+
+        story = _story(organisation=organisation)
+        bullet = {**_bullets()[0], "employers": []}
+        return StoryExtractorAgent(llm=object())._reject_reason(
+            story, bullet, RESUME_TEXT.lower(), all_employers
+        )
+
+    def test_a_headerless_bullet_is_still_held_to_a_resume_employer(self) -> None:
+        """The résumé DOES name employers — just not above this bullet. A
+        claim must still be one of them, not any word anywhere in the file."""
+        assert self._reason("Melbourne", ["ANZ"]) is not None
+        assert self._reason("ANZ", ["ANZ"]) is None
+
+    def test_with_no_employers_at_all_the_claim_must_appear_as_words(self) -> None:
+        assert self._reason("Globex", []) is not None
+        # A raw substring of a real word on the résumé — the old fallback
+        # accepted "Taxation Offic" because it never looked at word edges.
+        assert self._reason("Taxation Offic", []) is not None
+        assert self._reason("ANZ", []) is None

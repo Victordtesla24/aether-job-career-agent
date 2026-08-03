@@ -73,6 +73,20 @@ with the remedy graded by what the failure actually proves:
 And the organisation check no longer asks "does this string occur anywhere in
 the résumé" (which any past employer, university or skill satisfies for any
 bullet) but "is this the employer of the section the CITED BULLET sits in".
+
+STORY-ORG-SUBSTRING-2026-08-03
+-----------------------------
+Binding the organisation to the cited bullet was right; the comparison behind
+it was not. ``organisation_matches`` tested ``wanted in known or known in
+wanted`` over the space-delimited name — still a substring test, just a
+word-bounded one. So an organisation whose name is a word-run INSIDE a genuine
+employer's name, or that CONTAINS one, passed the guard: on the owner's own
+résumé that accepted "ANZ Stadium" and "Australia Bank" for the ANZ bullets,
+"Australian Taxation" for the ATO bullets, and "Telstra Super Pty Ltd" for the
+Telstra bullets — a foreign employer for all 21 of its bullets. A guard that
+looks bound and is not is worse than none, because the claim ships labelled
+"grounded". Names are now compared as whole normalized token sequences
+(identity, not containment), and the no-header fallback is word-bound too.
 """
 from __future__ import annotations
 
@@ -95,7 +109,9 @@ from app.services.resume_bullets import (
     extract_resume_bullets,
     find_bullet,
     is_quantified,
+    organisation_appears_in_text,
     organisation_matches,
+    resume_employers,
     strip_unevidenced_sentences,
     unevidenced_claims,
 )
@@ -204,6 +220,10 @@ class StoryExtractorAgent:
         #: bullet was borrowed from another achievement. The two get different
         #: remedies (see the module docstring), so both sets are needed.
         resume_numbers = bullet_numbers(resume_text)
+        #: Every employer the résumé names anywhere. Used ONLY for a bullet
+        #: whose own section yielded no header — never to widen a bullet that
+        #: does know its employer.
+        all_employers = resume_employers(resume_text)
         existing_ids = {s["id"] for s in self._stories.list_by_user(user_id)}
         covered = self._stories.live_achievement_keys(user_id)
         seen_keys: set[str] = set()
@@ -288,7 +308,9 @@ class StoryExtractorAgent:
                 )
                 continue
 
-            reason = self._reject_reason(story, bullet, resume_lower)
+            reason = self._reject_reason(
+                story, bullet, resume_lower, all_employers
+            )
             if reason is not None:
                 result.dropped.append(f"{title}: {reason}")
                 continue
@@ -374,7 +396,11 @@ class StoryExtractorAgent:
     # -- validation --------------------------------------------------------
 
     def _reject_reason(
-        self, story: dict[str, Any], bullet: dict[str, str], resume_lower: str
+        self,
+        story: dict[str, Any],
+        bullet: dict[str, str],
+        resume_lower: str,
+        all_employers: list[str],
     ) -> str | None:
         """Why this story is not usable, or ``None`` when it is."""
         for field_name in _STAR_FIELDS:
@@ -401,12 +427,25 @@ class StoryExtractorAgent:
                     f"organisation {organisation!r} is not the employer for "
                     f"source bullet {bullet['id']} ({', '.join(employers)})"
                 )
-        elif organisation.lower() not in resume_lower:
-            # No header block was extractable from this layout: fall back to
-            # the whole-résumé check rather than rejecting every story. This
-            # is the OLD behaviour, kept only where the tighter one has no
-            # evidence to work from — never used to weaken a bullet that DOES
-            # know its employer.
+        elif all_employers:
+            # This bullet sits under no header of its own, but the résumé DOES
+            # name employers elsewhere — so the claim must still be one of
+            # them. Weaker than the per-bullet binding above, far stronger
+            # than "occurs somewhere in the file".
+            if not organisation_matches(organisation, all_employers):
+                return (
+                    f"organisation {organisation!r} is not an employer named "
+                    f"in the resume ({', '.join(all_employers)})"
+                )
+        elif not (
+            organisation.lower() in resume_lower
+            and organisation_appears_in_text(organisation, resume_lower)
+        ):
+            # Last resort: the layout yields NO employer structure at all, so
+            # the whole résumé is the only evidence there is. Both the old raw
+            # containment AND a whole-word match are required, so this branch
+            # accepts strictly less than it did — "Taxation Offic" no longer
+            # "appears" in a résumé that says "Taxation Office".
             return f"organisation {organisation!r} does not appear in the resume"
 
         metrics = self._evidence_metrics(story.get("metrics"))

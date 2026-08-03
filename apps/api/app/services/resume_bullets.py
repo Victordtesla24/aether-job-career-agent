@@ -52,6 +52,11 @@ WHAT THIS MODULE PROVIDES
   "evidenced" any bullet (live: an Independent-consulting project tagged
   ``Australian Taxation Office (ATO)``). Binding the check to the cited
   bullet's own section closes that (STORY-NARRATIVE-GROUNDING-2026-08-03).
+* :func:`organisation_matches` — whether a claimed organisation IS one of
+  those employers. An identity test over whole normalized names, never a
+  containment test: matching a substring in either direction let "ANZ Stadium"
+  claim the ANZ bullets and "Apple" claim "Apple Bank for Savings"
+  (STORY-ORG-SUBSTRING-2026-08-03).
 
 Nothing here invents content. Every bullet returned is a verbatim slice of the
 user's own résumé (whitespace-normalized and de-hyphenated across the PDF line
@@ -115,6 +120,24 @@ _STANDALONE_NUMBER = re.compile(r"(?<![A-Za-z0-9])\d")
 #: Magnitude suffixes a résumé writes numbers with ("10k+", "$5M", "2bn").
 _MAGNITUDES = {"k": 1_000, "m": 1_000_000, "bn": 1_000_000_000, "b": 1_000_000_000}
 _MAGNITUDE = re.compile(r"\s?(bn|[kmb])\b")
+
+#: A parenthetical inside an organisation name. On the RÉSUMÉ side this is the
+#: employer's own printed short form ("Australian Taxation Office (ATO)"); on
+#: the CLAIM side it is not read as a name at all (see
+#: :func:`_organisation_identities`).
+_PARENTHETICAL = re.compile(r"\(([^)]*)\)")
+
+#: Legal-form words a registered name ENDS with. A résumé prints "Microsoft
+#: Inc." where a story writes "Microsoft"; both name one employer, and the
+#: difference is a company-registration detail, not a different organisation.
+_LEGAL_FORM_WORDS = frozenset({
+    "pty", "ltd", "limited", "plc", "llc", "llp", "lp", "inc", "incorporated",
+    "corp", "corporation", "company", "co", "gmbh", "ag", "nv", "bv", "sa",
+    "sas", "srl", "spa", "pte", "oy", "ab", "kk", "kft", "sro",
+})
+
+#: Articles a name may lead with ("The Warehouse" / "Warehouse").
+_LEADING_ARTICLES = frozenset({"the"})
 
 #: Spelled-out small numbers a résumé uses in prose ("in under three hours").
 _NUMBER_WORDS = {
@@ -410,28 +433,103 @@ def strip_unevidenced_sentences(
     return " ".join(kept), list(removed)
 
 
-def _organisation_identity(name: str) -> str:
-    """An organisation name reduced to space-delimited lowercase words."""
-    return f" {re.sub(r'[^a-z0-9]+', ' ', (name or '').lower()).strip()} "
+def _name_tokens(name: str) -> tuple[str, ...]:
+    """An organisation name as lowercase alphanumeric words, in order."""
+    return tuple(re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).split())
+
+
+def _without_legal_form(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """``tokens`` with a leading article and a TRAILING legal form removed.
+
+    Only the ends are touched, and only words that cannot change WHICH
+    organisation is named: "Microsoft Pty Ltd" and "Microsoft" are one
+    employer. A legal-form word in the MIDDLE of a name is part of the name
+    ("Inc. Magazine", "Ltd Commodities") and is left alone.
+    """
+    trimmed = list(tokens)
+    while trimmed and trimmed[0] in _LEADING_ARTICLES:
+        trimmed.pop(0)
+    while trimmed and trimmed[-1] in _LEGAL_FORM_WORDS:
+        trimmed.pop()
+    return tuple(trimmed)
+
+
+def _organisation_identities(
+    name: str, *, printed_short_forms: bool
+) -> set[tuple[str, ...]]:
+    """Every WHOLE name ``name`` gives for one organisation.
+
+    Each identity is a complete token sequence, never a fragment of one, so
+    comparing two names is an equality test and can never be satisfied by a
+    collision inside a longer name.
+
+    ``printed_short_forms`` is set only for a name read off the RÉSUMÉ: a
+    résumé that prints ``Australian Taxation Office (ATO)`` is printing two
+    complete names for its own employer, so the parenthetical is an alias.
+    It is NOT set for a name a story CLAIMS, because a parenthetical there is
+    routinely a region or a qualifier — reading "Deloitte (ANZ)" as naming
+    "ANZ" would hand a bank's bullet to a consultancy.
+
+    Nothing is inferred either way: an acronym the document never prints is
+    not an alias, so "NAB" names "National Australia Bank" only when the
+    résumé itself prints the "(NAB)".
+    """
+    text = name or ""
+    variants = [text, _PARENTHETICAL.sub(" ", text)]
+    if printed_short_forms:
+        variants.extend(_PARENTHETICAL.findall(text))
+    identities: set[tuple[str, ...]] = set()
+    for variant in variants:
+        tokens = _name_tokens(variant)
+        if not tokens:
+            continue
+        identities.add(tokens)
+        trimmed = _without_legal_form(tokens)
+        if trimmed:
+            identities.add(trimmed)
+    return identities
 
 
 def organisation_matches(organisation: str, employers: list[str]) -> bool:
-    """True when ``organisation`` names one of ``employers``.
+    """True when ``organisation`` IS one of ``employers``.
 
-    Word-boundary aware in BOTH directions, because a résumé prints an
-    employer one way and a story may legitimately name it the other: "ATO"
-    must match "Australian Taxation Office (ATO)" and vice versa. It is not a
-    raw substring test — "AN" does not match "ANZ" — which is the flaw the
-    whole-résumé check had.
+    An IDENTITY test, not a containment test. The previous implementation
+    matched ``wanted in known or known in wanted`` over the space-delimited
+    name, which is still a substring test: any organisation whose name is a
+    word-run INSIDE an employer's name ("Apple" against "Apple Bank for
+    Savings"), or that CONTAINS one ("ANZ Stadium" against "ANZ"), passed.
+    Measured on the owner's own résumé, that accepted a foreign employer for
+    every one of its 21 bullets (STORY-ORG-SUBSTRING-2026-08-03).
+
+    Names are now compared as whole normalized token sequences. The only
+    things normalized away are things that do not change which organisation
+    is named: case, punctuation, a leading article, a trailing legal form,
+    and the employer's OWN printed short form (see
+    :func:`_organisation_identities`).
     """
-    wanted = _organisation_identity(organisation)
-    if not wanted.strip():
+    wanted = _organisation_identities(organisation, printed_short_forms=False)
+    if not wanted:
         return False
-    for employer in employers:
-        known = _organisation_identity(employer)
-        if wanted in known or known in wanted:
-            return True
-    return False
+    return any(
+        wanted & _organisation_identities(employer, printed_short_forms=True)
+        for employer in employers
+    )
+
+
+def organisation_appears_in_text(organisation: str, text: str) -> bool:
+    """True when ``text`` prints ``organisation`` as WHOLE WORDS.
+
+    The last-resort check, for a résumé whose layout yields no employer
+    header at all. It is word-bound rather than a raw substring scan, so
+    "Taxation Offic" no longer "appears" in a résumé that says "Taxation
+    Office". It says nothing about WHICH job the name belongs to — the caller
+    uses it only when the document supports no better answer.
+    """
+    stream = f" {' '.join(_name_tokens(text))} "
+    return any(
+        f" {' '.join(tokens)} " in stream
+        for tokens in _organisation_identities(organisation, printed_short_forms=False)
+    )
 
 
 def _identity_text(text: str) -> str:
