@@ -57,6 +57,31 @@ def score_budget() -> int:
         return DEFAULT_SCORE_BUDGET
 
 
+def _fit_score_of(job: JobRaw) -> float:
+    """Sort key for :attr:`QualificationResult.qualified`.
+
+    ``JobRaw`` is a JSON-shaped mapping, so ``fitScore`` is typed ``object``.
+    A row that carries no numeric score is legitimately unranked — an UNJUDGED
+    posting has no score yet — and sorts last rather than being dropped. ``bool``
+    is excluded deliberately: it is a subclass of ``int`` and would otherwise
+    rank a ``True`` as 1.0.
+    """
+    raw = job.get("fitScore")
+    if isinstance(raw, bool):
+        return float(raw)  # preserves the old `float(x or 0.0)` behaviour
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        # The old expression parsed numeric strings, so keep doing that — but
+        # a garbage string used to raise ValueError from inside sort(), taking
+        # the whole discovery sweep down over one bad row. Rank it last instead.
+        try:
+            return float(raw)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 @dataclass
 class Judgement:
     """One posting, its real score, and the decision made about it."""
@@ -240,7 +265,7 @@ def qualify(
         else:
             result.rejected += 1
 
-    result.qualified.sort(key=lambda j: float(j.get("fitScore") or 0.0), reverse=True)
+    result.qualified.sort(key=_fit_score_of, reverse=True)
     logger.info(
         "qualification: %d judged -> %d qualified, %d rejected, %d unjudged (%s)",
         result.judged, len(result.qualified), result.rejected, result.unjudged,

@@ -1805,7 +1805,14 @@ class CoverLetterAgent:
             body, jd_body, claim_evidence,
             job_title=job["title"], company=job["company"],
         )
-        initial = quality_iterations[0] if quality_iterations else final_quality.as_dict()
+        # Annotated to match `quality_iterations` and `letter_quality` below:
+        # as_dict() is typed dict[str, object], so the union made `overall` an
+        # `object` that float() could not narrow. The value is a real score from
+        # the quality scorer, so this widens the local rather than defaulting it
+        # — a silent default here would fabricate the `delta` shown to the user.
+        initial: dict[str, Any] = (
+            quality_iterations[0] if quality_iterations else final_quality.as_dict()
+        )
         letter_quality: dict[str, Any] = {
             **final_quality.as_dict(),
             "initialScore": initial["overall"],

@@ -241,14 +241,18 @@ class ScoutAgent:
                     )
                     no_source_url += 1
                     continue
-                key = (
+                # Named distinctly from the `key` bound by the qual_totals loop
+                # above, which is a str. Reusing that name here made mypy read
+                # this tuple as a str and the `seen` set as a set of strs — the
+                # dedup was correct at runtime, but nothing type-checked it.
+                dedup_key = (
                     job["company"].strip().lower(),
                     job["title"].strip().lower(),
                     job["sourceUrl"].strip(),
                 )
-                if key in seen:
+                if dedup_key in seen:
                     continue
-                seen.add(key)
+                seen.add(dedup_key)
                 row = self._repository.create(user_id, job)
                 # The repository upserts on (userId, sourceUrl): only a row that
                 # was actually inserted counts as a discovery — a re-discovered
