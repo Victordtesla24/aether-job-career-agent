@@ -440,6 +440,16 @@ class JobRepository:
             job_id, '"fitScore" = %s, "atsScore" = %s', (fit_score, ats_score)
         )
 
+    def clear_fit_score(self, job_id: str) -> dict[str, Any] | None:
+        """Retire a persisted score (v5 evidence gate remediation).
+
+        NULL — not 0 — is the honest value: the board sorts
+        ``fitScore DESC NULLS LAST``, so an unscorable posting drops out of the
+        ranking instead of being ranked last on a number nobody computed.
+        Idempotent: clearing an already-NULL row is a no-op UPDATE.
+        """
+        return self._update(job_id, '"fitScore" = NULL, "atsScore" = NULL', ())
+
     def toggle_saved(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         with get_connection() as conn:
             with conn.cursor() as cur:

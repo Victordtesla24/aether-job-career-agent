@@ -13,7 +13,6 @@ The Job Discovery screen (``/dashboard/jobs``) reads:
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -27,6 +26,7 @@ from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.job import VALID_STATUSES, JobRepository
 from app.services.discovery.active_feed import active_feed, annotate_listing_age
+from app.services.fit_evidence import job_evidence_text
 
 router = APIRouter()
 
@@ -161,21 +161,11 @@ _SOURCE_STABILITY = {
 }
 
 
-def _requirements_list(job: dict[str, Any]) -> list[str]:
-    reqs = job.get("requirements")
-    if isinstance(reqs, str):
-        try:
-            reqs = json.loads(reqs)
-        except ValueError:
-            reqs = [reqs]
-    return [str(r) for r in (reqs or [])]
-
-
-def _job_text(job: dict[str, Any]) -> str:
-    title = job.get('title', '')
-    desc = job.get('description', '')
-    reqs = ' '.join(_requirements_list(job))
-    return f"{title} {desc} {reqs}".strip()
+#: The text this router scores a posting on. Deliberately the SAME function the
+#: fit scorer and the evidence gate use (v5) — a second local copy of "what
+#: counts as the posting's text" is how the panel and the card start disagreeing
+#: about whether a job is scorable.
+_job_text = job_evidence_text
 
 
 def _is_au(job: dict[str, Any]) -> bool:
@@ -328,6 +318,36 @@ def _empty_insights(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _no_evidence_insights(job: dict[str, Any]) -> dict[str, Any]:
+    """Honest refusal for a posting that publishes almost no text (v5 gate).
+
+    Found while remediating the persisted scores: this endpoint runs the ATS
+    engine ON DEMAND, so clearing the database alone would have left the detail
+    panel still showing a ~75% fit for an EMPTY posting whose card had just
+    become honestly unscored — the same fabricated number, on the surface the
+    user actually reads, now contradicting the card next to it.
+
+    Same shape as :func:`_empty_insights` (``scored: False`` + degraded
+    résumé-dependent dimensions, which the UI already renders as "—"), but
+    ``needsResume`` is False: the user's résumé is fine, the POSTING is the
+    thing without evidence. The résumé-independent facts (salary, location,
+    source stability) are real and stay measured.
+    """
+    payload = _empty_insights(job)
+    payload["needsResume"] = False
+    payload["narrative"] = (
+        "This posting doesn't publish enough detail to score a match against "
+        "your resume — only a headline. Open the original listing for the full "
+        "description; we'd rather show you nothing than a fit score with "
+        "nothing behind it."
+    )
+    payload["riskSignals"] = [
+        {"label": "Posting publishes almost no description", "severity": "high"},
+        *payload["riskSignals"],
+    ]
+    return payload
+
+
 def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Run the real ATS engine + deterministic field blends into a UI payload.
 
@@ -336,11 +356,17 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     against the bundled operator résumé (NF-final-B-007).
     """
     from app.services.ats_engine import ATSEngine
+    from app.services.fit_evidence import has_scorable_evidence, job_evidence_text
     from app.services.resume_grounding import resolve_user_resume_text
 
     resume_text = resolve_user_resume_text(user_id, allow_operator_fallback=False)
     if not resume_text.strip():
         return _empty_insights(job)
+    # The SAME gate the fit scorer applies before it will persist a number —
+    # imported, never re-implemented, so the panel and the card can never
+    # disagree about whether this posting is scorable at all.
+    if not has_scorable_evidence(job_evidence_text(job)):
+        return _no_evidence_insights(job)
 
     title = job.get("title", "")
     remote = bool(job.get("remote"))

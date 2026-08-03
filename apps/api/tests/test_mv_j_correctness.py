@@ -202,8 +202,13 @@ def test_insights_skillgap_not_garbage(client, auth_headers, test_user_id):
     seed_own_resume(client, auth_headers)
     jid = _seed_job(
         test_user_id,
+        # Padded past the v5 evidence gate (MIN_SCORABLE_CHARS) so the SCORED
+        # path runs — the junk tokens under test are unchanged.
         "Python and Django backend role. See cdn.openai.com for details. "
-        "tag RMjA4LjEyMi44LjEx when applying. Accommodations for disability.",
+        "tag RMjA4LjEyMi44LjEx when applying. Accommodations for disability. "
+        "You will build and operate REST APIs, own database schema design in "
+        "Postgres, write automated tests, and work with product managers to "
+        "ship features weekly. Celery, Redis and AWS experience is valued.",
     )
     body = client.get(f"/jobs/{jid}/insights", headers=auth_headers).json()
     assert body["scored"] is True, body

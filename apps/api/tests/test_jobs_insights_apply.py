@@ -30,8 +30,17 @@ def _make_job(user_id: str, **over) -> str:
         "company": "Canva",
         "location": "Sydney NSW",
         "remote": False,
+        # v5 evidence gate: a posting under MIN_SCORABLE_CHARS is now REFUSED
+        # by /insights (an empty JD scored 74.63 in production), so this fixture
+        # carries a realistically-sized description. These tests are about the
+        # insights payload, not about the gate — see
+        # tests/test_v5_thin_score_remediation.py for the gate itself.
         "description": "Lead cross-functional delivery of the platform program "
-        "with agile program management, governance and cloud delivery.",
+        "with agile program management, governance and cloud delivery. You will "
+        "own the delivery roadmap across three squads, run quarterly planning, "
+        "manage vendor and stakeholder relationships, and report program health "
+        "to the executive steering committee. Experience with cloud migrations, "
+        "risk management and agile coaching at scale is essential.",
         "requirements": json.dumps([]),
         "source": "seek",
         "sourceUrl": f"https://example.com/{job_id}",

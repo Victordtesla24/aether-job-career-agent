@@ -176,6 +176,49 @@ def _warm_up_ats_semantic_model() -> None:
         print(f"WARNING: ATS semantic model warm-up failed: {exc}", file=sys.stderr)
 
 
+def _remediate_unscorable_fit_scores() -> None:
+    """Retire pre-gate fit scores on every start (v5 evidence gate).
+
+    The evidence gate stopped NEW junk scores from being written, but the rows
+    scored BEFORE it shipped were unreachable — the fit scorer skips anything
+    already scored — so production kept 48 of them, led by a 76.76 on a
+    29-character posting, above every row carrying a real description. Because
+    the board sorts ``fitScore DESC NULLS LAST``, those rows led the board while
+    the gate's own honest refusals (NULL) sorted last.
+
+    Wiring it HERE is the point: this must not depend on anybody remembering to
+    run a script. It is additive (no schema change), idempotent (a second start
+    finds nothing to clear) and scoped to score columns only — no job row is
+    deleted, hidden or restaged.
+
+    BEST-EFFORT, exactly like the rotation above and for the same reason: a
+    stale score is a data-quality problem, and turning it into a boot failure
+    under ``Restart=on-failure`` would convert it into a total outage. Failures
+    are logged loudly and the API still serves.
+    """
+    from app.services.fit_score_remediation import remediate_unscorable_fit_scores
+
+    try:
+        outcome = remediate_unscorable_fit_scores()
+    except Exception as exc:  # noqa: BLE001 — never take the API down for this
+        print(
+            "WARNING: v5 fit-score evidence remediation did not run at startup; "
+            f"pre-gate scores may still be ranking the board: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    if outcome.cleared or outcome.after_scored_without_evidence:
+        print(
+            "v5 fit-score evidence remediation: "
+            f"scanned={outcome.scanned} cleared={outcome.cleared} "
+            f"before={outcome.before_scored_without_evidence} "
+            f"after={outcome.after_scored_without_evidence}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Apply §14.7 admin-credential rotation on app load (GAP-P6-SEC-001).
@@ -239,6 +282,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             f"WARNING: §14.7 admin credential rotation skipped at startup: {exc}",
             file=sys.stderr,
         )
+    _remediate_unscorable_fit_scores()
     threading.Thread(
         target=_warm_up_ats_semantic_model, name="ats-semantic-warmup", daemon=True
     ).start()

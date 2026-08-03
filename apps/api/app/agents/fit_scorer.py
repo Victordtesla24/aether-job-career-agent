@@ -9,7 +9,6 @@ persists ``fitScore``/``atsScore`` via the job repository.
 """
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,7 +16,20 @@ from typing import Any
 
 from app.repositories.job import JobRepository
 from app.services.ats_engine import ATSEngine
+from app.services.fit_evidence import (
+    MIN_SCORABLE_CHARS,
+    has_scorable_evidence,
+    job_evidence_text,
+)
 from app.services.resume_grounding import require_user_resume_text
+
+__all__ = [
+    "FitScoreResult",
+    "FitScorerAgent",
+    "MIN_SCORABLE_CHARS",
+    "get_base_resume_path",
+    "has_scorable_evidence",
+]
 
 #: Repo-root bundled base resume (read-only). Overridable for tests/deploys.
 _DEFAULT_RESUME = Path(__file__).resolve().parents[4] / "assets" / "resume" / "Vik_Resume_Final.pdf"
@@ -34,21 +46,12 @@ class FitScoreResult:
     #: Postings left UNSCORED because they carry too little real text for a
     #: score to mean anything (v5). Not a failure — an honest refusal.
     skipped_no_evidence: int = 0
-
-
-#: Minimum characters of real posting text before a fit score means anything.
-#: MEASURED, not guessed (2026-08-02, production): rows with <200 chars of
-#: description scored avg 58.9 / max 78.6, while rows carrying a real
-#: description scored avg 40.8 / max 56.5. A posting with an EMPTY description
-#: scored 74.63 — the highest on the board. With almost no text the engine has
-#: nearly nothing to mismatch, so emptiness reads as a perfect fit and the
-#: least-informative jobs float to the top of the user's board.
-MIN_SCORABLE_CHARS = 200
-
-
-def has_scorable_evidence(job_text: str) -> bool:
-    """True when a posting carries enough real text for a score to mean anything."""
-    return len((job_text or "").strip()) >= MIN_SCORABLE_CHARS
+    #: Postings whose ALREADY-PERSISTED score was retired by this run because
+    #: the row does not carry enough evidence to justify it. These are the
+    #: pre-gate scores (see :meth:`FitScorerAgent.run`); a subset of
+    #: ``skipped_no_evidence``, counted separately so a remediating run is
+    #: visibly different from a run that merely refused new work.
+    cleared_no_evidence: int = 0
 
 
 class FitScorerAgent:
@@ -69,14 +72,15 @@ class FitScorerAgent:
             user_id, "Add your resume before scoring jobs against it."
         )
         for job in self._repository.list_by_user(user_id):
-            if job.get("fitScore") is not None and not rescore:
-                # RT-005 self-heal: a job scored before agent stage-sync existed
-                # may still sit at "discovered" — advance it so the board stays
-                # truthful. Guarded forward-only: never demotes a manual move.
-                self._repository.advance_status(
-                    job["id"], "screening", allowed_from={"discovered"}
-                )
-                continue
+            # EITHER column being set means a score is persisted on this row —
+            # a half-written pair is exactly what remediation must not miss.
+            # The SKIP decision below deliberately stays on "fitScore is not
+            # None", the condition this loop has always used, so this change
+            # retires stale scores WITHOUT quietly altering which rows a normal
+            # run re-scores.
+            has_persisted_score = (
+                job.get("fitScore") is not None or job.get("atsScore") is not None
+            )
             try:
                 jd = self._job_text(job)
                 if not has_scorable_evidence(jd):
@@ -84,7 +88,28 @@ class FitScorerAgent:
                     # spuriously-high number derived from a teaser line. The job
                     # still shows on the board — it is simply unranked, which is
                     # the truth, instead of being ranked top on no evidence.
+                    if has_persisted_score:
+                        # ...and RETIRE a score this row should never have had.
+                        # The gate (557739e) only stopped NEW junk from being
+                        # written; the rows scored before it shipped were
+                        # unreachable, because the skip-if-already-scored branch
+                        # below walked straight past them. Production still had
+                        # 48 of them, led by a 76.76 on a 29-character posting —
+                        # above every row carrying a real description. The board
+                        # sorts fitScore DESC NULLS LAST, so the junk led the
+                        # board while the gate's own refusals sorted last.
+                        self._repository.clear_fit_score(job["id"])
+                        result.cleared_no_evidence += 1
                     result.skipped_no_evidence += 1
+                    continue
+                if job.get("fitScore") is not None and not rescore:
+                    # RT-005 self-heal: a job scored before agent stage-sync
+                    # existed may still sit at "discovered" — advance it so the
+                    # board stays truthful. Guarded forward-only: never demotes
+                    # a manual move.
+                    self._repository.advance_status(
+                        job["id"], "screening", allowed_from={"discovered"}
+                    )
                     continue
                 score = self._engine.score(resume_text, jd)
                 self._repository.update_fit_score(job["id"], score.overall, score.overall)
@@ -102,14 +127,11 @@ class FitScorerAgent:
     def _job_text(job: dict[str, Any]) -> str:
         """Text scored against the résumé.
 
+        Delegates to :func:`app.services.fit_evidence.job_evidence_text` so the
+        scoring path and the startup remediation judge a row on exactly the
+        same string — see that module's docstring for why it is a leaf.
+
         NOTE (v5): callers must check :func:`has_scorable_evidence` first — a
         posting with almost no description scores spuriously HIGH, because the
         engine has nearly no tokens to mismatch against."""
-        requirements = job.get("requirements")
-        if isinstance(requirements, str):
-            try:
-                requirements = json.loads(requirements)
-            except ValueError:
-                requirements = [requirements]
-        req_text = " ".join(requirements or [])
-        return f"{job['title']} {job.get('description', '')} {req_text}".strip()
+        return job_evidence_text(job)

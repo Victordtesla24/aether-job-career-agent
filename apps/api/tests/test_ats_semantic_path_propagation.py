@@ -92,7 +92,16 @@ _JOB_RECORD = {
     "id": "job-1",
     "title": "Backend Engineer",
     "company": "Acme",
-    "description": "Looking for a backend engineer skilled in Kubernetes.",
+    # Long enough to clear the v5 evidence gate (MIN_SCORABLE_CHARS) that
+    # _build_insights now applies before it will score anything: this test is
+    # about semantic-path propagation, not about the gate.
+    "description": (
+        "Looking for a backend engineer skilled in Kubernetes. You will design "
+        "and operate containerised services, own deployment pipelines, tune "
+        "Postgres, and share an on-call rotation with the platform team. "
+        "Experience with Python, Docker, Terraform and observability tooling is "
+        "expected, along with a track record of shipping reliable services."
+    ),
     "source": "manual",
 }
 
