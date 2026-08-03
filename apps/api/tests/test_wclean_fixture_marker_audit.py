@@ -39,6 +39,7 @@ defect in the rule.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import uuid
 from pathlib import Path
@@ -207,6 +208,33 @@ def test_detector_catches_production_marker(kind, text, marker):
 # 3. The detector: false positives. Verbatim real production content.
 # ===========================================================================
 
+#: Verbatim tail of production ``Job`` ``c40c7085c424bd1870f70065e`` (Airtasker,
+#: "Media Coordinator", source ``ashby``,
+#: ``https://jobs.ashbyhq.com/airtasker/704c39fd-…/application``) — a real
+#: employer's real posting fetched from a real board.
+#:
+#: This is the false-positive class that made ``scripts/audit_fixture_markers.py``
+#: report contamination against the LIVE database on 2026-08-03: the
+#: ``self-declared-synthetic`` rule carried a bare ``do not send`` alternative,
+#: meant for a QA row that labels itself "MODELS-LIVE QA synthetic — do not
+#: send". "Do not send" is also, and far more commonly, ordinary recruitment-
+#: agency boilerplate addressed to staffing suppliers, and it appeared in 7 real
+#: Airtasker postings. Every one was reported as fixture residue.
+#:
+#: The discriminator is grammatical, not lexical: the harness directive has no
+#: object — the phrase ENDS the line ("… synthetic — do not send"). The agency
+#: clause always names what must not be sent ("do not send resumes directly to
+#: managers"). A rule that flags this string proposes deleting a real job the
+#: user could apply to.
+PRODUCTION_AGENCY_CLAUSE = (
+    "To all recruitment agencies and talent suppliers: Airtasker does not "
+    "accept unsolicited resumes. Airtasker is not responsible for any fees "
+    "related to unsolicited resumes. Please do not forward resumes to our job "
+    "postings or directly to our managers. If you are on our supplier list and "
+    "have terms in place, ensure you work alongside our internal TA team and "
+    "do not send resumes directly to managers. #LI-TR1 #LI-Hybrid"
+)
+
 FALSE_POSITIVE_CORPUS = [
     # Résumé bullets (Resume.sections, user c6c8d016…)
     ("prose", "Test Automation Strategy: Architected the program's COBOL/mainframe "
@@ -253,6 +281,10 @@ FALSE_POSITIVE_CORPUS = [
     ("email", "hr@protest.com"),
     ("email", "talent@testing.io"),
     ("url", "https://careers.test.com/jobs/12"),
+    # The recruitment-agency clause (see PRODUCTION_AGENCY_CLAUSE below).
+    ("prose", PRODUCTION_AGENCY_CLAUSE),
+    ("prose", "Please do not send unsolicited resumes to our hiring managers."),
+    ("prose", "Agencies: do not send CVs without a signed agreement in place."),
 ]
 
 
@@ -265,6 +297,30 @@ def test_real_production_content_is_never_flagged(kind, text):
     assert hits == [], (
         f"real production content wrongly flagged as fixture data "
         f"({kind}): {text!r} -> {hits}"
+    )
+
+
+def test_recruitment_agency_clause_is_not_a_synthetic_self_declaration():
+    """The exact false positive ``scripts/audit_fixture_markers.py`` reported
+    against the LIVE database (7 × ``Job.description``, all real Airtasker
+    postings sourced from Ashby).
+
+    Both halves are the contract: the agency clause must be clean, and the
+    harness directive the rule exists for must still be caught — the fix is a
+    narrowing of the rule, never its removal."""
+    assert scan_text(PRODUCTION_AGENCY_CLAUSE, "prose") == [], (
+        "a real employer's agency clause was reported as fixture residue; the "
+        "audit would propose deleting 7 genuine jobs the user can apply to"
+    )
+    harness_markers = {
+        name
+        for name, _match, _context in scan_text(
+            "MODELS-LIVE QA synthetic — do not send", "prose"
+        )
+    }
+    assert "self-declared-synthetic" in harness_markers, (
+        "narrowing the rule must not disarm it: an objectless 'do not send' "
+        "directive that ends the line is still a harness self-declaration"
     )
 
 
@@ -315,7 +371,8 @@ def _insert_realistic_clean_rows(conn, user_id: str) -> tuple[str, str, set[str]
                 "Senior Test Analyst",
                 "TLS Consulting Pty Ltd",
                 "Own end-to-end testing for credit automation workstreams, "
-                "embedding test coverage into delivery plans.",
+                "embedding test coverage into delivery plans.\n\n"
+                + PRODUCTION_AGENCY_CLAUSE,
                 "greenhouse",
                 "https://job-boards.greenhouse.io/netlify/jobs/8603630002",
             ),
@@ -415,11 +472,21 @@ def test_reintroduced_fixture_rows_are_caught_by_the_db_scan(
     """The guard proper: re-insert the exact rows found in production on
     2026-08-02 and prove the scan names every one of them."""
     user_id = client._test_user_id
-    job_id, _resume_id, clean_ids = _insert_realistic_clean_rows(db_session, user_id)
+    _clean_job_id, _resume_id, clean_ids = _insert_realistic_clean_rows(
+        db_session, user_id
+    )
     thread_id = uuid.uuid4().hex[:25]
     approval_id = uuid.uuid4().hex[:25]
     resume_id = uuid.uuid4().hex[:25]
     application_id = uuid.uuid4().hex[:25]
+    # The contaminated Application needs a job of its OWN: ``db.py``'s
+    # ``Application_user_job_active_key`` partial unique index allows exactly one
+    # ACTIVE ('submitted'/'screening'/'interview'/'offer') application per
+    # (userId, jobId), and the clean row above is already a 'submitted' one on
+    # the clean job. Reusing it raised UniqueViolation the moment that index
+    # existed in ``aether_test`` — the index is created lazily on first use, so
+    # this test only ever passed in a session that had not yet created it.
+    job_id = uuid.uuid4().hex[:25]
     agent_run_id = uuid.uuid4().hex[:25]
     background_job_id = uuid.uuid4().hex[:25]
     probe_letter = (
@@ -427,6 +494,19 @@ def test_reintroduced_fixture_rows_are_caught_by_the_db_scan(
         "your convenience.\n\nSincerely,\nGAP-P7-DEF-B Probe 1785452243543\n"
     )
     with db_session.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Job" ("id","userId","title","company","description",'
+            '"source","sourceUrl","updatedAt") VALUES (%s,%s,%s,%s,%s,%s,%s,now())',
+            (
+                job_id,
+                user_id,
+                "Senior Product Manager, Strategic Origination Platforms",
+                "Plenti",
+                "Own the origination platform roadmap end to end.",
+                "greenhouse",
+                "https://job-boards.greenhouse.io/plenti/jobs/4471003",
+            ),
+        )
         cur.execute(
             'INSERT INTO "BackgroundJob" ("id","userId","agentKey","status","result")'
             " VALUES (%s,%s,%s,%s,%s::jsonb)",
@@ -544,6 +624,28 @@ def test_reintroduced_fixture_rows_are_caught_by_the_db_scan(
 # ===========================================================================
 # 5. The demo-funnel seeder must not exist as a runnable production hazard.
 # ===========================================================================
+#
+# Scope note (2026-08-03). The first version of this guard scanned the RAW
+# SOURCE TEXT of ``scripts/seed_demo.py`` for the forbidden literals. That
+# self-triggered: the module docstring is the written record of what the
+# deleted generator did and necessarily quotes ``DELETE FROM "Application"``,
+# so the guard failed against the very state it exists to accept. The rewrite
+# (2b7dc6b) fixed the false positive by parsing the module and inspecting only
+# executable code — but in doing so it NARROWED the true-positive surface to
+# ``ast.Assign`` targets and bare ``ast.Constant`` strings, which is a small
+# fraction of the ways the generator can come back:
+#
+#     FUNNEL: dict[str, int] = {...}        # AnnAssign  — not an Assign
+#     FUNNEL, TITLES = _load_demo()         # Tuple target — not an ast.Name
+#     def FUNNEL(): ...                     # a def binds the name too
+#     from demo_data import funnel as FUNNEL
+#     cur.execute(f'DELETE FROM "Application" WHERE "userId" = {uid}')   # JoinedStr
+#     cur.execute('DELETE FROM ' + '"Application"')                      # BinOp
+#
+# Every one of those slipped through. The analysis below restores full
+# coverage: ALL binding forms the language has, and static string values folded
+# through f-strings and ``+`` concatenation — while still excluding docstrings,
+# so the deletion record above stays legal.
 
 
 #: SQL and content literals that only the deleted demo-funnel generator emits.
@@ -562,20 +664,21 @@ _FORBIDDEN_SEED_LITERALS = (
 _FORBIDDEN_SEED_NAMES = {"FUNNEL", "COMPANIES", "TITLES", "DEMO_EMAIL"}
 
 
-def _executable_string_literals(tree: ast.Module) -> list[str]:
-    """Every string constant in ``tree`` EXCEPT docstrings.
+def _docstring_node_ids(tree: ast.AST) -> set[int]:
+    """``id()`` of every string Constant that is a docstring.
 
-    Scanning raw source text cannot work here: ``seed_demo``'s module docstring
-    is the written record of what the deleted generator did and necessarily
-    quotes the SQL below. Only code can reintroduce the hazard, so only code is
-    inspected.
+    Docstrings are prose ABOUT the code, and this module's docstring documents
+    the deleted generator verbatim. Only code can reintroduce the hazard, so
+    only code is inspected.
     """
-    docstring_nodes = set()
+    ids: set[int] = set()
     for node in ast.walk(tree):
-        body = getattr(node, "body", None)
         if not isinstance(
             node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-        ) or not body:
+        ):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
             continue
         first = body[0]
         if (
@@ -583,14 +686,135 @@ def _executable_string_literals(tree: ast.Module) -> list[str]:
             and isinstance(first.value, ast.Constant)
             and isinstance(first.value.value, str)
         ):
-            docstring_nodes.add(id(first.value))
-    return [
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
-        and id(node) not in docstring_nodes
+            ids.add(id(first.value))
+    return ids
+
+
+def _static_string(node: ast.AST, docstring_ids: set[int]) -> str | None:
+    """The statically-known string value of ``node``, or ``None``.
+
+    Folds the three ways a literal can be spelled without changing what the
+    database receives:
+
+    * ``ast.Constant``  — a plain (or implicitly concatenated) literal;
+    * ``ast.JoinedStr`` — an f-string, whose interpolations are rendered back
+      to source so ``f'DELETE FROM "Application" WHERE id={x}'`` still reads as
+      the forbidden statement;
+    * ``ast.BinOp``/``Add`` — ``'DELETE FROM ' + '"Application"'``.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return None if id(node) in docstring_ids else node.value
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+            elif isinstance(value, ast.FormattedValue):
+                try:
+                    parts.append(ast.unparse(value.value))
+                except Exception:  # pragma: no cover - unparse is total in 3.12
+                    parts.append("")
+        return "".join(parts)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _static_string(node.left, docstring_ids)
+        right = _static_string(node.right, docstring_ids)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def _executable_string_literals(tree: ast.Module) -> list[str]:
+    """Every statically-known string value in EXECUTABLE code."""
+    docstring_ids = _docstring_node_ids(tree)
+    values: list[str] = []
+    for node in ast.walk(tree):
+        text = _static_string(node, docstring_ids)
+        if text is not None:
+            values.append(text)
+    return values
+
+
+def _target_names(node: ast.AST | None) -> set[str]:
+    """Names bound by an assignment target (recursing into tuple/list/starred).
+
+    ``a.b = …`` and ``a[0] = …`` bind nothing at module level, so Attribute and
+    Subscript targets yield nothing.
+    """
+    if node is None:
+        return set()
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return set().union(*(_target_names(e) for e in node.elts)) if node.elts else set()
+    if isinstance(node, ast.Starred):
+        return _target_names(node.value)
+    return set()
+
+
+def _bound_names(tree: ast.Module) -> set[str]:
+    """Every name BOUND anywhere in ``tree``, by any construct the language has.
+
+    Checking ``ast.Assign`` alone (the 2b7dc6b guard) misses annotated and
+    augmented assignment, tuple unpacking, walrus, loop and ``with``/``except``
+    targets, comprehensions, ``def``/``class``, imports, parameters and match
+    captures — each of which can reintroduce ``FUNNEL``/``COMPANIES``/
+    ``TITLES``/``DEMO_EMAIL`` just as effectively as ``FUNNEL = {...}``.
+    """
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                names |= _target_names(target)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            names |= _target_names(node.target)
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            names |= _target_names(node.target)
+        elif isinstance(node, ast.withitem):
+            names |= _target_names(node.optional_vars)
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            names.add(node.name)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.ExceptHandler):
+            if node.name:
+                names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add(node.asname or node.name.split(".")[0])
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)):
+            if node.name:
+                names.add(node.name)
+        elif isinstance(node, ast.MatchMapping):
+            if node.rest:
+                names.add(node.rest)
+    return names
+
+
+def seed_demo_reintroductions(source: str) -> tuple[list[str], set[str]]:
+    """``(offending literals, reintroduced names)`` for a ``seed_demo`` source.
+
+    Empty + empty means the demo-funnel generator is absent. This is the whole
+    guard, exposed as a function so it can be exercised against synthesised
+    re-additions as well as against the real file.
+    """
+    tree = ast.parse(source)
+    literals = _executable_string_literals(tree)
+    offending = [
+        text
+        for forbidden in _FORBIDDEN_SEED_LITERALS
+        for text in literals
+        if forbidden in text
     ]
+    return offending, _bound_names(tree) & _FORBIDDEN_SEED_NAMES
+
+
+def _seed_demo_source() -> str:
+    return (
+        Path(__file__).resolve().parents[1] / "scripts" / "seed_demo.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_seed_demo_has_no_fabricated_funnel_generator():
@@ -602,31 +826,211 @@ def test_seed_demo_has_no_fabricated_funnel_generator():
 
     Nothing imports it but ``seed_admin_user``; the funnel generator is pure
     hazard and must stay deleted."""
-    source = (
-        Path(__file__).resolve().parents[1] / "scripts" / "seed_demo.py"
-    ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
-    literals = _executable_string_literals(tree)
-    for forbidden in _FORBIDDEN_SEED_LITERALS:
-        offenders = [text for text in literals if forbidden in text]
-        assert offenders == [], (
-            f"scripts/seed_demo.py executes a statement containing {forbidden!r}: "
-            "the demo-funnel generator injects fabricated Jobs/Applications into "
-            "— and deletes the real rows of — whichever database the repo-root "
-            f".env points at. Offending literal(s): {offenders}"
-        )
-
-    assigned = {
-        target.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
-    reintroduced = assigned & _FORBIDDEN_SEED_NAMES
-    assert reintroduced == set(), (
-        f"scripts/seed_demo.py re-defines {sorted(reintroduced)} — the fabricated "
+    literals, names = seed_demo_reintroductions(_seed_demo_source())
+    assert literals == [], (
+        "scripts/seed_demo.py executes a statement containing a demo-funnel "
+        "literal: the generator injects fabricated Jobs/Applications into — and "
+        "deletes the real rows of — whichever database the repo-root .env "
+        f"points at. Offending literal(s): {literals}"
+    )
+    assert names == set(), (
+        f"scripts/seed_demo.py re-defines {sorted(names)} — the fabricated "
         "demo-funnel constants (847/412 counts, fake companies/titles, and the "
         "production owner's email as DEMO_EMAIL)."
     )
+
+
+#: Every way the deleted generator can come back. ``ast.Assign``-only analysis
+#: catches exactly ONE of these (the first); the rest are the coverage that was
+#: lost when the guard stopped reading source text.
+_REINTRODUCTION_FORMS = [
+    ("plain assignment", 'FUNNEL = {"sourced": 847, "applied": 412}\n'),
+    ("annotated assignment", 'FUNNEL: dict[str, int] = {"sourced": 847}\n'),
+    ("annotated declaration only", "COMPANIES: list[str]\n"),
+    ("augmented assignment", 'TITLES = []\nTITLES += ["Data Analyst"]\n'),
+    ("tuple unpacking", "FUNNEL, _rest = _load_demo()\n"),
+    ("starred unpacking", "_head, *COMPANIES = _load_demo()\n"),
+    ("walrus", "if (DEMO_EMAIL := _owner_email()):\n    pass\n"),
+    ("for-loop target", "for TITLES in _rows():\n    pass\n"),
+    ("with-statement target", "with _open() as COMPANIES:\n    pass\n"),
+    ("except-clause target", "try:\n    pass\nexcept OSError as FUNNEL:\n    pass\n"),
+    ("comprehension target", "_x = [FUNNEL for FUNNEL in _rows()]\n"),
+    ("import alias", "from demo_data import funnel as FUNNEL\n"),
+    ("plain import", "import COMPANIES\n"),
+    ("function definition", "def FUNNEL():\n    return 847\n"),
+    ("class definition", "class TITLES:\n    pass\n"),
+    ("function parameter", "def _seed(DEMO_EMAIL='owner@example.com'):\n    pass\n"),
+    ("global rebind in a function", "def _seed():\n    global FUNNEL\n    FUNNEL = {}\n"),
+    (
+        "match capture",
+        "match _rows():\n    case {'funnel': FUNNEL}:\n        pass\n",
+    ),
+]
+
+
+@pytest.mark.parametrize("label,snippet", _REINTRODUCTION_FORMS)
+def test_guard_catches_every_form_of_name_reintroduction(label, snippet):
+    """A re-added generator must be caught however it binds its constants.
+
+    The 2026-08-02 rewrite checked ``ast.Assign`` targets only, so anything in
+    this list but the first line slipped through silently — the guard reported
+    GREEN on a file that had the hazard back."""
+    _literals, names = seed_demo_reintroductions(
+        '"""Provision the platform-owner admin account."""\n' + snippet
+    )
+    assert names, (
+        f"a {label} reintroducing a demo-funnel constant was NOT caught: "
+        f"{snippet!r}"
+    )
+
+
+#: The same, for the SQL the generator executes.
+_REINTRODUCTION_STATEMENTS = [
+    ("plain literal", "_cur.execute('DELETE FROM \"Application\" WHERE 1=1')\n"),
+    (
+        "implicit concatenation",
+        "_cur.execute('DELETE FROM ' \"\\\"Job\\\" WHERE 1=1\")\n",
+    ),
+    (
+        "explicit concatenation",
+        "_cur.execute('DELETE FROM ' + '\"Application\" WHERE 1=1')\n",
+    ),
+    (
+        "f-string",
+        "_cur.execute(f'DELETE FROM \"Application\" WHERE \"userId\" = {_uid}')\n",
+    ),
+    (
+        "f-string insert",
+        "_cur.execute(f'INSERT INTO \"Job\" (id) VALUES ({_jid})')\n",
+    ),
+    (
+        "content literal in an f-string",
+        "_desc = f'Demo-seeded job posting for {_n}'\n",
+    ),
+    ("url literal", "_url = 'https://demo.aether.dev/jobs/417'\n"),
+]
+
+
+@pytest.mark.parametrize("label,snippet", _REINTRODUCTION_STATEMENTS)
+def test_guard_catches_every_form_of_sql_reintroduction(label, snippet):
+    """The destructive statements must be caught however the string is built."""
+    literals, _names = seed_demo_reintroductions(
+        '"""Provision the platform-owner admin account."""\n' + snippet
+    )
+    assert literals, (
+        f"a {label} reintroducing the demo-funnel SQL/content was NOT caught: "
+        f"{snippet!r}"
+    )
+
+
+def test_guard_does_not_self_trigger_on_the_deletion_record():
+    """The false positive that motivated the 2026-08-02 rewrite must stay dead.
+
+    ``seed_demo``'s module docstring quotes the deleted SQL verbatim — that is
+    the record of the removal, and it must remain legal to write it down.
+    Function and class docstrings get the same treatment."""
+    source = (
+        '"""Removed: the generator ran DELETE FROM "Application" and '
+        'DELETE FROM "Job", then INSERT INTO "Job" 847 rows described as '
+        '"Demo-seeded job posting for the analytics funnel." at '
+        'https://demo.aether.dev/jobs/N, plus a "Demo seed resume" '
+        '(formatHash demo-seed-hash) and INSERT INTO "Application" 412 rows.\n'
+        'Its constants were FUNNEL, COMPANIES, TITLES and DEMO_EMAIL."""\n'
+        "\n"
+        "def seed_admin_user():\n"
+        '    """Upserts the admin row with INSERT INTO "User" — not a funnel."""\n'
+        "    return None\n"
+    )
+    literals, names = seed_demo_reintroductions(source)
+    assert (literals, names) == ([], set()), (
+        "the guard fired on prose that merely RECORDS the deletion: "
+        f"literals={literals} names={sorted(names)}"
+    )
+
+
+def test_guard_accepts_the_real_seed_demo_and_rejects_its_ancestor():
+    """Both directions against real sources: the file as shipped is clean, and
+    the same analysis applied to a module that genuinely carries the generator
+    reports it."""
+    assert seed_demo_reintroductions(_seed_demo_source()) == ([], set())
+
+    ancestor = (
+        '"""Seed the canonical demo funnel."""\n'
+        "FUNNEL = {'sourced': 847, 'applied': 412}\n"
+        "COMPANIES: list[str] = ['Northwind', 'Initech']\n"
+        "TITLES, DEMO_EMAIL = ['Data Analyst'], 'owner@example.com'\n"
+        "\n"
+        "def main():\n"
+        '    _cur.execute(\'DELETE FROM "Application" WHERE "userId" = %s\', (_u,))\n'
+        "    _cur.execute(f'INSERT INTO \"Job\" (id, description) VALUES "
+        "({_i}, \\'Demo-seeded job posting for the analytics funnel.\\')')\n"
+    )
+    literals, names = seed_demo_reintroductions(ancestor)
+    assert names == _FORBIDDEN_SEED_NAMES, sorted(names)
+    assert literals, "the ancestor's destructive SQL was not reported"
+
+
+# ===========================================================================
+# 6. The shipped audit SCRIPT must actually run against the live database.
+# ===========================================================================
+
+
+def _audit_script_module():
+    """Import ``scripts/audit_fixture_markers.py`` as a module.
+
+    The script is what an operator (and any deploy gate) actually runs, so its
+    connection handling is production code and belongs under test — that it was
+    not is precisely why it could sit broken.
+    """
+    path = Path(__file__).resolve().parents[1] / "scripts" / "audit_fixture_markers.py"
+    spec = importlib.util.spec_from_file_location("_audit_fixture_markers", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The shape of the real production ``DATABASE_URL``: Prisma writes a
+#: ``?schema=`` query parameter, which libpq does not accept.
+_PRISMA_STYLE_DSN = (
+    "postgresql://role:pw@db-fdc4e11da.db005.hosteddb.reai.io:5432/"
+    "fdc4e11da?schema=aether&connect_timeout=15"
+)
+
+
+def test_audit_script_dsn_is_accepted_by_psycopg2():
+    """The audit exited 1 against production without scanning a single row:
+
+        psycopg2.ProgrammingError: invalid dsn:
+            invalid URI query parameter: "schema"
+
+    It passed ``get_database_url()`` straight to ``psycopg2.connect``, but every
+    DSN in this repo is Prisma-style. ``app.db`` has translated that param into
+    a ``search_path`` option since P2-S01; the script simply never used it."""
+    import psycopg2.extensions
+
+    module = _audit_script_module()
+    dsn, schema = module.resolve_connection_target(_PRISMA_STYLE_DSN)
+
+    assert schema == "aether"
+    parsed = psycopg2.extensions.parse_dsn(dsn)  # raised ProgrammingError before
+    assert "schema" not in parsed
+    assert parsed["dbname"] == "fdc4e11da"
+    assert parsed["connect_timeout"] == "15"
+
+
+def test_audit_script_schema_override_wins_over_the_dsn():
+    """``--schema aether_test`` must still be honoured."""
+    module = _audit_script_module()
+    _dsn, schema = module.resolve_connection_target(
+        _PRISMA_STYLE_DSN, schema_override="aether_test"
+    )
+    assert schema == "aether_test"
+
+
+def test_audit_script_defaults_the_schema_when_the_dsn_omits_it():
+    module = _audit_script_module()
+    _dsn, schema = module.resolve_connection_target(
+        "postgresql://role:pw@host:5432/db"
+    )
+    assert schema == "aether"

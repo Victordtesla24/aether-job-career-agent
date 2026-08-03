@@ -36,9 +36,42 @@ def _load_root_env_into_environ() -> None:
             )
 
 
+#: Used when the DSN carries no ``?schema=`` of its own.
+DEFAULT_SCHEMA = "aether"
+
+
+def resolve_connection_target(
+    database_url: str, schema_override: str | None = None
+) -> tuple[str, str]:
+    """``(libpq-safe DSN, schema)`` for a Prisma-style ``DATABASE_URL``.
+
+    Every DSN in this repo is written by Prisma and carries ``?schema=aether``,
+    which libpq rejects outright::
+
+        psycopg2.ProgrammingError: invalid dsn:
+            invalid URI query parameter: "schema"
+
+    This script used to hand ``get_database_url()`` to ``psycopg2.connect``
+    unchanged, so it died on connect and exited 1 against production without
+    scanning a single row — an audit that always "fails" teaches its readers to
+    ignore it. ``app.db`` has translated that parameter since P2-S01; reuse that
+    one implementation rather than keeping a second copy, and take the schema to
+    scan from the same place, so the audit cannot be pointed at the wrong one.
+    """
+    from app.db import _translate_prisma_url
+
+    dsn, schema = _translate_prisma_url(database_url)
+    return dsn, schema_override or schema or DEFAULT_SCHEMA
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--schema", default="aether")
+    parser.add_argument(
+        "--schema",
+        default=None,
+        help="Schema to scan. Defaults to the DSN's ?schema= parameter, "
+        f"or {DEFAULT_SCHEMA!r} when it has none.",
+    )
     parser.add_argument("--json", dest="json_path", default=None)
     args = parser.parse_args()
 
@@ -50,11 +83,11 @@ def main() -> int:
     from app.db import get_database_url
     from app.services.fixture_marker_audit import findings_to_json, scan_connection
 
-    dsn = get_database_url()
+    dsn, schema = resolve_connection_target(get_database_url(), args.schema)
     connection = psycopg2.connect(dsn)
     connection.autocommit = True
     try:
-        findings = scan_connection(connection, schema=args.schema)
+        findings = scan_connection(connection, schema=schema)
     finally:
         connection.close()
 
@@ -69,7 +102,7 @@ def main() -> int:
             f"\n    …{finding.context}…"
         )
     print(f"\n{len(findings)} fixture marker(s) in user-visible columns "
-          f"of schema {args.schema!r}.")
+          f"of schema {schema!r}.")
     for key, count in Counter(
         (f.table, f.column, f.marker) for f in findings
     ).most_common():

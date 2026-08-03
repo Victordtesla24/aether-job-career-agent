@@ -45,7 +45,8 @@ cannot contain:
                                can never receive mail, so a row addressed there
                                is definitionally synthetic.
   * ``self-declared-synthetic`` — the text says so itself ("SYNTHETIC TEST
-                               DATA", "safe to delete", "do not send").
+                               DATA", "safe to delete", a line ending in the
+                               objectless directive "do not send").
   * ``harness-run-label``    — a QA campaign label (GOLD-MASTER-Vn, MODELS-LIVE
                                QA, GAP-P7-DEF-x) that only a test harness emits.
   * ``demo-seed``            — the literal strings the demo-funnel seeder wrote.
@@ -164,12 +165,22 @@ _RESERVED_EMAIL_DOMAIN_RE = re.compile(
 #: Text that declares its own synthetic nature. Deliberately whole phrases —
 #: "synthetic" alone appears in the user's real story about "a classifier
 #: trained on synthetic test cases".
+#:
+#: ``do not send`` is anchored to the END OF ITS LINE (2026-08-03). The rule was
+#: written for a harness row whose own subject reads "MODELS-LIVE QA synthetic —
+#: do not send": an instruction to the operator, with no object, terminating the
+#: text. Unanchored it also matched ordinary recruitment-agency boilerplate —
+#: "…work alongside our internal TA team and do not send resumes directly to
+#: managers" — and reported 7 genuine Airtasker postings in the live database as
+#: fixture residue, which is the audit proposing the destruction of real jobs.
+#: A real clause always names what must not be sent (resumes / CVs / candidates),
+#: so it never ends the line there; the harness directive always does.
 _SELF_DECLARED_RE = re.compile(
     r"(?:"
     r"synthetic test (?:data|row|body)"
     r"|test (?:data|fixture|row)\s*[—-]\s*do not"
     r"|safe to delete"
-    r"|do not send"
+    r"|do not send[.!]?(?=[ \t]*(?:\r?\n|$))"
     r"|deliberately missing recipient"
     r"|not-a-real-recipient"
     r"|this is (?:a|only a) test\b"
