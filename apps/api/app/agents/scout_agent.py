@@ -16,6 +16,7 @@ fixture-only LinkedIn/Indeed adapters) is a benign ``skipped``.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +27,47 @@ from app.services.discovery.adapter_registry import ADAPTERS
 from app.services.discovery.base_adapter import SourceBlockedError
 
 logger = logging.getLogger(__name__)
+
+#: Hours a source stays un-probed after it told us it blocks this server
+#: (CRITICAL-4). See :func:`source_block_backoff_hours` for the incident.
+#:
+#: Sized against the two failure directions. Too long and a block that lifts
+#: upstream keeps costing the user postings they could have seen; too short
+#: and we are back to hammering. Six hours means at most 4 probes/day/source
+#: instead of the measured ~56 (724 scout runs over 13 days), a 93% reduction,
+#: while still re-testing four times a day — well inside the window in which a
+#: user would notice a source being dark.
+BLOCK_BACKOFF_HOURS = 6.0
+
+
+def source_block_backoff_hours() -> float:
+    """How long a ``blocked`` source is left alone before the next probe.
+
+    THE INCIDENT (measured in production, schema ``aether``, 2026-08-03):
+    ``JobSourceStatus`` carried ``wellfound / blocked / "SourceBlockedError:
+    Wellfound public listings unavailable: HTTP Error 403: Forbidden"``, and
+    ``AgentRun`` carried 724 ``scout`` runs since 2026-07-21. :meth:`ScoutAgent.run`
+    loops over every adapter unconditionally, so every one of those 724 runs
+    opened a fresh request to a host that had already answered 403 to this
+    server's IP. The refusal was disclosed honestly to the user but never
+    acted on — an unbounded, non-backing-off retry against an external
+    dependency, and the standard way a soft block escalates into a hard IP ban
+    that would remove the source for every user permanently.
+
+    ``AETHER_DISCOVERY_BLOCK_BACKOFF_HOURS`` tunes the window without a
+    redeploy. A non-positive or malformed value falls back to the default
+    rather than disabling the backoff: "0 means off" would silently restore
+    the hammering this exists to stop, so there is deliberately no way to
+    switch it off through configuration.
+    """
+    raw = (os.environ.get("AETHER_DISCOVERY_BLOCK_BACKOFF_HOURS") or "").strip()
+    if not raw:
+        return BLOCK_BACKOFF_HOURS
+    try:
+        hours = float(raw)
+    except ValueError:
+        return BLOCK_BACKOFF_HOURS
+    return hours if hours > 0 else BLOCK_BACKOFF_HOURS
 
 
 @dataclass
@@ -102,6 +144,33 @@ class ScoutAgent:
                 "error": None,
                 "status": "ok",
             }
+            backoff = self._active_block(source)
+            if backoff is not None:
+                # CRITICAL-4: this source has already told us it refuses this
+                # server, and the refusal is still inside the backoff window.
+                # Make NO request — the answer is known and asking again only
+                # risks escalating a soft block into a hard IP ban.
+                #
+                # Deliberately NOT routed through ``_record_status``: that
+                # would re-stamp ``lastSyncAt = now()``, which is wrong twice
+                # over. It would slide the backoff window forward on every run
+                # so the source could never be re-probed at all, and it would
+                # tell the Jobs-page Sync Status panel (which renders
+                # ``relTime(lastSyncAt)``) that we checked when we did not.
+                # The stored row is already correct and stays untouched, so it
+                # honestly ages in the UI.
+                src["status"] = "blocked"
+                src["error"] = backoff["error"]
+                result.per_source.append(src)
+                logger.info(
+                    "scout: %s not probed — blocked %.1fh ago, backing off for "
+                    "%.1fh (%s)",
+                    source,
+                    backoff["ageSeconds"] / 3600.0,
+                    source_block_backoff_hours(),
+                    backoff["error"],
+                )
+                continue
             try:
                 jobs = adapter_cls().fetch(query=query, location=location)
             except NotImplementedError as exc:
@@ -200,6 +269,46 @@ class ScoutAgent:
             self._record_status(user_id, src)
         result.qualification = qual_totals
         return result
+
+    def _active_block(self, source: str) -> dict[str, Any] | None:
+        """The still-current block for ``source``, or ``None`` to go ahead.
+
+        Returns ``{"error": <the real upstream refusal>, "ageSeconds": float}``
+        when the newest recorded status for this source is ``blocked`` and is
+        younger than :func:`source_block_backoff_hours`.
+
+        FAILS OPEN, on purpose. This lookup is an optimisation that saves a
+        request nobody wants made; it is not a correctness gate. If the status
+        store is unreachable the right answer is to attempt discovery (the
+        user's board is what matters) rather than to refuse it, so a lookup
+        error is logged and treated as "no block". The reverse choice would
+        turn a status-table blip into a total discovery outage.
+
+        Only ``blocked`` backs off. An ``error`` status is frequently transient
+        (a 500, a timeout, a DNS hiccup) and is worth retrying on the next run;
+        a ``skipped`` source has no live mode and costs no request at all.
+        Neither is filtered here — ``latest_block`` returns ``None`` for both.
+        """
+        try:
+            block = self._status_repository.latest_block(source)
+        except Exception as exc:  # noqa: BLE001 — never block discovery on this
+            logger.warning(
+                "scout: block-backoff lookup failed for %s; probing anyway (%s: %s)",
+                source, type(exc).__name__, exc,
+            )
+            return None
+        if block is None:
+            return None
+        try:
+            age_seconds = float(block.get("ageSeconds") or 0.0)
+        except (TypeError, ValueError):
+            age_seconds = 0.0
+        if age_seconds >= source_block_backoff_hours() * 3600.0:
+            return None  # window expired — probe once and find out
+        return {
+            "error": block.get("lastError") or "source blocked upstream",
+            "ageSeconds": max(age_seconds, 0.0),
+        }
 
     def _record_status(self, user_id: str, src: dict[str, Any]) -> None:
         """Persist a per-source status row. Best-effort: a status-write failure

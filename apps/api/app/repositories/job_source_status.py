@@ -107,6 +107,45 @@ class JobSourceStatusRepository:
             conn.commit()
         return row
 
+    def latest_block(self, source: str) -> Optional[dict[str, Any]]:
+        """The newest recorded status for ``source`` — but ONLY if it is a block.
+
+        Returns the row (plus a DB-computed ``ageSeconds``) when the most
+        recent ``JobSourceStatus`` row for this source, ACROSS ALL USERS,
+        carries ``status = 'blocked'``; ``None`` otherwise — including when the
+        newest row is healthy, which is how a lifted block instantly
+        re-enables the source with no operator action.
+
+        WHY SERVER-WIDE AND NOT PER-USER. A ``SourceBlockedError`` means the
+        source refuses automated access *from this server* — the production
+        instance of it is ``wellfound`` answering ``HTTP Error 403: Forbidden``,
+        an IP-level refusal. The answer is therefore identical for every user,
+        and one probe settles it for all of them. Scoping this per user would
+        multiply the same already-refused request by the user count, which is
+        the opposite of what the caller
+        (``app.agents.scout_agent.ScoutAgent.run``) needs it for.
+
+        ``ageSeconds`` is computed by the DATABASE clock rather than returned
+        for the caller to diff against ``datetime.now()``: the hosted Postgres
+        runs measurably ahead of the app server (~3 s observed 2026-07-29, see
+        ``app.services.gmail_service.is_email_sync_fresh``), and a negative age
+        must never be mistaken for an expired window.
+        """
+        self._ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_SELECT_COLS}, '
+                    'EXTRACT(EPOCH FROM (now() - "lastSyncAt")) AS "ageSeconds" '
+                    'FROM "JobSourceStatus" WHERE "source" = %s '
+                    'ORDER BY "lastSyncAt" DESC LIMIT 1',
+                    (source,),
+                )
+                rows = rows_to_dicts(cur)
+        if not rows or rows[0].get("status") != "blocked":
+            return None
+        return rows[0]
+
     def list_by_user(self, user_id: str) -> list[dict[str, Any]]:
         """Every source's latest sync status for a user, ordered by source."""
         self._ensure_table()
