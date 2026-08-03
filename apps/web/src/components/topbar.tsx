@@ -14,7 +14,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { fetchAgents } from "../lib/api/agents";
-import { fetchApprovals } from "../lib/api/approvals";
+import { fetchApprovals, type Approval } from "../lib/api/approvals";
+import { isExpired } from "./approvals/lib";
 import { fetchSettings } from "../lib/api/workspaces";
 import { apiRequest } from "../lib/api/client";
 import { fetchMe } from "../lib/api/admin";
@@ -36,6 +37,31 @@ export function filterSearchHits(hits: SearchHit[], query: string, limit = 8): S
   return hits
     .filter((h) => `${h.label} ${h.sublabel}`.toLowerCase().includes(q))
     .slice(0, limit);
+}
+
+/**
+ * How many approvals the bell may honestly claim are waiting (CRITICAL-4).
+ *
+ * `GET /approvals?status=pending` returns EVERY pending row, including ones
+ * the backend has already voided: `ApprovalService.resolve` refuses a request
+ * older than `EXPIRY_HOURS` (48h) with a 409 and tells the user to re-run the
+ * agent. The Approvals page handles that correctly — it renders those rows
+ * with an "expired" badge, disables Approve/Reject and offers "Clear expired"
+ * — but the bell used the raw `items.length`, so it reported void requests as
+ * pending work. Measured in production 2026-08-03: 91 pending rows, growing by
+ * roughly 45/day from the autopilot, every one of which becomes a permanent
+ * phantom in that count 48h after it is created.
+ *
+ * The count is therefore filtered by the SAME `isExpired` predicate the queue
+ * screen uses (one 48h definition, shared with the server's). Expired rows are
+ * not hidden anywhere — they remain listed and clearable on the queue screen;
+ * they are only excluded from a number that means "things you can act on".
+ */
+export function actionableApprovalCount(
+  approvals: Approval[],
+  now: number = Date.now(),
+): number {
+  return approvals.filter((a) => a.status === "pending" && !isExpired(a, now)).length;
 }
 
 /** Build the search index from the user's live jobs, applications and agents. */
@@ -214,7 +240,10 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     const loadApprovals = () =>
       fetchApprovals("pending")
         .then((items) => {
-          if (!cancelled) setPendingApprovals(items.length);
+          // Only what the API will actually let the user act on — an expired
+          // pending request answers 409, so counting it would be a promise the
+          // backend refuses to keep (CRITICAL-4).
+          if (!cancelled) setPendingApprovals(actionableApprovalCount(items));
         })
         .catch(() => undefined);
     void loadApprovals();
