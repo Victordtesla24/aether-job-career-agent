@@ -190,13 +190,40 @@ def _clamp(value: float) -> float:
 
 
 def _content_tokens(text: str) -> list[str]:
-    """Lowercased tokens with stopwords/boilerplate/garbage removed (order kept)."""
-    tokens = [t.lower().rstrip(".,-") for t in _TOKEN_RE.findall(text)]
-    return [
-        t
-        for t in tokens
-        if len(t) >= 2 and t not in _STOPWORDS and not _is_noise_token(t)
-    ]
+    """Lowercased tokens with stopwords/boilerplate/garbage removed (order kept).
+
+    ``_TOKEN_RE`` requires a LEADING LETTER, so inside a number-with-unit it
+    starts matching at the unit and produces a fragment of that number rather
+    than a word: ``"10k+ users"`` yields ``k+``, ``"$1.5M+"`` yields ``m+``.
+    Those fragments used to survive every downstream filter — ``len("k+") == 2``
+    clears the length floor, they are not stopwords, and :func:`_is_noise_token`
+    only recognises URL/gibberish shapes — so ``k+`` was treated as a genuine JD
+    keyword by every consumer of this function. It reached the user in
+    ``ATSScore.missing_keywords``, and, worse, ``resume_tailor._validate``'s ATS
+    non-regression floor rejected an otherwise-clean rewrite for "dropping the
+    JD keyword ``k+``" that the original bullet only ever contained as part of
+    "10k+ device concurrency". A single such fragment was enough to reject the
+    last surviving rewrite in a batch, leaving ``changes == 0`` and turning the
+    whole tailoring feature into a silent no-op.
+
+    A match that begins immediately after a DIGIT is therefore dropped: it is a
+    unit suffix on a number, never a word. Real skills are unaffected because
+    they never start mid-number — ``s3``, ``ec2``, ``c#``, ``c++``, ``log4j2``,
+    ``i18n``, ``node.js`` and ``covid-19`` all match from their own first letter
+    with a non-digit (or nothing) in front of them. This is the same class
+    ``c3d79f0`` fixed one layer downstream in ``clean_gap_keywords``; the root
+    was here.
+    """
+    kept: list[str] = []
+    for match in _TOKEN_RE.finditer(text):
+        start = match.start()
+        if start > 0 and text[start - 1].isdigit():
+            # Unit fragment of a number ("10k+" -> "k+"), not a word.
+            continue
+        token = match.group(0).lower().rstrip(".,-")
+        if len(token) >= 2 and token not in _STOPWORDS and not _is_noise_token(token):
+            kept.append(token)
+    return kept
 
 
 @lru_cache(maxsize=1)
@@ -293,6 +320,25 @@ class ATSEngine:
             _logger.warning("ATS semantic scoring degraded: %s", exc)
             semantic = _DEGRADED_SEMANTIC_SCORE
             semantic_path = "degraded"
+        if not _content_tokens(resume_text) or not _content_tokens(job_description):
+            # NO EVIDENCE ON ONE SIDE -> there is no semantic overlap to
+            # measure, and whatever the step above produced for it is an
+            # artifact rather than a measurement. An embedding model still
+            # returns a vector for an empty (or wholly-boilerplate) string, so
+            # an EMPTY resume scored semantic_similarity 11.875 -> overall 4.75
+            # while keyword_match and experience_gap were both a correct 0.
+            # That figure propagated into
+            # ``tailor_agent._compute_conversion_metrics`` as the
+            # ``baselineATSScore`` divisor behind the user-facing
+            # ``estimatedConversionLift``.
+            #
+            # This is the resume-side twin of the gate ``557739e`` added on the
+            # job side ("an empty job description was scoring 74.63 — refuse to
+            # score on no evidence"). 0.0 is the honest answer here, not a
+            # placeholder: ``semantic_path`` is left exactly as the path above
+            # resolved it, because "degraded" means "we could not measure" —
+            # a different and weaker claim than "there is nothing to measure".
+            semantic = 0.0
         experience = self._experience_score(resume_text, job_description)
 
         overall = _clamp(
