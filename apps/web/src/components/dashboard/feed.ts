@@ -4,6 +4,12 @@
  * enriched from AgentRun output, badge mapping and relative timestamps.
  * Kept free of React so they are unit-testable.
  */
+import {
+  coverLetterDegraded,
+  humanizeDuration,
+  parseServerTime,
+  stalledForMs,
+} from "../../lib/agent-run-health";
 import type { AgentRun } from "../../lib/api/agents";
 
 interface FeedBadge {
@@ -50,28 +56,25 @@ export function agentTile(agentName: string): FeedTile {
 }
 
 /** True when a completed coverLetter run degraded gracefully and produced no
- * letter (QA-RES-F). The cover-letter agent/worker set this exact flag on
- * every honest degrade path (LLM unavailable on first draft, fabrication/
- * structural guard rejection) — see apps/api/app/agents/cover_letter_agent.py,
- * apps/api/app/workers/tasks.py and apps/api/app/routers/agents.py, all of
- * which mark the run `completed` with `output.coverLetterUnavailable = true`
- * and `cover_letter_id: None`. Genuine successes always carry a real
- * `cover_letter_id` and never set this flag.
+ * letter (QA-RES-F).
  *
- * Exported (QA3-F-03) so every other surface that renders AgentRun rows —
- * the Agents console's Orchestration panel and its "Recent runs" table —
- * reuses this SAME predicate instead of re-deriving it, so a degraded run
- * can never read as a plain success on one screen while this one shows it
- * honestly. */
-export function coverLetterDegraded(run: AgentRun): boolean {
-  if (run.agentName !== "coverLetter") return false;
-  const out = run.output ?? {};
-  return out.coverLetterUnavailable === true;
-}
+ * The predicate itself now lives in `lib/agent-run-health` (alongside the
+ * staleness classifier that also has to know what "produced something" means),
+ * and is re-exported here unchanged so the many callers that already import it
+ * from this module — the Agents console's Orchestration panel and its "Recent
+ * runs" table — keep reusing the SAME single definition. */
+export { coverLetterDegraded };
 
-/** Badge per run status/agent (wireframe: Discovered/Tailored/Submitted/Waiting). */
+/** Badge per run status/agent (wireframe: Discovered/Tailored/Submitted/Waiting).
+ *
+ * CRITICAL-2: a run whose in-flight status is older than any real run takes is
+ * NOT "Waiting" — nothing is waiting on it. It gets its own honest badge so a
+ * week-dead row can never sit in the feed looking like queued work. */
 export function runBadge(run: AgentRun): FeedBadge {
   if (run.status === "queued" || run.status === "running") {
+    if (stalledForMs(run) !== null) {
+      return { label: "Stalled", cls: "bg-white/8 text-aether-muted border-white/10" };
+    }
     return { label: "Waiting", cls: "bg-aether-yellow/15 text-aether-yellow border-aether-yellow/20" };
   }
   if (run.status === "failed") {
@@ -116,6 +119,17 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
     return { text: "run failed", highlight: null, metric: run.error ? run.error.slice(0, 60) : null };
   }
   if (run.status === "queued" || run.status === "running") {
+    // CRITICAL-2: "in progress" is a claim about the present. Only make it
+    // while the run could still plausibly be alive; past the staleness window
+    // say what is actually true — it stopped and never reported back.
+    const stalledMs = stalledForMs(run);
+    if (stalledMs !== null) {
+      return {
+        text: `run stalled — no progress for ${humanizeDuration(stalledMs)}`,
+        highlight: null,
+        metric: "stalled",
+      };
+    }
     return { text: `run ${run.status}`, highlight: null, metric: "in progress" };
   }
   switch (run.agentName) {
@@ -205,11 +219,16 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
   }
 }
 
-/** "just now" / "N min ago" / "N hr ago" / "N d ago" relative to `now`. */
+/** "just now" / "N min ago" / "N hr ago" / "N d ago" relative to `now`.
+ *
+ * Parsed with `parseServerTime`, not bare `new Date()`: the API serialises its
+ * naive UTC `timestamp` columns with no timezone designator, which ECMAScript
+ * reads as LOCAL time. For this product's owner (en-AU, UTC+10) that silently
+ * shifted every relative age by ten hours — a run finished a minute ago read as
+ * "10 hr ago". */
 export function relTime(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "queued";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "queued";
+  const then = parseServerTime(iso);
+  if (then === null) return "queued";
   const mins = Math.max(0, Math.floor((now.getTime() - then) / 60_000));
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins} min ago`;

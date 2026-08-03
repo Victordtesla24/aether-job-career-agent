@@ -23,6 +23,12 @@ export const AgentRunSchema = z.object({
   startedAt: z.string().nullish(),
   completedAt: z.string().nullish(),
   createdAt: z.string(),
+  // Stamped by the executing worker while a run is actually progressing
+  // (AgentRun.heartbeatAt). Optional because rows written before that column
+  // existed carry no stamp at all — see `lib/agent-run-health`, which treats a
+  // FRESH heartbeat as proof of life (a legitimately long run is then never
+  // called stalled) and falls back to wall-clock age when there is none.
+  heartbeatAt: z.string().nullish(),
 });
 
 export type AgentRun = z.infer<typeof AgentRunSchema>;

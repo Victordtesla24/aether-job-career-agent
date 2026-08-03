@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
 import { useRealtimeResources } from "../../hooks/useRealtime";
+import { useNow } from "../../hooks/useNow";
 import MarketPulse from "../../components/analytics/MarketPulse";
 import {
   agentDisplayName,
@@ -167,6 +168,15 @@ export default function DashboardPage() {
   useRealtimeResources(["stories"], () => stories.reload());
   useRealtimeResources(["contacts", "outreach"], () => crm.reload());
   useRealtimeResources(["approvals"], () => approvals.reload());
+
+  // CRITICAL-2. The channel above covers everything that changes because the
+  // SERVER changed it. A run going stale is different: no row moves and no
+  // event fires — the run simply stops being plausible as time passes. Without
+  // this tick, the Agent Activity feed would keep an "in progress" line on
+  // screen indefinitely for a run whose worker died while the tab was open,
+  // which is exactly how a week of inactivity got hidden. It issues no
+  // requests; it only re-renders so `runBadge`/`describeRun` are re-evaluated.
+  useNow();
 
   const [feedFilter, setFeedFilter] = useState<(typeof FEED_FILTERS)[number]>("All");
   const [busyApprovalId, setBusyApprovalId] = useState<string | null>(null);

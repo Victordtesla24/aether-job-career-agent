@@ -5,8 +5,17 @@
  * and error log (wireframe: agent-monitor.html, DEF-001..004). Statuses and
  * log rows are derived from the live run history passed in by the Agents page.
  */
+import {
+  coverLetterDegraded,
+  isInFlight,
+  isLiveRun,
+  isStalledRun,
+  parseServerTime,
+  stalledLabel,
+  STALLED_RUN_ADVICE,
+} from "../../lib/agent-run-health";
 import type { AgentRun, AgentSummary } from "../../lib/api/agents";
-import { coverLetterDegraded } from "../dashboard/feed";
+import { useNow } from "../../hooks/useNow";
 
 /**
  * The REAL 7-agent topology, in pipeline order (supervisor → scout →
@@ -24,9 +33,19 @@ const NODES: Array<{ label: string; agent: string; blurb: string }> = [
   { label: "Email", agent: "emailAgent", blurb: "Triages inbox · drafts grounded replies · imports job alerts" },
 ];
 
-function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[]) {
-  const running = runs.some((r) => r.agentName === agent && r.status === "running");
-  if (running) return { label: "running", cls: "text-aether-coral border-aether-coral/40" };
+function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[], now: number) {
+  // `runs` arrives newest-first (GET /agents/runs orders by createdAt DESC), so
+  // the node reflects this agent's CURRENT run, not any older one.
+  const newest = runs.find((r) => r.agentName === agent);
+  if (newest && isInFlight(newest)) {
+    // CRITICAL-2: only a run that could still plausibly be alive paints the
+    // node as running. A `running` row older than the staleness window has no
+    // worker behind it, and showing it as live is how a week of total
+    // inactivity got hidden behind a coral badge.
+    return isLiveRun(newest, now)
+      ? { label: "running", cls: "text-aether-coral border-aether-coral/40" }
+      : { label: stalledLabel(newest, now), cls: "text-aether-amber border-aether-amber/40" };
+  }
   const summary = agents.find((a) => a.name === agent);
   if (summary?.status && summary.status !== "idle")
     return { label: summary.status, cls: "text-aether-green border-aether-green/40" };
@@ -45,6 +64,10 @@ interface TaskItem {
   label: string;
   progress: number | null;
   active: boolean;
+  // CRITICAL-2: true for an in-flight run whose last movement is older than any
+  // real run takes. It renders as an inert, honest "stalled for N" row — never
+  // an indeterminate indicator, which would claim work is still happening.
+  stalled?: boolean;
   // QA3-F-03: true for a letterless coverLetter degrade (GAP-P4-002) — the
   // run genuinely finished (not still in flight), but produced no letter, so
   // it must never render with the same green "success" treatment as a real
@@ -52,8 +75,11 @@ interface TaskItem {
   degraded?: boolean;
 }
 
-function logLevel(run: AgentRun): { tag: string; cls: string } {
+function logLevel(run: AgentRun, now: number): { tag: string; cls: string } {
   if (run.status === "failed") return { tag: "ERR", cls: "text-red-300" };
+  // CRITICAL-2: a run that stopped reporting is not still going. "RUN" for a
+  // row that last moved eight days ago is a false present-tense claim.
+  if (isStalledRun(run, now)) return { tag: "DEAD", cls: "text-aether-amber" };
   if (run.status === "running" || run.status === "queued")
     return { tag: "RUN", cls: "text-aether-amber" };
   // QA3-F-03: a letterless coverLetter degrade is recorded status='completed'
@@ -72,8 +98,17 @@ export default function Orchestration({
   agents: AgentSummary[];
   runs: AgentRun[];
 }) {
+  // Staleness is a function of elapsed time, not of any server event, so the
+  // widget re-renders on a clock as well as on realtime refetches — otherwise a
+  // run that goes stale while the screen is open keeps its spinner forever.
+  const now = useNow();
   const online = agents.filter((a) => a.status !== "offline").length;
-  const queued = runs.filter((r) => r.status === "running" || r.status === "queued").length;
+  const queueRuns = runs.filter(isInFlight);
+  const liveRuns = queueRuns.filter((r) => isLiveRun(r, now));
+  const stalledRuns = queueRuns.filter((r) => isStalledRun(r, now));
+  // CRITICAL-2: stalled work is NOT queued work. Counting a dead row here is
+  // what put "1 task in queue" on screen for eight days.
+  const queued = liveRuns.length;
   // QA3-F-03: a letterless coverLetter degrade is recorded status='completed'
   // (GAP-P4-002 — the guard working is not a failure), but it is NOT a
   // success — exclude it from the numerator (counted distinctly below)
@@ -98,18 +133,32 @@ export default function Orchestration({
   // `null` — the UI renders an honest indeterminate indicator for it instead
   // of a fabricated percentage (MV-agent-monitor-002). Only a genuinely
   // completed run gets the real, backend-confirmed 100%.
-  const active: TaskItem[] = runs
-    .filter((r) => r.status === "running" || r.status === "queued")
+  //
+  // CRITICAL-2: a stalled run keeps its row here — it is real, and the user
+  // needs to see it — but never the indeterminate pulsing indicator, which is
+  // a claim that something is happening. It gets `stalled: true`, an inert
+  // bar, and a label that states how long it has been dead.
+  const active: TaskItem[] = [...stalledRuns, ...liveRuns]
     .slice(0, 3)
-    .map((r) => ({
-      key: r.id,
-      label: `${r.agentName} · ${r.status === "running" ? "in progress" : "queued"}`,
-      progress: null,
-      active: true,
-    }));
+    .map((r) =>
+      isStalledRun(r, now)
+        ? {
+            key: r.id,
+            label: `${r.agentName} · ${stalledLabel(r, now)}`,
+            progress: null,
+            active: false,
+            stalled: true,
+          }
+        : {
+            key: r.id,
+            label: `${r.agentName} · ${r.status === "running" ? "in progress" : "queued"}`,
+            progress: null,
+            active: true,
+          },
+    );
   const recentDone: TaskItem[] = runs
     .filter((r) => r.status === "completed")
-    .slice(0, 3 - active.length)
+    .slice(0, Math.max(0, 3 - active.length))
     .map((r) =>
       coverLetterDegraded(r)
         ? { key: r.id, label: `${r.agentName} · unavailable`, progress: 100, active: false, degraded: true }
@@ -130,6 +179,14 @@ export default function Orchestration({
                 "uptime 99.8%" literal has been removed rather than grounded
                 in a fake number. */}
             {online} agents online · {queued} task{queued === 1 ? "" : "s"} in queue
+            {stalledRuns.length > 0 ? (
+              // CRITICAL-2: stalled work is reported separately and never
+              // folded into the queue count, which would read as live work.
+              <span className="text-aether-amber" data-testid="orchestration-stalled-count">
+                {" "}
+                · {stalledRuns.length} stalled
+              </span>
+            ) : null}
           </span>
         </div>
         <div className="flex gap-2">
@@ -186,7 +243,7 @@ export default function Orchestration({
           </svg>
           <div className="relative grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {NODES.map((node) => {
-              const status = nodeStatus(node.agent, agents, runs);
+              const status = nodeStatus(node.agent, agents, runs, now);
               return (
                 <article
                   key={node.label}
@@ -218,10 +275,16 @@ export default function Orchestration({
               {tasks.map((t) => (
                 <div key={t.key}>
                   <div className="mb-1 flex justify-between text-[11px]">
-                    <span className="capitalize text-aether-muted">{t.label}</span>
+                    <span className={t.stalled ? "text-aether-amber" : "capitalize text-aether-muted"}>
+                      {t.label}
+                    </span>
                     {/* No fabricated percentage for in-progress work — only a
-                        real, completed-run 100% is ever shown as a number. */}
-                    <span className="mono">{t.progress !== null ? `${t.progress}%` : "…"}</span>
+                        real, completed-run 100% is ever shown as a number. A
+                        stalled run gets neither: "…" would imply it is still
+                        thinking. */}
+                    <span className="mono">
+                      {t.progress !== null ? `${t.progress}%` : t.stalled ? "—" : "…"}
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-white/10">
                     {t.progress !== null ? (
@@ -231,6 +294,10 @@ export default function Orchestration({
                         }`}
                         style={{ width: `${t.progress}%` }}
                       />
+                    ) : t.stalled ? (
+                      // CRITICAL-2: inert and unanimated. No role="progressbar"
+                      // either — nothing is progressing.
+                      <div className="h-1.5 w-full rounded-full bg-aether-amber/25" />
                     ) : (
                       <div
                         role="progressbar"
@@ -241,6 +308,12 @@ export default function Orchestration({
                   </div>
                 </div>
               ))}
+              {tasks.some((t) => t.stalled) ? (
+                // Said once for the whole queue rather than repeated per row.
+                <p className="pt-1 text-[10px] leading-snug text-aether-muted-dim">
+                  {STALLED_RUN_ADVICE}
+                </p>
+              ) : null}
             </div>
           )}
         </div>
@@ -295,23 +368,29 @@ export default function Orchestration({
           ) : (
             <div className="mono space-y-1.5 text-[11px]">
               {runs.slice(0, 6).map((run) => {
-                const level = logLevel(run);
+                const level = logLevel(run, now);
                 return (
                   <p key={run.id} className="flex items-start gap-2">
                     <span className={`w-8 shrink-0 font-bold ${level.cls}`}>{level.tag}</span>
                     <span className="shrink-0 text-aether-muted-dim">
-                      {run.startedAt
-                        ? new Date(run.startedAt).toLocaleTimeString([], {
+                      {/* parseServerTime, not `new Date`: the API's naive UTC
+                          stamps carry no timezone designator, so a bare parse
+                          prints them in the viewer's own offset — ten hours
+                          wrong for this product's en-AU owner. */}
+                      {parseServerTime(run.startedAt) !== null
+                        ? new Date(parseServerTime(run.startedAt) as number).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
                           })
                         : "--:--"}
                     </span>
                     <span className="truncate text-aether-muted">
-                      {run.error ??
-                        (coverLetterDegraded(run)
-                          ? `${run.agentName} unavailable (degraded)`
-                          : `${run.agentName} ${run.status}`)}
+                      {isStalledRun(run, now)
+                        ? `${run.agentName} ${stalledLabel(run, now)} — no worker attached`
+                        : (run.error ??
+                          (coverLetterDegraded(run)
+                            ? `${run.agentName} unavailable (degraded)`
+                            : `${run.agentName} ${run.status}`))}
                     </span>
                   </p>
                 );

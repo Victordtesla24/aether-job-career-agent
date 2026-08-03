@@ -4,10 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchAgents } from "../lib/api/agents";
+import { agentPulse, type AgentPulse } from "../lib/agent-run-health";
 import { fetchSubscription, type SubscriptionState } from "../lib/api/billing";
 import { NAV_ITEMS } from "../lib/navigation";
-
-type AgentPulse = { running: number; total: number };
 
 /**
  * Primary application sidebar. It renders straight from the NAV_ITEMS contract
@@ -33,10 +32,12 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
       fetchAgents()
         .then((agents) => {
           if (cancelled) return;
-          setPulse({
-            running: agents.filter((a) => a.status === "running").length,
-            total: agents.length,
-          });
+          // CRITICAL-2: an agent whose latest run merely SAYS "running" is not
+          // necessarily working. `agentPulse` applies the same staleness window
+          // the rest of the UI uses, so a run abandoned days ago can no longer
+          // light up "Agents Active" — that badge is exactly what made a week
+          // of total inactivity look like a busy system.
+          setPulse(agentPulse(agents));
         })
         .catch(() => {
           if (!cancelled) setPulse(null);
@@ -64,6 +65,7 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
   }, []);
 
   const running = pulse?.running ?? 0;
+  const stalled = pulse?.stalled ?? 0;
   const agentsActive = running > 0;
   return (
     <aside className="w-[248px] shrink-0 border-r border-white/10 glass hidden lg:flex flex-col px-4 py-6">
@@ -152,7 +154,7 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
                   : "text-xs font-medium text-aether-muted"
               }
             >
-              {agentsActive ? "Agents Active" : "Agents Idle"}
+              {agentsActive ? "Agents Active" : stalled > 0 ? "Agents Stalled" : "Agents Idle"}
             </span>
           </div>
           <p className="text-[11px] text-aether-muted-dim leading-relaxed">
@@ -161,8 +163,14 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
               : pulse === null
                 ? "Agent status unavailable"
                 : agentsActive
-                  ? `${running} of ${pulse.total} agents running`
-                  : `${pulse.total} agents ready · none running`}
+                  ? `${running} of ${pulse.total} agents running${
+                      stalled > 0 ? ` · ${stalled} stalled` : ""
+                    }`
+                  : stalled > 0
+                    ? // Honest: the run says "running" but has not moved for
+                      // longer than any real run takes, so nothing is working.
+                      `${stalled} stalled run${stalled === 1 ? "" : "s"} · none running`
+                    : `${pulse.total} agents ready · none running`}
           </p>
           <Link
             href="/dashboard/agents"

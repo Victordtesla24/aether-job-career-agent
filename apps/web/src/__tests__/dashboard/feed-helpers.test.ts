@@ -30,6 +30,22 @@ function run(overrides: Partial<AgentRun>): AgentRun {
   };
 }
 
+/**
+ * An in-flight run that is genuinely in flight.
+ *
+ * CRITICAL-2: "Waiting" / "in progress" are claims about the PRESENT, so the
+ * feed helpers now only make them while a run could still plausibly be alive
+ * (`lib/agent-run-health`). The fixed 2026-07-10 timestamps above describe a
+ * run whose worker died long ago — correct for the terminal statuses they were
+ * written for, but not for `running`/`queued`, which need a fresh anchor to
+ * mean what these assertions intend. The stalled counterpart is asserted
+ * explicitly below rather than left implicit in a stale fixture.
+ */
+function liveRun(overrides: Partial<AgentRun>): AgentRun {
+  const now = new Date().toISOString();
+  return run({ startedAt: now, createdAt: now, completedAt: null, ...overrides });
+}
+
 describe("runBadge", () => {
   it("maps wireframe badges per agent and status", () => {
     expect(runBadge(run({ agentName: "scout" })).label).toBe("Discovered");
@@ -37,9 +53,22 @@ describe("runBadge", () => {
     expect(runBadge(run({ agentName: "submission" })).label).toBe("Submitted");
     expect(runBadge(run({ agentName: "coverLetter" })).label).toBe("Drafted");
     expect(runBadge(run({ agentName: "supervisor" })).label).toBe("Completed");
-    expect(runBadge(run({ status: "running" })).label).toBe("Waiting");
-    expect(runBadge(run({ status: "queued" })).label).toBe("Waiting");
+    expect(runBadge(liveRun({ status: "running" })).label).toBe("Waiting");
+    expect(runBadge(liveRun({ status: "queued" })).label).toBe("Waiting");
     expect(runBadge(run({ status: "failed" })).label).toBe("Failed");
+  });
+
+  it("CRITICAL-2: an in-flight run whose worker is long gone is 'Stalled', never 'Waiting'", () => {
+    // Nothing is waiting on a run that last moved eight days ago.
+    const dead = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    expect(
+      runBadge(run({ status: "running", startedAt: dead, createdAt: dead, completedAt: null }))
+        .label,
+    ).toBe("Stalled");
+    expect(
+      runBadge(run({ status: "queued", startedAt: null, createdAt: dead, completedAt: null }))
+        .label,
+    ).toBe("Stalled");
   });
 
   it("QA-RES-F: never shows the success 'Drafted' badge for a degraded coverLetter run", () => {
@@ -138,7 +167,16 @@ describe("describeRun", () => {
 
   it("handles failed and in-flight runs without fabricating detail", () => {
     expect(describeRun(run({ status: "failed", error: "boom" })).text).toBe("run failed");
-    expect(describeRun(run({ status: "running" })).metric).toBe("in progress");
+    expect(describeRun(liveRun({ status: "running" })).metric).toBe("in progress");
+  });
+
+  it("CRITICAL-2: describes a long-dead in-flight run as stalled, never 'in progress'", () => {
+    const dead = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    const d = describeRun(
+      run({ status: "running", startedAt: dead, createdAt: dead, completedAt: null }),
+    );
+    expect(d.metric).toBe("stalled");
+    expect(d.text).toMatch(/stalled — no progress for 8 days/);
   });
 });
 

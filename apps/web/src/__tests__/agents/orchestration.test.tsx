@@ -52,6 +52,23 @@ function run(overrides: Partial<AgentRun>): AgentRun {
   };
 }
 
+/**
+ * A run that is genuinely still in flight.
+ *
+ * CRITICAL-2: an in-flight run is now only rendered as live work while its last
+ * observable movement is recent (`lib/agent-run-health`), because a `running`
+ * row that had not moved for 192 hours was being painted as an active run in
+ * production. The fixed 2026-07-17 anchor above is fine for the terminal
+ * statuses these tests were written around, but for `running`/`queued` it
+ * describes a dead run — these cases are about the fabricated-progress and
+ * live-count behaviour, so they need a fixture that really is in flight.
+ * Stalled rendering has its own coverage in `stale-run-honesty.test.tsx`.
+ */
+function inFlightRun(overrides: Partial<AgentRun>): AgentRun {
+  const now = new Date().toISOString();
+  return run({ startedAt: now, createdAt: now, completedAt: null, ...overrides });
+}
+
 describe("Orchestration — MV-agent-monitor-001 dead buttons", () => {
   it("renders 'Pause All' as an honestly disabled control, not a live one", () => {
     render(<Orchestration agents={agents} runs={[]} />);
@@ -78,8 +95,8 @@ describe("Orchestration — MV-agent-monitor-001 dead buttons", () => {
 describe("Orchestration — MV-agent-monitor-002 fabricated progress %", () => {
   it("never renders a numeric percentage for an in-progress (running/queued) task", () => {
     const runs = [
-      run({ id: "a", status: "running", startedAt: null, completedAt: null }),
-      run({ id: "b", status: "queued", startedAt: null, completedAt: null }),
+      inFlightRun({ id: "a", status: "running" }),
+      inFlightRun({ id: "b", status: "queued" }),
     ];
     render(<Orchestration agents={agents} runs={runs} />);
     const queue = screen.getByTestId("task-queue");
@@ -119,7 +136,7 @@ describe("Orchestration — ADV-agent-monitor-001 fabricated uptime", () => {
   });
 
   it("still shows the real, live agent/task counts next to where uptime used to be", () => {
-    const runs = [run({ id: "q1", status: "queued", startedAt: null, completedAt: null })];
+    const runs = [inFlightRun({ id: "q1", status: "queued" })];
     render(<Orchestration agents={agents} runs={runs} />);
     const section = screen.getByTestId("agent-orchestration");
     expect(section.textContent).toMatch(/1 agents? online/i);

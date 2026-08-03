@@ -27,6 +27,15 @@ import {
   type AgentRun,
   type AgentSummary,
 } from "../../../lib/api/agents";
+import {
+  agentOutputGaps,
+  isStalledRun,
+  outputGapMessage,
+  parseServerTime,
+  stalledLabel,
+  STALLED_RUN_ADVICE,
+} from "../../../lib/agent-run-health";
+import { useNow } from "../../../hooks/useNow";
 import { apiRequest } from "../../../lib/api/client";
 import {
   jobAlertHeadline,
@@ -417,6 +426,17 @@ export default function AgentsPage() {
     setConfigProvider(target);
   };
 
+  // CRITICAL-2. A run goes stale by the passage of time, not by any server
+  // event, so this screen re-renders on a clock in addition to the realtime
+  // refetch above; otherwise a run that dies while the console is open keeps
+  // its "in progress" label until someone reloads.
+  const now = useNow();
+  const stalledRuns = runs.filter((r) => isStalledRun(r, now));
+  // "This agent has produced nothing since <date>" — derived from the runs the
+  // server actually returned. No agent name is hardcoded and nothing is
+  // asserted about an agent absent from the window.
+  const outputGaps = agentOutputGaps(runs, now);
+
   const agentCount = catalog?.counts.total ?? 0;
   const providerCount = providers?.length ?? 0;
   // OpenRouter carries the live 300+ model catalog the picker browses; other
@@ -498,6 +518,63 @@ export default function AgentsPage() {
           </button>
         </div>
       </header>
+
+      {stalledRuns.length > 0 ? (
+        // CRITICAL-2. In production one tailor run sat at status='running' for
+        // 192.6 hours with no process attached, and every surface rendered it
+        // as active work — so the product concealed a week of total inactivity
+        // behind a spinner. A run in flight for longer than the backend's own
+        // staleness window (agents.py `_job_stale_thresholds`) has no worker
+        // behind it; say so, say how long, and say what can be done. There is
+        // no cancel endpoint for an AgentRun, so no clear/cancel action is
+        // offered — only the one that genuinely exists, starting a new run.
+        <div
+          data-testid="agents-stalled-banner"
+          role="alert"
+          className="rounded-xl border border-aether-amber/40 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+        >
+          <p className="font-semibold">
+            {stalledRuns.length === 1
+              ? "1 agent run is stalled — it is not making progress"
+              : `${stalledRuns.length} agent runs are stalled — they are not making progress`}
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {stalledRuns.slice(0, 5).map((r) => (
+              <li key={r.id} className="font-mono text-xs">
+                {r.agentName} · {stalledLabel(r, now)} · started{" "}
+                {parseServerTime(r.startedAt ?? r.createdAt) !== null
+                  ? new Date(
+                      parseServerTime(r.startedAt ?? r.createdAt) as number,
+                    ).toLocaleString("en-AU")
+                  : "unknown"}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-xs text-aether-amber/90">{STALLED_RUN_ADVICE}</p>
+        </div>
+      ) : null}
+
+      {outputGaps.length > 0 ? (
+        // CRITICAL-2 item 3: an agent can look healthy while producing nothing
+        // for days. Report the drought from the real run history rather than
+        // letting an idle-looking green card imply work is happening.
+        <div
+          data-testid="agents-no-output"
+          role="status"
+          className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-aether-muted"
+        >
+          <p className="font-semibold text-aether-muted">Agents with no recent output</p>
+          <ul className="mt-1.5 space-y-1 text-xs">
+            {outputGaps.map((gap) => (
+              <li key={gap.agent}>{outputGapMessage(gap, now)}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-aether-muted-dim">
+            Measured over the {runs.length.toLocaleString()} most recent run
+            {runs.length === 1 ? "" : "s"} this console loaded.
+          </p>
+        </div>
+      ) : null}
 
       {alertsNotice ? (
         <p
@@ -623,6 +700,13 @@ export default function AgentsPage() {
                         // "Unavailable" treatment the dashboard feed already
                         // uses for this exact run shape.
                         <span className="text-aether-muted">Unavailable</span>
+                      ) : isStalledRun(run, now) ? (
+                        // CRITICAL-2: never print the raw "running" for a row
+                        // whose worker is gone — that word is what convinced
+                        // the owner an agent had been grinding for hours.
+                        <span className="text-aether-amber" title={STALLED_RUN_ADVICE}>
+                          {stalledLabel(run, now)}
+                        </span>
                       ) : (
                         <span
                           className={
@@ -638,7 +722,13 @@ export default function AgentsPage() {
                       )}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-aether-muted">
-                      {run.startedAt ? new Date(run.startedAt).toLocaleString("en-AU") : "—"}
+                      {/* parseServerTime, not `new Date`: the API's naive UTC
+                          stamps carry no timezone designator, so a bare parse
+                          renders them in the viewer's offset — ten hours out
+                          for this product's en-AU owner. */}
+                      {parseServerTime(run.startedAt) !== null
+                        ? new Date(parseServerTime(run.startedAt) as number).toLocaleString("en-AU")
+                        : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-aether-muted-dim">{run.error ?? "—"}</td>
                   </tr>
