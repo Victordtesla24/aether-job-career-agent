@@ -61,14 +61,15 @@ from app.services.agent_run_watchdog import (
 )
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
-    LLM_UNAVAILABLE_USER_MESSAGE,
     LLMUnavailableError,
     QuotaExhaustedError,
     _infer_anthropic_auth_mode,
+    classify_llm_failure,
     get_accumulated_usage,
     get_active_credential_env_var,
     get_last_served_model,
     get_quota_block_hours,
+    llm_failure_user_message,
     resolve_provider,
     resolve_user_credential,
     served_model_capture,
@@ -1040,11 +1041,22 @@ def _execute_reserved_run(
         # message on both the AgentRun audit record and the 503 detail; the raw
         # exception (carrying 'hard budget', 'live call', the prompt name) is
         # logged server-side only, never shown to the user. Quota is refunded.
-        logger.warning("agent run %s LLM-unavailable: %s", run_id, exc)
-        runs.finish(run_id, "failed", error=LLM_UNAVAILABLE_USER_MESSAGE)
+        #
+        # CRITICAL-3: the message is now chosen by the FAILURE CLASS the
+        # transport attached. A 402 (out of credits) or 401 (bad key) is not
+        # "temporarily unavailable" and will not fix itself in "a moment" —
+        # telling the owner otherwise is what made a week of a dead upstream
+        # look like routine flakiness, and what invited the autopilot to keep
+        # retrying. The retryable class keeps the exact previous message.
+        user_message = llm_failure_user_message(exc)
+        logger.warning(
+            "agent run %s LLM-unavailable (class=%s): %s",
+            run_id, classify_llm_failure(exc), exc,
+        )
+        runs.finish(run_id, "failed", error=user_message)
         _refund_once()
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, LLM_UNAVAILABLE_USER_MESSAGE
+            status.HTTP_503_SERVICE_UNAVAILABLE, user_message
         ) from exc
     except (FabricationError, StructuralError) as exc:
         # GAP-P4-002: the cover agent's fabrication / §10.2 structural guard

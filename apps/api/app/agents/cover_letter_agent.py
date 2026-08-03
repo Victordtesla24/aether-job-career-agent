@@ -49,6 +49,7 @@ from app.services.llm_client import (
     LLMUnavailableError,
     get_cover_budget_seconds,
     get_model,
+    llm_failure_user_message,
     remaining_budget_seconds,
     shared_budget,
 )
@@ -1530,7 +1531,7 @@ class CoverLetterAgent:
                     untrusted_text=raw_description,
                     provenance_evidence=provenance_evidence,
                 )
-            except LLMUnavailableError:
+            except LLMUnavailableError as exc:
                 # cover _draft() resilience (ML-cover-002): a live LLM failure on
                 # the FIRST draft must NOT propagate a raw LLMUnavailableError out
                 # of run(). Degrade to an honest coverLetterUnavailable result the
@@ -1538,13 +1539,26 @@ class CoverLetterAgent:
                 # with the fabrication/structural guard-rejection degrade
                 # (agents.py:1558-1600). Never fabricates a letter; downstream
                 # the reserved run is refunded and never billed.
-                return CoverLetterResult(
-                    cover_letter_unavailable=True,
-                    message=(
+                #
+                # CRITICAL-3: the degrade message follows the FAILURE CLASS. It
+                # used to assert "temporarily unavailable … try again in a
+                # moment" unconditionally, which is false for a 402/401 and is
+                # the exact text that made a dead upstream read as a blip. The
+                # retryable class keeps the original sentence verbatim.
+                if exc.retryable:
+                    message = (
                         "The cover letter couldn't be generated because the "
                         "writing model was temporarily unavailable. Please try "
                         "again in a moment."
-                    ),
+                    )
+                else:
+                    message = (
+                        "The cover letter couldn't be generated: "
+                        f"{llm_failure_user_message(exc)}"
+                    )
+                return CoverLetterResult(
+                    cover_letter_unavailable=True,
+                    message=message,
                 )
             # W-TAILOR-CONVERGE item 4: the letter had NO quality measurement
             # of any kind. Score the FIRST draft now, before any corrective

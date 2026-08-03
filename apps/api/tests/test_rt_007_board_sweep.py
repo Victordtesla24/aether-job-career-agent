@@ -126,6 +126,10 @@ class TestSweepProcessesWholeBoard:
         assert summary == {
             "user_id": user_id, "processed": 0, "tailored": 0, "covers": 0,
             "failures": 0, "reason": "board-complete", "skipped_failures": 0,
+            # CRITICAL-3: eligible jobs an aborted stretch left unattempted.
+            # Always present (0 on a clean, complete board) so an abort can
+            # never be mistaken for a finished board.
+            "suppressed": 0,
             "needs_continuation": False,
         }
 

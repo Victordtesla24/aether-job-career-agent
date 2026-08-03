@@ -52,11 +52,11 @@ from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
-    LLM_UNAVAILABLE_USER_MESSAGE,
     LLMClient,
     LLMUnavailableError,
     get_cover_budget_seconds,
     get_model,
+    llm_failure_user_message,
     shared_budget,
 )
 from app.services.resume_grounding import (
@@ -861,12 +861,15 @@ def _refine_cover_letter_body(
                     )
                 retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
                 revised, flagged, claim_flags = _draft(retry_prompt, "retry")
-    except LLMUnavailableError:
+    except LLMUnavailableError as exc:
         # MV-cover-letter-studio-005: surface an honest, secret-free message —
         # the raw exception's internals ('hard budget', prompt name) never reach
         # the user. Honest 503 semantics preserved (no fixture fallback).
+        # CRITICAL-3: the message follows the FAILURE CLASS, so an out-of-credit
+        # or bad-key refusal says so here too instead of inviting a retry that
+        # cannot succeed. The retryable class is byte-identical to before.
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, LLM_UNAVAILABLE_USER_MESSAGE
+            status.HTTP_503_SERVICE_UNAVAILABLE, llm_failure_user_message(exc)
         ) from None
     if flagged:
         raise HTTPException(

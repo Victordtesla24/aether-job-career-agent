@@ -30,6 +30,7 @@ import contextvars
 import json
 import logging
 import os
+import random
 import re
 import time
 from contextlib import contextmanager
@@ -408,13 +409,140 @@ LLM_UNAVAILABLE_USER_MESSAGE = (
     "The AI service is temporarily unavailable. Please try again in a moment."
 )
 
+# --------------------------------------------------------------------------
+# CRITICAL-3 — upstream FAILURE CLASSES.
+#
+# Production, 2026-08-02: OpenRouter returned HTTP 402 (out of credits) and the
+# chain-exhaustion raise below erased that fact, surfacing every 402 as a bare
+# ``LLMUnavailableError`` -> "The AI service is temporarily unavailable. Please
+# try again in a moment." Both halves of that sentence were false, and the
+# board-sweep autopilot believed them: it re-attempted the SAME 10 jobs every
+# 10-minute cron tick — 37 failed tailor runs per job, 60/hour, indefinitely,
+# every one a real POST to a metered API.
+#
+# A failure class is now carried from the transport all the way to the HTTP
+# response and to the autopilot's breaker:
+#   * ``insufficient_credits`` (402) and ``auth`` (401/403) are NOT retryable —
+#     the upstream has already answered the question and asking again costs
+#     money and time while changing nothing. Fail fast, say why.
+#   * everything else (429, 5xx, timeout, network, malformed content) IS
+#     retryable — back off exponentially with jitter and try again.
+# --------------------------------------------------------------------------
+LLM_FAILURE_RETRYABLE = "retryable"
+LLM_FAILURE_INSUFFICIENT_CREDITS = "insufficient_credits"
+LLM_FAILURE_AUTH = "auth"
+
+#: Classes for which further attempts are pointless until a human acts.
+LLM_NON_RETRYABLE_FAILURE_CLASSES = frozenset(
+    {LLM_FAILURE_INSUFFICIENT_CREDITS, LLM_FAILURE_AUTH}
+)
+
+#: Honest, secret-free user messages for the non-retryable classes. Unlike
+#: :data:`LLM_UNAVAILABLE_USER_MESSAGE` these say what is wrong and what fixes
+#: it, and explicitly deny that retrying helps — the autopilot and the UI both
+#: render this text, so it must never invite a retry that cannot succeed.
+LLM_INSUFFICIENT_CREDITS_USER_MESSAGE = (
+    "The AI provider rejected the request because the account is out of "
+    "credits. Automated runs are paused until the balance is topped up — "
+    "retrying now will not help."
+)
+LLM_AUTH_FAILED_USER_MESSAGE = (
+    "The AI provider rejected the configured credential (authentication "
+    "failed). Automated runs are paused until the API key is corrected in "
+    "Agent Settings — retrying now will not help."
+)
+
+_LLM_FAILURE_USER_MESSAGES = {
+    LLM_FAILURE_INSUFFICIENT_CREDITS: LLM_INSUFFICIENT_CREDITS_USER_MESSAGE,
+    LLM_FAILURE_AUTH: LLM_AUTH_FAILED_USER_MESSAGE,
+}
+
 
 class LLMUnavailableError(RuntimeError):
     """Raised when the live LLM backend failed AND no fixture fallback exists.
 
     Routers convert this into a clean HTTP 503 with an honest, secret-free
-    user message (:data:`LLM_UNAVAILABLE_USER_MESSAGE`).
+    user message — :func:`llm_failure_user_message`, which is
+    :data:`LLM_UNAVAILABLE_USER_MESSAGE` for the retryable class and a
+    class-specific actionable message otherwise.
+
+    ``failure_class`` defaults to :data:`LLM_FAILURE_RETRYABLE`, so every
+    pre-existing raise site (malformed JSON, budget exhaustion, unclassified
+    transport errors) keeps its exact previous meaning and message.
     """
+
+    def __init__(
+        self,
+        *args: Any,
+        failure_class: str = LLM_FAILURE_RETRYABLE,
+        provider: str | None = None,
+        expires_at: Any = None,
+    ) -> None:
+        super().__init__(*args)
+        self.failure_class = failure_class
+        self.provider = provider
+        self.expires_at = expires_at
+
+    @property
+    def retryable(self) -> bool:
+        return self.failure_class not in LLM_NON_RETRYABLE_FAILURE_CLASSES
+
+
+class LLMCircuitOpenError(LLMUnavailableError):
+    """Raised INSTEAD of making a live call while the circuit breaker is open.
+
+    A subclass of :class:`LLMUnavailableError` so every existing handler
+    (routers' 503 + refund, the worker's honest degrade) treats it correctly
+    with no new plumbing — but it carries the class that tripped the breaker
+    and the instant the cooling period ends, so the message stays honest and
+    the autopilot stops instead of grinding.
+    """
+
+
+class ProviderAuthError(RuntimeError):
+    """Raised when a provider rejects the CREDENTIAL itself (HTTP 401/403).
+
+    Narrower than the generic ``RuntimeError`` the ``status_code >= 400``
+    branch used to raise, and carrying the same message, so the only behaviour
+    that changes is that the chain can now tell "this key is wrong" (no amount
+    of retrying fixes it) from "this call failed" (retrying might).
+    """
+
+    def __init__(self, message: str, *, provider: str = "", status_code: int = 401) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = status_code
+
+
+def classify_llm_failure(exc: BaseException | None) -> str:
+    """The failure class of a transport-level exception.
+
+    Conservative by construction: ONLY the two exception types the transport
+    raises deliberately for 402 and 401/403 are non-retryable. Anything else —
+    including an unrecognised ``RuntimeError`` — stays retryable, because
+    wrongly declaring a transient blip permanent would stall a user's board for
+    the whole cooling period.
+    """
+    if isinstance(exc, InsufficientCreditsError):
+        return LLM_FAILURE_INSUFFICIENT_CREDITS
+    if isinstance(exc, ProviderAuthError):
+        return LLM_FAILURE_AUTH
+    if isinstance(exc, LLMUnavailableError):
+        return exc.failure_class
+    return LLM_FAILURE_RETRYABLE
+
+
+def llm_failure_user_message(exc: BaseException | None) -> str:
+    """The honest, secret-free user message for an LLM failure.
+
+    Never exposes the raw exception text (which carries prompt names, 'hard
+    budget', provider bodies); routers use this for BOTH the 503 detail and
+    the ``AgentRun.error`` audit column so the owner-visible record and the
+    HTTP response can never disagree.
+    """
+    return _LLM_FAILURE_USER_MESSAGES.get(
+        classify_llm_failure(exc), LLM_UNAVAILABLE_USER_MESSAGE
+    )
 
 
 class InsufficientCreditsError(RuntimeError):
@@ -1092,6 +1220,153 @@ def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
     except Exception as exc:  # noqa: BLE001 — never let the block store 500 a run
         logger.debug("quota block lookup failed: %s", exc)
         return None
+
+
+# --------------------------------------------------------------------------
+# CRITICAL-3 — retry backoff (exponential, full jitter) + circuit breaker.
+# --------------------------------------------------------------------------
+
+def get_llm_retry_backoff_base_seconds() -> float:
+    """Base delay of the exponential backoff between RETRYABLE live attempts.
+
+    ``AETHER_LLM_RETRY_BACKOFF_BASE_SECONDS`` (default 0.5s). ``0`` disables
+    the wait entirely — kept as an explicit operator escape hatch, never the
+    default, because "no wait" is exactly the behaviour that let a failing
+    upstream be re-hammered at machine speed.
+    """
+    try:
+        base = float(os.environ.get("AETHER_LLM_RETRY_BACKOFF_BASE_SECONDS", "0.5"))
+    except ValueError:
+        return 0.5
+    return max(0.0, base)
+
+
+def get_llm_retry_backoff_max_seconds() -> float:
+    """Ceiling of the exponential backoff (``AETHER_LLM_RETRY_BACKOFF_MAX_SECONDS``,
+    default 8s). Bounded so a retry can never outlive the run's wall-clock
+    budget, which would turn resilience into a hang."""
+    try:
+        cap = float(os.environ.get("AETHER_LLM_RETRY_BACKOFF_MAX_SECONDS", "8"))
+    except ValueError:
+        return 8.0
+    return max(0.0, cap)
+
+
+def _backoff_delay(attempt: int) -> float:
+    """FULL-JITTER exponential backoff: ``uniform(0, min(cap, base * 2**attempt))``.
+
+    Full jitter (rather than a fixed or an equal-jitter delay) is deliberate:
+    the sweep enqueues one stretch per user and several users can hit the same
+    upstream in the same tick, so identical deterministic delays would keep
+    their retries phase-locked and re-create the very burst this is meant to
+    spread out.
+    """
+    base = get_llm_retry_backoff_base_seconds()
+    if base <= 0:
+        return 0.0
+    ceiling = min(get_llm_retry_backoff_max_seconds(), base * (2 ** max(0, attempt)))
+    if ceiling <= 0:
+        return 0.0
+    return random.uniform(0.0, ceiling)
+
+
+def _sleep_for_backoff(seconds: float) -> None:
+    """Module-level sleep seam so tests can assert the backoff WITHOUT waiting
+    (and so a future async transport can override it in one place)."""
+    if seconds > 0:
+        time.sleep(seconds)
+
+
+#: ``AgentQuotaBlock.reason`` prefix that marks a row as a CIRCUIT-BREAKER
+#: cooldown rather than a subscription-quota cooldown. The two share the table
+#: (one row per user+provider, already indexed and already consulted before
+#: every live call) but must never be confused: a subscription block means
+#: "your plan is spent, switch billing" and surfaces as HTTP 429, while a
+#: circuit block means "the provider refused and we stopped asking" and
+#: surfaces as an honest 503 carrying the class that tripped it.
+CIRCUIT_REASON_PREFIX = "llm_circuit_open:"
+
+
+def get_llm_breaker_cooldown_seconds() -> float:
+    """How long the circuit stays open after a non-retryable upstream refusal.
+
+    ``AETHER_LLM_BREAKER_COOLDOWN_SECONDS``, default 900s (15 min). Long
+    enough that a 10-minute cron tick cannot re-probe a dead upstream every
+    cycle; short enough that a top-up is picked up without operator action.
+    Floored at 30s so a bad value cannot make the breaker a no-op.
+    """
+    try:
+        seconds = float(os.environ.get("AETHER_LLM_BREAKER_COOLDOWN_SECONDS", "900"))
+    except ValueError:
+        seconds = 900.0
+    return max(30.0, seconds)
+
+
+def _circuit_cooldown_expiry() -> datetime:
+    """When a freshly tripped circuit re-closes (UTC), with up to 10% jitter so
+    many users tripped by the same outage do not all re-probe in lockstep."""
+    seconds = get_llm_breaker_cooldown_seconds()
+    seconds += random.uniform(0.0, seconds * 0.1)
+    return datetime.now(timezone.utc) + timedelta(seconds=seconds)
+
+
+def _record_llm_circuit_open(
+    user_id: str | None, provider: str, failure_class: str
+) -> "datetime | None":
+    """Open the circuit for ``user_id`` + ``provider`` for a cooling period.
+
+    Returns the expiry (or ``None`` when nothing was recorded). Never raises:
+    a breaker that cannot be persisted must degrade to the pre-existing
+    behaviour, not turn a provider outage into a 500.
+
+    An ACTIVE subscription-quota block is left untouched — it is a stronger,
+    longer statement about the same user+provider, and the two share one row.
+    """
+    if not user_id or failure_class not in LLM_NON_RETRYABLE_FAILURE_CLASSES:
+        return None
+    try:
+        from app.repositories.user_provider_credential import AgentQuotaBlockRepository
+
+        repo = AgentQuotaBlockRepository()
+        existing = repo.get_active(user_id, provider)
+        if existing is not None and not str(
+            existing.get("reason") or ""
+        ).startswith(CIRCUIT_REASON_PREFIX):
+            return None
+        expires_at = _circuit_cooldown_expiry()
+        repo.set_block(
+            user_id, provider,
+            expires_at=expires_at,
+            reason=f"{CIRCUIT_REASON_PREFIX}{failure_class}",
+        )
+    except Exception as exc:  # noqa: BLE001 — never hide the underlying failure
+        logger.warning(
+            "failed to record %s circuit breaker (%s): %s",
+            provider, failure_class, type(exc).__name__,
+        )
+        return None
+    logger.error(
+        "LLM circuit OPEN for user=%s provider=%s class=%s until %s — further "
+        "live calls are refused without contacting the provider",
+        user_id, provider, failure_class, expires_at.isoformat(timespec="seconds"),
+    )
+    return expires_at
+
+
+def _circuit_open_error(provider: str, block: "dict[str, Any]") -> LLMCircuitOpenError:
+    """The honest error raised in place of a live call while the circuit is open."""
+    reason = str(block.get("reason") or "")
+    failure_class = reason[len(CIRCUIT_REASON_PREFIX):] or LLM_FAILURE_RETRYABLE
+    if failure_class not in LLM_NON_RETRYABLE_FAILURE_CLASSES:
+        failure_class = LLM_FAILURE_RETRYABLE
+    expires_at = block.get("expiresAt")
+    return LLMCircuitOpenError(
+        f"LLM circuit open for provider '{provider}' ({failure_class}); "
+        f"cooling until {expires_at}",
+        failure_class=failure_class,
+        provider=provider,
+        expires_at=expires_at,
+    )
 
 
 def anthropic_auth_headers(auth_mode: str, secret: str) -> dict[str, str]:
@@ -1876,6 +2151,10 @@ class LLMClient:
         # provenance here, rather than sniffing the model id downstream, is what
         # keeps every other caller's request byte-identical.
         free_chain_models: set[str] = set()
+        #: Number of RETRYABLE failures so far in this chain — the exponent of
+        #: the backoff below. Non-retryable failures deliberately do not
+        #: advance it: they never wait.
+        retry_attempt = 0
         idx = 0
         while idx < len(chain):
             attempt_model = chain[idx]
@@ -1926,6 +2205,12 @@ class LLMClient:
                     # success or shift the bill). Propagate so the router
                     # returns an honest 429.
                     raise
+                except LLMCircuitOpenError:
+                    # CRITICAL-3: the breaker is already open for this
+                    # user+provider. Walking the rest of the chain would just
+                    # re-raise this for every model; propagate immediately so
+                    # the caller fails fast with the honest reason.
+                    raise
                 except Exception as exc:  # 404/429/5xx/network/timeout — next model
                     last_error = exc
                     logger.warning(
@@ -1938,6 +2223,28 @@ class LLMClient:
                                 chain, prompt_name
                             )
                         )
+                    # CRITICAL-3: exponential backoff with FULL JITTER before
+                    # the next model — but ONLY for a retryable class. A 402 /
+                    # 401 answer does not change while we wait, so waiting on
+                    # one would only add latency to a failure that is already
+                    # certain (the admin free-model rescue appended above is
+                    # a DIFFERENT question — a $0-priced model on the same
+                    # credential — so it is asked immediately).
+                    if (
+                        classify_llm_failure(exc) == LLM_FAILURE_RETRYABLE
+                        and idx + 1 < len(chain)
+                    ):
+                        delay = _backoff_delay(retry_attempt)
+                        # Never spend budget a real attempt still needs.
+                        headroom = self._remaining_budget() - _MIN_ATTEMPT_SECONDS
+                        delay = min(delay, max(0.0, headroom))
+                        if delay > 0:
+                            logger.info(
+                                "LLM backoff %.2fs before next model (prompt=%s, "
+                                "attempt=%d)", delay, prompt_name, retry_attempt + 1,
+                            )
+                            _sleep_for_backoff(delay)
+                        retry_attempt += 1
                     break  # genuine call error → next model (no same-model retry)
                 if validate is not None:
                     try:
@@ -1963,8 +2270,27 @@ class LLMClient:
             if budget_exhausted
             else f"live call failed{f': {last_error}' if last_error else ''}"
         )
+        # CRITICAL-3: carry the CLASS of the failure that ended the chain.
+        # Erasing it here is what turned an OpenRouter 402 into "temporarily
+        # unavailable, try again in a moment" and let the autopilot re-attempt
+        # the same 10 jobs every cron tick, indefinitely, on a metered API.
+        # A budget exhaustion is always retryable regardless of what any
+        # earlier attempt raised — the provider never got the last word.
+        failure_class = (
+            LLM_FAILURE_RETRYABLE if budget_exhausted
+            else classify_llm_failure(last_error)
+        )
+        provider = getattr(last_error, "provider", None)
+        if failure_class in LLM_NON_RETRYABLE_FAILURE_CLASSES:
+            ctx = _user_cred_context.get()
+            ctx_user_id = ctx[0] if ctx else None
+            _record_llm_circuit_open(
+                ctx_user_id, provider or resolve_provider(primary), failure_class
+            )
         raise LLMUnavailableError(
-            f"LLM backend unavailable: {detail} for '{prompt_name}'"
+            f"LLM backend unavailable: {detail} for '{prompt_name}'",
+            failure_class=failure_class,
+            provider=provider,
         )
 
     @staticmethod
@@ -2110,6 +2436,13 @@ class LLMClient:
         if ctx_user_id is not None:
             block = _active_quota_block(ctx_user_id, provider)
             if block is not None:
+                # CRITICAL-3: the same row also carries the circuit breaker.
+                # An OPEN circuit means the provider already refused for a
+                # non-retryable reason (402/401) and we stopped asking — so we
+                # refuse HERE, before a credential is resolved and before any
+                # HTTP request exists, and say why.
+                if str(block.get("reason") or "").startswith(CIRCUIT_REASON_PREFIX):
+                    raise _circuit_open_error(provider, block)
                 raise QuotaExhaustedError(
                     provider,
                     expires_at=block.get("expiresAt"),
@@ -2229,6 +2562,15 @@ class LLMClient:
                 # Anthropic transport must never pull OpenRouter models (and
                 # therefore OpenRouter billing) into an Anthropic-billed run.
                 raise InsufficientCreditsError(message, provider=provider)
+            if resp.status_code in (401, 403):
+                # CRITICAL-3: the credential itself was rejected. Same message
+                # and same RuntimeError taxonomy as before — only the CLASS is
+                # narrower, so the chain can stop instead of re-presenting a
+                # key the provider has already refused. Applies to BOTH
+                # transports: a bad key is a bad key regardless of provider.
+                raise ProviderAuthError(
+                    message, provider=provider, status_code=resp.status_code
+                )
             raise RuntimeError(message)
         body = resp.json()
         # The served model (+ accumulated usage, MF-1) is published only on

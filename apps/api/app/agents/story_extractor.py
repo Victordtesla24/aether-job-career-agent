@@ -243,6 +243,20 @@ class StoryExtractorAgent:
                         f"LLM unavailable for source bullets "
                         f"{', '.join(b['id'] for b in chunk)}: {exc}"
                     )
+                    if not exc.retryable:
+                        # CRITICAL-3: a non-retryable refusal (402 out of
+                        # credits / 401 bad key) answers the question for the
+                        # WHOLE run — every remaining chunk would present the
+                        # same credential to the same provider and be refused
+                        # the same way. Stop, and say so in `dropped` (which is
+                        # surfaced on the run record) instead of walking the
+                        # rest of the résumé one paid-API refusal at a time.
+                        result.dropped.append(
+                            f"stopped after a non-retryable provider refusal "
+                            f"({exc.failure_class}); remaining source bullets "
+                            "were not attempted"
+                        )
+                        break
                     continue
                 batch = raw.get("stories") if isinstance(raw, dict) else None
                 if not isinstance(batch, list):

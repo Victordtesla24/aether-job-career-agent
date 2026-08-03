@@ -544,6 +544,86 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     }
 
 
+def _remaining_eligible_count(user_id: str, attempted: set[str]) -> int:
+    """Eligible jobs this stretch has NOT attempted yet.
+
+    CRITICAL-3 requirement 4 ("never silently swallow"): when the stretch
+    aborts on an upstream refusal it is abandoning real, queued work. That
+    number goes into the summary and the log so an aborted stretch can never be
+    mistaken for a finished board — the old code broke out with no record of
+    how much it left behind.
+    """
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT count(*) FROM "Job" j
+                WHERE j."userId" = %s
+                  AND j."id" != ALL(%s)
+                  AND (
+                        (j."status" = 'tailoring')
+                     OR (j."status" IN ('screening','matched')
+                         AND j."fitScore" IS NOT NULL)
+                      )
+                  AND j."status" NOT IN ('applied','archived')
+                  AND NOT EXISTS (
+                        SELECT 1 FROM "Application" a
+                        WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+                      )
+                ''',
+                (user_id, list(attempted) or ["-"]),
+            )
+            row = cur.fetchone()
+    return row[0] if row else 0
+
+
+def _llm_failure(exc: BaseException) -> Any | None:
+    """The classified :class:`LLMUnavailableError` behind ``exc``, or ``None``.
+
+    CRITICAL-3 — THE bug this whole module's breaker was missing. The sweep
+    calls agents through ``_run_agent`` -> ``app.routers.agents._dispatch``,
+    and ``_dispatch`` converts every ``LLMUnavailableError`` into
+    ``HTTPException(503, ...) from exc``. So ``sweep_user_stretch``'s
+    ``except LLMUnavailableError`` clause — with its ``LLM_OUTAGE_BREAKER``
+    circuit breaker — was UNREACHABLE on the only path that can reach it: the
+    503 landed in ``except HTTPException``, was counted as an ordinary
+    per-job failure, and the stretch ground through all ``max_jobs`` jobs.
+    Measured live 2026-08-02: 10 jobs x 37 attempts each, 60 failed tailor
+    runs per hour, every one a paid POST to an upstream returning HTTP 402.
+
+    ``raise ... from exc`` sets ``__cause__``, so the class survives the HTTP
+    translation and is recovered here. Both the direct exception and the
+    wrapped one are handled, so the seam works whether the sweep is calling
+    the router or an agent directly.
+
+    A RAW transport error (``InsufficientCreditsError`` / ``ProviderAuthError``)
+    that arrives without the chain's classified wrapper is normalised into the
+    same shape. That is not hypothetical: ``LLMClient.complete`` bypasses
+    ``_auto`` entirely in ``live``/``record`` mode and propagates the raw error,
+    and the end-to-end 402 test in
+    ``tests/test_critical3_llm_circuit_breaker.py`` caught the sweep walking
+    all 10 jobs on exactly that path. Classification must not depend on which
+    code path the error travelled.
+    """
+    from app.services.llm_client import (
+        LLM_FAILURE_RETRYABLE,
+        LLMUnavailableError,
+        classify_llm_failure,
+    )
+
+    for candidate in (exc, getattr(exc, "__cause__", None)):
+        if candidate is None:
+            continue
+        if isinstance(candidate, LLMUnavailableError):
+            return candidate
+        failure_class = classify_llm_failure(candidate)
+        if failure_class != LLM_FAILURE_RETRYABLE:
+            return LLMUnavailableError(str(candidate), failure_class=failure_class)
+    return None
+
+
 def _cover_result_degraded(result: Any) -> bool:
     """Whether a coverLetter run RETURNED an honest "no letter produced"
     degrade instead of raising (``cover_letter_agent`` ML-cover-002 path).
@@ -612,8 +692,34 @@ def sweep_user_stretch(
         "user_id": user_id, "processed": 0, "tailored": 0, "covers": 0,
         "failures": 0, "reason": "board-complete",
         "skipped_failures": 0,
+        # CRITICAL-3: eligible jobs this stretch deliberately did NOT attempt
+        # because it aborted on an upstream refusal. Always present so a caller
+        # never has to guess whether an abort left work behind.
+        "suppressed": 0,
     }
     llm_outages = 0
+
+    def _abort_on_llm(llm_exc: Any, job_id: str) -> None:
+        """Record + log an abort caused by an upstream LLM refusal.
+
+        Sets the honest reason (``llm-<class>``) and counts the eligible jobs
+        left unattempted, so the tick log states what was abandoned instead of
+        going quiet.
+        """
+        failure_class = getattr(llm_exc, "failure_class", "unknown")
+        summary["reason"] = (
+            "llm-unavailable" if getattr(llm_exc, "retryable", True)
+            else f"llm-{failure_class}"
+        )
+        summary["suppressed"] = _remaining_eligible_count(user_id, attempted)
+        logger.warning(
+            "board-sweep %s: ABORTING stretch after job %s — upstream LLM "
+            "failure class=%s retryable=%s; %d eligible job(s) suppressed "
+            "(not attempted) rather than retried: %s",
+            user_id, job_id, failure_class,
+            getattr(llm_exc, "retryable", True), summary["suppressed"], llm_exc,
+        )
+
     while True:
         if summary["processed"] + summary["failures"] >= max_jobs:
             summary["reason"] = "job-cap"
@@ -689,6 +795,27 @@ def sweep_user_stretch(
                 logger.info("board-sweep %s: plan quota 429 — stopping", user_id)
                 break
             summary["failures"] += 1
+            # CRITICAL-3: recover the LLM failure class the router wrapped into
+            # this HTTPException. Without this the breaker below never saw a
+            # single outage and the stretch burned its whole job cap against a
+            # provider that had already refused.
+            llm_exc = _llm_failure(exc)
+            if llm_exc is not None:
+                if not llm_exc.retryable:
+                    # 402 / 401 — the answer will not change by asking again.
+                    # ONE attempt, then stop, with the reason on the record.
+                    _abort_on_llm(llm_exc, job_id)
+                    break
+                llm_outages += 1
+                logger.warning(
+                    "board-sweep %s job %s: LLM unavailable (%d/%d before "
+                    "circuit opens): %s",
+                    user_id, job_id, llm_outages, LLM_OUTAGE_BREAKER, exc.detail,
+                )
+                if llm_outages >= LLM_OUTAGE_BREAKER:
+                    _abort_on_llm(llm_exc, job_id)
+                    break
+                continue
             logger.warning(
                 "board-sweep %s job %s: HTTP %s: %s",
                 user_id, job_id, exc.status_code, exc.detail,
@@ -699,14 +826,31 @@ def sweep_user_stretch(
             summary["failures"] += 1
             logger.info("board-sweep %s job %s: guard rejection: %s", user_id, job_id, exc)
         except LLMUnavailableError as exc:
+            # Direct (un-wrapped) path — kept for callers that bypass the
+            # router. Same classification rules as the wrapped path above.
             summary["failures"] += 1
+            if not exc.retryable:
+                _abort_on_llm(exc, job_id)
+                break
             llm_outages += 1
-            logger.warning("board-sweep %s job %s: LLM unavailable: %s", user_id, job_id, exc)
+            logger.warning(
+                "board-sweep %s job %s: LLM unavailable (%d/%d before circuit "
+                "opens): %s",
+                user_id, job_id, llm_outages, LLM_OUTAGE_BREAKER, exc,
+            )
             if llm_outages >= LLM_OUTAGE_BREAKER:
-                summary["reason"] = "llm-unavailable"
+                _abort_on_llm(exc, job_id)
                 break
         except Exception as exc:  # noqa: BLE001 — one bad job never sinks the sweep
             summary["failures"] += 1
+            # CRITICAL-3: classify BEFORE writing this off as "unexpected".
+            # A raw transport refusal (402/401) that reached here un-wrapped is
+            # still an upstream saying no — grinding through the rest of the
+            # board would repeat a paid, already-answered question.
+            llm_exc = _llm_failure(exc)
+            if llm_exc is not None and not llm_exc.retryable:
+                _abort_on_llm(llm_exc, job_id)
+                break
             logger.exception("board-sweep %s job %s: unexpected: %s", user_id, job_id, exc)
     if summary["reason"] == "skipped-failures" and summary["processed"] == 0:
         # ML-W-12: a tick that skips EVERY eligible job due to cover-failure
@@ -735,7 +879,18 @@ def sweep_user_stretch(
     # operator mandate ("keep working non-stop until the pipeline is cleared").
     # board-complete / quota-exhausted / no-resume / llm-unavailable are HARD
     # stops — retrying immediately would either find nothing or fail again.
-    summary["needs_continuation"] = summary["reason"] in ("job-cap", "deadline")
+    #
+    # CRITICAL-3: ``processed > 0`` is now REQUIRED. A stretch that failed
+    # every one of its ``max_jobs`` attempts also reports ``job-cap`` — and
+    # that is exactly what happened for days in production: 10 consecutive
+    # failures against an upstream returning 402 were read as "we ran out of
+    # room, there is more to do", so the sweep asked to be run again. Progress
+    # is the only honest justification for continuing; zero completions means
+    # the cap was consumed by failures and the next cron tick (10 minutes of
+    # cooling) is the right cadence, not an immediate re-enqueue.
+    summary["needs_continuation"] = (
+        summary["reason"] in ("job-cap", "deadline") and summary["processed"] > 0
+    )
     return summary
 
 
