@@ -55,7 +55,10 @@ from app.services.agent_run_stream import (
     iter_agent_run_events,
     release_slot_when_done,
 )
-from app.services.agent_run_watchdog import agent_run_heartbeat
+from app.services.agent_run_watchdog import (
+    ABANDONED_ERROR_MARKER,
+    agent_run_heartbeat,
+)
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
     LLM_UNAVAILABLE_USER_MESSAGE,
@@ -2917,6 +2920,14 @@ def _is_transient_failure(run: dict[str, Any]) -> bool:
     (non-transient message) returns False and still paints the card "error".
     """
     error = (run.get("error") or "").lower()
+    # CRITICAL-1: an ABANDONED run (watchdog-reconciled — the owning process
+    # died and stopped heartbeating) is never a transient upstream blip, and
+    # must never be tolerated into an "active" card. Checked FIRST, because the
+    # honest error quotes real elapsed minutes and a value like "503.0 minutes"
+    # would otherwise trip the bare-HTTP-status token match below and re-hide
+    # the very concealment this watchdog exists to remove.
+    if ABANDONED_ERROR_MARKER in error:
+        return False
     if any(keyword in error for keyword in _TRANSIENT_PHRASE_KEYWORDS):
         return True
     return bool(_TRANSIENT_CODE_RE is not None and _TRANSIENT_CODE_RE.search(error))

@@ -311,7 +311,46 @@ def test_executing_a_reserved_run_stamps_a_heartbeat(
 
 
 # ---------------------------------------------------------------------------
-# 5. Automatic wiring: API startup, worker startup, periodic cron.
+# 5. The reconciled run must SURFACE, not be re-hidden by transient tolerance.
+# ---------------------------------------------------------------------------
+
+
+def test_abandonment_is_never_classified_as_a_transient_blip():
+    """``/agents/catalog`` paints a card "active" when the last run's error
+    reads like an upstream blip (ML-agents-err-001). An abandoned run is the
+    opposite of a blip — it is the process dying — and re-hiding it behind an
+    "active" card would restore exactly the concealment this fix removes."""
+    from app.routers.agents import _is_transient_failure
+    from app.services.agent_run_watchdog import _honest_error
+
+    never_stamped = _honest_error(
+        {"agentName": "tailor", "ageSeconds": 192.6 * 3600, "heartbeatAgeSeconds": None}
+    )
+    stale_stamp = _honest_error(
+        {
+            "agentName": "tailor",
+            "ageSeconds": 40000.0,
+            "heartbeatAgeSeconds": 30180.0,  # 503.0 minutes -> a bare "503" token
+        }
+    )
+    for message in (never_stamped, stale_stamp):
+        assert _is_transient_failure({"error": message}) is False, message
+
+
+def test_reconciled_row_from_the_database_is_not_transient(
+    client, auth_headers, test_user_id, db_session
+):
+    from app.routers.agents import _is_transient_failure
+    from app.services.agent_run_watchdog import reconcile_abandoned_agent_runs
+
+    run_id = _insert_run(db_session, test_user_id, age_seconds=192.6 * 3600)
+    reconcile_abandoned_agent_runs(reason="test")
+    row = _row(db_session, run_id)
+    assert _is_transient_failure({"error": row["error"]}) is False
+
+
+# ---------------------------------------------------------------------------
+# 6. Automatic wiring: API startup, worker startup, periodic cron.
 # ---------------------------------------------------------------------------
 
 

@@ -185,8 +185,23 @@ class ReconcileOutcome:
         )
 
 
+#: Stable marker every reconciled run's error carries.
+#: ``routers.agents._is_transient_failure`` keys off it to keep an abandoned run
+#: OUT of its transient/upstream-blip tolerance: that tolerance paints an agent
+#: card "active" when the last failure reads like a provider hiccup, and an
+#: abandoned run is the opposite of a hiccup — the process died. Re-hiding it
+#: behind an "active" card would restore exactly the concealment this module
+#: exists to remove. Keep the two in sync; the test suite pins the coupling.
+ABANDONED_ERROR_MARKER = "run abandoned — no worker heartbeat"
+
+
 def _honest_error(row: dict) -> str:
-    """The message the owner sees. It names the real cause and nothing else."""
+    """The message the owner sees. It names the real cause and nothing else.
+
+    Deliberately free of the wording ``_is_transient_failure`` treats as an
+    upstream blip ("try again", "timed out", "temporarily unavailable"): an
+    abandoned run is chronic breakage and must surface as such.
+    """
     agent = row.get("agentName") or "agent"
     age_h = float(row.get("ageSeconds") or 0.0) / 3600.0
     hb_age = row.get("heartbeatAgeSeconds")
@@ -196,15 +211,15 @@ def _honest_error(row: dict) -> str:
             f"{agent} run and it exceeded the {get_max_run_seconds():.0f}s "
             f"wall-clock ceiling (it had been marked running for {age_h:.1f} "
             "hours). The process that owned it died or was restarted; no "
-            "result was produced and no work is in progress. Re-run the agent "
-            "to try again."
+            "result was produced and no work is in progress. Start the agent "
+            "again to retry."
         )
     return (
         f"Run abandoned — no worker heartbeat for {float(hb_age) / 60.0:.1f} "
         f"minutes on this {agent} run (it had been marked running for "
         f"{age_h:.1f} hours). The process that owned it died or was restarted; "
-        "no result was produced and no work is in progress. Re-run the agent "
-        "to try again."
+        "no result was produced and no work is in progress. Start the agent "
+        "again to retry."
     )
 
 
