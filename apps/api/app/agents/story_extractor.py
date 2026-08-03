@@ -39,10 +39,43 @@ never less:
 The anti-fabrication posture is unchanged in direction and strictly tightened
 in degree: nothing here loosens a check, and no number, organisation or claim
 is ever accepted that the user's own résumé does not evidence.
+
+STORY-NARRATIVE-GROUNDING-2026-08-03
+------------------------------------
+Everything above validated the ``metrics`` DICT. The agents that consume the
+Story Bank — ``tailor_agent.build_story_evidence`` and the cover-letter
+evidence block — read the STAR PROSE, not ``metrics``. So the guard was
+pointed at a field the consumers ignore, and the prose was completely
+unchecked. Audited live on the production DB (17 stories, the owner's own
+résumé, ``scripts/story_narrative_audit.py``):
+
+* 15 of 17 carried a number in situation/task/action/result that their OWN
+  cited bullet does not evidence;
+* 7 of 17 carried a number that appears NOWHERE in the résumé —
+  "MTTR from 4.2 hours to 3.8 hours", "234 architectural decisions",
+  "120+ regulatory obligations", "37 missing controls".
+
+The narrative is now held to the same standard the metrics dict already was,
+with the remedy graded by what the failure actually proves:
+
+* FABRICATED (the number appears nowhere in the résumé) — the story is
+  REJECTED. A model that invented a measurement has proven it will assert
+  things the évidence does not contain, so the unverifiable prose around it is
+  not salvageable either.
+* BORROWED (the number is real but belongs to a DIFFERENT bullet) — the one
+  sentence carrying it is STRIPPED, nothing is rewritten, and the story is
+  rejected anyway if what survives is too thin to be usable. Stripping keeps a
+  genuinely grounded story instead of discarding the bullet's only coverage
+  over a misattributed clause; the claim itself never survives.
+* A TITLE has no sentences to strip, so an unevidenced number there rejects
+  the story.
+
+And the organisation check no longer asks "does this string occur anywhere in
+the résumé" (which any past employer, university or skill satisfies for any
+bullet) but "is this the employer of the section the CITED BULLET sits in".
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -58,9 +91,13 @@ from app.services.llm_client import (
 from app.services.resume_bullets import (
     achievement_key,
     bullet_numbers,
+    claim_numbers,
     extract_resume_bullets,
     find_bullet,
     is_quantified,
+    organisation_matches,
+    strip_unevidenced_sentences,
+    unevidenced_claims,
 )
 from app.services.resume_grounding import resolve_user_resume_text
 
@@ -76,6 +113,10 @@ SYSTEM_PROMPT = (
     "round, extrapolate or borrow a number from another bullet.\n"
     "3. If the cited bullet contains numbers, the story MUST carry at least "
     "one metric drawn from them.\n"
+    "3b. EVERY number in the title, situation, task, action and result must "
+    "also appear in the cited bullet. Do not add durations, counts, dates, "
+    "percentages or team sizes the bullet does not state, and do not borrow "
+    "them from another bullet — write those parts without numbers instead.\n"
     "4. organisation must be the employer/client named in the résumé for that "
     "bullet, spelled exactly as the résumé spells it.\n"
     "5. Write in the first person, past tense, concrete and specific. Each of "
@@ -87,15 +128,12 @@ SYSTEM_PROMPT = (
     '"result": "...", "metrics": {"...": "..."}, "tags": ["..."]}]}'
 )
 
-#: Numbers a metric CLAIMS. A digit run glued to a preceding letter is an
-#: identifier, not a claim — "p95_latency", "D3 arcs", "AC6-AC19", "log4j" —
-#: and holding a story to evidencing "95" because its metric key says "p95"
-#: rejected real, fully-evidenced stories (observed live on the LLM-evaluation
-#: bullet). Same rule as ``resume_bullets.is_quantified``, so what counts as a
-#: number is decided ONCE for both sides of the comparison.
-_NUMBER_RE = re.compile(r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?")
-
 _STAR_FIELDS = ("title", "situation", "task", "action", "result")
+
+#: The prose fields a sentence can be stripped from. ``title`` is deliberately
+#: absent: it is a single unit, so there is nothing to remove short of the
+#: whole story.
+_BODY_FIELDS = ("situation", "task", "action", "result")
 
 #: Minimum length of each STAR body field. Below this a "story" is a fragment
 #: that cannot ground a cover-letter paragraph or answer an interview
@@ -133,6 +171,11 @@ class StoryExtractionResult:
     #: Bullets that already had a live story and were refreshed rather than
     #: duplicated (the dedup layer doing its job, reported honestly).
     merged: int = 0
+    #: Sentences removed from a KEPT story because they carried a number that
+    #: belongs to a different bullet. Reported, never silent: the stored story
+    #: is not verbatim what the model wrote and the operator must be able to
+    #: see exactly what was taken out and why.
+    stripped: list[str] = field(default_factory=list)
 
 
 class StoryExtractorAgent:
@@ -156,6 +199,11 @@ class StoryExtractorAgent:
             return result
 
         resume_lower = resume_text.lower()
+        #: Every number the résumé states ANYWHERE. A narrative number outside
+        #: this set was invented outright; one inside it but outside the cited
+        #: bullet was borrowed from another achievement. The two get different
+        #: remedies (see the module docstring), so both sets are needed.
+        resume_numbers = bullet_numbers(resume_text)
         existing_ids = {s["id"] for s in self._stories.list_by_user(user_id)}
         covered = self._stories.live_achievement_keys(user_id)
         seen_keys: set[str] = set()
@@ -230,6 +278,15 @@ class StoryExtractorAgent:
             if reason is not None:
                 result.dropped.append(f"{title}: {reason}")
                 continue
+
+            story, reason, note = self._ground_narrative(
+                story, bullet, resume_numbers
+            )
+            if reason is not None:
+                result.dropped.append(f"{title}: {reason}")
+                continue
+            if note:
+                result.stripped.append(f"{title}: {note}")
 
             key = achievement_key(user_id, bullet["text"])
             if key in seen_keys:
@@ -318,14 +375,31 @@ class StoryExtractorAgent:
         organisation = str(story.get("organisation") or "").strip()
         if not organisation:
             return "no organisation given"
-        if organisation.lower() not in resume_lower:
+        employers = list(bullet.get("employers") or [])
+        if employers:
+            # BOUND TO THE CITED BULLET. "Does this string occur anywhere in
+            # the résumé" let any past employer — or any word inside one —
+            # evidence any bullet; live, an Independent-consulting project was
+            # tagged with the ATO. The employer list is the header block the
+            # cited bullet actually sits under.
+            if not organisation_matches(organisation, employers):
+                return (
+                    f"organisation {organisation!r} is not the employer for "
+                    f"source bullet {bullet['id']} ({', '.join(employers)})"
+                )
+        elif organisation.lower() not in resume_lower:
+            # No header block was extractable from this layout: fall back to
+            # the whole-résumé check rather than rejecting every story. This
+            # is the OLD behaviour, kept only where the tighter one has no
+            # evidence to work from — never used to weaken a bullet that DOES
+            # know its employer.
             return f"organisation {organisation!r} does not appear in the resume"
 
         metrics = self._evidence_metrics(story.get("metrics"))
         evidenced = bullet_numbers(bullet["text"])
         for key, value in metrics.items():
-            for number in _NUMBER_RE.findall(f"{key} {value}"):
-                if number.replace(",", "") not in evidenced:
+            for number in claim_numbers(f"{key} {value}"):
+                if number not in evidenced:
                     return (
                         f"metric {key!r}={value!r} uses {number!r}, which is not "
                         f"evidenced by source bullet {bullet['id']}"
@@ -336,6 +410,68 @@ class StoryExtractorAgent:
                 "carries no metric"
             )
         return None
+
+    @staticmethod
+    def _ground_narrative(
+        story: dict[str, Any], bullet: dict[str, Any], resume_numbers: set[str]
+    ) -> tuple[dict[str, Any], str | None, str]:
+        """Hold the STAR PROSE to the cited bullet's evidence.
+
+        Returns ``(story, reject_reason, strip_note)``. The returned story is
+        a copy whose body fields have had any sentence carrying a borrowed
+        number removed; ``reject_reason`` is set when the story cannot be
+        salvaged at all. Nothing is ever rewritten or added — the only edit
+        this method can make is a deletion.
+        """
+        evidenced = bullet_numbers(bullet["text"])
+        grounded = dict(story)
+        removed: list[str] = []
+
+        for field_name in _STAR_FIELDS:
+            text = str(story.get(field_name) or "")
+            invented = [n for n in unevidenced_claims(text, evidenced)
+                        if n not in resume_numbers]
+            if invented:
+                # FABRICATION: the résumé does not state this number anywhere.
+                return (
+                    grounded,
+                    f"{field_name} claims {', '.join(invented)}, which the "
+                    "resume does not state anywhere",
+                    "",
+                )
+
+        borrowed_title = unevidenced_claims(str(story.get("title") or ""), evidenced)
+        if borrowed_title:
+            return (
+                grounded,
+                f"title claims {', '.join(borrowed_title)}, which source "
+                f"bullet {bullet['id']} does not evidence",
+                "",
+            )
+
+        for field_name in _BODY_FIELDS:
+            text = str(story.get(field_name) or "")
+            if not unevidenced_claims(text, evidenced):
+                continue
+            cleaned, gone = strip_unevidenced_sentences(text, evidenced)
+            if len(cleaned.strip()) < _MIN_BODY_CHARS:
+                return (
+                    grounded,
+                    f"{field_name} rests on {', '.join(gone)}, which source "
+                    f"bullet {bullet['id']} does not evidence; nothing usable "
+                    "remains once that is removed",
+                    "",
+                )
+            grounded[field_name] = cleaned.strip()
+            removed.extend(f"{field_name}:{n}" for n in gone)
+
+        note = (
+            f"stripped sentences carrying {', '.join(removed)} — not evidenced "
+            f"by source bullet {bullet['id']}"
+            if removed
+            else ""
+        )
+        return grounded, None, note
 
     @staticmethod
     def _evidence_metrics(metrics: Any) -> dict[str, Any]:

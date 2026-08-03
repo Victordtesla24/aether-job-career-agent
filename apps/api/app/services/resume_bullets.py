@@ -43,10 +43,20 @@ WHAT THIS MODULE PROVIDES
   a key no matter how far their wording drifts, which turns dedup from a
   similarity heuristic into an exact lookup (and into a database uniqueness
   guarantee — see ``app.db.ensure_story_achievement_column``).
+* :func:`claim_numbers` — the numbers a piece of GENERATED PROSE claims, on
+  exactly the same reading of "a number" the bullet side uses, so the two
+  sides of the comparison can never disagree about what a number is.
+* :func:`resume_employers` / the ``employers`` key on every extracted bullet —
+  WHICH EMPLOYER a bullet belongs to. The organisation guard used to be a
+  substring test over the WHOLE résumé, so any employer the candidate ever had
+  "evidenced" any bullet (live: an Independent-consulting project tagged
+  ``Australian Taxation Office (ATO)``). Binding the check to the cited
+  bullet's own section closes that (STORY-NARRATIVE-GROUNDING-2026-08-03).
 
 Nothing here invents content. Every bullet returned is a verbatim slice of the
 user's own résumé (whitespace-normalized and de-hyphenated across the PDF line
-breaks that split words such as ``"test- evidence"``).
+breaks that split words such as ``"test- evidence"``), and every employer
+returned is a line the résumé itself prints above a date range.
 """
 from __future__ import annotations
 
@@ -113,6 +123,38 @@ _NUMBER_WORDS = {
     "twelve": "12",
 }
 
+#: A number a piece of GENERATED PROSE claims. Deliberately STRICTER than
+#: :data:`_NUMBER` (which reads the évidence side): a digit run glued to a
+#: preceding letter or digit is an identifier, not a claim — "p95_latency",
+#: "D3 arcs", "AC6-AC19", "log4j" — and holding a story to evidencing "95"
+#: because it wrote "P95" rejected real, fully-evidenced stories.
+_CLAIM_NUMBER = re.compile(r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?")
+
+#: Sentence boundary — terminal punctuation followed by whitespace. Used to
+#: remove the ONE sentence carrying an unevidenced number without touching the
+#: rest of a paragraph. "3.5 hours" is safe: its dot has no space after it.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+
+#: A month name as a résumé prints it ("Sept", "March", "Jun").
+_MONTH = (
+    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+)
+_DATE_POINT = rf"(?:{_MONTH}\s+)?(?:19|20)\d{{2}}"
+
+#: A WHOLE LINE that is a date range — "March 2026 - Present",
+#: "Sept 2017 - June 2025", "2017 - 2022". This is the one structural marker
+#: that reliably survives PDF text extraction of a work-experience block, in
+#: every layout observed (single- and multi-column). It must be the whole line:
+#: a bullet whose own text contains "(2022 - 2025)" is prose, not a header.
+_DATE_RANGE_LINE = re.compile(
+    rf"{_DATE_POINT}\s*[-–—]+\s*(?:{_DATE_POINT}|present|current|now|date)\.?",
+    re.IGNORECASE,
+)
+
+#: An employer line is a NAME, not a sentence. Anything longer than this is a
+#: paragraph that happens to sit above a date and is not an employer.
+_MAX_EMPLOYER_CHARS = 80
+
 #: Segmentation gates. Deliberately shape-based (length / word count / prose
 #: density), never keyword-based, so they generalise to any user's résumé.
 _MIN_CHARS = 60
@@ -145,32 +187,117 @@ def _is_achievement(text: str) -> bool:
     return len(_FUNCTION_WORD.findall(text)) >= _MIN_FUNCTION_WORDS
 
 
-def extract_resume_bullets(resume_text: str) -> list[dict[str, str]]:
+def _segments(text: str) -> list[str]:
+    """The résumé split into records, by whichever strategy fits the layout.
+
+    Three are tried, best-first, because résumé PDFs do not extract uniformly:
+    own-line bullet markers (cleanest), inline bullet glyphs (multi-column
+    layouts), then paragraphs (no glyphs at all). The strategy that yields the
+    most achievement bullets wins, so a document is never reduced to "no
+    evidence" by a layout quirk.
+
+    The NON-achievement segments are returned too, and they matter: they are
+    where the job headers live, which is what binds each bullet to the employer
+    that owns it.
+    """
+
+    def _kept(segments: list[str]) -> int:
+        return sum(
+            1 for s in (canonicalize_bullet(x) for x in segments) if _is_achievement(s)
+        )
+
+    own_line = _BULLET_SEPARATOR.split(text)
+    best = own_line
+    if _kept(own_line) < _SPARSE_SPLIT:
+        inline = _INLINE_BULLET.split(text)
+        if _kept(inline) > _kept(own_line):
+            best = inline
+    if _kept(best) == 0:
+        best = re.split(r"\n\s*\n", text)
+    return best
+
+
+def _employer_headers(segment: str) -> list[str]:
+    """The employer names this segment prints above a date range.
+
+    A work-experience header block extracts as a small run of lines — role,
+    employer, dates, location — so the employer is the last non-empty line
+    BEFORE a line that is entirely a date range. Nothing is inferred: every
+    string returned is a verbatim line of the user's own résumé.
+    """
+    lines = [line.strip() for line in (segment or "").splitlines()]
+    found: list[str] = []
+    for index, line in enumerate(lines):
+        if not _DATE_RANGE_LINE.fullmatch(line):
+            continue
+        for previous in reversed(lines[:index]):
+            if not previous:
+                continue
+            if (
+                _DATE_RANGE_LINE.fullmatch(previous)
+                or _SECTION_HEADING.search(previous)
+                or len(previous) > _MAX_EMPLOYER_CHARS
+            ):
+                break
+            found.append(previous)
+            break
+    return list(dict.fromkeys(found))
+
+
+def resume_employers(resume_text: str) -> list[str]:
+    """Every employer name the résumé prints above a date range, in order."""
+    return list(
+        dict.fromkeys(
+            employer
+            for segment in _segments(resume_text or "")
+            for employer in _employer_headers(segment)
+        )
+    )
+
+
+def extract_resume_bullets(resume_text: str) -> list[dict[str, Any]]:
     """The achievement bullets in ``resume_text``, in document order.
 
-    Returns ``[{"id": "B1", "text": "<verbatim bullet>"}, ...]``. Ids are
-    positional and therefore stable for a given résumé text, which is what
-    lets the model cite one and lets the caller verify the citation.
+    Returns ``[{"id": "B1", "text": "<verbatim bullet>", "employers": [...]},
+    ...]``. Ids are positional and therefore stable for a given résumé text,
+    which is what lets the model cite one and lets the caller verify the
+    citation.
 
-    Three splitting strategies are tried, best-first, because résumé PDFs do
-    not extract uniformly: own-line bullet markers (cleanest), inline bullet
-    glyphs (multi-column layouts), then paragraphs (no glyphs at all). The
-    strategy that yields the most achievement bullets wins, so a document is
-    never reduced to "no evidence" by a layout quirk.
+    ``employers`` is the employer(s) whose header block most recently preceded
+    this bullet — the candidates for "who the candidate worked for when they
+    did this". It is a LIST, not a single name, because a multi-column PDF
+    extracts several consecutive job headers before the bullet group they
+    introduce (verified on the owner's own résumé: ANZ, ANZ, NAB and Microsoft
+    all print before the nine bullets that follow). Naming one of them would be
+    a guess; naming the set is exactly what the document supports, and it is
+    still enormously tighter than "any word anywhere in the résumé", which is
+    what the organisation guard used before. A layout that yields no header at
+    all yields an empty list, and the caller degrades honestly.
     """
     text = resume_text or ""
-
-    def _kept(segments: list[str]) -> list[str]:
-        return [s for s in (canonicalize_bullet(x) for x in segments) if _is_achievement(s)]
-
-    kept = _kept(_BULLET_SEPARATOR.split(text))
-    if len(kept) < _SPARSE_SPLIT:
-        inline = _kept(_INLINE_BULLET.split(text))
-        if len(inline) > len(kept):
-            kept = inline
-    if not kept:
-        kept = _kept(re.split(r"\n\s*\n", text))
-    return [{"id": f"B{i}", "text": t} for i, t in enumerate(kept, start=1)]
+    bullets: list[dict[str, Any]] = []
+    pending: list[str] = []
+    current: list[str] = []
+    for segment in _segments(text):
+        canonical = canonicalize_bullet(segment)
+        if _is_achievement(canonical):
+            if pending:
+                current, pending = pending, []
+            bullets.append(
+                {
+                    "id": f"B{len(bullets) + 1}",
+                    "text": canonical,
+                    "employers": list(current),
+                }
+            )
+            continue
+        headers = _employer_headers(segment)
+        if headers:
+            # Accumulate across consecutive non-achievement segments: the
+            # header block and the bullets it introduces are often separated
+            # by side-column chrome that splits into several segments.
+            pending = list(dict.fromkeys(pending + headers))
+    return bullets
 
 
 def bullet_numbers(text: str) -> set[str]:
@@ -232,6 +359,79 @@ def is_quantified(text: str) -> bool:
     not begin immediately after a letter counts.
     """
     return bool(_STANDALONE_NUMBER.search(text or ""))
+
+
+def claim_numbers(text: str) -> list[str]:
+    """The numbers a piece of GENERATED PROSE claims, in order, normalized.
+
+    Thousands separators are dropped so "10,000" and "10000" are the same
+    claim — the same normalization :func:`bullet_numbers` applies to the
+    evidence side, so the two sides can never disagree about notation.
+
+    Duplicates are kept (the caller reports which sentence carried what), and
+    identifiers are NOT claims: "P95", "D3", "AC6-AC19" and "log4j" carry no
+    quantity, so the regex ignores a digit run that starts immediately after a
+    letter or digit.
+    """
+    return [m.group().replace(",", "") for m in _CLAIM_NUMBER.finditer(text or "")]
+
+
+def unevidenced_claims(text: str, evidenced: set[str]) -> list[str]:
+    """Numbers ``text`` claims that ``evidenced`` does not support."""
+    seen: dict[str, None] = {}
+    for number in claim_numbers(text):
+        if number not in evidenced:
+            seen[number] = None
+    return list(seen)
+
+
+def strip_unevidenced_sentences(
+    text: str, evidenced: set[str]
+) -> tuple[str, list[str]]:
+    """``text`` with every sentence carrying an unevidenced number REMOVED.
+
+    Returns the surviving prose and the numbers that were removed with it.
+    This only ever DELETES: no sentence is rewritten, no number is changed and
+    nothing is added, so the survivor is still the model's own wording and is
+    still entirely supported by ``evidenced``. A caller that finds the
+    survivor too thin to be a usable story must reject the story — which is
+    what the extractor does.
+    """
+    kept: list[str] = []
+    removed: dict[str, None] = {}
+    for sentence in _SENTENCE_BREAK.split(text or ""):
+        offenders = unevidenced_claims(sentence, evidenced)
+        if offenders:
+            for number in offenders:
+                removed[number] = None
+            continue
+        if sentence.strip():
+            kept.append(sentence.strip())
+    return " ".join(kept), list(removed)
+
+
+def _organisation_identity(name: str) -> str:
+    """An organisation name reduced to space-delimited lowercase words."""
+    return f" {re.sub(r'[^a-z0-9]+', ' ', (name or '').lower()).strip()} "
+
+
+def organisation_matches(organisation: str, employers: list[str]) -> bool:
+    """True when ``organisation`` names one of ``employers``.
+
+    Word-boundary aware in BOTH directions, because a résumé prints an
+    employer one way and a story may legitimately name it the other: "ATO"
+    must match "Australian Taxation Office (ATO)" and vice versa. It is not a
+    raw substring test — "AN" does not match "ANZ" — which is the flaw the
+    whole-résumé check had.
+    """
+    wanted = _organisation_identity(organisation)
+    if not wanted.strip():
+        return False
+    for employer in employers:
+        known = _organisation_identity(employer)
+        if wanted in known or known in wanted:
+            return True
+    return False
 
 
 def _identity_text(text: str) -> str:
