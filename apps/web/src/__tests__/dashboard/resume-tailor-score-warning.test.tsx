@@ -118,6 +118,12 @@ describe("W-C tailoring-loop sub-85 warning surfacing (GOLD-MASTER-V2 §5.3.1 pt
         confidence: "model-estimated",
         // Backend field wired in tailor_agent.py; not yet in the FE type.
         requires_review: true,
+        // ADR-GMV4-004(2): declare provenance explicitly rather than relying
+        // on absence to mean "trusted" — this fixture asserts the trusted
+        // (measured) path, so it must say so.
+        baselineDegraded: false,
+        tailoredDegraded: false,
+        scoringDegraded: false,
       } as never,
       // Backend field returned by agents.py:2309; not yet in the FE type.
       warning: WARNING_TEXT,
@@ -157,6 +163,12 @@ describe("W-C tailoring-loop sub-85 warning surfacing (GOLD-MASTER-V2 §5.3.1 pt
         methodology: "Like-for-like ATS delta (shared context) x population baseline (2.5%)",
         confidence: "model-estimated",
         requires_review: false,
+        // ADR-GMV4-004(2): declare provenance explicitly rather than relying
+        // on absence to mean "trusted" — this fixture asserts the trusted
+        // (measured) path, so it must say so.
+        baselineDegraded: false,
+        tailoredDegraded: false,
+        scoringDegraded: false,
       } as never,
       warning: null,
     } as never);

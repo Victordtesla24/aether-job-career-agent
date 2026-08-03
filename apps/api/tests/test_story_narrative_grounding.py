@@ -317,8 +317,8 @@ class TestRemediationVerdicts:
 
     @staticmethod
     def _finding(row: dict[str, Any]) -> dict[str, Any]:
-        from scripts.story_narrative_audit import _finding
         from app.services.resume_bullets import bullet_numbers, resume_employers
+        from scripts.story_narrative_audit import _finding
 
         bullet = _bullets()[0]
         return _finding(

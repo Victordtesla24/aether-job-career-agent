@@ -68,6 +68,12 @@ describe("W-J item 7 — before/after ATS banner (Resume Studio, characterizatio
         estimatedConversionLift: "+3.2x",
         methodology: "measured",
         confidence: "high",
+        // ADR-GMV4-004(2): declare provenance explicitly rather than relying
+        // on absence to mean "trusted" — this fixture asserts the trusted
+        // (measured) path, so it must say so.
+        baselineDegraded: false,
+        tailoredDegraded: false,
+        scoringDegraded: false,
       },
       noChangesApplied: false,
     });

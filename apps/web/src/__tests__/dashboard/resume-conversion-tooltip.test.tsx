@@ -36,6 +36,12 @@ const { METHODOLOGY, CONVERSION_METRICS, JOB } = vi.hoisted(() => {
       estimatedConversionLift: "+4.2%",
       methodology,
       confidence: "model-estimated",
+      // ADR-GMV4-004(2): declare provenance explicitly rather than relying
+      // on absence to mean "trusted" — this fixture asserts the trusted
+      // (measured) path, so it must say so.
+      baselineDegraded: false,
+      tailoredDegraded: false,
+      scoringDegraded: false,
     },
     JOB: {
       id: "job-1",
