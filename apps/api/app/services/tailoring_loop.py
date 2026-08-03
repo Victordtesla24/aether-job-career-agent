@@ -38,6 +38,16 @@ posting verbatim above the directive cannot poison that list, because the
 list is derived from ``ATSScore.missing_keywords``, not from the directive
 text.
 
+Third design note (2026-08-03): that noise claim was OVERSTATED when it was
+written. ``clean_gap_keywords`` stripped only the <= 2-character halves of a
+split contraction, so "don" (from "don't") and a long tail of closed-class
+function words — "other", "actually", "each", "more", "between" — sailed
+straight through into BOTH the LLM's forbidden-keyword list AND the
+user-facing sub-target warning. Verified by reading them back out of live
+production ``Resume.sections->'tailoringSummary'->'gapKeywords'`` rows. The
+filter now covers contraction prefixes, closed-class function words,
+delexical light verbs and HTML entity names; see :func:`clean_gap_keywords`.
+
 Second design note (W-TAILOR-CONVERGE): the directive only ever asks for gap
 keywords the candidate's OWN EVIDENCE already contains
 (:func:`split_gap_keywords`). A JD keyword absent from the résumé, story bank
@@ -74,13 +84,103 @@ DEFAULT_MAX_ITERATIONS = 5
 #: §5.3 item 1 / hard rule: the ATS score at which tailoring is "done".
 DEFAULT_TARGET_SCORE = 85.0
 
+#: Every English contraction a job posting realistically contains, written out
+#: in full so the fragment set below can be DERIVED from it rather than
+#: hand-maintained. ``ats_engine._TOKEN_RE`` is ``[a-zA-Z][a-zA-Z0-9+#.\-]*``
+#: — the apostrophe is not in that character class, so each of these splits at
+#: the apostrophe and BOTH halves become candidate "keywords".
+#:
+#: The original set listed only the SUFFIX halves ("re", "ll", "ve"), all of
+#: which happen to be <= 2 characters and were therefore already covered by the
+#: length rule. The halves that actually leaked are the ``n``-final PREFIXES of
+#: the negative contractions — "don" (from "don't"), "doesn", "isn", "won",
+#: "couldn" — which are 3+ characters and sailed straight through. "don" was
+#: observed in live production ``gapKeywords`` rows on 2026-08-03.
+_CONTRACTIONS = """
+    don't doesn't didn't isn't aren't wasn't weren't won't can't couldn't
+    shouldn't wouldn't hasn't haven't hadn't mustn't needn't shan't mightn't
+    ain't we're you're they're it's he's she's that's what's there's here's
+    who's how's let's i'm i've we've you've they've i'd we'd you'd they'd
+    he'd she'd i'll we'll you'll they'll he'll she'll it'll
+""".split()
+
 #: Contraction fragments that a naive apostrophe split leaves behind
-#: ("we're" -> "we" + "re", "we'll" -> "we" + "ll", "I've" -> "i" + "ve").
-_CONTRACTION_FRAGMENTS = frozenset({"re", "ll", "ve", "d", "m", "s", "t"})
+#: ("we're" -> "we" + "re", "don't" -> "don" + "t", "I've" -> "i" + "ve").
+_CONTRACTION_FRAGMENTS = frozenset(
+    fragment
+    for contraction in _CONTRACTIONS
+    for fragment in contraction.split("'")
+    if fragment
+)
+
+#: Closed-class English function words: determiners, quantifiers, pronouns,
+#: conjunctions, prepositions, degree/frequency adverbs and modals.
+#:
+#: The choice of a CLOSED class is the whole point, and is what makes this list
+#: safe to apply to a keyword gap: closed classes take no new members, so no
+#: present or future skill, tool, employer or certification can ever be one of
+#: these words. (Contrast an open-class guess like "delivery" or "platform",
+#: which really can be part of a skill phrase — those are deliberately NOT
+#: here.) Words already in ``ats_engine._STOPWORDS`` are omitted; this set only
+#: fills that list's gaps.
+#:
+#: These were read back out of real persisted
+#: ``Resume.sections->'tailoringSummary'->'gapKeywords'`` rows in the production
+#: ``aether`` schema on 2026-08-03 — i.e. they had already survived
+#: ``clean_gap_keywords`` and reached both the user-facing honesty warning and
+#: the LLM's forbidden-keyword list: "other", "actually", "more", "between",
+#: "every", "such", "around", "yourself", "behind", "continue", "answering".
+_FUNCTION_WORDS = frozenset(
+    """
+    other others another same own such
+    each every everyone everything everybody anyone anybody anything
+    someone something nobody none
+    more most less least much many few fewer several enough
+    between within without among amongst upon onto through throughout
+    around behind beneath beside besides beyond toward towards
+    against above below over under during
+    actually really simply just very quite rather too even still yet
+    always often sometimes usually never already again once
+    myself yourself himself herself itself ourselves yourselves themselves
+    however therefore moreover furthermore otherwise thus hence
+    although though whilst while whereas because unless whether either neither
+    must should shall may might cannot
+    """.split()
+)
+
+#: Delexical ("light") verbs and a few contentless discourse verbs. These are
+#: open-class words, so — unlike ``_FUNCTION_WORDS`` — they are listed one by
+#: one on their own merits rather than by category: each is a verb whose
+#: meaning lives entirely in its object ("make progress", "take ownership"),
+#: so it can never itself be the skill an ATS is matching on. Job postings are
+#: dense with them, and "continue"/"answering" were observed live.
+_LIGHT_VERBS = frozenset(
+    """
+    get gets getting got make makes making made take takes taking taken
+    give gives giving given put puts putting keep keeps keeping kept
+    come comes coming go goes going gone continue continues continuing
+    say says saying said tell tells telling told ask asks asking asked
+    answer answers answering answered let lets
+    know knows knowing known think thinks thinking thought
+    see sees seeing seen look looks looking
+    """.split()
+)
 
 #: Generic non-skill words the docstring/tests call out explicitly — carry no
 #: checkable skill signal even though they are not in ``ats_engine._STOPWORDS``.
+#: Kept separate from ``_FUNCTION_WORDS`` because these are open-class words
+#: judged case by case, not a whole grammatical category.
 _GENERIC_NOISE = frozenset({"use", "uses", "used", "using", "about"})
+
+#: HTML entity NAMES that survive a crude tag-strip of a scraped posting and
+#: then tokenize as ordinary words. "nbsp" (from ``&nbsp;``) was observed in
+#: live production ``gapKeywords`` on 2026-08-03.
+_HTML_ENTITIES = frozenset(
+    """
+    nbsp amp quot apos lt gt ndash mdash rsquo lsquo rdquo ldquo hellip
+    bull middot times divide copy reg trade deg permil laquo raquo shy zwj zwnj
+    """.split()
+)
 
 #: Header that separates the (verbatim) job description from the loop's own
 #: retry directive inside the ``job_description`` argument handed to
@@ -89,14 +189,44 @@ _GENERIC_NOISE = frozenset({"use", "uses", "used", "using", "about"})
 DIRECTIVE_MARKER = "--- AETHER TAILORING DIRECTIVE ---"
 
 
+#: Union of every non-skill vocabulary above, built once. Membership is the
+#: whole test — order of the individual sets is irrelevant, so collapsing them
+#: keeps ``clean_gap_keywords`` a single hash lookup per token.
+_NON_SKILL_TOKENS = (
+    _CONTRACTION_FRAGMENTS
+    | _FUNCTION_WORDS
+    | _LIGHT_VERBS
+    | _GENERIC_NOISE
+    | _HTML_ENTITIES
+    | _ATS_STOPWORDS
+)
+
+
 def clean_gap_keywords(raw: list[str]) -> list[str]:
     """Strip tokenization noise from ``ATSScore.missing_keywords``.
 
-    Drops bare 1-2 char fragments (covers "re", "ll", "ve", "xz", "a", ...),
-    generic non-skill words ("use", "about") and duplicates, while preserving
-    real multi-char skill keywords and their first-seen order — so the
-    per-iteration directive only ever asks the model to surface real,
-    checkable skill terms.
+    Drops, in order of how they arise:
+
+    * bare 1-2 char fragments ("re", "ll", "ve", "xz", "a", ...);
+    * contraction fragments of BOTH halves — critically the ``n``-final
+      prefixes ("don" from "don't", "doesn", "isn", "won", "couldn"), which
+      are 3+ characters and used to survive the length rule;
+    * HTML entity names left by a crude tag-strip of a scraped posting
+      ("nbsp");
+    * closed-class function words ("other", "each", "more", "between",
+      "actually") and delexical light verbs ("make", "take", "continue");
+    * ``ats_engine._STOPWORDS`` and generic non-skill words ("use", "about");
+    * duplicates.
+
+    Real multi-char skill keywords and their first-seen order are preserved,
+    so both consumers of this list stay honest: the per-iteration directive
+    only asks the model to surface real, checkable skill terms, and the
+    user-facing sub-target warning only names words that genuinely are a
+    keyword gap.
+
+    This is a pure NOISE filter. It never changes what the anti-fabrication /
+    entailment guard will accept — it only shrinks the set of words the loop
+    bothers to ask about, which is strictly stricter, never looser.
     """
     cleaned: list[str] = []
     seen: set[str] = set()
@@ -104,9 +234,7 @@ def clean_gap_keywords(raw: list[str]) -> list[str]:
         token = (raw_kw or "").strip().lower()
         if len(token) <= 2:
             continue
-        if token in _CONTRACTION_FRAGMENTS or token in _GENERIC_NOISE:
-            continue
-        if token in _ATS_STOPWORDS:
+        if token in _NON_SKILL_TOKENS:
             continue
         if token in seen:
             continue
