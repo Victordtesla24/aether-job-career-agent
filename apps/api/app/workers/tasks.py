@@ -370,3 +370,27 @@ async def sweep_stale_jobs(ctx: Any) -> int:
             _refund_for_job(repo, job)
             swept += 1
     return swept
+
+
+async def reconcile_abandoned_agent_runs_cron(ctx: Any) -> int:
+    """ARQ cron: fail abandoned ``AgentRun`` rows nothing is executing (CRITICAL-1).
+
+    ``sweep_stale_jobs`` above covers ``BackgroundJob``; this covers ``AgentRun``
+    — the row the dashboard actually renders, and the one that had a production
+    tailor run stuck at ``status='running'`` for 8 days because NOTHING ever
+    reconciled it. Runs periodically (not only at startup) so a run orphaned by
+    a crash between restarts still surfaces within one cron interval.
+
+    Async-def only to satisfy ARQ; the body is a short, indexed set of DB
+    statements, so it does not need a thread offload.
+    """
+    from app.services.agent_run_watchdog import reconcile_abandoned_agent_runs
+
+    try:
+        outcome = reconcile_abandoned_agent_runs(reason="worker-cron")
+    except Exception as exc:  # noqa: BLE001 — a cron tick must not kill the worker
+        logger.warning("agent-run watchdog cron failed: %s", type(exc).__name__)
+        return 0
+    if outcome.before or outcome.reconciled:
+        logger.warning("%s", outcome.summary())
+    return outcome.reconciled

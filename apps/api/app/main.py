@@ -283,6 +283,14 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             file=sys.stderr,
         )
     _remediate_unscorable_fit_scores()
+    # CRITICAL-1: fail every AgentRun this process (or a previous one) orphaned.
+    # Wired HERE for the same reason as the remediation above — it must not
+    # depend on anybody remembering to run a script. A production tailor run sat
+    # at status='running' for 8 days and the UI kept calling it ACTIVE because
+    # nothing ever reconciled it. Best-effort (see reconcile_on_startup).
+    from app.services.agent_run_watchdog import reconcile_on_startup
+
+    reconcile_on_startup("api-startup")
     threading.Thread(
         target=_warm_up_ats_semantic_model, name="ats-semantic-warmup", daemon=True
     ).start()

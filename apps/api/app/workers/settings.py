@@ -9,7 +9,11 @@ from __future__ import annotations
 import os
 
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
-from app.workers.tasks import run_agent_job, sweep_stale_jobs
+from app.workers.tasks import (
+    reconcile_abandoned_agent_runs_cron,
+    run_agent_job,
+    sweep_stale_jobs,
+)
 
 
 def _redis_settings():
@@ -31,6 +35,14 @@ def _cron_jobs():
             # RT-007 autopilot tick — every 10 min; a no-op unless
             # AETHER_BOARD_SWEEP_ENABLED is on and users have board work.
             cron(board_sweep_cron, minute=set(range(0, 60, 10))),
+            # CRITICAL-1 abandoned-AgentRun watchdog — every 5 min. Bounds how
+            # long a zombie 'running' row can be shown to the owner as an ACTIVE
+            # run to one cron interval; before this existed the bound was
+            # "forever" (8 days observed in production).
+            cron(
+                reconcile_abandoned_agent_runs_cron,
+                minute=set(range(2, 60, 5)),
+            ),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []
@@ -48,9 +60,26 @@ def _sweep_func():
         return board_sweep_user
 
 
+async def _on_startup(ctx) -> None:
+    """Reconcile every AgentRun this worker orphaned when it died (CRITICAL-1).
+
+    A worker restart kills whatever it was executing mid-flight, leaving the
+    ``AgentRun`` row at ``status='running'`` with nobody behind it — that is
+    exactly how the observed 8-day zombie was created (``aether-worker`` was
+    restarted 2026-08-03 00:17). Running this on EVERY start means a restart
+    cleans up after itself instead of leaving the owner staring at a run that
+    will never finish. Uses the tighter startup heartbeat threshold; a run being
+    executed right now by a sibling process is still stamping and is untouched.
+    """
+    from app.services.agent_run_watchdog import reconcile_on_startup
+
+    reconcile_on_startup("worker-startup")
+
+
 class WorkerSettings:
     functions = [run_agent_job, _sweep_func()]
     cron_jobs = _cron_jobs()
+    on_startup = _on_startup
     redis_settings = _redis_settings()
     max_jobs = 3        # 2 vCPU / ~2.5 GB free -> modest concurrency
     job_timeout = 600   # > largest worker LLM budget so ARQ never kills mid-run

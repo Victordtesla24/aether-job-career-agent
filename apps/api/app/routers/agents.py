@@ -55,6 +55,7 @@ from app.services.agent_run_stream import (
     iter_agent_run_events,
     release_slot_when_done,
 )
+from app.services.agent_run_watchdog import agent_run_heartbeat
 from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
 from app.services.llm_client import (
     LLM_UNAVAILABLE_USER_MESSAGE,
@@ -944,9 +945,20 @@ def _execute_reserved_run(
     try:
         # Bind BOTH the credential context and the user's chosen model so the
         # deep LLM path resolves THIS user's key AND model.
-        with user_credential_context(user_id, agent_name), user_model_context(
-            _override_model
-        ), served_model_capture():
+        #
+        # ``agent_run_heartbeat`` (CRITICAL-1) stamps AgentRun.heartbeatAt for
+        # as long as this run actually executes. THIS is the seam because it is
+        # the ONE place both the sync HTTP path (``_record_run``) and the ARQ
+        # worker (``workers.tasks._run_single_agent_body``) — and every pipeline
+        # step, which routes through ``_record_run`` too — share. Without the
+        # stamp the watchdog could not tell a live run from a dead one and would
+        # have to time runs out on age alone, which would murder legitimately
+        # long runs. It writes nothing on the success/failure paths below: the
+        # ``status='running'`` guard in ``AgentRunRepository.heartbeat`` makes a
+        # stamp on an already-finished run impossible.
+        with agent_run_heartbeat(run_id), user_credential_context(
+            user_id, agent_name
+        ), user_model_context(_override_model), served_model_capture():
             try:
                 output = _to_output(fn())
             except (FabricationError, StructuralError):
@@ -2572,7 +2584,10 @@ class EmailAgentRequest(BaseModel):
 
 
 @router.post("/email/run")
-def run_email_agent(body: EmailAgentRequest, current_user: CurrentUser) -> dict[str, Any]:
+def run_email_agent(
+    body: EmailAgentRequest, current_user: CurrentUser, request: Request,
+    response: Response,
+) -> dict[str, Any]:
     """Run the Email Agent: triage / draft_reply / insights / send /
     job_alerts (P4, W-ALERT).
 
@@ -2583,8 +2598,27 @@ def run_email_agent(body: EmailAgentRequest, current_user: CurrentUser) -> dict[
     ``job_alerts`` reads the candidate's OWN automated job-alert mail across
     every connected mailbox and persists each extracted posting as a real
     ``Job`` row (deterministic, no LLM, nothing invented).
+
+    EMAIL-DRAFTING-FIX item 5: ``triage``/``draft_reply``/``draft_follow_up``/
+    ``insights`` are real LLM calls (measured live at 26.7s-61.0s) that a
+    synchronous request behind a proxy can 503 on. When
+    ``AETHER_ASYNC_GENERATION`` is ON, exactly those modes are routed through
+    the SAME enqueue + ``GET /agents/jobs/{id}`` polling path tailor/coverLetter
+    already use (the web client's ``runAgent``/``resolveRun`` already handles
+    the 202 envelope generically — no frontend change needed). ``send`` /
+    ``apply_labels`` / ``job_alerts`` reach no model at all
+    (``_email_agent_will_call_llm``, the SAME predicate ML-W4C already uses to
+    decide metering) and stay synchronous — enqueuing a sub-100ms Gmail
+    mutation would only add latency for no benefit.
     """
     params = {k: v for k, v in body.model_dump().items() if v is not None}
+    if async_generation_enabled() and _email_agent_will_call_llm(params):
+        system_run = _is_system_run(request)
+        job_id = _enqueue_single_agent(
+            current_user["id"], "emailAgent", params, system_run=system_run
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
     try:
         return _dispatch(current_user["id"], "emailAgent", params)
     except LookupError as exc:

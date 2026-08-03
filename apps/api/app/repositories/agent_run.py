@@ -11,6 +11,65 @@ _COLUMNS = (
     '"costUsd", "startedAt", "completedAt", "createdAt"'
 )
 
+#: Rows that are still ``running`` but that no live process owns any more
+#: (CRITICAL-1). TWO disjoint arms, and the split is the whole safety argument:
+#:
+#:   * ``heartbeatAt IS NOT NULL`` — the owning process DID stamp progress at
+#:     least once, so a missing recent stamp is positive evidence that it died.
+#:     Reconciled on heartbeat staleness alone, never on age: a legitimately
+#:     long run keeps stamping and is therefore untouchable however old it gets.
+#:   * ``heartbeatAt IS NULL`` — no stamp was EVER recorded (the row predates
+#:     this watchdog, or its process died before execution began). There is no
+#:     liveness evidence either way, so the generous wall-clock ceiling applies.
+#:
+#: Both timestamps are compared with ``NOW()`` so the naive ``timestamp``
+#: columns round-trip through exactly the same server ``TimeZone`` conversion
+#: that wrote them — self-consistent regardless of what that setting is.
+_ABANDONED_PREDICATE = '''
+    "status" = 'running'::"AgentRunStatus"
+    AND (
+        ("heartbeatAt" IS NOT NULL
+         AND "heartbeatAt" < NOW() - make_interval(secs => %s))
+        OR
+        ("heartbeatAt" IS NULL
+         AND COALESCE("startedAt", "createdAt")
+             < NOW() - make_interval(secs => %s))
+    )
+'''
+
+_heartbeat_column_ready = False
+
+
+def ensure_heartbeat_column() -> None:
+    """Additive, idempotent DDL for ``AgentRun.heartbeatAt`` (CRITICAL-1).
+
+    ``AgentRun`` is Prisma-managed (``packages/db/src/schema.prisma``) and the
+    column is declared there too; this lazy ``ADD COLUMN IF NOT EXISTS`` is the
+    same belt-and-braces pattern ``user_provider_credential`` already uses for
+    ``billingAuditJson``, so a deploy that has not re-run Prisma still gets a
+    working watchdog. Documentary mirror:
+    ``apps/api/migrations/0026_agent_run_heartbeat.sql``.
+
+    ``timestamp`` (not ``timestamptz``) deliberately matches the existing
+    ``startedAt``/``completedAt`` columns so every comparison in this module is
+    against columns written the same way.
+    """
+    global _heartbeat_column_ready
+    if _heartbeat_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "AgentRun" '
+                'ADD COLUMN IF NOT EXISTS "heartbeatAt" timestamp'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "AgentRun_status_heartbeatAt_idx" '
+                'ON "AgentRun" ("status", "heartbeatAt")'
+            )
+        conn.commit()
+    _heartbeat_column_ready = True
+
 
 class AgentRunRepository:
     def start(
@@ -54,6 +113,94 @@ class AgentRunRepository:
                 rows = rows_to_dicts(cur)
             conn.commit()
         return rows[0] if rows else None
+
+    def heartbeat(self, run_id: str) -> bool:
+        """Stamp liveness for a RUNNING run. Returns False once it is terminal.
+
+        The ``status = 'running'`` predicate is what makes the heartbeat loop
+        self-terminating and makes a stamp on an already-reconciled run
+        impossible — a heartbeat can never resurrect a finished row.
+        """
+        ensure_heartbeat_column()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "AgentRun" SET "heartbeatAt" = NOW() '
+                    'WHERE "id" = %s AND "status" = \'running\'::"AgentRunStatus"',
+                    (run_id,),
+                )
+                stamped = cur.rowcount > 0
+            conn.commit()
+        return stamped
+
+    def count_abandoned(
+        self, heartbeat_stale_seconds: float, max_run_seconds: float
+    ) -> int:
+        """How many ``running`` rows currently have nothing alive behind them."""
+        ensure_heartbeat_column()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT COUNT(*) FROM "AgentRun" WHERE {_ABANDONED_PREDICATE}',
+                    (heartbeat_stale_seconds, max_run_seconds),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return int(row[0]) if row else 0
+
+    def list_abandoned(
+        self,
+        heartbeat_stale_seconds: float,
+        max_run_seconds: float,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Abandoned ``running`` rows plus the numbers the honest error cites."""
+        ensure_heartbeat_column()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'''
+                    SELECT "id", "userId", "agentName", "startedAt", "createdAt",
+                           "heartbeatAt",
+                           EXTRACT(EPOCH FROM (
+                               NOW() - COALESCE("startedAt", "createdAt")
+                           )) AS "ageSeconds",
+                           CASE WHEN "heartbeatAt" IS NULL THEN NULL ELSE
+                               EXTRACT(EPOCH FROM (NOW() - "heartbeatAt"))
+                           END AS "heartbeatAgeSeconds"
+                    FROM "AgentRun"
+                    WHERE {_ABANDONED_PREDICATE}
+                    ORDER BY COALESCE("startedAt", "createdAt") ASC
+                    LIMIT %s
+                    ''',
+                    (heartbeat_stale_seconds, max_run_seconds, limit),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        return rows
+
+    def fail_abandoned(self, run_id: str, error: str) -> bool:
+        """Atomically fail ONE abandoned run. First-terminal-wins.
+
+        The ``status = 'running'`` guard means a reconciler racing a worker that
+        is finishing the very same run loses cleanly: whoever writes the
+        terminal state first wins and the other observes ``False``. The row is
+        never deleted and is never marked ``completed`` — an abandoned run
+        produced no output, and saying otherwise would be a fabrication.
+        """
+        ensure_heartbeat_column()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "AgentRun" '
+                    'SET "status" = \'failed\'::"AgentRunStatus", "error" = %s, '
+                    '    "completedAt" = NOW() '
+                    'WHERE "id" = %s AND "status" = \'running\'::"AgentRunStatus"',
+                    (error, run_id),
+                )
+                won = cur.rowcount > 0
+            conn.commit()
+        return won
 
     def set_billing_audit(
         self, run_id: str, audit: dict[str, Any]

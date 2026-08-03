@@ -300,9 +300,15 @@ model AgentRun {
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime       @default(now())
+  // CRITICAL-1: liveness stamp written every ~30s WHILE the run executes
+  // (app/services/agent_run_watchdog.py). NULL means no worker ever proved it
+  // was alive. The watchdog reconciles a 'running' row only when this evidence
+  // is missing, so a legitimately long run is never reaped on age alone.
+  heartbeatAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
+  @@index([status, heartbeatAt])
 }
