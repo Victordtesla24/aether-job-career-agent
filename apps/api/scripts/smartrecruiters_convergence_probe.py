@@ -78,7 +78,7 @@ def _existing_urls(user_id: str) -> set[str]:
             return {row[0] for row in cur.fetchall()}
 
 
-def _sweep(user_id: str, index: int) -> set[str]:
+def _sweep(user_id: str, index: int) -> tuple[set[str], dict[str, str]]:
     real_fetch_json = mod.fetch_json
     detail_ids: set[str] = set()
 
@@ -99,8 +99,12 @@ def _sweep(user_id: str, index: int) -> set[str]:
     known = _existing_urls(user_id)
     repo = JobRepository()
     updated = 0
+    url_by_posting: dict[str, str] = {}
     for job in jobs:
         url = normalize_source_url(job.get("sourceUrl"))
+        if not url:
+            continue
+        url_by_posting[url.rsplit("/", 1)[-1]] = url
         if url in known and job.get("description", "").strip():
             repo.create(user_id, job)
             updated += 1
@@ -112,7 +116,7 @@ def _sweep(user_id: str, index: int) -> set[str]:
         f"{updated} existing board row(s) re-persisted with a real description; "
         f"board coverage now {with_description}/{total}"
     )
-    return detail_ids
+    return detail_ids, url_by_posting
 
 
 def main() -> int:
@@ -135,15 +139,23 @@ def main() -> int:
     print(f"budget/sweep={mod._DETAIL_BUDGET_PER_SWEEP} concurrency={mod._DETAIL_CONCURRENCY}")
 
     seen: list[set[str]] = []
+    urls: dict[str, str] = {}
     for index in range(1, sweeps + 1):
-        seen.append(_sweep(user_id, index))
+        fetched, url_by_posting = _sweep(user_id, index)
+        seen.append(fetched)
+        urls.update(url_by_posting)
 
+    board_urls = _existing_urls(user_id)
     for i in range(len(seen)):
         for j in range(i + 1, len(seen)):
             overlap = seen[i] & seen[j]
+            on_board = {p for p in overlap if urls.get(p) in board_urls}
             print(
-                f"sweeps {i + 1} vs {j + 1}: {len(overlap)} posting(s) fetched twice "
-                f"(want 0 — a re-fetch is budget NOT spent on a starved posting)"
+                f"sweeps {i + 1} vs {j + 1}: {len(overlap)} posting(s) fetched twice, "
+                f"of which {len(on_board)} are rows ON the board. Only the latter "
+                "would be budget wasted in production: the rest are postings this "
+                "probe deliberately did not insert, so their text was never "
+                "persisted for the cache to find."
             )
     union = set().union(*seen) if seen else set()
     print(f"distinct postings enriched across {sweeps} sweep(s): {len(union)}")
