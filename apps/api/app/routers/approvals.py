@@ -280,10 +280,19 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
         )
     try:
         if approval["type"] == "email_send":
-            return _execute_email_send(approval, current_user)
+            sent = _execute_email_send(approval, current_user)
+            # CRITICAL-4: the real side-effect returned. ``executedAt`` alone
+            # was stamped BEFORE it ran and so could not distinguish a finished
+            # send from a process killed mid-send — and nothing ever revisited
+            # the row, so the second case read as executed forever while
+            # nothing had been sent.
+            repo.complete_execution(approval_id, user_id)
+            return sent
         payload = ApprovalRepository._payload_dict(approval)
         if approval["type"] == "application_submit" and payload.get("kind") == "submission":
-            return _execute_application_submit(approval, current_user)
+            submitted = _execute_application_submit(approval, current_user)
+            repo.complete_execution(approval_id, user_id)
+            return submitted
         # BLOCKER (v5 adversarial review): `claim_execution` stamps
         # ``executedAt = NOW()`` BEFORE any work happens, so reaching this
         # non-transmitting branch left the row reading "executed" while nothing

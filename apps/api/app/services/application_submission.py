@@ -442,10 +442,15 @@ def maybe_autonomous_transmit(
             "message": "Nothing was sent.",
         }
     try:
-        return transmit_application(user, resolved)
+        sent = transmit_application(user, resolved)
     except (SubmissionRefused, SubmissionTransportError) as exc:
         repo.release_execution(approval["id"], user_id)
         return {"transmitted": False, "reason": exc.reason, "message": exc.message}
+    # CRITICAL-4: the send provably returned. Until this stamp lands the row
+    # only records that a claim was MADE, which cannot be distinguished from a
+    # process that died mid-send — see repositories.approval.execution_state.
+    repo.complete_execution(approval["id"], user_id)
+    return sent
 
 
 class SubmissionRefused(Exception):

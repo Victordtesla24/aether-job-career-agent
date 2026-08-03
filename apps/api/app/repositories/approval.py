@@ -2,16 +2,113 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db import ensure_approval_columns, get_connection, new_id, rows_to_dicts
 
+logger = logging.getLogger(__name__)
+
 _COLUMNS = (
     '"id", "userId", "applicationId", "type", "status", "payload", '
-    '"createdAt", "resolvedAt", "resolvedByUserId", "resolvedFromIp"'
+    '"createdAt", "resolvedAt", "resolvedByUserId", "resolvedFromIp", '
+    '"executedAt", "executionCompletedAt"'
 )
 
 VALID_TYPES = frozenset({"application_submit", "email_send", "offer_response"})
+
+# ---------------------------------------------------------------------------
+# CRITICAL-4 — execution claims that outlive the process that made them.
+#
+# ``claim_execution`` stamps ``executedAt = NOW()`` BEFORE the side-effect runs
+# (an at-most-once guard so a double-submit cannot fire two real Gmail sends),
+# and ``release_execution`` clears it if the side-effect raises. But an
+# ``except`` only runs if the process is alive to run it: ``aether-api`` is
+# restarted on every deploy and runs under ``Restart=on-failure``, and the
+# claimed section performs multi-second network I/O (PDF rendering + a Gmail
+# send). A restart or a kill inside that window left ``executedAt`` stamped
+# with nothing sent, and NOTHING revisited the row — the same shape as the
+# 8-day zombie AgentRun: state that survives every restart forever.
+#
+# ``executionCompletedAt`` splits the claim from the proof, so the three cases
+# are finally distinguishable.
+# ---------------------------------------------------------------------------
+
+#: A claim was made and the owning request is still plausibly running.
+EXECUTION_STATE_RUNNING = "running"
+#: A claim was made, the ceiling has passed, and no completion was ever
+#: recorded. The outcome is UNKNOWN — the process may have died before the
+#: side-effect fired, or after it fired but before the stamp.
+EXECUTION_STATE_INTERRUPTED = "interrupted"
+#: The side-effect provably returned.
+EXECUTION_STATE_EXECUTED = "executed"
+
+#: Wall-clock ceiling (s) for one execute. Sized well above the real work: the
+#: claimed section renders the résumé and cover-letter PDFs in-process and then
+#: performs a Gmail upload, and it sits behind a synchronous HTTP request that
+#: the reverse proxy itself will not hold open anywhere near this long. 10
+#: minutes is generous enough that a live-but-slow send is never mislabelled.
+_MAX_EXECUTION_SECONDS_DEFAULT = 600.0
+#: Never below 5 minutes, whatever the environment says — a ceiling under the
+#: real work would declare running executions interrupted, which is the exact
+#: dishonesty this exists to remove, pointed the other way.
+_MAX_EXECUTION_SECONDS_FLOOR = 300.0
+
+
+def max_execution_seconds() -> float:
+    """How long a claimed execution may run before it is presumed orphaned.
+
+    ``AETHER_APPROVAL_MAX_EXECUTION_SECONDS`` tunes it without a redeploy;
+    a malformed or too-small value is clamped to
+    :data:`_MAX_EXECUTION_SECONDS_FLOOR` rather than taking a process down or
+    mislabelling live work.
+    """
+    raw = (os.environ.get("AETHER_APPROVAL_MAX_EXECUTION_SECONDS") or "").strip()
+    if not raw:
+        return _MAX_EXECUTION_SECONDS_DEFAULT
+    try:
+        value = float(raw)
+    except ValueError:
+        return _MAX_EXECUTION_SECONDS_DEFAULT
+    if value <= 0:
+        return _MAX_EXECUTION_SECONDS_DEFAULT
+    return max(value, _MAX_EXECUTION_SECONDS_FLOOR)
+
+
+def execution_state(approval: dict[str, Any], now: datetime | None = None) -> str | None:
+    """``None`` (never claimed), ``running``, ``interrupted`` or ``executed``.
+
+    Pure and defensive: a row selected before these columns existed simply has
+    no claim, which must degrade to ``None`` rather than raise into an
+    approvals response.
+    """
+    claimed = approval.get("executedAt")
+    if not isinstance(claimed, datetime):
+        return None
+    if isinstance(approval.get("executionCompletedAt"), datetime):
+        return EXECUTION_STATE_EXECUTED
+    if claimed.tzinfo is None:
+        claimed = claimed.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    age = (now - claimed).total_seconds()
+    return (
+        EXECUTION_STATE_INTERRUPTED
+        if age > max_execution_seconds()
+        else EXECUTION_STATE_RUNNING
+    )
+
+
+def _with_execution_state(row: dict[str, Any]) -> dict[str, Any]:
+    """Attach the derived ``executionState`` to a row leaving the repository.
+
+    Read paths carry it so no consumer can present a claim whose owning
+    process died as a completed action — the state is derived from the two
+    stamps every time rather than cached anywhere it could go stale.
+    """
+    row["executionState"] = execution_state(row)
+    return row
 
 
 class ApprovalRepository:
@@ -141,6 +238,31 @@ class ApprovalRepository:
             conn.commit()
         return claimed
 
+    def complete_execution(self, approval_id: str, user_id: str) -> bool:
+        """Record that the claimed side-effect PROVABLY finished (CRITICAL-4).
+
+        Called only after the real action returned — the Gmail send, the
+        application transmission. Until this lands, ``executedAt`` alone says
+        no more than "somebody claimed this and may or may not still be
+        running"; see :func:`execution_state`.
+
+        Conditional on the claim existing (``executedAt IS NOT NULL``) so a
+        completion can never precede or fabricate the claim that authorises
+        it. Returns whether a row was stamped.
+        """
+        ensure_approval_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "ApprovalRequest" SET "executionCompletedAt" = NOW() '
+                    'WHERE "id" = %s AND "userId" = %s AND "executedAt" IS NOT NULL '
+                    'AND "executionCompletedAt" IS NULL RETURNING "id"',
+                    (approval_id, user_id),
+                )
+                stamped = cur.fetchone() is not None
+            conn.commit()
+        return stamped
+
     def release_execution(self, approval_id: str, user_id: str) -> None:
         """Release a claim so an approval stays retryable after an honest failure.
 
@@ -148,16 +270,88 @@ class ApprovalRepository:
         not connected, or a send/attachment error): clearing ``executedAt`` lets
         the user retry once the underlying problem is fixed. A *successful*
         execute keeps the stamp, so the real action can never fire twice.
+
+        Clears ``executionCompletedAt`` too, so a released row carries no
+        residue of a previous attempt's proof (CRITICAL-4).
         """
         ensure_approval_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'UPDATE "ApprovalRequest" SET "executedAt" = NULL '
+                    'UPDATE "ApprovalRequest" SET "executedAt" = NULL, '
+                    '"executionCompletedAt" = NULL '
                     'WHERE "id" = %s AND "userId" = %s',
                     (approval_id, user_id),
                 )
             conn.commit()
+
+    def list_interrupted_executions(
+        self, max_seconds: float | None = None
+    ) -> list[dict[str, Any]]:
+        """Claims whose owning process died before recording a completion.
+
+        A row here means: ``executedAt`` was stamped more than
+        :func:`max_execution_seconds` ago and no completion ever followed. The
+        outcome is genuinely UNKNOWN — see :meth:`report_interrupted_executions`
+        for why that is where this stops.
+
+        The age filter runs on the DATABASE clock, not the app server's: the
+        hosted Postgres runs measurably ahead (~3 s observed 2026-07-29) and a
+        skewed comparison must not promote a live claim to orphaned.
+        """
+        ensure_approval_columns()
+        ceiling = max_execution_seconds() if max_seconds is None else float(max_seconds)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'SELECT {_COLUMNS}, '
+                    'EXTRACT(EPOCH FROM (NOW() - "executedAt")) AS "claimAgeSeconds" '
+                    'FROM "ApprovalRequest" '
+                    'WHERE "executedAt" IS NOT NULL '
+                    'AND "executionCompletedAt" IS NULL '
+                    'AND "executedAt" < NOW() - (%s || \' seconds\')::interval '
+                    'ORDER BY "executedAt" ASC',
+                    (str(ceiling),),
+                )
+                return rows_to_dicts(cur)
+
+    def report_interrupted_executions(
+        self, max_seconds: float | None = None
+    ) -> dict[str, Any]:
+        """Surface interrupted claims. **Deliberately does not release them.**
+
+        WHY THERE IS NO AUTO-RETRY HERE. The only two ways to reach this state
+        are (a) the process died before the side-effect fired, and (b) it died
+        after Gmail accepted the message but before the completion stamp. Case
+        (a) wants a retry; case (b) would send a SECOND real application email
+        to a real employer. Nothing in this system can tell them apart — the
+        Gmail send is the point at which the evidence is created, and that is
+        precisely the window that was lost.
+
+        So this reports, and a human who can look in their own Sent folder
+        decides. Releasing on a guess would trade a visible unknown for an
+        invisible duplicate, and duplicates land in a stranger's inbox with
+        the user's name on them. Auto-retry is refused rather than
+        half-implemented.
+        """
+        rows = self.list_interrupted_executions(max_seconds)
+        for row in rows:
+            logger.warning(
+                "approval %s (type=%s user=%s): execution claimed %.1f min ago "
+                "with no completion recorded — the process that owned it died. "
+                "The outcome is UNKNOWN and the claim is deliberately NOT "
+                "released: re-executing could send a second real message. "
+                "Check the Sent folder before retrying.",
+                row["id"], row["type"], row["userId"],
+                float(row.get("claimAgeSeconds") or 0.0) / 60.0,
+            )
+        return {
+            "interrupted": len(rows),
+            "ids": [row["id"] for row in rows],
+            "maxExecutionSeconds": (
+                max_execution_seconds() if max_seconds is None else float(max_seconds)
+            ),
+        }
 
     def get_by_id(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
         ensure_approval_columns()
@@ -169,7 +363,7 @@ class ApprovalRepository:
                     (approval_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
-        return rows[0] if rows else None
+        return _with_execution_state(rows[0]) if rows else None
 
     def list_pending(self, user_id: str) -> list[dict[str, Any]]:
         return self._list(user_id, "pending")
@@ -191,7 +385,7 @@ class ApprovalRepository:
                     f'WHERE {" AND ".join(clauses)} ORDER BY "createdAt" DESC',
                     params,
                 )
-                return rows_to_dicts(cur)
+                return [_with_execution_state(row) for row in rows_to_dicts(cur)]
 
     def approve(
         self, approval_id: str, user_id: str, ip: str | None = None

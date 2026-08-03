@@ -342,6 +342,15 @@ def ensure_approval_columns() -> None:
     request by conditionally stamping this column exactly once, so a
     double-submit/retry cannot fire the same real Gmail send twice.
 
+    ``executionCompletedAt`` (CRITICAL-4) is the other half of that claim.
+    ``executedAt`` is stamped BEFORE the side-effect runs, so on its own it
+    cannot distinguish "the send finished" from "the process died mid-send and
+    never got to release the claim" — and nothing reconciled the second case,
+    so the row read as executed forever while nothing had been sent. This
+    column is stamped only once the side-effect provably returned, making an
+    interrupted execution a visible state instead of a silent lie. See
+    ``app.repositories.approval.execution_state``.
+
     ``resolvedByUserId`` / ``resolvedFromIp`` (GOLD-MASTER-V2 §15 Defect 1)
     persist who resolved an approval, and from what client IP, on the row
     itself — independent of ``AdminAuditLog`` or access logs, which rotate.
@@ -361,7 +370,12 @@ def ensure_approval_columns() -> None:
     global _approval_columns_ready
     if _approval_columns_ready:
         return
-    _managed_columns = ("executedAt", "resolvedByUserId", "resolvedFromIp")
+    _managed_columns = (
+        "executedAt",
+        "executionCompletedAt",
+        "resolvedByUserId",
+        "resolvedFromIp",
+    )
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTERs when every
@@ -381,6 +395,10 @@ def ensure_approval_columns() -> None:
             cur.execute(
                 'ALTER TABLE "ApprovalRequest" '
                 'ADD COLUMN IF NOT EXISTS "executedAt" timestamptz'
+            )
+            cur.execute(
+                'ALTER TABLE "ApprovalRequest" '
+                'ADD COLUMN IF NOT EXISTS "executionCompletedAt" timestamptz'
             )
             cur.execute(
                 'ALTER TABLE "ApprovalRequest" '

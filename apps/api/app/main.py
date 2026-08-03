@@ -176,6 +176,46 @@ def _warm_up_ats_semantic_model() -> None:
         print(f"WARNING: ATS semantic model warm-up failed: {exc}", file=sys.stderr)
 
 
+def _report_interrupted_approval_executions() -> None:
+    """Name every approval whose execution this process's predecessor orphaned.
+
+    CRITICAL-4: ``/approvals/{id}/execute`` stamps ``executedAt`` BEFORE the
+    real Gmail send and releases it in an ``except`` — which only runs if the
+    process survives. This service is restarted on every deploy and runs under
+    ``Restart=on-failure``, so a kill inside that window left the approval
+    reading "executed" with nothing sent, and nothing ever revisited it.
+
+    Startup is where those rows are created, so startup is where they are
+    named. It REPORTS and does not release: the process may have died after
+    Gmail accepted the message, and re-executing would send a second real
+    application email to a real employer (see
+    ``ApprovalRepository.report_interrupted_executions``).
+
+    Best-effort, like every other startup chore here — a DB blip must not turn
+    a data-hygiene problem into a crash loop under ``Restart=on-failure``.
+    """
+    from app.repositories.approval import ApprovalRepository
+
+    try:
+        outcome = ApprovalRepository().report_interrupted_executions()
+    except Exception as exc:  # noqa: BLE001 — never take the API down for this
+        print(
+            "WARNING: interrupted-approval-execution report did not run at "
+            f"startup; a claimed-but-unfinished send may look executed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    if outcome["interrupted"]:
+        print(
+            f"approval execution watchdog: {outcome['interrupted']} claimed "
+            "execution(s) never recorded a completion — outcome UNKNOWN, "
+            f"claims deliberately NOT released: {outcome['ids']}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
 def _remediate_unscorable_fit_scores() -> None:
     """Retire pre-gate fit scores on every start (v5 evidence gate).
 
@@ -291,6 +331,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from app.services.agent_run_watchdog import reconcile_on_startup
 
     reconcile_on_startup("api-startup")
+    _report_interrupted_approval_executions()
     threading.Thread(
         target=_warm_up_ats_semantic_model, name="ats-semantic-warmup", daemon=True
     ).start()

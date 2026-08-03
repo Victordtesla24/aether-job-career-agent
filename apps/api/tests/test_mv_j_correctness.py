@@ -261,20 +261,49 @@ def test_execute_email_send_is_idempotent(client, auth_headers, test_user_id, mo
         repo.disconnect(test_user_id)
 
 
-def test_execute_non_email_approval_still_succeeds_once(client, auth_headers):
+def test_execute_non_transmitting_approval_is_honest_and_not_burnt(
+    client, auth_headers
+):
+    """A branch that transmits NOTHING must not burn the approval.
+
+    RED AT HEAD BEFORE THIS EDIT (verified against commit 8dbfa10 in a clean
+    worktree): this test demanded ``{"status": "executed"}`` followed by a 409
+    on the second call — the single-shot semantics that belong to a REAL
+    side-effect. ``kind="test"`` is not ``kind="submission"``, so this reaches
+    the branch of ``execute_gated_action`` that sends nothing at all, and the
+    v5 adversarial review deliberately made that branch release its execution
+    claim: stamping ``executedAt`` for work that never happened is precisely
+    what left 133 approvals reading "executed" with 0 transmissions, and
+    burning the row would also deadlock an ``application_submit`` that merely
+    arrived without a submission payload — the user could never fix the
+    payload and execute for real.
+
+    So the honest contract is: 200 + ``recorded`` + ``transmitted: false``,
+    repeatable, with no claim left behind. The single-shot guarantee still
+    holds where it matters and is covered by the real-send test above, which
+    pins 200 -> 409 and exactly one Gmail call.
+    """
     from app.repositories.approval import ApprovalRepository
     from app.security import decode_access_token
 
     uid = decode_access_token(auth_headers["Authorization"].removeprefix("Bearer "))["userId"]
-    approval = ApprovalRepository().create(uid, "application_submit", {"kind": "test"})
+    repo = ApprovalRepository()
+    approval = repo.create(uid, "application_submit", {"kind": "test"})
     assert client.post(
         f"/approvals/{approval['id']}/approve", headers=auth_headers
     ).status_code == 200
-    first = client.post(f"/approvals/{approval['id']}/execute", headers=auth_headers)
-    assert first.status_code == 200, first.text
-    assert first.json()["status"] == "executed"
-    second = client.post(f"/approvals/{approval['id']}/execute", headers=auth_headers)
-    assert second.status_code == 409, second.text
+
+    for attempt in ("first", "second"):
+        resp = client.post(f"/approvals/{approval['id']}/execute", headers=auth_headers)
+        assert resp.status_code == 200, f"{attempt}: {resp.text}"
+        body = resp.json()
+        assert body["status"] == "recorded", attempt
+        assert body["transmitted"] is False, attempt
+
+    row = repo.get_by_id(approval["id"], uid)
+    assert row is not None
+    assert row["executedAt"] is None, "nothing was transmitted, so nothing may be claimed"
+    assert row["executionCompletedAt"] is None
 
 
 # --------------------------------------------------------------------------- #

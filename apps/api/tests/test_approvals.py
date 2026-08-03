@@ -49,11 +49,30 @@ class TestApprovalGateway:
         assert resp.status_code == 403
 
     def test_high_risk_action_allowed_after_approval(self, client, auth_headers, user_id):
+        """The gate opens after approval — and says exactly what it did.
+
+        RED AT HEAD BEFORE THIS EDIT (verified against commit 8dbfa10 in a
+        clean worktree, not asserted): this test still demanded
+        ``{"status": "executed"}``. That response was deleted on purpose by the
+        v5 adversarial review. ``_create_approval`` builds an
+        ``application_submit`` approval whose payload carries ``kind="test"``,
+        i.e. NOT ``kind="submission"`` — it reaches the branch of
+        ``execute_gated_action`` that transmits nothing. Answering "executed"
+        there is what made 133 never-executed approvals look actioned in
+        production, so the branch now releases its execution claim and returns
+        an honest ``recorded`` + ``transmitted: false`` + the reason.
+
+        The assertions follow the honest contract. Restoring "executed" would
+        re-introduce the exact lie the reviewer removed.
+        """
         approval = _create_approval(user_id)
         client.post(f"/approvals/{approval['id']}/approve", headers=auth_headers)
         resp = client.post(f"/approvals/{approval['id']}/execute", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json()["status"] == "executed"
+        body = resp.json()
+        assert body["status"] == "recorded"
+        assert body["transmitted"] is False
+        assert "Nothing was transmitted" in body["detail"]
 
     def test_approval_expiry_blocks_action(self, client, auth_headers, user_id):
         repo = ApprovalRepository()

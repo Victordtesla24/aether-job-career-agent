@@ -257,6 +257,14 @@ class NotificationAgent:
 
         Keyed on the approval being approved AND executed, so a digest that was
         rejected — or is still sitting pending — never suppresses its own items.
+
+        CRITICAL-4: "executed" here requires ``executionCompletedAt``, not just
+        the ``executedAt`` claim. ``claim_execution`` stamps ``executedAt``
+        BEFORE the send runs, so keying on it alone meant a process killed
+        mid-send still advanced this window — permanently suppressing every
+        status update and new match inside it from every future digest, with
+        no way for the user to notice the loss. The window may only move on a
+        send that provably completed.
         """
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -266,7 +274,7 @@ class NotificationAgent:
                     '   ON ar."id" = nd."approvalId" AND ar."userId" = nd."userId"'
                     ' WHERE nd."userId" = %s'
                     '   AND ar."status" = \'approved\'::"ApprovalStatus"'
-                    '   AND ar."executedAt" IS NOT NULL'
+                    '   AND ar."executionCompletedAt" IS NOT NULL'
                     ' ORDER BY nd."windowEnd" DESC LIMIT 1',
                     (user_id,),
                 )
