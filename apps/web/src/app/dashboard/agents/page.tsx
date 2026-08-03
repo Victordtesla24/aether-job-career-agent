@@ -28,6 +28,11 @@ import {
   type AgentSummary,
 } from "../../../lib/api/agents";
 import { apiRequest } from "../../../lib/api/client";
+import {
+  jobAlertHeadline,
+  jobAlertTone,
+  runJobAlertIntake,
+} from "../../../lib/api/jobAlerts";
 import { coverLetterDegraded } from "../../../components/dashboard/feed";
 import Orchestration from "../../../components/agents/Orchestration";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
@@ -107,6 +112,14 @@ export default function AgentsPage() {
   const [testOpen, setTestOpen] = useState(false);
   const [configProvider, setConfigProvider] = useState<Provider | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Job-alert intake (email agent `mode: "job_alerts"`) — its own busy/notice
+  // pair so it never borrows the pipeline's wording or its spinner.
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  const [alertsNotice, setAlertsNotice] = useState<{
+    tone: "success" | "neutral" | "warning";
+    headline: string;
+    detail: string;
+  } | null>(null);
   // Per-agent live model catalog (ML-catalog-001/002/003): one shared fetch of
   // the OpenRouter catalog + its freshness, fed to every per-agent picker.
   const [catalogModels, setCatalogModels] = useState<ProviderModel[] | null>(null);
@@ -312,6 +325,40 @@ export default function AgentsPage() {
     }
   };
 
+  /**
+   * Run the Email Agent's job-alert intake from the console.
+   *
+   * Deliberately NOT routed through `trigger()`: that path sends
+   * `RUN_PARAMS[backend]` (triage for emailAgent) and renders
+   * `agentSuccessNotice`, which knows nothing about intake counts and would
+   * report a scan in triage's words. This uses the shared intake client, so the
+   * headline is derived from the run's OWN counts by the same rules as the
+   * Email Center — including the honest degrade when no mailbox is connected.
+   */
+  const scanJobAlerts = async () => {
+    setAlertsBusy(true);
+    setAlertsNotice(null);
+    try {
+      const summary = await runJobAlertIntake();
+      setAlertsNotice({
+        tone: jobAlertTone(summary),
+        headline: jobAlertHeadline(summary),
+        detail: summary.message,
+      });
+    } catch (e) {
+      setAlertsNotice({
+        tone: "warning",
+        headline: "The job-alert scan did not complete",
+        detail: e instanceof Error ? e.message : "Unknown error.",
+      });
+    } finally {
+      setAlertsBusy(false);
+      // The intake records a real AgentRun row — refresh the audit table/stats
+      // so the console reflects it without a reload.
+      await load();
+    }
+  };
+
   const onRunAgent = (key: string) => {
     const agent = catalog?.agents.find((a) => a.key === key);
     if (agent?.backend) void trigger(agent.backend);
@@ -404,6 +451,32 @@ export default function AgentsPage() {
             <i className="fa-solid fa-vial text-[10px] text-aether-indigo" aria-hidden="true" />
             Test Run
           </button>
+          {/* The Email Agent's job-alert intake. The per-agent "Run" button
+              below triggers TRIAGE (RUN_PARAMS.emailAgent) — before this
+              control existed, `mode: "job_alerts"` was reachable from no user
+              action anywhere, so a fully built backend sat dead. Deterministic
+              on the server (regex/HTML parser, no model), so it is never
+              metered and never invents a posting. */}
+          <button
+            type="button"
+            data-testid="agents-scan-job-alerts"
+            onClick={() => void scanJobAlerts()}
+            disabled={alertsBusy}
+            title="Read your own job-alert emails from the last 7 days and add the postings to your Jobs board"
+            className="flex items-center gap-2 rounded-lg border border-aether-green/40 bg-aether-green/10 px-3.5 py-2 text-xs font-semibold text-aether-green transition hover:bg-aether-green/20 disabled:opacity-50"
+          >
+            {alertsBusy ? (
+              <>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-aether-green/40 border-t-aether-green" />
+                Scanning job alerts…
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-inbox text-[10px]" aria-hidden="true" />
+                Scan Job Alerts
+              </>
+            )}
+          </button>
           <button
             type="button"
             data-testid="run-pipeline-btn"
@@ -425,6 +498,32 @@ export default function AgentsPage() {
           </button>
         </div>
       </header>
+
+      {alertsNotice ? (
+        <p
+          data-testid="agents-job-alerts-notice"
+          data-tone={alertsNotice.tone}
+          role={alertsNotice.tone === "warning" ? "alert" : "status"}
+          className={`rounded-xl border p-3 text-sm ${
+            alertsNotice.tone === "success"
+              ? "border-aether-green/30 bg-aether-green/10 text-aether-green"
+              : alertsNotice.tone === "warning"
+                ? "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                : "border-white/10 bg-white/5 text-aether-muted"
+          }`}
+        >
+          <span className="font-semibold">{alertsNotice.headline}</span>
+          {alertsNotice.detail ? <span className="ml-2">{alertsNotice.detail}</span> : null}
+          {alertsNotice.tone === "success" ? (
+            <>
+              {" "}
+              <Link href="/dashboard/jobs" className="font-semibold underline underline-offset-2">
+                Open your Jobs board
+              </Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {notice ? (
         <p

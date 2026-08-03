@@ -6,6 +6,7 @@
  * stats. Backed by GET /emails/inbox + POST /emails/send
  * (wireframe: email-center.html).
  */
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -25,6 +26,12 @@ import {
   type EmailMessage,
 } from "../../../lib/api/workspaces";
 import { runAgent } from "../../../lib/api/agents";
+import {
+  jobAlertHeadline,
+  jobAlertTone,
+  runJobAlertIntake,
+  type JobAlertIntakeSummary,
+} from "../../../lib/api/jobAlerts";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
 import { connectAnotherGmail, disconnectAccount, setPrimaryAccount } from "../../../lib/api/emails";
@@ -76,6 +83,19 @@ export default function EmailCenterPage() {
   const [draftError, setDraftError] = useState<string | null>(null);
   const [triageBusy, setTriageBusy] = useState(false);
   const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+
+  // Job-alert intake (email agent `mode: "job_alerts"`). Before this control
+  // existed the mode was reachable from no user action anywhere — the backend
+  // was real and tested but dead product surface. Everything rendered below
+  // comes from the run's OWN counts; nothing is inferred.
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  const [alertsResult, setAlertsResult] = useState<JobAlertIntakeSummary | null>(null);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [alertDays, setAlertDays] = useState(7);
+  const [boardMovedLive, setBoardMovedLive] = useState(false);
+  //: When the last intake started (ms). Null until one has run — the realtime
+  //: `jobs` handler only claims "the board moved" for changes AFTER a scan.
+  const alertRunAtRef = useRef<number | null>(null);
 
   // Real, full thread bodies fetched on demand per thread id (W-13 / QA #2).
   // The bounded inbox list truncates `body` to a snippet (server marks this
@@ -216,6 +236,17 @@ export default function EmailCenterPage() {
   // built from.
   useRealtimeResources(["emails"], () => {
     refreshInbox();
+  });
+
+  // The job-alert intake writes real Job rows, and the Jobs board is already a
+  // subscriber of the same shared channel — so it refreshes itself. The Email
+  // Center joins `jobs` too, for ONE purpose: to be able to say, on evidence
+  // rather than assumption, that the board has actually moved since this scan
+  // ran. The channel carries no domain data (see lib/realtime/store.ts), so
+  // this only ever flips a flag — the counts on screen stay the ones the run
+  // itself returned.
+  useRealtimeResources(["jobs"], () => {
+    if (alertRunAtRef.current !== null) setBoardMovedLive(true);
   });
 
   // Run the REAL emailAgent triage over the inbox (one batch LLM call) so the
@@ -369,6 +400,13 @@ export default function EmailCenterPage() {
     [inbox],
   );
 
+  //: How many mailboxes a scan can actually read right now — the number the
+  //: in-flight progress line states, so it never overstates the reach.
+  const connectedCount = useMemo(
+    () => (inbox?.accounts ?? []).filter((a) => a.status === "connected").length,
+    [inbox],
+  );
+
   // GMV4-email-001. Three states, not two. The backend already distinguishes
   // "linked but the grant expired" (`status: "needs_reauth"`, `actionRequired`,
   // plus a human `note`) from "never linked" — the UI used to collapse both into
@@ -380,6 +418,54 @@ export default function EmailCenterPage() {
     [inbox],
   );
   const allAccountsBroken = !connected && linkedButBroken;
+
+  // Why the intake cannot run right now — null when it can. Distinguishes
+  // "nothing linked" from "linked but every grant expired", exactly as the
+  // Connect/Reconnect CTA above does (GMV4-email-001).
+  const alertsUnavailableReason = useMemo(() => {
+    if (connected) return null;
+    return allAccountsBroken
+      ? "Reconnect Gmail to scan your job alerts — every linked inbox needs re-authorization, so no mail can be read."
+      : "Connect Gmail to scan your job alerts. Aether reads only your own automated job-alert emails.";
+  }, [connected, allAccountsBroken]);
+
+  /**
+   * Run the REAL job-alert intake: POST /agents/email/run with
+   * `mode: "job_alerts"`. Deterministic on the server (regex + HTML parser, no
+   * model), so every posting it keeps came out of an email the user received;
+   * anything missing a title, company or apply link is DROPPED, never
+   * back-filled. The panel renders the returned counts as-is.
+   */
+  const runJobAlerts = useCallback(async () => {
+    // Belt-and-braces: the control is disabled in this state, so this only
+    // guards a programmatic call. Never a silent no-op — it says why.
+    if (!connected) {
+      setAlertsError(
+        allAccountsBroken
+          ? "No mailbox can be read — every linked Gmail account needs re-authorization."
+          : "No Gmail account is connected, so there is no mail to scan.",
+      );
+      return;
+    }
+    setAlertsBusy(true);
+    setAlertsError(null);
+    setAlertsResult(null);
+    setBoardMovedLive(false);
+    alertRunAtRef.current = Date.now();
+    try {
+      const summary = await runJobAlertIntake({ days: alertDays });
+      setAlertsResult(summary);
+      // The scan may also have created/updated EmailThread rows; refetch so the
+      // inbox on screen matches what just happened, without a page reload.
+      refreshInbox();
+    } catch (e) {
+      setAlertsError(
+        e instanceof Error ? e.message : "Could not run the job-alert scan.",
+      );
+    } finally {
+      setAlertsBusy(false);
+    }
+  }, [connected, allAccountsBroken, alertDays, refreshInbox]);
 
   // Whether ANY thread has a real triage score yet — drives honest per-tab empty
   // copy ("Run AI Triage…" vs "No emails…").
@@ -524,6 +610,41 @@ export default function EmailCenterPage() {
             <i className="fa-solid fa-wand-magic-sparkles mr-2" aria-hidden="true" />
             {triageBusy ? "Triaging…" : "Run AI Triage"}
           </button>
+          {/* Job-alert intake — the ONLY user-facing way to run the email
+              agent's `job_alerts` mode. Grouped with its scan window so the
+              bounded window is visible before the run, not buried in a default. */}
+          <span className="flex items-center gap-1.5">
+            <label className="sr-only" htmlFor="job-alert-days">
+              Scan window
+            </label>
+            <select
+              id="job-alert-days"
+              data-testid="job-alerts-days"
+              value={alertDays}
+              onChange={(e) => setAlertDays(Number(e.target.value))}
+              disabled={alertsBusy}
+              title="How far back to read each mailbox"
+              className="rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-xs text-aether-muted disabled:opacity-50"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
+            </select>
+            <button
+              type="button"
+              data-testid="run-job-alerts-btn"
+              onClick={() => void runJobAlerts()}
+              disabled={alertsBusy || !connected}
+              title={
+                alertsUnavailableReason ??
+                "Read your own job-alert emails and add the postings to your Jobs board"
+              }
+              className="rounded-xl border border-aether-green/40 bg-aether-green/10 px-4 py-2 text-sm font-semibold text-aether-green hover:bg-aether-green/20 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-inbox mr-2" aria-hidden="true" />
+              {alertsBusy ? "Scanning job alerts…" : "Scan Job Alerts"}
+            </button>
+          </span>
           <button
             type="button"
             onClick={openCompose}
@@ -682,6 +803,170 @@ export default function EmailCenterPage() {
         >
           {triageNotice.message}
         </p>
+      ) : null}
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Job-alert intake: honest unavailable / in-flight / result states.  */}
+      {/* ---------------------------------------------------------------- */}
+      {alertsUnavailableReason ? (
+        <p
+          data-testid="job-alerts-unavailable"
+          role="status"
+          className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-100"
+        >
+          <i className="fa-solid fa-circle-info mr-2" aria-hidden="true" />
+          {alertsUnavailableReason}
+        </p>
+      ) : null}
+
+      {alertsBusy ? (
+        <p
+          data-testid="job-alerts-progress"
+          role="status"
+          aria-busy="true"
+          className="rounded-xl border border-aether-green/30 bg-aether-green/10 p-3 text-sm text-aether-green"
+        >
+          <i className="fa-solid fa-spinner mr-2 animate-spin" aria-hidden="true" />
+          Scanning {connectedCount} connected {connectedCount === 1 ? "mailbox" : "mailboxes"} for
+          job-alert emails from the last {alertDays} days. This reads mail directly from Gmail and
+          can take up to a minute — the counts appear when the scan finishes.
+        </p>
+      ) : null}
+
+      {alertsError ? (
+        <p
+          data-testid="job-alerts-error"
+          role="alert"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        >
+          {alertsError}
+        </p>
+      ) : null}
+
+      {alertsResult ? (
+        <section
+          data-testid="job-alerts-result"
+          data-tone={jobAlertTone(alertsResult)}
+          role="status"
+          className={`rounded-2xl border p-4 ${
+            jobAlertTone(alertsResult) === "success"
+              ? "border-aether-green/30 bg-aether-green/5"
+              : jobAlertTone(alertsResult) === "warning"
+                ? "border-amber-400/40 bg-amber-400/5"
+                : "border-white/10 bg-white/5"
+          }`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold" data-testid="job-alerts-headline">
+                {jobAlertHeadline(alertsResult)}
+              </h2>
+              {/* The server's own sentence, verbatim — never paraphrased here. */}
+              {alertsResult.message ? (
+                <p className="mt-1 text-xs text-aether-muted">{alertsResult.message}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              data-testid="job-alerts-dismiss"
+              onClick={() => setAlertsResult(null)}
+              className="text-xs text-aether-muted-dim hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            {[
+              { id: "mailboxes-scanned", label: "Mailboxes scanned", value: alertsResult.accountsScanned },
+              { id: "messages-scanned", label: "Messages scanned", value: alertsResult.messagesScanned },
+              { id: "alert-emails", label: "Job-alert emails", value: alertsResult.alertEmails },
+              { id: "postings-extracted", label: "Postings extracted", value: alertsResult.postingsExtracted },
+              { id: "postings-skipped", label: "Skipped (incomplete)", value: alertsResult.postingsSkipped },
+              { id: "jobs-created", label: "New cards created", value: alertsResult.jobsCreated },
+              { id: "jobs-updated", label: "Already known", value: alertsResult.jobsUpdated },
+            ].map((stat) => (
+              <div
+                key={stat.id}
+                data-testid={`job-alerts-${stat.id}`}
+                className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-center"
+              >
+                <div className="mono text-base font-bold">{stat.value}</div>
+                <div className="text-[10px] text-aether-muted-dim">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {alertsResult.postingsSkipped > 0 ? (
+            <p className="mt-2 text-[11px] text-aether-muted-dim">
+              Skipped postings were dropped on purpose: a listing with no title, company or apply
+              link is never invented or half-saved.
+            </p>
+          ) : null}
+
+          {alertsResult.platforms.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="job-alerts-platforms">
+              <span className="text-[10px] uppercase tracking-wide text-aether-muted-dim">
+                Alert sources
+              </span>
+              {alertsResult.platforms.map((p) => (
+                <span
+                  key={p.platform}
+                  className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-aether-muted"
+                >
+                  {p.platform} · {p.count}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {alertsResult.mailboxes.length > 0 ? (
+            <ul className="mt-3 space-y-1.5" data-testid="job-alerts-mailboxes">
+              {alertsResult.mailboxes.map((m, i) => (
+                <li
+                  key={m.accountId ?? `mailbox-${i}`}
+                  data-testid="job-alerts-mailbox"
+                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-2.5 py-1.5 text-[11px] ${
+                    m.error ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-white/10 text-aether-muted"
+                  }`}
+                >
+                  <span className="mono">{m.email ?? m.accountId ?? "Mailbox"}</span>
+                  {m.error ? (
+                    <span data-testid="job-alerts-mailbox-error">
+                      could not be read — {m.error}
+                    </span>
+                  ) : (
+                    <span>
+                      {m.messagesScanned ?? "—"} scanned · {m.alertEmails ?? "—"} alerts ·{" "}
+                      {m.jobsCreated ?? "—"} new · {m.jobsUpdated ?? "—"} already known
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {alertsResult.notes.length > 0 ? (
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-[11px] text-aether-muted-dim" data-testid="job-alerts-notes">
+              {alertsResult.notes.map((note, i) => (
+                <li key={`${i}-${note.slice(0, 24)}`}>{note}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          {alertsResult.jobsCreated > 0 || alertsResult.jobsUpdated > 0 ? (
+            <p className="mt-3 text-xs">
+              <Link href="/dashboard/jobs" className="text-aether-coral hover:underline">
+                Open your Jobs board
+              </Link>
+              {boardMovedLive ? (
+                <span data-testid="job-alerts-board-live" className="ml-2 text-aether-green">
+                  · your Jobs board has updated live since this scan — no reload needed
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       {sentNotice ? (

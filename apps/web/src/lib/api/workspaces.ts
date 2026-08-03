@@ -262,6 +262,11 @@ export interface EmailInbox {
   recruiterProfile: { name: string; role: string; history: string; notes: string } | null;
 }
 
+/** One linked mailbox, exactly as the inbox endpoint reports it. Named so
+ *  components and tests can talk about a single account without restating the
+ *  inline shape (and drifting from it). */
+export type EmailInboxAccount = EmailInbox["accounts"][number];
+
 export const fetchEmailInbox = (options: RequestOptions = {}) =>
   apiRequest<EmailInbox>("/workspaces/emails/inbox", options);
 
