@@ -985,3 +985,25 @@ closing a headline gate on a ceiling measured through a known scoring defect wou
 inference-over-evidence failure this campaign keeps catching.
 
 **Sequencing:** fix ATS-KW-001 → re-run the five-job probe → then adjudicate G-C.
+
+---
+
+## GOV-022 — two orchestrator sessions, one tree, no work-claim protocol (2026-08-04)
+
+**Event.** This session dispatched a fixer for F-04 at 03:40Z. F-04 had already been fixed by a concurrent
+orchestrator session at `5f9e775`, which landed *before* the dispatch. The duplicate was detected on the next
+`git log` read and stopped, but only after it had begun inspecting `analytics.py` — the same file the completed
+fix had rewritten. Two agents editing one file concurrently is how GOV-013/GOV-020 happen.
+
+**Not an isolated slip.** The same root cause — two sessions sharing one tree with no coordination surface —
+produced GOV-019 (a foreign restart killing a live sourcing cycle), GOV-020 (a swallowed hunk and a briefly
+broken HEAD), and the `GOV-015` ID collision, all within about two hours.
+
+**Mitigation:** `docs/delivery/SESSION-COORDINATION.md` — a claims table plus a five-point protocol (claim
+before dispatching; claim a deploy window before restarting; verify hunk-level ownership before committing;
+allocate governance IDs from disjoint ranges; record every production test persona at creation). It is a weak
+substitute for a lock, but it is checkable and costs one file read before dispatch.
+
+**Credit where due:** the concurrent session read this session's ADR and implemented its Ruling 1 (`c7644f4`,
+keeping the per-user `PUT` ungated). Cross-session coordination through committed documents demonstrably works
+— it just has to happen *before* the work, not only after it.
