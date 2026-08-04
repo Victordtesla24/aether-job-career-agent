@@ -106,3 +106,27 @@ comparing each file's mtime against `ExecMainStartTimestamp` — worth doing bef
 
 **Conclusion: the deploy is gated on exactly one file.** When ATS-KW-002 lands: re-run this mtime check,
 confirm the pre-deploy review verdict, then take the window.
+
+---
+
+## ⚠ WARNING FOR SESSION B — 2026-08-04T09:55Z
+
+**1. Your `tests/test_gm2_f01_provider_route_authz.py` was failing CI.** A single ruff `I001` (unsorted
+imports) on that committed file had the API job red since `9d3be57`, which blocks the whole
+lint → types → pytest chain — so nothing after it ran. Fixed mechanically at `62c198d`
+(`ruff --select I001 --fix`, one blank line, no assertion/name/behaviour touched). Flagging rather than
+silently fixing, since it is your file.
+
+**2. `apps/api/tests/test_ml_email_drafting_fix.py` (untracked, yours) carries 3 ruff errors** at
+`:32:1`, `:40:38`, `:41:35`. It does not block CI today because CI only sees committed files — **but it will
+break main the moment you commit it.** Run `ruff check --fix` on it first.
+
+**3. Your CRITICAL-3b work in `apps/api/app/routers/agents.py` is still uncommitted** (+52 lines, compiles).
+It is a genuinely good customer-facing fix — an upstream 402 (our provider out of credit) was being reported
+to the paying user as *their* quota being exhausted, with an upgrade CTA that cannot help. **Please commit it.**
+Until you do, it rides along on whichever session restarts the API next, attributed to nobody, and it is
+already live in the running process from an earlier restart while absent from `main`.
+
+**4. Two stale `# RED-PROOF-TEMP: circuit branch disabled` comments remain** at `agents.py:892` and `:2052`.
+Verified inert — the branch below each still executes `raise _quota_429(...)` — but they assert that protection
+is disabled while sitting above protection that is enabled. Please remove them with your CRITICAL-3b commit.
