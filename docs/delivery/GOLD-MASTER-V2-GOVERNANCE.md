@@ -1111,3 +1111,60 @@ Neither met the bar, so they shipped neither — the correct call.
 **The pattern worth keeping:** three times now, an agent measuring against real data has overturned an
 orchestrator conclusion drawn from a plausible single case (cf. GOV-015 ADV-ENT-002, GOV-017 weakened guards,
 this). **A single reproduction proves a defect exists; it does not size it, and it does not choose the remedy.**
+
+---
+
+## GOV-026 — the pre-deploy review earned its cost: a fabricated perfect match, caught before shipping
+
+**Verdict: BLOCK.** An independent reviewer, reviewing five committed-but-undeployed fixes, found that the ATS
+pair (`f5d7139` + `9780c92`) introduces a **worse defect than the one it fixes**. I reproduced it myself before
+acting.
+
+Production builds the scored JD as `title + " " + description + " " + " ".join(requirements)`
+(`fit_evidence.py:51,56`) — requirement items joined by a **bare space**. The geographic carrier span opens an
+80-char window with no stop character present, so it swallows the rest of the list:
+
+```
+reqs = ['Relocation to Melbourne supported','Snowflake','dbt','Airflow','Spark',
+        'Kafka','Python','SQL','Terraform','AWS']
+required keywords -> ['data','engineer','senior','products']   (all 9 stack terms gone)
+
+scored vs a resume holding NONE of that stack:
+keyword_match = 100.0      missing_keywords = []      overall = 74.45
+```
+
+**The product would tell the candidate they are a perfect keyword match with zero gaps.** That is the
+fabrication this entire campaign exists to prevent, and it would have shipped in the fix that was supposed to
+make scoring more honest.
+
+### Why every layer of verification missed it
+
+The ATS-KW-001 author was careful — hand-classified all 16 removals, audited 482 vocabulary tokens against 159
+technology terms, ran an 18-JD differential, declared their own failure modes. **All of it was measured on a
+corpus where every JD puts a `.` immediately after the location**, which closes the window. Delete that one
+character from their own fixture and it flips. Their corpus was structurally incapable of finding this, and
+each subsequent check (KW-002's 5,750-posting corpus included) inherited the same blind spot because it reused
+the same JD shapes.
+
+**The lesson, and it generalises past this repo:** a differential corpus proves a filter behaves consistently
+*on the shapes it contains*. It says nothing about shapes it lacks. The production shape here —
+`" ".join(requirements)` — is discoverable in one line of `fit_evidence.py`, and no corpus was ever built from
+it. **Derive test corpora from how the input is CONSTRUCTED in production, not from how examples are usually
+written.**
+
+### Also found
+
+- **R-02 (MAJOR):** strong-vocabulary tokens are seeded at *every* occurrence, so the "every occurrence must
+  fall in a geographic span" safety rule is **vacuous** for them — `darwin`, `monaco`, `berkeley`, `georgia`,
+  `polish` are deleted unconditionally. The commit message's "zero collisions" claim is contradicted by its own
+  differential log, which already flags `georgia`.
+- **R-03/R-04 (MAJOR):** KW-002's benefit-list promotion displaces *systematically*, not randomly (aggregate
+  netting is the wrong test); and customer names (`Visa`, `Mastercard`, `Qantas`) now rank 2nd–5th, telling
+  candidates to put a customer's brand in their résumé — the same defect class KW-001 was opened to remove.
+
+### Standing ruling
+
+**F-02, F-03 and F-04 are SOUND** — the reviewer specifically hunted the `build_scout_query(None)` `ValueError`
+and proved it unreachable, verified the cron from the script, and confirmed F-03 cannot fabricate a run result.
+**The ATS pair is HELD until R-01 is closed**, and **GOV-021 / the ≥85 ceiling must NOT be re-adjudicated** —
+every ATS number measured since `f5d7139` was measured through this defect.
