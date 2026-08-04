@@ -69,3 +69,40 @@ single deploy window claimed here → restart → prod-verify each fix → then 
 must be taken after the last verification persona is created).
 
 `origin/main` == local `9d3be57` as of 09:15Z — 25 commits that existed only on this VM are now pushed.
+
+---
+
+## DEPLOY SURFACE — measured 2026-08-04T09:45Z (session A)
+
+The tree carries 24 dirty files, but a restart would newly ship only **TWO**. Everything else predates the
+current API process (started 03:07:32Z) and is therefore **already serving in production**. Measured by
+comparing each file's mtime against `ExecMainStartTimestamp` — worth doing before every deploy, because
+"uncommitted" and "not live" are NOT the same thing in this tree.
+
+| file | mtime | status |
+|---|---|---|
+| `app/routers/agents.py` | 04:38Z | **NEW** — session B's CRITICAL-3b fix, +52 lines, compiles |
+| `app/services/ats_engine.py` | 09:40Z | **NEW** — ATS-KW-002 in flight, ACTIVELY BEING EDITED |
+| `app/agents/email_agent.py` | 08-03 02:30 | already serving |
+| `app/services/gmail_service.py` | 08-03 02:27 | already serving |
+| `app/services/llm_client.py` | 08-03 10:23 | already serving |
+| `app/services/story_dedup_migration.py` | 08-01 01:02 | already serving |
+| `app/services/story_paraphrase.py` | 08-01 00:34 | already serving |
+
+**Assessment of the two:**
+
+1. **`agents.py` — safe and beneficial to ship.** Session B's CRITICAL-3b fix. The circuit breaker parks its
+   cooldown in the same `AgentQuotaBlock` row as subscription-quota cooldowns, distinguished only by `reason`,
+   and the gates did not read `reason`. So from the *second* attempt onward, an upstream HTTP 402 (**our**
+   provider out of credit) was reported to the paying customer as *"Your subscription quota is exhausted…
+   switch to API-key billing"* — every clause false, blaming the user for an operator failure, with a remedy
+   that cannot work. `board_sweep` compounded it by mapping 429 → `quota-exhausted`, so operator telemetry
+   agreed with the lie and hid the dead upstream. This is a customer-facing honesty fix of exactly the class
+   this campaign exists to close. It compiles and is raised before any quota reserve, so a refused run
+   consumes nothing.
+2. **`ats_engine.py` — THE blocker.** Actively being edited by the ATS-KW-002 fix. It is the scoring engine
+   that computes the headline number the product sells. Nothing deploys until it is committed or its author
+   confirms a stable state.
+
+**Conclusion: the deploy is gated on exactly one file.** When ATS-KW-002 lands: re-run this mtime check,
+confirm the pre-deploy review verdict, then take the window.
