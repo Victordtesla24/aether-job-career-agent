@@ -1,4 +1,14 @@
-"""POST /resumes/upload — file ingestion + auto story extraction (SC-ST-03)."""
+"""POST /resumes/upload — file ingestion + OPT-IN story extraction (SC-ST-03).
+
+F-03 (PROD-UAT-2026-08-03): extraction used to be dispatched unconditionally,
+so an upload silently spent a metered agent run. It is now opt-in via the
+``extract_stories`` form flag (default off) — see
+``apps/api/app/routers/resumes.py`` and
+``tests/test_f03_upload_silent_quota_spend.py``, which owns the quota
+assertions. The GAP-P6-RESFIX cases below are re-pointed at the path that
+still dispatches (``extract_stories=true``) so every one of their original
+assertions keeps its full force.
+"""
 from __future__ import annotations
 
 RESUME_TEXT = """VIKRAM DESHPANDE
@@ -11,15 +21,26 @@ EXPERIENCE
 """
 
 
-def _upload(client, auth_headers, filename: str, content: bytes, mime: str):
+def _upload(
+    client,
+    auth_headers,
+    filename: str,
+    content: bytes,
+    mime: str,
+    *,
+    extract_stories: bool = False,
+):
     return client.post(
         "/resumes/upload",
         files={"file": (filename, content, mime)},
+        data={"extract_stories": "true" if extract_stories else "false"},
         headers=auth_headers,
     )
 
 
-def test_upload_text_resume_creates_root_and_extracts(client, auth_headers):
+def test_upload_text_resume_creates_root_without_running_extraction(
+    client, auth_headers
+):
     before = client.get("/resumes", headers=auth_headers).json()
     res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
     assert res.status_code == 201
@@ -28,8 +49,9 @@ def test_upload_text_resume_creates_root_and_extracts(client, auth_headers):
     assert body["parentId"] is None
     assert body["sections"]["raw_text"].startswith("VIKRAM DESHPANDE")
     assert len(body["sections"]["bullets"]) >= 3
-    # Story extraction is auto-triggered (best-effort) and reported.
-    assert "storyExtraction" in body
+    # F-03: extraction is opt-in, so a plain upload runs none and says so.
+    assert body["storyExtractionRequested"] is False
+    assert body["storyExtraction"] is None
     after = client.get("/resumes", headers=auth_headers).json()
     assert len(after) == len(before) + 1
 
@@ -89,7 +111,10 @@ def test_upload_propagates_402_for_non_subscriber(
 
     monkeypatch.setenv("AETHER_REQUIRE_PAID_SUBSCRIPTION", "true")
     ensure_user_billing(test_user_id)  # Free/active by default -> NOT paid
-    res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    res = _upload(
+        client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain",
+        extract_stories=True,
+    )
     assert res.status_code == 402, res.text
     body = res.json()
     assert body["detail"]["error"] == "subscription_required"
@@ -99,15 +124,19 @@ def test_upload_propagates_402_for_non_subscriber(
 def test_upload_still_succeeds_for_paid_subscriber(
     client, auth_headers, test_user_id, monkeypatch
 ):
-    """A paid subscriber's upload is unaffected — it still succeeds with a
-    real storyExtraction result (no entitlement error to swallow)."""
+    """A paid subscriber's opt-in upload is unaffected — it still succeeds with
+    a real storyExtraction result (no entitlement error to swallow)."""
     monkeypatch.setenv("AETHER_REQUIRE_PAID_SUBSCRIPTION", "true")
     _set_plan(test_user_id, "pro", "active")
-    res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    res = _upload(
+        client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain",
+        extract_stories=True,
+    )
     assert res.status_code == 201, res.text
     body = res.json()
-    assert "storyExtraction" in body
-    extraction = body["storyExtraction"] or {}
+    assert body["storyExtractionRequested"] is True
+    extraction = body["storyExtraction"]
+    assert extraction is not None
     assert "error" not in extraction
 
 
@@ -126,7 +155,10 @@ def test_upload_still_swallows_genuine_extractor_error_for_subscriber(
         raise RuntimeError("synthetic extractor failure")
 
     monkeypatch.setattr(StoryExtractorAgent, "run", _boom)
-    res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    res = _upload(
+        client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain",
+        extract_stories=True,
+    )
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["storyExtraction"]["error"] == "synthetic extractor failure"

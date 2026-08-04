@@ -67,6 +67,12 @@ import {
   deriveInputs,
   type CareerDataInputs,
 } from "../../../components/settings/career-data";
+import {
+  buildUploadNotice,
+  EXTRACTION_COST_HINT,
+  EXTRACTION_OPT_IN_LABEL,
+  type ResumeUploadResult,
+} from "../../../components/settings/resume-upload";
 import { SECTIONS } from "./sections";
 import { formatAud } from "../../../lib/format";
 import { emailLooksValid } from "../../../components/auth/validation";
@@ -131,6 +137,9 @@ export default function SettingsClient({
   const [jobBoardSyncError, setJobBoardSyncError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  // F-03: story extraction is a METERED agent run, so it is opt-in and OFF by
+  // default — an upload must never spend the user's quota unasked.
+  const [extractStories, setExtractStories] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Career Data (GAP-P4-047 · ADR D-0031): real GitHub + portfolio ingestion
@@ -261,6 +270,9 @@ export default function SettingsClient({
     try {
       const form = new FormData();
       form.append("file", file);
+      // F-03: the ONLY thing that can trigger the metered storyExtractor run
+      // is this explicit, pre-disclosed opt-in.
+      form.append("extract_stories", extractStories ? "true" : "false");
       const res = await fetch(`${apiBaseUrl()}/resumes/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${await getToken()}` },
@@ -270,10 +282,8 @@ export default function SettingsClient({
         const detail = await res.text().catch(() => "");
         throw new Error(`Upload failed (${res.status}): ${detail.slice(0, 160)}`);
       }
-      const created = (await res.json()) as { label?: string; version?: number };
-      setUploadNotice(
-        `Uploaded and parsed — registered as v${created.version} (“${created.label}”); story extraction ran.`,
-      );
+      const created = (await res.json()) as ResumeUploadResult;
+      setUploadNotice(buildUploadNotice(created));
       setData(await fetchSettings());
     } catch (e) {
       setUploadNotice(e instanceof Error ? e.message : "Upload failed");
@@ -725,6 +735,28 @@ export default function SettingsClient({
                     e.target.value = "";
                   }}
                 />
+                {/* F-03: the cost of story extraction, stated BEFORE the file
+                    is chosen — uploading used to dispatch the metered
+                    storyExtractor agent with no warning and no opt-out. */}
+                <label
+                  className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5"
+                  data-testid="resume-extract-stories-label"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-aether-green"
+                    data-testid="resume-extract-stories-toggle"
+                    checked={extractStories}
+                    disabled={uploading}
+                    onChange={(e) => setExtractStories(e.target.checked)}
+                  />
+                  <span className="text-[11px] leading-4 text-aether-muted">
+                    {EXTRACTION_OPT_IN_LABEL}
+                    <span className="mt-0.5 block text-[10px] text-aether-muted-dim">
+                      {EXTRACTION_COST_HINT}
+                    </span>
+                  </span>
+                </label>
                 <button
                   type="button"
                   data-testid="resume-upload-btn"

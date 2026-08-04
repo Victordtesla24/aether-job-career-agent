@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
@@ -60,15 +60,39 @@ def create_resume(body: ResumeIngestRequest, current_user: CurrentUser) -> dict[
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_resume(
-    current_user: CurrentUser, file: UploadFile = File(...)
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+    extract_stories: bool = Form(default=False),
 ) -> dict[str, Any]:
     """Upload a resume file as a new root version (SC-ST-03).
 
     Extracts text server-side (PDF via PyMuPDF; anything else decoded as
-    UTF-8 text), registers a new ROOT resume through the same section-building
-    path as JSON ingestion, then auto-triggers story extraction so the Story
-    Bank reflects the new base resume (SC-SB-01). Extraction failures never
-    fail the upload — the run is best-effort and reported in the response.
+    UTF-8 text) and registers a new ROOT resume through the same
+    section-building path as JSON ingestion. Uploading, on its own, makes no
+    LLM call and consumes NOTHING of the caller's metered run allowance.
+
+    ``extract_stories`` (F-03, PROD-UAT-2026-08-03) — OPT-IN, default OFF.
+    This endpoint used to dispatch the ``storyExtractor`` agent
+    unconditionally so the Story Bank would reflect the new base resume
+    (SC-SB-01). That agent is genuine LLM work (STRUCTURED tier, one
+    ``complete_json`` call per four résumé bullets), so it is metered: a
+    single deliberate upload silently produced an unrequested agent run
+    (``costUsd 0.0010``, ``billingAudit.quotaPath "metered_api"``) and burned
+    one of a Free plan's five monthly runs, with no warning before the fact
+    and no way to decline. Exempting the agent from metering was the wrong
+    remedy — it really does call a model, and the exemption seam
+    (``_DETERMINISTIC_BACKENDS`` / ``_OPTIONAL_LLM_BY_BACKEND``) exists only
+    for calls that reach NO model — so extraction is now the caller's explicit
+    choice, priced and disclosed before they commit. When it IS requested the
+    dispatch is unchanged: same agent, same atomic reserve, same audit row,
+    same GAP-P6-RESFIX entitlement propagation. The capability itself is not
+    lost — ``POST /agents/story-extractor/run`` (the Story Bank's "Draft
+    missing stories" trigger) runs exactly the same extraction on demand.
+
+    The response reports both halves honestly: ``storyExtractionRequested``
+    says whether extraction was asked for, and ``storyExtraction`` carries the
+    run result — ``None`` when it was not requested, so no caller can render
+    after-the-fact copy claiming a run that never happened.
     """
     data = await file.read()
     filename = file.filename or "resume"
@@ -109,20 +133,25 @@ async def upload_resume(
         version=repo.next_version(current_user["id"]),
     )
     extraction: dict[str, Any] | None = None
-    try:
-        from app.routers.agents import _dispatch
+    if extract_stories:
+        try:
+            from app.routers.agents import _dispatch
 
-        extraction = _dispatch(current_user["id"], "storyExtractor", {})
-    except HTTPException:
-        # An HTTPException here (e.g. the 402 subscription-required paywall
-        # gate in _record_run) is a real API error, not an extraction
-        # failure — it must propagate to the client so a non-subscriber is
-        # routed to /pricing instead of getting a 200 with the error buried
-        # in storyExtraction.error (GAP-P6-RESFIX).
-        raise
-    except Exception as exc:  # noqa: BLE001 — upload must survive extraction issues
-        extraction = {"error": str(exc)}
-    return {**resume, "storyExtraction": extraction}
+            extraction = _dispatch(current_user["id"], "storyExtractor", {})
+        except HTTPException:
+            # An HTTPException here (e.g. the 402 subscription-required paywall
+            # gate in _record_run) is a real API error, not an extraction
+            # failure — it must propagate to the client so a non-subscriber is
+            # routed to /pricing instead of getting a 200 with the error buried
+            # in storyExtraction.error (GAP-P6-RESFIX).
+            raise
+        except Exception as exc:  # noqa: BLE001 — upload must survive extraction issues
+            extraction = {"error": str(exc)}
+    return {
+        **resume,
+        "storyExtraction": extraction,
+        "storyExtractionRequested": extract_stories,
+    }
 
 
 @router.get("/{resume_id}")
