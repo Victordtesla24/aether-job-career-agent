@@ -668,3 +668,47 @@ rows still carry probe-like names — all of them mailinator test identities ins
 **G-K is REOPENED** and stays open until the purge executes cleanly under a re-approved manifest, AND the
 operator dispositions the two live-mode Stripe customer records (`OD-1`), which cannot be removed from inside
 the VM.
+
+---
+
+## GOV-015 — ADV-ENT-002 REFUTED under live configuration (2026-08-04)
+
+**Prior claim (this campaign):** "the backend advertises a Free tier of 5 runs that it universally denies" —
+carried for weeks as an open business/entitlement defect awaiting an owner decision.
+
+**Refuted by live probe.** The qa-adversary drove a real free-tier persona to quota exhaustion against
+production: the account received **exactly 5 runs**, and the **6th was cleanly refused with 429 and no
+phantom increment**. Evidence: `uat/reports/evidence/prod-uat-2026-08-03/s10-quota-exhaustion-429.json`,
+`s12-quota-honesty.json`.
+
+**Ruling:** ADV-ENT-002 is CLOSED as NOT-REPRODUCIBLE under live config. The Free tier delivers what it
+advertises. Any residual concern belongs to F-03 (a metered run is spent on résumé upload without the user
+asking), which is a *different* defect with a different fix.
+
+**Lesson (the recurring one in this campaign):** a defect inferred from reading code must be confirmed against
+the running system before it is carried as fact. This is the fourth finding in this campaign that survived on
+inference and died on contact with a live probe — cf. the Stripe USD "CRITICAL" (refuted: Adaptive Pricing
+presentment), the 83×5xx count (refuted: an `awk` comparison against a non-timestamp), and ML-admin-003
+(refuted: deployment lag, not a code gap).
+
+---
+
+## GOV-016 — the F-01 tenancy lapse is ISOLATED, and that finding is load-bearing (2026-08-04)
+
+When F-01 was found (any authenticated customer could read/overwrite/delete the operator's deployment-wide
+LLM provider credentials) the obvious fear was systemic: that tenancy had been applied inconsistently across
+the whole API. It had not.
+
+**Verified by direct cross-tenant probe of every standard resource router** — jobs, applications, resumes,
+cover-letters, stories, approvals, runs, interviews, networking, offers, emails — **all correctly owner-scoped
+on BOTH reads and writes/deletes (404 cross-tenant, with owner data verified unchanged afterwards)**, and the
+entire admin surface gated (403). Evidence: `uat/reports/evidence/prod-uat-2026-08-03/s11-tenancy-sweep.json`.
+
+**Why this matters for the closure record:** F-01 is a single missed gate on one deployment-wide store that
+predates the per-user provider design, not a pattern of missing authorization. That bounds the blast radius and
+means F-01 can be closed by gating that one endpoint family rather than by an API-wide authorization audit.
+
+**Also recorded:** the anti-fabrication core promise — the product's central commitment — held on every
+generation path exercised. Cover letters were fully grounded in the uploaded résumé and self-flagged for
+approval when weak; tailoring reported an honest 42/100 rather than faking coverage; ATS scores were real; and
+email-send and approval-execute refused honestly rather than fabricating a "sent"/"executed" state.
