@@ -1235,3 +1235,74 @@ engine was discarded and honestly relabelled rather than reported as a pass.
 **Standing rule:** never copy a file over the working tree in this repo to obtain a baseline. Load the old
 module under a different name with `importlib` — the technique the same agent used everywhere else. A tool
 timeout is not a rare event, and any technique whose safety depends on a cleanup step completing is unsafe here.
+
+---
+
+## GOV-028 — ORCH-CORR-014: I declared a deploy complete while a quarter of it was 34 hours stale
+
+**The error.** I restarted `aether-api` and `aether-web`, verified both, and declared the deploy complete and
+verified. **`aether-worker` had not restarted since 2026-08-03 00:17:42 UTC** — 34 hours before `f5d7139`,
+`9780c92`, `f91cdf0`. With `AETHER_ASYNC_GENERATION=true`, **every `POST /agents/tailor/run` executes in that
+worker.** The product's core journey was still running the old ATS engine, R-01 fabrication included.
+
+**How it was caught — empirically, not by inference.** The GOV-021 re-measurement agent observed two different
+engines answering live at the same time: the worker (11:05:13Z) emitted
+`a16z, accel, according, account, advisor, agents, ai-native, ai-powered, along, app, applicable` — strictly
+alphabetical, the ATS-KW-002 signature — while the freshly restarted API (11:12:11Z) emitted an
+evidence-ranked set for the same input.
+
+**Root cause of my error.** I built the deploy checklist around *"which files would a restart newly ship"* and
+verified it against the two units I restarted. I never enumerated **which services execute which code paths**.
+My verification was real, but it only ever exercised the API path, so it was structurally incapable of catching
+this — the same shape of blind spot as GOV-026, where a differential corpus could only speak about the shapes
+it contained.
+
+**Corrected:** `aether-worker` restarted 2026-08-04 12:01:38Z. Clean shutdown — *775 jobs complete, 0 failed,
+0 ongoing to cancel* — so nothing was interrupted; the only running `AgentRun` was a scout job, which executes
+in the API process. All four units now run post-fix code.
+
+**Standing rule:** a deploy is complete only when EVERY unit that loads application code has been restarted and
+its start time checked against the commit timestamps — `aether-api`, `aether-web`, `aether-worker`,
+`aether-discovery`. "The API responds correctly" is not evidence about the worker.
+
+---
+
+## GOV-029 — the ≥85 ATS target is unreachable, and GOV-015-WC named the wrong cause
+
+The re-measurement ran the same five jobs, same identity, same base résumé, same model as GOV-015-WC, so the
+deltas are directly comparable.
+
+**The mechanism finding stands and is now confirmed twice.** Mean delta **+4.55** (GOV-015-WC: +4.86), 5/5
+positive, 0 at 0.0%; a difference of −0.31 on n=5 is not meaningful. Individual jobs moved in BOTH directions,
+exactly as predicted once the engine was fixed. Confirmation the fixes were live in the measured engine: the
+bare token `location` that GOV-015-WC cited as its own ATS-KW-001 evidence is **gone** from the gap set.
+
+**But the binding constraint is ARITHMETIC, not the candidate and not the anti-fabrication guard.**
+
+`overall = 0.4·keyword + 0.4·semantic + 0.2·experience`. The loop moves **only** `keyword_match` — instrumented
+runs show `semantic_similarity` moved **exactly +0.00** on all three, and `experience_gap` was already pegged at
+100. So `max_overall = 60 + 0.4·semantic`, which reaches 85 only when `semantic ≥ 62.5`. Across **200 real
+full-text postings** semantic averages **41.0** and maxes **69.8**: grant a *perfect* `keyword_match` of 100 and
+only **2 of 200** postings could reach 85 — and both rows are the same duplicated posting.
+
+**Ruling: GOV-015-WC's threshold conclusion is CORRECT in outcome and WRONG in stated cause.** ≥85 is
+unreachable, but because the target is mis-calibrated against its own formula's real range — not because this
+candidate's evidence corpus is thin. The engine's own `REVIEW_THRESHOLD` is 60.0. **The loop must NOT be tuned
+to chase 85**; the honest fix is to re-derive the target from the formula. Best after-score observed: 65.94.
+
+**Nuance, recorded rather than buried:** on full-text postings roughly **half** the refused gaps *are* genuine
+skills the candidate lacks (`jax`, `pydanticai`, `devsecops`). That half is a legitimate data condition and the
+refusal is correct behaviour — but it does not set the ceiling, since granting all of them still leaves 2 of 3
+steel-man postings arithmetically incapable of 85 (82.07, 79.63).
+
+**Still confounded, and worse than I assumed.** All five GOV-015-WC jobs are Adzuna postings storing a
+**500-char truncated teaser** (1,547 such jobs; 99.6% end in a truncation ellipsis; only 13.9% contain any
+requirement marker, versus 92.6–100% elsewhere). On those the extractor takes **88–97% of the entire text** as
+"required keywords", because they hold only 38–45 distinct tokens against a 40-keyword cap — so a truncation
+fragment like `payro` becomes a required skill. R-03/R-04 persist (`equity`/`insurance` on 32% of postings; the
+posting's **own employer name on 96.5%**), plus two new classes: **R-05** EEO/RAP boilerplate (31.7% of 7,720
+postings) and **R-06** scraper artifacts (Material-icon ligatures in 116 postings, mid-word truncation
+fragments).
+
+Cost of the re-measurement: **$0.138895** across 8 runs. Note this is real upstream spend the app's own
+`AgentRun` ledger does not see, because the harness writes no rows.
