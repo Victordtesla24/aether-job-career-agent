@@ -811,3 +811,33 @@ deletes accounts the UAT is mid-test on, or silently misses rows created after t
 
 "Quarantine instead of delete" — correctly rejected. Suspending the users leaves 5,011 Job rows inflating
 every count and metric, so §13.1.3 would still be violated. Quarantine would be theatre.
+
+---
+
+# SEQUENCING AMENDMENT — 2026-08-04T03:40Z
+
+My earlier ruling deferred the purge until (1) the UAT completed and (2) F-01 was deployed and verified. Both
+are now done, and Job-row counts have been static at exactly **5,011 test / 2,562 genuine** across ~1.5 hours,
+so C5 quiescence would currently hold.
+
+**I am nonetheless deferring further, deliberately.** Four fixes are in flight (F-02 backend, F-03, F-04, and
+the weakened-guard restoration). Each will need deploying and then **production verification**, and production
+verification creates test data — that is precisely how the current 5,011 rows came to exist. Purging now would
+mean purging again afterwards: two destructive passes over production instead of one, each carrying its own
+irreversibility window between COMMIT and a successful row-scoped restore.
+
+**Revised sequence (binding):**
+1. All in-flight fixes land, deploy, and are production-verified. Every persona created during verification is
+   recorded at the point of creation, not reconstructed afterwards.
+2. Confirm no agent is holding a live production session.
+3. Re-census under C5 — the manifest's 5,087 rows are a census at 02:07Z and MUST be refreshed, never reused.
+   Verify the manifest hash against the off-tree snapshot first (`2fc7e193085feb…`); a mismatch means a
+   concurrent writer touched it and it must be re-approved before use.
+4. Backup gates G1–G5 (psql JSONL capture — **`pg_dump` is banned here**, it aborts on the 16.14/17.9 version
+   gap and leaves a 0-byte file).
+5. Janitor executes, with a read-only risk-officer diff of the janitor's actual SQL against the re-approved
+   manifest beforehand. Janitor ≠ the authoring risk-officer (C8).
+
+**Rationale worth preserving:** the cost of deferring is that production carries visible test data for longer —
+a cosmetic and metric-integrity cost. The cost of purging early is repeating an irreversible operation on live
+customer data. Those are not symmetric, and the asymmetry decides it.
