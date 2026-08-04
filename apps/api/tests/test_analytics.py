@@ -101,20 +101,26 @@ class TestAnalytics:
         assert dist["total"] == 5
 
     def test_probability_counts_measured_zero_conversion(self, client, auth_headers, user_id):
-        """Market-pulse probability must include a genuinely measured 0%
+        """Market-pulse progress index must include a genuinely measured 0%
         interview conversion (applications exist, none interviewed) instead of
-        silently dropping it — dropping inflated the headline score."""
+        silently dropping it — dropping inflated the headline score.
+
+        Updated for F-04: the self-referential "Market demand" factor is gone,
+        and a factor is now MEASURED iff its basis has rows (these jobs carry
+        no fitScore, so "Skill match" is not measured and is excluded rather
+        than counted as a zero). The assertion below therefore derives the
+        expected mean from the wire's own `measured` flags — same guarantee,
+        no hardcoded factor list to drift.
+        """
         _seed_funnel(user_id, jobs=3, statuses=["submitted", "submitted", "submitted"])
         pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
-        factors = {f["label"]: f["value"] for f in pulse["probability"]["factors"]}
-        assert factors["Interview conversion"] == 0
-        measured = [
-            factors["Application volume"],
-            factors["Market demand"],
-            factors["Interview conversion"],  # 3 applications → measured zero
-        ]
-        if factors["Skill match"]:
-            measured.append(factors["Skill match"])
+        factors = {f["label"]: f for f in pulse["probability"]["factors"]}
+        # 3 applications, none interviewed → a REAL zero, not an absence.
+        assert factors["Interview conversion"]["measured"] is True
+        assert factors["Interview conversion"]["value"] == 0
+
+        measured = [f["value"] for f in pulse["probability"]["factors"] if f["measured"]]
+        assert 0 in measured, measured  # the measured zero is still in the mean
         assert pulse["probability"]["score"] == round(sum(measured) / len(measured))
 
     def test_source_donut_colors_are_unique(self, client, auth_headers, user_id):

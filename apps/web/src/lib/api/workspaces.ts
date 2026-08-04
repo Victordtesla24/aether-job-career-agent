@@ -477,7 +477,35 @@ export interface MarketPulse {
   sourcesLabel: string;
   topSkills: Array<{ skill: string; demand: number }>;
   activityHeatmap: number[][];
-  probability: { score: number; label: string; note: string; factors: Array<{ label: string; value: number }> };
+  /**
+   * Job-search progress index. The wire key is historical — this is NOT a
+   * probability of anything (PROD-UAT-2026-08-03 F-04): it is the unweighted
+   * average of whichever of the user's OWN measured signals have data.
+   *
+   * `score` and every `factors[].value` are `number | null`, and `strict`
+   * mode makes that the enforcement: `score / 100` and `` `${value}%` `` on a
+   * possibly-null value are compile errors, so a consumer physically cannot
+   * render a not-measured signal as a number the way the old
+   * `{ score: number; value: number }` shape invited.
+   */
+  probability: {
+    /** null when no factor has data yet — render "not measured", never 0. */
+    score: number | null;
+    measured: boolean;
+    label: string;
+    note: string;
+    /** Full derivation, including what this number explicitly is not. */
+    methodology: string;
+    /** Populated exactly when `score` is null. */
+    unmeasuredReason: string | null;
+    /**
+     * SAME flag as `marketVsYou.marketDataConnected` — one server-side source
+     * of truth, so this panel can never claim market evidence while the
+     * Market-vs-You banner reports none is connected (F-04).
+     */
+    marketDataConnected: boolean;
+    factors: Array<{ label: string; value: number | null; measured: boolean }>;
+  };
   employerActivity: Array<{ company: string; event: string; when: string; signal: string }>;
   recruiterTrends: { series: number[]; rows: Array<{ label: string; delta: string }> };
   marketVsYou: {

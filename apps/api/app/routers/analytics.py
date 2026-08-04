@@ -253,6 +253,38 @@ _PALETTE = ["#4F46E5", "#FF6B35", "#34D399", "#7C3AED", "#FBBF24", "#F59E0B"]
 #: not-connected and shows only the user's own real figures.
 _MARKET_DATA_SOURCE_CONNECTED = False
 
+#: Reference application count the "Application volume" factor is scaled
+#: against. It is a stated CONVENTION, not a measurement and not a market
+#: benchmark — nothing in this product knows how many applications a role
+#: takes. ``_PROGRESS_METHODOLOGY`` discloses it verbatim on the surface so
+#: the scaled number can never be read as evidence about the market
+#: (PROD-UAT-2026-08-03 F-04).
+_APPLICATION_VOLUME_REFERENCE = 30
+
+#: Honest naming for the composite formerly shipped as "Job Probability Score
+#: — Likelihood of landing an offer in the next 60 days" (F-04). There is no
+#: offer-outcome model, no calibration set and no base rates anywhere in this
+#: codebase, so no offer likelihood can be computed; what CAN be computed is
+#: the average of the user's own measured signals, which is what this is.
+_PROGRESS_LABEL = "Job Search Progress"
+_PROGRESS_NOTE = (
+    "Average of the measured signals below — all from your own applications, "
+    "interview outcomes and job-fit scores."
+)
+_PROGRESS_METHODOLOGY = (
+    "Not an offer-likelihood estimate. Aether has no offer-outcome model and "
+    "no external market-data provider, so it cannot tell you how likely an "
+    "offer is. What it does measure: applications you have submitted (scaled "
+    f"against a {_APPLICATION_VOLUME_REFERENCE}-application reference), the "
+    "share of those that reached an interview, and the average fit score of "
+    'your fit-scored jobs. A signal with no data yet reads "not measured" and '
+    "is left out of the average — never counted as a zero."
+)
+_PROGRESS_UNMEASURED_REASON = (
+    "Not measured — none of these signals has data yet. Apply to a job, or "
+    "score a job for fit, and this will start reporting."
+)
+
 #: Non-skill boilerplate tokens filtered out of Job.requirements when counting
 #: skill demand, so the top-skills chart reflects genuine skills.
 _SKILL_STOPWORDS = {
@@ -392,13 +424,21 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 cur, user_id, ' AND "createdAt" >= NOW() - INTERVAL \'30 days\''
             )["submitted"]
 
-            # Average fit score across scored jobs (skill-match proxy).
+            # Average fit score across scored jobs (skill-match proxy). The
+            # COUNT rides along because "no job has ever been fit-scored" and
+            # "the average fit score really is 0" are DIFFERENT facts, and the
+            # progress panel must not conflate them: the old gate tested the
+            # average's truthiness, so an unscored board and a genuine 0 were
+            # indistinguishable and both still shipped a rendered "0"
+            # (PROD-UAT-2026-08-03 F-04).
             cur.execute(
-                'SELECT COALESCE(AVG("fitScore"), 0) FROM "Job" '
+                'SELECT COUNT(*), COALESCE(AVG("fitScore"), 0) FROM "Job" '
                 'WHERE "userId" = %s AND "fitScore" IS NOT NULL',
                 (user_id,),
             )
-            avg_fit = float(cur.fetchone()[0] or 0)
+            fit_row = cur.fetchone()
+            fit_scored_jobs = int(fit_row[0] or 0)
+            avg_fit = float(fit_row[1] or 0)
 
             # --- Employer activity: recent application status changes ------
             cur.execute(
@@ -541,30 +581,70 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         ordered.append(scaled)
     activity_heatmap = [ordered[w * 7 : w * 7 + 7] for w in range(5)]
 
-    # ---- Probability score -----------------------------------------------
+    # ---- Job-search progress index ---------------------------------------
+    # HONESTY CONTRACT (PROD-UAT-2026-08-03 F-04, ADR-F04-PROBABILITY-SCORE-
+    # HONESTY.md). Every factor here is a measurement of THIS user's own
+    # recorded evidence, and the composite claims nothing beyond being their
+    # average.
+    #
+    # REMOVED: ``market_demand_factor = min(100, round(sources_total/50*100))``.
+    # ``sources_total`` is COUNT(*) of the user's OWN "Job" rows, so it carried
+    # no information about the market, about demand, or about this person's
+    # chances — and it saturated at 50 jobs, pinning to 100 for anyone whose
+    # scout agent had run once (the UAT account held 1637). It was labelled
+    # "Market demand" and averaged into a headline that claimed to be the
+    # likelihood of an offer, on the same response that reports
+    # ``_MARKET_DATA_SOURCE_CONNECTED = False``. The input has no information,
+    # so no weight is correct except zero: it is deleted, not renamed and not
+    # down-weighted, and the composite stays the plain unweighted mean of
+    # whatever remains measured.
+    #
+    # MEASURED means "this factor's basis has rows". Applied UNIFORMLY — the
+    # old code stated this rule in a comment but exempted two of its four
+    # factors from it, so an empty account still scored a confident 0% and an
+    # unscored board still rendered "Skill match 0". A genuinely measured zero
+    # (7 applications, 0 interviews) still counts; only an empty basis is
+    # excluded, and it is reported as not-measured on the wire rather than
+    # silently dropped while a "0" stays on screen.
     total_apps = int(f_total or 0)
     interviews = int(f_interviews or 0)
     interview_rate = round(interviews / total_apps * 100) if total_apps else 0
-    app_volume_factor = min(100, round(total_apps / 30 * 100)) if total_apps else 0
-    market_demand_factor = min(100, round(sources_total / 50 * 100)) if sources_total else 0
-    skill_match_factor = min(100, round(avg_fit))
-    factors: list[dict[str, Any]] = [
-        {"label": "Application volume", "value": app_volume_factor},
-        {"label": "Interview conversion", "value": interview_rate},
-        {"label": "Market demand", "value": market_demand_factor},
-        {"label": "Skill match", "value": skill_match_factor},
+
+    # (label, value, measured, requires_market_data)
+    factor_specs: list[tuple[str, int, bool, bool]] = [
+        (
+            "Application volume",
+            min(100, round(total_apps / _APPLICATION_VOLUME_REFERENCE * 100)),
+            total_apps > 0,
+            False,
+        ),
+        ("Interview conversion", interview_rate, total_apps > 0, False),
+        ("Skill match", min(100, round(avg_fit)), fit_scored_jobs > 0, False),
     ]
-    # Average over MEASURED factors only: a factor is excluded when its basis
-    # has no data yet (no applications → conversion unknowable; no fit-scored
-    # jobs → skill match unknowable), but a genuinely measured zero (e.g. 7
-    # applications, 0 interviews) counts — excluding it inflated the score.
-    measured: list[int] = [app_volume_factor, market_demand_factor]
-    if total_apps:
-        measured.append(interview_rate)
-    if avg_fit:
-        measured.append(skill_match_factor)
-    prob_score = round(sum(measured) / len(measured)) if measured else 0
-    prob_score = max(0, min(100, prob_score))
+    # STRUCTURAL GUARANTEE (F-04). Market-data dependence is part of a factor's
+    # DEFINITION and is filtered against the very same constant that drives the
+    # "Market vs. You" not-connected banner below, so a factor claiming market
+    # evidence cannot be emitted while that banner says none is connected —
+    # the factor is simply not built. No factor sets the flag today; the
+    # mechanism exists so the next one has to declare its dependence rather
+    # than quietly reintroduce the contradiction this fix removed.
+    factors: list[dict[str, Any]] = [
+        {"label": label, "value": value if measured else None, "measured": measured}
+        for label, value, measured, requires_market_data in factor_specs
+        if _MARKET_DATA_SOURCE_CONNECTED or not requires_market_data
+    ]
+
+    measured_values = [f["value"] for f in factors if f["measured"]]
+    # No measurable signal at all → NO score. The product's established
+    # degraded-scoring vocabulary (LetterQualityPanel / Resume Studio "not
+    # measured") applies: a missing number presented honestly beats a
+    # confident 0%, which on the old copy read as "zero chance of an offer"
+    # asserted from no data whatsoever.
+    prob_score = (
+        max(0, min(100, round(sum(measured_values) / len(measured_values))))
+        if measured_values
+        else None
+    )
 
     # ---- Employer activity feed ------------------------------------------
     employer_activity = []
@@ -648,10 +728,22 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         "sourcesLabel": "jobs sourced",
         "topSkills": top_skills,
         "activityHeatmap": activity_heatmap,
+        # The wire key stays "probability" for its six existing consumers, but
+        # nothing rendered from it claims a probability any more (F-04): the
+        # score is null when unmeasurable, every factor states its own
+        # provenance, and the copy the UI renders comes from here rather than
+        # being hardcoded in the component where the server could never
+        # correct it.
         "probability": {
             "score": prob_score,
-            "label": "Job Probability Score",
-            "note": "Likelihood of landing an offer in the next 60 days",
+            "measured": prob_score is not None,
+            "label": _PROGRESS_LABEL,
+            "note": _PROGRESS_NOTE,
+            "methodology": _PROGRESS_METHODOLOGY,
+            "unmeasuredReason": None if prob_score is not None else _PROGRESS_UNMEASURED_REASON,
+            # SAME constant as marketVsYou.marketDataConnected below — one
+            # source of truth, so this panel and that banner cannot disagree.
+            "marketDataConnected": _MARKET_DATA_SOURCE_CONNECTED,
             "factors": factors,
         },
         "employerActivity": employer_activity,

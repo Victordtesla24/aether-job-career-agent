@@ -2,7 +2,7 @@
 
 /**
  * Real-Time Market Pulse — activity heatmap, jobs-by-source donut,
- * top skills, job probability score, employer activity, recruiter trends,
+ * top skills, job-search progress index, employer activity, recruiter trends,
  * market-vs-you and trend indicators (wireframe: analytics.html an09–an17,
  * DEF-005..011). Backed by GET /analytics/market-pulse.
  */
@@ -61,6 +61,8 @@ export default function MarketPulse() {
   }
 
   const ringC = 2 * Math.PI * 42;
+  const prob = data.probability;
+  const score = prob.score;
 
   return (
     <section className="space-y-4" data-testid="market-pulse">
@@ -173,47 +175,86 @@ export default function MarketPulse() {
           )}
         </div>
 
-        {/* Job Probability Score */}
+        {/* Job-search progress index (PROD-UAT-2026-08-03 F-04).
+         *
+         * This panel used to headline "Your Job Probability Score — likelihood
+         * of landing an offer in the next 60 days", one of whose factors was
+         * the user's own saved-job count relabelled "Market demand", on the
+         * same screen as the "Market data: not connected" banner below. Both
+         * the market factor and the offer-likelihood claim are gone; every
+         * string rendered here now comes from the API so the copy cannot drift
+         * away from what the server actually computed.
+         *
+         * `score` / `value` are `number | null`, so a not-measured signal is a
+         * compile error to render as a number — it takes the "not measured"
+         * branch, matching LetterQualityPanel and the Resume Studio panels. */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="probability-score">
           <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            <MetricTooltip
-              label="Your Job Probability Score"
-              value=""
-              tooltip="An estimate of your likelihood of landing an offer, blending your fit scores, application activity, and current market conditions."
-            />
+            <MetricTooltip label={prob.label} value="" tooltip={prob.methodology} />
           </h3>
           <div className="flex items-center gap-5">
-            <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" role="img" aria-label={`Probability ${data.probability.score}%`}>
-              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke="#34D399"
-                strokeWidth="10"
-                strokeLinecap="round"
-                strokeDasharray={`${(data.probability.score / 100) * ringC} ${ringC}`}
-              />
-              <text x="50" y="55" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white" fontSize="20" fontWeight="700">
-                {data.probability.score}%
-              </text>
-            </svg>
+            {score === null ? (
+              <div
+                className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full border border-dashed border-white/15 text-center text-[10px] leading-tight text-aether-muted-dim"
+                role="img"
+                aria-label={`${prob.label}: not measured`}
+                data-testid="probability-not-measured"
+              >
+                not
+                <br />
+                measured
+              </div>
+            ) : (
+              <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90" role="img" aria-label={`${prob.label} ${score}%`}>
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#34D399"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(score / 100) * ringC} ${ringC}`}
+                />
+                <text x="50" y="55" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white" fontSize="20" fontWeight="700">
+                  {score}%
+                </text>
+              </svg>
+            )}
             <div className="flex-1 space-y-2">
-              {data.probability.factors.map((f) => (
+              {prob.factors.map((f) => (
                 <div key={f.label}>
                   <div className="mb-0.5 flex justify-between text-[10px]">
                     <span className="text-aether-muted-dim">{f.label}</span>
-                    <span className="mono">{f.value}</span>
+                    {f.value === null ? (
+                      <span className="italic text-aether-muted-dim">not measured</span>
+                    ) : (
+                      <span className="mono">{f.value}</span>
+                    )}
                   </div>
-                  <div className="h-1 rounded-full bg-white/10">
-                    <div className="h-1 rounded-full bg-aether-green" style={{ width: `${f.value}%` }} />
-                  </div>
+                  {f.value === null ? null : (
+                    <div className="h-1 rounded-full bg-white/10">
+                      <div className="h-1 rounded-full bg-aether-green" style={{ width: `${f.value}%` }} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
-          <p className="mt-3 text-[11px] text-aether-muted-dim">{data.probability.note}</p>
+          <p className="mt-3 text-[11px] text-aether-muted-dim">
+            {score === null ? prob.unmeasuredReason : prob.note}
+          </p>
+          {!prob.marketDataConnected && (
+            // Driven by the SAME server flag as the "Market vs. Your
+            // Performance" banner below, so the two surfaces cannot disagree.
+            <p
+              className="mt-2 text-[11px] italic text-aether-muted-dim"
+              data-testid="probability-market-data-state"
+            >
+              Market data: not connected — this figure uses only your own recorded activity.
+            </p>
+          )}
         </div>
       </div>
 
