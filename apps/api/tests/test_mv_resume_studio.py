@@ -19,7 +19,7 @@ default); the async worker shares the same service + refund plumbing.
 from __future__ import annotations
 
 import pytest
-from conftest import seed_own_resume
+from conftest import seed_own_resume, seed_search_target
 
 from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.billing import UsageQuotaRepository
@@ -298,6 +298,13 @@ class TestNoSilentBilledNoOp:
         # a synthetic résumé would make that step 422 on fabrication grounds.
         seed_own_resume(
             client, auth_headers, raw_text=parse_resume_pdf(get_base_resume_path())["raw_text"]
+        )
+        # F-02: an empty pipeline body is derived from the caller's own profile
+        # (and refused when they have none), so this run needs a configured
+        # target — the values the router used to substitute for everyone.
+        seed_search_target(
+            client, auth_headers,
+            target_role="Business Analyst", location="Melbourne, Australia",
         )
         self._force_noop(monkeypatch)
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)

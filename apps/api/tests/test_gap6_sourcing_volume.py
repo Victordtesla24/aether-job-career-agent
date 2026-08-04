@@ -22,20 +22,31 @@ FIXTURE_DIR = None  # not needed — this module doesn't hit fixtures/http
 
 
 class TestBuildScoutQuery:
-    def test_no_target_role_returns_full_role_family(self):
-        from app.services.discovery.query_builder import (
-            ROLE_FAMILY_TERMS,
-            build_scout_query,
-        )
+    def test_no_target_role_refuses_instead_of_inventing_one(self):
+        """SUPERSEDED BY F-02 (was: "returns the full role family").
 
-        query = build_scout_query(None)
-        for term in ROLE_FAMILY_TERMS:
-            assert term in query.lower()
+        Returning ``ROLE_FAMILY_QUERY`` for a caller with no target role is the
+        substitution F-02 removed — it is how a user whose profile said nothing
+        received project-management postings. The honest refusal now lives at
+        the route layer (``agents.py::_resolve_scout_target`` -> 422), so an
+        empty role reaching this pure function is a programming error. The
+        GAP-SRC-001 behaviour this suite exists for — broadening a role the
+        user DOES have — is unchanged and still asserted below.
+        """
+        import pytest
 
-    def test_blank_target_role_returns_full_role_family(self):
         from app.services.discovery.query_builder import build_scout_query
 
-        assert build_scout_query("   ") == build_scout_query(None)
+        with pytest.raises(ValueError, match="target role"):
+            build_scout_query(None)
+
+    def test_blank_target_role_refuses_the_same_way(self):
+        import pytest
+
+        from app.services.discovery.query_builder import build_scout_query
+
+        with pytest.raises(ValueError, match="target role"):
+            build_scout_query("   ")
 
     def test_family_member_target_role_is_broadened_not_replaced(self):
         """The bug: a profile targetRole of a single narrow title (this

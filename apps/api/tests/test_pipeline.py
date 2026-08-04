@@ -8,7 +8,7 @@ agent cards and the RECENT RUNS table reflect real activity.
 """
 from __future__ import annotations
 
-from conftest import seed_own_resume
+from conftest import seed_own_resume, seed_search_target
 
 from app.agents.fit_scorer import get_base_resume_path
 from app.services.resume_parser import parse_resume_pdf
@@ -37,6 +37,14 @@ class TestPipelineRun:
         # The pipeline reaches tailor/coverLetter for a matched job — both are
         # OUTBOUND paths that now require the caller's own résumé on file.
         seed_own_resume(client, auth_headers, raw_text=_operator_resume_text())
+        # F-02: an empty body is no longer completed with a hardcoded persona —
+        # the scout step searches for THIS user's configured target, and a user
+        # with none is refused. The values below are the ones the router used to
+        # substitute for everyone, so the run this test exercises is unchanged.
+        seed_search_target(
+            client, auth_headers,
+            target_role="Business Analyst", location="Melbourne, Australia",
+        )
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -75,6 +83,11 @@ class TestPipelineRun:
         # Defensive: if a job IS matched (fixture-dependent), the pipeline would
         # reach tailor/coverLetter, both of which now require a résumé on file.
         seed_own_resume(client, headers, raw_text=_operator_resume_text())
+        # F-02: and a configured search target, or the run is refused (422).
+        seed_search_target(
+            client, headers,
+            target_role="Business Analyst", location="Melbourne, Australia",
+        )
         resp = client.post("/agents/pipeline/run", json={}, headers=headers)
         assert resp.status_code == 200
         body = resp.json()

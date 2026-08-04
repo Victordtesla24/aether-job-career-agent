@@ -8,10 +8,18 @@ Analyst, Delivery Manager, Scrum Master, Transformation Manager, ...) the
 same candidate is equally qualified for, and that ``relevance.py`` already
 recognizes as on-target (``TARGET_ROLE_RE``).
 
-``build_scout_query`` derives a multi-term query from whatever the caller
-provides:
+``build_scout_query`` BROADENS a role the caller actually has. It never
+invents one:
 
-- No target role at all -> the full role-family query.
+- No target role at all -> ``ValueError``. This function used to answer that
+  case with the full role-family query, and that substitution is how a data
+  scientist ended up with project-management postings (F-02). Fabricating a
+  search for a user who configured none is the defect, not a fallback, so the
+  honest answer now lives one layer up: ``agents.py::_resolve_scout_target``
+  refuses with a 422 naming the missing profile field before anything reaches
+  here. An empty role arriving at this function is therefore a programming
+  error, and says so instead of inventing a persona. No caller needs the old
+  behaviour: the ONLY production caller is that same dispatch seam.
 - A target role that is itself a member of the recognised role family (per
   ``relevance.is_target_role`` — the SAME regex ``relevance.filter_relevant``
   uses to keep results, so the query and the filter never disagree about
@@ -44,15 +52,27 @@ ROLE_FAMILY_TERMS: tuple[str, ...] = (
     "transformation manager",
 )
 
-#: The role-family query used when no profile target role is configured.
+#: The whole family as one comma-joined string — the shape a broadened query
+#: takes. NOT a fallback: since F-02 nothing substitutes it for a user who
+#: configured no target role (see the module docstring).
 ROLE_FAMILY_QUERY = ", ".join(ROLE_FAMILY_TERMS)
 
 
 def build_scout_query(target_role: str | None) -> str:
-    """Return the query string the scout should hand to keyword sources."""
+    """Return the query string the scout should hand to keyword sources.
+
+    :raises ValueError: when ``target_role`` is empty/blank. Callers resolve
+        the user's own target first and refuse honestly when there is none
+        (F-02) — this function broadens a real role, it never supplies one.
+    """
     role = (target_role or "").strip()
     if not role:
-        return ROLE_FAMILY_QUERY
+        raise ValueError(
+            "build_scout_query requires a target role — it broadens the role a "
+            "user actually chose and never invents one. A caller with no target "
+            "role must refuse the run (see _resolve_scout_target), not search "
+            "for somebody else's job."
+        )
     if not relevance.is_target_role(role):
         # Outside the recognised family — profile-driven, not overridden.
         return role

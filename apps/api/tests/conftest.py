@@ -560,3 +560,34 @@ def seed_own_resume(client, auth_headers, *, raw_text: str | None = None) -> dic
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+def seed_search_target(
+    client, auth_headers, *, target_role: str, location: str
+) -> str:
+    """Configure the authed fixture user's OWN job-search target and return their id.
+
+    F-02: discovery is derived from the caller's ``targetRole``/``location``
+    profile columns, and a caller who supplies neither those nor an explicit
+    query is refused (422) rather than handed somebody else's search. A test
+    that drives a discovery path for a user who "has a profile" must therefore
+    say so explicitly — exactly like :func:`seed_own_resume` above.
+
+    Writes the two columns directly (the same ones ``PUT /workspaces/settings``
+    persists) so the helper stays usable from tests that do not want to submit
+    a whole settings payload.
+    """
+    from app.db import ensure_user_profile_columns, get_connection
+
+    me = client.get("/auth/me", headers=auth_headers)
+    assert me.status_code == 200, me.text
+    user_id = me.json()["id"]
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "User" SET "targetRole" = %s, "location" = %s WHERE id = %s',
+                (target_role, location, user_id),
+            )
+        conn.commit()
+    return user_id

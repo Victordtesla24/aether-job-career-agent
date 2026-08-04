@@ -59,7 +59,7 @@ from app.services.agent_run_watchdog import (
     ABANDONED_ERROR_MARKER,
     agent_run_heartbeat,
 )
-from app.services.discovery.query_builder import ROLE_FAMILY_QUERY, build_scout_query
+from app.services.discovery.query_builder import build_scout_query
 from app.services.llm_client import (
     LLMUnavailableError,
     QuotaExhaustedError,
@@ -83,10 +83,14 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
-#: Last-resort discovery targets used only when the user has NOT configured a
-#: target role/location on their profile (see ``_user_search_defaults``).
-_DEFAULT_QUERY = ROLE_FAMILY_QUERY
-_DEFAULT_LOCATION = "Melbourne, Australia"
+#: There is deliberately NO default query/location constant here (F-02). This
+#: module used to carry ``_DEFAULT_QUERY = ROLE_FAMILY_QUERY`` +
+#: ``_DEFAULT_LOCATION = "Melbourne, Australia"`` and hand them to any caller
+#: who supplied none — so every user's "Run All" scouted the same hardcoded
+#: PM/BA persona in Melbourne. A discovery run is now derived from the
+#: CALLER'S OWN profile (``_user_search_defaults``) or refused outright
+#: (``_resolve_scout_target``); with no constant left to fall back to,
+#: reintroducing that substitution means adding the literal back here.
 
 #: The LIVE PIPELINE nodes, in pipeline order (mirrors the LangGraph node names
 #: in packages/agents/src/graph/aether-graph.ts, and the ``NODES`` array the
@@ -1623,19 +1627,20 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
 
 
 def _user_search_defaults(user_id: str) -> tuple[str, str]:
-    """Resolve the user's configured job-search targets from the DB.
+    """The user's OWN configured job-search targets, or ``""`` for each unset.
 
-    Reads the profile ``targetRole``/``location`` columns and falls back to the
-    module-level defaults only when the user has not configured them. This keeps
-    scout runs targeted at the *user's* real goals rather than a hardcoded
-    persona.
+    Reads the profile ``targetRole``/``location`` columns — the same two fields
+    Settings > Profile writes and the topbar chip renders. It substitutes
+    NOTHING (F-02): an empty string means "this user has not told us", and
+    :func:`_resolve_scout_target` turns that into an honest refusal rather than
+    somebody else's search.
 
     The returned ``query`` may still be a single narrow title (whatever the
-    user typed into their profile) — ``_dispatch`` runs it through
+    user typed into their profile) — ``_agent_callable`` runs it through
     ``query_builder.build_scout_query`` afterwards to broaden it to the
     user's whole target-role family (GAP-SRC-001).
     """
-    query, location = _DEFAULT_QUERY, _DEFAULT_LOCATION
+    query, location = "", ""
     ensure_user_profile_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1651,6 +1656,73 @@ def _user_search_defaults(user_id: str) -> tuple[str, str]:
             query = target_role
         if user_location:
             location = user_location
+    return query, location
+
+
+#: Profile columns a discovery run is derived from -> how to name them to a
+#: human in the refusal below.
+_SEARCH_TARGET_LABELS = {"targetRole": "target role", "location": "location"}
+
+
+def _missing_search_target_422(missing: list[str]) -> HTTPException:
+    """The honest refusal for a discovery run with nothing to search for (F-02).
+
+    Mirrors the frontend prompt (``discovery-target-prompt``): name the profile
+    field that is missing and where to fix it, rather than substituting a
+    persona the customer never chose. Refusing is the whole point — a
+    fabricated search writes unfiltered postings to the user's own board and
+    then calls them theirs.
+
+    ``detail`` is a plain STRING on purpose, not the structured object the
+    plan-quota 429 uses. The Agents console renders a backend 422 through
+    ``agents-feedback.runErrorNotice``, whose ``extractApiJsonDetail`` surfaces
+    only a string detail; an object falls through to that branch's hardcoded
+    "run Scout to discover jobs" copy, which for THIS refusal is both wrong and
+    misdirecting (running Scout is refused for the same reason). A structured
+    detail is only worth introducing together with the frontend change that
+    reads it.
+    """
+    human = " and ".join(f"no {_SEARCH_TARGET_LABELS[field]}" for field in missing)
+    return HTTPException(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        f"Your profile has {human}, so there is nothing to search for. "
+        f"Add {'them' if len(missing) > 1 else 'it'} in Settings > Profile, or "
+        "supply an explicit query and location with the run.",
+    )
+
+
+def _resolve_scout_target(user_id: str, params: dict[str, Any]) -> tuple[str, str]:
+    """What this discovery run searches for, and where — or an honest refusal.
+
+    Precedence, and the ONE place it is decided for every caller (both HTTP
+    routes, the async worker, ``_pipeline_core``):
+
+    1. An EXPLICIT caller-supplied value wins. The Jobs screen, Settings' Sync
+       All and ``scripts/discovery_cron.sh`` all send one, so none of them is
+       affected by this resolution at all.
+    2. Otherwise the user's OWN profile (:func:`_user_search_defaults`) — this
+       is the path a caller that supplies nothing (the Agents console's "Run
+       All", which posts ``{}``) now reaches. It was unreachable before F-02:
+       the request models materialised hardcoded defaults, so
+       ``params.get("query")`` was always truthy.
+    3. Otherwise NOTHING — which is a 422, never a substitution.
+
+    The returned query is the caller's/profile's own wording, unbroadened;
+    ``_agent_callable`` applies ``build_scout_query`` exactly once.
+    """
+    query = str(params.get("query") or "").strip()
+    location = str(params.get("location") or "").strip()
+    if not query or not location:
+        profile_query, profile_location = _user_search_defaults(user_id)
+        query = query or profile_query
+        location = location or profile_location
+    missing = [
+        field
+        for field, value in (("targetRole", query), ("location", location))
+        if not value
+    ]
+    if missing:
+        raise _missing_search_target_422(missing)
     return query, location
 
 
@@ -1670,11 +1742,12 @@ def _agent_callable(
     identical for a system run and a normal run.
     """
     if name == "scout":
-        default_query, default_location = _user_search_defaults(user_id)
-        raw_query = params.get("query") or default_query
-        location = params.get("location") or default_location
+        # F-02: the caller's own explicit target, else THIS user's profile,
+        # else an honest 422 — resolved here, before ``_record_run``, so a
+        # refused run reserves no quota and leaves no audit row.
+        raw_query, location = _resolve_scout_target(user_id, params)
         # Broaden whatever query arrived (an explicit caller-supplied query,
-        # a cron/UI hardcode, or the profile-derived default above) into the
+        # the discovery cron's, or the profile-derived one above) into the
         # user's full target-role family — GAP-SRC-001: a single narrow
         # title starves discovery volume regardless of where it came from.
         query = build_scout_query(raw_query)
@@ -2333,8 +2406,16 @@ def get_background_job(job_id: str, current_user: CurrentUser) -> dict[str, Any]
 
 
 class ScoutRunRequest(BaseModel):
-    query: str = Field(min_length=1)
-    location: str = Field(min_length=1)
+    """Explicit discovery targets — BOTH optional since F-02.
+
+    Omitting one falls back to the caller's OWN profile
+    (``_resolve_scout_target``), and a profile with nothing configured is
+    refused with a 422 naming the missing field — never completed with a
+    hardcoded persona. A value that IS supplied must still be a real one, so
+    ``min_length=1`` continues to reject an explicitly empty string."""
+
+    query: str | None = Field(default=None, min_length=1)
+    location: str | None = Field(default=None, min_length=1)
 
 
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
@@ -2342,8 +2423,16 @@ def run_scout(
     body: ScoutRunRequest, current_user: CurrentUser, request: Request
 ) -> dict[str, Any]:
     """Kick off a scout discovery run for the authenticated user."""
+    user_id = current_user["id"]
+    # F-02: resolve BEFORE dispatch (same as ``run_pipeline``) so the AgentRun
+    # audit row records the search that ACTUALLY ran — the caller's own profile
+    # values when the body omitted them — rather than the two nulls it was sent.
+    # ``_agent_callable`` re-resolves from these now-explicit params without a
+    # second DB read, and refuses identically if this route is bypassed.
+    params = body.model_dump()
+    params["query"], params["location"] = _resolve_scout_target(user_id, params)
     output = _dispatch(
-        current_user["id"], "scout", body.model_dump(),
+        user_id, "scout", params,
         system_run=_is_system_run(request),
     )
     return {
@@ -2648,8 +2737,17 @@ def run_email_agent(
 
 
 class PipelineRunRequest(BaseModel):
-    query: str = _DEFAULT_QUERY
-    location: str = _DEFAULT_LOCATION
+    """Same contract as :class:`ScoutRunRequest`, and for the same reason.
+
+    F-02: these two fields defaulted to ``_DEFAULT_QUERY``/``_DEFAULT_LOCATION``.
+    ``runPipeline()`` posts ``body: {}``, so pydantic materialised those
+    literals and ``_user_search_defaults`` — the profile-derived helper that
+    already existed — was never consulted: every user's "Run All" scouted the
+    same hardcoded PM/BA persona in Melbourne and wrote the results to their own
+    board. ``None`` is what makes the user's own profile reachable."""
+
+    query: str | None = Field(default=None, min_length=1)
+    location: str | None = Field(default=None, min_length=1)
 
 
 #: Canonical pipeline plan, mirroring packages/agents LangGraph node order.
@@ -2793,13 +2891,23 @@ def run_pipeline(
     never bypasses the paywall (the sync path is walled by the supervisor step's
     own ``_record_run``; the async path by ``_enqueue_pipeline``)."""
     user_id = current_user["id"]
+    # F-02: resolve the discovery target HERE, before anything is enqueued or
+    # recorded. "Run All" posts an empty body, so this is the point at which a
+    # user who has configured no target role/location is honestly refused
+    # (422) instead of having somebody else's search fabricated for them —
+    # and doing it at the route means the ASYNC path refuses at request time
+    # rather than failing a background job the user only discovers later. The
+    # resolved values are stored on the params the worker replays, so the
+    # queued job carries the SAME search the caller was told about.
+    params = body.model_dump()
+    params["query"], params["location"] = _resolve_scout_target(user_id, params)
     if async_generation_enabled():
         job_id = _enqueue_pipeline(
-            user_id, body.model_dump(), system_run=_is_system_run(request)
+            user_id, params, system_run=_is_system_run(request)
         )
         response.status_code = status.HTTP_202_ACCEPTED
         return {"job_id": job_id, "status": "enqueued"}
-    return _pipeline_core(user_id, body.model_dump())
+    return _pipeline_core(user_id, params)
 
 
 # ---------------------------------------------------------------------------
