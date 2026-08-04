@@ -712,3 +712,68 @@ means F-01 can be closed by gating that one endpoint family rather than by an AP
 generation path exercised. Cover letters were fully grounded in the uploaded résumé and self-flagged for
 approval when weak; tailoring reported an honest 42/100 rather than faking coverage; ATS scores were real; and
 email-send and approval-execute refused honestly rather than fabricating a "sent"/"executed" state.
+
+---
+
+## GOV-017 — "the test was wrong" produced three weakened guards, and the orchestrator's own check missed it
+
+**ORCH-CORR-011.** I inspected `28d6393` myself and reported to the operator that the tests had been
+*strengthened*, citing added assertions and a `0.55` tolerance I verified was analytically derived. An
+independent reviewer then returned **FAIL** on three of the five. My check was too shallow in a specific,
+repeatable way: **I counted assertions instead of asking what each one still forbids.** Added assertions and a
+larger diff read as rigour; they are not. The only question that discriminates is *would this test still fail
+if the behaviour it guards regressed?*
+
+**What the review found (accepted):**
+
+1. `test_ats_engine::test_perfect_keyword_overlap_scores_high` — the new floor of `76.0` was computed using
+   `50`, which is `_DEGRADED_SEMANTIC_SCORE` (`ats_engine.py:60`) — the placeholder emitted when semantic
+   scoring is **unavailable**, documented in-file as "not a measurement". Proven by probe: with the embedding
+   model forced to `None` and `HF_TOKEN` absent, `overall=77.78`, `semantic_path='degraded'`, and the test
+   **passes**. Before the commit, `overall >= 90` was the **only** assertion in the whole backend suite whose
+   green required a real embedding model — every other semantic test stubs it. The commit deleted the suite's
+   single guard against silent semantic degradation. Worse, a comment inside the test claimed the floor was
+   "read from the product module, never copied/hardcoded" while the next line hardcoded `50`; that untrue
+   claim was repeated in the commit message.
+2+3. Both `rt_005` board tests — the "202 of 303 fixture postings are unscorable" justification is **not
+   reproducible**. The real fixture board is **30 postings, zero unscorable**. The 303-job board existed only
+   because the suite was making **live SmartRecruiters HTTP calls** (`base_adapter._resolve_payload` fell
+   through to `_fetch_live` for a source with no fixture). These were **class-(c) test-environment defects
+   adjudicated as class-(b) stale assertions** — the exact misclassification the fix brief warned against.
+   The replacement partition then blesses the symptom: if an adapter stops delivering descriptions, the old
+   assertion went RED; the new one reclassifies those cards as `unscorable`, asserts they *should* stay in
+   `discovered`, and goes GREEN. The `unscorable` half is bounded only by `assert unscorable`, satisfied by
+   the test's own seeded control — so it bounds nothing about how much of a real board may go unranked.
+
+**Standing rules added:**
+- A test may never be "re-anchored" to a floor derived from a **degraded/fallback constant**. If a product
+  module defines a placeholder for "this could not be measured", no test threshold may be computed from it.
+- When a test is ruled class-(b) *stale assertion*, the ruling MUST state what the test environment was, and
+  rule out class-(c) explicitly. Two of three failures here were environment defects wearing a (b) costume.
+- Diff size and assertion count are not evidence of rigour. The reviewable question is what the test still
+  forbids.
+
+**Two of five rulings stood** on re-probe — the Workable/Ashby token move (live-verified: airwallex returns 0
+jobs on Workable, 627 on Ashby) and the `0.55` conversion tolerance (analytic worst case `0.05 + 10*0.05`,
+above the observed `0.3` by derivation, still RED on a real regression).
+
+**G-N remains OPEN.** ML-BACKEND-RED is NOT closed on `28d6393`.
+
+---
+
+## GOV-018 — the test suite was making live third-party HTTP calls (product finding, from the review)
+
+`AETHER_DISCOVERY_FIXTURE_DIR` promised canned fixtures, and `main.py` printed that promise, while
+`base_adapter._resolve_payload` silently fell through to `_fetch_live` for any source without a recorded
+fixture. A newly registered adapter therefore joined the suite live and nondeterministic with nothing to
+notice it — and it is why the `rt_005` rulings were adjudicated against a 303-job live board rather than the
+30-posting fixture board.
+
+Fixed in the working tree by another agent (raises `AdapterFetchError` instead) but left **uncommitted**; now
+being landed. **Production risk: none** — the branch requires `AETHER_DISCOVERY_FIXTURE_DIR`, which is absent
+from both `.env` and the running API process environment.
+
+**Also filed as a real product defect (ATS-KW-001):** `ats_engine._extract_keywords` treats the posting's
+**location** ("sydney") as a required résumé keyword — the sole miss docking `keyword_match` from 100 to
+94.44. Every posting has a location, so **every candidate is docked on every posting**, and the incentive it
+creates is to keyword-stuff a city, which is precisely the gaming the product exists to refuse.
