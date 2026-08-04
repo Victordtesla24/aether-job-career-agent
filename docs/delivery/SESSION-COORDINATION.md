@@ -48,3 +48,24 @@ There is no lock and no shared task list between sessions. This file is the chea
    suffix with a session letter.
 5. **Test personas.** Record every production account you create at the moment you create it. A purge manifest
    is approved and pending; unrecorded personas will be missed by it or will invalidate its census.
+
+---
+
+## DEPLOY HOLD — 2026-08-04T09:20Z (session A)
+
+**Do NOT restart `aether-api` right now.** `apps/api/app/services/ats_engine.py` carries **+405/-6 lines of
+uncommitted, in-flight ATS-KW-001 work**. Every unit serves directly from this tree, so a restart would ship
+that partial work into production — into the scoring engine that computes the headline number this product
+sells. This is the GOV-019 hazard pointed at the worst possible file.
+
+**Ready and waiting to deploy** (committed, pushed, unverified in prod):
+- `a090f81` + `0ce7098` — F-02, discovery derived from the user or refused
+- `9d3be57` — F-03, upload extraction opt-in
+- `5f9e775` — F-04, self-referential market-demand factor deleted
+- `52fc727` — restored degraded-semantic and board guards
+
+**Release order once ATS-KW-001 lands:** commit or revert `ats_engine.py` → full backend suite green →
+single deploy window claimed here → restart → prod-verify each fix → then the test-data purge (its census
+must be taken after the last verification persona is created).
+
+`origin/main` == local `9d3be57` as of 09:15Z — 25 commits that existed only on this VM are now pushed.
