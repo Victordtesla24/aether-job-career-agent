@@ -1,0 +1,305 @@
+{
+ "_provenance": "Recorded live from https://api.smartrecruiters.com/v1/companies/<id>/postings and .../postings/<id> on 2026-08-04. Real postings, real advert text, unedited; only the keys the adapter reads are kept, and only postings carrying a real advert that clears the fit-scorer evidence gate were sampled. No field is invented.",
+ "boards": [
+  {
+   "company": "canva",
+   "jobs": [
+    {
+     "id": "6000000001281761",
+     "name": "Senior Visual Designer (Video)",
+     "company": {
+      "identifier": "Canva",
+      "name": "Canva"
+     },
+     "location": {
+      "city": "Sydney",
+      "country": "au",
+      "remote": false,
+      "hybrid": true,
+      "fullLocation": "Sydney, , Australia"
+     },
+     "releasedDate": "2026-08-04T01:17:25.101Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/canva/postings/6000000001281761",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p>Join the team redefining how the world experiences design.<br>\nHey, g’day, mabuhay, kia ora, 你好, hallo, vítejte!</p><p>Thanks for stopping by. We know job hunting can be a little time consuming and you’re probably keen to find out what’s on offer, so we’ll get straight to the point.</p><p><strong>Where and how you can work</strong></p><p>Our flagship campus is in Sydney, with a campus in Melbourne, this role is based in <strong>Sydney or Melbourne. </strong>We trust our Canvanauts to choose the balance that empowers them and their team to achieve their goals, while collaborating closely with global teams across time zones.</p><p><strong>What you’d be doing in this role</strong></p><p>As Canva scales, change continues to be part of our DNA. But we like to think that’s all part of the fun. This role will give you the flavour of the type of things you’ll be working on when you start — but it will likely evolve.</p><p>We’re looking for a Visual Designer (Video). A designer who understands social media culture, video trends, storytelling patterns, and is familiar with platforms like TikTok, Reels, and YouTube Shorts.</p><p>But unlike a traditional social-media content creator, this role focuses on designing content for Canva users: Templates, video formats, motion graphics, hooks, trend-based layouts, storytelling sequences, and creative assets that users can customise and publish on their own channels. This designer will help Canva shape the next generation of video and social-first content within the product, enabling millions of people to produce high-performing, culturally relevant content.</p><p>&#xa0;</p><p><strong>At the moment, this role is focused on:</strong></p><ul><li><p>Designing short-form video templates, storytelling structures, and trend-based content for users</p></li><li><p>Translating&#xa0;cultural and platform trends into usable, customisable creative assets</p></li><li><p>Building sequences, hooks, transitions, and story arcs that reflect real platform behaviours</p></li><li><p>Collaborating&#xa0;with Content Studio, Product, and Editing/Video teams to maintain alignment</p></li><li><p>Delivering content at pace while balancing craft, consistency, and scalability</p></li><li><p>Participating&#xa0;in trend reviews, content forecasting, and creative reviews</p></li><li><p>Contributing&#xa0;to experimentation across motion, video editing, and AI-assisted content creation</p></li></ul><p>&#xa0;</p><p><strong>This role is perfect for designers who are:</strong></p><ul><li>Familiar with social media platforms and the types of content that resonate with audiences</li><li><p>Able to convert platform trends into templates usable by millions of non-experts</p></li><li><p>Skilled in video editing, motion design, mobile-first storytelling, and creative pacing</p></li><li><p>Curious about creator culture and the evolving role of short-form video</p></li><li><p>Collaborative, iterative, and comfortable with rapid creative production</p></li><li><p>Motivated by empowering people to express their ideas through social content</p></li></ul><p>&#xa0;</p><p><strong>About the team</strong></p><p><strong>The Content Studio team </strong>within the Global Content &amp; Discovery supergroup is on a mission to empower the world to design. We create world-class templates and creative assets that inspire users, unlock new use cases, and showcase the best of Canva’s product capabilities.</p><p>We work at the intersection of culture, creativity, and product — partnering closely with teams across Video, Editing, AI, and Discovery to ensure Canva stays at the forefront of visual communication globally.</p><p><strong>What's in it for you?</strong></p><p>Achieving our crazy big goals motivates us to work hard - and we do - but you'll experience lots of moments of magic, connectivity and fun woven throughout life at Canva, too. We also offer a range of benefits to set you up for every success in and outside of work.</p><p><strong>Here's a taste of what's on offer:</strong></p><ul><li><p>Equity packages - we want our success to be yours too</p></li><li><p>Inclusive parental leave policy that supports all parents &amp; carers</p></li><li><p>An annual Vibe &amp; Thrive allowance to support your wellbeing, social connection, office setup &amp; more</p></li><li><p>Flexible leave options that empower you to be a force for good, take time to recharge and supports you personally</p></li></ul><p>Check out lifeatcanva.com for more info.</p><p><strong>Other stuff to know</strong></p><p>We make hiring decisions based on your experience, skills and passion, as well as how you can enhance Canva and our culture. When you apply, please tell us the pronouns you use and any reasonable adjustments you may need during the interview process.</p><p>We celebrate all types of skills and backgrounds at Canva so even if you don’t feel like your skills quite match what’s listed above - we still want to hear from you!</p><p>Please note that interviews are conducted virtually.</p><p><br>\n<em><strong>Kindly attach link to your portfolio. If it is guardrailed by a password, kindly add your PW to the cover letter. Thank you!</strong></em></p>"
+       }
+      }
+     }
+    },
+    {
+     "id": "6000000001281715",
+     "name": "Senior Motion Designer (Social Content)",
+     "company": {
+      "identifier": "Canva",
+      "name": "Canva"
+     },
+     "location": {
+      "city": "Sydney",
+      "country": "au",
+      "remote": false,
+      "hybrid": true,
+      "fullLocation": "Sydney, , Australia"
+     },
+     "releasedDate": "2026-08-04T01:16:56.711Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/canva/postings/6000000001281715",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p><strong>Join the team redefining how the world experiences design.</strong></p><p>Hey, g’day, mabuhay, kia ora, 你好, hallo, vítejte!</p><p>Thanks for stopping by. We know job hunting can be a little time consuming and you’re probably keen to find out what’s on offer, so we’ll get straight to the point.</p><p><strong>Where and how you can work</strong></p><p>Our flagship campus is in Sydney, with a campus in Melbourne, this role is based in <strong>Sydney or Melbourne. </strong>We trust our Canvanauts to choose the balance that empowers them and their team to achieve their goals, while collaborating closely with global teams across time zones.</p><p>&#xa0;</p><p><strong>What you’d be doing in this role</strong></p><p>As Canva scales, change continues to be part of our DNA. But we like to think that’s all part of the fun. This role will give you the flavour of the type of things you’ll be working on when you start - but it will likely evolve.</p><p>At the moment, this role is focused on:</p><ul><li>Owning the end-to-end craft of motion assets -&#xa0;video, transitions, characters, scenes, and storytelling sequences -&#xa0;that ship directly into Canva's content ecosystem</li><li>Developing narrative-driven motion content that sets the creative bar for how millions of users experience animation in Canva</li><li>Partnering with template designers and product teams to shape how motion features are demonstrated and adopted at scale</li><li>Contributing to creative reviews, content strategy, and experimentation cycles that influence the direction of Canva's motion library</li><li>Staying ahead of animation trends, editing styles, and visual storytelling techniques&#xa0;and bringing that thinking into the work</li></ul><p>&#xa0;</p><p><strong>You're probably a match if</strong></p><ul><li><p>Motion-obsessed and skilled in animation, timing, pacing, and visual storytelling</p></li><li><p>Comfortable working across multiple styles</p></li><li><p>Excited to create assets that empower others to tell their stories</p></li><li><p>Inspired by the challenge of simplifying professional-level motion for everyday users</p></li><li><p>Curious about the evolving world of motion design, film language, and mixed-media visuals</p></li><li><p>Collaborative, autonomous, and comfortable working in fast-paced content production environments</p></li></ul><p>&#xa0;</p><p><strong>About the team</strong></p><p><strong>The Content Studio team </strong>within the Global Content &amp; Discovery supergroup is on a mission to empower the world to design. We create world-class templates and creative assets that inspire users, unlock new use cases, and showcase the best of Canva’s product capabilities.</p><p>We work at the intersection of culture, creativity, and product - partnering closely with teams across Video, Editing, AI, and Discovery to ensure Canva stays at the forefront of visual communication globally.</p><p>&#xa0;</p><p><strong>What's in it for you?</strong></p><p>Achieving our crazy big goals motivates us to work hard - and we do - but you'll experience lots of moments of magic, connectivity and fun woven throughout life at Canva, too. We also offer a range of benefits to set you up for every success in and outside of work.</p><p><strong>Here's a taste of what's on offer:</strong></p><ul><li><p>Equity packages - we want our success to be yours too</p></li><li><p>Inclusive parental leave policy that supports all parents &amp; carers</p></li><li><p>An annual Vibe &amp; Thrive allowance to support your wellbeing, social connection, office setup &amp; more</p></li><li><p>Flexible leave options that empower you to be a force for good, take time to recharge and supports you personally</p></li></ul><p>Check out lifeatcanva.com for more info.</p><p><strong>Other stuff to know</strong></p><p>We make hiring decisions based on your experience, skills and passion, as well as how you can enhance Canva and our culture. When you apply, please tell us the pronouns you use and any reasonable adjustments you may need during the interview process.</p><p>We celebrate all types of skills and backgrounds at Canva so even if you don’t feel like your skills quite match what’s listed above - we still want to hear from you!</p><p>Please note that interviews are conducted virtually.</p><p><br>\n<em><strong>Kindly attach link to your portfolio. If it is guardrailed by a password, kindly add your password to the cover letter. Thank you!</strong></em></p>"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "company": "pexa",
+   "jobs": [
+    {
+     "id": "743999710052717",
+     "name": "Accountant",
+     "company": {
+      "identifier": "PEXA",
+      "name": "PEXA"
+     },
+     "location": {
+      "city": "Docklands",
+      "region": "VIC",
+      "country": "au",
+      "address": "Tower 4, Level 16/727 Collins St",
+      "postalCode": "3008",
+      "remote": false,
+      "hybrid": false,
+      "fullLocation": "Docklands, VIC, Australia"
+     },
+     "releasedDate": "2020-03-24T05:52:13.000Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/pexa/postings/743999710052717",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p>Our Finance team is seeking a proactive and adaptable  Accountant. This role is an integral part of the Finance function, providing support and management of the corporate trust accounts. </p><ul><li>Prepare month end financials and management reporting for properties, ensuring timely delivery of reports to property managers, owners and State Trust accounting function as required, including accruals, prepayments and analysing variances.</li><li>Reconcile trust bank Accounts.</li><li>Prepare balance sheet reconciliations, investigating and resolving issues, reconciling financial data to ensure accurate and timely reporting to clients and management.</li><li>Work closely with AP and AR team to ensure processing is accurate and assist with queries.</li><li>Undertake Monthly Accrual Variance Reporting and month end close off</li><li>Directly Responsible for the recording, reporting and analysis of the financial performance for the Retail Centres &amp; General Properties within the portfolio</li><li>Identify areas for improvement and work to deliver better services to Colliers and its clients.</li></ul>"
+       },
+       "qualifications": {
+        "text": "<p><strong>The skills and experience you will bring to this role include:</strong></p><ul><li>Desirable to be CA or CPA qualified or working towards accreditation.</li><li><strong>Knowledge of MRI software</strong> is desirable</li><li>Excellent Communication skills both Written and Oral, ability to converse with all level of staff  </li><li>Worked with multiple stakeholders under various time time &amp; KPI pressures  </li><li>It is essential to be highly proficient in Microsoft Office (Word &amp; Excel )</li></ul>"
+       },
+       "additionalInformation": {
+        "text": "<p>Free alcohol on fridays!</p>"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "company": "ampol",
+   "jobs": [
+    {
+     "id": "6000000001281682",
+     "name": "Team Member - Hervey Bay",
+     "company": {
+      "identifier": "Ampol",
+      "name": "Ampol"
+     },
+     "location": {
+      "city": "Hervey Bay",
+      "region": "Queensland",
+      "country": "au",
+      "address": "115-119 Boat Harbour Dr Cnr Beach Rd",
+      "postalCode": "4655",
+      "remote": false,
+      "hybrid": false,
+      "latitude": "-25.28763",
+      "longitude": "152.83174",
+      "fullLocation": "Hervey Bay, Queensland, Australia"
+     },
+     "releasedDate": "2026-08-04T01:13:08.044Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/ampol/postings/6000000001281682",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p><strong>At Ampol, We’re Powered by People!&#xa0;&#xa0;&#xa0;</strong>&#xa0;</p><p>As one of Australia’s leading convenience retailers, Ampol is all about making life easier for our customers. Whether they’re fuelling up, grabbing essentials, or just stopping by, we’re here to make their experience smooth and pleasant. With a friendly smile and a warm greeting, we ensure our customers get exactly what they need, quickly and efficiently.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>What You'll Do:&#xa0;&#xa0;&#xa0;</strong></p><p>As a Retail Team Member, you’ll play a crucial role in keeping our stores in top shape through effective merchandising, inventory management, and stock control. Your skills will shine as you handle POS transactions and cash reconciliations, ensuring each shift ends accurately and securely.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>Key Responsibilities:</strong>&#xa0;&#xa0;&#xa0;&#xa0;</p><ul><li>Deliver Exceptional Customer Service: Put customers first and exceed their expectations.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Support the Store Manager: Use your retail experience to assist in daily operations.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Thrive in a Team Environment: Collaborate effectively with your colleagues.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Attention to Detail: Maintain high standards of safety and accuracy.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Flexible Availability: Be ready to work weekends and overnight shifts when needed.&#xa0; &#xa0;</li></ul><p>&#xa0;</p><p><strong>Qualifications:</strong></p><ul><li>Previous retail or customer service experience preferred</li><li>Ability to operate POS and handle cash accurately</li><li>Strong communication and teamwork skills</li><li>Flexibility to work across a 7-day roster, with availability for over nights and weekends a must.&#xa0;</li></ul><p>&#xa0;</p><p><strong>What We Offer:&#xa0;&#xa0;&#xa0;&#xa0;</strong></p><ul><li>Comprehensive Training &amp; Support: We’re here to help you succeed.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Autonomy &amp; Ownership: Take pride in your role with the freedom to excel.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Flexible Rosters: We accommodate your work-life balance.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Career Growth Opportunities: Build your future with one of Australia’s largest retail networks.&#xa0;&#xa0;&#xa0;&#xa0;</li></ul><p>&#xa0;</p><p>Our Recruitment Process:&#xa0;If you’re a great fit, we’ll reach out to guide you through the next steps.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>Fuel your career with Ampol! Apply Now!&#xa0;&#xa0;&#xa0;</strong>&#xa0;</p><p>&#xa0;</p><p>To review our current payrates for all retail related Team Member roles, please visit Fair Work&#xa0;<a href=\"https://awards.fairwork.gov.au/MA000089.html\" rel=\"noopener noreferrer\">https://awards.fairwork.gov.au/MA000089.html</a>&#xa0;and view section 16 of the Vehicle Repair, Services and Retail Award 2020.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p>We are proud to be recognised as an employer of choice for women and are winners of an Employer Brand award through LinkedIn. </p>"
+       },
+       "additionalInformation": {
+        "text": "<div sr-tagline=\"\"></div><p>By clicking apply, you confirm you have read and agree to our&#xa0;<a href=\"https://c.smartrecruiters.com/sr-company-attachments-prod-aws-dc9/68397163321cc03b6a5d240c/e4090605-2b96-49c6-9240-9213d28366f2?r=s3-ap-southeast-2\" rel=\"noopener noreferrer\">Ampol Recruitment Privacy Collection Statement</a>.</p><p><em>&#xa0;We’re an equal opportunity workplace. We not only embrace diversity and inclusion; we celebrate what makes you unique. We welcome applications from people of all ages, cultural backgrounds, and diverse sexualities and genders (including if you identify as transgender). We also highly encourage Aboriginal and Torres Strait Islander peoples to apply for roles with Ampol.</em>&#xa0;</p>"
+       }
+      }
+     }
+    },
+    {
+     "id": "6000000001280674",
+     "name": "Team Member - Forrest Highway South",
+     "company": {
+      "identifier": "Ampol",
+      "name": "Ampol"
+     },
+     "location": {
+      "city": "West Pinjarra",
+      "region": "Western Australia",
+      "country": "au",
+      "address": "Lot 601 Forrest Highway",
+      "postalCode": "6208",
+      "remote": false,
+      "hybrid": false,
+      "latitude": "-32.685766",
+      "longitude": "115.777994",
+      "fullLocation": "West Pinjarra, Western Australia, Australia"
+     },
+     "releasedDate": "2026-08-03T22:14:22.923Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/ampol/postings/6000000001280674",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p><strong>At Ampol, We’re Powered by People!&#xa0;&#xa0;&#xa0;</strong>&#xa0;</p><p>As one of Australia’s leading convenience retailers, Ampol is all about making life easier for our customers. Whether they’re fuelling up, grabbing essentials, or just stopping by, we’re here to make their experience smooth and pleasant. With a friendly smile and a warm greeting, we ensure our customers get exactly what they need, quickly and efficiently.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>What You'll Do:&#xa0;&#xa0;&#xa0;</strong></p><p>As a Retail Team Member, you’ll play a crucial role in keeping our stores in top shape through effective merchandising, inventory management, and stock control. Your skills will shine as you handle POS transactions and cash reconciliations, ensuring each shift ends accurately and securely.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>Key Responsibilities:</strong>&#xa0;&#xa0;&#xa0;&#xa0;</p><ul><li>Deliver Exceptional Customer Service: Put customers first and exceed their expectations.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Support the Store Manager: Use your retail experience to assist in daily operations.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Thrive in a Team Environment: Collaborate effectively with your colleagues.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Attention to Detail: Maintain high standards of safety and accuracy.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Flexible Availability: Be ready to work weekends and overnight shifts when needed.&#xa0; &#xa0;</li></ul><p>&#xa0;</p><p><strong>Qualifications:</strong></p><ul><li>Previous retail or customer service experience preferred</li><li>Ability to operate POS and handle cash accurately</li><li>Strong communication and teamwork skills</li><li>Flexibility to work across a 7-day roster, with availability for over nights and weekends a must.&#xa0;</li></ul><p>&#xa0;</p><p><strong>What We Offer:&#xa0;&#xa0;&#xa0;&#xa0;</strong></p><ul><li>Comprehensive Training &amp; Support: We’re here to help you succeed.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Autonomy &amp; Ownership: Take pride in your role with the freedom to excel.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Flexible Rosters: We accommodate your work-life balance.&#xa0;&#xa0;&#xa0;&#xa0;</li><li>Career Growth Opportunities: Build your future with one of Australia’s largest retail networks.&#xa0;&#xa0;&#xa0;&#xa0;</li></ul><p>&#xa0;</p><p>Our Recruitment Process:&#xa0;If you’re a great fit, we’ll reach out to guide you through the next steps.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p><strong>Fuel your career with Ampol! Apply Now!&#xa0;&#xa0;&#xa0;</strong>&#xa0;</p><p>&#xa0;</p><p>To review our current payrates for all retail related Team Member roles, please visit Fair Work&#xa0;<a href=\"https://awards.fairwork.gov.au/MA000089.html\" rel=\"noopener noreferrer\">https://awards.fairwork.gov.au/MA000089.html</a>&#xa0;and view section 16 of the Vehicle Repair, Services and Retail Award 2020.&#xa0;&#xa0;&#xa0;&#xa0;</p><p>&#xa0;</p><p>We are proud to be recognised as an employer of choice for women and are winners of an Employer Brand award through LinkedIn. </p>"
+       },
+       "additionalInformation": {
+        "text": "<div sr-tagline=\"\"></div><p>By clicking apply, you confirm you have read and agree to our&#xa0;<a href=\"https://c.smartrecruiters.com/sr-company-attachments-prod-aws-dc9/68397163321cc03b6a5d240c/e4090605-2b96-49c6-9240-9213d28366f2?r=s3-ap-southeast-2\" rel=\"noopener noreferrer\">Ampol Recruitment Privacy Collection Statement</a>.</p><p><em>&#xa0;We’re an equal opportunity workplace. We not only embrace diversity and inclusion; we celebrate what makes you unique. We welcome applications from people of all ages, cultural backgrounds, and diverse sexualities and genders (including if you identify as transgender). We also highly encourage Aboriginal and Torres Strait Islander peoples to apply for roles with Ampol.</em>&#xa0;</p>"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "company": "seek",
+   "jobs": [
+    {
+     "id": "744000141178407",
+     "name": "Senior Operations Manager",
+     "company": {
+      "identifier": "SEEK",
+      "name": "SEEK"
+     },
+     "location": {
+      "city": "North Sydney",
+      "region": "New South Wales",
+      "country": "au",
+      "remote": false,
+      "hybrid": true,
+      "fullLocation": "North Sydney, New South Wales, Australia"
+     },
+     "releasedDate": "2026-08-03T06:12:39.579Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/seek/postings/744000141178407",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<ul><li>​​​​​Lead the day-to-day operations of credential and identity verification, including capacity and workload management, SLA and turnaround performance, escalation handling and quality/compliance outcomes</li><li>Set clear standards, goals and KPIs for Verify Ops across accuracy and compliance, speed and throughput, productivity, customer experience and people/engagement, and use data to monitor performance and drive action</li><li>Lead, coach and develop a team of permanent and contingent workers, including workforce planning, hiring, onboarding, training, quality assurance and ongoing capability uplift</li><li>Develop, implement and continuously improve processes, standard operating procedures, quality frameworks and operating rhythms to increase efficiency, reduce risk and maintain a consistently high standard of verification outcomes</li><li>Partner with Product, Engineering and other stakeholders to evolve our verification tooling, workflows and knowledge management, including opportunities to use AI, automation, workflow orchestration and agent-assist to improve quality, efficiency and scale</li><li>Own operational readiness for new or changed verification products and flows, including requirements input, process and control design, playbooks, training and change management for the Verify Ops team</li><li>Ensure effective incident, escalation and issue management for verification operations, including root-cause analysis, corrective and preventative actions and clear communication to stakeholders</li><li>Ensure ongoing compliance with relevant laws, obligations, policies and standard operating procedures, including appropriate controls, documentation and auditability</li><li>Build strong, trusted relationships with key internal stakeholders and external team members (including any external partners or suppliers), and communicate clearly and proactively about performance, risks and opportunities</li><li>Stay informed about product and service changes, regulatory and industry developments in verification and credential management, and emerging technologies and apply relevant learnings to improve outcomes</li></ul>"
+       },
+       "qualifications": {
+        "text": "<ul><li>Experience leading, developing and scaling a service, operations, verification or compliance team, including direct people leadership</li><li>Experience managing a mixed workforce, including permanent team members and contingent workers, with demonstrated ability to build a strong team culture and manage performance</li><li>Strong customer and stakeholder focus, with excellent written and verbal communication skills</li><li>Exceptional judgement and decision-making skills, including an ability to prioritise the critical few things, balance accuracy with speed and customer experience, and make sound trade-offs</li><li>Ability to manage multiple priorities and initiatives, while communicating proactively and effectively with stakeholders</li><li>Strong comfort with ambiguity, driving progress through an agile test-and-learn mindset in a scaling environment</li><li>Strong data-driven mindset, with experience defining key operational metrics, monitoring performance, identifying trends and using insight to improve outcomes</li><li>Demonstrated experience improving operational processes, service quality and team effectiveness in a scaling or fast-paced environment</li><li>Ability to work effectively in a cross-functional environment and influence across multiple functions and teams</li><li>Good understanding of, or strong desire to learn, relevant technology concepts, operational tooling and the role of AI and automation in modern support operations</li></ul><p>Other Qualifications, Skills and Experience</p><ul><li>Experience in a start-up or scale-up environment, working with agile software development and cross-functional teams</li><li>Experience improving operational tooling, workflows, knowledge management, self-service or agent-assist capabilities</li><li>Experience using AI, automation or workflow optimisation to improve operational efficiency, quality or customer experience</li><li>Proficiency in using data visualisation tools such as Tableau, Databricks, Power BI, Sisense or similar</li><li>Relevant university degree would be advantageous</li></ul>"
+       },
+       "additionalInformation": {
+        "text": "<p>At SEEK, we are passionate about fostering a culture of inclusion and wellbeing that embraces and values the diversity of our people. We are a purpose driven business that works with heart.</p><p><br>\nWe know teams with diverse ideas, experiences and perspectives are more creative and are critical to ensuring effective delivery and innovating to enable our future success. As such, we welcome applications from people with a diverse group of backgrounds and life experiences, especially as they relate to gender, sexual identity, culture, faith, disability and life stages. If you have the skills, curiosity and an adaptable approach but don't meet every responsibility or qualification listed in this advertisement, please still get in touch with us.</p>"
+       }
+      }
+     }
+    },
+    {
+     "id": "744000141176349",
+     "name": "Operations Manager",
+     "company": {
+      "identifier": "SEEK",
+      "name": "SEEK"
+     },
+     "location": {
+      "city": "North Sydney",
+      "region": "New South Wales",
+      "country": "au",
+      "remote": false,
+      "hybrid": true,
+      "fullLocation": "North Sydney, New South Wales, Australia"
+     },
+     "releasedDate": "2026-08-03T05:26:05.739Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/seek/postings/744000141176349",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<ul><li>Lead the day-to-day operations of SEEK Pass Customer Support, including workload management, service performance, escalation handling and quality outcomes</li><li>Lead, coach and develop a team of permanent and contingent workers, including workforce planning, hiring, onboarding, training, quality assurance and ongoing capability uplift</li><li>Develop, implement and continuously improve processes, workflows and operating rhythms to increase efficiency and maintain a consistently high standard of service</li><li>Use customer feedback, operational insights, data and core metrics/KPIs to shape our Customer Support strategy, inform prioritisation and drive continuous improvement, including opportunities to use AI, automation, self-service and tooling optimisation to improve quality, efficiency and scale</li><li>Ensure ongoing compliance with relevant laws, obligations, policies and standard operating procedures</li><li>Build strong, trusted relationships with key internal stakeholders and external team members, and communicate clearly and proactively</li><li>Stay informed about product and service changes, emerging technologies and industry trends, and apply relevant learnings to improve outcomes</li></ul>"
+       },
+       "qualifications": {
+        "text": "<ul><li>Experience leading, developing and scaling a customer support or service operations team, including direct people leadership</li><li>Strong customer focus, with excellent written and verbal communication skills</li><li>Exceptional judgement and decision-making skills, including an ability to prioritise the critical few things and make sound trade-offs</li><li>Ability to manage multiple priorities and initiatives, while communicating proactively and effectively with stakeholders</li><li>Strong comfort with ambiguity, driving progress through an agile test-and-learn mindset</li><li>Strong data-driven mindset, with experience defining key operational metrics, monitoring performance and identifying trends and using insight to improve outcomes</li><li>Demonstrated experience improving operational processes, service quality and team effectiveness in a scaling environment</li><li>Ability to work effectively in a cross-functional environment and influence across multiple functions and teams</li><li>Good understanding of, or strong desire to learn, relevant technology concepts, operational tooling and the role of AI and automation in modern support operations</li></ul><p>&#xa0;</p><p>Other Qualifications, Skills and Experience</p><ul><li>Experience in a start-up environment, working with agile software development teams</li><li>Experience improving support tooling, workflows, knowledge management, self-service or agent-assist capabilities</li><li>Experience using AI, automation or workflow optimisation to improve operational efficiency, quality or customer experience</li><li>Proficiency in using data visualisation tools such as Tableau, Databricks, Power BI or Sisense</li><li>Relevant university degree would be advantageous</li></ul><p>&#xa0;</p>"
+       },
+       "additionalInformation": {
+        "text": "<p>At SEEK, we are passionate about fostering a culture of inclusion and wellbeing that embraces and values the diversity of our people. We are a purpose driven business that works with heart.</p><p><br>\nWe know teams with diverse ideas, experiences and perspectives are more creative and are critical to ensuring effective delivery and innovating to enable our future success. As such, we welcome applications from people with a diverse group of backgrounds and life experiences, especially as they relate to gender, sexual identity, culture, faith, disability and life stages. If you have the skills, curiosity and an adaptable approach but don't meet every responsibility or qualification listed in this advertisement, please still get in touch with us.</p>"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "company": "nearmap",
+   "jobs": [
+    {
+     "id": "744000141311657",
+     "name": "Director, Regional HR Lead - AU & Poland",
+     "company": {
+      "identifier": "Nearmap",
+      "name": "Nearmap"
+     },
+     "location": {
+      "city": "Barangaroo",
+      "region": "NSW",
+      "country": "au",
+      "address": "100 Barangaroo Avenue",
+      "postalCode": "2000",
+      "remote": false,
+      "hybrid": true,
+      "latitude": "-33.8636877",
+      "longitude": "151.2021374",
+      "fullLocation": "Barangaroo, NSW, Australia"
+     },
+     "releasedDate": "2026-08-03T16:42:21.105Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/nearmap/postings/744000141311657",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p><strong>Position Location:&#xa0;</strong>Nearmap is open to considering candidates based in Sydney, Australia willing to split their work time between working remotely and coming into the office in Bangaroo.&#xa0;<br>\n<br>\n<strong>About the Role</strong></p><p>Reporting to the CHRO, our Regional Lead&#xa0;will&#xa0;balance global consistency with local execution.&#xa0;You’ll&#xa0;set the agenda for regional policy and best&#xa0;practices, and&#xa0;contribute to our company-wide strategy as a member of our People &amp; Culture SLT. Day to day,&#xa0;you’ll&#xa0;be the go-to for our Australian and Polish employees and managers, providing coaching, guidance and serving as the point person for all employee relations matters.&#xa0;&#xa0;You’ll&#xa0;be a standout project manager, putting your skills to use leading programs&#xa0;that&#xa0;have a global impact including our ESG Strategy.&#xa0;Our&#xa0;Regional&#xa0;facilities teams will also report&#xa0;into&#xa0;you, with dedicated Workplace&#xa0;Ops&#xa0;Managers in both locations, helping you to shape our employee experience.&#xa0;You’ll&#xa0;partner closely with our&#xa0;Global Business Partner, People Ops and Talent Acquisition teams,&#xa0;and&#xa0;have a meaningful&#xa0;impact on how our culture and company takes shape as it grows.&#xa0;&#xa0;</p><ul><li>Translate global HR strategy into region-specific plans reflecting local market, cultural, and legal context.&#xa0;</li><li>Support leaders through advice, coaching, and solutions-focused problem-solving, including coaching managers on relevant employment legislation&#xa0;in Australia and Poland.&#xa0;&#xa0;</li><li>Manage performance processes end-to-end&#xa0;(PIPs, probation reviews, exit conversations, etc.)&#xa0;and drive high performance through coaching, feedback, and clear accountability.&#xa0;</li><li>Handle complaints, legal, and risk matters including redundancies, providing&#xa0;timely&#xa0;and&#xa0;accurate&#xa0;advice across diverse People management activities.&#xa0;&#xa0;</li><li>Stay current on legislative requirements, policies, and agreements, ensuring full compliance with local laws and company/Code of Conduct guidelines.&#xa0;</li><li>Diagnose operational gaps and risks, developing and maintaining&#xa0;our&#xa0;local&#xa0;policies&#xa0;and implementing&#xa0;best practices&#xa0;that align with business goals.&#xa0;</li><li>Own global programs including&#xa0;ESG strategy as&#xa0;member&#xa0;of P&amp;C SLT.&#xa0;&#xa0;</li><li>Partner with People Ops on payroll,&#xa0;onboarding&#xa0;and&#xa0;offboarding.&#xa0;Analyse&#xa0;People metrics and trends (e.g.&#xa0;quarterly onboarding/offboarding data) to inform People strategy and&#xa0;drive continuous improvements.&#xa0;&#xa0;</li><li>Develop our strategy for engagement and culture-building for the regions you support in close&#xa0;partnership&#xa0;with our Workplace ops managers, championing&#xa0;Nearmap's&#xa0;culture and values.&#xa0;<br>\n&#xa0;</li></ul>"
+       },
+       "qualifications": {
+        "text": "<p><strong>About You</strong></p><ul><li><strong>You're&#xa0;a trusted advisor&#xa0;and&#xa0;relationship builder.&#xa0;</strong>People bring you their toughest problems because you listen first, then help chart the right course of action. You keep everyone in the loop along the way,&#xa0;building the kind of trust that makes leaders turn to you&#xa0;again and again.&#xa0;</li><li><strong>You're&#xa0;a change navigator.&#xa0;</strong>Ambiguity&#xa0;doesn't&#xa0;rattle&#xa0;you,&#xa0;it&#xa0;energises&#xa0;you. You can walk into a messy, evolving situation and find the thread that turns chaos into a clear path forward.&#xa0;</li><li><strong>You're&#xa0;a balance-keeper.&#xa0;</strong>You know when to hold the line on policy and when to&#xa0;flex for&#xa0;the human on the other side of it. You bring empathy and&#xa0;rigour&#xa0;to every call, never sacrificing one for the other.&#xa0;</li><li><strong>You're&#xa0;an operator with&#xa0;vision.&#xa0;</strong>You're&#xa0;just as comfortable rolling up your sleeves on the details as you are&#xa0;shaping&#xa0;the bigger strategy. You connect the dots between&#xa0;what's&#xa0;happening today and where the business needs to go.&#xa0;</li><li><strong>You're&#xa0;a proactive self-starter.&#xa0;Y</strong>ou&#xa0;don't&#xa0;wait to be asked, you spot what needs doing and bring the energy to get it moving. Whether&#xa0;it's&#xa0;a quick win or a long slog, you show up ready and pull others along with you.&#xa0;</li></ul><p><strong>What You'll Bring</strong></p><ul><li>Bachelor’s degree&#xa0;preferred&#xa0;</li><li>10+ years&#xa0;as a P&amp;C Business Partner/HR Manager/Senior HR advisor,&#xa0;with a focus on employee relations,&#xa0;ideally in a fast-paced growth industry.&#xa0;</li><li>Solid understanding of Australian employment legislation, with experience managing complex ER issues from identification through resolution.&#xa0;</li><li>Proven experience diagnosing&#xa0;organisational&#xa0;needs and rolling out programs that improve capability, performance, and culture.&#xa0;</li><li>Strong relationship-building&#xa0;and coaching skills&#xa0;across diverse stakeholders, balanced with confidentiality, discretion, and sound judgment when handling sensitive information.&#xa0;</li><li>Excellent written, verbal, visual&#xa0;communication&#xa0;and&#xa0;organisational&#xa0;skills.&#xa0;You're&#xa0;able to juggle multiple tasks,&#xa0;maintain&#xa0;accurate&#xa0;documentation, and consistently meet deadlines with high attention to detail.&#xa0;</li><li>Confident with a wide range of IT systems, including advanced Microsoft Office skills, with the ability to quickly learn new tools.&#xa0;</li></ul>"
+       },
+       "additionalInformation": {
+        "text": "<p><strong>Why you'll love working at Nearmap:</strong></p><p>We move fast and work smart; often wearing multiple hats. We’re proud of our inclusive, supportive culture, and maintain a safe environment where everyone feels a sense of belonging and can be themselves.</p><p><strong>Learn More About The Work We Do</strong></p><p><strong><a href=\"https://www.youtube.com/@nearmap\" rel=\"noopener noreferrer\">YouTube Page</a></strong></p><p><a href=\"https://www.linkedin.com/company/nearmap-com/posts/?feedView=all\" rel=\"noopener noreferrer\">LinkedIn Page</a></p><p><em>Thanks, but we got this! Nearmap does not accept unsolicited resumes from recruitment agencies and search firms. Please do not email or send unsolicited resumes to any Nearmap employee, location or address. Nearmap is not responsible for any fees related to unsolicited resumes.</em></p>"
+       }
+      }
+     }
+    },
+    {
+     "id": "744000140998589",
+     "name": "Regional Growth Marketing Manager",
+     "company": {
+      "identifier": "Nearmap",
+      "name": "Nearmap"
+     },
+     "location": {
+      "city": "Barangaroo",
+      "region": "NSW",
+      "country": "au",
+      "address": "100 Barangaroo Avenue",
+      "postalCode": "2000",
+      "remote": true,
+      "hybrid": false,
+      "fullLocation": "Barangaroo, NSW, Australia"
+     },
+     "releasedDate": "2026-07-31T21:16:14.048Z",
+     "ref": "https://api.smartrecruiters.com/v1/companies/nearmap/postings/744000140998589",
+     "jobAd": {
+      "sections": {
+       "jobDescription": {
+        "text": "<p><strong>About the role</strong></p><p>We're looking for a Regional Growth Marketing Manager to run account-based marketing for our AECO and Government segments across Australia and New Zealand.</p><p>This isn't a campaign-building role. The Global Campaign Manager owns the strategy, messaging, and 1:Many programs. You take that content and turn it into targeted 1:1 and 1:Few programs against the accounts where Nearmap has the greatest opportunity to win, expand, or land new business, working hand in hand with regional sales.</p><p>You'll own the ANZ field events calendar, the account plans, and the sales relationship. If an account surges on intent data, you and your AE pod move on it together.<br>\n<br>\n<strong>What you'll do</strong></p><ul><li>Run 1:1 Strategic ABM for Nearmap's highest-priority ANZ accounts and 1:Few cluster programs for groups of accounts with a shared use case, buying trigger, or competitive situation</li><li>Build joint account plans with AEs: buying committee maps, shared OKRs, program plans, and a regular review cadence</li><li>Adapt global campaign content, assets, messaging, and nurture sequences for ANZ account-specific context</li><li>Act on 6Sense intent signals with your AE pod so marketing and sales move together the moment an account is in motion</li><li>Own the ANZ field events calendar for AECO and Government, with every event tied to a defined account list, a pipeline objective, and a follow-up plan</li><li>Manage the ANZ event budget for your segments, plan spend quarterly, and report on return</li><li>Partner with ANZ AECO and Government sales leadership as a peer, attend pipeline reviews, and build programs that move stalled deals</li><li>Coordinate BDR and SDR outreach sequencing with your ABX programs and intent signals so outbound lands when accounts are in market</li><li>Bring field intelligence back to the Global Campaign Manager and Portfolio Marketing on what ANZ buyers are saying and where the message needs sharpening</li></ul>"
+       },
+       "qualifications": {
+        "text": "<p><strong>What you'll bring</strong></p><ul><li>6 to 8 years in field marketing, ABX, or demand generation in a B2B SaaS or technology company, with a track record of account-level pipeline contribution</li><li>Proven end-to-end events management, from strategy through logistics and post-event measurement</li><li>Strong ABX execution, including 1:1 and 1:Few programs built and run in partnership with sales</li><li>Deep sales partnership experience and credibility with sales leadership</li><li>Experience in AECO-adjacent ANZ markets, including construction, engineering, architecture, infrastructure, or commercial real estate, is a strong advantage</li><li>The self-sufficiency to run regional ABX programs without relying on a dedicated support function</li><li>Proficiency with Salesforce and 6Sense, and comfort using intent data and CRM signals to prioritise and activate daily</li></ul><p><strong>Ways of working</strong></p><ul><li><p>This role is based in our Sydney, Australia office, hybrid, with two anchor days in the office each week. You'll work closely with regional AECO and Government sales leadership and stay flexible for the occasional early call to align with North America based teams.</p></li></ul>"
+       },
+       "additionalInformation": {
+        "text": "<p><strong>Some of our benefits</strong></p><p>Nearmap takes a holistic approach to our employees' emotional, physical, and financial wellness. Some of our current benefits include:</p><ul><li>Quarterly wellbeing day off, four additional days off annually for your 'YOU' Days</li><li>Wellbeing and technology allowance</li><li>Annual flu vaccinations</li><li>Hybrid flexibility for this role</li><li>Nearmap subscription (of course!)</li><li>Stocked kitchen with access to all the snacks you need</li><li>In-office lunch every Tuesday and Thursday at our Sydney CBD office</li><li>Showers available for anyone cycling to work or lunchtime gym-goers!</li></ul><p><strong>Working at Nearmap</strong></p><p>We move fast, we care about craft, and we're proud of what we're building. If you're energised by turning strategy into pipeline and building real relationships with sales, we'd love to meet you.</p><p>If you can see yourself working at Nearmap and feel you have the right level of experience, we invite you to get in touch.</p><p>Thanks, but we got this! Nearmap does not accept unsolicited resumes from recruitment agencies and search firms. Please do not email or send unsolicited resumes to any Nearmap employee, location, or address. Nearmap is not responsible for any fees related to unsolicited resumes.</p>"
+       }
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

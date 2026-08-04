@@ -97,6 +97,21 @@ class BaseAdapter(abc.ABC):
             path = Path(fixture_dir) / self.source / "jobs.json"
             if path.exists():
                 return json.loads(path.read_text())
+            # Fixture mode with NO fixture for this source used to fall through
+            # to ``_fetch_live`` — a silent fallback that made the test suite
+            # issue real third-party HTTP calls while ``main.py`` was printing
+            # "adapters will serve canned HTTP fixtures instead of making live
+            # calls" (§REC-05) and this module's own docstring promised "no
+            # network I/O". A newly registered adapter therefore joined the
+            # suite live and nondeterministic, with nothing to notice it.
+            # Fixture mode is now absolute: a missing fixture is a loud,
+            # named failure, never a live call.
+            raise AdapterFetchError(
+                f"fixture mode is active (AETHER_DISCOVERY_FIXTURE_DIR={fixture_dir}) "
+                f"but source '{self.source}' has no recorded payload at {path}. "
+                "Record one (or pass fixture=) — refusing to make a live HTTP "
+                "call while fixture mode is configured."
+            )
         return self._fetch_live(query, location)
 
     def _fetch_live(self, query: str, location: str) -> dict[str, Any]:
