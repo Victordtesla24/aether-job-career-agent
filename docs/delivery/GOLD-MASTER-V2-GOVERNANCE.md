@@ -1306,3 +1306,58 @@ fragments).
 
 Cost of the re-measurement: **$0.138895** across 8 runs. Note this is real upstream spend the app's own
 `AgentRun` ledger does not see, because the harness writes no rows.
+
+---
+
+## GOV-030 — G-N measured: zero regressions, but NOT GREEN. And ORCH-CORR-015.
+
+**Full suite at HEAD (1:07:51):** **2704 passed / 7 failed / 1 skipped**.
+
+**The decomposition is the finding.** All 7 failures are in **untracked test files belonging to other
+sessions' in-flight work**. Restated as an identity: the **2683 tracked tests that exist at HEAD were 2682
+passed / 0 failed / 1 skipped**. A clean checkout would not even collect the two files that failed.
+**Eight commits landed today — including three rewrites of `ats_engine.py` — and produced zero regressions.**
+The ATS surface is **156/156 green**, including `test_rt_005_board_stage_sync.py` under the strengthened
+`{unscorable} == {seeded control}` partition restored in `52fc727`.
+
+`test_perfect_keyword_overlap_scores_high` **passed on the measured path** — not a model-load caveat: the 88 MB
+embedding cache is on disk, the log records `ATS semantic scoring active path=local`, and assertion 4a
+(`semantic_path in ('local','hf_api')`) would have failed first. So the guard restored in `52fc727` is doing
+its job rather than passing vacuously.
+
+Class-(c) was **ruled out by evidence, not assumed**: both failing files were re-run alone under the lock and
+reproduced identically. Deterministic, not concurrency.
+
+### ORCH-CORR-015 — I called a live defect "inert stale comments"
+
+Earlier today I inspected `# RED-PROOF-TEMP: circuit branch disabled` at `agents.py:896` and `:2125`, saw that
+the branch below each still executes `raise _quota_429(...)`, and reported them as **stale comments that
+"assert protection is disabled while sitting above protection that is enabled."**
+
+**That was backwards.** The comments were telling the truth. `_raise_if_llm_circuit_open()` is defined at
+`:678` and `grep -c` finds **exactly one occurrence in the entire tree — its own definition**. It is dead code.
+The `_quota_429` those branches raise *is the bug*: it is the user-blaming error the fix exists to replace.
+
+I checked whether the code ran, and concluded it therefore worked. I never checked whether the *right* code
+ran. **A branch executing is not the same as a branch being correct** — and a comment that contradicts your
+reading deserves investigation, not dismissal.
+
+**The live consequence, unfixed until now:** an upstream **HTTP 402 (OUR provider out of credit)** reaches a
+paying customer from the second attempt onward as `429 subscription_quota_exceeded` + *"Switch this agent to
+API-key billing"* — every clause false, blaming the user for an operator failure, recommending a remedy that
+cannot work. `board_sweep` maps 429 → `quota-exhausted`, so operator telemetry agrees with the lie and hides
+the dead upstream. **No tracked test covers this**, so deleting the red file to reach a green suite would have
+left it silently unguarded — the exact trade this campaign has refused twice before (GOV-017).
+
+### The 7th failure: a vacuous guard resting on a claim never observed
+
+`test_gm2s15_f04_probability_self_reference.py::test_3` dies in its own **arrange** step with a
+`UniqueViolation` on `Application_user_job_active_key` — it seeds 4 `submitted` then 4 `interview` rows on the
+same 4 job ids, against a partial unique index permitting one active row per `(userId, jobId)`. It never
+reaches its assertion, so it carries **zero information** about `5f9e775`, whose only anti-over-correction pin
+it was. Its docstring claims test 3 "already passes" — a state that was **never observable**. Same shape as
+GOV-017: a fail-before/pass-before condition **asserted rather than measured**. It is also a repeat of
+`WC-INTERVIEW-SEED-001` (`40c11c7`), whose corrected pattern sits unused two files away.
+
+**G-N remains OPEN.** The suite exits 1, and no run in this campaign has yet measured a pristine HEAD — six
+backend source files carry uncommitted edits, including the disabled fix branch.
