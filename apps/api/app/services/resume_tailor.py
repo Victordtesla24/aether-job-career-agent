@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.services.ats_engine import _content_tokens as _ats_content_tokens
+from app.services.ats_engine import _geographic_tokens as _ats_geographic_tokens
 from app.services.llm_client import (
     LLMClient,
     get_entailment_budget_seconds,
@@ -31,6 +32,31 @@ from app.services.llm_client import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def jd_keyword_terms(job_description: str) -> set[str]:
+    """JD tokens a rewrite is MEASURED against — the posting's geography removed.
+
+    ATS-KW-001. Two places in this module derive a "JD keyword" set straight
+    from the tokenizer and treat every token in it as a term worth keeping:
+    :func:`select_bullets_to_tailor`'s ranking, and the ATS non-regression
+    floor in ``_validate``. Neither knew that the posting's own city is in
+    there, so a bullet like "Led the Melbourne data platform team" made the
+    floor reject any rewrite that did not carry "Melbourne" forward — blocking
+    a truthful rewrite to protect a keyword that is not a skill.
+
+    That floor exists to guarantee ``tailoredATSScore >= baselineATSScore``.
+    Now that ``ATSEngine`` no longer scores geography
+    (``ats_engine._geographic_tokens``), keeping geography here would constrain
+    rewrites for zero score benefit — so removing it RESTORES the floor's
+    agreement with the engine it is defending rather than relaxing it.
+
+    This touches only which words count as JD KEYWORDS. The anti-fabrication
+    and JD-echo guards are upstream of this and are not consulted here.
+    """
+    return set(_ats_content_tokens(job_description)) - set(
+        _ats_geographic_tokens(job_description)
+    )
 
 SYSTEM_PROMPT = (
     "You are an elite resume editor optimising a resume to pass ATS keyword "
@@ -2059,7 +2085,7 @@ def select_bullets_to_tailor(
     if k <= 0 or len(ordered) <= k:
         return ordered
     done = frozenset(already_tailored_refs or ())
-    jd_key_stems = {_stem(t) for t in _ats_content_tokens(job_description)}
+    jd_key_stems = {_stem(t) for t in jd_keyword_terms(job_description)}
     resume_stems, _ = _evidence_index(resume_text)
     scoped = _scoped_evidence_map(ordered, resume_text, evidence_extra)
     ranked: list[tuple[int, int, int, int, str]] = []
@@ -2221,7 +2247,7 @@ class ResumeTailorService:
         jd_stems, _ = _evidence_index(job_description)
         #: JD keyword tokens (same tokenizer the ATS engine scores with) so a
         #: rewrite can be measured against the original for keyword coverage.
-        jd_terms = set(_ats_content_tokens(job_description))
+        jd_terms = jd_keyword_terms(job_description)
         result = TailorResult()
         structured = self._structure_originals(originals, resume_text)
         by_ref = {b["evidenceRef"]: b["text"] for b in structured}
