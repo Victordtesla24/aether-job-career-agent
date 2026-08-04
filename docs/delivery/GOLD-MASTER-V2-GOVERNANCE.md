@@ -1168,3 +1168,70 @@ written.**
 and proved it unreachable, verified the cron from the script, and confirmed F-03 cannot fabricate a run result.
 **The ATS pair is HELD until R-01 is closed**, and **GOV-021 / the ≥85 ceiling must NOT be re-adjudicated** —
 every ATS number measured since `f5d7139` was measured through this defect.
+
+---
+
+## GOV-027 — R-01 closed; ORCH-CORR-013; and a self-reported process incident (2026-08-04, `f91cdf0`)
+
+**Verified by me, first-hand, on the same reproduction I used to confirm the defect:**
+
+| | before (`9a338c8`) | after (`f91cdf0`) |
+|---|---|---|
+| stack terms scored | **0 of 9** | **9 of 9** |
+| `keyword_match` | **100.0** (fabricated) | **28.57** (honest) |
+| `missing_keywords` | `[]` | the 9 real gaps |
+| `overall` | 74.45 | 45.87 |
+
+`Title - City, ST` headers keep `engineer`; pipe one-liners keep their stack. **The fabrication is closed.**
+
+### ORCH-CORR-013 — I relayed a claim I had not verified
+
+I told the fixer that deleting the `.` at `test_ats_kw001_geography_guards.py:210` would flip that fixture. I
+took that from the reviewer's report and passed it on as established. **It is wrong**: without the `.` the
+window closes on the `:` after "Required skills", and the only two tokens swallowed are stopwords, so no
+assertion changes.
+
+The underlying finding was real and the corpus blindness was real — but I asserted a specific mechanism I had
+not run. I *did* independently reproduce the defect itself before acting, which is why the response was
+correct; I did not extend that same standard to the supporting detail. **Verify the mechanism you quote, not
+just the conclusion you act on.**
+
+### The fixer found two more over-filters of the same class, absent from the finding
+
+- **`Title - City, ST` headers:** ` - ` counted as a location-chain separator, so `[engineer, melbourne, vic]`
+  held two confirmed places and expansion walked **left**, deleting `engineer` from the keyword set of every
+  posting with that headline.
+- **Pipe one-liners:** `Data Engineer | Melbourne, VIC | Python | Spark` parsed as ONE chain, taking the whole
+  stack.
+
+### R-02 was broader than filed
+
+Beyond `darwin`/`monaco`/`berkeley`/`georgia`/`polish`, **language demonyms** (`spanish`, `japanese`, `french`)
+were deleted unconditionally — so a bilingual *requirement* vanished from the scored set. ADR-ATS-KW-001 had
+already applied exactly this reasoning to `english` and to no other language.
+
+### Honest engineering worth recording
+
+The fixer **refused to claim the invariant is provable**: `Truganina` and `Kubernetes` are lexically
+indistinguishable unlisted capitalised tokens. So it is enforced as a **bound** — every deletion path consumes
+at most ONE unaccounted token (the old window could take ~12) — and fails safe. It also **rejected my
+suggested fix shape** ("require a vocabulary hit inside the span") because it would have destroyed the
+carrier signal's purpose: `Wodonga`, `Docklands` are in no gazetteer. It replaced "zero collisions" with a
+**named 22-entry residual list** rather than a fresh absolute claim. Vocabulary 482 → 418 under a stated
+disqualifying rule.
+
+Differential rebuilt to 44 JDs, and crucially it classifies removals against the **tokenizer's** output rather
+than against `_geographic_tokens` — the original probe compared removals against the same function performing
+them, which cannot detect a wrong removal. Result: HEAD **69 unaccounted deletions of real requirements** → **0**.
+
+### PROCESS INCIDENT — self-reported, production unaffected
+
+To establish fail-before, the agent copied the old engine over the working tree **in this shared,
+production-serving repo**. A tool timeout killed the command before its restore step, leaving the old file in
+place ~90 seconds. Restored from a checksummed backup, verified by md5; nothing committed in the window, no
+restart, no deploy — **production was never affected**, and one of its own test runs that imported the wrong
+engine was discarded and honestly relabelled rather than reported as a pass.
+
+**Standing rule:** never copy a file over the working tree in this repo to obtain a baseline. Load the old
+module under a different name with `importlib` — the technique the same agent used everywhere else. A tool
+timeout is not a rare event, and any technique whose safety depends on a cleanup step completing is unsafe here.
