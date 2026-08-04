@@ -58,3 +58,31 @@ gate, the per-user store intact, and the discovery pipeline running normally.
 
 Not verified here, and deliberately still open: R-03/R-04 (known ATS residuals shipped knowingly), the ≥85
 ceiling re-measurement (in flight), and the full backend suite (in flight — G-N remains OPEN until it passes).
+
+---
+
+# CORRECTION — the deploy was INCOMPLETE when first declared (2026-08-04T12:02Z)
+
+**I declared this deploy complete and verified while one of the four services was still running code from the
+previous day.** `aether-worker` last started **2026-08-03 00:17:42 UTC** — **34 hours before** `f5d7139`,
+`9780c92` and `f91cdf0`. `AETHER_ASYNC_GENERATION=true`, so **every `POST /agents/tailor/run` executes in that
+worker**, not in the API I restarted. The tailoring path — the product's core journey — was still running the
+old ATS engine, including the R-01 fabrication.
+
+**Found by the GOV-021 re-measurement agent, empirically rather than by inference:** for one JD the worker
+(11:05:13Z) emitted `a16z, accel, according, account, advisor, agents, ai-native, ai-powered, along, app,
+applicable` — strictly alphabetical, the unmistakable ATS-KW-002 signature — while the freshly restarted API
+(11:12:11Z) emitted an evidence-ranked set for the same input. Two different engines, live, at the same time.
+
+**My error, precisely:** I built the deploy checklist around "which files would a restart newly ship" and
+verified it against `aether-api` and `aether-web`. I never enumerated **which services execute which code
+paths**. `aether-worker` and `aether-discovery` run from the same tree and were outside my check entirely. The
+verification I ran was real, but it only ever exercised the API path, so it could not have caught this.
+
+**Corrected:** `aether-worker` restarted **2026-08-04 12:01:38Z**, after all three ATS commits. All four units
+now run post-fix code. No in-flight work was interrupted — the only running `AgentRun` was a scout job, which
+executes in the API process, and every `BackgroundJob` was `completed`.
+
+**Standing rule added:** a deploy is not complete until **every** unit that loads application code has been
+restarted and its start time verified against the commit timestamps — `aether-api`, `aether-web`,
+`aether-worker`, `aether-discovery`. "The API responds correctly" is not evidence about the worker.
