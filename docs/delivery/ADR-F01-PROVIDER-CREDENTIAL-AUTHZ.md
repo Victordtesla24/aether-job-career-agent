@@ -278,3 +278,65 @@ current (200) behaviour for a customer.
    deployment credential, so the pre-fix exposure window cannot be reconstructed from
    the database. The operator should rotate any credential that was live while the
    hole was open and treat its last-4 as disclosed.
+
+---
+
+# ORCHESTRATOR RULINGS — 2026-08-04T03:05Z
+
+## Ruling 1 — `PUT /agents/providers/{provider}`: **OPTION A. Keep `CurrentUser`. Do NOT gate it.**
+
+Two sessions wrote contradictory tests for this route: one asserts 403 for a non-admin, the other asserts 200.
+They cannot both pass. **The 403 test is wrong and must be corrected**, for reasons both sessions already
+agree on factually:
+
+- the handler writes `AgentProvider`, whose PK is `("userId","provider")`;
+- **every statement is scoped by `current_user["id"]`**;
+- it **never touches `ProviderCredential`** — the deployment-wide store F-01 is about;
+- it is the **only** write path behind the customer model picker (`ModelPicker.tsx:110` → `updateProvider`),
+  read back at run time at `agents.py:1663`.
+
+This route is therefore already correctly per-user. Gating it would 403 every customer's model-picker save —
+breaking a paid feature to "fix" a route that was never part of the vulnerability. F-01 is a **tenancy** defect
+about an unscoped shared store, not a rule that every `/agents/providers*` path must be admin-only; applying
+the gate by URL prefix rather than by what the code actually writes would be cargo-culting the fix.
+
+The one real residue — the echoed `_provider_env_state` `detail` (and a 409 message) disclosing **one bit per
+provider**, whether the server holds an env key for it — is tracked separately. It is not a secret, hint or
+timestamp, and it does not justify breaking model choice for every paying customer. Option B (gate it *paired
+with* a new per-user model-preference write endpoint + a ModelPicker re-point) remains available later if that
+bit is ever judged material; it is a feature change, not a security fix, and must not ride on a blocker.
+
+**Action:** delete or correct `apps/api/tests/test_gm2_f01_provider_route_authz.py::test_non_admin_put_providers_status_model_gets_403`.
+Two committed tests asserting opposite contracts for one route is a broken suite regardless of which ships.
+
+## Ruling 2 — commit-procedure deviation: **ENDORSED. This was the right call.**
+
+`apps/api/app/routers/agents.py` carried another session's in-flight CRITICAL-3b work. A literal
+`git commit --only <path>` would have swallowed it and shipped it to main — **the exact GOV-013 failure the
+rule exists to prevent**. Staging only own hunks via a validated `git apply --cached` (every retained hunk
+asserted to carry an `F-01`/`AdminUser` marker, foreign hunks excluded), then verifying post-commit that HEAD
+carried 7 `AdminUser` annotations and **zero** foreign markers, upheld the rule's *intent* where its letter
+would have violated it.
+
+**Standing amendment to the shared-tree rule:** `git commit --only <paths>` is the default, but when a path
+you must commit ALSO carries another session's in-flight hunks, `--only` is INSUFFICIENT — stage your own
+hunks explicitly and prove the foreign hunks are absent from the commit and still present in the working tree.
+Disclose the deviation, as was done here.
+
+**Correction to that agent's characterisation, for the record:** the two `# RED-PROOF-TEMP: circuit branch
+disabled` markers at `:892` and `:2052` do **not** disable anything — the branch below each still executes
+`raise _quota_429(...)`. They are stale, and now false, comments left over from a red proof. They carried no
+behavioural risk to this deploy, but they must be removed: a comment asserting protection is disabled, sitting
+above protection that is enabled, will mislead the next reader in exactly the wrong direction.
+
+## Deploy record
+
+API restarted 2026-08-04T02:58Z. Verified live against a real non-admin (`isAdmin=False`): **403** on
+`GET /providers`, `PUT|DELETE /providers/anthropic/credential`, `POST /providers/anthropic/verify`,
+`POST /providers/anthropic/oauth/start`; **401** (not 403) for anonymous; **200** on
+`GET /agents/user/providers`, so the per-user store is intact. Frontend built and restarted immediately in the
+same operation, per `INCIDENT-2026-07-21-web-build-clobber.md`.
+
+**Operator action still required:** `ProviderCredential` has no audit trail, so the pre-fix exposure window
+cannot be reconstructed. Rotate every provider credential that was live while the hole was open, and treat
+each last-4 as disclosed.
