@@ -594,3 +594,77 @@ the final declaration, not carried forward on its recorded status.
   rotated in lockstep (verified against the new hash); discovery cron succeeding every 30 min; admin
   privilege self-restored on rotation exactly as the approved design intended.
 - Branch hygiene: `origin/main` == local HEAD `8e61afc`, 0 unpushed, 1 remote branch, 0 open PRs.
+
+---
+
+## GOV-013 — Production test-data purge: execution WITHHELD (manifest fails its own approval)
+
+| Field | Value |
+|---|---|
+| **Adjudicated** | 2026-08-04T02:1xZ, orchestrator |
+| **Severity** | HIGH — irreversible production data deletion |
+| **Ruling** | **EXECUTION WITHHELD.** The purge is APPROVED IN PRINCIPLE and BLOCKED IN PRACTICE. |
+
+### The finding being remediated
+The production DB holds 15 users: **13 `@mailinator.com` test identities owning 5,011 `Job` rows**, created
+2026-08-03/04 by this run's own UAT agents — i.e. AFTER W-CLEAN was recorded complete. §13.1.3 forbids stale
+test data in the live DB, so **G-K is REOPENED** and cannot close on the earlier evidence.
+
+### Why execution is withheld — two independent blocks
+
+**OD-4 — the manifest does not match its own approval record. `[VERIFIED]`**
+The risk-officer's approval record pins the manifest at sha256 `ac43a9a8…`. The manifest on disk hashes to
+`5ce65fe3…` — a **mismatch**. It was modified after approval, by a second risk-officer instance working the
+same task concurrently. Worse, the orchestrator's own grep finds the **REJECTED `pg_dump` command still present
+8 times** in the approved-looking artifact.
+
+Under §13.2 a janitor "executes the manifest exactly". Executing this one would run a backup command that its
+own author rejected as unsafe — see below — against production. **REFUSED until the manifest is re-authored by
+a single author, the pg_dump command is purged from it, and a fresh approval record pins a matching sha256.**
+
+**C5-A — the target rows are not quiescent. `[VERIFIED by the risk-officer]`**
+A 20-minute look-back suggested quiescence; it was wrong. Test-user `AgentRun` rows went 7 → 8 → 9 during the
+assessment and the in-scope total drifted 5,079 → 5,080 → 5,081 across seven minutes. A UAT sub-agent is still
+writing. Deleting now would pull rows out from under a running session.
+
+### Three findings in this assessment that would each have caused real damage
+
+1. **A `sourceUrl`-based predicate would have destroyed 1,387 OWNER rows.** `UNIQUE INDEX
+   "Job_userId_sourceUrl_key"` proves dedup is per-user, so job rows are private copies — but 1,387 of the
+   owner's `sourceUrl`s also exist as test-user copies. `DELETE FROM "Job" WHERE "sourceUrl" IN (…)` would have
+   taken the owner's with them. Identity-only predicates are now machine-enforced over the manifest's generated
+   SQL; the orchestrator independently confirmed **0 non-identity predicates** and 5 identity predicates present.
+2. **The ORM misrepresents the FK graph.** `schema.prisma` declares 16 models; the live database has **31 tables
+   and only 16 FK constraints**, with **17 user-scoped tables carrying no FK to `"User"` at all**. A
+   cascade-based purge would have silently orphaned subscriptions, quotas and stored provider credentials.
+   Every table is now deleted explicitly.
+3. **`pg_dump` fails DANGEROUSLY here.** Client 16.14 against server 17.9 aborts **and leaves a 0-byte file**.
+   A janitor running `pg_dump … && psql -c 'DELETE …'` would get a silently empty backup and delete anyway.
+   Replaced with a JSONL capture validated round-trip (5,011 rows, 0 unparseable, 3/3 byte-identical on restore).
+   Full-DB/PITR restore is **prohibited** as rollback: the owner is writing concurrently, so restoring would
+   destroy their post-backup work and convert cleanup into real loss.
+
+### Conditions that must ALL hold before a janitor may execute
+Backup verified non-empty and JSON-parseable with matching line counts, copied off-VM with sha256 (the evidence
+tree is gitignored); identity predicates only; explicit per-table deletes in FK order, never cascade; single
+transaction with in-transaction pre/post assertions; 30 minutes of zero test-identity writes with all UAT
+sub-agents confirmed terminated; `AdminAuditLog`, `StripeEvent`, `Plan`, `AdminSetting` and provider-credential
+tables untouched; a read-only risk-officer diff of the janitor's actual SQL against the re-approved manifest;
+and the janitor is not the approver.
+
+### OD-3 — the BLOCKER-002 "PRESERVE-DO-NOT-DELETE" rows: ADJUDICATED, NOT BLOCKING
+Three `ApprovalRequest` ids designated preserve-do-not-delete on 2026-07-31 return **0 rows**, and the
+`GAP-P7-DEF-B` probe string is absent everywhere. Orchestrator probe: **338 `ApprovalRequest` rows exist, 0 of
+which contain the probe string**, and the owner's `User.name` now reads as a real name rather than a
+placeholder.
+
+Ruling: the **corrective outcome BLOCKER-002 required is achieved** — the customer-facing defect (cover letters
+signed with a test-probe string) is gone at its source. The three designated rows are unaccounted for, and this
+is recorded honestly as an **evidence-provenance gap**, not a data-integrity violation: the substantive evidence
+survives in the committed text corpus. It does not block the purge and does not reopen BLOCKER-002. Ten `User`
+rows still carry probe-like names — all of them mailinator test identities inside the purge scope.
+
+### Effect on gates
+**G-K is REOPENED** and stays open until the purge executes cleanly under a re-approved manifest, AND the
+operator dispositions the two live-mode Stripe customer records (`OD-1`), which cannot be removed from inside
+the VM.
