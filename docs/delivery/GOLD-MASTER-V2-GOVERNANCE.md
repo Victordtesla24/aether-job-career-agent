@@ -918,3 +918,34 @@ production data, with these numbers, and MUST NOT report G-C as "≥85 achieved"
 - **Shared-production hygiene:** independent autopilot tailoring activity was observed on the same owner
   account mid-probe (a run the prober did not trigger). Per-run costs were taken from each run's own `costUsd`
   rather than an account-wide quota delta, so the figures are unaffected.
+
+---
+
+## GOV-020 — index inheritance, FOURTH instance — and this one briefly broke HEAD (2026-08-04)
+
+**Event.** Commit `52fc727` (guard restoration) swept up a *different* agent's uncommitted hunk in
+`apps/api/tests/test_rt_005_board_stage_sync.py` — the `seed_search_target` precondition belonging to the F-02
+backend work. This is the **fourth** recorded instance of the index-inheritance hazard, and the first in the
+"swallowed by a well-behaved agent" direction: `52fc727` used explicit paths and its own `--stat` check
+confirmed only two files landed. The check was true and still insufficient, because **the swallowed hunk was
+inside a file the committer legitimately owned**.
+
+**Consequence — a broken intermediate HEAD.** Between `52fc727` and `0ce7098`, HEAD's
+`test_rt_005_board_stage_sync.py` imported `conftest.seed_search_target`, which did not yet exist in HEAD's
+`conftest.py`. Anyone checking out that range would have hit a collection error. `0ce7098` repaired it by
+landing the conftest half.
+
+**Verified repaired (orchestrator, first-hand):** `seed_search_target` is defined in `conftest.py` at HEAD and
+referenced twice in `test_rt_005_board_stage_sync.py` at HEAD; all four affected modules parse cleanly.
+
+**Rule strengthened.** `git commit --only <paths>` and a `--stat` check are NOT sufficient on their own. Before
+committing ANY file, diff it against HEAD and confirm **every hunk is yours** — path-level ownership does not
+imply hunk-level ownership when several agents edit one file. The hunk-staging discipline two agents adopted
+independently today (snapshot foreign base → replay own delta onto a pristine `HEAD` copy → `git apply --cached`
+→ prove zero foreign markers in the commit AND all foreign hunks still unstaged in the tree) is now the
+REQUIRED procedure for any shared file, not a permitted deviation.
+
+**Also cleared, by first-hand check rather than relay:** a residual claimed a stray probe file
+`apps/api/tests/_rt005_original_assertions_probe.py` would now 422 and break the suite. It does not exist — the
+authoring agent removed it — and even if it did, its leading underscore means pytest would never collect it.
+Recorded because acting on that relayed claim would have produced a fix for a non-problem.
