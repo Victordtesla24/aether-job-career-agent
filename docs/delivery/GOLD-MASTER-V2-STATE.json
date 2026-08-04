@@ -3,8 +3,8 @@
   "prompt": "/home/ubuntu/aether-gold-master-execution.md",
   "orchestrator": "claude-opus-5 (xhigh, brain-only per \u00a70.1)",
   "started_utc": "2026-07-30T22:36:00Z",
-  "updated_utc": "2026-07-31T16:55:00Z",
-  "phase_step": "DEPLOYED. 71 commits live on production (061014c). Post-deploy verification + 60-min window next.",
+  "updated_utc": "2026-08-04T03:20:00Z",
+  "phase_step": "GOLD-MASTER V4 continuation. F-01 BLOCKER closed+deployed+prod-verified. UAT verdict written: NOT fit to onboard. 3 defects in flight (F-02, F-03, weakened-guard restoration). Prod test-data purge APPROVED-WITH-CONDITIONS, execution deferred on quiescence.",
   "evidence_root": "uat/reports/evidence/gold-master-v2/",
   "governance_log": "docs/delivery/GOLD-MASTER-V2-GOVERNANCE.md",
   "baseline": {
@@ -52,12 +52,7 @@
     "W-L": "PENDING"
   },
   "gates": {
-    "G-A": {
-      "status": "DELIVERABLE-WRITTEN-NOT-CLOSED",
-      "evidence": "docs/delivery/GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md",
-      "verdict": "NOT-READY (BLOCKED-ON-ITEMS)",
-      "note": "Document exists with executive verdict as G-A requires, but coverage is PARTIAL (6/27 routes). Must be refreshed as the sweep completes before qa-adversary can close G-A."
-    },
+    "G-A": "UAT COMPLETE 2026-08-04 with an explicit VERDICT: NOT fit to onboard paying customers. F-01 BLOCKER (closed), F-02/F-03 MAJOR (in flight), F-04 MINOR (open). G-A closes when the must-fix list is closed and re-verified.",
     "G-B": {
       "status": "CLOSED",
       "evidence": "commit aac8c03 \u2014 last shipped \"Coming Soon\" stub removed; grep proves ZERO user-reachable placeholder strings across apps/web/src; 650/650 FE, lint+tsc clean."
@@ -112,10 +107,7 @@
       "status": "CODE-COMPLETE-PENDING-PROD-VERIFY",
       "note": "Scores API-derived and rendered on the tracker; before/after banner pinned. One red test remains, blocked on a file-ownership collision."
     },
-    "G-K": {
-      "status": "CLOSED",
-      "evidence": "uat/reports/evidence/gold-master-v2/final/G-K-SWEEP.md \u2014 0 PROHIBITED-STUB; campaign added +4 jscpd clones ALL test-to-test with ZERO production code; the 5 shared extractions verified as MOVES not copies; no cross-account leakage."
-    },
+    "G-K": "REOPENED 2026-08-04 \u2014 production holds 13 mailinator test identities owning 5,011 Job rows, created AFTER W-K was signed off, by this run own UAT agents. Purge APPROVED-WITH-CONDITIONS (13 conditions); execution DEFERRED until quiescence. G-K also blocked on operator-only Stripe residue (2 live-mode customers).",
     "G-L": {
       "status": "CLOSED",
       "evidence": "CI run 30635438303 conclusion=success on main; deploy 061014c live at 13:45:25Z; git ls-remote --heads origin = exactly 1 branch (main); gh pr list --state open = 0 open PRs; no force-push, no --no-verify."
@@ -128,10 +120,7 @@
       "monitor": "alive throughout (10 tails), signal-proven by an immediate api.log delta on probe",
       "note": "Window 1 (14:12:47-15:13:06Z) was INVALIDATED by 2 real 5xx which turned out to be BLOCKER-004, a genuine live defect on the signup path that every test suite and the full 27-route smoke sweep had missed. The window did exactly what \u00a714.3.5 exists for."
     },
-    "G-N": {
-      "status": "CLOSED",
-      "evidence": "Backend 2056 passed / 0 failed / 1 skipped on the deployed tree (baseline 1885 -> +171 new tests, ZERO regressions). Frontend 650/650. The single previously-red test was fixed, not carved out. Skipped count 1 vs baseline 0 - no skipped-test inflation."
-    },
+    "G-N": "REOPENED 2026-08-04 \u2014 the CLOSED status recorded 07-31 was stale and false. Last full suite: 24 failed / 2549 passed / 1 skipped. 13 closed by a fixer; of the 5 remaining, an independent review FAILED 3 as WEAKENED tests (GOV-017) \u2014 restoration in flight. G-N cannot close until the suite is green AND the restored guards hold.",
     "G-O": {
       "status": "CLOSED",
       "evidence": "Post-deploy smoke: 18/18 routes 200, zero console errors, zero 5xx, no placeholder content (POST-DEPLOY-SMOKE.md). Plus aac8c03 removing the last \"Coming Soon\"."
@@ -881,5 +870,16 @@
   },
   "evidence_hygiene": {
     "action": "Redacted the plaintext weak password from 2 evidence markdown artifacts (FINAL-REPORT-SPOTCHECKS.md, POST-DEPLOY-SMOKE.md). Captured .log files were deliberately NOT edited \u2014 they are the raw record, and altering them would falsify evidence. The remaining occurrence in observation-window-*.log is the application own output, now being fixed at source as BLOCKER-005."
+  },
+  "v4_progress": {
+    "F-01": "CLOSED + DEPLOYED + PROD-VERIFIED 2026-08-04T03:00Z (eb03989). Non-admin gets 403 on all deployment-wide provider-credential routes; anonymous 401 not 403; per-user store still 200. 7 endpoints gated via the EXISTING get_admin_user dependency \u2014 3 were NOT in the original finding (anthropic oauth start/exchange/refresh); the exchange path upserts the same shared row, so a customer could have made their own Claude account the deployment billing credential. OPERATOR ACTION: ProviderCredential has no audit trail \u2014 rotate every credential live during the exposure window; treat each last-4 as disclosed.",
+    "exonerating_evidence": "From the completed UAT, recorded for the closure record: (1) the F-01 tenancy lapse does NOT generalise \u2014 every other resource router is correctly owner-scoped on reads AND writes (404 cross-tenant), admin surface 403; (2) quota is HONEST (free user got exactly 5 runs, 6th cleanly 429, no phantom increment) which REFUTES ADV-ENT-002; (3) the anti-fabrication core promise HELD on every generation path exercised; (4) upgrade path produces a real cs_live Stripe session.",
+    "open_defects": {
+      "F-02": "MAJOR, in flight \u2014 hardcoded Sync query ignores the customer",
+      "F-03": "MAJOR, in flight \u2014 resume upload silently spends a metered run",
+      "F-04": "MINOR, open \u2014 probability score inflated by a self-referential market-demand factor",
+      "ATS-KW-001": "open \u2014 job LOCATION scored as a required resume keyword; every candidate docked on every posting"
+    },
+    "operational_hazards": "GOV-019: units serve from the SHARED working tree, so any session restart deploys every other session in-flight work. A concurrent restart at 03:07:32Z killed a discovery fit-scorer cycle. Verification is only valid until the next foreign restart \u2014 re-assert security gates after any deploy. GOV-013: git index inheritance (3 instances). GOV-018: the suite was making live third-party HTTP calls under fixture mode."
   }
 }
