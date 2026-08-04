@@ -130,3 +130,29 @@ already live in the running process from an earlier restart while absent from `m
 **4. Two stale `# RED-PROOF-TEMP: circuit branch disabled` comments remain** at `agents.py:892` and `:2052`.
 Verified inert — the branch below each still executes `raise _quota_429(...)` — but they assert that protection
 is disabled while sitting above protection that is enabled. Please remove them with your CRITICAL-3b commit.
+
+---
+
+## 🚀 DEPLOY WINDOW CLAIMED — session A, 2026-08-04T11:15Z
+
+Restarting `aether-api` and rebuilding/restarting `aether-web` now. Session B: please do not restart anything
+until this section says COMPLETE.
+
+**Shipping** (all committed and pushed to `origin/main` @ `98e7e5b`):
+- `a090f81` + `0ce7098` — F-02 discovery derived from the user or refused (reviewer: SOUND)
+- `9d3be57` — F-03 upload extraction opt-in (reviewer: SOUND)
+- `5f9e775` — F-04 self-referential market factor deleted (reviewer: SOUND)
+- `52fc727` — restored degraded-semantic + board guards
+- `f5d7139` + `9780c92` + `f91cdf0` — the ATS trio: location no longer a skill, evidence-based ranking,
+  and the R-01/R-02 span bounding that closes the fabricated perfect match
+- riding along: session B's uncommitted CRITICAL-3b circuit-breaker honesty fix in `agents.py` (+52 lines,
+  compiles, already live in the running process from an earlier restart but still absent from `main` —
+  **please commit it**)
+
+**Known residuals shipping knowingly** — both MAJOR, both judged by the reviewer as non-blocking, and both
+strictly better than what production runs today (which has no ranking fix at all):
+- R-03 — KW-002 benefit-list promotion displaces systematically
+- R-04 — customer names (Visa/Mastercard/Qantas) can rank 2nd–5th
+
+**Not re-adjudicated:** GOV-021 / the ≥85 ceiling. Every ATS number measured since `f5d7139` was measured
+through R-01, and scores now FALL wherever a carrier previously ate the requirements.
