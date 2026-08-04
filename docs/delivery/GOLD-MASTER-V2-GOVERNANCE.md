@@ -1007,3 +1007,42 @@ substitute for a lock, but it is checkable and costs one file read before dispat
 **Credit where due:** the concurrent session read this session's ADR and implemented its Ruling 1 (`c7644f4`,
 keeping the per-user `PUT` ungated). Cross-session coordination through committed documents demonstrably works
 — it just has to happen *before* the work, not only after it.
+
+---
+
+## GOV-023 — ATS-KW-002: the headline score is computed against alphabetical noise (2026-08-04)
+
+**Verified first-hand by the orchestrator on the live engine at HEAD, not relayed.**
+
+`ATSEngine._extract_keywords` fits `TfidfVectorizer` on a **single document**. With one document IDF is
+constant for every present term, so ranking collapses to raw term frequency — and because almost every JD term
+appears exactly once, the ordering is decided by the **alphabetical tie-break**. `_MAX_KEYWORDS = 40` then
+truncates that alphabetical list.
+
+**Measured on a realistic Senior Data Engineer posting:**
+
+| | result |
+|---|---|
+| set size | 40 (at the cap), cut off at `modelling` |
+| real requirements NOT scored | **9 of 16** — `python`, `sql`, `spark`, `snowflake`, `terraform`, `streaming`, `pipelines`, `warehousing`, `orchestration` |
+| boilerplate occupying scored slots | **16** — `lunches`, `catered`, `allowance`, `generous`, `competitive`, `agencies`, `click`, `crew`, `annual`, `leave`, `atlassian`, `ltd`, `budget`, `days`, `globe`, `customers` |
+
+Everything alphabetically after roughly "m" is discarded. A candidate is scored on whether their résumé echoes
+*lunches* and *catered*; whether it says *Python* is not measured at all. The tailoring loop then optimises
+toward those same tokens.
+
+**Severity: MAJOR, and strictly worse than ATS-KW-001.** That defect was *contamination* — a non-skill counted
+as a skill. This is silent **loss of the real requirements**, in the number this product sells.
+
+**Nuance worth recording (found by re-testing my own first probe):** a JD with fewer than 40 unique content
+tokens loses nothing — my initial 34-token probe scored every real skill. The harm requires a posting long
+enough to hit the cap, which real postings comfortably are. The alphabetical *ordering* is always present; the
+*loss* only bites past the cap. Reporting the mechanism without that qualifier would have overstated it.
+
+**Blocks G-C.** The GOV-021 ≥85 re-measurement must not be run through this defect — it would measure a
+ceiling imposed by alphabetical truncation and attribute it to the anti-fabrication guard.
+
+**Credit:** found by the ATS-KW-001 fixer while fixing something else, and **escalated rather than absorbed** —
+the same discipline that earlier turned "these tests are stale" into "these tests were never defective". The
+contrast with GOV-017 is the lesson: an agent that widens scope silently produces GOV-017; an agent that
+reports what it found and stops produces this.
