@@ -1072,3 +1072,42 @@ runs on this VM, serially, under `flock /tmp/aether-pytest.lock`, taking ~2h20m.
 **Operator item:** setting `DATABASE_URL_TEST` would make CI meaningfully protective, but must point at a
 DISPOSABLE database. The suite's fixtures TRUNCATE, and this repo has already destroyed its production data
 once that way (`INCIDENT-PROD-DB-WIPE-2026-07-18.md`). Never point it at the production URL.
+
+---
+
+## GOV-025 — ATS-KW-002 fixed, and it corrected me on four counts (2026-08-04, `9780c92`)
+
+**ORCH-CORR-012.** I filed GOV-023 from a single hand-written probe. The fixer refused to trust single
+postings and pulled **5,750 real production `Job` rows** (read-only). Four corrections, all accepted:
+
+1. **Not alphabetical throughout** — alphabetical *within each term-frequency tier*. Repeated terms do outrank
+   once-stated ones; the damage concentrates in the `tf=1` tier, which is where the 40-slot cut lands. This is
+   why severity varies posting to posting, which my single probe could not have shown.
+2. **My "9 of 16 lost / 16 boilerplate" figure is posting-specific and does not generalise.** Their
+   reconstruction of the same shape lost only 4 of 16, because it states its stack twice.
+3. **The defect is WORSE than I filed it.** Corpus-wide, **84.9% of technology terms present in a posting
+   never entered the scored set** — `python` dropped from 1,011 postings, `aws` from 565, `sql` from 407.
+   Median trailing alphabetical run: 15 of 40.
+4. **My suggested remedy was wrong.** I leaned toward fitting IDF against the real corpus. Measured, that
+   **promotes the employer name to first place** — `atlassian` df=8 → idf **6.46**, above `terraform` 3.25 and
+   `python` 1.65; `recruiters` 2.46 and `unsolicited` 2.32 also outrank `python`. Rarity is not
+   requirement-ness. It would have made contaminant (A) worse. Rejected on evidence.
+
+**Result (corpus-wide, 5,743 postings):** technology terms scored **15.1% → 64.1%**; boilerplate slots
+**3.73% → 2.30%**; postings with a ≥20-of-40 alphabetical run **1,596 → 0**. `TfidfVectorizer` removed rather
+than re-parameterised. The new key **orders but never deletes** — `len(keywords)` stays `min(40, unique)` — so
+no score can move merely from a denominator change.
+
+**Disclosed regression, not buried:** Title-Cased benefit lists under a *colon-less* "Benefits" heading are now
+promoted (`insurance` 88→205 postings, `equity` 90→253). Net boilerplate still fell because larger classes fell
+further, but this sub-class moved the wrong way and has no guard. Tracked as task #43; the fix is small (add
+colon-less headings to the non-requirement vocabulary).
+
+**Contaminant (A) deferred honestly:** they measured BOTH a naive and a safe employer detector. The naive one
+cuts 5,114→1,142 postings but wrongly demotes `sql`, `gitlab`, `mongodb`, `databricks`, `datadog`, `figma`,
+`grafana`, `servicenow` and costs 299 real technology terms; the safe variant's effect shrinks to 5,114→4,852.
+Neither met the bar, so they shipped neither — the correct call.
+
+**The pattern worth keeping:** three times now, an agent measuring against real data has overturned an
+orchestrator conclusion drawn from a plausible single case (cf. GOV-015 ADV-ENT-002, GOV-017 weakened guards,
+this). **A single reproduction proves a defect exists; it does not size it, and it does not choose the remedy.**
