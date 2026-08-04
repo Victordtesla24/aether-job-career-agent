@@ -268,50 +268,105 @@ def _iter_tokens(text: str) -> list[tuple[str, int, int]]:
 # below from over-matching: a term that is both a place and a real technology
 # ("Phoenix", "Ontario", "Java") keeps its keyword status as soon as it also
 # appears somewhere that is NOT geographic — e.g. in a skills list.
+#
+# -- R-01 / R-02: the filter's failure modes are NOT symmetric ---------------
+#
+# UNDER-filtering leaves a city in the user's gap list — cosmetic, and visibly
+# odd. OVER-filtering deletes a REQUIREMENT, and a requirement that is not in
+# the keyword set cannot be missing from it, so the product reports a PERFECT
+# keyword match with zero gaps on a posting whose stack the candidate does not
+# have. That is the fabrication this product exists to refuse, and it is worse
+# than the defect this filter was added to fix. Every ambiguity below is
+# therefore resolved by KEEPING the token.
+#
+# Both defects were measured on 9a338c8 and both were invisible to the original
+# guard corpus, for the same structural reason: every JD in it put a "." right
+# after the location, and every homonym it tested was one the vocabulary
+# deliberately omits.
+#
+#   R-01 — the location VALUE had no bound except sentence punctuation, and the
+#   production JD (``fit_evidence.job_evidence_text``) has none between the
+#   requirement items. One carrier phrase in the first requirement deleted the
+#   whole tech stack: keyword_match 100.0, missing_keywords []. Fixed by
+#   :func:`_walk_location_value`, by making the pipe and the spaced dash chain
+#   BOUNDARIES rather than joins, and by capping what a chain may absorb.
+#
+#   R-02 — the every-occurrence rule was VACUOUS for the vocabulary, because a
+#   vocabulary token was seeded at every occurrence: "every occurrence is
+#   geographic" was true by construction. "linux, windows and darwin" lost
+#   ``darwin``; Monaco the editor, Berkeley DB, Georgia the typeface and the
+#   ordinary verb "polish" all vanished. Fixed by disqualifying the colliding
+#   entries under a STATED rule (see the vocabulary below) and by
+#   :func:`_skill_context_indices`, which gives the rule something to bite on.
 
-#: Place names strong enough to mark geography on their own: countries and
-#: their demonyms, states/provinces, regions, and cities big enough that the
-#: name is overwhelmingly the place. DELIBERATE OMISSIONS (precision over
-#: recall): city names that are also well-known technology names — "phoenix",
-#: "aurora", "sierra", "ventura", "monterey", "catalina", "hudson", "atlas",
-#: "athena" — are NOT listed. They are still caught when the posting states
-#: them geographically ("Location: Phoenix, AZ"), via the label/carrier spans
-#: below, and are never dropped when they appear in a skills list. "english"
-#: is omitted for the same reason: it is a language competency here, not a
-#: nationality.
+#: Place names strong enough to mark geography on their own: countries,
+#: states/provinces, regions, and cities big enough that the name is
+#: overwhelmingly the place.
+#:
+#: THE DISQUALIFYING RULE (R-02, 2026-08-04). An entry is EXCLUDED when the
+#: colliding sense is something a JOB POSTING CAN REQUIRE — a technology, a
+#: product or brand the role services, a material, a published standard, a
+#: language competency, or an ordinary work verb. The exclusions are not
+#: taste; the rule is what makes the list auditable.
+#:
+#: * technologies/products — "phoenix", "aurora", "sierra", "ventura",
+#:   "monterey", "catalina", "hudson", "atlas", "athena", "monaco" (the VS Code
+#:   editor), "darwin" (the macOS/BSD kernel), "berkeley" (Berkeley DB,
+#:   Berkeley sockets), "georgia" (the typeface), "milwaukee" (Milwaukee Tool),
+#:   "hobart" (commercial kitchen equipment);
+#: * materials/standards/equipment — "cork", "portland" (Portland cement),
+#:   "chicago" (the Chicago Manual of Style), "bristol" (Bristol board, the
+#:   Bristol Stool Chart), "anchorage" (a structural/fall-arrest anchorage),
+#:   "wellington" (wellington boots), "hawthorn" (the plant);
+#: * ordinary words — "polish", "turkey" ("turkiye" is kept);
+#: * LANGUAGE AND NATIONALITY DEMONYMS, as a CLASS. ATS-KW-001 already omitted
+#:   "english" because it is a competency here rather than a nationality; that
+#:   reasoning is not special to English. A posting that asks for fluent
+#:   Spanish, Mandarin or Japanese is stating a REQUIREMENT, and deleting it
+#:   tells the candidate they match a bilingual role they cannot do. Dropping
+#:   the demonyms costs no location detection: the country name itself is
+#:   still listed, and the demonym form is still caught positionally
+#:   ("based in the Netherlands", "Location: Ireland").
+#:
+#: An excluded place is NOT undetectable — it is simply detected POSITIONALLY,
+#: via the label and carrier spans below ("Location: Phoenix, AZ", "based in
+#: Portland"), which is how postings state a location in the first place.
+#: Under-detecting a location leaves a cosmetic entry in the gap list;
+#: over-detecting DELETES a requirement and fabricates a match, so the list
+#: resolves every doubt towards exclusion.
 _GEO_STRONG_TOKENS = frozenset(
     """
-    afghanistan albania algeria andorra angola argentina argentine argentinian armenia
-    australia australian austria austrian azerbaijan bahamas bahrain bangladesh barbados
-    belarus belgium belgian belize benin bhutan bolivia bosnia botswana brazil brazilian
-    brunei bulgaria burundi cambodia cameroon canada canadian chile chilean china chinese
-    colombia colombian congo croatia croatian cuba cuban cyprus czechia czech denmark danish
-    djibouti dominica ecuador egypt egyptian eritrea estonia estonian ethiopia fiji finland
-    finnish france french gabon gambia germany german ghana greece greek guatemala guinea
-    guyana haiti honduras hungary hungarian iceland india indian indonesia indonesian iran
-    iraq ireland irish israel israeli italy italian jamaica japan japanese kazakhstan kenya
+    afghanistan albania algeria andorra angola argentina armenia
+    australia austria azerbaijan bahamas bahrain bangladesh barbados
+    belarus belgium belize benin bhutan bolivia bosnia botswana brazil
+    brunei bulgaria burundi cambodia cameroon canada chile china
+    colombia congo croatia cuba cyprus czechia denmark
+    djibouti dominica ecuador egypt eritrea estonia ethiopia fiji finland
+    france gabon gambia germany ghana greece guatemala guinea
+    guyana haiti honduras hungary iceland india indonesia iran
+    iraq ireland israel italy jamaica japan kazakhstan kenya
     kosovo kuwait kyrgyzstan laos latvia lebanon lesotho liberia libya liechtenstein
-    lithuania luxembourg madagascar malawi malaysia malaysian maldives mali malta mauritania
-    mauritius mexico mexican moldova monaco mongolia montenegro morocco mozambique myanmar
-    namibia nepal netherlands dutch nicaragua nigeria norway norwegian oman pakistan
-    pakistani palau palestine panama paraguay peru philippines filipino poland polish
-    portugal portuguese qatar romania romanian russia russian rwanda samoa senegal serbia
-    serbian seychelles singapore singaporean slovakia slovenia somalia spain spanish sudan
-    suriname sweden swedish switzerland swiss syria taiwan tajikistan tanzania thailand thai
-    togo tonga tunisia turkey turkiye turkmenistan uganda ukraine ukrainian uruguay
-    uzbekistan vanuatu venezuela vietnam vietnamese yemen zambia zimbabwe
-    europe european asia asian africa african americas emea apac anz latam oceania nordics
-    benelux scandinavia scandinavian caribbean britain british england scotland wales
+    lithuania luxembourg madagascar malawi malaysia maldives mali malta mauritania
+    mauritius mexico moldova mongolia montenegro morocco mozambique myanmar
+    namibia nepal netherlands nicaragua nigeria norway oman pakistan
+    palau palestine panama paraguay peru philippines poland
+    portugal qatar romania russia rwanda samoa senegal serbia
+    seychelles singapore slovakia slovenia somalia spain sudan
+    suriname sweden switzerland syria taiwan tajikistan tanzania thailand
+    togo tonga tunisia turkiye turkmenistan uganda ukraine uruguay
+    uzbekistan vanuatu venezuela vietnam yemen zambia zimbabwe
+    europe asia africa americas emea apac anz latam oceania nordics
+    benelux scandinavia caribbean britain england scotland wales
     queensland tasmania victoria
-    sydney melbourne brisbane perth adelaide canberra hobart darwin newcastle wollongong
+    sydney melbourne brisbane perth adelaide canberra newcastle wollongong
     geelong ballarat bendigo townsville cairns toowoomba launceston mackay rockhampton
     bunbury bundaberg wagga albury tamworth dubbo mildura shepparton warrnambool gladstone
     gosford maitland parramatta chatswood docklands southbank cremorne collingwood abbotsford
-    hawthorn camberwell dandenong footscray fitzroy carlton prahran malvern ringwood
+    camberwell dandenong footscray fitzroy carlton prahran malvern ringwood
     frankston armadale burwood
-    auckland wellington christchurch dunedin tauranga queenstown napier zealand
-    london manchester birmingham leeds glasgow edinburgh bristol liverpool sheffield cardiff
-    belfast dublin cork paris lyon marseille berlin munich hamburg frankfurt cologne
+    auckland christchurch dunedin tauranga queenstown napier zealand
+    london manchester birmingham leeds glasgow edinburgh liverpool sheffield cardiff
+    belfast dublin paris lyon marseille berlin munich hamburg frankfurt cologne
     stuttgart amsterdam rotterdam brussels antwerp zurich geneva bern vienna prague warsaw
     krakow budapest bucharest sofia athens lisbon porto madrid barcelona valencia seville
     milan rome turin naples florence copenhagen stockholm gothenburg oslo helsinki tallinn
@@ -324,11 +379,11 @@ _GEO_STRONG_TOKENS = frozenset(
     wuhan tianjin
     toronto vancouver montreal calgary ottawa edmonton winnipeg halifax mississauga
     saskatchewan manitoba alberta newfoundland
-    seattle portland denver austin dallas houston atlanta miami orlando tampa boston chicago
+    seattle denver austin dallas houston atlanta miami orlando tampa boston
     philadelphia pittsburgh detroit minneapolis nashville charlotte raleigh columbus
-    cincinnati cleveland indianapolis milwaukee omaha tucson albuquerque sacramento oakland
-    berkeley fresno anaheim honolulu anchorage
-    alabama alaska arizona arkansas california colorado connecticut delaware florida georgia
+    cincinnati cleveland indianapolis omaha tucson albuquerque sacramento oakland
+    fresno anaheim honolulu
+    alabama alaska arizona arkansas california colorado connecticut delaware florida
     hawaii idaho illinois indiana iowa kansas kentucky louisiana maryland massachusetts
     michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon
     pennsylvania tennessee texas utah vermont virginia wisconsin wyoming
@@ -378,14 +433,41 @@ _GEO_WEAK_TOKENS = frozenset(
     """.split()
 )
 
-#: Where a captured location value ends. Deliberately does NOT stop at
-#: determiners, so "our office in the Melbourne CBD" still yields a value.
+#: The OUTER limit on a captured location value — punctuation past which the
+#: value certainly cannot continue. It is a backstop, NOT the bound: the value
+#: is bounded token-by-token by :func:`_walk_location_value`, because R-01
+#: proved that punctuation alone is no bound at all. Production builds the
+#: scored JD as ``fit_evidence.job_evidence_text`` = ``title + " " +
+#: description + " " + " ".join(requirements)`` — requirement items joined by a
+#: BARE SPACE — so a posting whose first requirement mentions relocation places
+#: the carrier phrase immediately in front of the entire tech stack with no
+#: stop character anywhere in it, and this window swallowed all of it.
+#: Deliberately does NOT stop at determiners, so "our office in the Melbourne
+#: CBD" still yields a value.
 _GEO_VALUE_STOP_RE = re.compile(
-    r"[.;:!?\n()\[\]]|(?<=\s)[-–—](?=\s)"
+    r"[.;:!?\n()\[\]|•·]|(?<=\s)[-–—](?=\s)"
     r"|\b(?:and|or|with|using|plus|including|for|as|who|which|that)\b",
     re.IGNORECASE,
 )
 _GEO_VALUE_MAX_CHARS = 80
+
+#: Words that STRUCTURE a location value without naming a place. They may be
+#: consumed inside a span without limit because no résumé bullet lists one as a
+#: skill, and they carry no evidence either way about where the value ends.
+_GEO_VALUE_FILLER = frozenset(
+    """
+    the a an our your their its of
+    greater metro metropolitan inner outer surrounding wider
+    area areas region regions city cities
+    """.split()
+)
+
+#: How many tokens a location statement may absorb that are recognisable as a
+#: place by NOTHING except their position — the unlisted place NAME itself
+#: ("Wodonga", "Truganina", "Docklands"). ONE, because that is how many unknown
+#: names a single location slot holds. Everything past it is prose or the next
+#: field, and absorbing prose is what fabricated a perfect match in R-01.
+_GEO_UNLISTED_BUDGET = 1
 
 #: An explicit location LABEL — the "Location: Melbourne" line every job board
 #: emits. Requires a real separator, so the word "location" in prose ("this
@@ -447,8 +529,16 @@ _GEO_NON_SKILL_WORDS = frozenset(
     """.split()
 )
 
-#: Separators that join the parts of one location chain ("Melbourne, VIC").
-_GEO_CHAIN_SEP_RE = re.compile(r"[ \t]*[,/|][ \t]*|[ \t]+[-–—][ \t]+")
+#: Separators that join the parts of ONE location ("Melbourne, VIC").
+#:
+#: The PIPE and the SPACED DASH are deliberately NOT here (R-01). In a posting
+#: headline they are FIELD delimiters, not location-internal punctuation:
+#: "Senior Data Engineer - Melbourne, VIC" and "Data Engineer | Melbourne |
+#: Python | Spark" put the job title and the whole tech stack in the same run
+#: as the city. Treating them as location joins let chain expansion walk
+#: straight out of the location and delete "engineer", "python" and "spark".
+#: Here they BOUND a chain instead.
+_GEO_CHAIN_SEP_RE = re.compile(r"[ \t]*[,/][ \t]*")
 _GEO_CHAIN_WHITESPACE_RE = re.compile(r"[ \t]+")
 
 
@@ -486,7 +576,81 @@ def _separator_chains(tokens: list[tuple[str, int, int]], text: str) -> list[lis
     return chains
 
 
-def _geo_value_spans(text: str) -> list[tuple[int, int]]:
+def _walk_location_value(
+    text: str,
+    tokens: list[tuple[str, int, int]],
+    place_indices: set[int],
+    skill_context: set[int],
+    value_start: int,
+    limit: int,
+) -> int:
+    """End offset of the location value beginning at ``value_start``.
+
+    R-01. The predecessor took "everything up to the first stop character, or
+    80 characters" — which is not a bound on a location, it is a bound on a
+    SENTENCE, and the JD the engine actually receives has no sentence
+    punctuation between the requirement items at all. A single carrier phrase
+    in the first requirement therefore deleted the whole tech stack.
+
+    So the value is walked TOKEN BY TOKEN and ends at the first token that
+    cannot be part of a location. A token may be consumed when it is
+
+    * a PLACE — in the geographic vocabulary or a multi-token place phrase
+      (``place_indices``), a region abbreviation, or location vocabulary; or
+    * FILLER — a determiner or "greater"/"metro"/"area" (:data:`_GEO_VALUE_FILLER`); or
+    * the ONE unlisted token a location statement is allowed
+      (:data:`_GEO_UNLISTED_BUDGET`) — the place name no gazetteer carries,
+      which is the entire reason carriers exist ("based in Wodonga").
+
+    That single allowance is spent only where an unlisted name can actually
+    be: BEFORE any place has been seen ("based in Wodonga"), or immediately
+    after a chain separator that follows one ("Location: Melbourne, Truganina").
+    An unlisted token separated from a confirmed place by nothing but a SPACE
+    is the next field or the next sentence — "Relocation to Melbourne
+    supported Snowflake dbt ..." — and ends the value.
+
+    It is NEVER spent on a token the posting is itself naming as a skill
+    (``skill_context``). "Location: Melbourne, Kubernetes, Terraform, Go" is a
+    location followed by a stack list, and the allowance exists for unlisted
+    PLACE names, not for the first item of the next field.
+
+    FAIL-SAFE DIRECTION: every ambiguity here is resolved by STOPPING. Ending
+    the value early leaves a place in the gap list, which is cosmetic; running
+    past it deletes a requirement and reports a perfect match the candidate has
+    not earned.
+    """
+    end = value_start
+    budget = _GEO_UNLISTED_BUDGET
+    place_seen = False
+    previous_end: int | None = None
+    for index, (token, start, token_end) in enumerate(tokens):
+        if start < value_start:
+            continue
+        if start >= limit:
+            break
+        if (
+            index in place_indices
+            or token in _GEO_WEAK_TOKENS
+            or token in _GEO_NON_SKILL_WORDS
+        ):
+            place_seen = True
+        elif token not in _GEO_VALUE_FILLER:
+            gap = text[previous_end:start] if previous_end is not None else ""
+            chained = bool(_GEO_CHAIN_SEP_RE.fullmatch(gap))
+            if budget <= 0 or index in skill_context or (place_seen and not chained):
+                break
+            budget -= 1
+        previous_end = token_end
+        end = min(token_end, limit)
+    return end
+
+
+def _geo_value_spans(
+    text: str,
+    tokens: list[tuple[str, int, int]],
+    place_indices: set[int],
+    skill_context: set[int],
+) -> list[tuple[int, int]]:
     """Character ranges of location values introduced by a label or carrier."""
     spans: list[tuple[int, int]] = []
     #: (span_start, value_start). For a LABEL the span reaches back over the
@@ -503,10 +667,74 @@ def _geo_value_spans(text: str) -> list[tuple[int, int]]:
     for span_start, value_start in starts:
         window = text[value_start : value_start + _GEO_VALUE_MAX_CHARS]
         stop = _GEO_VALUE_STOP_RE.search(window)
-        end = value_start + (stop.start() if stop else len(window))
+        limit = value_start + (stop.start() if stop else len(window))
+        end = _walk_location_value(
+            text, tokens, place_indices, skill_context, value_start, limit
+        )
         if end > value_start:
             spans.append((span_start, end))
     return spans
+
+
+def _skill_context_indices(
+    text: str, tokens: list[tuple[str, int, int]], place_indices: set[int]
+) -> set[int]:
+    """Token indices sitting in a SKILLS LIST rather than a location.
+
+    R-02. ``_geographic_tokens`` advertises an every-occurrence rule as its
+    whole safety argument — "a term that is both a place and a real technology
+    keeps its keyword status as soon as it also appears somewhere that is NOT
+    geographic". For the vocabulary that rule was VACUOUS: a vocabulary token
+    was seeded at EVERY occurrence, so "every occurrence is geographic" was
+    true by construction and no amount of skills-list context could save it.
+    "ship binaries for linux, windows and darwin" lost ``darwin``; Monaco the
+    editor, Berkeley DB and Georgia the typeface all vanished.
+
+    This gives the rule something to bite on. A run of separator-joined tokens
+    that already holds TWO members carrying independent skill evidence
+    (:func:`_skill_evidence_tokens`) is a skills list, and a vocabulary place
+    named inside it is being named as a skill. The two anchors may not
+    themselves be places or region abbreviations — otherwise "Sydney, Melbourne
+    and Brisbane" would anchor itself and the founding ATS-KW-001 defect would
+    walk straight back in.
+    """
+    #: Runs are detected over the CONTENT tokens, exactly as
+    #: ``_extract_keywords`` feeds ``_skill_list_neighbours``. Over the raw
+    #: token stream the conjunction in "Tahoma and Geneva" would be a token of
+    #: its own, so the gap between two list items would be a bare space and
+    #: ``_SKILL_LIST_SEP_RE``'s "and"/"or" branch could never fire.
+    content = [
+        (index, occurrence)
+        for index, occurrence in enumerate(tokens)
+        if len(occurrence[0]) >= 2
+        and occurrence[0] not in _STOPWORDS
+        and not _is_noise_token(occurrence[0])
+    ]
+    if not content:
+        return set()
+    evidenced = _skill_evidence_tokens(text, [occurrence for _index, occurrence in content])
+    inside: set[int] = set()
+    run: list[int] = []
+
+    def flush() -> None:
+        anchors = [
+            index
+            for index in run
+            if tokens[index][0] in evidenced
+            and index not in place_indices
+            and tokens[index][0] not in _GEO_WEAK_TOKENS
+        ]
+        if len(anchors) >= 2:
+            inside.update(run)
+
+    for position, (index, (_token, start, _end)) in enumerate(content):
+        if run and _SKILL_LIST_SEP_RE.fullmatch(text[content[position - 1][1][2] : start]):
+            run.append(index)
+            continue
+        flush()
+        run = [index]
+    flush()
+    return inside
 
 
 def _geographic_tokens(job_description: str) -> frozenset[str]:
@@ -526,29 +754,30 @@ def _geographic_tokens(job_description: str) -> frozenset[str]:
     are evidence about a POSITION in the text, not about a word, so a term that
     is both a place and a technology keeps its keyword status the moment it
     also appears outside every span — which is exactly what a skills list is.
+
+    For that argument to be worth anything, every signal must be BOUNDED, and
+    signal 3 must be able to lose. Both were untrue as shipped:
+
+    * signals 1 and 2 ran to the first sentence stop, and the production JD has
+      none between requirement items, so one carrier phrase deleted the whole
+      tech stack (R-01). The value is now walked token by token
+      (:func:`_walk_location_value`);
+    * signal 3 marked every occurrence of a vocabulary token, so its
+      "every occurrence" test could never fail (R-02). A vocabulary hit inside
+      a skills list, outside every value span, is now not geography
+      (:func:`_skill_context_indices`);
+    * chain expansion took a whole chain on the strength of two confirmed
+      elements, which walks out of a headline and into the stack. It may now
+      absorb at most :data:`_GEO_UNLISTED_BUDGET` unaccounted tokens.
+
+    ORDER MATTERS: the vocabulary/phrase seeds are computed FIRST because the
+    value walk needs to know which tokens are places, and the skills-list
+    rescue is applied BEFORE chain expansion so a rescued token cannot be
+    dragged back in as a chain member.
     """
     tokens = _iter_tokens(job_description)
     if not tokens:
         return frozenset()
-
-    # Signal 0 — the vocabulary of stating where. Never a skill anywhere, so
-    # marked at every occurrence without needing positional evidence.
-    marked: set[int] = {
-        index
-        for index, (token, _s, _e) in enumerate(tokens)
-        if token in _GEO_NON_SKILL_WORDS
-    }
-
-    # Signals 1 + 2 — everything inside a labelled/carried location value.
-    # Containment is tested on the token's START offset only: ``_TOKEN_RE``
-    # absorbs a trailing "." into the token ("AZ." -> end past the sentence
-    # stop), so requiring the whole token to fit inside the value would miss
-    # every location that ends its sentence — which is most of them.
-    value_spans = _geo_value_spans(job_description)
-    if value_spans:
-        for index, (_token, start, _end) in enumerate(tokens):
-            if any(lo <= start < hi for lo, hi in value_spans):
-                marked.add(index)
 
     # Signal 3a — multi-token place names, longest phrase first.
     seeds: set[int] = set()
@@ -566,6 +795,42 @@ def _geographic_tokens(job_description: str) -> frozenset[str]:
 
     # Signal 3b — single-token place names.
     seeds.update(index for index, (token, _s, _e) in enumerate(tokens) if _is_strong_geo(token))
+
+    # Signal 0 — the vocabulary of stating where. Never a skill anywhere, so
+    # marked at every occurrence without needing positional evidence.
+    marked: set[int] = {
+        index
+        for index, (token, _s, _e) in enumerate(tokens)
+        if token in _GEO_NON_SKILL_WORDS
+    }
+
+    # Signals 1 + 2 — everything inside a labelled/carried location value. The
+    # value is bounded token-by-token (:func:`_walk_location_value`), which is
+    # what stops a carrier phrase in the production JD shape from swallowing
+    # the requirements that follow it (R-01). The vocabulary seeds above are
+    # computed FIRST because the walk needs to know which tokens are places.
+    # Containment is tested on the token's START offset only: ``_TOKEN_RE``
+    # absorbs a trailing "." into the token ("AZ." -> end past the sentence
+    # stop), so requiring the whole token to fit inside the value would miss
+    # every location that ends its sentence — which is most of them.
+    # ``skill_context`` is computed BEFORE the spans because the value walk
+    # needs it too: the one unlisted token a location may absorb must never be
+    # spent on a token the posting is naming as a skill.
+    skill_context = _skill_context_indices(job_description, tokens, seeds)
+    value_spans = _geo_value_spans(job_description, tokens, seeds, skill_context)
+    in_span: set[int] = set()
+    if value_spans:
+        in_span = {
+            index
+            for index, (_token, start, _end) in enumerate(tokens)
+            if any(lo <= start < hi for lo, hi in value_spans)
+        }
+        marked |= in_span
+
+    # R-02 — give the every-occurrence rule something to bite on. A vocabulary
+    # hit inside a SKILLS LIST, and outside every location value, is the
+    # posting naming a technology, not stating where the job is.
+    seeds -= skill_context - in_span
 
     # Signal 3c — chain expansion, so the parts of a multi-part location that
     # are not recognisable on their own ("Truganina", "VIC") join the part that
@@ -589,9 +854,19 @@ def _geographic_tokens(job_description: str) -> frozenset[str]:
     # merely happens to contain a place name from being walked to its end: in
     # "our type system: Georgia, Helvetica and Inter" the chain holds exactly
     # one confirmed element, so "Helvetica" never joins.
+    #
+    # Two confirmed elements are NOT on their own a licence to take the whole
+    # chain (R-01): "We hire across Sydney, Melbourne, Python, Spark, Airflow
+    # teams" has two, and taking the rest deletes three real requirements. The
+    # chain may absorb at most the ONE unlisted token a location holds — the
+    # suburb no gazetteer carries ("Truganina, Melbourne, VIC") — and a chain
+    # the filter cannot account for that tightly is left ENTIRELY alone.
     for chain in _separator_chains(tokens, job_description):
-        if len(chain) > 1 and sum(1 for index in chain if index in seeds) >= 2:
-            seeds.update(chain)
+        if len(chain) < 2:
+            continue
+        unlisted = [index for index in chain if index not in seeds]
+        if len(chain) - len(unlisted) >= 2 and len(unlisted) <= _GEO_UNLISTED_BUDGET:
+            seeds.update(unlisted)
     marked |= seeds
 
     total: Counter[str] = Counter()

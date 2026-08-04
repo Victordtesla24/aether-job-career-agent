@@ -120,9 +120,24 @@ keeps `phoenix` and drops `az`.
 
 **Vocabulary precision, measured.** 482 strong tokens, 69 weak abbreviations, 94 phrases.
 Audited against 159 common technology/tool/platform terms (languages, frameworks, data
-stack, cloud, CI, observability, BI): **zero collisions** with either the strong vocabulary
-or the weak abbreviations, and all twelve deliberate omissions confirmed absent. Artifact:
+stack, cloud, CI, observability, BI): ~~**zero collisions** with either the strong
+vocabulary or the weak abbreviations~~, and all twelve deliberate omissions confirmed
+absent. Artifact:
 `uat/reports/evidence/models-live/ATS-KW-001/vocabulary-collision-audit-*.log`.
+
+> **CORRECTION (2026-08-04, R-02).** The struck claim is **FALSE**, and this document
+> contradicted it two sections later: §5 failure mode 1 already named `Georgia` the
+> typeface as a live collision, and `test_2` in the guard file records the same thing as a
+> KNOWN LIMITATION. "Zero collisions" was true only of *the 159 terms in that one audit
+> list* — a list which contains no editor (`monaco`), no embedded database (`berkeley`),
+> no kernel (`darwin`), no typeface (`georgia`), no tool brand (`milwaukee`) and no
+> ordinary English verb (`polish`), all six of which were measured as unconditional
+> deletions on 9a338c8. The number describes the audit's coverage, not the vocabulary's
+> precision, and it must not be read as the latter. **No replacement "zero" is claimed
+> here**: the residual collisions that remain are enumerated by name in
+> `ADR-R01-GEOGRAPHIC-SPAN-BOUNDING.md` §7. See that ADR for the disqualifying rule the
+> vocabulary is now curated under (64 entries removed, 482 → 418) and for the mechanism
+> that makes a residual collision survivable rather than fatal.
 
 **Never-empty guard.** If filtering would remove *every* content token, the unfiltered set
 is kept and a WARNING is logged. An empty keyword set makes `_keyword_match` return a flat
@@ -202,6 +217,28 @@ defect and must be re-measured. Artifact:
 `uat/reports/evidence/models-live/ATS-KW-001/gov021-gap-count-*.log`.
 
 ## 5. Failure modes — stated honestly
+
+> **SUPERSEDED IN PART (2026-08-04) — see `ADR-R01-GEOGRAPHIC-SPAN-BOUNDING.md`.**
+> Failure modes 1 and 3 below both understate their severity, and mode 3 states the
+> opposite of what was measured:
+>
+> * **mode 1** calls the residual "*under-demand* — the engine asks for one keyword
+>   fewer — which never fabricates a gap and never docks a candidate". True as far as it
+>   goes, and it misses the consequence that matters: a requirement absent from the
+>   keyword set cannot be reported missing from it either. Deleting requirements does not
+>   merely ask for less, it **fabricates a perfect match**. Measured (R-01): a résumé with
+>   none of the posting's stack scored `keyword_match = 100.0`, `missing_keywords = []`.
+> * **mode 3** claims carrier over-capture is "largely self-correcting: an over-captured
+>   skill almost always also appears outside the span and is therefore kept". In the
+>   production JD shape it self-corrects **never**: `job_evidence_text` joins the
+>   requirements array with a bare space, each item usually appears exactly once, so a
+>   single carrier phrase in the first item took the entire remaining stack, every token
+>   of which occurred only inside the span. The "80 chars max" was not a bound on a
+>   location — it was a bound on a sentence, and the production JD has no sentences.
+>
+> Both are fixed. The bound is now a token walk, not a character window; the vocabulary is
+> curated under a stated disqualifying rule; and the every-occurrence rule is no longer
+> vacuous for vocabulary tokens.
 
 1. **A vocabulary token used as a technology is still dropped.** The every-occurrence rule
    protects a homonym only when the geographic evidence is *positional*. A token in the
