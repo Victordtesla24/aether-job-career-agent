@@ -64,7 +64,6 @@ from app.repositories.provider_credential import ProviderCredentialRepository
 from app.repositories.user_provider_credential import UserProviderCredentialRepository
 from app.services import credential_vault as vault
 
-
 # --------------------------------------------------------------------------- #
 # Fixtures / helpers (mirrors the conventions already used by sibling F-01
 # suites in this repo — auth_headers-style register+login, isolate the vault
