@@ -777,3 +777,34 @@ from both `.env` and the running API process environment.
 **location** ("sydney") as a required résumé keyword — the sole miss docking `keyword_match` from 100 to
 94.44. Every posting has a location, so **every candidate is docked on every posting**, and the incentive it
 creates is to keyword-stuff a city, which is precisely the gaming the product exists to refuse.
+
+---
+
+## GOV-019 — two sessions restarting the same production API caused a real production failure (2026-08-04)
+
+**Event.** I restarted `aether-api` at 02:58Z to deploy the F-01 fix and verified it live. At **03:07:32Z** the
+API's main process started *again* — `NRestarts=0`, so systemd did not do it and nothing had crashed. A
+concurrent session restarted the shared production API while I was mid-verification.
+
+**Consequence, in production:** the discovery cron's `POST /agents/fit-scorer/run` hit the API mid-restart and
+failed — `curl: (52) Empty reply from server`, logged as `FATAL ... HTTP 000` at exactly 03:07:32Z. The scout
+run two minutes earlier had succeeded (persisted 9, updated 1,395), so a complete sourcing cycle was lost to
+the restart. It self-heals on the next 30-minute tick (03:30:42Z).
+
+**Why this is more than a nuisance.** Every unit on this VM serves **directly from the shared working tree**.
+A restart by any session therefore deploys whatever is in that tree at that instant — including every other
+session's in-flight, unverified, uncommitted work. Two consequences follow:
+1. Nobody can state what is running in production from their own commits alone.
+2. A verification result is only valid until the next foreign restart. I re-verified F-01 after this one and
+   it held (403 on GET `/providers`, DELETE `/providers/anthropic/credential`, and POST
+   `/providers/anthropic/oauth/exchange`) — but that re-check was necessary, not optional.
+
+**Standing rule:** treat a production restart as an exclusive operation. Before restarting, check
+`systemctl show aether-api -p ExecMainStartTimestamp` and re-check it immediately after verifying; if it moved
+under you, your verification is void and must be repeated. After any deploy, re-assert the security-critical
+gate specifically — a foreign restart cannot remove a committed fix, but it can and does change everything
+around it.
+
+**Still live in the working tree (and therefore in production):** two `# RED-PROOF-TEMP: circuit branch
+disabled` comments at `agents.py:892` and `:2052`. Confirmed inert — the branch below each still executes
+`raise _quota_429(...)` — but they are false comments sitting above live protection and must be removed.
