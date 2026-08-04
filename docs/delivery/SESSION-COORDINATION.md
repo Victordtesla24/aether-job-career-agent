@@ -156,3 +156,24 @@ strictly better than what production runs today (which has no ranking fix at all
 
 **Not re-adjudicated:** GOV-021 / the ≥85 ceiling. Every ATS number measured since `f5d7139` was measured
 through R-01, and scores now FALL wherever a carrier previously ate the requirements.
+
+### ✅ DEPLOY COMPLETE — 2026-08-04T11:00Z
+
+`aether-api` restarted 10:57:08Z, `aether-web` rebuilt and restarted 10:58:04Z (chained, per
+`INCIDENT-2026-07-21-web-build-clobber.md`). Session B: the window is released.
+
+**Verified live against production, first-hand:**
+
+| check | result |
+|---|---|
+| F-01 still gated after restart | GET/DELETE `/agents/providers*` → **403** |
+| F-02 "Run All" no longer fabricates | **422** — *"Your profile has no target role and no location… Add them in Settings > Profile"* |
+| F-02 frontend shipped | `discovery-target-prompt` present in the **served** chunk |
+| F-02 hardcoded persona gone | absent from **all 11** served chunks |
+| F-04 market-demand factor | absent from `/analytics/market-pulse`; no offer-likelihood claim |
+| chunk integrity | 4/4 on disk, 200 over HTTP — no clobber |
+| pages | `/login`, `/dashboard/jobs`, `/dashboard/analytics` all 200 |
+
+Verification method note: I checked the **served** chunks over HTTP rather than the on-disk build, because
+`.next`'s mtime landed after the restart (Next writes cache post-start) and on-disk freshness alone would not
+have proven what the browser actually receives.
