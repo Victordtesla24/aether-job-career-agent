@@ -545,3 +545,52 @@ orchestrator's capture was silent over the same window because it was watching n
 **Standing rule:** a monitor is proven by SIGNAL, not by liveness. Before trusting any monitoring window,
 confirm the capture contains expected routine traffic; a capture with zero lines over an exercised window is
 evidence of a broken monitor, never of a clean system.
+
+---
+
+## GOV-013 — index-inheritance hazard, THIRD recorded instance (2026-08-04)
+
+**Class:** shared-tree git hazard · **Severity:** HIGH — silently misattributes and can silently revert work.
+
+A fixer agent recorded that its one-line isort fix to
+`apps/api/tests/test_story_narrative_grounding.py` "shows as committed with a clean `git status`, but
+appears in `git diff d329a9b..937de06` rather than in any commit of mine — another agent's
+`git add`/`git commit` picked it up."
+
+This is the **third** instance in this tree. A prior instance silently reverted a real fix while leaving
+the suite GREEN — i.e. the failure mode is invisible to tests, which is what makes it dangerous.
+
+**Root cause:** the git index is shared per-worktree. Any agent running `git add -A` / `git add .` /
+bare `git commit -a` sweeps in every other concurrent agent's in-flight edits.
+
+**Binding rule (already mandated in agent briefs; restated here as governance):**
+`git commit --only <explicit paths>` is the ONLY permitted commit form in this tree. `git add -A`,
+`git add .`, `git stash`, `git checkout --`, and `git reset` are PROHIBITED for any path the agent did
+not itself create. Verify with `git show --stat` after every commit that only intended paths landed.
+
+**Also recorded by the same agent:** HEAD moved from `d329a9b` to `937de06` mid-task (four commits from a
+concurrent session). Any before/after suite delta measured across such a move must be attributed with that
+in mind — the two runs are against different trees.
+
+---
+
+## GOV-014 — the state file outlived its truth (2026-08-04)
+
+`docs/delivery/GOLD-MASTER-V2-STATE.json` was last written `2026-07-31T16:55Z` and asserts
+`G-N: CLOSED` and (via W-K) production free of test data. On `2026-08-04` the orchestrator verified
+first-hand that BOTH claims are false at HEAD:
+
+- **G-N:** the most recent full suite recorded **24 failed / 2549 passed / 1 skipped**.
+- **G-K:** production holds **13 `@mailinator.com` test identities owning 5,011 Job rows**, created
+  *after* W-K was recorded complete — by this run's own UAT agents.
+
+**Lesson:** a gate recorded CLOSED is a claim about a moment, not a durable property. Long-running
+campaigns that keep testing against production keep *creating* the conditions that reopen their own
+gates. Any gate whose evidence predates the most recent production activity MUST be re-verified before
+the final declaration, not carried forward on its recorded status.
+
+**Correct at 2026-08-04T02:05Z (orchestrator-verified, first-hand):**
+- BLOCKER-001 fully closed: weak credential → 401; `.env` hash no longer verifies it; `AETHER_CRON_PASSWORD`
+  rotated in lockstep (verified against the new hash); discovery cron succeeding every 30 min; admin
+  privilege self-restored on rotation exactly as the approved design intended.
+- Branch hygiene: `origin/main` == local HEAD `8e61afc`, 0 unpushed, 1 remote branch, 0 open PRs.
