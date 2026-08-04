@@ -3,11 +3,18 @@
 /**
  * AI Provider Connections (wireframe: providers-ag07). Six provider cards whose
  * connection status, credential source + active model are real, persisted
- * state (GET /agents/providers). The card action opens the in-app credential
- * configuration modal (REQ-PC-1) — there is no ".env editing" path:
+ * state. The card action opens the in-app credential configuration modal
+ * (REQ-PC-1) — there is no ".env editing" path:
  *  - connected   → "Connected · Manage" (rotate / test / remove the credential)
  *  - warning     → "Re-authenticate"
  *  - unconfigured→ "Configure keys"
+ *
+ * Renders BOTH provider scopes (F-01 / ADR-F01-PROVIDER-CREDENTIAL-AUTHZ) from
+ * the identical row shape, differing only in `title`/`blurb` and which endpoint
+ * the parent fetched: the OPERATOR's deployment-wide connections
+ * (GET /agents/providers, admin-only) or a CUSTOMER's own keys
+ * (GET /agents/user/providers/catalog). This component never fetches — it can
+ * only show what the page was allowed to load.
  */
 import type { Provider } from "./api";
 import { providerAction, providerModelDisabledReason, providerSourceBadge, type ProviderSourceBadge } from "./logic";
@@ -42,19 +49,35 @@ export default function ProviderConnections({
   busyId,
   onConfigure,
   onModel,
+  title = "AI Provider Connections",
+  blurb,
 }: {
   providers: Provider[];
   loading: boolean;
   busyId: string | null;
   onConfigure: (provider: Provider) => void;
   onModel: (id: string, model: string) => void;
+  /** Heading for this scope. Defaults to the operator wording. */
+  title?: string;
+  /** Optional one-line explanation of whose keys these are. */
+  blurb?: string;
 }) {
   return (
     <section data-testid="provider-connections">
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <i className="fa-solid fa-plug text-sm text-aether-indigo" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">AI Provider Connections</h2>
+        <h2 className="text-sm font-semibold">{title}</h2>
       </div>
+      {blurb ? (
+        <p
+          data-testid="provider-connections-blurb"
+          className="mb-4 text-[11px] leading-relaxed text-aether-muted"
+        >
+          {blurb}
+        </p>
+      ) : (
+        <div className="mb-4" />
+      )}
 
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">

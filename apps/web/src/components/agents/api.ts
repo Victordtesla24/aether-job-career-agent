@@ -349,6 +349,78 @@ export async function listUserCredentials(o: RequestOptions = {}): Promise<UserC
   );
 }
 
+/**
+ * The provider panel an ORDINARY customer sees: GET /agents/user/providers/catalog
+ * (F-01 / ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). Same `Provider` shape as
+ * {@link fetchProviders} so the one panel component renders both views, but the
+ * server builds it from THIS user's own credential rows and default-model
+ * preference only — it reads no deployment credential and no provider env var,
+ * so the operator's status, last-4 hint and verify timestamps are never sent to
+ * a customer's browser. `fetchProviders` is the operator's view and 403s for a
+ * non-admin; the page picks which one to call from `isAdmin`.
+ */
+export async function fetchUserProviderCatalog(
+  o: RequestOptions = {},
+): Promise<Provider[]> {
+  return z.array(ProviderSchema).parse(
+    await apiRequest<unknown>("/agents/user/providers/catalog", o),
+  );
+}
+
+/**
+ * Save (or rotate) THIS user's OWN provider key: PUT
+ * /agents/user/providers/{id}/credential. The per-user twin of
+ * {@link putProviderCredential} — it writes the caller's own encrypted row and
+ * never the deployment-wide store. The server verifies it after saving, so the
+ * returned `lastVerifyStatus` is a real result.
+ */
+export async function putUserProviderCredential(
+  id: string,
+  body: CredentialInput,
+  o: RequestOptions = {},
+): Promise<UserCredential> {
+  return UserCredentialSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/user/providers/${id}/credential`, {
+        ...o,
+        method: "PUT",
+        body,
+      }),
+    ) as UserCredential;
+}
+
+/** Remove THIS user's own stored key: DELETE /agents/user/providers/{id}/credential. */
+export async function deleteUserProviderCredential(
+  id: string,
+  o: RequestOptions = {},
+): Promise<UserCredential> {
+  return UserCredentialSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/user/providers/${id}/credential`, {
+        ...o,
+        method: "DELETE",
+      }),
+    ) as UserCredential;
+}
+
+/**
+ * Test THIS user's own key end-to-end: POST /agents/user/providers/{id}/verify.
+ * A real round-trip against the caller's credential — never the operator's.
+ */
+export async function verifyUserProvider(
+  id: string,
+  o: RequestOptions = {},
+): Promise<VerifyResult> {
+  return VerifyResultSchema.parse(
+    await apiRequest<unknown>(`/agents/user/providers/${id}/verify`, {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
 
 
 

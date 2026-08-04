@@ -445,6 +445,36 @@ def test_user_id(client, auth_headers) -> str:
     return client._test_user_id
 
 
+@pytest.fixture()
+def promote_user_to_admin():
+    """Grant ``isAdmin`` to a user id (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ).
+
+    Suites that exercise an OPERATOR-only surface — the deployment-wide
+    ``/agents/providers/...`` credential family, ``/admin/*`` — use this to
+    override the module's ``auth_headers`` so the fixture user IS the operator::
+
+        @pytest.fixture()
+        def auth_headers(client, auth_headers, promote_user_to_admin):
+            promote_user_to_admin(client._test_user_id)
+            return auth_headers
+
+    The JWT carries no privilege claim (``get_current_user`` re-reads ``isAdmin``
+    from the row on every request), so promoting after login is enough — the
+    already-issued token acts as admin immediately, no re-login needed.
+    """
+    from app.db import get_connection
+    from app.repositories.admin import _ensure_admin_schema
+
+    def _promote(user_id: str) -> None:
+        _ensure_admin_schema()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('UPDATE "User" SET "isAdmin"=true WHERE "id"=%s', (user_id,))
+            conn.commit()
+
+    return _promote
+
+
 # ---------------------------------------------------------------------------
 # Own-resume seeding — OUTBOUND generation paths (cover letter, tailoring,
 # email drafts) now REFUSE (422) for an authed user with no résumé of their

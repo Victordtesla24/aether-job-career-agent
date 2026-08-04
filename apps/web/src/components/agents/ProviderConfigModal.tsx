@@ -20,11 +20,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   deleteProviderCredential,
+  deleteUserProviderCredential,
   exchangeAnthropicOAuth,
   putProviderCredential,
+  putUserProviderCredential,
   refreshAnthropicOAuth,
   startAnthropicOAuth,
   verifyProvider,
+  verifyUserProvider,
   type Provider,
   type ProviderAuthMode,
 } from "./api";
@@ -86,18 +89,59 @@ const BADGE_CLS: Record<ProviderSourceBadge["tone"], string> = {
   none: "border-white/10 bg-white/5 text-aether-muted-dim",
 };
 
+/**
+ * Fold a per-user credential row into the provider card's view model.
+ *
+ * The two stores answer with different shapes: the deployment endpoints return
+ * a full provider row (mergeable as-is), while the per-user endpoints return a
+ * `UserCredential` whose `id` is the CREDENTIAL row's id — spreading it whole
+ * would silently overwrite the provider's own `id` and point every subsequent
+ * call at a nonexistent provider. So copy only the credential-derived fields.
+ * `detail` is deliberately not synthesised here: the parent's `onSaved()`
+ * refetch supplies the server's own honest wording.
+ */
+function withUserCredential(
+  view: Provider,
+  cred: { authMode?: string | null; secretHint?: string | null; lastVerifiedAt?: string | null; lastVerifyStatus?: "ok" | "failed" | null },
+): Provider {
+  const stored = Boolean(cred.secretHint);
+  return {
+    ...view,
+    source: stored ? "database" : "none",
+    status: stored ? (cred.lastVerifyStatus === "failed" ? "warning" : "connected") : "unconfigured",
+    authMode: (cred.authMode as Provider["authMode"]) ?? null,
+    secretHint: cred.secretHint ?? null,
+    lastVerifiedAt: cred.lastVerifiedAt ?? null,
+    lastVerifyStatus: cred.lastVerifyStatus ?? null,
+    needsReauth: false,
+  };
+}
+
+/**
+ * Which credential store this dialog writes (F-01 /
+ * ADR-F01-PROVIDER-CREDENTIAL-AUTHZ):
+ *  - `"deployment"` — the operator's shared store (`/agents/providers/...`),
+ *    admin-only on the server. The historical default.
+ *  - `"user"` — the signed-in customer's OWN store
+ *    (`/agents/user/providers/...`), which bills that customer's own account.
+ */
+export type ProviderConfigScope = "deployment" | "user";
+
 export default function ProviderConfigModal({
   provider,
   onClose,
   onSaved,
   onNotice,
+  scope = "deployment",
 }: {
   provider: Provider | null;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
   onNotice: (notice: Notice) => void;
+  scope?: ProviderConfigScope;
 }) {
   const open = provider !== null;
+  const userScope = scope === "user";
 
   const [view, setView] = useState<Provider | null>(provider);
   const [mode, setMode] = useState<ProviderAuthMode>("api_key");
@@ -207,7 +251,12 @@ export default function ProviderConfigModal({
     setError(null);
     onNotice({ kind: "info", text: `Saving ${view.name} credential…` });
     try {
-      const updated = await putProviderCredential(view.id, { authMode: mode, secret: trimmed });
+      const updated = userScope
+        ? withUserCredential(
+            view,
+            await putUserProviderCredential(view.id, { authMode: mode, secret: trimmed }),
+          )
+        : await putProviderCredential(view.id, { authMode: mode, secret: trimmed });
       setView((v) => (v ? { ...v, ...updated } : updated));
       setSecret("");
       onNotice({
@@ -228,7 +277,9 @@ export default function ProviderConfigModal({
     setBusy("removing");
     setError(null);
     try {
-      const updated = await deleteProviderCredential(view.id);
+      const updated = userScope
+        ? withUserCredential(view, await deleteUserProviderCredential(view.id))
+        : await deleteProviderCredential(view.id);
       setView((v) => (v ? { ...v, ...updated } : updated));
       setSecret("");
       onNotice({
@@ -323,7 +374,9 @@ export default function ProviderConfigModal({
     setError(null);
     onNotice({ kind: "info", text: `Testing ${view.name} connection…` });
     try {
-      const res = await verifyProvider(view.id);
+      const res = userScope
+        ? await verifyUserProvider(view.id)
+        : await verifyProvider(view.id);
       onNotice({
         kind: res.ok ? "success" : "error",
         text: `${view.name} connection ${res.ok ? "ok" : "failed"} — ${res.detail}`,
@@ -368,9 +421,18 @@ export default function ProviderConfigModal({
               <h3 id="provider-config-title" className="truncate text-sm font-semibold">
                 Configure {view.name}
               </h3>
-              <p className="text-[11px] text-aether-muted-dim">
-                Credentials are stored encrypted on the server — enter them here, no{" "}
-                <code className="font-mono">.env</code> editing.
+              <p className="text-[11px] text-aether-muted-dim" data-testid="provider-config-scope-note">
+                {userScope ? (
+                  <>
+                    Your own key, stored encrypted on the server. Runs on this
+                    provider bill to your account.
+                  </>
+                ) : (
+                  <>
+                    Credentials are stored encrypted on the server — enter them here, no{" "}
+                    <code className="font-mono">.env</code> editing.
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -414,7 +476,13 @@ export default function ProviderConfigModal({
           ) : null}
         </div>
 
-        {view.id === "anthropic" ? (
+        {/* Connect-with-Anthropic writes the DEPLOYMENT-WIDE
+            ProviderCredential('anthropic') row (anthropic_oauth.persist_tokens),
+            and its three routes are admin-only on the server (F-01 /
+            ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). Never offer a customer a control
+            that can only 403 — in the per-user scope they paste their own key
+            below instead. */}
+        {view.id === "anthropic" && !userScope ? (
           <div className="mb-4 rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-3">
             {anthropicNeedsReauth ? (
               <div

@@ -30,7 +30,7 @@ from app.agents.cover_letter_agent import (
 )
 from app.agents.scout_agent import ScoutAgent
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
-from app.middleware.auth import CurrentUser
+from app.middleware.auth import AdminUser, CurrentUser
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.background_jobs import BackgroundJobRepository
 from app.repositories.billing import (
@@ -3431,8 +3431,16 @@ def _provider_status_object(provider_id: str, user_id: str) -> dict[str, Any]:
 
 
 @router.get("/providers")
-def list_providers(current_user: CurrentUser) -> list[dict[str, Any]]:
+def list_providers(current_user: AdminUser) -> list[dict[str, Any]]:
     """The AI providers with connection state derived from real credentials.
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). This reads the
+    DEPLOYMENT-WIDE ``ProviderCredential`` store plus the server environment —
+    one shared store with no user id anywhere in it — so its rows (source,
+    last-4 ``secretHint``, ``lastVerifiedAt``) are the operator's credential
+    state, not the caller's. It is gated by the SAME ``AdminUser`` dependency
+    ``/api/admin/*`` uses. A customer's own keys live at
+    ``GET /agents/user/providers`` + ``GET /agents/user/providers/catalog``.
 
     Status is DB-first with an honest ``source`` (``database``/``environment``/
     ``none``): a stored encrypted-vault credential wins, else a legacy env key
@@ -3623,9 +3631,17 @@ def _validate_provider_auth(
 
 @router.put("/providers/{provider}/credential")
 def put_provider_credential(
-    provider: str, body: ProviderCredentialBody, current_user: CurrentUser
+    provider: str, body: ProviderCredentialBody, current_user: AdminUser
 ) -> dict[str, Any]:
     """Store (encrypt) a provider credential entirely in-UI; return masked row.
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ):
+    ``ProviderCredentialRepository`` takes no user id — this WRITES the single
+    deployment-wide credential every run bills against. The ``AdminUser``
+    dependency resolves before the body of this function, so an ungated caller
+    gets 403 BEFORE the provider-name check below and never learns which
+    provider ids are configured. Customers store their own keys at
+    ``PUT /agents/user/providers/{provider}/credential``.
 
     Honest failures: an unknown/unsupported provider is 404; a mismatched
     authMode/prefix is 422; a missing ``AETHER_CREDENTIAL_KEY`` is a 503 (the
@@ -3665,9 +3681,16 @@ def put_provider_credential(
 
 @router.delete("/providers/{provider}/credential")
 def delete_provider_credential(
-    provider: str, current_user: CurrentUser
+    provider: str, current_user: AdminUser
 ) -> dict[str, Any]:
-    """Remove a stored credential; status falls back to the env source (ADR-PC-4)."""
+    """Remove a stored credential; status falls back to the env source (ADR-PC-4).
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): this DELETES the
+    deployment-wide credential for every user at once. The live probe that
+    found the hole hit exactly this route — an ungated DELETE of an unknown
+    provider answered 404 (name check first). ``AdminUser`` now resolves first,
+    so the answer is 403.
+    """
     if provider not in _CREDENTIAL_PROVIDERS:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -3678,8 +3701,14 @@ def delete_provider_credential(
 
 
 @router.post("/providers/{provider}/verify")
-def verify_provider(provider: str, current_user: CurrentUser) -> dict[str, Any]:
+def verify_provider(provider: str, current_user: AdminUser) -> dict[str, Any]:
     """Perform a REAL provider round-trip and record the honest result (REQ-PC-7).
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): this spends the
+    OPERATOR's credential on a live upstream call and mutates the shared row's
+    ``lastVerifyStatus``, so an ungated caller could both burn the operator's
+    money and probe whether their credential is still valid. Customers verify
+    their own key at ``POST /agents/user/providers/{provider}/verify``.
 
     Never marks a credential verified without a genuine 2xx. The result is
     stamped onto the stored row (when one exists) as ``lastVerifiedAt`` /
@@ -3779,6 +3808,85 @@ def list_user_credentials(current_user: CurrentUser) -> list[dict[str, Any]]:
         r["createdAt"] = _iso_or_none(r.get("createdAt"))
         r["updatedAt"] = _iso_or_none(r.get("updatedAt"))
     return rows
+
+
+def _build_user_provider_entry(
+    seed: dict[str, Any], cred: dict[str, Any] | None, override: dict[str, Any]
+) -> dict[str, Any]:
+    """One provider's PER-USER status, derived ONLY from this user's own rows.
+
+    Deliberately does NOT call ``_provider_env_state`` or read
+    ``ProviderCredential``: nothing about the operator's deployment-wide
+    credential (its existence, source, last-4 hint or verify history) may reach
+    a customer (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). ``status`` is honest —
+    a stored key whose last real verify came back ``failed`` is demoted to
+    ``warning``, exactly as the deployment-wide builder does, and a provider
+    with no key of the user's own is ``unconfigured``. Shape matches the
+    frontend ``ProviderSchema`` so the same panel component renders both views.
+    """
+    if cred:
+        status_token = "warning" if cred.get("lastVerifyStatus") == "failed" else "connected"
+        source = "database"
+        detail = f"Your own key, stored in the encrypted vault ({cred.get('secretHint')})"
+        if cred.get("lastVerifyStatus"):
+            detail += f" · last test: {cred['lastVerifyStatus']}"
+    else:
+        status_token = "unconfigured"
+        source = "none"
+        detail = f"You have not added your own {seed['name']} key."
+    return {
+        "id": seed["id"],
+        "label": seed["name"],
+        "name": seed["name"],
+        "auth": seed["auth"],
+        "icon": seed["icon"],
+        "color": seed["color"],
+        "models": seed["models"],
+        "status": status_token,
+        "source": source,
+        "authMode": cred.get("authMode") if cred else None,
+        "secretHint": cred.get("secretHint") if cred else None,
+        "baseUrl": cred.get("baseUrl") if cred else None,
+        "lastVerifiedAt": _iso_or_none(cred.get("lastVerifiedAt")) if cred else None,
+        "lastVerifyStatus": cred.get("lastVerifyStatus") if cred else None,
+        "needsReauth": False,
+        # The user's OWN provider-level default model (the ModelPicker's row);
+        # "" means "no override — agents run the app default".
+        "model": override.get("model") or "",
+        "detail": detail,
+    }
+
+
+@router.get("/user/providers/catalog")
+def list_user_provider_catalog(current_user: CurrentUser) -> list[dict[str, Any]]:
+    """The provider panel an ORDINARY customer sees: their own keys only.
+
+    Added for F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). ``GET /agents/providers``
+    is now operator-only because it exposes the deployment-wide credential
+    store; this is the per-user replacement customers get instead. It combines
+    static provider identity (``PROVIDER_SEED`` — branding + the static model
+    list, no credential material) with THIS user's own
+    ``UserProviderCredential`` rows and THIS user's own ``AgentProvider``
+    default-model preference. It reads no deployment credential and no provider
+    env var, so it cannot leak the operator's state.
+
+    Scoped to ``_CREDENTIAL_PROVIDERS`` — the providers that actually accept a
+    stored user credential. ``abacus`` is excluded because a user cannot supply
+    one, and offering a card for it would be a dead control.
+    """
+    user_id = current_user["id"]
+    creds = {
+        row["provider"]: row
+        for row in UserProviderCredentialRepository().list_masked(user_id)
+    }
+    overrides = _user_provider_overrides(user_id)
+    return [
+        _build_user_provider_entry(
+            seed, creds.get(seed["id"]), overrides.get(seed["id"], {})
+        )
+        for seed in PROVIDER_SEED
+        if seed["id"] in _CREDENTIAL_PROVIDERS
+    ]
 
 
 def _user_credential_masked(user_id: str, provider: str) -> dict[str, Any]:
@@ -3904,8 +4012,14 @@ def _oauth_vault_ready_or_503() -> None:
 
 
 @router.post("/providers/anthropic/oauth/start")
-def anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
+def anthropic_oauth_start(current_user: AdminUser) -> dict[str, Any]:
     """Begin the Connect-with-Anthropic flow: return the authorize URL.
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): this is step 1 of
+    a flow whose step 2 (``/exchange``) writes the DEPLOYMENT-WIDE
+    ``ProviderCredential('anthropic')`` row — see
+    ``anthropic_oauth.persist_tokens``. It is the same shared store the manual
+    paste writes, so the whole flow is gated as one family.
 
     Generates a server-side PKCE verifier + opaque single-use state, persists
     them (the verifier NEVER leaves the server), and returns Anthropic's own
@@ -3939,9 +4053,17 @@ def _parse_pasted_oauth_code(pasted: str) -> tuple[str, str]:
 
 @router.post("/providers/anthropic/oauth/exchange")
 def anthropic_oauth_exchange(
-    body: AnthropicOAuthExchangeBody, current_user: CurrentUser
+    body: AnthropicOAuthExchangeBody, current_user: AdminUser
 ) -> dict[str, Any]:
     """Exchange the pasted one-time ``code#state`` for a subscription token.
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): on success this
+    OVERWRITES the deployment-wide ``ProviderCredential('anthropic')`` row, so
+    before the gate any authenticated customer could have replaced the
+    operator's subscription token with their own — silently re-billing every
+    bare ``claude-*`` run on the deployment (including cron) to whoever
+    connected last. The per-user ``AnthropicOAuthState`` owner check below is a
+    CSRF/state binding, not an authorization gate.
 
     422 malformed paste, or an honest upstream CODE-REJECTION — a real HTTP
     response reached us with a non-2xx status (e.g. Anthropic 400 invalid_grant
@@ -3997,8 +4119,13 @@ def anthropic_oauth_exchange(
 
 
 @router.post("/providers/anthropic/oauth/refresh")
-def anthropic_oauth_refresh(current_user: CurrentUser) -> dict[str, Any]:
+def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
     """Force-refresh the stored subscription token (the "Renew now" action).
+
+    OPERATOR-ONLY (F-01, ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): a successful
+    refresh rotates the deployment-wide ``ProviderCredential('anthropic')`` row
+    via ``persist_tokens``, and a failure marks the session ``needs_reauth`` —
+    both are deployment-wide effects.
 
     502 + ``needs_reauth`` marked on an honest refresh failure; NEVER a stale
     token, NEVER a cross-provider fallback. Returns the rotated masked status.

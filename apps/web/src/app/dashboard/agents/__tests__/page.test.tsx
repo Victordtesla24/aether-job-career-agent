@@ -52,6 +52,25 @@ vi.mock("../../../../lib/api/client", async () => {
   return { ...actual, apiRequest: (...args: unknown[]) => apiRequest(...args) };
 });
 
+// F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): the Agents console now resolves
+// isAdmin from /auth/me BEFORE choosing which provider endpoint to call —
+// GET /agents/providers (operator, admin-only) or GET /agents/user/providers/catalog
+// (customer). This suite exercises the OPERATOR console, so pin the identity;
+// without it the page would silently fall to the customer path and the
+// fetchProviders assertions below would stop covering anything.
+vi.mock("../../../../lib/api/admin", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../lib/api/admin")>();
+  return {
+    ...actual,
+    fetchMe: vi.fn().mockResolvedValue({
+      id: "u-operator",
+      email: "operator@example.com",
+      name: "",
+      isAdmin: true,
+    }),
+  };
+});
+
 vi.mock("../../../../lib/api/agents", () => ({
   fetchAgentRuns: (...args: unknown[]) => fetchAgentRuns(...args),
   fetchAgents: (...args: unknown[]) => fetchAgents(...args),

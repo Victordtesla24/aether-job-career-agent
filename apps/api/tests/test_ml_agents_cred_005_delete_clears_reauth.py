@@ -44,6 +44,23 @@ import pytest
 
 from app.services import credential_vault as vault
 
+# --------------------------------------------------------------------------- #
+# F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). The deployment-wide
+# ``/agents/providers/...`` credential family reads and writes ONE shared
+# ``ProviderCredential`` store with no user id in it, so it is now gated by the
+# same ``AdminUser`` dependency ``/admin/*`` uses. This module exercises that
+# OPERATOR surface, so its fixture user IS the operator: override the shared
+# ``auth_headers`` to carry ``isAdmin``. Nothing else about these tests changes —
+# each still asserts exactly the behaviour it asserted before, only with the
+# actor these endpoints were always meant for.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture()
+def auth_headers(client, auth_headers, promote_user_to_admin):
+    promote_user_to_admin(client._test_user_id)
+    return auth_headers
+
 FAKE_ACCESS_1 = "sk-ant-oat01-FAKEtestACCESSvalue0000000000deadbeef"
 FAKE_REFRESH_1 = "sk-ant-ort01-FAKEtestREFRESHvalue0000000000deadbeef"
 

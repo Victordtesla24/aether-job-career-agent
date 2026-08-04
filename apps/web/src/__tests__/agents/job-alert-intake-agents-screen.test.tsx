@@ -26,6 +26,25 @@ const fetchAgentRunsMock = vi.hoisted(() => vi.fn());
 const runAgentMock = vi.hoisted(() => vi.fn());
 const runPipelineMock = vi.hoisted(() => vi.fn());
 
+// F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ): the Agents console now resolves
+// isAdmin from /auth/me BEFORE choosing which provider endpoint to call —
+// GET /agents/providers (operator, admin-only) or GET /agents/user/providers/catalog
+// (customer). This suite exercises the OPERATOR console, so pin the identity;
+// without it the page would silently fall to the customer path and the
+// fetchProviders assertions below would stop covering anything.
+vi.mock("../../lib/api/admin", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/api/admin")>();
+  return {
+    ...actual,
+    fetchMe: vi.fn().mockResolvedValue({
+      id: "u-operator",
+      email: "operator@example.com",
+      name: "",
+      isAdmin: true,
+    }),
+  };
+});
+
 vi.mock("../../lib/api/agents", () => ({
   fetchAgents: fetchAgentsMock,
   fetchAgentRuns: fetchAgentRunsMock,

@@ -57,6 +57,7 @@ import {
   fetchProviderCatalog,
   fetchProviderModels,
   fetchProviders,
+  fetchUserProviderCatalog,
   refreshProviderModels,
   updateAgentConfig,
   updateProvider,
@@ -65,6 +66,7 @@ import {
   type Provider,
   type ProviderModel,
 } from "../../../components/agents/api";
+import { fetchMe } from "../../../lib/api/admin";
 import { ApiError } from "../../../lib/api/client";
 import {
   agentSuccessNotice,
@@ -143,28 +145,68 @@ export default function AgentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [cat, prov, st, agentList, runList] = await Promise.all([
+      const [cat, st, agentList, runList] = await Promise.all([
         fetchCatalog(),
-        fetchProviders(),
         fetchAgentStats(),
         fetchAgents(),
         fetchAgentRuns(),
       ]);
       setCatalog(cat);
-      setProviders(prov);
       setStats(st);
       setAgents(agentList);
       setRuns(runList);
     } catch (e) {
       setNotice(runErrorNotice(e, "Loading agents"));
       setCatalog((prev) => prev ?? { agents: [], counts: { total: 0, active: 0, paused: 0, error: 0 } });
-      setProviders((prev) => prev ?? []);
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). GET /agents/providers exposes the
+  // OPERATOR's deployment-wide credential state (source, last-4 secretHint,
+  // verify timestamps) and is admin-only on the server. Resolve isAdmin FIRST —
+  // from the same /auth/me source the AdminGuard and topbar already use — and
+  // only then decide which endpoint to call, so a customer's browser never even
+  // REQUESTS the operator's rows (a 403-after-click would still be too late:
+  // the panel would have rendered "Manage" controls that can only fail).
+  // `null` = not yet resolved; a failed lookup degrades to non-admin, the safe
+  // direction, and the server gate is authoritative regardless.
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await fetchMe();
+        if (!cancelled) setIsAdmin(me.isAdmin);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The provider panel, scoped to who is looking: the operator's shared
+  // connections, or the customer's own keys. Deliberately NOT part of `load()`
+  // above — it must not run until isAdmin is known, and a provider-panel
+  // failure must not blank the agent catalog.
+  const loadProviders = useCallback(async () => {
+    if (isAdmin === null) return;
+    try {
+      setProviders(isAdmin ? await fetchProviders() : await fetchUserProviderCatalog());
+    } catch (e) {
+      setNotice(runErrorNotice(e, "Loading providers"));
+      setProviders((prev) => prev ?? []);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    void loadProviders();
+  }, [loadProviders]);
 
   // W-RT — the shared realtime channel. The in-flight poll below only runs
   // while THIS tab started a run; a run started by the scheduler, the worker or
@@ -395,18 +437,14 @@ export default function AgentsPage() {
 
   const refreshProviders = useCallback(async () => {
     setProviderBusy(null);
-    try {
-      setProviders(await fetchProviders());
-    } catch (e) {
-      setNotice(runErrorNotice(e, "Refreshing providers"));
-    }
-  }, []);
+    await loadProviders();
+  }, [loadProviders]);
 
   const onProviderModel = async (id: string, model: string) => {
     setProviderBusy(id);
     try {
       await updateProvider(id, { model });
-      setProviders(await fetchProviders());
+      await loadProviders();
     } catch (e) {
       setNotice(runErrorNotice(e, "Updating provider"));
     } finally {
@@ -631,10 +669,22 @@ export default function AgentsPage() {
 
       <ProviderConnections
         providers={providers ?? []}
-        loading={providers === null}
+        loading={providers === null || isAdmin === null}
         busyId={providerBusy}
         onConfigure={openConfig}
         onModel={(id, model) => void onProviderModel(id, model)}
+        title={
+          isAdmin === null
+            ? "AI Providers"
+            : isAdmin
+              ? "AI Provider Connections"
+              : "Your AI Provider Keys"
+        }
+        blurb={
+          isAdmin === false
+            ? "Keys you add here are yours alone, stored encrypted. Runs on a provider you have supplied a key for bill to your own account."
+            : undefined
+        }
       />
 
       {openrouterProvider ? (
@@ -750,6 +800,9 @@ export default function AgentsPage() {
         onClose={() => setConfigProvider(null)}
         onSaved={refreshProviders}
         onNotice={setNotice}
+        // Explicitly `=== true`: while isAdmin is still unresolved the safe
+        // default is the per-user store, never the operator's.
+        scope={isAdmin === true ? "deployment" : "user"}
       />
     </div>
   );
