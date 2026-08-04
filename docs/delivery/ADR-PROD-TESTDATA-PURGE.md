@@ -756,3 +756,58 @@ onto another author's unverified content — reproduced live.
 **Second approver:** risk-officer (second instance), GOLD-MASTER-V2 · G-K
 **Executed:** nothing. Production reads only; two session-local TEMP tables for restore validation; **zero
 writes to any production table.**
+
+---
+
+# ORCHESTRATOR RULING — 2026-08-04T02:20Z
+
+## 1. OD-3 (missing PRESERVE rows): CONCUR — not blocking, recorded as a provenance gap
+
+Independently re-probed. The three ids `cd8c0a3e0382fae35a68be0d3`, `c36175418153a9925bc1318f1`,
+`c7301be81ac6368902c8c2c78` return **0 rows in `ApprovalRequest`, `AgentRun`, `Application`, `Job` and
+`AdminAuditLog`** — they exist nowhere with an `id` column. `ApprovalRequest` now holds **339** rows (337
+genuine / 2 test), and **`executedAt` is NULL on every one of them (0 of 339 executed)** — so whatever those
+rows recorded, nothing was ever transmitted to a third party.
+
+I concur with the risk-officer: BLOCKER-002's corrective outcome — cover letters no longer signed with a test
+probe string — is achieved at source, and the substantive evidence survives in the committed text corpus.
+The disappearance of the three designated rows is an **evidence-provenance gap**, recorded honestly, not a
+data-integrity violation and not grounds to reopen BLOCKER-002. It does not block the purge, which touches
+only the 2 test-owned approval rows and leaves all 337 genuine rows intact.
+
+## 2. EXECUTION IS DEFERRED — condition C5 cannot currently be satisfied
+
+**The purge must NOT run yet, and the reason is my own doing:** a qa-adversary is running an adversarial UAT
+against production right now, deliberately creating personas. C5 (quiescence + re-census) is a hard
+precondition, and the census is already stale — the risk-officer watched `AgentRun` go 7→10, `Application`
+0→1, `EmailThread` 0→1 and `ApprovalRequest` 1→2 *during authoring*. Executing against a moving target either
+deletes accounts the UAT is mid-test on, or silently misses rows created after the census.
+
+**Sequence (binding):**
+1. qa-adversary UAT completes and its created accounts are listed in `PROD-UAT-2026-08-03.md`.
+2. F-01 fix deployed and verified (a security fix outranks cleanup).
+3. Re-census under C5, refresh the manifest, single writer only.
+4. Backup gates G1–G5, then janitor executes — janitor ≠ the authoring risk-officer (C8).
+
+## 3. Accepted with emphasis
+
+- **`pg_dump` is banned here and this is the most important operational finding in the ADR.** Client 16.14
+  against server 17.9 aborts and leaves a **0-byte file**. A janitor running `pg_dump && DELETE` would have
+  destroyed 5,087 production rows believing it held a backup. The validated psql JSONL capture replaces it.
+- **C2 (identity predicates only) is non-negotiable.** 1,387 of the owner's genuine `Job` rows share a
+  `sourceUrl` with a test copy; any content-derived predicate would destroy the owner's real data. Job rows
+  are strictly per-user (`UNIQUE (userId, sourceUrl)`, scalar `userId`, `ON DELETE CASCADE`) — the overlap is
+  in the *values*, never the rows.
+- **C12 (no literal protected-side guards).** The earlier `owner Job count <> 2506 → RAISE` guard was already
+  false when written; I measured 2,506 at 01:55Z and the risk-officer measured 2,538 at 02:07Z. Discovery adds
+  rows every 30 minutes, so any literal count guard fails open-loop and trains the operator to disable the one
+  protection standing over owner data. Deltas only.
+- **C11 discharged:** the manifest is gitignored and single-copy, and a second risk-officer process was
+  observed overwriting it mid-authoring. Snapshotted off-tree to
+  `/home/ubuntu/aether-purge-manifest-backup/` (sha256 `2fc7e193085feb…`). Verify that hash before the janitor
+  consumes the file; if it differs, a concurrent writer touched it and it must be re-approved.
+
+## 4. Rejected
+
+"Quarantine instead of delete" — correctly rejected. Suspending the users leaves 5,011 Job rows inflating
+every count and metric, so §13.1.3 would still be violated. Quarantine would be theatre.
