@@ -67,6 +67,11 @@ import {
   type ProviderModel,
 } from "../../../components/agents/api";
 import { fetchMe } from "../../../lib/api/admin";
+import {
+  deriveSearchTarget,
+  missingTargetLabel,
+  type DiscoveryProfile,
+} from "../../../lib/discovery/search-target";
 import { ApiError } from "../../../lib/api/client";
 import {
   agentSuccessNotice,
@@ -78,9 +83,17 @@ import {
   type Notice,
 } from "../../../lib/agents-feedback";
 
-/** Per-agent discovery params for backend triggers. */
+/**
+ * Per-agent params for backend triggers.
+ *
+ * F-02: `scout` deliberately has NO entry. It used to carry a hardcoded
+ * `{query: "software engineer", location: "Australia"}` sent for every
+ * customer who pressed Run on the Scout card — the same defect as Job
+ * Discovery's "Sync Now" hardcode, with a different literal. Scout's params
+ * are now resolved per-run from the signed-in user's own profile in
+ * `resolveScoutParams()` below, which refuses rather than invents one.
+ */
 const RUN_PARAMS: Record<string, Record<string, unknown>> = {
-  scout: { query: "software engineer", location: "Australia" },
   emailAgent: { mode: "triage" },
 };
 
@@ -359,12 +372,53 @@ export default function AgentsPage() {
     return RUN_PARAMS[name] ?? {};
   };
 
+  /**
+   * F-02 — Scout runs the SIGNED-IN user's own search, or it does not run.
+   *
+   * Returns the params, or `null` after posting an honest refusal notice. The
+   * profile is re-read per run (rather than reused from the mount-time
+   * `isAdmin` lookup) so a target role just saved in Settings takes effect
+   * immediately. Nothing here manufactures a query: a user who has told us
+   * nothing gets a message pointing at Settings, never someone else's search.
+   */
+  const resolveScoutParams = async (): Promise<Record<string, unknown> | null> => {
+    let profile: DiscoveryProfile | null = null;
+    try {
+      const me = await fetchMe();
+      profile = { targetRole: me.targetRole, location: me.location };
+    } catch {
+      setNotice({
+        kind: "error",
+        text: "Scout could not read your profile, so it has no target role to search for. Reload and try again — it will not run a guessed search.",
+      });
+      return null;
+    }
+    const target = deriveSearchTarget(profile);
+    if (target.status !== "ready") {
+      setNotice({
+        kind: "error",
+        text: `Scout has nothing to search for — your profile has no ${missingTargetLabel(target.missing)} set. Add it in Settings and Scout will search for exactly that.`,
+        href: "/dashboard/settings",
+        hrefLabel: "open Settings →",
+      });
+      return null;
+    }
+    return { query: target.query, location: target.location };
+  };
+
   const trigger = async (backend: string) => {
+    // Resolved BEFORE the "started" notice so a refusal never follows a claim
+    // that the run began.
+    let scoutParams: Record<string, unknown> | null = null;
+    if (backend === "scout") {
+      scoutParams = await resolveScoutParams();
+      if (scoutParams === null) return;
+    }
     setBusy(backend);
     setNotice({ kind: "info", text: `${backend} started — running now…` });
     startPolling("agent");
     try {
-      const params = await resolveParams(backend);
+      const params = scoutParams ?? (await resolveParams(backend));
       const output = await runAgent(AGENT_ROUTE[backend] ?? backend, params);
       setNotice(missingResumeNotice(output) ?? agentSuccessNotice(backend, output));
     } catch (e) {

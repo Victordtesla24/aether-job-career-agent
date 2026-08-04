@@ -19,6 +19,13 @@ const MeSchema = z.object({
   email: z.string(),
   name: z.string().optional().default(""),
   isAdmin: z.boolean().optional().default(false),
+  // F-02: the profile columns that say what THIS user is job-hunting for.
+  // GET /auth/me has always returned them (apps/api/app/routers/auth.py:me);
+  // they were simply dropped on the floor here, which is why Job Discovery had
+  // nothing to derive a search from and posted a hardcoded persona instead.
+  // Optional-with-default so an older payload still parses.
+  targetRole: z.string().optional().default(""),
+  location: z.string().optional().default(""),
 });
 type Me = z.infer<typeof MeSchema>;
 

@@ -21,6 +21,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
 import { resolveRun } from "../../../lib/api/agents";
+import { fetchMe } from "../../../lib/api/admin";
+import {
+  deriveSearchTarget,
+  missingTargetLabel,
+  type DiscoveryProfile,
+  type EnteredTarget,
+} from "../../../lib/discovery/search-target";
 import { fetchScoutSources, fetchSourceAvailability } from "../../../lib/api/jobs";
 import type { Job, ScoutSourceStatus, SourceAvailability } from "../../../lib/api/jobs";
 import type { TailorRunResult } from "../../../lib/api/resumes";
@@ -291,6 +298,53 @@ export default function JobsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [demoEmpty, setDemoEmpty] = useState(false);
 
+  // F-02 — what Sync Now searches for belongs to the SIGNED-IN user.
+  //
+  // This screen used to POST a literal
+  // `{query: "delivery lead, product owner, program manager, business analyst",
+  //   location: "Australia"}` for everyone, so a Senior Data Scientist got
+  // 1,621 project-management postings written into their account. The target is
+  // now derived from their own profile (GET /auth/me's `targetRole`/`location`,
+  // the same columns Settings > Profile writes), and when the profile says
+  // nothing we ASK rather than substitute — see `deriveSearchTarget`, which
+  // owns no default query at all.
+  //
+  // The lookup is memoised in a ref rather than read straight off state so a
+  // Sync Now pressed before the fetch settles waits for the real answer instead
+  // of racing to "nothing configured".
+  const [profile, setProfile] = useState<DiscoveryProfile | null>(null);
+  const [profileSettled, setProfileSettled] = useState(false);
+  const profileLoad = useRef<Promise<DiscoveryProfile | null> | null>(null);
+  const loadProfile = useCallback((): Promise<DiscoveryProfile | null> => {
+    profileLoad.current ??= fetchMe()
+      .then((me) => ({ targetRole: me.targetRole, location: me.location }))
+      // A failed lookup stays UNKNOWN (null). It must never degrade into a
+      // guessed search — `deriveSearchTarget(null)` asks the user instead.
+      .catch(() => null);
+    return profileLoad.current;
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void loadProfile().then((p) => {
+      if (cancelled) return;
+      setProfile(p);
+      setProfileSettled(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProfile]);
+  /** A role/location typed into the prompt below, for this session only. */
+  const [enteredTarget, setEnteredTarget] = useState<EnteredTarget | null>(null);
+  const [askOpen, setAskOpen] = useState(false);
+  const [askRole, setAskRole] = useState("");
+  const [askLocation, setAskLocation] = useState("");
+  const [askError, setAskError] = useState<string | null>(null);
+  const searchTarget = useMemo(
+    () => deriveSearchTarget(profile, enteredTarget),
+    [profile, enteredTarget],
+  );
+
   const [insights, setInsights] = useState<Record<string, Insights>>({});
   const insightsInFlight = useRef<Set<string>>(new Set());
 
@@ -480,7 +534,15 @@ export default function JobsPage() {
     midnight.setHours(0, 0, 0, 0);
     const newToday = all.filter((j) => j.createdAt && new Date(j.createdAt).getTime() >= midnight.getTime()).length;
     const sources = new Set(all.map((j) => j.source)).size;
-    return { matches: all.length, newToday, sources };
+    // F-02 labelling. Every discovered row used to be counted as a "match"
+    // ("1,621 matches across markets") even though nothing had been scored
+    // against the user's résumé — the screen asserted a relevance the system
+    // had not measured. A "match" claim needs a fit score behind it, so the
+    // two populations are now counted separately, using the same
+    // `fitScore != null` test the dashboard already treats as "scored"
+    // (dashboard/page.tsx:194).
+    const scored = all.filter((j) => j.fitScore != null).length;
+    return { total: all.length, scored, unscored: all.length - scored, newToday, sources };
   }, [jobs]);
 
   // Source bar: real per-source counts from the loaded jobs, most jobs first.
@@ -559,14 +621,12 @@ export default function JobsPage() {
     selectedInsights?.semanticPath === "local" || selectedInsights?.semanticPath === "hf_api";
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
 
-  const runDiscovery = async () => {
+  /** Run the real discovery pass for an already-resolved, user-owned target. */
+  const runDiscoveryFor = async (query: string, location: string) => {
     setRunning(true);
     setError(null);
     try {
-      await apiRequest("/agents/scout/run", {
-        method: "POST",
-        body: { query: "delivery lead, product owner, program manager, business analyst", location: "Australia" },
-      });
+      await apiRequest("/agents/scout/run", { method: "POST", body: { query, location } });
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       setInsights({});
       await Promise.all([load(), loadSourceStatus()]);
@@ -575,6 +635,39 @@ export default function JobsPage() {
     } finally {
       setRunning(false);
     }
+  };
+
+  const runDiscovery = async () => {
+    // Wait for the profile lookup if it is still in flight, so a fast click
+    // gets the user's real target rather than a premature "nothing set".
+    const current = profileSettled ? profile : await loadProfile();
+    const target = deriveSearchTarget(current, enteredTarget);
+    if (target.status !== "ready") {
+      // Nothing of this user's own to search for. Ask — never borrow someone
+      // else's query, and never report a run that did not happen.
+      setAskRole(target.role);
+      setAskLocation(target.location);
+      setAskError(null);
+      setAskOpen(true);
+      setError(null);
+      return;
+    }
+    await runDiscoveryFor(target.query, target.location);
+  };
+
+  /** Search exactly what the user typed into the prompt — nothing added. */
+  const submitAskedTarget = async () => {
+    const target = deriveSearchTarget(profile, { role: askRole, location: askLocation });
+    if (target.status !== "ready") {
+      setAskError(
+        `Enter a ${missingTargetLabel(target.missing)} so the search describes the job you actually want.`,
+      );
+      return;
+    }
+    setEnteredTarget({ role: target.query, location: target.location });
+    setAskError(null);
+    setAskOpen(false);
+    await runDiscoveryFor(target.query, target.location);
   };
 
   const toggleSave = async (jobId: string) => {
@@ -784,7 +877,8 @@ export default function JobsPage() {
         <div>
           <h1 className="text-2xl font-bold">Job Discovery</h1>
           <p className="mono text-xs text-aether-muted-dim" data-testid="jobs-stats">
-            {stats.matches} matches across markets · {stats.newToday} new today · {stats.sources} sources connected
+            {stats.total} discovered · {stats.scored} scored against your résumé ·{" "}
+            {stats.unscored} not yet scored · {stats.newToday} new today · {stats.sources} sources connected
           </p>
         </div>
         <button
@@ -797,6 +891,121 @@ export default function JobsPage() {
           {running ? "Syncing…" : "Sync Now"}
         </button>
       </header>
+
+      {/* F-02 — say plainly what Sync Now will search for, and where that came
+          from. Rendered only once the profile lookup has settled, so the line
+          never states a target before one is known. */}
+      {profileSettled ? (
+        <p className="text-xs text-aether-muted-dim" data-testid="discovery-search-target">
+          {searchTarget.status === "ready" ? (
+            <>
+              Sync Now searches for{" "}
+              <span className="font-semibold text-white">{searchTarget.query}</span> in{" "}
+              <span className="font-semibold text-white">{searchTarget.location}</span>
+              {searchTarget.source === "profile" ? (
+                <>
+                  {" "}
+                  — from your profile.{" "}
+                  <Link href="/dashboard/settings" className="underline hover:text-white">
+                    Change it in Settings
+                  </Link>
+                </>
+              ) : (
+                <>
+                  {" "}
+                  — what you entered for this session.{" "}
+                  <Link href="/dashboard/settings" className="underline hover:text-white">
+                    Save it to your profile
+                  </Link>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              No {missingTargetLabel(searchTarget.missing)} on your profile yet — Sync Now will
+              ask what you are looking for rather than search for a role you did not choose.
+            </>
+          )}
+        </p>
+      ) : null}
+
+      {/* F-02 — the honest empty-profile path. The product's promise is that it
+          does not fabricate, so with nothing configured the screen asks the
+          question instead of quietly running somebody else's search and
+          labelling the results "matches". */}
+      {askOpen ? (
+        <section
+          data-testid="discovery-target-prompt"
+          aria-labelledby="discovery-target-prompt-heading"
+          className="rounded-2xl border border-aether-coral/30 bg-aether-coral/5 p-5"
+        >
+          <h2 id="discovery-target-prompt-heading" className="text-sm font-semibold">
+            What should we search for?
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-aether-muted">
+            Your profile has no {missingTargetLabel(searchTarget.status === "needs-input" ? searchTarget.missing : ["role"])}{" "}
+            set, so there is nothing here to search for yet. Tell us what you want and we
+            will search for exactly that — we will not guess a target role on your behalf,
+            because results we cannot justify are not results.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-[11px] text-aether-muted-dim">
+              Target role
+              <input
+                type="text"
+                data-testid="discovery-role-input"
+                value={askRole}
+                onChange={(e) => setAskRole(e.target.value)}
+                placeholder="e.g. Senior Data Scientist"
+                className="w-64 rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-sm text-white placeholder:text-aether-muted-dim"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] text-aether-muted-dim">
+              Location
+              <input
+                type="text"
+                data-testid="discovery-location-input"
+                value={askLocation}
+                onChange={(e) => setAskLocation(e.target.value)}
+                placeholder="e.g. Melbourne, Australia"
+                className="w-64 rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-sm text-white placeholder:text-aether-muted-dim"
+              />
+            </label>
+            <button
+              type="button"
+              data-testid="discovery-target-submit"
+              onClick={() => void submitAskedTarget()}
+              disabled={running}
+              className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+            >
+              {running ? "Searching…" : "Search this"}
+            </button>
+            <button
+              type="button"
+              data-testid="discovery-target-cancel"
+              onClick={() => {
+                setAskOpen(false);
+                setAskError(null);
+              }}
+              className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-aether-muted hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+          {askError ? (
+            <p className="mt-2 text-xs text-red-300" data-testid="discovery-target-error">
+              {askError}
+            </p>
+          ) : null}
+          <p className="mt-2 text-[11px] text-aether-muted-dim">
+            Prefer to set it once?{" "}
+            <Link href="/dashboard/settings" className="underline hover:text-white">
+              Add your target role in Settings
+            </Link>{" "}
+            and every future sync will use it.
+          </p>
+        </section>
+      ) : null}
 
       {/* Market tabs (jd20/jd21/jd41) */}
       <div className="flex items-center gap-1 border-b border-white/10" role="tablist" aria-label="Market">
