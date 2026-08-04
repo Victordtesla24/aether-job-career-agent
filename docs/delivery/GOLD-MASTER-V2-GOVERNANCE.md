@@ -851,3 +851,70 @@ a three-day-old blocker list that names an already-rotated credential as "live a
 the "prior reports are testimony" failure this run exists to prevent — inaccurate in the *pessimistic*
 direction, which is no more acceptable than inaccuracy in the optimistic one. The qa-adversary that owns the
 document must refresh it; this entry is the orchestrator's verified input to that refresh, not a substitute for it.
+
+---
+
+## GOV-015 — W-C/G-C: the tailoring loop WORKS; the §5.2 ≥85 threshold is unreachable without fabricating
+
+| Field | Value |
+|---|---|
+| **Adjudicated** | 2026-08-04T04:5xZ, orchestrator, on a live 5-job production probe |
+| **Evidence** | `uat/reports/evidence/gold-master-v2/wc/TAILORING-EFFICACY-PROBE.md` |
+| **Ruling** | Mechanism COMPLIANT. Threshold NOT MET and NOT HONESTLY REACHABLE. G-C closes on the honest-warning path, NOT on ≥85. |
+
+### The measurement
+Five real production jobs across distinct domains, owner identity, per-run costs taken from each run's own
+`costUsd`:
+
+| before | after | delta | iterations | honest warning |
+|---|---|---|---|---|
+| 53.69 | 54.69 | +1.00 | 5 | yes |
+| 44.28 | 52.28 | +8.00 | 5 (still climbing) | yes |
+| 39.22 | 45.54 | +6.32 | 5 | yes |
+| 33.13 | 37.13 | +4.00 | 3 — cut short, LLM budget exhausted, disclosed | yes |
+| 34.00 | 39.00 | +5.00 | 5 (still climbing) | yes |
+
+**Mean delta +4.86. 5/5 positive. 0/5 at 0.0%. 0/5 reached 85.**
+
+### This REFUTES prior testimony in this run's own evidence tree
+`GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md` blocking item 5 states the feature shows "0.0% movement in 7/7 runs"
+and that tailoring "moves its own metric by zero". That measurement was taken against the OLD single-pass
+`resume_tailor.py`. `TailoringLoop` replaced it and genuinely re-scores every iteration — proven by non-round,
+run-specific per-iteration deltas, which a cached or re-displayed pre-tailoring value could not produce.
+**Blocking item 5 is withdrawn as written.** The review must be corrected: reporting a working feature as
+broken is the same testimony failure as the reverse.
+
+### Why 85 is not reached — and why that is CORRECT behaviour
+`tailoring_loop.py:246-274` (`split_gap_keywords`) refuses to inject gap keywords the candidate's evidence
+corpus does not support. Each posting carries 10-20+ such keywords. The anti-fabrication guard therefore
+imposes a hard, honest ceiling well below 85 for this candidate against these postings.
+
+The gap is a **DATA** condition — this résumé genuinely does not evidence those requirements — not a code
+defect. Closing it would require fabricating experience, which §5.3.3 forbids ("Do not fabricate experience")
+and which the entire anti-fabrication architecture exists to prevent.
+
+§5.2 states the score "MUST be ≥ 85". §5.3.1 point 5 states that if max iterations is reached below 85 the
+system must surface an honest inline warning with the best achieved score and **NEVER claim success**.
+**Observed: an honest warning in 5/5 runs, naming the unreachable keywords, plus an explicit "cut short, LLM
+budget exhausted" disclosure on the run that stopped at 3 iterations.**
+
+**Ruling:** where §5.2's threshold and §5.3.3's anti-fabrication rule conflict on real data, **§5.3.3 wins and
+§5.3.1.5 is the compliant outcome.** A system that reached 85 here would be lying. G-C closes on mechanism
+correctness and honest disclosure; the run's final report MUST state plainly that the ≥85 target is not met on
+production data, with these numbers, and MUST NOT report G-C as "≥85 achieved".
+
+### Secondary findings from the same probe
+- **ATS-KW-001 CONFIRMED LIVE but MINOR.** The Kinetic JD's ordinary sentence *"Melbourne location with true
+  flexibility"* put the bare token **"location"** into that run's real `gapKeywords`/`unreachableKeywords`.
+  Sampled n=60 live postings: geography noise appears in the top-40 required keywords on **18%**, costing
+  **~1.00 point** of overall score per hit (2.5 pts on the keyword sub-score; up to 2.00 when a city name and
+  the literal word both hit). Real, worth fixing, and **not** the dominant cause of the 30-50 point gap to 85.
+  It must not be sold as the fix that unlocks 85.
+- **`interview_conversion_rate` = 0.0% is ATTESTED, not a placeholder** — a genuine computation at
+  `analytics.py:200-230`, cross-checked against the funnel's raw 0/67. It reads zero because the account has
+  logged zero interviews, which is the honest value.
+- **LLM budget exhaustion truncated one run at 3 of 5 iterations** and said so. Honest, but it means the
+  achievable ceiling is budget-sensitive; worth recording as a known constraint rather than a defect.
+- **Shared-production hygiene:** independent autopilot tailoring activity was observed on the same owner
+  account mid-probe (a run the prober did not trigger). Per-run costs were taken from each run's own `costUsd`
+  rather than an account-wide quota delta, so the figures are unaffected.
