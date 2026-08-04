@@ -86,3 +86,39 @@ executes in the API process, and every `BackgroundJob` was `completed`.
 **Standing rule added:** a deploy is not complete until **every** unit that loads application code has been
 restarted and its start time verified against the commit timestamps — `aether-api`, `aether-web`,
 `aether-worker`, `aether-discovery`. "The API responds correctly" is not evidence about the worker.
+
+---
+
+# DEPLOY #2 — CRITICAL-3b + seed fix (2026-08-04T12:46Z)
+
+**Shipped:** `90fd15d` (backend circuit honesty), `267a1a9` (the 503 banner's customer-visible half),
+`19d4c65` (F-04 anti-over-correction guard now reaches its assertion).
+
+**All FOUR units restarted this time**, per the rule added after the last deploy missed one:
+`aether-api` 12:45:46Z · `aether-worker` 12:45:47Z · `aether-web` 12:46:41Z · `aether-discovery.timer` active.
+Worker shutdown was clean — *24 jobs complete, 0 failed, 0 ongoing to cancel*.
+
+| check | result |
+|---|---|
+| `admin`/`admin123` | **401** |
+| F-01 provider routes (non-admin / anon) | **403 / 401** |
+| per-user provider store | **200** |
+| F-02 `pipeline/run {}` | **422** |
+| F-04 `market_demand` | **0 occurrences** |
+| 5xx since restart | **0** |
+| new 503 branch in the SERVED chunk | **`paused —` present** |
+| fallback copy | **still present — intended** |
+
+## A verification of mine that was wrong, and how it was caught
+
+I first grepped the served bundle for `insufficient_credits` / `failure_class`, found nothing, and nearly
+recorded the web half as not deployed. **The grep was wrong, not the deploy.** The fix adds no new literal: it
+calls `extractApiJsonDetail(err)` and renders the **backend's** message, so the only new marker is the template
+`` `${context} paused — ${detail}` ``. That IS present in the served chunk.
+
+The old *"wait a minute and press the button again"* copy is also still present, and that is **correct** — it
+is now the fallback for a synthetic client-side error or a 503 carrying no JSON detail (a proxy/gateway page),
+not the blanket override it used to be.
+
+**Lesson, and it is the same one as R-01 and GOV-028:** grep for what the change actually introduces, not for
+what you imagine it introduces. A negative result from a wrong probe looks identical to a failed deploy.
