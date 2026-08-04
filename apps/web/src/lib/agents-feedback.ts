@@ -317,6 +317,23 @@ export function runErrorNotice(err: unknown, context: string): Notice {
       ? Number((err as { status: unknown }).status)
       : undefined;
   if (status === 503) {
+    // CRITICAL-3b. The API chooses the 503 body by FAILURE CLASS
+    // (`llm_client.llm_failure_user_message`): an upstream HTTP 402 says the
+    // provider account is out of credits and that retrying will NOT help; a
+    // 401 says the configured API key was rejected; only the transient class
+    // says "temporarily unavailable, try again". Overwriting all three with
+    // one hardcoded "wait a minute and press the button again" told a user
+    // staring at a dead upstream to keep pressing — and hid an operator
+    // failure behind copy that reads like routine flakiness.
+    //
+    // Uses the STRICT extractor: only a genuine backend `{"detail": "..."}`
+    // body replaces the copy below. A synthetic client-side error, or a 503
+    // with no JSON detail (proxy/gateway page), still falls through to the
+    // original guidance unchanged.
+    const detail = extractApiJsonDetail(err);
+    if (detail) {
+      return { kind: "error", text: `${context} paused — ${detail}` };
+    }
     return {
       kind: "error",
       text: `${context} paused — the AI model is busy or its time budget was exceeded. Wait a minute and press the button again; your data is safe.`,
