@@ -949,3 +949,39 @@ REQUIRED procedure for any shared file, not a permitted deviation.
 `apps/api/tests/_rt005_original_assertions_probe.py` would now 422 and break the suite. It does not exist — the
 authoring agent removed it — and even if it did, its leading underscore means pytest would never collect it.
 Recorded because acting on that relayed claim would have produced a fix for a non-problem.
+
+---
+
+## GOV-021 — the ≥85 ruling must be RE-MEASURED after ATS-KW-001, and a GOV-id collision
+
+### 1. ID collision (housekeeping)
+**Two `GOV-015` entries exist.** A concurrent orchestrator session filed `GOV-015` at `9274f93` (W-C/G-C
+tailoring efficacy) while this session had already filed `GOV-015` (ADV-ENT-002 refuted). Both are valid and
+both are kept — cite them as **GOV-015-ENT** (ADV-ENT-002 refuted, this session) and **GOV-015-WC** (tailoring
+efficacy, `9274f93`). Root cause: two sessions allocating from one monotonic namespace with no lock. Later IDs
+in this file (016–021) are this session's.
+
+### 2. The substantive point: the ≥85 ceiling was measured on a demonstrably mis-scoring engine
+
+`GOV-015-WC` rules that the tailoring mechanism is COMPLIANT (mean delta **+4.86**, **5/5 positive**, 0/5 at
+0.0%) and that §5.2's ≥85 threshold is "NOT HONESTLY REACHABLE" because `split_gap_keywords`
+(`tailoring_loop.py:246-274`) refuses to inject keywords the candidate's evidence corpus does not support. I
+**agree with the mechanism finding**, and I agree the anti-fabrication refusal is correct behaviour that must
+not be weakened to hit a number.
+
+**But the ceiling measurement is confounded, and the confound was discovered independently and after it.**
+`ATS-KW-001` (task #37, found by the reviewer of `28d6393`): `ats_engine._extract_keywords` treats the
+**posting's location** as a required résumé keyword. In the measured perfect-overlap case "sydney" was the
+**sole** miss, docking `keyword_match` from 100 → 94.44. Every posting carries a location, so **every candidate
+is docked on every posting** — and a location token is exactly the kind of "gap keyword" the corpus cannot
+evidence, so it is plausibly also inflating the unsatisfiable-gap count that the ≥85 ruling rests on.
+
+**Ruling:** `GOV-015-WC`'s *mechanism* finding stands and its withdrawal of the "0.0% movement in 7/7 runs"
+testimony stands (that figure was taken against the OLD single-pass `resume_tailor.py`, and reporting a working
+feature as broken is the same testimony failure as the reverse). Its *threshold* conclusion is **PROVISIONAL**:
+the five-job probe must be **re-run after ATS-KW-001 is fixed** before "≥85 is unreachable without fabricating"
+is recorded as settled. G-C must not be closed on the honest-warning path until that re-measurement exists —
+closing a headline gate on a ceiling measured through a known scoring defect would be exactly the
+inference-over-evidence failure this campaign keeps catching.
+
+**Sequencing:** fix ATS-KW-001 → re-run the five-job probe → then adjudicate G-C.
