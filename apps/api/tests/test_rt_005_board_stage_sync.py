@@ -82,16 +82,84 @@ class TestAdvanceStatusPrimitive:
             repo.advance_status("cnope", "screening", allowed_from={"bogus"})
 
 
+def _seed_unscorable_job(user_id: str, suffix: str) -> dict:
+    """A posting with a 0-character description: no scorable evidence
+    (``app.services.fit_evidence.has_scorable_evidence``, landed 557739e —
+    "an empty job description was scoring 74.63 — refuse to score on no
+    evidence"). Used to prove the evidence gate positively, not just assume
+    it (RULING 3, docs/delivery/BACKEND-RED-TESTS-2026-08-03.md)."""
+    return JobRepository().create(
+        user_id,
+        {
+            "title": "Unscorable — empty description",
+            "company": "Nobody",
+            "location": None,
+            "remote": False,
+            "description": "",
+            "requirements": [],
+            "source": "manual",
+            "sourceUrl": f"https://example.invalid/ruling3-empty-description/{suffix}",
+            "postedAt": None,
+        },
+    )
+
+
 class TestFitScorerManagesBoard:
-    def test_scored_jobs_advance_to_screening(self, client, auth_headers):
+    def test_scored_jobs_advance_to_screening(self, client, auth_headers, test_user_id):
+        from app.services.fit_evidence import has_scorable_evidence, job_evidence_text
+
         jobs = _seed_jobs(client, auth_headers)
         assert all(j["status"] == "discovered" for j in jobs)
+
+        # RULING 3: seed one job with no scorable evidence alongside the real
+        # fixture jobs, so this test can assert BOTH halves of the evidence
+        # gate contract in a single pass — scorable jobs advance, the
+        # unscorable one honestly does not.
+        empty_job = _seed_unscorable_job(test_user_id, "fit-scorer")
+        assert empty_job["status"] == "discovered"
+        assert not has_scorable_evidence(job_evidence_text(empty_job))
+
         resp = client.post("/agents/fit-scorer/run", headers=auth_headers)
         assert resp.status_code == 200, resp.text
+        run = resp.json()
+        assert run["errors"] == [], run
         after = client.get("/jobs?include_stale=true", headers=auth_headers).json()
-        assert after and all(j["status"] == "screening" for j in after), [
-            (j["id"], j["status"]) for j in after
+        assert after
+
+        # Partition the board by the SAME gate the write path uses
+        # (fit_scorer.FitScorer.run -> has_scorable_evidence(self._job_text(job))),
+        # rather than assuming which fixture postings carry a description.
+        scorable = [j for j in after if has_scorable_evidence(job_evidence_text(j))]
+        unscorable = [j for j in after if not has_scorable_evidence(job_evidence_text(j))]
+        # Neither half may be empty, or one of the two directions below would
+        # pass vacuously.
+        assert scorable, "fixture board must contain scorable postings"
+        assert unscorable, "fixture board must contain unscorable postings"
+
+        # Direction 1 — scoring advances the card. Every scorable posting
+        # carries a real score AND sits in "Evaluating".
+        assert all(j["status"] == "screening" for j in scorable), [
+            (j["id"], j["status"]) for j in scorable if j["status"] != "screening"
         ]
+        assert all(j["fitScore"] is not None for j in scorable), [
+            j["id"] for j in scorable if j["fitScore"] is None
+        ]
+
+        # Direction 2 — NOT scoring must NOT advance the card. This is the
+        # assertion that protects the evidence gate: before 557739e a 0-char
+        # description scored ~74.63 and led the board.
+        assert all(j["status"] == "discovered" for j in unscorable), [
+            (j["id"], j["status"]) for j in unscorable if j["status"] != "discovered"
+        ]
+        assert all(j["fitScore"] is None for j in unscorable), [
+            j["id"] for j in unscorable if j["fitScore"] is not None
+        ]
+        # ...and the control we deliberately made unscorable is in that half.
+        assert empty_job["id"] in {j["id"] for j in unscorable}
+
+        # The agent's own tally must agree with the board partition — every
+        # scorable job was freshly scored in this run, nothing else was.
+        assert run["scored"] == len(scorable), (run["scored"], len(scorable))
 
     def test_manual_move_is_never_demoted(self, client, auth_headers):
         jobs = _seed_jobs(client, auth_headers)
@@ -119,14 +187,27 @@ class TestFitScorerManagesBoard:
 
 class TestPipelineManagesBoard:
     def test_pipeline_leaves_top_job_ready_and_rest_screening(
-        self, client, auth_headers
+        self, client, auth_headers, test_user_id
     ):
+        from app.services.fit_evidence import has_scorable_evidence, job_evidence_text
+
         seed_own_resume(client, auth_headers, raw_text=_operator_resume_text())
+
+        # RULING 3 (BACKEND-RED-TESTS-2026-08-03.md): seed one job with a
+        # 0-character description alongside the real fixture jobs the
+        # pipeline's own scout step will discover. It carries no scorable
+        # evidence and must be honestly left at "discovered" through the
+        # whole pipeline run — never scored, never selected as top job,
+        # never advanced.
+        empty_job = _seed_unscorable_job(test_user_id, "pipeline")
+        assert not has_scorable_evidence(job_evidence_text(empty_job))
+
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
         assert resp.status_code == 200, resp.text
         body = resp.json()
         top = body.get("top_job_id")
         assert top, "fixture pipeline should select a top job"
+        assert top != empty_job["id"], "an unscorable job must never be selected as top"
         after = client.get("/jobs?include_stale=true", headers=auth_headers).json()
         by_id = {j["id"]: j["status"] for j in after}
         if body["status"] == "awaiting_approval":
@@ -136,9 +217,33 @@ class TestPipelineManagesBoard:
             # Cover guard-rejected (degrade path): the tailored top job must
             # still sit honestly in "tailoring", never stuck in discovered.
             assert by_id[top] in ("tailoring", "ready")
-        # Every other scored job advanced out of "discovered" to "screening".
-        rest = {jid: s for jid, s in by_id.items() if jid != top}
-        assert rest and all(s == "screening" for s in rest.values()), rest
+
+        # Every other SCORABLE posting advanced out of "discovered" to
+        # "screening". Scoped by the write path's OWN gate (RULING 3), not by
+        # an assumption about which fixture postings carry a description.
+        rest_scorable = [
+            j
+            for j in after
+            if j["id"] != top and has_scorable_evidence(job_evidence_text(j))
+        ]
+        assert rest_scorable, "fixture board must contain other scorable postings"
+        assert all(j["status"] == "screening" for j in rest_scorable), [
+            (j["id"], j["status"]) for j in rest_scorable if j["status"] != "screening"
+        ]
+
+        # The evidence gate holds across the WHOLE pipeline run
+        # (scout -> fitScorer -> matcher -> tailor -> cover), not just the
+        # scorer: an unscorable posting is never given a score and never
+        # leaves "discovered".
+        unscorable = [j for j in after if not has_scorable_evidence(job_evidence_text(j))]
+        assert unscorable, "fixture board must contain unscorable postings"
+        assert all(j["status"] == "discovered" for j in unscorable), [
+            (j["id"], j["status"]) for j in unscorable if j["status"] != "discovered"
+        ]
+        assert all(j["fitScore"] is None for j in unscorable), [
+            j["id"] for j in unscorable if j["fitScore"] is not None
+        ]
+        assert empty_job["id"] in {j["id"] for j in unscorable}
 
 
 class TestTailorEndpointManagesBoard:

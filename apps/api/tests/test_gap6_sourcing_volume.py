@@ -94,7 +94,17 @@ class TestPortalsVolume:
     def test_gate6_volume_tokens_present(self):
         """Anchors the gate-6 expansion: every token asserted here was
         curled live (200, real board) against the provider's public API
-        before being added — see portals.py docstrings."""
+        before being added — see portals.py docstrings.
+
+        Re-anchored 2026-08-04 (docs/delivery/BACKEND-RED-TESTS-2026-08-03.md
+        RULING 2): a live 2026-08-02 re-probe found all five previous
+        Workable accounts (veriff, canva, deputy, safetyculture, airwallex)
+        returning ZERO jobs, so ``airwallex`` was deliberately removed from
+        ``WORKABLE_ACCOUNTS`` (portals.py). It remains a live, verified Ashby
+        board token, so the anchor moves there. ``WORKABLE_ACCOUNTS`` is kept
+        non-empty with its real, currently-verified members instead of
+        pinning the retired token.
+        """
         from app.services.discovery import portals
 
         assert "datadog" in portals.greenhouse_boards()
@@ -102,7 +112,12 @@ class TestPortalsVolume:
         assert "okta" in portals.greenhouse_boards()
         assert "palantir" in portals.lever_companies()
         assert "openai" in portals.ashby_boards()
-        assert "airwallex" in portals.workable_accounts()
+        assert "airwallex" in portals.ashby_boards()
+
+        workable = portals.workable_accounts()
+        assert workable, "WORKABLE_ACCOUNTS must not be emptied outright"
+        for expected in ("propeller", "rokt", "bupa"):
+            assert expected in workable, workable
 
 
 class TestScoutRunBroadensQuery:

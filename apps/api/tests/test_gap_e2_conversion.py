@@ -105,7 +105,23 @@ class TestConversionMetricsUnit:
         assert low_rate["baselineATSScore"] == high_rate["baselineATSScore"]
         assert low_rate["tailoredATSScore"] == high_rate["tailoredATSScore"]
         assert low_lift != 0.0
-        assert round(high_lift, 4) == round(low_lift * 10, 4)
+        # Re-anchored 2026-08-04 (docs/delivery/BACKEND-RED-TESTS-2026-08-03.md
+        # RULING 4): the product exposes ONLY a 1-decimal-place STRING for
+        # the lift (``_compute_conversion_metrics``: f"{sign}{lift_pct:.1f}%")
+        # — there is no unrounded numeric field to compare directly. Parsing
+        # that 1-dp string back to float and then demanding 4-dp exactness
+        # after multiplying by 10 amplifies low_lift's own rounding error
+        # (up to +/-0.05 from a single round-to-1-dp) tenfold (up to
+        # +/-0.5), which is exactly what produced the false RED here
+        # (23.7 != 24.0 — a rounding artifact, not a product defect: the true
+        # unrounded lift is ~2.37% -> "+2.4%" at the low rate and ~23.7% ->
+        # "+23.7%" at 10x). A tolerance of 0.5 (the low_lift amplification)
+        # plus a touch of headroom for high_lift's own +/-0.05 rounding
+        # covers the worst case a CORRECT product can produce, while still
+        # failing if the 10x relationship genuinely breaks (e.g. a lift that
+        # is only 2x or unrelated to the population rate would miss by far
+        # more than this tolerance).
+        assert abs(high_lift - low_lift * 10) <= 0.55, (high_lift, low_lift)
 
 
 class TestConversionMetricsApi:
