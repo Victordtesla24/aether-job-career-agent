@@ -1,8 +1,10 @@
 """ATS scoring engine — deterministic 0-100 resume/JD fit score (P2-S03).
 
 Components (weights):
-- ``keyword_match``     (40%) — TF-IDF keyword extraction from the JD; the
-  score is the coverage of those keywords in the resume.
+- ``keyword_match``     (40%) — the JD's required keywords, ranked by
+  evidence that each token NAMES a requirement (ATS-KW-002; see
+  :meth:`ATSEngine._extract_keywords`); the score is the coverage of those
+  keywords in the resume.
 - ``semantic_similarity`` (40%) — GMV4-ats-001: a genuine embedding-model
   cosine similarity, resolved through THREE paths in strict priority order
   (see :meth:`ATSEngine._semantic_similarity_detailed`):
@@ -601,6 +603,266 @@ def _geographic_tokens(job_description: str) -> frozenset[str]:
     return frozenset(token for token, count in total.items() if geographic[token] == count)
 
 
+# -- ATS-KW-002: the ALPHABET must never decide what a candidate is scored on -
+#
+# ``_extract_keywords`` used to rank the JD's content tokens with a
+# ``TfidfVectorizer`` fitted on a SINGLE document. That cannot work, and the
+# arithmetic says so exactly: with n=1 document, sklearn's smoothed IDF is
+#
+#     idf(t) = ln((1 + n) / (1 + df(t))) + 1 = ln(2 / 2) + 1 = 1
+#
+# for EVERY term present, and L2 normalisation is a positive scalar that
+# preserves order. So the "TF-IDF weight" was identically the raw term
+# frequency, and the sort's ``(-weight, term)`` tie-break meant that among the
+# overwhelming majority of JD terms — the ones occurring exactly once — the
+# required-keyword set was chosen IN ALPHABETICAL ORDER and then truncated at
+# ``_MAX_KEYWORDS``.
+#
+# Measured 2026-08-04 over 5750 real production ``Job`` rows (read-only pull;
+# see docs/delivery/ADR-ATS-KW-002-KEYWORD-RANKING.md §2):
+#   * 84.9% of the technology terms actually present in a posting NEVER entered
+#     the scored set — "python" was dropped from 1011 postings, "aws" from 565,
+#     "sql" from 407, "terraform" from 210;
+#   * the trailing strictly-alphabetical run of the 40 returned keywords had a
+#     MEDIAN LENGTH OF 15, and reached 34 of 40 at the extreme.
+#
+# The replacement ranks by EVIDENCE THAT A TOKEN NAMES A REQUIREMENT, and its
+# ordering key is TOTAL — ``(-tier, -frequency, first_occurrence)``, where
+# ``first_occurrence`` is unique per token — so no tie can survive to be
+# settled by spelling. Nothing is DELETED by this ranking: every token remains
+# eligible, and ``len(keywords)`` is still ``min(_MAX_KEYWORDS, unique tokens)``
+# exactly as before, so no score can move because the denominator changed size.
+
+#: A token whose SHAPE only a named technology has: an embedded digit or
+#: ``+``/``#`` (``s3``, ``log4j``, ``oauth2``, ``c++``, ``c#``), or a dotted
+#: product name (``node.js``, ``asp.net``, ``d3.js``).
+_SKILL_SHAPE_CHAR_RE = re.compile(r"[0-9+#]")
+#: Bounds on the dotted form. Without them the rule fires on the run-together
+#: sentence a missing space produces ("...resources.Your next..." -> the single
+#: token ``resources.your``), which is prose, not a product.
+_DOTTED_SKILL_MAX_CHARS = 12
+_DOTTED_SKILL_MAX_SUFFIX_CHARS = 4
+#: Dotted abbreviations that are ordinary prose, not products.
+_NOT_SKILL_SHAPE = frozenset({"e.g", "i.e"})
+
+#: Words routinely written ALL-CAPS in a heading ("WHAT YOU'LL OWN") or
+#: Title-Cased mid-sentence, which are therefore NOT acronyms or product names.
+#: Only ``_content_tokens`` survivors matter here — ``_STOPWORDS`` has already
+#: removed most function words — and an omission is a SOFT error: it can only
+#: promote one extra token, never delete a real one.
+_CAPS_NOT_ACRONYM = frozenset(
+    """
+    about above after again against almost alone along already although always among
+    another anyone anything around away back become before behind below beside best
+    better between beyond big come coming day days deep each either else enough even
+    ever every everyone everything far few first following forward front full get
+    gets getting give given go going gone good great group half hard have having help
+    here high highest hold home how however I if impact instead it its itself just
+    keep key kind know known last later least less let level life like likely little
+    live long look looking lots love made main make makes making many matter may
+    maybe mean means might mind more most much must near need needs never next nice
+    no none nor not nothing now often once one only open other others out over own
+    part perhaps please plus put quite rather ready real really right same say see
+    seen set several should show side since small some someone something soon still
+    such sure take taken than thing things think those though three through thus time
+    times today together too top toward true try turn two under until up upon us use
+    used using usually very want way ways week weeks well what whatever when whether
+    while whole why wide within without wonder yes yet you
+    responsibilities requirements qualifications benefits perks role roles team teams
+    apply join now next steps offer offers looking love overview summary mission
+    values culture vision purpose story journey people person candidate life
+    """.split()
+)
+
+#: What a token must sit AFTER for its capital letter to be sentence-initial
+#: (and therefore no evidence of anything). Bullets in production postings are
+#: dashes and middots, not newlines — the descriptions arrive as ONE flat blob.
+_SENTENCE_INITIAL_CHARS = ".!?:;•·*\n\r-–—|/([{\"'"
+
+#: Separators that join the items of one skills list ("Spark, Kafka and dbt").
+_SKILL_LIST_SEP_RE = re.compile(r"[ \t]*[,/|&][ \t]*|[ \t]+(?:and|or)[ \t]+", re.IGNORECASE)
+
+#: Headings that open a section which states BENEFITS, CULTURE, EMPLOYER
+#: IDENTITY or APPLICATION MECHANICS — never what the candidate must be able to
+#: do. Matched ANYWHERE in the text, deliberately NOT ``^``-anchored: the JD the
+#: engine receives is ``job_evidence_text`` = title + description + requirements,
+#: and production descriptions carry no newlines at all, so a line-anchored
+#: heading regex fires only on hand-written test strings. That is the same trap
+#: ADR-ATS-KW-001 §3 recorded for the location label; measured here, the
+#: line-anchored form matched 0 of 5750 real postings.
+_NON_REQUIREMENT_SECTION_RE = re.compile(
+    r"(?:what\s+we\s+offer|what'?s?\s+in\s+it\s+for\s+you|what\s+you'?ll\s+get|"
+    r"why\s+(?:join|work\s+(?:with|at)|us\b|you'?ll\s+love)|"
+    r"(?:our\s+|the\s+)?(?:benefits?|perks?)(?:\s+(?:and|&)\s+\w+)?\s*[:\-]|"
+    r"perks?\s+(?:and|&)\s+benefits?|benefits?\s+(?:and|&)\s+perks?|"
+    r"compensation\s+(?:and|&)\s+benefits?|"
+    r"equal\s+(?:opportunity|employment)|affirmative\s+action|"
+    r"no\s+agencies|recruit\w*\s+agenc\w*\s*[:.]|"
+    r"how\s+to\s+apply|application\s+process|to\s+apply\s*[,:]|"
+    r"about\s+(?:us|the\s+company|our\s+company)|our\s+(?:values|mission|culture)|"
+    r"life\s+at\s+\w+|diversity\s+(?:and|&)\s+inclusion|"
+    r"privacy\s+(?:policy|notice)|next\s+steps)",
+    re.IGNORECASE,
+)
+#: Headings that CLOSE a non-requirement section by opening a requirement one.
+_REQUIREMENT_SECTION_RE = re.compile(
+    r"(?:what\s+you'?ll\s+(?:do|own|be\s+doing)|responsibilit\w*|"
+    r"requirements?\s*[:\-]|qualifications?\s*[:\-]|"
+    r"what\s+we'?re\s+looking\s+for|who\s+you\s+are|about\s+you|you\s+are\s*[:\-]|"
+    r"skills?\s+(?:and|&)\s+experience|your\s+(?:experience|background)|"
+    r"tech(?:nical)?\s+stack|the\s+role|about\s+the\s+role|key\s+(?:duties|responsibilities)|"
+    r"day[- ]to[- ]day|what\s+you'?ll\s+bring|you'?ll\s+need|must\s+have|nice\s+to\s+have)",
+    re.IGNORECASE,
+)
+#: A non-requirement section may never claim more than this share of a posting.
+#: Beyond it the detector is likelier to be wrong than the posting is to be
+#: entirely perks, so the whole signal is discarded for that posting rather
+#: than trusted — demoting most of a JD would be a silent, uniform distortion.
+_NON_REQUIREMENT_MAX_SHARE = 0.5
+
+
+def _has_skill_shape(token: str) -> bool:
+    """True when the token's SHAPE alone marks it a named technology."""
+    if token in _NOT_SKILL_SHAPE:
+        return False
+    if _SKILL_SHAPE_CHAR_RE.search(token):
+        return True
+    if "." not in token or len(token) > _DOTTED_SKILL_MAX_CHARS:
+        return False
+    suffix = token.rsplit(".", 1)[1]
+    return 0 < len(suffix) <= _DOTTED_SKILL_MAX_SUFFIX_CHARS and suffix.isalpha()
+
+
+def _is_sentence_initial(text: str, start: int) -> bool:
+    """Whether the token at ``start`` opens a sentence, bullet or clause.
+
+    A capital there is grammar, not evidence. Anywhere else — after a comma, or
+    mid-clause — a capital marks a proper noun, which in a job ad is
+    overwhelmingly a product, tool or platform.
+    """
+    index = start - 1
+    while index >= 0 and text[index] in " \t":
+        index -= 1
+    return index < 0 or text[index] in _SENTENCE_INITIAL_CHARS
+
+
+def _skill_evidence_tokens(text: str, occurrences: list[tuple[str, int, int]]) -> set[str]:
+    """Tokens carrying positive evidence that they NAME a skill or technology.
+
+    Three independent signals, any one of which suffices:
+
+    1. **Shape** — ``s3``, ``c++``, ``log4j``, ``node.js`` (:func:`_has_skill_shape`).
+    2. **All-caps in the source** — ``SQL``, ``AWS``, ``ETL``, and, just as
+       importantly for non-technical postings, ``GST``, ``FBT``, ``PAYG``,
+       ``CPA``. This is what keeps the fix from being a tech-only fix.
+    3. **Capitalised away from a sentence/bullet start** — ``Python``,
+       ``Snowflake``, ``Terraform``, ``Kubernetes``, ``Expensify``, ``Slack``.
+
+    Measured over 5750 real postings: these capture 83.3% of the technology
+    terms present, against the 15.1% the old ranking actually scored.
+    """
+    forms: dict[str, list[tuple[str, bool]]] = {}
+    for token, start, end in occurrences:
+        forms.setdefault(token, []).append(
+            (text[start:end].rstrip(".,-"), _is_sentence_initial(text, start))
+        )
+    evidenced: set[str] = set()
+    for token, occs in forms.items():
+        if _has_skill_shape(token):
+            evidenced.add(token)
+            continue
+        if token in _CAPS_NOT_ACRONYM:
+            continue
+        for source_form, sentence_initial in occs:
+            if len(source_form) < 2 or not source_form[0].isupper():
+                continue
+            if source_form.isupper() or not sentence_initial:
+                evidenced.add(token)
+                break
+    return evidenced
+
+
+def _skill_list_neighbours(
+    text: str, occurrences: list[tuple[str, int, int]], evidenced: set[str]
+) -> set[str]:
+    """Items of a separator-run that already holds >= 2 evidenced items.
+
+    Job ads name their stack as a list, and the list mixes forms that carry
+    evidence with ones that cannot: "Spark, Kafka, Airflow, dbt, Snowflake,
+    Terraform". ``dbt`` is lowercase by its own branding and would otherwise be
+    invisible. Requiring TWO evidenced members of the SAME run is what stops an
+    ordinary comma-separated prose list from being harvested — the same
+    two-confirmed-elements rule ``_geographic_tokens`` uses for location chains.
+    """
+    joined: set[str] = set()
+    run: list[int] = []
+
+    def flush() -> None:
+        if len(run) > 1 and sum(1 for i in run if occurrences[i][0] in evidenced) >= 2:
+            joined.update(occurrences[i][0] for i in run)
+
+    for index in range(len(occurrences)):
+        if run and _SKILL_LIST_SEP_RE.fullmatch(
+            text[occurrences[index - 1][2] : occurrences[index][1]]
+        ):
+            run.append(index)
+            continue
+        flush()
+        run = [index]
+    flush()
+    return joined - evidenced
+
+
+def _non_requirement_tokens(
+    text: str, occurrences: list[tuple[str, int, int]]
+) -> frozenset[str]:
+    """Tokens stated ONLY where a posting talks about perks, culture or how to apply.
+
+    Sections run from a non-requirement heading to the next heading of either
+    kind. A token is demoted only when EVERY occurrence of it falls inside such
+    a section — the every-occurrence rule ADR-ATS-KW-001 established — which is
+    what makes this safe across professions. ``superannuation``, ``payroll`` and
+    ``compensation`` are perks boilerplate in a software ad and the literal
+    subject matter of an accounting one; a flat word list would destroy the
+    accountant's requirements, and this does not, because in that posting those
+    words also occur in requirement prose.
+    """
+    marks = sorted(
+        [(m.start(), True) for m in _NON_REQUIREMENT_SECTION_RE.finditer(text)]
+        + [(m.start(), False) for m in _REQUIREMENT_SECTION_RE.finditer(text)]
+    )
+    spans: list[tuple[int, int]] = []
+    for position, (start, non_requirement) in enumerate(marks):
+        if not non_requirement:
+            continue
+        end = len(text)
+        for later_start, _kind in marks[position + 1 :]:
+            if later_start > start:
+                end = later_start
+                break
+        if spans and start <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(spans[-1][1], end))
+        else:
+            spans.append((start, end))
+    if not spans:
+        return frozenset()
+    if sum(end - start for start, end in spans) > _NON_REQUIREMENT_MAX_SHARE * len(text):
+        _logger.debug(
+            "ATS keyword ranking: non-requirement sections claimed >%.0f%% of the "
+            "posting; discarding the signal for this posting",
+            _NON_REQUIREMENT_MAX_SHARE * 100,
+        )
+        return frozenset()
+
+    total: Counter[str] = Counter()
+    inside: Counter[str] = Counter()
+    for token, start, _end in occurrences:
+        total[token] += 1
+        if any(low <= start < high for low, high in spans):
+            inside[token] += 1
+    return frozenset(token for token, count in total.items() if inside[token] == count)
+
+
 @lru_cache(maxsize=1)
 def _load_embedding_model():
     """Return a cached sentence-transformers model, or None.
@@ -752,7 +1014,7 @@ class ATSEngine:
         return _clamp(100.0 * len(matched) / len(keywords)), matched, missing
 
     def _extract_keywords(self, job_description: str) -> list[str]:
-        """Top JD terms ranked by TF-IDF weight (deterministic tie-break).
+        """The posting's required keywords, ranked by REQUIREMENT EVIDENCE.
 
         The posting's own GEOGRAPHY is removed first (ATS-KW-001): a city is
         not a skill, so it must not sit in the required-keyword set, must not
@@ -760,6 +1022,32 @@ class ATSEngine:
         ``missing_keywords`` gap list the user is shown. See
         :func:`_geographic_tokens` for how a place is told apart from a
         homonymous technology.
+
+        What survives is then ORDERED — not filtered — by a three-part key
+        (ATS-KW-002). The predecessor fitted a ``TfidfVectorizer`` on a single
+        document, where IDF is provably the constant 1 for every present term,
+        so the ranking collapsed to term frequency and the ``(-weight, term)``
+        tie-break handed the choice to the ALPHABET for the great majority of
+        JD terms, which occur exactly once. See the module comment above for
+        the arithmetic and the 5750-posting measurement.
+
+        The key, in order:
+
+        1. **tier** — 2 when the token carries evidence of NAMING a skill
+           (:func:`_skill_evidence_tokens`), 0 when every occurrence of it sits
+           in a perks/culture/how-to-apply section (:func:`_non_requirement_tokens`),
+           1 otherwise. Demotion outranks evidence: a Title-Cased perk is still
+           a perk.
+        2. **frequency** — how insistently the posting states it.
+        3. **first occurrence** — the posting's own ordering, which front-loads
+           what matters. It is UNIQUE per token, so the key is a TOTAL order and
+           no tie can ever reach a tie-break on spelling.
+
+        Tier 1 is deliberately the fallback rather than a filter: a posting
+        whose requirements are ordinary lowercase nouns (many non-technical
+        roles) keeps every one of its tokens eligible and simply degrades to
+        frequency-then-position, which is strictly better defined than
+        frequency-then-alphabet. Nothing here can DELETE a requirement.
         """
         tokens = _content_tokens(job_description)
         if not tokens:
@@ -780,22 +1068,33 @@ class ATSEngine:
                     "(%d tokens); keeping the unfiltered set",
                     len(tokens),
                 )
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
 
-            vectorizer = TfidfVectorizer(
-                analyzer=lambda _: tokens, lowercase=False  # noqa: ARG005
-            )
-            matrix = vectorizer.fit_transform([job_description])
-            weights = matrix.toarray()[0]
-            terms = vectorizer.get_feature_names_out()
-            ranked = sorted(zip(terms, weights), key=lambda tw: (-tw[1], tw[0]))
-            return [term for term, _ in ranked[:_MAX_KEYWORDS]]
-        except ImportError:  # pragma: no cover — sklearn is a hard dep, belt-and-braces
-            seen: dict[str, None] = {}
-            for token in tokens:
-                seen.setdefault(token, None)
-            return list(seen)[:_MAX_KEYWORDS]
+        candidates = set(tokens)
+        occurrences = [
+            (token, start, end)
+            for token, start, end in _iter_tokens(job_description)
+            if token in candidates
+        ]
+        evidenced = _skill_evidence_tokens(job_description, occurrences)
+        evidenced |= _skill_list_neighbours(job_description, occurrences, evidenced)
+        evidenced &= candidates
+        demoted = _non_requirement_tokens(job_description, occurrences) & candidates
+
+        frequency: Counter[str] = Counter(tokens)
+        first_occurrence: dict[str, int] = {}
+        for index, token in enumerate(tokens):
+            first_occurrence.setdefault(token, index)
+
+        def rank(token: str) -> tuple[int, int, int]:
+            if token in demoted:
+                tier = 0
+            elif token in evidenced:
+                tier = 2
+            else:
+                tier = 1
+            return (-tier, -frequency[token], first_occurrence[token])
+
+        return sorted(candidates, key=rank)[:_MAX_KEYWORDS]
 
     def _semantic_similarity(self, resume_text: str, job_description: str) -> float:
         """0-100 semantic-similarity score, built on
