@@ -64,6 +64,7 @@ from app.services.llm_client import (
     LLMUnavailableError,
     QuotaExhaustedError,
     _infer_anthropic_auth_mode,
+    circuit_block_error,
     classify_llm_failure,
     get_accumulated_usage,
     get_active_credential_env_var,
@@ -674,6 +675,55 @@ def _quota_429(provider: str, expires_at: Any) -> HTTPException:
     )
 
 
+def _raise_if_llm_circuit_open(provider: str, block: dict[str, Any]) -> None:
+    """Refuse the run with an honest 503 when ``block`` is a CIRCUIT cooldown.
+
+    CRITICAL-3b (adversarial review of 0b6102d, BLOCKING). The circuit breaker
+    parks its cooldown in the SAME ``AgentQuotaBlock`` row that carries
+    subscription-quota cooldowns, distinguished only by ``reason``. The gates
+    that consult that row before every run did not read ``reason``, so from the
+    SECOND attempt onward — the first attempt opens the circuit, so only later
+    ones ever see the row — an upstream HTTP 402 (OUR provider is out of
+    credit) was reported to the paying user as:
+
+        "Your <provider> subscription quota is exhausted. Runs are paused until
+         it resets." + "Switch this agent to API-key billing."
+
+    Every clause of that is false for a 402, it blames the user for an operator
+    failure, and the suggested remedy cannot work. Worse, ``board_sweep``
+    treats an HTTP 429 as ``reason="quota-exhausted"``, so the operator's own
+    telemetry agreed with the lie and hid the dead upstream.
+
+    A circuit cooldown now raises the SAME honest, class-specific 503 the
+    in-run failure path raises (``llm_failure_user_message``), so a user sees
+    one consistent story on attempt 1 and attempt 2:
+
+    * ``insufficient_credits`` / ``auth`` → an operator/service problem, stated
+      plainly, with NO upgrade CTA and no claim that retrying helps;
+    * anything else (a row whose class we cannot read) → the unchanged
+      transient message, i.e. retry with backoff.
+
+    ``raise ... from circuit`` is load-bearing, not cosmetic: it sets
+    ``__cause__``, which is how ``board_sweep._llm_failure`` recovers the class
+    through the HTTP translation and stops the autopilot instead of counting an
+    ordinary failure. A genuine subscription-quota row returns here untouched
+    and keeps its 429.
+
+    Raised BEFORE any quota reserve or ``AgentRun`` row, so a run refused
+    because our upstream is out of credit consumes nothing of the user's plan.
+    """
+    circuit = circuit_block_error(provider, block)
+    if circuit is None:
+        return
+    logger.warning(
+        "refusing run for user provider=%s: LLM circuit open (class=%s) until %s",
+        provider, circuit.failure_class, circuit.expires_at,
+    )
+    raise HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE, llm_failure_user_message(circuit)
+    ) from circuit
+
+
 def _plan_quota_429(code: str, quota: dict[str, Any] | None) -> HTTPException:
     """Honest 429 for the plan run-quota / USD spend-cap gate (GAP-P6-BILL-002).
 
@@ -843,6 +893,10 @@ def _record_run(
         except Exception:  # noqa: BLE001 — block store down → allow the run
             block = None
         if block is not None:
+            # CRITICAL-3b: a CIRCUIT cooldown (our upstream refused) is an
+            # operator failure — honest 503, never the user's quota. A genuine
+            # subscription-quota row falls through and keeps its 429.
+            _raise_if_llm_circuit_open(provider, block)
             raise _quota_429(provider, block.get("expiresAt"))
 
     # Plan quota gate (GAP-P6-BILL-002): atomically RESERVE one run BEFORE the
@@ -2071,6 +2125,10 @@ def _enqueue_single_agent(
         except Exception:  # noqa: BLE001 — block store down -> allow
             block = None
         if block is not None:
+            # CRITICAL-3b: same split as the sync gate — a circuit cooldown is
+            # an honest 503 raised BEFORE the reserve, so an out-of-credit
+            # upstream costs the user nothing; a real quota row keeps its 429.
+            _raise_if_llm_circuit_open(provider, block)
             raise _quota_429(provider, block.get("expiresAt"))
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).

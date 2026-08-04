@@ -1353,6 +1353,46 @@ def _record_llm_circuit_open(
     return expires_at
 
 
+def is_circuit_block(block: "dict[str, Any] | None") -> bool:
+    """Whether an ``AgentQuotaBlock`` row is a CIRCUIT-BREAKER cooldown.
+
+    The single authority on what a block row MEANS. One table carries two
+    completely different statements about the same user+provider:
+
+    * ``reason`` WITHOUT the circuit prefix — the user's own subscription quota
+      is spent. Their problem, their reset time, HTTP 429.
+    * ``reason`` WITH :data:`CIRCUIT_REASON_PREFIX` — OUR upstream provider
+      refused (402 out of credits / 401 bad key) and we stopped asking. The
+      operator's problem, HTTP 503, and never billed to the user.
+
+    Every reader of the row must branch on this, not on "a row exists". The
+    reviewer of 0b6102d found the two router gates
+    (``_record_run`` / ``_enqueue_single_agent``) doing exactly that: from the
+    SECOND attempt onward — the first opens the circuit, so only later ones see
+    the row — an out-of-credit upstream was reported to the paying user as
+    "your subscription quota is exhausted", complete with a billing suggestion
+    that could not possibly help.
+    """
+    if not block:
+        return False
+    return str(block.get("reason") or "").startswith(CIRCUIT_REASON_PREFIX)
+
+
+def circuit_block_error(
+    provider: str, block: "dict[str, Any] | None"
+) -> "LLMCircuitOpenError | None":
+    """The classified circuit-open error for ``block``, or ``None`` when the row
+    is NOT a circuit cooldown (i.e. it is a genuine subscription-quota block and
+    the caller must keep its existing 429 behaviour).
+
+    The public seam the router gates use so the reason-parsing above lives in
+    exactly one place.
+    """
+    if not is_circuit_block(block):
+        return None
+    return _circuit_open_error(provider, block or {})
+
+
 def _circuit_open_error(provider: str, block: "dict[str, Any]") -> LLMCircuitOpenError:
     """The honest error raised in place of a live call while the circuit is open."""
     reason = str(block.get("reason") or "")
@@ -2441,8 +2481,9 @@ class LLMClient:
                 # non-retryable reason (402/401) and we stopped asking — so we
                 # refuse HERE, before a credential is resolved and before any
                 # HTTP request exists, and say why.
-                if str(block.get("reason") or "").startswith(CIRCUIT_REASON_PREFIX):
-                    raise _circuit_open_error(provider, block)
+                circuit = circuit_block_error(provider, block)
+                if circuit is not None:
+                    raise circuit
                 raise QuotaExhaustedError(
                     provider,
                     expires_at=block.get("expiresAt"),
