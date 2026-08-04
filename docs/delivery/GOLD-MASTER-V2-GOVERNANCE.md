@@ -808,3 +808,46 @@ around it.
 **Still live in the working tree (and therefore in production):** two `# RED-PROOF-TEMP: circuit branch
 disabled` comments at `agents.py:892` and `:2052`. Confirmed inert — the branch below each still executes
 `raise _quota_429(...)` — but they are false comments sitting above live protection and must be removed.
+
+---
+
+## GOV-014 — The G-A verdict is STALE on four of its eight blocking items
+
+| Field | Value |
+|---|---|
+| **Adjudicated** | 2026-08-04T03:4xZ, orchestrator, by first-hand re-probe |
+| **Severity** | MEDIUM — verdict accuracy |
+| **Status** | Items 1-4 CLOSED on fresh evidence; verdict stands NOT-READY on the remainder |
+
+`GOLD-MASTER-V2-ADVERSARIAL-REVIEW.md` was written 2026-07-31T16:42Z and returns **NOT-READY —
+BLOCKED-ON-ITEMS** with eight blocking items in required order. Three days have passed. Under this run's own
+epistemic discipline the document is now TESTIMONY, so the orchestrator re-probed each concrete item rather
+than inheriting the verdict.
+
+| # | Blocking item as written | Fresh probe | Now |
+|---|---|---|---|
+| 1 | Rotate `AETHER_ADMIN_PASSWORD_HASH` **and** `AETHER_CRON_PASSWORD` together — "confirmed still both live and exploitable" | `admin`/`admin123` → **401**, no token. The configured hash **no longer verifies** the published password. `AETHER_CRON_PASSWORD` **does** verify the rotated hash, and discovery cron is cycling every 30 min, persisting jobs and completing fit-scoring. | **CLOSED** — operator did both halves in lockstep, and admin self-restored exactly as the approved design intended |
+| 2 | Add an audit-log write to `POST /approvals/{id}/approve` and `/reject` — "the highest-priority code gap in the run" | `_write_decision_audit()` defined at `approvals.py:35` and **called at `:229` (approve) and `:245` (reject)** | **CLOSED** |
+| 3 | 8 stored cover letters still carry the fixture signature (0 of 8 remediated) | Sweep for `GAP-P7-DEF-B` / `Probe 1785…` across `ApprovalRequest`, `Application`, `Resume`, `StoryEntry`, `OutreachTask`, `EmailThread`: **0 rows in every table**. There is no `CoverLetter` table in the live schema. | **CLOSED** |
+| 4 | 45 unpushed commits; production on the same binary 20+ hours | `origin/main` == local `HEAD`; **0 unpushed**; exactly one remote branch; zero open PRs | **CLOSED** |
+
+### Items that remain genuinely open
+5. **Tailoring efficacy** — the score-aware loop must move the metric its UI implies (0.0% movement in 7/7 runs
+   at review time). W-C is recorded complete; efficacy is **not** re-verified by this probe and must not be
+   assumed. Remains open pending live proof.
+6. **Business decisions (operator)** — `ADV-ENT-002` (honour the advertised Free tier or stop advertising it)
+   and AUD presentment on Stripe Checkout.
+7. **Test baseline** — backend RED set (24 at baseline, 5 residual) plus Playwright 40/52. Must not be reported
+   as green.
+8. **Process** — `approvals-screen-test.md` is an 18-line stub.
+
+Plus, found after the review was written: `F-02` backend "Run All" fabrication, `F-03` résumé upload quota
+consumption, `F-04` self-referential probability factor, `ATS-KW-001` (job LOCATION scored as a required résumé
+keyword, docking every candidate on every posting), W-SUB, W-PORTAL, and the reopened G-K purge.
+
+### Ruling
+The **NOT-READY verdict stands**, but it must be re-issued on current evidence before G-A/G-P close. Re-stating
+a three-day-old blocker list that names an already-rotated credential as "live and exploitable" would be exactly
+the "prior reports are testimony" failure this run exists to prevent — inaccurate in the *pessimistic*
+direction, which is no more acceptable than inaccuracy in the optimistic one. The qa-adversary that owns the
+document must refresh it; this entry is the orchestrator's verified input to that refresh, not a substitute for it.
