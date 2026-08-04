@@ -36,8 +36,7 @@ def engine():
 def test_perfect_keyword_overlap_scores_high(engine):
     """RESUME_MATCHING restates every required JD_PYTHON skill near-verbatim.
     That is a promise about the ``keyword_match`` component and about which
-    terms genuinely get credited — NOT a promise that ``overall`` clears some
-    fixed threshold. ``overall = _WEIGHT_KEYWORD*keyword_match +
+    terms genuinely get credited. ``overall = _WEIGHT_KEYWORD*keyword_match +
     _WEIGHT_SEMANTIC*semantic_similarity + _WEIGHT_EXPERIENCE*experience_gap``
     (module docstring), and ``semantic_similarity`` is a genuine
     all-MiniLM-L6-v2 embedding cosine (GMV4-ats-001 removed the old
@@ -46,14 +45,22 @@ def test_perfect_keyword_overlap_scores_high(engine):
     read, which "perfect keyword overlap" does not control. Even a literally
     perfect keyword_match=100 and experience_gap=100 only cap ``overall`` at
     ``_WEIGHT_KEYWORD*100 + _WEIGHT_EXPERIENCE*100 + _WEIGHT_SEMANTIC*semantic``
-    — asserting a fixed 90 floor on ``overall`` is arithmetically unreachable
-    unless semantic >= 75, which resume/JD register differences do not
-    guarantee. See docs/delivery/BACKEND-RED-TESTS-2026-08-03.md RULING 1
+    = 89.96 for this pair, so a fixed 90 floor on ``overall`` is arithmetically
+    unreachable. See docs/delivery/BACKEND-RED-TESTS-2026-08-03.md RULING 1
     (measured: overall=87.74 from keyword_match=94.44,
     semantic_similarity=74.91, experience_gap=100 — genuinely near-perfect,
     capped by an honest semantic score, not a regression).
+
+    The ``overall`` floor asserted below is nonetheless a real gate, and
+    specifically a gate on the engine having MEASURED rather than degraded:
+    see the derivation at assertion 4.
     """
-    from app.services.ats_engine import _WEIGHT_EXPERIENCE, _WEIGHT_KEYWORD, _WEIGHT_SEMANTIC
+    from app.services.ats_engine import (
+        _DEGRADED_SEMANTIC_SCORE,
+        _WEIGHT_EXPERIENCE,
+        _WEIGHT_KEYWORD,
+        _WEIGHT_SEMANTIC,
+    )
 
     score = engine.score(RESUME_MATCHING, JD_PYTHON)
 
@@ -77,19 +84,43 @@ def test_perfect_keyword_overlap_scores_high(engine):
     #    requirement, so it must be at its ceiling too.
     assert score.experience_gap == 100, score.experience_gap
 
-    # 4. `overall` floor DERIVED from the scoring weights themselves (read
-    #    from the product module, never copied/hardcoded) plus the two
-    #    ceiling components just proven above. semantic_similarity is a
-    #    genuine embedding cosine for two differently-worded texts about the
-    #    same role — bounded below, conservatively, by 50 (well under the
-    #    ~75 typically measured for a near-identical skill list, but not an
-    #    exact-value pin that would break on harmless embedding-model drift).
-    conservative_semantic_floor = 50
-    floor = (
-        _WEIGHT_KEYWORD * 90
-        + _WEIGHT_SEMANTIC * conservative_semantic_floor
+    # 4a. The score must be a MEASUREMENT. When semantic scoring is genuinely
+    #     unavailable (no local model on disk and no HF_TOKEN — e.g. the
+    #     MODEL_CACHE_DIR=/tmp/aether_models cache wiped) the engine honestly
+    #     emits `semantic_path="degraded"` and substitutes
+    #     `_DEGRADED_SEMANTIC_SCORE`, documented at ats_engine.py:54-60 as
+    #     "not a measurement". Every other semantic test in the suite installs
+    #     a stub model (test_ats_engine_semantic.py, test_ats_warm_up.py), so
+    #     without this line NOTHING in the backend suite notices that the
+    #     running environment has lost the embedding model — measured
+    #     2026-08-04: the whole module passes with overall=77.78,
+    #     semantic_path='degraded'.
+    assert score.semantic_path in ("local", "hf_api"), score.semantic_path
+
+    # 4b. `overall` floor. The floor itself is a deliberately chosen 85 — NOT
+    #     copied from any product constant, and not pinned to a measured
+    #     value: measured overall is 87.74 against a 89.96 ceiling for this
+    #     pair, so it carries ~2.7 points of headroom for harmless
+    #     embedding-model drift. What IS derived from the product module is
+    #     the guarantee that makes it degradation-proof: the highest `overall`
+    #     the degraded path can physically produce is
+    #     `_WEIGHT_KEYWORD*100 + _WEIGHT_SEMANTIC*_DEGRADED_SEMANTIC_SCORE +
+    #     _WEIGHT_EXPERIENCE*100` = 80.0, whatever the keyword match. The
+    #     assertion that the floor clears that ceiling is made explicitly
+    #     below, so a future weight or placeholder change that lifted the
+    #     degraded ceiling up to the floor fails here loudly instead of
+    #     silently re-admitting a non-measurement.
+    #     (85 also coincides with tailoring_loop.DEFAULT_TARGET_SCORE, the
+    #     product's own ATS commitment; this test does not import it, because
+    #     that target belongs to TailoringLoop, not to the raw engine scoring
+    #     an untailored resume.)
+    degraded_ceiling = (
+        _WEIGHT_KEYWORD * 100
+        + _WEIGHT_SEMANTIC * _DEGRADED_SEMANTIC_SCORE
         + _WEIGHT_EXPERIENCE * 100
     )
+    floor = 85.0
+    assert floor > degraded_ceiling, (floor, degraded_ceiling)
     assert score.overall >= floor, (score.overall, floor)
 
 

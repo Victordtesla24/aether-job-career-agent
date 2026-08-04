@@ -18,7 +18,7 @@ Contract locked here (forward-only, never demoting a manual move):
 from __future__ import annotations
 
 import pytest
-from conftest import seed_own_resume
+from conftest import seed_own_resume, seed_search_target
 
 from app.agents.fit_scorer import get_base_resume_path
 from app.repositories.job import JobRepository
@@ -154,8 +154,21 @@ class TestFitScorerManagesBoard:
         assert all(j["fitScore"] is None for j in unscorable), [
             j["id"] for j in unscorable if j["fitScore"] is not None
         ]
-        # ...and the control we deliberately made unscorable is in that half.
-        assert empty_job["id"] in {j["id"] for j in unscorable}
+        # ...and the ONLY member of that half is the control we deliberately
+        # made unscorable. Equality, not membership: the `unscorable` half is
+        # otherwise bounded only by `assert unscorable` above, which this
+        # test's own seeded control satisfies by construction — so without
+        # this line the partition puts NO bound on how much of a real board
+        # may go unranked. A regression where an adapter stops delivering
+        # descriptions would reclassify those cards into the `unscorable`
+        # half and be asserted to leave them in "discovered", i.e. the
+        # partition would bless the symptom the RT-005 mandate exists to
+        # catch. Every real fixture posting must still advance (measured
+        # 2026-08-04 on the fixture-pinned board of 73f98c5: 30/30 scorable,
+        # 0 real postings unscorable).
+        assert {j["id"] for j in unscorable} == {empty_job["id"]}, [
+            (j["id"], j.get("title"), len(job_evidence_text(j))) for j in unscorable
+        ]
 
         # The agent's own tally must agree with the board partition — every
         # scorable job was freshly scored in this run, nothing else was.
@@ -202,6 +215,15 @@ class TestPipelineManagesBoard:
         empty_job = _seed_unscorable_job(test_user_id, "pipeline")
         assert not has_scorable_evidence(job_evidence_text(empty_job))
 
+        # F-02: an empty pipeline body now derives the scout step's search from
+        # THIS user's profile (and refuses when they have none), so the run
+        # needs a configured target. These are the values the router used to
+        # substitute for every caller, so the board this test asserts on is
+        # sourced exactly as before.
+        seed_search_target(
+            client, auth_headers,
+            target_role="Business Analyst", location="Melbourne, Australia",
+        )
         resp = client.post("/agents/pipeline/run", json={}, headers=auth_headers)
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -243,7 +265,13 @@ class TestPipelineManagesBoard:
         assert all(j["fitScore"] is None for j in unscorable), [
             j["id"] for j in unscorable if j["fitScore"] is not None
         ]
-        assert empty_job["id"] in {j["id"] for j in unscorable}
+        # Equality, not membership — see the twin assertion in
+        # TestFitScorerManagesBoard::test_scored_jobs_advance_to_screening.
+        # The seeded control is the ONLY posting allowed to sit out; every
+        # real fixture posting the pipeline sourced must still have moved.
+        assert {j["id"] for j in unscorable} == {empty_job["id"]}, [
+            (j["id"], j.get("title"), len(job_evidence_text(j))) for j in unscorable
+        ]
 
 
 class TestTailorEndpointManagesBoard:
