@@ -1046,3 +1046,29 @@ ceiling imposed by alphabetical truncation and attribute it to the anti-fabricat
 the same discipline that earlier turned "these tests are stale" into "these tests were never defective". The
 contrast with GOV-017 is the lesson: an agent that widens scope silently produces GOV-017; an agent that
 reports what it found and stops produces this.
+
+---
+
+## GOV-024 — "CI green" does NOT mean the backend suite passed (2026-08-04)
+
+**CI is green at `62c198d`** — both jobs pass. But the API job's own annotation reads:
+
+> `DATABASE_URL_TEST secret not set — DB test suite skipped`
+
+So the API job runs **`ruff` + `mypy` only**. The 2,500-test Python suite has never run in CI; it only ever
+runs on this VM, serially, under `flock /tmp/aether-pytest.lock`, taking ~2h20m.
+
+**Consequences, stated plainly:**
+1. **G-N cannot be closed on "CI is green."** CI green is a lint/type signal for the API. The only evidence
+   that the backend suite passes is a local full-suite run, and the last complete one recorded 24 failures.
+2. **A single lint error blocks everything downstream.** The `ruff` step failing left `mypy` and the pytest
+   step un-run — main had been red since `9d3be57` on one unsorted import block (`62c198d` fixed it). Because
+   ruff runs first, one trivial style error silently hides every other check.
+3. **Task #39 (embedding-model cache) is MOOT for CI as configured.** The restored `semantic_path` guard can
+   only fail where pytest runs, and pytest does not run in CI. It becomes live the moment `DATABASE_URL_TEST`
+   is set — so the requirement stands as a *precondition of enabling CI pytest*, not as a current CI failure.
+   Recorded as a correction: I previously framed it as something CI would hit today. It will not.
+
+**Operator item:** setting `DATABASE_URL_TEST` would make CI meaningfully protective, but must point at a
+DISPOSABLE database. The suite's fixtures TRUNCATE, and this repo has already destroyed its production data
+once that way (`INCIDENT-PROD-DB-WIPE-2026-07-18.md`). Never point it at the production URL.
