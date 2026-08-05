@@ -1586,3 +1586,49 @@ agree.
 suite as a whole has not been re-measured pristine since. "The only failures are fixed, so the suite must be
 green" is precisely the inference this campaign has been punished for six times. A confirming pristine run is
 commissioned.
+
+---
+
+## GOV-035 — G-N CLOSED GREEN: the first clean measurement this campaign has taken
+
+**2698 passed / 0 failed / 2 skipped · exit 0 · 1:07:15 · HEAD `49524d7` · pristine worktree.**
+
+Verified by me from the run's own artifacts, not from the report: the log's final line, the status file
+(`DONE rc=0 elapsed=4041`), **zero** failure lines, and **zero** `path=degraded` occurrences.
+
+### Why this run means something the previous eleven did not
+
+`git status --porcelain` was **empty**. What was on disk *was* the committed repository. Every earlier green in
+this campaign — including the one I reported to the operator on 2026-08-04 — was measured against a working
+tree carrying other sessions' uncommitted edits. That is precisely how a hard-`DELETE` story data-loss hazard
+survived in committed code for weeks while its four guard tests appeared to pass.
+
+**The isolation was a real hazard, not a formality.** An editable install genuinely maps package `app` to the
+**production** tree. It loses only because `pythonpath = ["."]` puts the worktree first on `sys.path` and
+`_EditableFinder` is *appended* after `PathFinder`. The agent did not reason its way to that conclusion — it
+loaded a probe plugin that printed the resolved module identity **inside the measured run** and would have
+hard-aborted the session on violation, then corroborated it across the whole run (every production-code
+warning in the log cites a worktree path). *Isolation that has not been verified is not isolation.*
+
+**The count reconciles exactly:** 2695 → 2700 collected, delta **+5**, the new archive/restore file.
+`test_story_dedup_invocation.py` collected 6 items in *both* runs — `FF.FF.` before, `......` now — so the fix
+changed outcomes without changing the collected set. Nothing appeared or vanished.
+
+**The semantic sentinel held on the measured path.** `test_perfect_keyword_overlap_scores_high` asserts
+`semantic_path in ('local','hf_api')` *before* its 85.0 floor, and it is the suite's only test that does not
+stub the model. Real weight-tensor loading appears in the log; `grep -c "path=degraded"` returns **0**. So the
+guard restored back in `52fc727` is still doing genuine work rather than passing vacuously — which is the
+whole reason it was restored.
+
+### Two skips, disclosed rather than buried inside a number
+
+`test_agents_screen.py:419` (condition-driven), and `test_mv_no_fixture_content_in_prod_data.py:219`, which
+skips because **a pristine worktree has no repo-root `.env`** — the production-data contamination check has no
+DSN to inspect. That is a genuine coverage gap **of the pristine method itself**, and it is on the record
+rather than hidden.
+
+### Scope of the closure
+
+This closes G-N **for the test suite**. It is a statement about the repository, not about live production
+behaviour — those are separate claims with separate evidence, and conflating them is the error this entry
+exists to avoid.
