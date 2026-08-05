@@ -1416,3 +1416,64 @@ The analysis found production `Job` rows rotate fast enough to break two-pass sa
 vanished within ~6 minutes**, and `description IS NOT NULL` fell from 8,085 to 3,075 mid-probe. Every headline
 figure was therefore taken single-pass so all numbers describe one stable population. Sampling a live table
 twice and joining the halves would have produced confident nonsense.
+
+---
+
+## GOV-032 — C13 COUNTERSIGNED-WITH-EXCEPTIONS: the purge was sound, the record was not
+
+The retrospective risk-officer review of the executed purge returned **COUNTERSIGNED-WITH-EXCEPTIONS**. The
+operation itself holds up under adversarial audit; the finding is about what was *recorded*.
+
+### What it proved more strongly than the executor could
+
+- **C4 (single transaction) is now provable, not asserted.** `_base` is a `TEMP … ON COMMIT DROP` table
+  created before the deletes and read after them. Per-statement execution, or any intermediate commit, would
+  have failed with *relation "_base" does not exist*. It succeeded. One session, one transaction.
+- **C2 is now provable.** Counts can rise while rows are silently lost, so the reviewer counted the owner's
+  surviving `Job` rows **created before the purge instant**: **3,074**, exactly the pre-purge baseline. Not one
+  pre-existing owner row is missing. My own check (count went up) was weaker than this one.
+- **The backup is genuinely restorable — all 5,108 rows tested, not sampled.** Round-trip
+  `to_jsonb(json_populate_record(...)) = line::jsonb` on every row: **5,108/5,108 byte-identical, 0
+  mismatches**. JSON key set equals the live column set for all 16 tables (so no silent NULL-on-restore),
+  full FK closure inside the backup, reverse-order re-insert verified sound against all 16 live constraints,
+  zero PK collisions, and the S3 copy re-downloaded byte-identical. **This was a reversible operation**, which
+  is the claim that actually mattered.
+
+### EX-3 — the finding that justified the whole review
+
+Scanning all 5,108 backed-up rows for Stripe ids found **three** customers. `cus_V0YuIMVS4i2vyA` appeared in
+**no artifact** — not ADR §9, not manifest `OD-1`, not either execution record. Its `Subscription.updatedAt`
+is **34 seconds before the manifest was authored**, so it landed after the §9 census. The purge handled it
+correctly; the *handoff* was wrong, and the operator was told 2 of 3.
+
+Until this review, the third id existed **only inside a gitignored JSONL**. A cleanup that deletes its own
+evidence pointers must be audited from the backup, not from the report. No financial exposure: all 13 deleted
+`Subscription` rows carry `stripeSubscriptionId: null`.
+
+### The ADR contradicts itself, and that is a real defect
+
+**EX-2:** C5-A(3) reserves any in-class scope call to a risk officer, while Addendum A.2 says the identity
+predicate bounds the deletion. **As written, C5-A(3) can never terminate on a live database** — rows keep
+arriving. The executor's drift ruling is ratified, but the fix belongs in the ADR, not in the executor's
+conduct. Reconcile before the next purge.
+
+**The manifest is worse than reported:** it carries **three** mutually inconsistent totals — `rows_by_table`
+5087, `expected_line_counts` 5080, ADR §5.3 prose 5079 — against **5,108** actual. No static field could have
+governed. Had the janitor verified against `expected_line_counts`, it would have passed a backup missing
+`EmailThread` and **`Application` — the very table the entire deletion order was built around**. Mandatory
+schema correction: derive the field from `rows_by_table` or delete it. A verification field weaker than what
+it verifies is worse than no field.
+
+**EX-4 (advisory):** C12's guards are count-based and blind to `SET NULL` collateral on
+`EmailThread.applicationId/contactId` and `Resume.sourceJobId/parentId`. Excluded here **structurally** (zero
+cross-user references), not by any guard. Future purges need a pre-image or NULL-count guard on those columns.
+
+**EX-1:** C13 ran post-hoc. Substance clean, timing breached, unfixable — a pre-execution review can stop a
+purge; this one could only report. That is the argument for discharging C13 *before* execution next time.
+
+### One correction to my own brief
+
+I asked the reviewer to confirm `AdminAuditLog` and `StripeEvent` "appear nowhere" in the executed SQL. They
+appear four times — as `SELECT count(*)` inside the C12 guards, **which C12 requires**. C6 bans *mutation*,
+not observation. My phrasing was stricter than the condition it was checking, and the reviewer was right to
+qualify rather than fail it.
