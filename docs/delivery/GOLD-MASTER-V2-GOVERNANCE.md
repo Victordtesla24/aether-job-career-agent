@@ -1361,3 +1361,58 @@ GOV-017: a fail-before/pass-before condition **asserted rather than measured**. 
 
 **G-N remains OPEN.** The suite exits 1, and no run in this campaign has yet measured a pristine HEAD — six
 backend source files carry uncommitted edits, including the disabled fix branch.
+
+---
+
+## GOV-031 — the ≥85 target: three explanations, and only the third was true
+
+This target has now been explained three times, each time by a careful agent, and the first two were wrong.
+
+| # | Claim | Verdict |
+|---|---|---|
+| 1 | GOV-015-WC: unreachable because the anti-fabrication guard refuses unsupportable gap keywords — a DATA condition about this candidate | **Wrong.** Measured through a scoring engine defective in three ways. |
+| 2 | GOV-029: unreachable because the formula's `semantic_similarity` range caps it — `max = 60 + 0.4·sem`, and `sem` averages 41.0 | **Right arithmetic, wrong conclusion.** It treated `semantic` as a fixed property. |
+| 3 | REPROBE-04: `semantic` is inert because **the loop rewrites text the scorer never reads** | **True, and it is a fixable defect.** |
+
+**Verified first-hand by the orchestrator.** `all-MiniLM-L6-v2` has `max_seq_length = 256` word pieces. The
+owner's real résumé is **15,104** word pieces — **256 encoded, 1.7%, with 14,848 never seen**. The transformers
+library emits the warning itself: `Token indices sequence length is longer than the specified maximum
+(447 > 256)`. The loop's own corpus is 1,477 word pieces and `strip_bullet_lines(resume)` alone is 452, so
+**the first tailorable bullet begins at word piece 453 — 199 past the window.**
+
+The analysis proved it behaviourally rather than by reading config: replacing **every** bullet with the
+posting's own text moved `semantic` by **0.000000** on 5/5 postings; deleting every bullet, also `0.000000`;
+putting the same text in the **summary** moved it **+19.5 to +25.3**. GOV-029's "exactly +0.00" was never
+rounding — it was a truncation boundary.
+
+**So 40% of the headline score this product sells is computed on the first ~1.7% of the résumé**, and the JD
+side is truncated identically — the metric compares a résumé header against a posting's opening boilerplate.
+
+### Why this changes the sequencing
+
+I was about to lower the target. That would have been **wrong**, and wrong in the way this campaign keeps
+catching: calibrating to a distribution produced by a defect. Fixing the truncation makes 40% of the score
+movable for the first time, so any target derived from today's numbers would be obsolete on the day it landed.
+
+**Binding order:** fix the truncation (task #48) → re-measure the attainable distribution → *then* re-derive
+the target (#46) and the UI thresholds (#49).
+
+### Production's own ledger, which no sample can argue with
+
+- **3,006 scored jobs — 0 at ≥85.** Max fit score ever recorded: **78.61**.
+- **156 tailoring runs — 0 with `success: true`, 156 carrying the sub-target warning.** Max best score: 69.48.
+
+The warning has fired on **100% of runs ever executed**, which means it also carries **zero information**: it
+cannot distinguish the run that genuinely needs review from the 155 performing exactly as designed. An honest
+message that is always true is not automatically an honest message.
+
+**And a truth-in-UI defect falls straight out of it:** the board offers a `Match >= 85` filter that has
+returned zero rows across all 3,006 scored jobs, and a green fit colour that has never once rendered. A filter
+that can never match is not a filter.
+
+### Methodological note worth keeping
+
+The analysis found production `Job` rows rotate fast enough to break two-pass sampling — **265 of 400 ids
+vanished within ~6 minutes**, and `description IS NOT NULL` fell from 8,085 to 3,075 mid-probe. Every headline
+figure was therefore taken single-pass so all numbers describe one stable population. Sampling a live table
+twice and joining the halves would have produced confident nonsense.
