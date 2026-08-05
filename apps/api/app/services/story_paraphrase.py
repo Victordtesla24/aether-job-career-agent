@@ -128,12 +128,54 @@ CREATE_TIME_THRESHOLDS = SimilarityThresholds(
 #: silent live write — so a wider net is the correct trade-off here. Still
 #: requires the SAME absolute-shared-token floors as the live preset, so it
 #: never degrades to a single-field match either.
+#:
+#: GMV4-story-004 THRESHOLD RE-DECISION (kept at 0.60, deliberately):
+#: when this preset drove an irreversible ``DELETE`` its looseness was
+#: indefensible. It no longer does — a merge now archives the losing row with
+#: a full pre-merge snapshot and is reversible
+#: (``story_dedup_migration.restore_merged_stories``), and the only production
+#: entrypoint (``scripts/story_dedup_sweep.py``) is dry-run by default and
+#: refuses to write until a human has reviewed and signed the emitted plan.
+#: The "reviewed" premise this docstring always asserted is now ENFORCED
+#: rather than assumed, and the human gate — not the ratio — is what bounds a
+#: false merge. Tightening to the create-time 0.70 would buy no protection the
+#: human gate does not already give, while silently missing verified-real
+#: duplicate clusters that sit between the two values (the ANZ pair above:
+#: title Jaccard 0.667), which is the entire defect GMV4-story-002 reports.
+#: ALTERNATIVE, implemented and available, not chosen as the default: run the
+#: sweep with :data:`CREATE_TIME_THRESHOLDS` instead
+#: (``story_dedup_sweep.py --conservative``) for an operator who wants the
+#: machine to pre-filter harder at the cost of leaving real duplicates behind.
 BULK_MIGRATION_THRESHOLDS = SimilarityThresholds(
     title_min_jaccard=0.60,
     title_min_shared=4,
     achievement_min_jaccard=0.30,
     achievement_min_shared=5,
 )
+
+
+def paraphrase_signals(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """The four raw similarity signals for the pair, plus the combined score.
+
+    Derived from the very same primitives :func:`is_paraphrase_match` decides
+    with (``_title_tokens`` / ``_achievement_tokens`` / ``_jaccard``) — never a
+    second, hand-rolled comparison (§13.1). A human reviewing a proposed merge
+    in the bulk sweep's dry-run report therefore sees the actual numbers that
+    produced the decision. Ratios are rounded to 4dp for readability HERE
+    ONLY; the match decision itself still compares the unrounded values, so a
+    borderline pair can never be flipped by presentation rounding.
+    """
+    title_jaccard, title_shared = _jaccard(_title_tokens(a), _title_tokens(b))
+    achievement_jaccard, achievement_shared = _jaccard(
+        _achievement_tokens(a), _achievement_tokens(b)
+    )
+    return {
+        "title_jaccard": round(title_jaccard, 4),
+        "title_shared": title_shared,
+        "achievement_jaccard": round(achievement_jaccard, 4),
+        "achievement_shared": achievement_shared,
+        "score": round(title_jaccard + achievement_jaccard, 4),
+    }
 
 
 def is_paraphrase_match(
@@ -157,6 +199,16 @@ def is_paraphrase_match(
         achievement_jaccard >= thresholds.achievement_min_jaccard
         and achievement_shared >= thresholds.achievement_min_shared
     )
+
+
+def thresholds_as_dict(thresholds: SimilarityThresholds) -> dict[str, Any]:
+    """Serialisable form of a preset, for audit trails and dry-run reports."""
+    return {
+        "title_min_jaccard": thresholds.title_min_jaccard,
+        "title_min_shared": thresholds.title_min_shared,
+        "achievement_min_jaccard": thresholds.achievement_min_jaccard,
+        "achievement_min_shared": thresholds.achievement_min_shared,
+    }
 
 
 def similarity_score(a: dict[str, Any], b: dict[str, Any]) -> float:
