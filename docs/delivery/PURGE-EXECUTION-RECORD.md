@@ -111,3 +111,54 @@ would destroy them.
 ---
 
 **Aborted:** no · **Rolled back:** no · **Rows deleted:** 5,108 · **Collateral damage:** none detected
+
+---
+
+# ORCHESTRATOR INDEPENDENT VERIFICATION — 2026-08-05T07:40Z
+
+Verified first-hand, not from the executor's report:
+
+| check | result |
+|---|---|
+| `@mailinator.com` users | **0** (was 13) |
+| genuine users | **2** — both intact |
+| owner (isAdmin) | 3,083 Job · 5,627 AgentRun · 260 Application |
+| real free-tier user | 0/0/0 — untouched |
+| orphan rows across `Job`, `AgentRun`, `Application`, `Resume`, `StoryEntry`, `Subscription`, `UsageQuota` | **0** |
+| `AdminAuditLog` / `StripeEvent` / `Plan` | 216 / 8 / 4 — unchanged |
+
+**C2 held, and this is the proof that mattered most.** 1,387 of the owner's `Job` rows shared a `sourceUrl`
+with a purged test copy. The owner's `Job` count went **UP** (3,074 → 3,083 under live discovery traffic),
+never down. A content-derived predicate would have destroyed those 1,387 rows; the identity-only rule the ADR
+forced is what prevented it.
+
+**C12 was vindicated concretely.** The literal guard this campaign rejected asserted the owner's `Job` count
+equalled **2,506**. The true value was **3,074** before the purge and **3,075** after. That guard would have
+rolled back a *correct* purge on every attempt — and the tempting "fix" would have been to delete the only
+protection standing over the owner's data.
+
+## Two defects in the approval package itself
+
+1. **The manifest contradicts itself.** `backup_spec.expected_line_counts` disagrees with `rows_by_table` in
+   the same file — `ApprovalRequest` 1 vs 2, `StoryEntry` 3 vs 4, `BackgroundJob` 1 vs 2, `AgentRun` 8 vs 10 —
+   and omits `EmailThread` and `Application` **entirely**. Residue of the concurrent-authorship collision
+   recorded earlier. **A janitor verifying its backup against that field would have passed a backup missing two
+   tables.** The executor verified against the live re-census instead, per `verify_cmd` and C5, which is why
+   this did no harm. Filed as a manifest defect: a verification field that is weaker than the thing it
+   verifies is worse than no field at all.
+2. **The 02:07Z census was stale by +21 rows** — `Resume` 3→4, `UsageQuota` 3→13, `Subscription` 3→13. The
+   executor reported the drift rather than adapting around it, verified provenance (the Resume is the 11:10Z
+   production-verification row; the 20 billing rows are a single backfill batch stamped identically to the
+   microsecond), and class-checked them as in-scope (`planId=free`, `status=active`,
+   `stripeSubscriptionId IS NULL`). Both scope tripwires were negative: no 14th identity, no out-of-scope
+   table. That is exactly the behaviour C5 exists to produce.
+
+## Open
+
+- **C13 is only PARTIALLY discharged.** It requires a *risk officer* to diff the executed SQL. The executor ran
+  a 26-check machine diff (clean) and correctly **refused to self-grant** the counter-signature. A
+  retrospective risk-officer review is dispatched — post-hoc, but it still answers the question that matters:
+  did the SQL that ran match the SQL that was approved.
+- **C10 — human-only, blocks G-K.** Two live-mode Stripe customers remain (`cus_V0KsL1wgumpXag`,
+  `cus_V0L97Kz0LbPZ3M`). The local `Subscription` rows that pointed at them are now deleted, so **the execution
+  record and the backup are the only remaining link** to them. They cannot be removed from inside this VM.
