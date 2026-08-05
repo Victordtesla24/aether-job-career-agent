@@ -162,3 +162,34 @@ protection standing over the owner's data.
 - **C10 — human-only, blocks G-K.** Two live-mode Stripe customers remain (`cus_V0KsL1wgumpXag`,
   `cus_V0L97Kz0LbPZ3M`). The local `Subscription` rows that pointed at them are now deleted, so **the execution
   record and the backup are the only remaining link** to them. They cannot be removed from inside this VM.
+
+---
+
+# CORRECTION — there are THREE Stripe customers, not two (2026-08-05T08:05Z)
+
+**The C13 countersignature found a third live-mode Stripe customer that appears in NO prior artifact**, and I
+verified it independently from the backup:
+
+| customer | in committed docs before this correction |
+|---|---|
+| `cus_V0KsL1wgumpXag` | 3 documents |
+| `cus_V0L97Kz0LbPZ3M` | 3 documents |
+| **`cus_V0YuIMVS4i2vyA`** | **0** — it existed only inside a gitignored JSONL backup |
+
+`cus_V0YuIMVS4i2vyA` belongs to `cb2aba1a9ec4787b28d460d22` / `aether-uat-1785805899201@mailinator.com` — the
+very persona used for yesterday's production verification. Its `Subscription.updatedAt` is
+`2026-08-04T02:08:56.614724Z`, **34 seconds before the manifest was authored** at `02:09:30.375620Z`. So the
+id landed *after* the §9 census and before the manifest existed: nothing was mishandled by the purge, which
+correctly deleted the row as in-scope. **This is a handoff defect, not a purge defect** — the operator was
+handed 2 of 3, and the only local pointer to the third has now been deleted.
+
+**No money is at risk.** All 13 deleted `Subscription` rows carry `stripeSubscriptionId: null` — verified
+directly from `Subscription.jsonl`. These are customer objects with no subscription and no charge.
+
+**C10 is amended: THREE live-mode Stripe customers require operator action**, not two. Verified no fourth
+exists.
+
+**Why this is the exact failure the C13 review exists to catch.** Every other check in this operation was a
+check on *what was done*. This was a check on *what was recorded* — and the record was wrong in a way that
+would have quietly become permanent, because the only surviving trace of the third id was inside a gitignored
+file. A cleanup that deletes its own evidence pointers has to be audited from the backup, not from the report.
