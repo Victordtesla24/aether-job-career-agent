@@ -1477,3 +1477,56 @@ I asked the reviewer to confirm `AdminAuditLog` and `StripeEvent` "appear nowher
 appear four times — as `SELECT count(*)` inside the C12 guards, **which C12 requires**. C6 bans *mutation*,
 not observation. My phrasing was stricter than the condition it was checking, and the reviewer was right to
 qualify rather than fail it.
+
+---
+
+## GOV-033 — the pristine measurement paid for itself on its first run
+
+**G-N: NOT GREEN — 4 failed / 2689 passed / 2 skipped**, and the four failures are the entire justification for
+having commissioned a pristine run at all.
+
+**Every previous "green" on `test_story_dedup_invocation.py` came from another session's UNCOMMITTED edits.**
+Both trees sit at the same commit `8044eaa`, yet:
+
+| | committed HEAD | production tree |
+|---|---|---|
+| `story_dedup_migration.py` | **119 lines**, `DELETE FROM "StoryEntry"` at :111 | **621 lines**, archive/restore |
+| `merge_duplicate_stories` | `(user_id)` | `(user_id, *, dry_run=False, …)` |
+| `story_dedup_sweep.py` (call site) | **not in git at all** | 486 lines on disk |
+
+Same commit, different content ⇒ necessarily uncommitted. **Verified first-hand by me**, not taken on report.
+
+**So the committed repository still contains the GMV4-story-002/-004 hard-DELETE data-loss hazard**, and the
+safe implementation is protected by nothing but the fact that no one has run `git checkout` on this VM. A
+clean checkout, a VM rebuild, or a redeploy from git restores destructive code. The four guards `02fae90`
+wrote to flag exactly this hazard have been RED at HEAD the whole time, invisible behind a working tree that
+made them pass.
+
+**This is the illusion the pristine method exists to break.** Yesterday I reported *"2683 tracked tests =
+2682 passed / 0 failed, zero regressions."* Every word was true of the tree I measured — and the tree was not
+the repository. **A test suite run against a dirty working tree measures what is on the disk, not what is in
+the product.** Landing this work is now the highest-priority item; a fixer is validating before committing,
+because 1,100 lines of unreviewed safety code is its own risk and a broken archive is worse than an honest
+delete.
+
+### Two methodological notes from the run worth keeping
+
+1. **An editable install nearly voided the whole exercise.** `__editable__.aether_api-0.0.0.pth` maps package
+   `app` to the **production** tree, so an isolated worktree could silently have imported production code. It
+   does not — setuptools appends `_EditableFinder` after `PathFinder`, and cwd wins — but the agent **verified
+   that empirically** (`app.__file__` resolved inside the worktree) rather than assuming. Isolation that is
+   not verified is not isolation.
+2. **Run 1 was killed at exactly 60 minutes, at 89%,** by the harness background-task cap; it was relaunched
+   under `setsid` and only the completed run reported. The killed log was retained and labelled as aborted
+   rather than quietly discarded.
+
+### Everything else measured green
+
+ATS engine and all KW-001 / KW-002 / R-01 guards, RT-005, cover-letter quality, fit scorer, the tailoring
+loop, and CRITICAL-3b (9 passed, now tracked). `test_perfect_keyword_overlap_scores_high` passed **on the
+measured path** — corroborated three ways, including `grep -c "path=degraded"` returning **0** across the whole
+run. Tracked count 2683 → 2695, reconciled exactly (+9 CRITICAL-3b, +3 F-04); the prior run's 2712 also
+reconciles (2683 + 12 since-committed + 17 still-uncommitted).
+
+**New skip disclosed rather than glossed:** `test_mv_no_fixture_content_in_prod_data.py` skips in a pristine
+worktree because there is no repo-root `.env` — a genuine, small coverage gap of the pristine method itself.
