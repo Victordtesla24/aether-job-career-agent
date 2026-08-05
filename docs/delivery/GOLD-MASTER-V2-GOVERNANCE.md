@@ -1530,3 +1530,59 @@ reconciles (2683 + 12 since-committed + 17 still-uncommitted).
 
 **New skip disclosed rather than glossed:** `test_mv_no_fixture_content_in_prod_data.py` skips in a pristine
 worktree because there is no repo-root `.env` — a genuine, small coverage gap of the pristine method itself.
+
+---
+
+## GOV-034 — the data-loss hazard is closed in the repository, not just on the disk (`ddd99db`)
+
+**Verified first-hand by me at HEAD:**
+
+| | before | after |
+|---|---|---|
+| `story_dedup_migration.py` committed | 119 lines | **621 lines** |
+| hard `DELETE` of a merge loser at HEAD | **1** | **0** |
+| `story_dedup_sweep.py` tracked in git | no | **yes** |
+| `story_paraphrase` helpers at HEAD | absent | **present** |
+| working tree vs HEAD for these files | diverged | **identical** |
+| the four GMV4-story guards | RED | **11 passed, exit 0** (incl. 5 new archive/restore tests) |
+
+The divergence that made every prior suite run green-by-accident is closed. The repository and the disk now
+agree.
+
+### What the fixer found that the brief did not anticipate
+
+1. **A hard dependency that would have been an `ImportError`.** `story_dedup_migration.py` imports
+   `paraphrase_signals` and `thresholds_as_dict` from `story_paraphrase.py` — **neither existed at HEAD**.
+   Committing only the three files I named would have produced a repository that cannot import. My brief told
+   it to "check for OTHER uncommitted dependencies… assume more than one file diverged"; it found exactly one
+   more, and it was load-bearing.
+2. **`restore_merged_stories` had ZERO test coverage anywhere in the suite** — grep for
+   `restore_merged_stories|list_archived_merges|mergeSnapshot|archivedAt` across `tests/` returned nothing.
+   Given the instruction that *a broken archive is worse than an honest delete, because it looks safe*, it
+   **refused to land on inspection alone** and proved the reverse path empirically: dry run writes nothing;
+   a merge archives recoverably with a snapshot; restore returns **both** sides byte-exactly; a partial chain
+   restore is refused and writes nothing; a full chain unwinds in reverse merge order.
+3. **The CLI gates were exercised for real**, not read: `--apply` without `--plan`, without `--confirm-user-id`,
+   with a mismatched id, with an unsigned plan, and with a mismatched `--expect-account` all refused with rows
+   still live; a stale plan was refused on digest mismatch.
+4. **It resolved an apparent contradiction in the guards rather than working around it:** `list_by_user`
+   filters `archivedAt IS NULL` while `get_by_id` deliberately includes archived rows — which is why one test
+   sees 1 row and another still finds the loser. Both behaviours were already committed and correct.
+5. **The one surviving physical `DELETE` is correct by design** — a user deleting their own *live* story,
+   guarded by `archivedAt IS NULL` so the CRUD surface cannot destroy an archived merge loser.
+
+### Residual risks recorded rather than closed
+
+- `story_dedup_sweep.py` **defaults to production** (it loads the repo-root `.env`). Correct for an ops tool,
+  and it prints its resolved target first, but the safety rests entirely on dry-run-by-default.
+- **The sweep has never been run against production data.** The 5 live near-duplicate clusters (16 of 37
+  stories, GMV4-story-002) are still there. Running it is a separate human-gated action.
+- **Archived rows accumulate** in `StoryEntry` with no retention policy — invisible to every product surface,
+  but real rows.
+- Evidence was written to a session-scoped scratchpad; I copied it to `/home/ubuntu/aether-gn-evidence/story-dedup/`
+  so it survives.
+
+**G-N is NOT yet closed.** The residual is fixed and independently re-verified (11 passed, exit 0), but the
+suite as a whole has not been re-measured pristine since. "The only failures are fixed, so the suite must be
+green" is precisely the inference this campaign has been punished for six times. A confirming pristine run is
+commissioned.
