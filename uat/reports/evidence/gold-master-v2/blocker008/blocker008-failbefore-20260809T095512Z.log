@@ -1,0 +1,225 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+FFF.....                                                                 [100%]
+=================================== FAILURES ===================================
+_________________ test_jobs_list_read_is_bounded_per_statement _________________
+
+client = <starlette.testclient.TestClient object at 0x7f9336916180>
+auth_headers = {'Authorization': 'Bearer <REDACTED-EPHEMERAL-TEST-JWT>'}
+job_sql = ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+    def test_jobs_list_read_is_bounded_per_statement(client, auth_headers, job_sql):
+        """Every ``Job`` read ``GET /jobs`` issues must be bounded per statement.
+    
+        FAILS on the pre-fix code: ``list_by_user`` emits a single
+        ``SELECT ... FROM "Job" j WHERE "userId" = %s ORDER BY ... DESC NULLS LAST``
+        with no depth-0 ``LIMIT`` and no id-set restriction, so its cost grows
+        without limit with the catalog — production kills it at 5 s.
+        """
+        _seed_jobs(_user_id(client, auth_headers), 3)
+        job_sql.clear()
+    
+        response = client.get("/jobs?include_stale=true", headers=auth_headers)
+        assert response.status_code == 200, response.text
+    
+        selects = _job_selects(job_sql)
+        assert selects, "expected GET /jobs to read the Job table"
+        unbounded = [s for s in selects if not _is_bounded(s)]
+>       assert not unbounded, (
+            "GET /jobs issued an unbounded Job read — this is the statement "
+            f"production cancels at 5 s:\n\n{unbounded[0]}"
+        )
+E       AssertionError: GET /jobs issued an unbounded Job read — this is the statement production cancels at 5 s:
+E         
+E         SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description", "requirements", "source", "sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt", "lastSeenAt", (SELECT r."id" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != 'rejected' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId", (SELECT r."approvalStatus" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != 'rejected' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus", 
+E                 (CASE WHEN (
+E                         ( (j."status" = 'tailoring')
+E                        OR (j."status" IN ('screening', 'matched') AND j."fitScore" IS NOT NULL) )
+E                         AND j."status" NOT IN ('applied', 'archived')
+E                         AND NOT EXISTS (
+E                               SELECT 1 FROM "Application" a
+E                               WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+E                             )
+E                       )
+E                       THEN (
+E                         SELECT r."createdAt" + (INTERVAL '1 hour' * 24)
+E                         FROM "AgentRun" r
+E                         WHERE r."userId" = j."userId"
+E                           AND r."agentName" = 'coverLetter'
+E                           AND 
+E             (r."status" = 'failed'
+E              OR (r."status" = 'completed'
+E                  AND (r."output"->'coverLetterUnavailable' = 'true'::jsonb
+E                       OR r."output"->'cover_letter_unavailable' = 'true'::jsonb)))
+E         
+E                           AND r."createdAt" >= NOW() - (INTERVAL '1 hour' * 24)
+E                           AND (r."input"->>'job_id') = j."id"
+E                           AND r."createdAt" > 
+E             GREATEST(
+E                 COALESCE(
+E                     (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
+E                      WHERE r2."userId" = j."userId" AND r2."agentName" = 'coverLetter'
+E                        AND (r2."status" = 'completed'
+E              AND (r2."output"->>'cover_letter_id' IS NOT NULL
+E                   OR r2."output"->>'coverLetterId' IS NOT NULL))
+E                        AND (r2."input"->>'job_id') = j."id"),
+E                     '-infinity'::timestamptz),
+E                 COALESCE(j."coverFailureClearedAt", '-infinity'::timestamptz))
+E         
+E                         ORDER BY r."createdAt" DESC
+E                         OFFSET 2 LIMIT 1
+E                       )
+E                       ELSE NULL
+E                  END) AS "autopilotSuppressedUntil"
+E              FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST
+E       assert not ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+tests/test_blocker008_jobs_list_read_path.py:199: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_______________ test_agentrun_is_never_scanned_once_per_job_row ________________
+
+client = <starlette.testclient.TestClient object at 0x7f92fd48c590>
+auth_headers = {'Authorization': 'Bearer <REDACTED-EPHEMERAL-TEST-JWT>'}
+job_sql = ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+    def test_agentrun_is_never_scanned_once_per_job_row(client, auth_headers, job_sql):
+        """The suppression predicate must be evaluated set-wise, not per ``Job`` row.
+    
+        Any statement that touches ``AgentRun`` must restrict ``Job`` to an
+        explicit id set, so the AgentRun work a single statement can do is capped
+        by the page size instead of by the catalog size.
+    
+        FAILS on the pre-fix code: the one board statement carries the
+        ``autopilotSuppressedUntil`` correlated subquery, which re-scans the user's
+        entire ``AgentRun`` history for every eligible ``Job`` row — 87% of the
+        6885.9 ms measured on production.
+        """
+        _seed_jobs(_user_id(client, auth_headers), 3)
+        job_sql.clear()
+    
+        assert client.get("/jobs?include_stale=true", headers=auth_headers).status_code == 200
+    
+        offenders = [
+            stmt
+            for stmt in job_sql
+            if '"AgentRun"' in stmt
+            and not re.search(r'"id"\s*=\s*(ANY\s*\(\s*%s\s*\)|%s)', stmt)
+        ]
+>       assert not offenders, (
+            "a statement scans AgentRun without bounding the Job rows it does so "
+            f"for — the per-row correlated form is back:\n\n{offenders[0]}"
+        )
+E       AssertionError: a statement scans AgentRun without bounding the Job rows it does so for — the per-row correlated form is back:
+E         
+E         SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description", "requirements", "source", "sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt", "lastSeenAt", (SELECT r."id" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != 'rejected' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId", (SELECT r."approvalStatus" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != 'rejected' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus", 
+E                 (CASE WHEN (
+E                         ( (j."status" = 'tailoring')
+E                        OR (j."status" IN ('screening', 'matched') AND j."fitScore" IS NOT NULL) )
+E                         AND j."status" NOT IN ('applied', 'archived')
+E                         AND NOT EXISTS (
+E                               SELECT 1 FROM "Application" a
+E                               WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+E                             )
+E                       )
+E                       THEN (
+E                         SELECT r."createdAt" + (INTERVAL '1 hour' * 24)
+E                         FROM "AgentRun" r
+E                         WHERE r."userId" = j."userId"
+E                           AND r."agentName" = 'coverLetter'
+E                           AND 
+E             (r."status" = 'failed'
+E              OR (r."status" = 'completed'
+E                  AND (r."output"->'coverLetterUnavailable' = 'true'::jsonb
+E                       OR r."output"->'cover_letter_unavailable' = 'true'::jsonb)))
+E         
+E                           AND r."createdAt" >= NOW() - (INTERVAL '1 hour' * 24)
+E                           AND (r."input"->>'job_id') = j."id"
+E                           AND r."createdAt" > 
+E             GREATEST(
+E                 COALESCE(
+E                     (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
+E                      WHERE r2."userId" = j."userId" AND r2."agentName" = 'coverLetter'
+E                        AND (r2."status" = 'completed'
+E              AND (r2."output"->>'cover_letter_id' IS NOT NULL
+E                   OR r2."output"->>'coverLetterId' IS NOT NULL))
+E                        AND (r2."input"->>'job_id') = j."id"),
+E                     '-infinity'::timestamptz),
+E                 COALESCE(j."coverFailureClearedAt", '-infinity'::timestamptz))
+E         
+E                         ORDER BY r."createdAt" DESC
+E                         OFFSET 2 LIMIT 1
+E                       )
+E                       ELSE NULL
+E                  END) AS "autopilotSuppressedUntil"
+E              FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST
+E       assert not ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+tests/test_blocker008_jobs_list_read_path.py:228: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+___________________ test_paged_board_read_returns_every_row ____________________
+
+client = <starlette.testclient.TestClient object at 0x7f92eef180e0>
+auth_headers = {'Authorization': 'Bearer <REDACTED-EPHEMERAL-TEST-JWT>'}
+job_sql = []
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f92ee189130>
+
+    def test_paged_board_read_returns_every_row(client, auth_headers, job_sql, monkeypatch):
+        """With the page size forced to 2 and 5 jobs seeded, ``GET /jobs`` must
+        still return all 5 — bounded per statement, complete in aggregate.
+    
+        FAILS on the pre-fix code: there is no page size to force
+        (``_BOARD_PAGE_SIZE`` does not exist), and the read is a single statement.
+        """
+        from app.repositories import job as job_repo
+    
+>       assert hasattr(job_repo, "_BOARD_PAGE_SIZE"), (
+            "the board read is not paged — no page size to bound a statement with"
+        )
+E       AssertionError: the board read is not paged — no page size to bound a statement with
+E       assert False
+E        +  where False = hasattr(<module 'app.repositories.job' from '/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/job.py'>, '_BOARD_PAGE_SIZE')
+
+tests/test_blocker008_jobs_list_read_path.py:246: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 31017.61it/s]
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 11724.52it/s]
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 5373.57it/s]
+------------------------------ Captured log setup ------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:951 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+=============================== warnings summary ===============================
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_blocker008_jobs_list_read_path.py::test_jobs_list_read_is_bounded_per_statement
+FAILED tests/test_blocker008_jobs_list_read_path.py::test_agentrun_is_never_scanned_once_per_job_row
+FAILED tests/test_blocker008_jobs_list_read_path.py::test_paged_board_read_returns_every_row
+3 failed, 5 passed, 6 warnings in 20.59s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

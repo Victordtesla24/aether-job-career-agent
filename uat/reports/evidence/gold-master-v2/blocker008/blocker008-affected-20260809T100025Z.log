@@ -1,0 +1,57 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+.....Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]................................................................... [ 44%]
+........................................................................ [ 88%]
+..................                                                       [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_feed_rows_expose_their_real_posting_age
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_listing_the_source_stopped_returning_is_hidden_but_kept
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_listing_the_source_stopped_returning_is_hidden_but_kept
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_camel_case_includeStale_is_accepted
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:239: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    else (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
+
+tests/test_blocker_006_empty_feed.py::TestSweepRecordsLiveness::test_create_stamps_last_seen_at
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:336: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "postedAt": (datetime.utcnow() - timedelta(days=140)).isoformat(),
+
+tests/test_blocker_006_empty_feed.py::TestSweepRecordsLiveness::test_create_stamps_last_seen_at
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:360: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert stamped > datetime.utcnow() - timedelta(minutes=5), (
+
+tests/test_rt_009_010_apply_wiring.py::TestSubmissionValidationGate::test_submit_rejects_draft_without_cover_letter
+tests/test_rt_009_010_apply_wiring.py::TestSubmissionValidationGate::test_submit_rejects_draft_with_base_resume
+  /opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1033: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    result = context.run(func, *args)
+
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_gap_p6_sourcing.py:408: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    posted = (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+162 passed, 25 warnings in 381.27s (0:06:21)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

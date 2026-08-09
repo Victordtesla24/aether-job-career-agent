@@ -57,6 +57,14 @@ _JOB_SCORING_COLUMNS = (
 #: over this table) so both walk it the same way.
 _SCORING_BATCH_SIZE = 500
 
+#: Rows the BOARD read (``list_by_user`` → ``GET /jobs``) pulls per round-trip
+#: (BLOCKER-008). Same value and same reason as ``_SCORING_BATCH_SIZE``: the
+#: cost of ONE statement stays flat as the catalog grows instead of scaling
+#: with it. This is a per-STATEMENT bound, never a result cap — the walk pages
+#: until it is exhausted and every matching row is returned (see
+#: ``list_by_user``).
+_BOARD_PAGE_SIZE = 500
+
 _TAILORED_RESUME_SUBQUERY = (
     '(SELECT r."id" FROM "Resume" r '
     'WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" '
@@ -138,80 +146,156 @@ _AP_COVER_RUN_PRODUCED_A_LETTER = '''
           OR {run}."output"->>'coverLetterId' IS NOT NULL))
 '''
 
-#: Mirrors ``board_sweep._SINCE_LAST_SUCCESS_OR_CLEAR`` verbatim, pre-bound to
-#: this module's fixed query shape (always a correlated subquery against the
-#: outer ``"Job" j``, unlike board_sweep's multi-shape template).
-_AP_SINCE_LAST_SUCCESS_OR_CLEAR = f'''
-    GREATEST(
-        COALESCE(
-            (SELECT MAX(r2."createdAt") FROM "AgentRun" r2
-             WHERE r2."userId" = j."userId" AND r2."agentName" = 'coverLetter'
-               AND {_AP_COVER_RUN_PRODUCED_A_LETTER.format(run="r2").strip()}
-               AND (r2."input"->>'job_id') = j."id"),
-            '-infinity'::timestamptz),
-        COALESCE(j."coverFailureClearedAt", '-infinity'::timestamptz))
-'''
+def _autopilot_suppression_expiry_sql() -> str:
+    """SET-BASED query returning ``(job_id, expiry)`` for the currently
+    suppressed jobs among an explicitly supplied, bounded id set.
 
+    Parameters, in order: ``(user_id, job_ids, user_id)``.
+    Jobs absent from the result are not suppressed — the caller defaults them
+    to ``None``.
 
-def _autopilot_suppressed_until_subquery() -> str:
-    """Correlated subquery (RT-010 style) computing the wall-clock time this
-    job's cover-failure suppression naturally expires — ``NULL`` when the job
-    is not currently suppressed.
+    WHY SET-BASED AND NOT THE CORRELATED SUBQUERY IT REPLACES (BLOCKER-008)
+    ----------------------------------------------------------------------
+    This used to be a per-row correlated subquery spliced into the board's
+    ``SELECT``. Each row's evaluation scanned the user's whole ``coverLetter``
+    ``AgentRun`` history twice — once for the letterless candidates and once
+    for the ``MAX(createdAt)`` success floor — and neither scan can be served
+    by an index, because the join key is ``input->>'job_id'`` (a JSONB
+    extraction). Measured READ-ONLY against production on 2026-08-09 (owner
+    account, 5932 ``Job`` rows, 7394 ``AgentRun`` rows of which 3277 are
+    ``coverLetter``, 5505 rows passing the eligibility gate below): the board
+    ``SELECT`` cost **6885.9 ms**, of which the correlated form of THIS
+    predicate was **5744 ms — 87%**, and the hosted ``statement_timeout`` is
+    5 s, so ``GET /jobs`` returned 500 on every call.
 
-    Mirrors ``board_sweep._job_suppression_expiry()``: with the window's
-    letterless runs (since the job's last success/clear) ordered oldest to
-    newest, the job is suppressed once there are ``>= limit`` of them, and
-    the expiry clock is set by the OLDEST of the ``limit`` most-recent ones
-    ageing out of the window. Ordering DESC and taking ``OFFSET (limit - 1)
-    LIMIT 1`` lands on exactly that row: with ``N >= limit`` qualifying rows
-    it is the ``limit``-th most recent one; with ``N < limit`` rows the
-    OFFSET exceeds the result set and the subquery returns NULL — the same
-    "not suppressed" answer as the Python function's ``len(rows) < limit``
-    guard.
+    The same answer computed set-wise walks the history ONCE per statement
+    instead of once per row: **27.1 ms** for a 500-job page, 222.6 ms for all
+    5932 rows across 12 bounded statements. Equivalence is not assumed — the
+    two forms were compared row-by-row over all 5932 production jobs:
+    **0 mismatches, 38 suppressed jobs both ways**
+    (``uat/reports/evidence/gold-master-v2/blocker008/probe3-equivalence-*.json``).
 
-    Also mirrors ``board_sweep._saturated_job_ids``'s eligibility gate
-    (``tailoring``, or ``screening``/``matched`` with a fitScore; not
-    ``applied``/``archived``; no ``Application`` row yet) — a job outside the
-    sweep's eligibility (e.g. already applied) must never show a suppression
-    hint even if its historical ``AgentRun`` rows would otherwise satisfy the
-    count, because the sweep is no longer tracking it.
+    THIS IS STILL THE THIRD (AND ONLY) COPY IN THIS MODULE
+    ------------------------------------------------------
+    See the THIRD-COPY WARNING above: the predicate is mirrored in
+    ``app/workers/board_sweep.py`` (source of truth) and
+    ``scripts/clear_cover_suppression.py`` (ops escape hatch). Rewriting the
+    shape did not add a copy — ``list_by_user`` AND ``get_by_id`` both read
+    through this one function, so there is exactly one encoding here, as
+    before. Update all three together on any predicate change.
+
+    SEMANTICS, TERM BY TERM (unchanged from the correlated form)
+    ------------------------------------------------------------
+    * ``elig`` mirrors ``board_sweep._saturated_job_ids``'s eligibility gate
+      (``tailoring``, or ``screening``/``matched`` with a fitScore; never
+      ``applied``/``archived``; no ``Application`` row yet). A job outside the
+      sweep's eligibility must never show a suppression hint even if its
+      history would otherwise satisfy the count, because the sweep is no
+      longer tracking it.
+    * ``floors`` + ``coverFailureClearedAt`` are
+      ``board_sweep._SINCE_LAST_SUCCESS_OR_CLEAR``: the later of the job's own
+      last GENUINELY-produced letter and its last ops-clear stamp. Expressed
+      as a GROUP BY instead of a correlated ``MAX`` — same value, one pass.
+    * ``rn = limit`` is ``board_sweep._job_suppression_expiry``'s
+      ``idx = len(rows) - limit`` over the ASC list, i.e. the OLDEST of the
+      ``limit`` most-recent qualifying failures — the run whose exit from the
+      window drops the count back below the limit. With fewer than ``limit``
+      qualifying rows no row has ``rn = limit`` and the job is simply absent
+      from the result, which is the same "not suppressed" answer as the
+      Python function's ``len(rows) < limit`` guard.
+    * ``r."userId" = %s`` replaces the correlated ``= j."userId"``: every
+      caller already scopes the ``Job`` read to that same ``user_id``, so the
+      two are the same value.
 
     ``limit``/``window`` are inlined as validated positive ints (never raw
-    strings) rather than bind params: this subquery text is spliced into the
-    middle of a larger SELECT whose own ``%s`` placeholders are positionally
-    bound from ``list_by_user``'s/``get_by_id``'s own params list, so adding
-    more ``%s`` here would require re-deriving that ordering — the tailored-
-    resume subqueries above set the same precedent of literal (non-templated)
-    SQL text.
+    strings) rather than bind params, the same precedent the tailored-resume
+    subqueries above set for literal (non-templated) SQL text.
     """
     limit = _autopilot_max_cover_failures()
     window = _autopilot_cover_failure_window_hours()
-    offset = limit - 1
     return f'''
-        (CASE WHEN (
-                ( (j."status" = 'tailoring')
-               OR (j."status" IN ('screening', 'matched') AND j."fitScore" IS NOT NULL) )
-                AND j."status" NOT IN ('applied', 'archived')
-                AND NOT EXISTS (
-                      SELECT 1 FROM "Application" a
-                      WHERE a."jobId" = j."id" AND a."userId" = j."userId"
-                    )
-              )
-              THEN (
-                SELECT r."createdAt" + (INTERVAL '1 hour' * {window})
-                FROM "AgentRun" r
-                WHERE r."userId" = j."userId"
-                  AND r."agentName" = 'coverLetter'
-                  AND {_AP_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
-                  AND r."createdAt" >= NOW() - (INTERVAL '1 hour' * {window})
-                  AND (r."input"->>'job_id') = j."id"
-                  AND r."createdAt" > {_AP_SINCE_LAST_SUCCESS_OR_CLEAR}
-                ORDER BY r."createdAt" DESC
-                OFFSET {offset} LIMIT 1
-              )
-              ELSE NULL
-         END) AS "autopilotSuppressedUntil"
+        WITH elig AS (
+            SELECT j."id", j."coverFailureClearedAt"
+            FROM "Job" j
+            WHERE j."userId" = %s AND j."id" = ANY(%s)
+              AND ( (j."status" = 'tailoring')
+                 OR (j."status" IN ('screening', 'matched')
+                     AND j."fitScore" IS NOT NULL) )
+              AND j."status" NOT IN ('applied', 'archived')
+              AND NOT EXISTS (
+                    SELECT 1 FROM "Application" a
+                    WHERE a."jobId" = j."id" AND a."userId" = j."userId"
+                  )
+        ),
+        runs AS (
+            SELECT (r."input"->>'job_id') AS job_id, r."createdAt",
+                   {_AP_COVER_RUN_PRODUCED_A_LETTER.format(run="r").strip()}
+                       AS produced_letter,
+                   {_AP_COVER_RUN_PRODUCED_NO_LETTER.format(run="r").strip()}
+                       AS letterless
+            FROM "AgentRun" r
+            WHERE r."userId" = %s AND r."agentName" = 'coverLetter'
+        ),
+        floors AS (
+            SELECT job_id, MAX("createdAt") AS last_letter
+            FROM runs WHERE produced_letter GROUP BY job_id
+        ),
+        ranked AS (
+            SELECT e."id" AS job_id, x."createdAt",
+                   ROW_NUMBER() OVER (
+                       PARTITION BY e."id" ORDER BY x."createdAt" DESC) AS rn
+            FROM elig e
+            JOIN runs x ON x.job_id = e."id"
+            LEFT JOIN floors f ON f.job_id = e."id"
+            WHERE x.letterless
+              AND x."createdAt" >= NOW() - (INTERVAL '1 hour' * {window})
+              AND x."createdAt" > GREATEST(
+                    COALESCE(f.last_letter, '-infinity'::timestamptz),
+                    COALESCE(e."coverFailureClearedAt", '-infinity'::timestamptz))
+        )
+        SELECT job_id, ("createdAt" + (INTERVAL '1 hour' * {window}))
+                   AS "autopilotSuppressedUntil"
+        FROM ranked WHERE rn = {limit}
     '''
+
+
+def _autopilot_suppression_map(
+    cur: Any, user_id: str, job_ids: list[str]
+) -> dict[str, Any]:
+    """``{job_id: autopilotSuppressedUntil}`` for the suppressed jobs in
+    ``job_ids``. Runs ONE bounded statement on the caller's open cursor."""
+    if not job_ids:
+        return {}
+    cur.execute(_autopilot_suppression_expiry_sql(), (user_id, job_ids, user_id))
+    return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def _order_board_rows(
+    rows: list[dict[str, Any]], column: str
+) -> list[dict[str, Any]]:
+    """``ORDER BY <column> DESC NULLS LAST``, applied in Python (BLOCKER-008).
+
+    The board read is keyset-paged on ``"id"``, so the requested ordering can
+    no longer be the pages' own ``ORDER BY``. Two-pass rather than a single
+    ``sorted(..., reverse=True)`` with a sentinel, because the sort values are
+    heterogeneous across the supported columns (float, timestamp, text) and
+    only a real comparison per column type is faithful.
+
+    * NULLs last — the same position ``NULLS LAST`` gives them.
+    * Text columns compare as Python strings, which is byte order. Production
+      and the test database are both ``C.UTF-8``, where that IS the database's
+      collation, and ``test_blocker008_jobs_list_read_path`` asserts the
+      agreement against the database's own ``ORDER BY`` rather than assuming
+      it — so a future move to a linguistic collation fails a test instead of
+      silently reordering the board.
+    * Ties keep the walk's ``id`` ASC order (Python's sort is stable). The
+      previous single ``ORDER BY`` left ties unordered, so this is strictly
+      more deterministic, never less.
+    """
+    present = [row for row in rows if row.get(column) is not None]
+    absent = [row for row in rows if row.get(column) is None]
+    present.sort(key=lambda row: row[column], reverse=True)
+    return present + absent
 
 
 VALID_STATUSES = frozenset(
@@ -378,6 +462,48 @@ class JobRepository:
         saved: bool | None = None,
         sort: str = "createdAt",
     ) -> list[dict[str, Any]]:
+        """The board projection — EVERY matching job, read in bounded pages.
+
+        BLOCKER-008. This used to be one ``SELECT`` with no ``LIMIT`` over
+        every row the user owns, carrying three correlated subqueries
+        evaluated per row. Measured READ-ONLY against production on
+        2026-08-09 (owner account, 5932 rows): **QueryCanceled at 5006.1 ms**
+        by the hosted 5 s ``statement_timeout`` — 6885.9 ms of real work — so
+        ``GET /jobs``, the primary jobs list, returned 500 on every call, for
+        both ``sort=createdAt`` and ``sort=fitScore``. The same catalog read
+        through THIS method, measured by calling the shipped code against
+        production (``probe4_after_fix_readonly.py``): all 5932 rows with all
+        24 fields in 1016.8 ms across 25 bounded statements — 12 pages
+        (slowest 104.5 ms) + 12 suppression reads (slowest 34.2 ms) + one
+        terminating empty page. Worst statement 47.8x under the 5 s cap, and
+        every field byte-identical to the pre-fix projection (0 differences
+        over 5932 rows x 24 fields).
+
+        SAME ROWS AND SAME FIELDS, NOT FEWER
+        ------------------------------------
+        The page size bounds ONE STATEMENT; it is not a result cap. The walk
+        pages until a page comes back short, so every row matching the same
+        filters as before is returned, carrying the same 24 keys as before
+        (nothing became optional, nothing is elided). There is deliberately
+        no default page/offset parameter: eight frontend call sites consume
+        this endpoint as a bare JSON array and one of them
+        (``dashboard/jobs/page.tsx``'s history count) reads ``.length`` as a
+        fact about the user's whole catalog, so a truncated response would be
+        a silently wrong screen rather than a fast one.
+
+        The keyset cursor advances on ``id`` — immutable, unique, and never
+        written by any job mutation — so the walk cannot skip or repeat a row.
+        Two honest consequences of reading in pages instead of one statement,
+        both bounded by the ~1 s the walk takes and by the board's own 20 s
+        poll: a job INSERTed by a concurrent sweep whose ``id`` sorts below the
+        cursor is not seen by the request in progress (it did not exist when
+        the old single ``SELECT`` ran either), and because the pages run at
+        READ COMMITTED, a row UPDATEd mid-walk is read at whichever page's
+        snapshot covers it. Neither can drop, duplicate or invent a row.
+
+        Ordering is applied after the walk, by :func:`_order_board_rows`,
+        because the pages themselves must be ordered by the keyset column.
+        """
         clauses = ['"userId" = %s']
         params: list[Any] = [user_id]
         if status is not None:
@@ -390,25 +516,44 @@ class JobRepository:
             clauses.append('"saved" = %s')
             params.append(saved)
         order_column = {
-            "createdAt": '"createdAt"',
-            "fitScore": '"fitScore"',
-            "fit_score": '"fitScore"',
-            "title": '"title"',
-            "company": '"company"',
-        }.get(sort, '"createdAt"')
+            "createdAt": "createdAt",
+            "fitScore": "fitScore",
+            "fit_score": "fitScore",
+            "title": "title",
+            "company": "company",
+        }.get(sort, "createdAt")
         ensure_job_cover_suppression_column()
         ensure_job_last_seen_column()
+
+        page_sql = (
+            f'SELECT {_JOB_READ_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
+            f'{_TAILORED_RESUME_STATUS_SUBQUERY} '
+            f'FROM "Job" j WHERE {" AND ".join(clauses)} AND "id" > %s '
+            f'ORDER BY "id" ASC LIMIT {int(_BOARD_PAGE_SIZE)}'
+        )
+        rows: list[dict[str, Any]] = []
+        last_id = ""
+        # One connection for the whole walk — same connection count as the
+        # single statement this replaces (the hosted database caps concurrent
+        # connections at 25). Unlike ``iter_scoring_candidates`` there are no
+        # caller writes interleaved between pages, so nothing is gained by
+        # releasing it, and reconnecting per page would cost more than the
+        # query itself.
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f'SELECT {_JOB_READ_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
-                    f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
-                    f'{_autopilot_suppressed_until_subquery()} '
-                    f'FROM "Job" j WHERE {" AND ".join(clauses)} '
-                    f"ORDER BY {order_column} DESC NULLS LAST",
-                    params,
-                )
-                return rows_to_dicts(cur)
+                while True:
+                    cur.execute(page_sql, (*params, last_id))
+                    page = rows_to_dicts(cur)
+                    if not page:
+                        break
+                    suppressed = _autopilot_suppression_map(
+                        cur, user_id, [row["id"] for row in page]
+                    )
+                    for row in page:
+                        row["autopilotSuppressedUntil"] = suppressed.get(row["id"])
+                    rows.extend(page)
+                    last_id = page[-1]["id"]
+        return _order_board_rows(rows, order_column)
 
     def iter_scoring_candidates(self, user_id: str) -> Iterator[dict[str, Any]]:
         """Stream EVERY job of ``user_id`` for the fit-scorer, one row at a time,
@@ -468,19 +613,31 @@ class JobRepository:
             last_id = batch[-1]["id"]
 
     def get_by_id(self, job_id: str, user_id: str) -> dict[str, Any] | None:
+        """The detail projection — the SAME fields ``list_by_user`` returns.
+
+        BLOCKER-008: reads ``autopilotSuppressedUntil`` through the same
+        single ``_autopilot_suppression_map`` the board uses. Splitting it out
+        of this ``SELECT`` costs one extra (bounded, single-id) statement on
+        the connection already open, and is what keeps ONE encoding of the
+        suppression predicate in this module — a second, detail-only copy is
+        exactly the drift the THIRD-COPY WARNING above exists to prevent.
+        """
         ensure_job_cover_suppression_column()
         ensure_job_last_seen_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'SELECT {_JOB_READ_COLUMNS}, {_TAILORED_RESUME_SUBQUERY}, '
-                    f'{_TAILORED_RESUME_STATUS_SUBQUERY}, '
-                    f'{_autopilot_suppressed_until_subquery()} '
+                    f'{_TAILORED_RESUME_STATUS_SUBQUERY} '
                     f'FROM "Job" j WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
-        return rows[0] if rows else None
+                if not rows:
+                    return None
+                suppressed = _autopilot_suppression_map(cur, user_id, [job_id])
+                rows[0]["autopilotSuppressedUntil"] = suppressed.get(job_id)
+        return rows[0]
 
     def update_status(self, job_id: str, status: str) -> dict[str, Any] | None:
         if status not in VALID_STATUSES:

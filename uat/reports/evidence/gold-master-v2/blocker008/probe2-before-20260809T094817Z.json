@@ -1,0 +1,68 @@
+{
+  "probe": "BLOCKER-008 #2 cost attribution",
+  "job_status_distribution": [
+    {
+      "s": "screening",
+      "n": 5501
+    },
+    {
+      "s": "ready",
+      "n": 340
+    },
+    {
+      "s": "applied",
+      "n": 30
+    },
+    {
+      "s": "discovered",
+      "n": 30
+    },
+    {
+      "s": "tailoring",
+      "n": 27
+    },
+    {
+      "s": "archived",
+      "n": 4
+    }
+  ],
+  "agentrun_rows_for_owner": 7394,
+  "agentrun_coverletter_rows": 3277,
+  "resume_rows_with_sourceJobId": 350,
+  "autopilot_gate_eligible_rows": 5505,
+  "autopilot_over_gate_statuses_only": {
+    "outcome": "completed",
+    "ms": 6177.8,
+    "rows": 5528
+  },
+  "bulk_resume_one_statement": {
+    "outcome": "completed",
+    "ms": 6.9,
+    "rows": 296
+  },
+  "rows_from_db": 5932,
+  "real_active_feed_rows": 2835,
+  "active_feed_status_mix": {
+    "screening": 2542,
+    "ready": 241,
+    "tailoring": 23,
+    "discovered": 29
+  },
+  "active_feed_ids_needing_autopilot_check": 2565,
+  "approx_response_bytes_full_rows": 10606475,
+  "enrich_feed_2835_ids": {
+    "outcome": "completed",
+    "ms": 3220.5,
+    "rows": 2835
+  },
+  "enrich_feed_500_ids": {
+    "outcome": "completed",
+    "ms": 926.6,
+    "rows": 500
+  },
+  "enrich_feed_250_ids": {
+    "outcome": "completed",
+    "ms": 446.0,
+    "rows": 250
+  }
+}
