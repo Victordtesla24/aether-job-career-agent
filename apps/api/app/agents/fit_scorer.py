@@ -71,7 +71,14 @@ class FitScorerAgent:
         resume_text = require_user_resume_text(
             user_id, "Add your resume before scoring jobs against it."
         )
-        for job in self._repository.list_by_user(user_id):
+        # BLOCKER-007: read through the scorer's own bounded, narrow projection
+        # — NOT the board's ``list_by_user``, whose unbounded three-correlated-
+        # subqueries-per-row SELECT crossed the hosted 5 s statement timeout at
+        # 5848 rows and made this endpoint 500 on every discovery cycle. Same
+        # rows, same order-independent semantics; see
+        # ``JobRepository.iter_scoring_candidates`` for why nothing is filtered
+        # out in SQL.
+        for job in self._repository.iter_scoring_candidates(user_id):
             # EITHER column being set means a score is persisted on this row —
             # a half-written pair is exactly what remediation must not miss.
             # The SKIP decision below deliberately stays on "fitScore is not

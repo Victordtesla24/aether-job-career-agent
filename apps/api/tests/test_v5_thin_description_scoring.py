@@ -70,8 +70,10 @@ class _StubRepo:
         self._jobs = jobs
         self.persisted: list[tuple[str, float]] = []
 
-    def list_by_user(self, user_id):
-        return self._jobs
+    def iter_scoring_candidates(self, user_id):
+        """The scorer's bounded read path (BLOCKER-007) — the real repository
+        pages this in keyset batches; the stub yields the same rows."""
+        return iter(self._jobs)
 
     def update_fit_score(self, job_id, fit, ats):
         self.persisted.append((job_id, fit))

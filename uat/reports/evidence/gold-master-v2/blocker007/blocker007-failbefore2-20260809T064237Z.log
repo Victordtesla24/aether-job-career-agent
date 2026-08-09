@@ -1,0 +1,197 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+________________ test_fit_scorer_read_is_bounded_per_statement _________________
+
+client = <starlette.testclient.TestClient object at 0x7fb5499018b0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOTFjNzNkMzVmZGJmOGIxM2Y5MTEwZjczIiwidXNlckl...xMTAzNThjQGV4YW1wbGUuY29tIiwiaWF0IjoxNzg2MjU3NzYwLCJleHAiOjE3ODYzNDQxNjB9.kR5-xDMzvTLTW-7qmMH7oyqkSHxnaP_6qnyZxcEWRkA'}
+job_sql = ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...ourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt"\n                    ', ...]
+
+    def test_fit_scorer_read_is_bounded_per_statement(client, auth_headers, job_sql):
+        """Every ``Job`` SELECT the fit-scorer issues must carry a LIMIT.
+    
+        FAILS on the pre-fix code because ``JobRepository.list_by_user`` emits one
+        unbounded ``SELECT ... FROM "Job" j WHERE "userId" = %s ORDER BY ...`` whose
+        cost grows without limit with the catalog — the statement production kills
+        at 5 s.
+        """
+        from app.agents.fit_scorer import FitScorerAgent
+        from app.repositories.job import JobRepository
+    
+        user_id = _seed_user(client, auth_headers)
+        _seed_scorable_jobs(user_id, 3)
+    
+        job_sql.clear()
+        FitScorerAgent(repository=JobRepository(), engine=_StubEngine()).run(user_id)
+    
+        selects = _job_selects(job_sql)
+        assert selects, "the fit-scorer must read jobs through JobRepository"
+        unbounded = [s for s in selects if " LIMIT " not in _outer_query(s).upper()]
+>       assert not unbounded, (
+            "the fit-scorer's job read must be bounded per statement (a LIMIT on "
+            f"the OUTER query, not inside a subquery); {len(unbounded)} unbounded "
+            f"SELECT(s) found: {unbounded}"
+        )
+E       AssertionError: the fit-scorer's job read must be bounded per statement (a LIMIT on the OUTER query, not inside a subquery); 1 unbounded SELECT(s) found: ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description", "requirements", "source", "sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt", "lastSeenAt", (SELECT r."id" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != \'rejected\' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId", (SELECT r."approvalStatus" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != \'rejected\' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus", \n        (CASE WHEN (\n                ( (j."status" = \'tailoring\')\n               OR (j."status" IN (\'screening\', \'matched\') AND j."fitScore" IS NOT NULL) )\n                AND j."status" NOT IN (\'applied\', \'archived\')\n                AND NOT EXISTS (\n                      SELECT 1 FROM "Application" a\n                      WHERE a."jobId" = j."id" AND a."userId" = j."userId"\n                    )\n              )\n              THEN (\n                SELECT r."createdAt" + (INTERVAL \'1 hour\' * 24)\n                FROM "AgentRun" r\n                WHERE r."userId" = j."userId"\n                  AND r."agentName" = \'coverLetter\'\n                  AND \n    (r."status" = \'failed\'\n     OR (r."status" = \'completed\'\n         AND (r."output"->\'coverLetterUnavailable\' = \'true\'::jsonb\n              OR r."output"->\'cover_letter_unavailable\' = \'true\'::jsonb)))\n\n                  AND r."createdAt" >= NOW() - (INTERVAL \'1 hour\' * 24)\n                  AND (r."input"->>\'job_id\') = j."id"\n                  AND r."createdAt" > \n    GREATEST(\n        COALESCE(\n            (SELECT MAX(r2."createdAt") FROM "AgentRun" r2\n             WHERE r2."userId" = j."userId" AND r2."agentName" = \'coverLetter\'\n               AND (r2."status" = \'completed\'\n     AND (r2."output"->>\'cover_letter_id\' IS NOT NULL\n          OR r2."output"->>\'coverLetterId\' IS NOT NULL))\n               AND (r2."input"->>\'job_id\') = j."id"),\n            \'-infinity\'::timestamptz),\n        COALESCE(j."coverFailureClearedAt", \'-infinity\'::timestamptz))\n\n                ORDER BY r."createdAt" DESC\n                OFFSET 2 LIMIT 1\n              )\n              ELSE NULL\n         END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+E       assert not ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+tests/test_blocker007_fit_scorer_read_path.py:200: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_______ test_fit_scorer_read_omits_the_board_only_correlated_subqueries ________
+
+client = <starlette.testclient.TestClient object at 0x7fb509ccb080>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYmE4YTk1NjUzZDk3OThlYTNhOWRkNzFmIiwidXNlckl...5Mjk0MzU4QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg2MjU3NzY0LCJleHAiOjE3ODYzNDQxNjR9.6oOJ0cd0km9GOsT6pKn-4ZIUcDyFl8wSAIce1rSfyrk'}
+job_sql = ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...ourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt"\n                    ', ...]
+
+    def test_fit_scorer_read_omits_the_board_only_correlated_subqueries(
+        client, auth_headers, job_sql
+    ):
+        """The three per-row correlated subqueries are board-UI payload only.
+    
+        ``FitScorerAgent.run`` reads exactly ``id``, ``fitScore``, ``atsScore`` and
+        the evidence text (``title``/``description``/``requirements``); it never
+        touches ``tailoredResumeId``, ``tailoredResumeStatus`` or
+        ``autopilotSuppressedUntil``. Paying for them per row is the bulk of the
+        5.7 s measured on production.
+        """
+        from app.agents.fit_scorer import FitScorerAgent
+        from app.repositories.job import JobRepository
+    
+        user_id = _seed_user(client, auth_headers)
+        _seed_scorable_jobs(user_id, 3)
+    
+        job_sql.clear()
+        FitScorerAgent(repository=JobRepository(), engine=_StubEngine()).run(user_id)
+    
+        offenders = [
+            stmt
+            for stmt in _job_selects(job_sql)
+            if any(marker in stmt for marker in _HEAVY_SUBQUERY_MARKERS)
+        ]
+>       assert not offenders, (
+            "the fit-scorer must not request the per-row correlated subqueries it "
+            f"never reads {_HEAVY_SUBQUERY_MARKERS}; offending SELECT(s): {offenders}"
+        )
+E       AssertionError: the fit-scorer must not request the per-row correlated subqueries it never reads ('tailoredResumeId', 'tailoredResumeStatus', 'autopilotSuppressedUntil'); offending SELECT(s): ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description", "requirements", "source", "sourceUrl", "status", "fitScore", "atsScore", "saved", "postedAt", "createdAt", "updatedAt", "lastSeenAt", (SELECT r."id" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != \'rejected\' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeId", (SELECT r."approvalStatus" FROM "Resume" r WHERE r."userId" = j."userId" AND r."sourceJobId" = j."id" AND r."approvalStatus" != \'rejected\' ORDER BY r."version" DESC LIMIT 1) AS "tailoredResumeStatus", \n        (CASE WHEN (\n                ( (j."status" = \'tailoring\')\n               OR (j."status" IN (\'screening\', \'matched\') AND j."fitScore" IS NOT NULL) )\n                AND j."status" NOT IN (\'applied\', \'archived\')\n                AND NOT EXISTS (\n                      SELECT 1 FROM "Application" a\n                      WHERE a."jobId" = j."id" AND a."userId" = j."userId"\n                    )\n              )\n              THEN (\n                SELECT r."createdAt" + (INTERVAL \'1 hour\' * 24)\n                FROM "AgentRun" r\n                WHERE r."userId" = j."userId"\n                  AND r."agentName" = \'coverLetter\'\n                  AND \n    (r."status" = \'failed\'\n     OR (r."status" = \'completed\'\n         AND (r."output"->\'coverLetterUnavailable\' = \'true\'::jsonb\n              OR r."output"->\'cover_letter_unavailable\' = \'true\'::jsonb)))\n\n                  AND r."createdAt" >= NOW() - (INTERVAL \'1 hour\' * 24)\n                  AND (r."input"->>\'job_id\') = j."id"\n                  AND r."createdAt" > \n    GREATEST(\n        COALESCE(\n            (SELECT MAX(r2."createdAt") FROM "AgentRun" r2\n             WHERE r2."userId" = j."userId" AND r2."agentName" = \'coverLetter\'\n               AND (r2."status" = \'completed\'\n     AND (r2."output"->>\'cover_letter_id\' IS NOT NULL\n          OR r2."output"->>\'coverLetterId\' IS NOT NULL))\n               AND (r2."input"->>\'job_id\') = j."id"),\n            \'-infinity\'::timestamptz),\n        COALESCE(j."coverFailureClearedAt", \'-infinity\'::timestamptz))\n\n                ORDER BY r."createdAt" DESC\n                OFFSET 2 LIMIT 1\n              )\n              ELSE NULL\n         END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+E       assert not ['SELECT "id", "userId", "title", "company", "location", "remote", "salaryMin", "salaryMax", "currency", "description"...       END) AS "autopilotSuppressedUntil"\n     FROM "Job" j WHERE "userId" = %s ORDER BY "createdAt" DESC NULLS LAST']
+
+tests/test_blocker007_fit_scorer_read_path.py:232: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+----------------------------- Captured stderr call -----------------------------
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 13757.95it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 37962.51it/s]
+------------------------------ Captured log call -------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:951 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+______________ test_fit_scorer_does_not_use_the_board_list_query _______________
+
+client = <starlette.testclient.TestClient object at 0x7fb505a53170>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjOGM0YjVhNDUxNjkwZTI5NDM4OTZjY2I0IiwidXNlckl...wYzQ5ZTI5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg2MjU3NzY3LCJleHAiOjE3ODYzNDQxNjd9.NodQ7p0cK4pHtaJyElG45nn4hBnIYJMrie2qiyCAPs4'}
+
+    def test_fit_scorer_does_not_use_the_board_list_query(client, auth_headers):
+        """Anti-regression: the scorer must not fall back to ``list_by_user``."""
+        from app.agents.fit_scorer import FitScorerAgent
+        from app.repositories.job import JobRepository
+    
+        user_id = _seed_user(client, auth_headers)
+        _seed_scorable_jobs(user_id, 2)
+    
+        repo = JobRepository()
+    
+        def _forbidden(*args: Any, **kwargs: Any):
+            raise AssertionError(
+                "FitScorerAgent must not read through JobRepository.list_by_user — "
+                "that is the unbounded board projection (BLOCKER-007)."
+            )
+    
+        repo.list_by_user = _forbidden  # type: ignore[method-assign]
+>       FitScorerAgent(repository=repo, engine=_StubEngine()).run(user_id)
+
+tests/test_blocker007_fit_scorer_read_path.py:255: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+app/agents/fit_scorer.py:74: in run
+    for job in self._repository.list_by_user(user_id):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ('c8c4b5a451690e2943896ccb4',), kwargs = {}
+
+    def _forbidden(*args: Any, **kwargs: Any):
+>       raise AssertionError(
+            "FitScorerAgent must not read through JobRepository.list_by_user — "
+            "that is the unbounded board projection (BLOCKER-007)."
+        )
+E       AssertionError: FitScorerAgent must not read through JobRepository.list_by_user — that is the unbounded board projection (BLOCKER-007).
+
+tests/test_blocker007_fit_scorer_read_path.py:249: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 22175.00it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 24973.31it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 16385.86it/s]
+------------------------------ Captured log setup ------------------------------
+WARNING  app.services.ats_engine:ats_engine.py:1210 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+WARNING  app.services.ats_engine:ats_engine.py:1210 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+____________ test_batched_read_is_honest_every_job_is_still_visited ____________
+
+client = <starlette.testclient.TestClient object at 0x7fb4f79f0860>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMzdiZGY4MjQyMzQ0N2VjZTU4YjlmNGY3IiwidXNlckl...yMTk0Mjk2QGV4YW1wbGUuY29tIiwiaWF0IjoxNzg2MjU3NzY5LCJleHAiOjE3ODYzNDQxNjl9.l8BLNDFzdG1_fUNxkzgVjb0C5guHRLCEUZs4o06GAJ0'}
+job_sql = []
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb54907dee0>
+
+    def test_batched_read_is_honest_every_job_is_still_visited(
+        client, auth_headers, job_sql, monkeypatch
+    ):
+        """Bounding the read must never become a silent truncation.
+    
+        With the batch size forced to 2 and 5 scorable jobs seeded, the scorer must
+        issue MORE THAN ONE bounded read and end with all 5 rows scored — i.e. the
+        batching walks the whole catalog inside a single run, it does not stop at
+        the first page.
+        """
+        from app.agents.fit_scorer import FitScorerAgent
+        from app.repositories import job as job_repo
+        from app.repositories.job import JobRepository
+    
+>       monkeypatch.setattr(job_repo, "_SCORING_BATCH_SIZE", 2)
+E       AttributeError: <module 'app.repositories.job' from '/home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/job.py'> has no attribute '_SCORING_BATCH_SIZE'
+
+tests/test_blocker007_fit_scorer_read_path.py:272: AttributeError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 13650.57it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 27068.50it/s]
+------------------------------ Captured log setup ------------------------------
+WARNING  app.services.ats_engine:ats_engine.py:1210 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+=============================== warnings summary ===============================
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_is_bounded_per_statement
+FAILED tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_read_omits_the_board_only_correlated_subqueries
+FAILED tests/test_blocker007_fit_scorer_read_path.py::test_fit_scorer_does_not_use_the_board_list_query
+FAILED tests/test_blocker007_fit_scorer_read_path.py::test_batched_read_is_honest_every_job_is_still_visited
+4 failed, 6 warnings in 11.92s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, Iterator
 
 from app.db import (
     ensure_job_cover_suppression_column,
@@ -33,6 +33,29 @@ _JOB_COLUMNS = (
 #: it, and the UI states it), so the ``RETURNING`` clauses of create/update
 #: stay on ``_JOB_COLUMNS`` and need no extra DDL guard.
 _JOB_READ_COLUMNS = _JOB_COLUMNS + ', "lastSeenAt"'
+
+#: Projection for the FIT-SCORER's read path (BLOCKER-007) — deliberately NOT
+#: ``_JOB_READ_COLUMNS``. It is exactly the six values
+#: :meth:`app.agents.fit_scorer.FitScorerAgent.run` reads: ``id`` (the write
+#: key), ``fitScore``/``atsScore`` (the score-present decision), and
+#: ``title``/``description``/``requirements`` (the evidence text built by
+#: :func:`app.services.fit_evidence.job_evidence_text`). Same column set as
+#: ``fit_score_remediation._EVIDENCE_COLUMNS`` plus the two score columns.
+#:
+#: The board's projection additionally evaluates THREE correlated subqueries
+#: PER ROW (``tailoredResumeId``, ``tailoredResumeStatus``, and
+#: ``autopilotSuppressedUntil``, which itself runs three more correlated scans
+#: of ``AgentRun``). The scorer reads none of them, and paying for them was the
+#: bulk of the cost that put this read over the hosted 5 s statement timeout.
+_JOB_SCORING_COLUMNS = (
+    '"id", "title", "description", "requirements", "fitScore", "atsScore"'
+)
+
+#: Rows the fit-scorer pulls per round-trip. Bounded so the cost of ONE
+#: statement stays flat as the catalog grows, instead of scaling with it —
+#: mirrors ``fit_score_remediation._BATCH_SIZE`` (the other keyset-paged sweep
+#: over this table) so both walk it the same way.
+_SCORING_BATCH_SIZE = 500
 
 _TAILORED_RESUME_SUBQUERY = (
     '(SELECT r."id" FROM "Resume" r '
@@ -386,6 +409,63 @@ class JobRepository:
                     params,
                 )
                 return rows_to_dicts(cur)
+
+    def iter_scoring_candidates(self, user_id: str) -> Iterator[dict[str, Any]]:
+        """Stream EVERY job of ``user_id`` for the fit-scorer, one row at a time,
+        read in bounded keyset-paged batches (BLOCKER-007).
+
+        WHY THIS EXISTS, AND NOT ``list_by_user``
+        -----------------------------------------
+        The scorer used to read through :meth:`list_by_user` — the board's
+        projection: every column plus three correlated subqueries per row, and
+        no ``LIMIT``. Measured read-only against production on 2026-08-09 with
+        5848 rows on the owner account, that statement was CANCELED at 5005.9 ms
+        by the hosted 5 s ``statement_timeout`` (it needs 5701.5 ms when the
+        timeout is raised), so ``POST /agents/fit-scorer/run`` had returned 500
+        on all 66 discovery cycles since 2026-08-07T22:05Z and nothing was being
+        scored at all. The SAME catalog read through THIS method, measured the
+        same way: all 5848 rows in 13 statements, slowest statement 107.7 ms
+        (46x under the cap), 1831.7 ms end to end — of which ~130 ms per batch
+        is connection setup, the price of the short-lived-connection rule below.
+
+        SAME ROWS, NOT FEWER — this is a bounded read, not a truncated one
+        ------------------------------------------------------------------
+        Every job belonging to ``user_id`` is still yielded, in one run. There
+        is deliberately NO ``fitScore IS NULL`` predicate: the scorer's pass
+        over already-scored rows is what retires pre-gate junk scores
+        (``clear_fit_score``) and what self-heals a scored job still parked at
+        ``discovered`` — filtering those rows out in SQL would silently stop
+        both. The evidence gate likewise stays in Python
+        (:func:`app.services.fit_evidence.has_scorable_evidence`); a SQL length
+        expression would be a second, drifting definition of it, for the reasons
+        set out in :mod:`app.services.fit_score_remediation`.
+
+        The keyset cursor advances on ``id``, which no scorer write touches, so
+        the in-loop score/status updates cannot make the walk skip or repeat a
+        row. A job INSERTED by a concurrent sweep whose ``id`` sorts BELOW the
+        current cursor is not seen by the run in progress; the next discovery
+        cycle picks it up, exactly as it would have before this change (that
+        job did not exist when the old single ``SELECT`` ran either).
+
+        The connection is released before each batch is yielded, so the caller's
+        per-row writes never run inside a held read connection (the hosted
+        database caps concurrent connections at 25).
+        """
+        sql = (
+            f'SELECT {_JOB_SCORING_COLUMNS} FROM "Job" '
+            f'WHERE "userId" = %s AND "id" > %s '
+            f'ORDER BY "id" LIMIT {int(_SCORING_BATCH_SIZE)}'
+        )
+        last_id = ""
+        while True:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (user_id, last_id))
+                    batch = rows_to_dicts(cur)
+            if not batch:
+                return
+            yield from batch
+            last_id = batch[-1]["id"]
 
     def get_by_id(self, job_id: str, user_id: str) -> dict[str, Any] | None:
         ensure_job_cover_suppression_column()

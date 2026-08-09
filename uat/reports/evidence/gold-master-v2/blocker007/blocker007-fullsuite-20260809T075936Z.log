@@ -1,0 +1,288 @@
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+..........................................................s............. [  2%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 18%]
+........................................................................ [ 21%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+.......Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]......Loading weights: 100%|██████████| 103/103 [00:00<00:00, 5503.56it/s]
+........................................................... [ 44%]
+........................................................................ [ 47%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 66%]
+....................................Loading weights:   0%|          | 0/103 [00:00<?, ?it/s].................................... [ 68%]
+........................................................................ [ 71%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 79%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+........................................................................ [ 92%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+.........................................................                [100%]
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/test_analytics.py::TestAnalytics::test_time_period_filter_works
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/analytics.py:106: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    job_filter = _period_clause(period, '"createdAt"')
+
+tests/test_applications_move.py::TestApplicationMove::test_job_fed_target_is_422[discovered]
+tests/test_applications_move.py::TestApplicationMove::test_job_fed_target_is_422[evaluating]
+tests/test_applications_move.py::TestApplicationMove::test_job_fed_target_is_422[tailoring]
+tests/test_applications_move.py::TestApplicationMove::test_unknown_stage_is_422
+tests/test_gmv2_wf_stage_patch.py::TestStagePatchEndpointExists::test_illegal_job_fed_target_is_422_with_honest_message
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/services/stage_transitions.py:154: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    new_status = validate_stage(to_stage, APP_STAGE_TO_STATUS, "application")
+
+tests/test_applications_move.py::TestApplicationMove::test_closed_application_cannot_move[rejected]
+tests/test_applications_move.py::TestApplicationMove::test_closed_application_cannot_move[withdrawn]
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/applications.py:363: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    move_application_stage(
+
+tests/test_applications_move.py::TestJobPipelineMove::test_app_fed_target_is_422[ready]
+tests/test_applications_move.py::TestJobPipelineMove::test_app_fed_target_is_422[submitted]
+tests/test_applications_move.py::TestJobPipelineMove::test_app_fed_target_is_422[in-review]
+tests/test_applications_move.py::TestJobPipelineMove::test_app_fed_target_is_422[interview]
+tests/test_applications_move.py::TestJobPipelineMove::test_app_fed_target_is_422[offer]
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/services/stage_transitions.py:270: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    new_status = validate_stage(to_stage, JOB_STAGE_TO_STATUS, "job")
+
+tests/test_applications_tracker.py: 2 warnings
+tests/test_approval_modal.py: 1 warning
+tests/test_email_agent.py: 1 warning
+tests/test_gap_d3_agent_config.py: 1 warning
+tests/test_gm2_s15_stored_signoff_leak_paths.py: 2 warnings
+tests/test_ml_admin_003_nul_query_param.py: 5 warnings
+tests/test_ml_adv_002_oauth_exchange_status.py: 1 warning
+tests/test_ml_email_drafting_fix.py: 1 warning
+tests/test_mv_resume_grounding.py: 1 warning
+tests/test_networking.py: 1 warning
+tests/test_offers_persist.py: 1 warning
+tests/test_rt_009_010_apply_wiring.py: 2 warnings
+  /opt/abacus-python/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1033: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    result = context.run(func, *args)
+
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_ready_jobs_with_old_posting_dates_are_returned
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_feed_rows_expose_their_real_posting_age
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_listing_the_source_stopped_returning_is_hidden_but_kept
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_listing_the_source_stopped_returning_is_hidden_but_kept
+tests/test_blocker_006_empty_feed.py::TestJobsEndpointBlocker006::test_camel_case_includeStale_is_accepted
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:239: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    else (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
+
+tests/test_blocker_006_empty_feed.py::TestSweepRecordsLiveness::test_create_stamps_last_seen_at
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:336: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "postedAt": (datetime.utcnow() - timedelta(days=140)).isoformat(),
+
+tests/test_blocker_006_empty_feed.py::TestSweepRecordsLiveness::test_create_stamps_last_seen_at
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_blocker_006_empty_feed.py:360: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert stamped > datetime.utcnow() - timedelta(minutes=5), (
+
+tests/test_f02_backend_user_scoped_discovery.py::TestPipelineRunDerivesTheSearchFromTheUser::test_empty_profile_is_refused_by_name_not_substituted
+tests/test_f02_backend_user_scoped_discovery.py::TestPipelineRunDerivesTheSearchFromTheUser::test_a_refused_pipeline_records_and_bills_nothing
+tests/test_f02_backend_user_scoped_discovery.py::TestPipelineRunDerivesTheSearchFromTheUser::test_half_a_profile_is_refused_naming_only_the_missing_half
+tests/test_f02_backend_user_scoped_discovery.py::TestScoutRunDerivesTheSearchFromTheUser::test_empty_profile_is_refused_by_name
+tests/test_f02_backend_user_scoped_discovery.py::TestScoutRunDerivesTheSearchFromTheUser::test_the_shared_dispatch_seam_refuses_too
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:1779: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    raise _missing_search_target_422(missing)
+
+tests/test_gap_p4_002_guard_degrade.py::TestGuardRejectionIsAnHonestCompletedDegrade::test_rejection_still_propagates_so_callers_keep_their_shape
+tests/test_ml_f1_f3_run_route_and_agent_list.py::test_the_dedicated_cover_letter_route_keeps_its_422_wording
+tests/test_wb1_blocker002_placeholder_signer_name.py::test_cover_letter_refuses_placeholder_signer_name[GAP-P7-DEF-B Probe 1785452243543]
+tests/test_wb1_blocker002_placeholder_signer_name.py::test_cover_letter_refuses_placeholder_signer_name[QA Test Runner 445566778899]
+tests/test_wb1_blocker002_placeholder_signer_name.py::test_cover_letter_refuses_placeholder_signer_name[probe_user_20260731093000]
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:2696: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    raise _guard_rejection_http_error("Cover letter", exc) from exc
+
+tests/test_gap_p5_auth_compliance.py::test_put_deployment_credential_rejects_subscription_oauth
+tests/test_gap_p7_def_a_dual_mode.py::test_garbage_credential_returns_422_naming_both_formats
+tests/test_gap_p7_def_a_dual_mode.py::test_legacy_subscription_oauth_label_still_rejected
+tests/test_ml_cred_001.py::test_bare_oat_no_digit_still_rejected_as_oauth_token
+tests/test_ml_cred_001.py::test_legacy_subscription_oauth_label_still_rejected
+tests/test_ml_cred_001.py::test_garbage_credential_still_422_message_never_echoes_secret
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_put_rejects_mismatched_anthropic_prefix
+tests/test_provider_config.py::TestCredentialEndpoints::test_anthropic_subscription_oauth_write_is_rejected
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:3821: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode, stored_secret = _validate_provider_auth(
+
+tests/test_gap_p5_auth_compliance.py::test_put_user_credential_rejects_subscription_oauth
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:4089: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    stored_mode, stored_secret = _validate_provider_auth(
+
+tests/test_gap_p6_admin.py::test_spend_cap_malformed_json_authed_is_422
+tests/test_gap_p6_admin.py::test_spend_cap_invalid_value_authed_is_422
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/admin.py:109: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    body = await _parse_spend_cap_body(request)
+
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_hides_seek_and_stale_include_stale_shows_them
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+tests/test_gap_p6_sourcing.py::TestJobsFeedEndpoint::test_default_feed_has_zero_duplicate_external_urls
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/tests/test_gap_p6_sourcing.py:408: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    posted = (datetime.utcnow() - timedelta(days=posted_days_ago)).isoformat()
+
+tests/test_gm2_s15_stored_signoff_leak_paths.py::test_refine_refuses_contaminated_stored_letter[GAP-P7-DEF-B Probe 1785452243543]
+tests/test_gm2_s15_stored_signoff_leak_paths.py::test_refine_refuses_contaminated_stored_letter[GAP-P7-DEF-B Probe 1784823962960]
+tests/test_ml_w26_refine_claim_guard.py::TestRefineClaimGuard::test_refine_rejects_unevidenced_jd_sourced_claim
+tests/test_wb1_blocker002_placeholder_signer_name.py::test_refine_refuses_placeholder_signer_name
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/cover_letters.py:950: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    lambda: _refine_cover_letter_body(letter_id, body, current_user),
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:20: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    token = pp.Word(tchar).setName("token")
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:21: PyparsingDeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+    token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:21: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:25: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:25: PyparsingDeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+    quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:26: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+    auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:26: PyparsingDeprecationWarning: 'addParseAction' deprecated - use 'add_parse_action'
+    auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:28: PyparsingDeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+    params = pp.Dict(pp.delimitedList(pp.Group(auth_param)))
+
+tests/test_gmail_service.py::test_send_without_credential_raises_not_connected
+  /opt/abacus-python/lib/python3.12/site-packages/httplib2/auth.py:34: PyparsingDeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+    www_authenticate = pp.delimitedList(pp.Group(challenge))
+
+tests/test_gmv2_wf_stage_patch.py::TestStagePatchEndpointExists::test_closed_application_cannot_move
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/applications.py:319: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    move_application_stage(
+
+tests/test_google_oauth.py::test_exchange_code_sets_verifier_from_state_before_fetch_token
+tests/test_wcal_google_calendar.py::test_exchange_persists_scopes_google_actually_granted
+tests/test_wcal_google_calendar.py::test_partial_grant_still_completes_so_the_gmail_connection_survives
+tests/test_wcal_google_calendar.py::test_full_grant_records_calendar_scope
+tests/test_wcal_google_calendar.py::test_relax_env_flag_is_not_left_set_after_exchange
+  /opt/abacus-python/lib/python3.12/site-packages/google_auth_oauthlib/helpers.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    credentials.expiry = datetime.datetime.utcfromtimestamp(session.token["expires_at"])
+
+tests/test_ml_admin_003_nul_query_param.py::test_admin_users_q_nul_byte_returns_422_not_500
+tests/test_ml_admin_003_nul_query_param.py::test_admin_users_plan_nul_byte_returns_422_not_500
+tests/test_ml_admin_003_nul_query_param.py::test_admin_users_nul_byte_recovers_for_next_normal_request[q]
+tests/test_ml_admin_003_nul_query_param.py::test_admin_users_nul_byte_recovers_for_next_normal_request[plan]
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/repositories/admin.py:568: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(f'SELECT count(*) {from_sql}{where_sql}', params)
+
+tests/test_ml_admin_003_nul_query_param.py::test_networking_contacts_company_nul_byte_returns_422_not_500
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/networking.py:211: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(
+
+tests/test_ml_admin_003_nul_query_param.py::test_networking_outreach_contact_id_nul_byte_returns_422_not_500
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/networking.py:385: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(
+
+tests/test_ml_admin_003_nul_query_param.py::test_workspaces_emails_inbox_thread_id_nul_byte_returns_422_not_500
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/workspaces.py:520: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(
+
+tests/test_ml_admin_003_nul_query_param.py::test_interviews_application_id_nul_byte_returns_422_not_500
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/interviews.py:451: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(
+
+tests/test_ml_catalog_fix1.py::test_unknown_model_id_rejected_valid_model_accepted
+tests/test_ml_model_curation.py::test_denylisted_model_not_offered_and_rejected_on_save
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:3349: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    _validate_agent_model(body.model, user_id)
+
+tests/test_ml_cred_002_anthropic_oauth.py::test_exchange_malformed_pasted_code_rejected_422[justacodenohashmark-no-hash-separator]
+tests/test_ml_cred_002_anthropic_oauth.py::test_exchange_malformed_pasted_code_rejected_422[CODEVALUE#-empty-state-half]
+tests/test_ml_cred_002_anthropic_oauth.py::test_exchange_malformed_pasted_code_rejected_422[#STATEVALUE-empty-code-half]
+tests/test_ml_cred_002_anthropic_oauth.py::test_exchange_malformed_pasted_code_rejected_422[-empty-string]
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:4248: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    code, state = _parse_pasted_oauth_code(body.pastedCode)
+
+tests/test_ml_f1_f3_run_route_and_agent_list.py::test_generic_run_route_returns_422_for_a_fabrication_rejection
+tests/test_ml_f1_f3_run_route_and_agent_list.py::test_generic_run_route_returns_422_for_a_structural_rejection
+tests/test_ml_f1_f3_run_route_and_agent_list.py::test_a_guard_rejection_through_the_generic_route_is_still_refunded
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/agents.py:4475: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    raise _guard_rejection_http_error(_display_for_backend(name), exc) from exc
+
+tests/test_mv_j_correctness.py: 1 warning
+tests/test_wb1_incb002_email_verification_toggle.py: 11 warnings
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/admin.py:223: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    body = await _parse_settings_body(request)
+
+tests/test_mv_resume_grounding.py::test_no_resume_user_cover_letter_refused_no_operator_pii
+tests/test_mv_resume_grounding.py::test_no_resume_user_tailor_refused_and_no_base_created
+tests/test_mv_resume_grounding.py::test_no_resume_user_fit_scoring_refused_no_operator_score
+  /opt/abacus-python/lib/python3.12/site-packages/starlette/_exception_handler.py:59: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    response = await handler(conn, exc)
+
+tests/test_resume_upload.py::test_upload_rejects_too_short_content
+tests/test_resume_upload.py::test_upload_rejects_unparseable_pdf
+  /opt/abacus-python/lib/python3.12/site-packages/fastapi/routing.py:345: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+tests/test_wb1_ml_settings_006_nul_byte.py::test_nul_byte_in_full_name_returns_422_not_500
+tests/test_wb1_ml_settings_006_nul_byte.py::test_nul_byte_in_target_role_returns_422_not_500
+tests/test_wb1_ml_settings_006_nul_byte.py::test_nul_byte_in_location_returns_422_not_500
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/workspaces.py:1146: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    cur.execute(
+
+tests/test_wsub_real_submission.py::TestExecuteTransmits::test_refuses_when_no_genuine_recipient
+  /home/ubuntu/github_repos/aether-job-career-agent/apps/api/app/routers/approvals.py:293: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    submitted = _execute_application_submit(approval, current_user)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2720 passed, 1 skipped, 134 warnings in 3996.06s (1:06:36)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+EXIT=0
