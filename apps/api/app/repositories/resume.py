@@ -221,8 +221,8 @@ class ResumeRepository:
                 cur.execute(
                     f'SELECT {_RESUME_COLUMNS} FROM "Resume" '
                     'WHERE "userId" = %s AND "parentId" IS NULL '
-                    'ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC '
-                    'LIMIT 1',
+                    'ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC, '
+                    '"version" DESC LIMIT 1',
                     (user_id,),
                 )
                 rows = rows_to_dicts(cur)

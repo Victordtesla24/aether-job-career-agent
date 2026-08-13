@@ -416,9 +416,14 @@ export interface SettingsPayload {
     activeFile: string | null;
     uploadedAt: string | null;
     versions: number;
-    /** U2a (R-F1): whether the active resume has its original upload bytes
-     * stored (immutable baseline) — false for uploads made before format
-     * preservation existed, or when there is no resume at all. */
+    /** U2a (R-F1), re-refixed 2026-08-13 per the ORCHESTRATOR RULING
+     * (NEW-2/F-2): whether the user's BASELINE résumé — the most recent
+     * root upload (`parentId IS NULL`) with stored original bytes, NOT
+     * necessarily `activeFile` above — has its original upload bytes
+     * stored (immutable baseline). A tailored child is never the baseline,
+     * so a tailoring run never flips this to false; false for accounts
+     * with no byte-stored root upload at all (pre-feature uploads, or no
+     * resume yet). See workspaces.py's `_build_settings`/`base_resume_row`. */
     originalStored: boolean;
   };
   portfolio: { url: string | null; cadence: string | null; lastSynced: string | null; status?: string };

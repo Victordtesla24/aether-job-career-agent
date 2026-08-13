@@ -88,7 +88,10 @@ export const BASELINE_HELP_TEXT =
   "a résumé you upload yourself is not yet layout-preserved on download; " +
   "it still renders in the Aether template.";
 
-/** Badge copy for whether the active resume has its original bytes stored. */
+/** Badge copy for whether the user's BASELINE résumé (the immutable root
+ * upload, not necessarily whichever résumé is "active") has its original
+ * bytes stored — see `SettingsPayload.resume.originalStored` in
+ * `lib/api/workspaces.ts`. */
 export const ORIGINAL_STORED_LABEL = "Original stored ✓";
 export const ORIGINAL_NOT_STORED_LABEL = "Original not stored — re-upload to store it";
 

@@ -1043,12 +1043,15 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
             )
             user_rows = rows_to_dicts(cur)
 
-            # Latest resume. "hasOriginal" is a cheap boolean presence check —
-            # NOT a select of the (up to 10MB) originalFile blob itself, which
-            # has exactly one real consumer, GET /resumes/{id}/original.
+            # Latest resume — feeds "activeFile"/"uploadedAt" only. The
+            # "original stored" badge is a SEPARATE query below
+            # (base_resume_rows), since the badge must track the immutable
+            # baseline, not whichever résumé is newest (a tailored child
+            # never has stored original bytes) — see the ORCHESTRATOR
+            # RULING comment on that query for the full reasoning.
             cur.execute(
                 """
-                SELECT id, label, "createdAt", "originalFile" IS NOT NULL AS "hasOriginal"
+                SELECT id, label, "createdAt"
                 FROM "Resume"
                 WHERE "userId" = %s
                 ORDER BY version DESC NULLS LAST, "createdAt" DESC
@@ -1094,7 +1097,8 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
                 SELECT "originalFile" IS NOT NULL AS "hasOriginal"
                 FROM "Resume"
                 WHERE "userId" = %s AND "parentId" IS NULL
-                ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC
+                ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC,
+                    "version" DESC
                 LIMIT 1
                 """,
                 (uid,),
