@@ -59,3 +59,7 @@ stripe>=13.2,<14
 # the engine now raises/degrades honestly instead of substituting a fake
 # number — see ats_engine.SemanticScoringUnavailableError.
 sentence-transformers>=3.0
+# DOCX resume ingestion (U2a / R-F3): real text extraction for .docx uploads
+# via python-docx's paragraph/table model, replacing the undecodable-garbage
+# UTF-8 fallback (MON-012). 1.1.2 is installed and verified on this VM.
+python-docx>=1.1
