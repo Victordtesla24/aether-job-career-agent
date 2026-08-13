@@ -144,9 +144,11 @@ export default function AgentModelPicker({
         />
         {catalogProvider === "anthropic" ? (
           <span>
-            These are Anthropic&apos;s own curated models — assigning one runs
-            this role directly against the connected Anthropic credential. It
-            never routes through OpenRouter and never bills a different
+            These are Anthropic&apos;s own curated models for the Orchestrator
+            role. Today&apos;s sequencing is deterministic, so assigning one
+            costs nothing until a real planning call runs on it — and when it
+            does, it runs only against a connected, verified Anthropic
+            credential: never through OpenRouter, never against a different
             account.
           </span>
         ) : (

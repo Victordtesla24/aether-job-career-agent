@@ -149,3 +149,45 @@ def test_orchestrator_override_binds_into_a_no_silent_substitution_chain(
         f"silent fallback substitution) once bound as the active choice — "
         f"got chain {chain!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# F-1 (review re-fix, BLOCKER): the orchestrator's role assignment must not
+# fabricate spend for a step that makes NO LLM call. Giving ``supervisor`` a
+# real model id via ``_ROLE_MODEL_BACKENDS`` broke ``_execute_reserved_run``'s
+# zero-cost gate (``if model is None or ...``), which used to be true for
+# every deterministic backend precisely BECAUSE ``_model_for_agent`` returned
+# None for them. Once the role backend returns a real id, the gate must be
+# widened (not the id removed) so a supervisor step still records $0 / 0
+# tokens / model=None — exactly like every other deterministic agent.
+# --------------------------------------------------------------------------- #
+
+
+def test_supervisor_role_run_still_records_zero_cost_and_no_model(
+    client, auth_headers, test_user_id
+):
+    """FAILS on the regression: ``_model_for_agent('supervisor')`` now
+    returns the flagship anthropic id (this slice's own fix), so the costing
+    tail's ``model is None`` gate no longer fires and a run that made NO LLM
+    call gets priced off its params/output JSON at Opus rates."""
+    from app.routers.agents import _record_run
+
+    out = _record_run(
+        test_user_id,
+        "supervisor",
+        {},
+        lambda: {"plan": ["scout", "fitScorer", "matcher", "tailor", "coverLetter"]},
+    )
+    assert out["model"] is None, (
+        f"supervisor makes no LLM call — output['model'] must stay None, got "
+        f"{out['model']!r} (a real model id here means a run stamp that "
+        "never actually served this run)"
+    )
+    assert out["tokensIn"] == 0 and out["tokensOut"] == 0, out
+    assert out["costUsd"] == 0.0, (
+        f"supervisor run recorded costUsd={out['costUsd']!r} — GET "
+        "/agents/stats sums this into spendUsd/avgCostPerRun/tokensTotal for "
+        "a step that made NO LLM call and charges no quota "
+        "(_call_is_metered is False for it)."
+    )
+    assert out["billingAudit"] == {"quotaPath": "none"}, out["billingAudit"]

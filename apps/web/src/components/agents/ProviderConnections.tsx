@@ -57,6 +57,7 @@ export default function ProviderConnections({
   title = "AI Provider Connections",
   blurb,
   anthropicModels = null,
+  anthropicModelsError = null,
 }: {
   providers: Provider[];
   loading: boolean;
@@ -76,8 +77,20 @@ export default function ProviderConnections({
    * for this card). `null` while loading; falls back to `providers[].models`
    * (bare ids, no pricing) so the select never regresses to "no models" while
    * the live fetch is in flight or has failed.
+   *
+   * F-3 re-fix: this live catalog is CREDENTIAL-INDEPENDENT (the endpoint
+   * answers 200 unconditionally, ADR-ML-4), so it may only back THIS card's
+   * select while `p.status === "connected"` in the scope this panel is
+   * showing — otherwise the backend's own honest-empty-list gating for
+   * unconfigured/needs-reauth providers (D-0020) would be dead for this one
+   * card. See the `anthropicOptions` computation below.
    */
   anthropicModels?: ProviderModel[] | null;
+  /** F-4: the live anthropic-catalog fetch's error, if it failed — surfaced
+   *  on the card so an empty anthropic select names the REAL cause (the fetch
+   *  failed) instead of the generic "configure below" copy, which is false
+   *  once a credential is actually connected. */
+  anthropicModelsError?: string | null;
 }) {
   return (
     <section data-testid="provider-connections">
@@ -107,21 +120,35 @@ export default function ProviderConnections({
           {providers.map((p) => {
             const action = providerAction(p.status);
             const busy = busyId === p.id;
-            const modelLockReason = providerModelDisabledReason(p);
             const badge = providerSourceBadge(p);
-            // ML-U1X-b: for anthropic, prefer the live-fetched catalog and
-            // fall back to the seed's bare id list only while that fetch
-            // hasn't resolved yet (or failed) — never a blanket "no models"
-            // for a card that has real options available either way. Labels
-            // stay bare ids here (pricing is the Orchestrator role picker's
-            // job, AgentModelPicker below) so this card matches every other
-            // provider's plain-id select.
+            // F-3 re-fix: the live-fetched catalog is credential-independent,
+            // so it may only stand in for the seed once THIS scope's card is
+            // actually `connected` — otherwise an unconfigured/needs-reauth
+            // card would show a real, selectable catalog for a credential
+            // nobody can call (D-0020 — the backend's own gating on `p.models`
+            // becomes dead for this card if the live fetch is preferred
+            // unconditionally). When connected, prefer the live fetch (it
+            // carries real pricing) and fall back to the seed's bare id list
+            // only while that fetch hasn't resolved yet or failed — the seed
+            // is ALSO real for a connected provider (backend static-catalog
+            // wiring), so this never regresses to a blanket "no models".
+            // Labels stay bare ids here (pricing is the Orchestrator role
+            // picker's job, AgentModelPicker below) so this card matches
+            // every other provider's plain-id select.
             const anthropicOptions =
-              p.id === "anthropic"
+              p.id === "anthropic" && p.status === "connected"
                 ? anthropicModels && anthropicModels.length > 0
                   ? anthropicModels.map((m) => ({ id: m.id, label: m.id }))
                   : p.models.map((id) => ({ id, label: id }))
                 : [];
+            // F-4: key the lock reason on the count of options THIS card is
+            // actually about to render (never the raw seed length for
+            // anthropic), so the tooltip and the `disabled` attribute below
+            // — both driven by `anthropicOptions.length` — can never diverge.
+            const modelLockReason =
+              p.id === "anthropic"
+                ? providerModelDisabledReason(p, anthropicOptions.length)
+                : providerModelDisabledReason(p);
             return (
               <div
                 key={p.id}
@@ -217,7 +244,11 @@ export default function ProviderConnections({
                       className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
                     >
                       {anthropicOptions.length === 0 ? (
-                        <option value="">No preset models — configure below</option>
+                        <option value="">
+                          {p.status === "connected" && anthropicModelsError
+                            ? `Catalog unavailable — ${anthropicModelsError}`
+                            : "No preset models — configure below"}
+                        </option>
                       ) : (
                         anthropicOptions.map((m) => (
                           <option key={m.id} value={m.id}>

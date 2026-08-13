@@ -868,6 +868,7 @@ export default function AgentsPage() {
         onConfigure={openConfig}
         onModel={(id, model) => void onProviderModel(id, model)}
         anthropicModels={anthropicModels}
+        anthropicModelsError={anthropicModelsError}
         title={
           isAdmin === null
             ? "AI Providers"

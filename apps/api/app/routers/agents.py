@@ -1330,7 +1330,21 @@ def _execute_reserved_run(
         )
         output["requestedModel"] = model
         model = _served_model
-    if model is None or no_llm_call or cover_degraded:
+    # F-1 re-fix (ML-U1X-b regression): ``_model_for_agent`` now returns a real
+    # id for a ROLE backend (``supervisor``/Orchestrator, ``_ROLE_MODEL_BACKENDS``)
+    # even though that backend makes NO LLM call today — its sequencing is
+    # deterministic (see the comment above ``_LLM_TIER_BY_BACKEND``). A backend
+    # absent from ``_LLM_TIER_BY_BACKEND`` NEVER reaches the model regardless of
+    # what its picker displays, so it must stay zero-cost/zero-token exactly like
+    # every other deterministic agent (scout/fitScorer/matcher) — anything else
+    # fabricates the spend/ROI figures GET /agents/stats reports, and would do so
+    # for every pipeline run since the supervisor step runs on all of them.
+    if (
+        model is None
+        or no_llm_call
+        or cover_degraded
+        or agent_name not in _LLM_TIER_BY_BACKEND
+    ):
         cost = 0.0
         output["model"] = None
         output["tokensIn"] = 0

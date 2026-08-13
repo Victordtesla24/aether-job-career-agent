@@ -69,19 +69,29 @@ export function agentStatusLabel(
  * needs to explain itself, so this backs a `title` tooltip rather than
  * leaving the lock silent.
  *
- * ML-U1X-b honesty fix: this used to key PURELY on `provider.models.length
- * === 0`, so a genuinely CONNECTED + verified provider (e.g. Anthropic before
- * this same slice wired its catalog into the FE fetch) was told "configure
- * its credentials" — nonsensical advice for someone who already has. A
- * `status === "connected"` provider's catalog may legitimately be fetched
- * from elsewhere (the live `fetchProviderModels` call, not this static seed
- * array), so an empty `models` array here is no longer evidence of a locked
- * select for a connected provider — only for one that is NOT connected
- * (unconfigured, or needing re-auth) does an empty list mean "nothing to
- * pick from."
+ * `optionCount` defaults to `provider.models.length` but a caller rendering a
+ * DIFFERENT option list than the seed array (e.g. the anthropic card, which
+ * prefers a live-fetched catalog over `provider.models`) must pass the
+ * ACTUAL number of options it is about to render — the select's `disabled`
+ * attribute and this reason must always agree on the same count, or a
+ * genuinely locked control renders with no explanation (F-4).
+ *
+ * ML-U1X-b honesty-fix history: this once keyed PURELY on
+ * `provider.models.length === 0` (told an already-connected provider to
+ * "configure its credentials"), then briefly suppressed the reason entirely
+ * for ANY `status === "connected"` provider — which silently dropped the
+ * explanation the moment a connected provider's real option source (a live
+ * fetch elsewhere) came back empty or failed. Keying on the actual rendered
+ * option count fixes both directions: a connected provider with real options
+ * is never told it has none, and a connected-but-currently-optionless
+ * provider (failed live fetch, cold cache, ...) still gets an honest reason
+ * instead of a silently-locked control.
  */
-export function providerModelDisabledReason(provider: Provider): string | null {
-  if (provider.status !== "connected" && provider.models.length === 0) {
+export function providerModelDisabledReason(
+  provider: Provider,
+  optionCount: number = provider.models.length,
+): string | null {
+  if (optionCount === 0) {
     return `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`;
   }
   return null;

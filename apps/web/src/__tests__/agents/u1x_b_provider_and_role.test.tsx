@@ -100,8 +100,14 @@ const ANTHROPIC_MODELS: ProviderModel[] = [
   { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", promptPerM: 1, completionPerM: 5, contextLength: 200000, tier: "budget", reasoning: false },
 ];
 
-/** Anthropic's REAL live shape today (connected + verified, per the RCA's
- * live probe) — `models: []` is exactly the bug, not a fixture mistake. */
+/** Anthropic's REAL live shape TODAY (connected + verified, per the RCA's
+ * live probe). `models` was `[]` at RED-authorship time (the exact bug this
+ * file pins) — the shipped BE fix (ML-U1X-a, `_build_provider_entry`) now
+ * genuinely populates it with the static catalog ids whenever a connected+
+ * verified credential exists, which is what a connected anthropic provider
+ * actually returns post-fix. Kept non-empty here so this fixture matches
+ * live reality and the F-4 re-fix (providerModelDisabledReason keys on the
+ * REAL option count) evaluates it correctly. */
 const CONNECTED_ANTHROPIC: Provider = {
   id: "anthropic",
   name: "Anthropic Claude",
@@ -109,7 +115,7 @@ const CONNECTED_ANTHROPIC: Provider = {
   status: "connected",
   model: "",
   detail: "Credential stored in the encrypted vault (…oat01)",
-  models: [],
+  models: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
   icon: "fa-a",
   color: "#D97757",
   source: "database",
