@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
+import MetricTooltip from "../../components/MetricTooltip";
 import { useRealtimeResources } from "../../hooks/useRealtime";
 import { useNow } from "../../hooks/useNow";
 import MarketPulse from "../../components/analytics/MarketPulse";
@@ -488,7 +489,21 @@ export default function DashboardPage() {
                   return (
                     <div key={stage.key}>
                       <div className="mb-1.5 flex justify-between text-xs">
-                        <span className="text-aether-muted">{stage.label}</span>
+                        {stage.key === "jobs_found" ? (
+                          // M-04/M-06: the funnel's "Jobs Found" is the cumulative
+                          // count of every job ever discovered for you (the top of
+                          // the application funnel), which is legitimately larger
+                          // than the Jobs Discovery board's live list (open, not-yet-
+                          // archived postings). Explaining it stops the two numbers
+                          // reading as a data bug.
+                          <MetricTooltip
+                            className="text-aether-muted"
+                            value={stage.label}
+                            tooltip="Total jobs discovered for you across all time — the top of your application funnel. The Jobs board shows only currently-open, un-archived postings, so its count is usually lower."
+                          />
+                        ) : (
+                          <span className="text-aether-muted">{stage.label}</span>
+                        )}
                         <span className="mono font-medium">{value}</span>
                       </div>
                       <div className="h-2 rounded-full bg-white/5">

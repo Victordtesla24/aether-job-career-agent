@@ -1118,7 +1118,7 @@ export default function SettingsClient({
                       Price:{" "}
                       <span className="mono font-semibold text-aether-text">
                         {currentPriceBreakdown
-                          ? `${formatAud(currentPriceBreakdown.total)} / ${
+                          ? `${formatAud(currentPriceBreakdown.total)} AUD / ${
                               subscription.interval === "year" ? "year" : "month"
                             }`
                           : "Price unavailable"}

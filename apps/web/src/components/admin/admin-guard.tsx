@@ -29,9 +29,25 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+    // C-04 (QA-v2): the admin health page was observed permanently stuck on
+    // "Verifying admin access..." — if fetchMe() never settles (a hung
+    // request, a chunk that failed to load, a flaky network) the gate stayed
+    // in "checking" forever and the page never rendered. A token holder has
+    // already passed the localStorage check above and the BACKEND is the real
+    // authority (every /api/admin/* route independently enforces AdminUser and
+    // 403s a non-admin), so falling THROUGH to render the admin chrome after a
+    // grace period is safe: a non-admin who slips past this client hint simply
+    // sees empty/forbidden data from the API, never privileged data. The
+    // timeout only ever fires if the /auth/me check hasn't resolved in time.
+    const fallback = setTimeout(() => {
+      if (!cancelled) {
+        setState((prev) => (prev === "checking" ? "allowed" : prev));
+      }
+    }, 4000);
     fetchMe()
       .then((me) => {
         if (cancelled) return;
+        clearTimeout(fallback);
         if (me.isAdmin) {
           setState("allowed");
         } else {
@@ -41,15 +57,25 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setState("denied");
+        clearTimeout(fallback);
+        // A definitive 401 means the session is gone — bounce to /login. Any
+        // OTHER failure (network/transient) is NOT proof the user is a
+        // non-admin, so we no longer eagerly redirect to /dashboard on it;
+        // the timeout above will fall through to render and let the API be
+        // the authority, matching the "never strand a real admin" goal.
         if (err instanceof ApiError && err.status === 401) {
+          setState("denied");
           router.replace("/login");
-        } else {
+        } else if (err instanceof ApiError && err.status === 403) {
+          setState("denied");
           router.replace("/dashboard");
+        } else {
+          setState((prev) => (prev === "checking" ? "allowed" : prev));
         }
       });
     return () => {
       cancelled = true;
+      clearTimeout(fallback);
     };
   }, [router]);
 

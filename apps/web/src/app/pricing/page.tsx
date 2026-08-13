@@ -93,6 +93,10 @@ export default function PricingPage() {
   // PAY-R3-05: dismissible notice for a shopper who backed out of Checkout
   // (cancel_url=/pricing?checkout=cancel).
   const [cancelNotice, setCancelNotice] = useState(false);
+  // H-04/M-01: the plan a returning visitor was signing in to subscribe to
+  // (?plan= set by the login round-trip). Drives the interval preselect + a
+  // highlight/notice so their choice survives login.
+  const [preselectedPlan, setPreselectedPlan] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +140,14 @@ export default function PricingPage() {
     if (params.get("checkout") === "cancel") {
       setCancelNotice(true);
       window.history.replaceState(null, "", "/pricing");
+      return;
+    }
+    // H-04/M-01: returning from the login round-trip with a remembered plan.
+    const planParam = params.get("plan");
+    const knownPlans = ["starter", "pro", "power"];
+    if (planParam && knownPlans.includes(planParam)) {
+      setPreselectedPlan(planParam);
+      if (params.get("interval") === "year") setInterval("year");
     }
   }, []);
 
@@ -157,6 +169,19 @@ export default function PricingPage() {
     async (plan: Plan) => {
       setCheckoutError(null);
       setSwitchNotice(null);
+      // H-04/M-01: an unauthenticated visitor who picks a paid plan should keep
+      // that selection. Rather than firing a checkout that 401s and dumps them
+      // on a context-free login, carry the plan + interval to /login so they
+      // return to pricing ready to subscribe to the tier they chose.
+      if (!isAuthed) {
+        const params = new URLSearchParams({
+          plan: plan.id,
+          interval,
+          next: "/pricing",
+        });
+        window.location.href = `/login?${params.toString()}`;
+        return;
+      }
       setSubmitting(plan.id);
       try {
         const result = await startCheckout(plan.id, interval);
@@ -200,7 +225,7 @@ export default function PricingPage() {
         setSubmitting(null);
       }
     },
-    [interval],
+    [interval, isAuthed],
   );
 
   return (
@@ -303,6 +328,28 @@ export default function PricingPage() {
           </div>
         ) : null}
 
+        {preselectedPlan && isAuthed ? (
+          <div
+            role="status"
+            data-testid="preselected-plan-notice"
+            className="mb-6 flex items-center justify-center gap-3 rounded-xl border border-aether-indigo/30 bg-aether-indigo/10 px-4 py-2.5 text-center text-sm text-aether-indigo"
+          >
+            <span>
+              You&apos;re signed in — confirm your{" "}
+              <span className="font-semibold capitalize">{preselectedPlan}</span> subscription below.
+            </span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-testid="preselected-plan-notice-dismiss"
+              onClick={() => setPreselectedPlan(null)}
+              className="text-aether-indigo/70 hover:text-aether-indigo"
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+
         {plans === null && !loadError ? (
           <p data-testid="pricing-loading" className="text-center text-sm text-aether-muted">
             Loading plans…
@@ -332,8 +379,13 @@ export default function PricingPage() {
                 <div
                   key={plan.id}
                   data-testid={`pricing-tier-${plan.id}`}
+                  data-preselected={preselectedPlan === plan.id ? "true" : undefined}
                   className={`glass flex flex-col rounded-2xl border p-6 ${
-                    isCurrentPlan ? "border-aether-green/40" : "border-white/10"
+                    isCurrentPlan
+                      ? "border-aether-green/40"
+                      : preselectedPlan === plan.id
+                        ? "border-aether-indigo/60 ring-2 ring-aether-indigo/40"
+                        : "border-white/10"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">

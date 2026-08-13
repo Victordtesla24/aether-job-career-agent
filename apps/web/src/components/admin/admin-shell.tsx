@@ -20,6 +20,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/health", label: "Health" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/subscriptions", label: "Subscriptions" },
   { href: "/admin/spend", label: "Spend (US$)" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/audit-log", label: "Audit log" },

@@ -21,11 +21,25 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
       setAuthed(true);
     } else {
+      const path = window.location.pathname;
+      const search = window.location.search;
+      // C-06 (QA-v2): an unauthenticated visitor who lands on the app root
+      // (`/` redirects to `/dashboard` via next.config) previously hit a bare
+      // /login form with zero information about the product. Send that root
+      // landing to the public /pricing page instead — it is the real public
+      // landing page (tiers, feature copy, a "Sign in" link). This only fires
+      // for the exact /dashboard root with no deep path or query: a genuine
+      // deep-link (e.g. a bookmarked /dashboard/jobs) still goes to /login so
+      // the ?next round-trip returns the user where they intended to go.
+      if (path === "/dashboard" && search === "") {
+        router.replace("/pricing");
+        return;
+      }
       // Preserve the originally-requested destination so /login can return the
       // visitor there instead of dropping them on bare /dashboard
       // (MV-login-002). safeNextPath re-validates it on the login side, so an
       // attacker-crafted value here can never become an open redirect.
-      const intended = window.location.pathname + window.location.search;
+      const intended = path + search;
       router.replace(`/login?next=${encodeURIComponent(intended)}`);
     }
   }, [router]);

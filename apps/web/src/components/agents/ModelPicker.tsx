@@ -82,7 +82,21 @@ export default function ModelPicker({
 
   const providerId = provider?.id ?? null;
   const providerName = provider?.name ?? "";
-  const current = provider?.model ?? "";
+  const savedModel = provider?.model ?? "";
+  // H-01/H-03/M-09: reflect the chosen model in the UI IMMEDIATELY. The backend
+  // does persist the override (PUT /agents/providers/{id}) and GET
+  // /agents/providers reads it back, but the picker only re-derived `current`
+  // after the async refetch (onSaved) resolved — a visible lag that read as
+  // "the selection didn't stick". This optimistic override shows the new model
+  // as the current default at once, then defers to the freshly-persisted prop
+  // once it arrives (or reverts on failure).
+  const [optimisticModel, setOptimisticModel] = useState<string | null>(null);
+  const current = optimisticModel ?? savedModel;
+  // Once the persisted value updates (refetch completed), the prop is the
+  // single source of truth again.
+  useEffect(() => {
+    setOptimisticModel(null);
+  }, [savedModel]);
 
   const load = useCallback(async () => {
     if (!providerId) return;
@@ -106,6 +120,7 @@ export default function ModelPicker({
     async (model: string, label: string) => {
       if (!providerId || busy) return;
       setBusy(true);
+      setOptimisticModel(model); // reflect the choice at once (H-01/H-03/M-09)
       try {
         await updateProvider(providerId, { model });
         onNotice?.({
@@ -116,6 +131,7 @@ export default function ModelPicker({
         });
         await onSaved?.();
       } catch (e) {
+        setOptimisticModel(null); // save failed — revert to the persisted value
         onNotice?.({ kind: "error", text: `Couldn't update the model — ${errorText(e)}` });
       } finally {
         setBusy(false);

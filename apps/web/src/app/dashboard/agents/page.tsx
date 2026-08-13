@@ -133,6 +133,7 @@ export default function AgentsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [providerBusy, setProviderBusy] = useState<string | null>(null);
   const [toggleBusy, setToggleBusy] = useState<string | null>(null);
+  const [stoppingAll, setStoppingAll] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [configProvider, setConfigProvider] = useState<Provider | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -483,6 +484,58 @@ export default function AgentsPage() {
     }
   };
 
+  // H-06: a single kill-switch that pauses every currently-enabled agent.
+  // There is no server-side "stop all" endpoint (each agent's enabled flag is
+  // its own AgentConfig row), so this honestly pauses them one by one via the
+  // same PATCH the per-agent toggle uses, then refreshes from the server so
+  // the counts reflect the true post-stop state. Disabling an agent stops it
+  // being scheduled/triggered; it does not force-kill an already-running run
+  // (no cancel endpoint exists) — the notice says so.
+  const onStopAll = async () => {
+    const enabled = (catalog?.agents ?? []).filter((a) => a.enabled);
+    if (enabled.length === 0) {
+      setNotice({ kind: "info", text: "No agents are currently enabled." });
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Pause all ${enabled.length} enabled agent${enabled.length === 1 ? "" : "s"}? ` +
+          "They will stop being scheduled. Runs already in progress finish on their own.",
+      )
+    ) {
+      return;
+    }
+    setStoppingAll(true);
+    let failed = 0;
+    for (const agent of enabled) {
+      try {
+        await updateAgentConfig(agent.key, { enabled: false });
+      } catch {
+        failed += 1;
+      }
+    }
+    try {
+      const [cat, st] = await Promise.all([fetchCatalog(), fetchAgentStats()]);
+      setCatalog(cat);
+      setStats(st);
+    } catch {
+      // Leave the last-known catalog in place if the refresh itself fails.
+    }
+    setStoppingAll(false);
+    if (failed === 0) {
+      setNotice({
+        kind: "success",
+        text: `Paused ${enabled.length} agent${enabled.length === 1 ? "" : "s"}. New runs are on hold.`,
+      });
+    } else {
+      setNotice({
+        kind: "error",
+        text: `Paused ${enabled.length - failed} of ${enabled.length} agents; ${failed} could not be paused. Try again.`,
+      });
+    }
+  };
+
   // The provider card action opens the in-app credential configuration modal
   // (REQ-PC-1). There is no ".env editing" path and no doomed status-flip PUT:
   // credentials are entered, tested and removed entirely in the modal, which
@@ -586,6 +639,26 @@ export default function AgentsPage() {
               <>
                 <i className="fa-solid fa-inbox text-[10px]" aria-hidden="true" />
                 Scan Job Alerts
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            data-testid="stop-all-agents-btn"
+            onClick={() => void onStopAll()}
+            disabled={stoppingAll || busy !== null}
+            title="Pause every enabled agent so no new runs are scheduled"
+            className="flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {stoppingAll ? (
+              <>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-300/40 border-t-red-300" />
+                Stopping…
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-stop text-[10px]" aria-hidden="true" />
+                Stop All Agents
               </>
             )}
           </button>

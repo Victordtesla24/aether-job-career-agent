@@ -64,6 +64,20 @@ export function actionableApprovalCount(
   return approvals.filter((a) => a.status === "pending" && !isExpired(a, now)).length;
 }
 
+/** Human label for the notifications panel (M-05/M-09). */
+function approvalLabel(type: Approval["type"]): string {
+  switch (type) {
+    case "application_submit":
+      return "Application ready to submit";
+    case "email_send":
+      return "Email ready to send";
+    case "offer_response":
+      return "Offer response awaiting your decision";
+    default:
+      return "Approval requested";
+  }
+}
+
 /** Build the search index from the user's live jobs, applications and agents. */
 async function loadSearchIndex(): Promise<SearchHit[]> {
   const [jobs, applications, agents] = await Promise.all([
@@ -171,6 +185,12 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   const [greeting, setGreeting] = useState("Welcome");
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  // M-05/M-09: the bell now opens a real notifications panel (was a bare link).
+  // We keep the actionable pending approvals themselves so the dropdown can
+  // list them, honestly reflecting the same items the count is derived from.
+  const [approvalItems, setApprovalItems] = useState<Approval[]>([]);
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchIndex = useRef<SearchHit[] | null>(null);
@@ -243,7 +263,11 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
           // Only what the API will actually let the user act on — an expired
           // pending request answers 409, so counting it would be a promise the
           // backend refuses to keep (CRITICAL-4).
-          if (!cancelled) setPendingApprovals(actionableApprovalCount(items));
+          if (cancelled) return;
+          const now = Date.now();
+          const actionable = items.filter((a) => a.status === "pending" && !isExpired(a, now));
+          setApprovalItems(actionable);
+          setPendingApprovals(actionable.length);
         })
         .catch(() => undefined);
     void loadApprovals();
@@ -263,6 +287,23 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
       clearInterval(timer);
     };
   }, []);
+
+  // M-05/M-09: close the notifications panel on an outside click or Escape.
+  useEffect(() => {
+    if (!bellOpen) return;
+    function onDown(e: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setBellOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [bellOpen]);
 
   const today = new Date().toLocaleDateString("en-AU", {
     weekday: "short",
@@ -354,21 +395,76 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             Hidden on screens that subscribe to nothing, where there is genuinely
             nothing to report. */}
         <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
-        <Link
-          href="/dashboard/approvals"
-          aria-label={
-            pendingApprovals > 0
-              ? `Notifications — ${pendingApprovals} pending approval${pendingApprovals === 1 ? "" : "s"}`
-              : "Notifications — no pending approvals"
-          }
-          data-design-id="m-notif-md02"
-          className="relative w-10 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center justify-center"
-        >
-          <i className="fa-regular fa-bell text-aether-muted" />
-          {pendingApprovals > 0 ? (
-            <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
+        <div className="relative" ref={bellRef}>
+          <button
+            type="button"
+            onClick={() => setBellOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={bellOpen}
+            aria-label={
+              pendingApprovals > 0
+                ? `Notifications — ${pendingApprovals} pending approval${pendingApprovals === 1 ? "" : "s"}`
+                : "Notifications — no pending approvals"
+            }
+            data-design-id="m-notif-md02"
+            data-testid="notification-bell"
+            className="relative w-10 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center justify-center"
+          >
+            <i className="fa-regular fa-bell text-aether-muted" />
+            {pendingApprovals > 0 ? (
+              <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
+            ) : null}
+          </button>
+          {bellOpen ? (
+            <div
+              role="menu"
+              data-testid="notification-panel"
+              className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                <span className="text-sm font-semibold text-aether-text">Notifications</span>
+                {pendingApprovals > 0 ? (
+                  <span className="rounded-full bg-aether-coral/15 px-2 py-0.5 text-[11px] font-medium text-aether-coral">
+                    {pendingApprovals} pending
+                  </span>
+                ) : null}
+              </div>
+              {approvalItems.length === 0 ? (
+                <p
+                  data-testid="notification-empty"
+                  className="px-4 py-6 text-center text-sm text-aether-muted"
+                >
+                  No new notifications.
+                </p>
+              ) : (
+                <ul className="max-h-80 overflow-y-auto py-1">
+                  {approvalItems.slice(0, 6).map((a) => (
+                    <li key={a.id}>
+                      <Link
+                        href="/dashboard/approvals"
+                        role="menuitem"
+                        onClick={() => setBellOpen(false)}
+                        className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5"
+                      >
+                        <span className="text-sm text-aether-text">{approvalLabel(a.type)}</span>
+                        <span className="text-[11px] text-aether-muted-dim">
+                          {timeAgo(a.createdAt)}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href="/dashboard/approvals"
+                onClick={() => setBellOpen(false)}
+                className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-semibold text-aether-indigo hover:bg-white/5"
+              >
+                View all approvals
+              </Link>
+            </div>
           ) : null}
-        </Link>
+        </div>
         {isAdmin ? (
           <Link
             href="/admin"

@@ -110,6 +110,9 @@ describe("PricingPage", () => {
   });
 
   it("Subscribe CTA starts checkout and redirects to the Stripe session URL", async () => {
+    // An authenticated visitor goes straight to checkout (an unauthenticated
+    // one is routed via /login with plan context — covered separately below).
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
     fetchPlansMock.mockResolvedValue(PLANS);
     startCheckoutMock.mockResolvedValue({
       checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test_abc",
@@ -132,6 +135,25 @@ describe("PricingPage", () => {
     await waitFor(() => {
       expect(hrefSetter).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_abc");
     });
+  });
+
+  it("H-04/M-01: an unauthenticated Subscribe click routes to /login carrying the plan context (no checkout fired)", async () => {
+    fetchPlansMock.mockResolvedValue(PLANS);
+    const hrefSetter = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { set href(v: string) { hrefSetter(v); }, get href() { return ""; }, search: "" },
+    });
+
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("subscribe-pro"));
+    fireEvent.click(screen.getByTestId("subscribe-pro"));
+
+    await waitFor(() => {
+      expect(hrefSetter).toHaveBeenCalledWith("/login?plan=pro&interval=month&next=%2Fpricing");
+    });
+    // The selection must survive login — checkout is NOT started yet.
+    expect(startCheckoutMock).not.toHaveBeenCalled();
   });
 
   it("Annual toggle switches paid tiers to their annual price", async () => {
@@ -169,6 +191,7 @@ describe("PricingPage", () => {
   });
 
   it("MV-pricing-004: shows a distinct honest message for a 400 (no Stripe price configured)", async () => {
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
     fetchPlansMock.mockResolvedValue(PLANS);
     startCheckoutMock.mockRejectedValue(
       new ApiError("POST /billing/checkout failed (400): no Stripe price configured", 400),
@@ -184,6 +207,7 @@ describe("PricingPage", () => {
   });
 
   it("MV-pricing-004: a 429 shows a distinct message honoring Retry-After, not the generic message", async () => {
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
     fetchPlansMock.mockResolvedValue(PLANS);
     startCheckoutMock.mockRejectedValue(
       new ApiError("POST /billing/checkout failed (429): rate limited", 429, 90),

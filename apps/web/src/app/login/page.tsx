@@ -28,10 +28,25 @@ export default function LoginPage() {
   // visitor was sent to /login from (MV-login-002).
   const [nextPath, setNextPath] = useState("/dashboard");
   const [redirecting, setRedirecting] = useState(false);
+  // H-04/M-01: /pricing forwards an unauthenticated visitor here with the plan
+  // + interval they chose. We surface which plan they're signing in for and
+  // send them back to /pricing (with the interval preselected) afterwards, so
+  // the selection survives the login round-trip.
+  const [planContext, setPlanContext] = useState<{ plan: string; interval: string } | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setJustRegistered(params.get("registered") === "1");
-    const dest = safeNextPath(params.get("next"));
+    const planParam = params.get("plan");
+    // Confine to the known plan ids; anything else is ignored (this value is
+    // URL-controllable and only ever drives display + a same-origin /pricing
+    // return, never a charge).
+    const knownPlans = ["starter", "pro", "power"];
+    let dest = safeNextPath(params.get("next"));
+    if (planParam && knownPlans.includes(planParam)) {
+      const interval = params.get("interval") === "year" ? "year" : "month";
+      setPlanContext({ plan: planParam, interval });
+      dest = `/pricing?plan=${planParam}&interval=${interval}`;
+    }
     setNextPath(dest);
     // Already signed in? Don't re-present the form — forward to the intended
     // destination (MV-login-001 / MV-login-002).
@@ -98,6 +113,18 @@ export default function LoginPage() {
           {justRegistered ? (
             <p role="status" data-testid="signup-success" className="text-sm text-aether-green">
               Account created — sign in to continue.
+            </p>
+          ) : null}
+
+          {planContext ? (
+            <p
+              role="status"
+              data-testid="login-plan-context"
+              className="rounded-lg border border-aether-indigo/30 bg-aether-indigo/10 px-3 py-2 text-sm text-aether-indigo"
+            >
+              Sign in to continue subscribing to the{" "}
+              <span className="font-semibold capitalize">{planContext.plan}</span> plan
+              {planContext.interval === "year" ? " (billed annually)" : ""}.
             </p>
           ) : null}
 
