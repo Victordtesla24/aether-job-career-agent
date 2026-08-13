@@ -7,7 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.db import get_connection, rows_to_dicts
+from app.agents.salary_intelligence_agent import MarketBenchmark, fetch_market_benchmark
+from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 
 router = APIRouter()
@@ -247,11 +248,30 @@ _SOURCE_COLORS = {
 }
 _PALETTE = ["#4F46E5", "#FF6B35", "#34D399", "#7C3AED", "#FBBF24", "#F59E0B"]
 
-#: No real external market-benchmark data provider is integrated. Market vs.
-#: You must never present a hardcoded guess as if it were sourced market
-#: data (see GAP-P4-060) — the panel instead reports the source as
-#: not-connected and shows only the user's own real figures.
+#: Whether the PROBABILITY model has any market evidence to reason from — it
+#: has none, and no factor may claim otherwise (see the factor gate below).
+#: This is deliberately DECOUPLED from Market vs. You: that panel now carries
+#: a real external benchmark (Adzuna AU) per row, but a posting count is not
+#: evidence about THIS user's chances, so it feeds no factor and this stays
+#: ``False``. Market vs. You must still never present a hardcoded guess as
+#: sourced market data (GAP-P4-060): each of its rows reports its OWN
+#: ``connected`` state and shows the user's real figures either way.
+#: (Renamed to ``_PROBABILITY_USES_MARKET_EVIDENCE`` in the I3 slice, once the
+#: transitional global flag below is gone.)
 _MARKET_DATA_SOURCE_CONNECTED = False
+
+#: There is no interview-conversion benchmark provider ANYWHERE — not at
+#: Adzuna, not at any licensed source this product can reach. That row is
+#: therefore permanently market-unavailable and says so on the surface,
+#: rather than borrowing a number from unrelated posting/salary data.
+_INTERVIEW_RATE_FOOTNOTE = (
+    "No external interview-conversion benchmark provider currently exists."
+)
+
+#: The exact honest state shown whenever no external benchmark is available —
+#: credentials absent, provider down, or the user has not set a target role
+#: and location. Unchanged wording from before any provider was integrated.
+_NO_MARKET_DATA_SUMMARY = "No market data source connected — showing your own figures only."
 
 #: Reference application count the "Application volume" factor is scaled
 #: against. It is a stated CONVENTION, not a measurement and not a market
@@ -689,26 +709,58 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     }
 
     # ---- Market vs you ------------------------------------------------
-    # No real external market-benchmark data source is connected (see
-    # _MARKET_DATA_SOURCE_CONNECTED above) — report that honestly instead of
-    # fabricating "market average" figures (GAP-P4-060).
+    # Each row states its OWN provenance: whether a real external benchmark
+    # backs its market side (``connected``), when that data was fetched
+    # (``dataAsOf``), what the market number literally counts
+    # (``marketNote``), and why it is absent when it is (``footnote``). A row
+    # without a provider stays market=None forever rather than borrowing a
+    # number from a different measurement (GAP-P4-060).
     you_apps_month = int(f_last_month or 0)
+    target_role, target_location = _user_market_target(user_id)
+    benchmark = fetch_market_benchmark(target_role, target_location)
+    postings_market = benchmark.postingsLast30d if benchmark is not None else None
+    postings_as_of = (
+        benchmark.dataAsOf
+        if benchmark is not None and benchmark.postingsLast30d is not None
+        else None
+    )
+
+    postings_row: dict[str, Any] = {
+        "label": "Applications / month",
+        "market": postings_market,
+        "you": you_apps_month,
+        "connected": postings_market is not None,
+        "dataAsOf": postings_as_of,
+    }
+    if benchmark is not None and postings_market is not None:
+        # The two sides are NOT the same quantity, and the row says so: "you"
+        # is applications this user submitted, "market" is employer demand.
+        postings_row["marketNote"] = (
+            f"Market = {postings_market} job ads posted in the last 30 days for "
+            f"{benchmark.role} in {benchmark.location} (Adzuna Australia) — "
+            "employer demand, not applications sent by other candidates."
+        )
+
+    interview_row: dict[str, Any] = {
+        "label": "Interview rate",
+        "market": None,
+        "you": interview_rate,
+        "unit": "%",
+        "connected": False,
+        "dataAsOf": None,
+        "footnote": _INTERVIEW_RATE_FOOTNOTE,
+    }
+
+    comparisons: list[dict[str, Any]] = [postings_row, interview_row]
     market_vs_you = {
-        "marketDataConnected": _MARKET_DATA_SOURCE_CONNECTED,
-        "comparisons": [
-            {
-                "label": "Applications / month",
-                "market": None,
-                "you": you_apps_month,
-            },
-            {
-                "label": "Interview rate",
-                "market": None,
-                "you": interview_rate,
-                "unit": "%",
-            },
-        ],
-        "summary": _market_summary(),
+        # TRANSITIONAL (this slice only — removed in I3 per R5): the deployed
+        # frontend still reads one global flag to decide whether to show its
+        # "no market data" banner. Reducing it to "is any row really
+        # connected" keeps that banner honest in both directions until the UI
+        # derives everything from the rows themselves.
+        "marketDataConnected": any(bool(c["connected"]) for c in comparisons),
+        "comparisons": comparisons,
+        "summary": _market_summary(benchmark if postings_market is not None else None),
     }
 
     # ---- Trend indicators (all series from real weekly rollups) ----------
@@ -847,13 +899,43 @@ def dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     return _dashboard(current_user, period)
 
 
-def _market_summary() -> str:
-    """Honest summary when no real market-benchmark data source is wired up.
+def _user_market_target(user_id: str) -> tuple[str, str]:
+    """The user's OWN target role and location (``""`` for each unset).
 
-    Previously this fabricated a comparison against hardcoded constants
-    (_MARKET_APPS_PER_MONTH / _MARKET_INTERVIEW_RATE) presented as if they
-    were real market data — see GAP-P4-060. Until a real market-data
-    provider is integrated (tracked for ADR), report the gap honestly
-    instead of inventing numbers.
+    Reads the same two profile columns discovery derives a search from
+    (``_user_search_defaults`` in the agents router) and substitutes NOTHING
+    (F-02): a user who has not told us what they are looking for gets an
+    honest "no market data" panel, never somebody else's market.
     """
-    return "No market data source connected — showing your own figures only."
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "targetRole", "location" FROM "User" WHERE id = %s',
+                (user_id,),
+            )
+            rows = rows_to_dicts(cur)
+    if not rows:
+        return "", ""
+    return (
+        (rows[0].get("targetRole") or "").strip(),
+        (rows[0].get("location") or "").strip(),
+    )
+
+
+def _market_summary(benchmark: MarketBenchmark | None) -> str:
+    """One sentence naming the real provider and the real numbers, or the
+    honest no-provider string.
+
+    This once fabricated a comparison against hardcoded constants
+    (_MARKET_APPS_PER_MONTH / _MARKET_INTERVIEW_RATE) presented as if they
+    were real market data — see GAP-P4-060. Now it either cites Adzuna
+    Australia with the figures actually returned, or reports the gap. No
+    adjectives, no interpretation, nothing the response did not contain.
+    """
+    if benchmark is None or benchmark.postingsLast30d is None:
+        return _NO_MARKET_DATA_SUMMARY
+    return (
+        f"Market data: Adzuna Australia — {benchmark.postingsLast30d} live "
+        f"postings (last 30 days) for your target role in {benchmark.location}."
+    )
