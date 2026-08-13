@@ -29,7 +29,7 @@ interface SourceStatusView {
  * cause: it strips the exception-class prefix and normalises the HTTP-error
  * tail; anything it does not recognise passes through verbatim.
  */
-export function humanizeSourceError(raw: string): string {
+export function humanizeSourceError(raw: string, source?: string): string {
   let text = raw.trim();
   // Strip a leading Python/JS exception class prefix ("AdapterFetchError: ").
   text = text.replace(/^[A-Za-z_]*(Error|Exception)\s*:\s*/, "");
@@ -39,6 +39,24 @@ export function humanizeSourceError(raw: string): string {
     (_m, code) => `the source returned HTTP ${code}`,
   );
   if (!text) return "Sync failed";
+
+  // M4: some adapters bubble up genuinely raw payloads — a URL, a multi-line
+  // stack trace, or an enormous blob — that would leak internals or wrap
+  // hideously in the pill. When the cleaned text is still clearly a raw dump,
+  // collapse it to a calm generic line rather than surfacing it verbatim. The
+  // curated "... the source returned HTTP 403 ..." style messages (short, no
+  // URL, no newline) fall through untouched so their copy is preserved.
+  const looksRaw =
+    /https?:\/\//i.test(text) || // embedded URL
+    /\n|Traceback|\bFile "|\s+at\s+\S+\(/.test(text) || // stack trace
+    text.length > 160; // oversized blob
+  if (looksRaw) {
+    const label = source
+      ? `${source.charAt(0).toUpperCase()}${source.slice(1)}`
+      : "This source";
+    return `${label}: temporarily unavailable — Aether will retry on the next sync.`;
+  }
+
   return `${text.charAt(0).toUpperCase()}${text.slice(1)} — Aether will retry on the next sync.`;
 }
 
@@ -66,7 +84,7 @@ export function sourceStatusView(
           : row.status;
     const errorText = isError
       ? row.lastError && row.lastError.trim().length > 0
-        ? humanizeSourceError(row.lastError)
+        ? humanizeSourceError(row.lastError, row.source)
         : "Sync failed"
       : null;
     return {

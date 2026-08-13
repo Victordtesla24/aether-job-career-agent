@@ -169,17 +169,17 @@ export default function PricingPage() {
     async (plan: Plan) => {
       setCheckoutError(null);
       setSwitchNotice(null);
-      // H-04/M-01: an unauthenticated visitor who picks a paid plan should keep
-      // that selection. Rather than firing a checkout that 401s and dumps them
-      // on a context-free login, carry the plan + interval to /login so they
-      // return to pricing ready to subscribe to the tier they chose.
+      // L-01/H-04: an unauthenticated visitor who picks a paid plan has no
+      // account yet, so a checkout would only 401. Send them to sign up (same
+      // destination as the free CTA), carrying their chosen plan + interval so
+      // the selection isn't lost on the way through onboarding.
       if (!isAuthed) {
         const params = new URLSearchParams({
           plan: plan.id,
           interval,
           next: "/pricing",
         });
-        window.location.href = `/login?${params.toString()}`;
+        window.location.href = `/signup?${params.toString()}`;
         return;
       }
       setSubmitting(plan.id);
@@ -444,7 +444,7 @@ export default function PricingPage() {
 
                   {isFree ? (
                     <Link
-                      href={isAuthed ? "/dashboard" : "/signup"}
+                      href={isAuthed ? "/dashboard" : "/signup?plan=free"}
                       data-testid={`subscribe-${plan.id}`}
                       className="mt-6 rounded-xl border border-white/15 py-2.5 text-center text-sm font-semibold transition hover:bg-white/5"
                     >

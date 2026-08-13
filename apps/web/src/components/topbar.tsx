@@ -183,6 +183,10 @@ function shortenRole(role: string): string {
 export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   const router = useRouter();
   const [greeting, setGreeting] = useState("Welcome");
+  // M6: until the profile/session resolves we render skeletons rather than the
+  // neutral "Welcome"/"AE" fallback, so the identity never visibly flips once
+  // the real name loads (session flicker).
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   // M-05/M-09: the bell now opens a real notifications panel (was a bare link).
@@ -241,10 +245,14 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             ? `${timeOfDayGreeting(new Date())}, ${derived.firstName}`
             : "Welcome",
         );
+        setSettingsLoaded(true);
       })
       .catch(() => {
         // Graceful fallback — leave the neutral "Welcome" state in place.
-        if (!cancelled) setGreeting("Welcome");
+        if (!cancelled) {
+          setGreeting("Welcome");
+          setSettingsLoaded(true);
+        }
       });
     fetchAgents()
       .then((agents) => {
@@ -329,7 +337,17 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         as defense in depth.
       */}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[13px] font-semibold sm:text-[15px]">{greeting}</h1>
+        <h1 className="truncate text-[13px] font-semibold sm:text-[15px]">
+          {settingsLoaded ? (
+            greeting
+          ) : (
+            <span
+              aria-hidden="true"
+              data-testid="greeting-skeleton"
+              className="inline-block h-3.5 w-40 max-w-full rounded bg-white/10 align-middle animate-pulse"
+            />
+          )}
+        </h1>
         <p className="truncate text-[11px] text-aether-muted-dim mono sm:text-xs">{liveSubtitle}</p>
       </div>
       <div className="flex items-center gap-3">
@@ -474,7 +492,12 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
             Admin
           </Link>
         ) : null}
-        <UserMenu initials={chip.initials} name={chip.chipName} role={chip.role} />
+        <UserMenu
+          initials={chip.initials}
+          name={chip.chipName}
+          role={chip.role}
+          loading={!settingsLoaded}
+        />
       </div>
     </header>
   );

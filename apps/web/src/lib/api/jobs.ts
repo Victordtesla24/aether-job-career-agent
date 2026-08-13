@@ -8,6 +8,7 @@
 import { z } from "zod";
 
 import { apiBaseUrl } from "./client";
+import { stripCopyOfPrefix } from "../humanize";
 
 const JobStatusSchema = z.enum([
   "discovered",
@@ -22,7 +23,9 @@ const JobStatusSchema = z.enum([
 
 export const JobSchema = z.object({
   id: z.string().min(1),
-  title: z.string().min(1),
+  // M5: duplicated listings arrive titled "Copy of <role>". Strip that
+  // engineering artefact at parse time so no consumer ever displays it.
+  title: z.string().min(1).transform(stripCopyOfPrefix),
   company: z.string().min(1),
   location: z.string().nullish(),
   remote: z.boolean(),

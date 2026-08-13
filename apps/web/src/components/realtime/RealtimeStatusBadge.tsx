@@ -16,7 +16,16 @@
  *    only what it knows.
  */
 
+import { useEffect, useState } from "react";
+
 import { useRealtimeStatus } from "../../hooks/useRealtime";
+
+/** L4: how long after mount we hold back a transient degraded banner. Freshly
+ * loaded data cannot meaningfully be "stale" yet, so a network hiccup during
+ * the opening handshake shows as a calm "Connecting…" rather than an alarming
+ * amber/red "may be stale" banner. A genuine server *refusal* (a real reason
+ * like a stream cap or expired session) is exempt and always surfaces. */
+const OFFLINE_GRACE_MS = 30_000;
 
 function asOf(connectedAt: number | null): string {
   if (connectedAt === null) return "not yet loaded live";
@@ -45,14 +54,32 @@ export function RealtimeStatusBadge({
 }: RealtimeStatusBadgeProps) {
   const state = useRealtimeStatus();
 
+  // L4: within the first 30s after mount, hold back the transient degraded
+  // banner so a slow/ flaky opening handshake does not greet the user with an
+  // alarming "may be stale" message on freshly loaded data.
+  const [graceElapsed, setGraceElapsed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGraceElapsed(true), OFFLINE_GRACE_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   if (hideWhenIdle && state.status === "idle") return null;
+
+  // Treat a degraded state as "still connecting" during the grace window when
+  // we have never connected. A server *refusal* carries a real reason
+  // (state.detail) and is exempt — it surfaces immediately, as ever.
+  const isTransientDegraded =
+    state.connectedAt === null &&
+    (state.status === "reconnecting" || (state.status === "offline" && !state.detail));
+  const effectiveStatus =
+    !graceElapsed && isTransientDegraded ? "connecting" : state.status;
 
   let label: string;
   let tone: string;
   let title: string;
   const suffix = compact ? "" : ` (${asOf(state.connectedAt)})`;
 
-  switch (state.status) {
+  switch (effectiveStatus) {
     case "live":
       label = "Live";
       tone = "text-emerald-300/90 border-emerald-400/30 bg-emerald-400/10";

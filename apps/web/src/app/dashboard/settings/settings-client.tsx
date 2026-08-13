@@ -1038,17 +1038,25 @@ export default function SettingsClient({
                   </p>
                 ) : null}
                 <div className="space-y-2.5">
-                  {data.integrations.map((i) => (
+                  {data.integrations.map((i) => {
+                    // SEEK is gated off behind AETHER_ENABLE_SEEK; never surface it as
+                    // connected/active in the UI regardless of what the API reports.
+                    const isSeek = /seek/i.test(i.name);
+                    const displayStatus = isSeek ? "not_configured" : i.status;
+                    const displayLabel = isSeek ? "Not active" : i.status.replace("_", " ");
+                    const displayDetail = isSeek ? "Not currently active" : i.detail;
+                    return (
                     <div key={i.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
                       <div>
                         <p className="text-xs font-semibold">{i.name}</p>
-                        <p className="text-[11px] text-aether-muted-dim">{i.detail}</p>
+                        <p className="text-[11px] text-aether-muted-dim">{displayDetail}</p>
                       </div>
-                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[i.status] ?? STATUS_STYLE.not_configured}`}>
-                        {i.status.replace("_", " ")}
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[displayStatus] ?? STATUS_STYLE.not_configured}`}>
+                        {displayLabel}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <p className="mt-3 text-[10px] text-aether-muted-dim">
                   <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
@@ -1159,7 +1167,7 @@ export default function SettingsClient({
                         <span className="text-aether-muted">Spend this period</span>
                         <span className="mono font-semibold" data-testid="billing-quota-spend">
                           ${subscription.quota.spendUsedUsd.toFixed(2)} / $
-                          {subscription.quota.spendCapUsd.toFixed(2)} USD
+                          {subscription.quota.spendCapUsd.toFixed(2)} AUD
                         </span>
                       </div>
                       {/* QA-2026-08-13 C-11: this figure is scoped to the

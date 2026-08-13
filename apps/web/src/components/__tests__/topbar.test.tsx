@@ -87,11 +87,12 @@ describe("Topbar mobile header clip (MV-mobile-dashboard-001)", () => {
 });
 
 describe("Topbar account-identity chip at mobile width (MV-mobile-dashboard-004)", () => {
-  it("hides the redundant name/role text below the lg breakpoint", () => {
+  it("hides the redundant name/role text below the lg breakpoint", async () => {
     render(<Topbar />);
-    // Initial synchronous chip state renders chipName "Welcome" before the
-    // fetchSettings promise resolves.
-    const nameNode = screen.getByText("Welcome", { selector: "span" });
+    // M6: the chip renders a skeleton until fetchSettings resolves (no
+    // "Welcome"/"AE" flicker), then shows the real name. Wait for the loaded
+    // name before asserting its wrapper carries the responsive hide class.
+    const nameNode = await screen.findByText("Administrator", { selector: "span" });
     const textWrapper = nameNode.parentElement as HTMLElement;
     expect(textWrapper.className).toMatch(/\bmax-lg:hidden\b/);
   });
