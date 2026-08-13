@@ -20,6 +20,14 @@ The tests below fail against that implementation and pass against an honest
 one. They are deliberately written so that most of them cannot be satisfied
 by a rename: the load-bearing one asserts that sourcing more jobs cannot move
 the score at all.
+
+CONTRACT NOTE (ADR D-0042, 2026-08-13): the ``marketVsYou.marketDataConnected``
+boolean quoted above is HISTORY. A real provider (Adzuna AU) now backs some of
+those rows, so each comparison row carries its OWN ``connected``/``dataAsOf``
+and the global flag is gone; ``probability.marketDataConnected`` survives as
+the score's own provenance and is permanently ``False``. The two assertions
+that read the removed key were rewritten to that contract below — the honesty
+invariants they enforce are unchanged.
 """
 from __future__ import annotations
 
@@ -143,37 +151,73 @@ class TestScoreIsNotARestatementOfTheUsersOwnJobCount:
         pulse = _pulse(client, auth_headers)
         prob = pulse["probability"]
 
-        if pulse["marketVsYou"]["marketDataConnected"] is False:
+        # ADR D-0042 / R5: ``marketVsYou`` no longer carries a global boolean —
+        # each comparison row states whether ITS OWN market side is backed by a
+        # provider, and the banner is derived from those rows. "No market
+        # source connected" is therefore "no row is connected".
+        if not any(row["connected"] for row in pulse["marketVsYou"]["comparisons"]):
             offenders = [
                 f for f in prob["factors"] if "market" in str(f["label"]).lower()
             ]
             assert offenders == [], (
                 "The probability panel presents market-evidence factors "
-                f"{offenders} on the same response that reports "
-                "marketDataConnected=false."
+                f"{offenders} on the same response whose marketVsYou rows all "
+                "report connected=false."
             )
             assert "market" not in str(prob.get("note", "")).lower(), prob.get("note")
 
 
-class TestScoreAndBannerShareOneSourceOfTruth:
-    def test_probability_panel_reports_the_same_market_data_state_as_the_banner(
+class TestScoreAndBannerCannotContradictEachOther:
+    def test_each_panel_states_its_own_market_evidence_and_neither_can_lie(
         self, client, auth_headers, user_id
     ):
-        """F-04 item 4: the score panel and the "no market data connected"
-        banner must be driven by one flag, so they can never disagree."""
+        """F-04 item 4, under the contract ADR D-0042 (R5) replaced it with.
+
+        The original fix made ONE boolean drive both surfaces. Sharing it
+        stopped working the moment a real provider landed: the Adzuna
+        benchmark can back the marketVsYou rows while the probability score
+        still reads ZERO market evidence, so one flag would have had to
+        misreport one of the two panels. They are deliberately decoupled, and
+        non-contradiction is now structural instead of shared-state:
+
+        * ``probability.marketDataConnected`` says whether the SCORE was built
+          from market evidence. No factor reads any external feed, so it is
+          flatly ``False`` — and the guard in the class above turns that into
+          the ban on market-labelled factors that F-04 actually asked for.
+        * ``marketVsYou`` publishes no global flag at all: every comparison row
+          carries its own ``connected``/``dataAsOf``, so the banner is derived
+          from the very rows it describes and cannot disagree with them. A row
+          with no provider also carries no market number.
+        """
         jobs = _seed_jobs(user_id, 5)
         _seed_applications(user_id, jobs, ["submitted"])
 
         pulse = _pulse(client, auth_headers)
         assert "marketDataConnected" in pulse["probability"], (
             "probability payload carries no marketDataConnected flag, so the "
-            "score panel and the market banner are independent surfaces that "
-            "can (and did) contradict each other"
+            "score panel states no provenance for its own number"
         )
-        assert (
-            pulse["probability"]["marketDataConnected"]
-            is pulse["marketVsYou"]["marketDataConnected"]
+        assert pulse["probability"]["marketDataConnected"] is False, (
+            "the score claims it was built from market evidence, but no "
+            f"factor reads any external market feed: {pulse['probability']['factors']}"
         )
+
+        market_vs_you = pulse["marketVsYou"]
+        assert "marketDataConnected" not in market_vs_you, (
+            "a global market-data boolean is back on marketVsYou; it can only "
+            "be an OR across rows whose provenance genuinely differs (the "
+            "interview row has no provider at all), so it must misdescribe at "
+            f"least one of them: {market_vs_you}"
+        )
+        assert market_vs_you["comparisons"], market_vs_you
+        for row in market_vs_you["comparisons"]:
+            assert isinstance(row["connected"], bool), row
+            assert "dataAsOf" in row, row
+            if not row["connected"]:
+                assert row["market"] is None, (
+                    "a row prints a market number while reporting that nothing "
+                    f"is connected behind it: {row}"
+                )
 
 
 class TestZeroEvidenceDegradesInsteadOfScoringZero:

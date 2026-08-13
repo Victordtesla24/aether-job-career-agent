@@ -145,6 +145,7 @@ def _seed_salary_job(
     salary_max: int | None = None,
     currency: str | None = "AUD",
     title: str = "Business Analyst",
+    source: str = "seek",
 ) -> str:
     """Insert one ``Job`` row carrying (or honestly omitting) a disclosed
     salary range, for :func:`user_disclosed_salary_median` (R3) tests —
@@ -161,7 +162,7 @@ def _seed_salary_job(
                     "currency", "createdAt", "updatedAt")
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ''',
-                (jid, user_id, title, "Acme", "desc", "seek",
+                (jid, user_id, title, "Acme", "desc", source,
                  f"https://example.com/{jid}", salary_min, salary_max, currency),
             )
         conn.commit()
@@ -523,6 +524,71 @@ class TestAnalytics:
         footnote = (salary_row.get("footnote") or "").lower()
         assert "disclosed salary" in footnote, salary_row
         assert "yet" in footnote, salary_row
+
+    def test_market_vs_you_salary_row_you_never_merges_an_unverified_currency(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """Module rule 2 (never merge currencies), enforced on the ONE number
+        this row prints beside an AUD market mean.
+
+        A row counts only when its currency is POSITIVELY established as AUD.
+        An explicit ``AUD`` establishes it. An EMPTY currency column
+        establishes it only together with the row's source: the AU-only feeds
+        (adzuna/seek) advertise nothing but AUD and write the column only
+        alongside a disclosed minimum, so their max-only rows are real AUD
+        disclosures — while an empty column on any other source is
+        ``unspecified``, and assuming AUD there would average a foreign figure
+        into the caller's own median.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        _seed_salary_job(user_id, salary_min=100000, salary_max=100000)  # AUD -> 100000
+        # AU feed, max only: currency column empty, but the ad was priced in AUD.
+        _seed_salary_job(user_id, salary_min=None, salary_max=140000, currency=None)
+        # Excluded: an explicitly foreign range.
+        _seed_salary_job(
+            user_id, salary_min=300000, salary_max=300000, currency="USD"
+        )
+        # Excluded: blank currency from a source that is not AU-only.
+        _seed_salary_job(
+            user_id, salary_min=None, salary_max=400000, currency=None, source="remotive"
+        )
+
+        payload = {"count": 107, "mean": 147924.58, "results": []}
+        _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        salary_row = _market_comparisons_by_label(pulse)["Advertised salary (mean)"]
+
+        # median([100000, 140000]) — either exclusion leaking in moves this.
+        assert salary_row["you"] == 120000, salary_row
+
+    def test_market_vs_you_salary_row_you_is_none_when_no_currency_is_verified(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """A caller whose only disclosures are in an unverified currency gets
+        the honest ``None`` — never a figure built by assuming those rows were
+        AUD because AUD is the surface's local currency.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        _seed_salary_job(
+            user_id, salary_min=300000, salary_max=300000, currency="USD"
+        )
+        _seed_salary_job(
+            user_id, salary_min=None, salary_max=400000, currency=None, source="remotive"
+        )
+
+        payload = {"count": 107, "mean": 147924.58, "results": []}
+        _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        salary_row = _market_comparisons_by_label(pulse)["Advertised salary (mean)"]
+
+        assert salary_row["you"] is None, salary_row
+        assert salary_row["connected"] is True, "market side is unaffected"
 
     def test_market_vs_you_live_failure_falls_back_to_honest_unavailable(
         self, client, auth_headers, monkeypatch, caplog

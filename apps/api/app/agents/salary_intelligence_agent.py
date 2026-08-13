@@ -45,7 +45,10 @@ Three hard rules for the own-corpus aggregation, each enforced below:
   market average.
 * **Never merge currencies.** Currency is part of the group key, so an AUD range
   and a USD range are never averaged together. An undisclosed currency is
-  labelled ``unspecified`` rather than assumed to be the user's local currency.
+  labelled ``unspecified`` rather than assumed to be the user's local currency —
+  and where part three has to produce ONE comparable number, a blank currency
+  is admitted only when the row's own source proves it (:data:`_AUD_ONLY_SOURCES`),
+  never because AUD is the local default.
 * **Never guess a role family.** A title that matches none of the known family
   terms is grouped as ``unclassified`` with its real titles listed.
 
@@ -550,6 +553,18 @@ def _fetch_salary_histogram(
     return counts or None
 
 
+#: Discovery sources whose postings are Australian ads by construction, so a
+#: figure one of them disclosed is in AUD even when the row's ``currency``
+#: column is empty: ``adzuna_adapter`` queries only Adzuna's ``/au`` endpoints
+#: and ``seek_adapter`` only seek.com.au. They are also the ONLY two adapters
+#: that write ``salaryMin``/``salaryMax`` at all today (every other one leaves
+#: both columns NULL, and ``job_alert_parser`` emits them as ``None`` on
+#: purpose), so the set is a positive whitelist rather than a guess: an adapter
+#: added later starts OUTSIDE it, and its blank-currency figures are excluded
+#: until it states a currency.
+_AUD_ONLY_SOURCES: frozenset[str] = frozenset({"adzuna", "seek"})
+
+
 def user_disclosed_salary_median(user_id: str) -> int | None:
     """Median of the salary figures ``user_id``'s OWN saved postings disclosed,
     or ``None`` when none of them disclosed anything.
@@ -564,19 +579,27 @@ def user_disclosed_salary_median(user_id: str) -> int | None:
     disclosures at all gets ``None``, never the market's number in place of
     their own.
 
-    Currency: rows are kept when they say ``AUD`` and when they say nothing,
-    and dropped otherwise, so a USD range can never be averaged into a figure
-    the surface prints beside an AUD market mean. Blank is kept rather than
-    dropped on the evidence of the adapters that write these rows: the AU
-    sources set ``currency`` only alongside a disclosed MINIMUM
-    (``seek_adapter``: ``"AUD" if salary_min is not None else None``), so an
-    AU posting that advertised only a maximum arrives with the column empty —
-    dropping it would silently discard real AUD disclosures.
+    Currency: a row counts only when its currency is POSITIVELY established as
+    AUD, so a USD range can never be averaged into a figure the surface prints
+    beside an AUD market mean. An explicit ``AUD`` establishes it. A BLANK
+    column establishes it only together with the row's provenance
+    (:data:`_AUD_ONLY_SOURCES`) — the AU-only adapters set ``currency`` only
+    alongside a disclosed MINIMUM (``seek_adapter``: ``"AUD" if salary_min is
+    not None else None``), so an AU ad that advertised a maximum alone arrives
+    with the column empty and dropping it would discard a real AUD disclosure.
+    A blank column on any OTHER source is ``unspecified``, not AUD (module
+    rule 2), and is excluded rather than assumed into the caller's median.
     """
     values: list[int] = []
     for job in JobRepository().list_by_user(user_id):
         currency = (job.get("currency") or "").strip().upper()
-        if currency and currency != "AUD":
+        if not currency:
+            # Rule 2: an undisclosed currency is never ASSUMED to be the
+            # caller's local one — it is accepted only where the row's own
+            # source settles what the ad could have been priced in.
+            if (job.get("source") or "").strip().lower() not in _AUD_ONLY_SOURCES:
+                continue
+        elif currency != "AUD":
             continue
         disclosed = _int_or_none(job.get("salaryMax"))
         if disclosed is None:
