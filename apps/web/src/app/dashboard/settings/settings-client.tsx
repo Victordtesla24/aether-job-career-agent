@@ -724,22 +724,34 @@ export default function SettingsClient({
                       <p className="mono text-[10px] text-aether-muted-dim">
                         uploaded {data.resume.uploadedAt} · {data.resume.versions} versions
                       </p>
-                      {data.resume.activeFile ? (
-                        <p
-                          className={`mt-1 text-[10px] font-medium ${
-                            data.resume.originalStored ? "text-aether-green" : "text-aether-amber"
-                          }`}
-                          data-testid="resume-original-stored-badge"
-                        >
-                          {data.resume.originalStored ? ORIGINAL_STORED_LABEL : ORIGINAL_NOT_STORED_LABEL}
-                        </p>
-                      ) : null}
                     </div>
                   </div>
                   <span className="rounded-md bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">
                     Active
                   </span>
                 </div>
+                {/* FE re-review refix (2026-08-13, finding NEW-4): this used
+                    to render INSIDE the box above, directly under whichever
+                    résumé is newest ("Active" — which after a tailoring run
+                    is a tailored child, e.g. "Tailored — Staff Engineer @
+                    Acme"). `originalStored` is never about that row per the
+                    ORCHESTRATOR RULING — it is about the user's BASELINE
+                    upload (apps/api/app/routers/workspaces.py's
+                    `base_resume_row`), a genuinely different document once
+                    any tailoring has happened. Rendered as its own line,
+                    captioned "Baseline upload", so it never reads as a claim
+                    about the "Active" file named just above it. */}
+                {data.resume.activeFile ? (
+                  <p
+                    className={`mt-2 text-[10px] font-medium ${
+                      data.resume.originalStored ? "text-aether-green" : "text-aether-amber"
+                    }`}
+                    data-testid="resume-original-stored-badge"
+                  >
+                    Baseline upload:{" "}
+                    {data.resume.originalStored ? ORIGINAL_STORED_LABEL : ORIGINAL_NOT_STORED_LABEL}
+                  </p>
+                ) : null}
                 <p
                   className="mt-3 text-[11px] leading-4 text-aether-muted-dim"
                   data-testid="resume-baseline-help-text"

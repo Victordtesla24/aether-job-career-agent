@@ -26,7 +26,23 @@ describe("U2a baseline help text", () => {
 
   it("honestly flags that pre-existing uploads have no stored original", () => {
     expect(BASELINE_HELP_TEXT).toMatch(/before this feature existed/i);
-    expect(BASELINE_HELP_TEXT).toMatch(/re-upload it to enable format preservation/i);
+    // FE re-review refix (2026-08-13, finding NEW-1): the overclaim this
+    // assertion used to lock ("re-upload it to enable format preservation")
+    // was deleted from the product copy by the F-1 refix — re-uploading
+    // stores bytes for a FUTURE format-preserving engine, it does not
+    // enable preservation today. This locks the CURRENT, honest copy
+    // instead of a phrase that no longer exists anywhere in the source.
+    expect(BASELINE_HELP_TEXT).toMatch(/re-uploading stores them now/i);
+    expect(BASELINE_HELP_TEXT).toMatch(/future format-preserving engine/i);
+    expect(BASELINE_HELP_TEXT).not.toMatch(/enable format preservation/i);
+  });
+
+  it("scopes the download-rendering claim to the user's own uploads, not every résumé (NEW-3)", () => {
+    // The two bundled seed PDFs DO byte-preserve on download
+    // (resolve_original_pdf matches their formatHash) — "every download"
+    // was an overclaim the copy must not make.
+    expect(BASELINE_HELP_TEXT).not.toMatch(/every download/i);
+    expect(BASELINE_HELP_TEXT).toMatch(/still renders in the aether template/i);
   });
 });
 
@@ -36,8 +52,14 @@ describe("U2a original-stored badge labels", () => {
   });
 
   it("the negative label tells the user the exact remedy", () => {
-    expect(ORIGINAL_NOT_STORED_LABEL).toMatch(/Re-upload/);
-    expect(ORIGINAL_NOT_STORED_LABEL).toMatch(/format preservation/);
+    // FE re-review refix (2026-08-13, finding NEW-1): the label this
+    // assertion used to lock never actually shipped with a "format
+    // preservation" claim (`/Re-upload/`, capital-R, never matched the
+    // real "Original not stored — re-upload to store it" string either —
+    // this test was RED at HEAD). Locks the real, honest label.
+    expect(ORIGINAL_NOT_STORED_LABEL).toMatch(/re-upload/i);
+    expect(ORIGINAL_NOT_STORED_LABEL).toMatch(/store it/i);
+    expect(ORIGINAL_NOT_STORED_LABEL).not.toMatch(/format preservation/i);
   });
 });
 

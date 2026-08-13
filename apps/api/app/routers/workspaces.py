@@ -986,21 +986,27 @@ def _build_settings(
             "activeFile": resume_row.get("label") if resume_row else None,
             "uploadedAt": str(resume_row["createdAt"])[:10] if resume_row else None,
             "versions": 0,  # will be filled below
-            # U2a (R-F1), refixed 2026-08-13 for finding F-2: whether the
-            # user's BASE résumé (parentId IS NULL — the immutable upload
-            # every tailoring run derives from, never `resume_row`, which can
-            # be any later tailored version) has its original upload bytes
-            # stored. That is the honest signal for "a future format-
-            # preserving engine (U2b/R-F4) has a source document for this
-            # user's baseline" vs. "this account's baseline predates
+            # U2a (R-F1), re-refixed 2026-08-13 per the ORCHESTRATOR RULING
+            # (NEW-2/F-2): whether the user's BASELINE résumé — the MOST
+            # RECENT Settings upload with stored original bytes (`parentId IS
+            # NULL`, newest `createdAt` among rows with `"originalFile" IS NOT
+            # NULL`; see `base_resume_row`'s query above) — has its original
+            # upload bytes stored. That is the honest signal for "a future
+            # format-preserving engine (U2b/R-F4) has a source document for
+            # this user's baseline" vs. "this account's baseline predates
             # original-byte storage, or has none." Deliberately NOT keyed off
-            # `resume_row` (whichever résumé is newest): every tailored child
-            # is created with no `originalFile` at all, so that would flip a
-            # permanently-stored baseline's badge to a pointless re-upload
-            # prompt the moment the user's first tailoring run completes.
-            # False (never None) when the user has no base résumé at all, so
-            # the Settings panel never has to special-case a missing summary
-            # object.
+            # `resume_row` (whichever résumé is newest, tailored children
+            # included): every tailored child is created with no
+            # `originalFile` at all, so that would flip a permanently-stored
+            # baseline's badge to a pointless re-upload prompt the moment the
+            # user's first tailoring run completes. Also NOT keyed off the
+            # user's FIRST-ever upload: a user who re-uploads (the exact
+            # remedy this badge's negative state instructs) gets a NEW
+            # `parentId IS NULL` row with bytes, and the badge must pick that
+            # fresher row, not stay pinned to the original upload forever.
+            # False (never None) when the user has no baseline with stored
+            # bytes at all, so the Settings panel never has to special-case a
+            # missing summary object.
             "originalStored": (
                 bool(base_resume_row.get("hasOriginal")) if base_resume_row else False
             ),
@@ -1052,29 +1058,43 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
             )
             resume_rows = rows_to_dicts(cur)
 
-            # FE-review refix (2026-08-13, finding F-2): the "original stored"
-            # badge must reflect the user's IMMUTABLE BASE résumé (`parentId
-            # IS NULL`) — the one document the badge's fact is actually about
-            # — never whichever résumé happens to be newest. Every tailored
-            # child is created with no `originalFile` at all
+            # ORCHESTRATOR RULING (2026-08-13, resolves FE re-review NEW-2 +
+            # F-2 permanently): the "baseline" row is the user's MOST RECENT
+            # Settings upload that has stored original bytes — `parentId IS
+            # NULL AND "originalFile" IS NOT NULL`, newest `createdAt` first.
+            # That is exactly what `POST /resumes/upload` creates and what the
+            # UI's "re-upload" instruction produces, so a legacy user (base v1,
+            # no bytes) who re-uploads gets base v2 picked here immediately —
+            # unlike the old "lowest version" rule, which pinned the badge to
+            # the FIRST upload ever made forever, even after a fresher one
+            # with real bytes existed (NEW-2).
+            #
+            # The `ORDER BY` below expresses that as a two-tier preference
+            # rather than a hard `WHERE ... AND "originalFile" IS NOT NULL`
+            # filter: rows WITH stored bytes sort first (newest of those wins,
+            # per the RULING); only when the user has NO byte-stored root row
+            # at all does this fall back to their newest root row regardless.
+            # That fallback matters because this same "baseline" row also has
+            # to stay resolvable for callers that mean something narrower by
+            # "the baseline" — the user's root document for content grounding
+            # — never whichever résumé happens to be newest overall. Every
+            # tailored child is created with no `originalFile` at all
             # (`TailorAgent.run`'s `_resumes.create(...)` call never passes
             # original-file fields — see `apps/api/app/agents/tailor_agent.py`),
-            # so keying the badge off `resume_rows` (latest version) flips a
-            # permanently-stored baseline's badge to the "re-upload" prompt
-            # the instant the user's first tailoring run completes — the
-            # default state for almost every active user (7 base vs 378
-            # tailored résumé rows observed in prod). A base résumé's
-            # stored-original fact never changes when a later version is
-            # tailored, so the badge must not pretend otherwise. Mirrors
-            # `ResumeRepository.get_base`'s ordering (lowest version = the
-            # true original upload) without loading the (up to 10MB)
-            # `originalFile` blob itself.
+            # so keying this off `resume_rows` (latest version, tailored
+            # children included) would flip a permanently-stored baseline's
+            # badge to the "re-upload" prompt the instant the user's first
+            # tailoring run completes — the default state for almost every
+            # active user (7 base vs 378 tailored résumé rows observed in
+            # prod). When the picked row genuinely has no stored bytes,
+            # `"hasOriginal"` below is honestly `false` — the fallback never
+            # fabricates a stored-original claim.
             cur.execute(
                 """
                 SELECT "originalFile" IS NOT NULL AS "hasOriginal"
                 FROM "Resume"
                 WHERE "userId" = %s AND "parentId" IS NULL
-                ORDER BY version ASC, "createdAt" ASC
+                ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC
                 LIMIT 1
                 """,
                 (uid,),

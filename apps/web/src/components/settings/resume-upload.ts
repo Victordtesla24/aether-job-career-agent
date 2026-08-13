@@ -70,6 +70,14 @@ export interface ResumeUploadResult {
  * yet. The copy below says what re-uploading actually does today: stores
  * the bytes as a source for later, without claiming downloads already look
  * any different.
+ *
+ * FE re-review refix (2026-08-13, finding NEW-3): the first version of that
+ * sentence said "every download still renders in the Aether template" —
+ * false for the two bundled seed PDFs, whose `formatHash` DOES match
+ * `resolve_original_pdf` (and, once MON-011 lands, would show "format
+ * preserved" for exactly those rows). "Every" overclaimed on the one class
+ * of résumé this feature never touches. Scoped to the user's own uploads —
+ * the only rows `resolve_original_pdf` genuinely cannot match — instead.
  */
 export const BASELINE_HELP_TEXT =
   "Supported formats: PDF (.pdf), Word (.docx), and plain text (.txt/.md). " +
@@ -77,7 +85,8 @@ export const BASELINE_HELP_TEXT =
   "never alters it. If you uploaded your résumé before this feature " +
   "existed, its original bytes were never stored; re-uploading stores " +
   "them now as the source for a future format-preserving engine — today, " +
-  "every download still renders in the Aether template.";
+  "a résumé you upload yourself is not yet layout-preserved on download; " +
+  "it still renders in the Aether template.";
 
 /** Badge copy for whether the active resume has its original bytes stored. */
 export const ORIGINAL_STORED_LABEL = "Original stored ✓";

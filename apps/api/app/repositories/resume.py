@@ -196,14 +196,33 @@ class ResumeRepository:
         return rows[0] if rows else None
 
     def get_base(self, user_id: str) -> dict[str, Any] | None:
-        """The user's base (root) resume: no parent, lowest version first."""
+        """The user's baseline (root) résumé — same selection rule as the
+        Settings "original stored" badge (apps/api/app/routers/workspaces.py,
+        ORCHESTRATOR RULING resolving FE re-review NEW-2/F-2): among the
+        user's root résumés (``parentId IS NULL``), prefer the newest one
+        that has its original upload bytes stored, so a re-upload (the exact
+        remedy the Settings panel's honest-copy instructs) becomes the base
+        every subsequent tailoring/grounding call derives from immediately —
+        not the FIRST upload ever made, which the old ``ORDER BY "version"
+        ASC`` picked forever regardless of how many fresher root uploads
+        followed it.
+
+        Falls back to the newest root résumé overall when NONE of the user's
+        root résumés has stored bytes (every account created before this
+        column existed, until it re-uploads) — this method feeds tailoring
+        and cover-letter grounding via ``sections.raw_text``, which every
+        résumé row has independent of whether its original bytes were kept,
+        so an account with no byte-stored root row must still resolve to its
+        real base résumé here rather than a dishonest "no résumé on file".
+        """
         ensure_resume_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'SELECT {_RESUME_COLUMNS} FROM "Resume" '
                     'WHERE "userId" = %s AND "parentId" IS NULL '
-                    'ORDER BY "version" ASC, "createdAt" ASC LIMIT 1',
+                    'ORDER BY ("originalFile" IS NOT NULL) DESC, "createdAt" DESC '
+                    'LIMIT 1',
                     (user_id,),
                 )
                 rows = rows_to_dicts(cur)

@@ -687,3 +687,60 @@ def test_settings_original_stored_badge_survives_a_tailoring_run(
         "the base résumé's original bytes are still stored and immutable — "
         "a later tailoring run must not flip this badge to false"
     )
+
+
+def test_settings_original_stored_reflects_the_newest_reupload_not_the_first(
+    client, auth_headers, test_user_id
+):
+    """ORCHESTRATOR RULING regression (resolves FE re-review NEW-2 — the
+    fix creating an INVERSE false honest-state on the exact remedy the UI
+    instructs).
+
+    Before this fix, ``base_resume_row`` (and ``ResumeRepository.get_base``)
+    picked the OLDEST ``parentId IS NULL`` row (``ORDER BY version ASC``) — a
+    legacy user's FIRST upload ever made, even after they followed the panel's
+    own "re-uploading stores them now" instruction and created a SECOND root
+    résumé with real stored bytes. The badge stayed pinned to the first
+    upload's (missing) bytes forever, contradicting a re-upload that
+    genuinely fixed the gap.
+
+    This test: (1) registers a root résumé with NO stored bytes (JSON
+    ingest — a legacy-shaped row), (2) re-uploads a real file (the panel's
+    instructed remedy) creating a SECOND ``parentId IS NULL`` row with
+    stored bytes, and asserts both the Settings badge AND
+    ``ResumeRepository.get_base`` now resolve to the fresher, byte-stored
+    upload — never the stale first one.
+    """
+    legacy = client.post(
+        "/resumes",
+        json={"label": "Legacy variant (no stored bytes)", "raw_text": RESUME_TEXT},
+        headers=auth_headers,
+    )
+    assert legacy.status_code == 201, legacy.text
+    assert legacy.json()["parentId"] is None
+
+    settings_before = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings_before["resume"]["originalStored"] is False, (
+        "sanity check: the only root résumé so far has no stored bytes"
+    )
+
+    reupload = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    assert reupload.status_code == 201, reupload.text
+    assert reupload.json()["parentId"] is None, (
+        "a Settings re-upload must create a NEW root résumé, not a child"
+    )
+
+    settings_after = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings_after["resume"]["originalStored"] is True, (
+        "the badge must reflect the MOST RECENT root résumé WITH stored "
+        "original bytes, not the first (byteless) root résumé ever made"
+    )
+
+    base = ResumeRepository().get_base(test_user_id)
+    assert base is not None
+    assert base["id"] == reupload.json()["id"], (
+        "ResumeRepository.get_base (tailoring/grounding's baseline) must "
+        "resolve the SAME re-uploaded row the Settings badge now reports, "
+        "not the stale first upload — a mismatch here is exactly the "
+        "'inverse false honest-state' NEW-2 flagged"
+    )
