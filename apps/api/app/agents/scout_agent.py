@@ -272,7 +272,34 @@ class ScoutAgent:
             result.per_source.append(src)
             self._record_status(user_id, src)
         result.qualification = qual_totals
+        self._archive_stale_jobs(user_id)
         return result
+
+    def _archive_stale_jobs(self, user_id: str) -> None:
+        """Best-effort auto-archival of stale discoveries (QA finding H-07).
+
+        Runs after every discovery sweep so listings that stopped being
+        re-discovered for ``AETHER_JOB_STALE_DAYS`` days (default 30; ``0``
+        disables) are moved to ``archived`` instead of being presented as
+        current openings. Failures are logged and never fail the run — the
+        discovery result itself is already complete at this point.
+        """
+        raw = os.environ.get("AETHER_JOB_STALE_DAYS", "30")
+        try:
+            days = int(raw)
+        except ValueError:
+            days = 30
+        if days <= 0:
+            return
+        try:
+            archived = self._repository.archive_stale(user_id, days=days)
+            if archived:
+                logger.info(
+                    "scout: auto-archived %d stale discovered jobs (>%d days old)",
+                    archived, days,
+                )
+        except Exception as exc:  # noqa: BLE001 — archival is housekeeping, never fatal
+            logger.warning("scout: stale-job archival failed: %s", exc)
 
     def _active_block(self, source: str) -> dict[str, Any] | None:
         """The still-current block for ``source``, or ``None`` to go ahead.

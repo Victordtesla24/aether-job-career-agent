@@ -386,9 +386,14 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             sources_total = int(cur.fetchone()[0])
 
             # --- Top skills: flatten Job.requirements ----------------------
+            # QA-2026-08-13 M-02: most adapters return an empty requirements
+            # list (7k+ jobs, zero populated), which left "Top Skills in
+            # Demand" permanently on its empty state. Also fetch title +
+            # description so the lexicon matcher can fall back to the posting
+            # text when requirements are missing.
             cur.execute(
-                'SELECT requirements FROM "Job" '
-                'WHERE "userId" = %s AND requirements IS NOT NULL',
+                'SELECT requirements, title, description FROM "Job" '
+                'WHERE "userId" = %s',
                 (user_id,),
             )
             requirement_rows = rows_to_dicts(cur)
@@ -554,9 +559,17 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     skill_counts: dict[str, int] = {}
     for row in requirement_rows:
         reqs = row.get("requirements")
-        if not isinstance(reqs, list):
-            continue
-        text = " ".join(r for r in reqs if isinstance(r, str)).lower()
+        text = ""
+        if isinstance(reqs, list):
+            text = " ".join(r for r in reqs if isinstance(r, str)).lower()
+        if not text:
+            # QA-2026-08-13 M-02 fallback: requirements are empty for the
+            # vast majority of sourced jobs, so match the lexicon against
+            # the posting title + description instead of showing "Not
+            # enough data" forever. Still counted at most once per job.
+            text = " ".join(
+                s for s in (row.get("title"), row.get("description")) if isinstance(s, str)
+            ).lower()
         if not text:
             continue
         for skill in _SKILL_LEXICON:

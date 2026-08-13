@@ -51,9 +51,13 @@ describe("sourceStatusView", () => {
     );
     expect(view.badge).toBe("error");
     expect(view.badgeLabel).toBe("error");
+    // QA H-08: the raw exception class / HTTP tail is humanized — the REAL
+    // cause is preserved, never fabricated, but no "AdapterFetchError:" or
+    // "HTTP Error 403: Forbidden" internals leak to the user.
     expect(view.errorText).toBe(
-      "AdapterFetchError: Wellfound public listings unavailable: HTTP Error 403: Forbidden",
+      "Wellfound public listings unavailable: the source returned HTTP 403 — Aether will retry on the next sync.",
     );
+    expect(view.errorText).not.toContain("AdapterFetchError");
   });
 
   it("falls back to a generic error message when status=error but lastError is missing", () => {

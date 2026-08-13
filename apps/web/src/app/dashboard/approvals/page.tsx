@@ -243,8 +243,49 @@ export default function ApprovalsPage() {
     }
   };
 
+  /**
+   * QA-2026-08-13 H-02: bulk decision over every currently-listed pending
+   * request. The backend has no bulk endpoint, so this loops the existing
+   * POST /approvals/{id}/approve|reject sequentially (server remains the
+   * only authority on each transition). Deliberately does NOT auto-send
+   * email_send approvals — bulk approval only records the decision; sending
+   * still happens per-item so a mass action can never mass-email.
+   */
+  const bulkDecide = async (decision: "approve" | "reject") => {
+    const targets = (approvals ?? []).filter((a) => a.status === "pending" && !isExpired(a));
+    if (targets.length === 0) return;
+    const verb = decision === "approve" ? "Approve" : "Reject";
+    if (
+      !window.confirm(
+        `${verb} all ${targets.length} pending request${targets.length === 1 ? "" : "s"}? ` +
+          (decision === "approve"
+            ? "Approved emails are NOT sent automatically — send each from its card."
+            : "Rejected requests can be re-created by the agents on their next run."),
+      )
+    ) {
+      return;
+    }
+    setBusy(`bulk-${decision}`);
+    let failed = 0;
+    for (const approval of targets) {
+      try {
+        await decideApproval(approval.id, decision);
+      } catch {
+        failed += 1;
+      }
+    }
+    setListError(
+      failed > 0 ? `${failed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied.` : null,
+    );
+    // Reconcile from server truth — list, badges and counters together.
+    await load();
+    setBusy(null);
+  };
+
   const pendingCount = approvals?.filter((a) => a.status === "pending").length ?? null;
   const expiredCount = approvals?.filter((a) => isExpired(a)).length ?? 0;
+  const actionablePendingCount =
+    approvals?.filter((a) => a.status === "pending" && !isExpired(a)).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -260,6 +301,28 @@ export default function ApprovalsPage() {
             ) : null}
           </p>
         </div>
+        {actionablePendingCount > 1 ? (
+          <div className="flex gap-2" data-testid="bulk-actions">
+            <button
+              type="button"
+              data-testid="bulk-approve-btn"
+              onClick={() => void bulkDecide("approve")}
+              disabled={busy !== null}
+              className="min-h-[44px] rounded-xl border border-aether-green/40 px-4 text-sm font-semibold text-aether-green hover:bg-aether-green/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+            >
+              Approve all ({actionablePendingCount})
+            </button>
+            <button
+              type="button"
+              data-testid="bulk-reject-btn"
+              onClick={() => void bulkDecide("reject")}
+              disabled={busy !== null}
+              className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+            >
+              Reject all
+            </button>
+          </div>
+        ) : null}
         {expiredCount > 0 ? (
           <button
             type="button"

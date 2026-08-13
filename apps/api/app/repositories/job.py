@@ -639,6 +639,33 @@ class JobRepository:
                 rows[0]["autopilotSuppressedUntil"] = suppressed.get(job_id)
         return rows[0]
 
+    def archive_stale(self, user_id: str, *, days: int) -> int:
+        """Archive (never delete) this user's stale, untouched discoveries.
+
+        A job is stale when it is still in the pre-pipeline ``discovered``
+        status, is not saved by the user, and was last touched more than
+        ``days`` days ago. Archiving keeps the row (and its history) but takes
+        it off the live board so 3-4 week old listings are no longer presented
+        as current openings (QA finding H-07). Returns the number of rows
+        archived.
+        """
+        if days <= 0:
+            return 0
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''UPDATE "Job"
+                       SET "status" = 'archived'::"JobStatus", "updatedAt" = NOW()
+                       WHERE "userId" = %s
+                         AND "status" = 'discovered'::"JobStatus"
+                         AND "saved" = FALSE
+                         AND "updatedAt" < NOW() - make_interval(days => %s)''',
+                    (user_id, days),
+                )
+                archived = cur.rowcount or 0
+            conn.commit()
+        return archived
+
     def update_status(self, job_id: str, status: str) -> dict[str, Any] | None:
         if status not in VALID_STATUSES:
             raise ValueError(f"Invalid job status '{status}'. Valid: {sorted(VALID_STATUSES)}")

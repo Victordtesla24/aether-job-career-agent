@@ -22,6 +22,26 @@ interface SourceStatusView {
   errorText: string | null;
 }
 
+/**
+ * QA H-08: translate a raw adapter exception string (e.g.
+ * "AdapterFetchError: Wellfound public listings unavailable: HTTP Error 404:
+ * Not Found") into calm, user-readable prose. The mapping never fabricates a
+ * cause: it strips the exception-class prefix and normalises the HTTP-error
+ * tail; anything it does not recognise passes through verbatim.
+ */
+export function humanizeSourceError(raw: string): string {
+  let text = raw.trim();
+  // Strip a leading Python/JS exception class prefix ("AdapterFetchError: ").
+  text = text.replace(/^[A-Za-z_]*(Error|Exception)\s*:\s*/, "");
+  // "HTTP Error 404: Not Found" → "the source returned HTTP 404".
+  text = text.replace(
+    /HTTP Error (\d{3})(?::\s*[A-Za-z ]+)?/,
+    (_m, code) => `the source returned HTTP ${code}`,
+  );
+  if (!text) return "Sync failed";
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)} — Aether will retry on the next sync.`;
+}
+
 /** Map raw per-source status rows to the view model the Sync Status panel renders. */
 export function sourceStatusView(
   rows: ScoutSourceStatus[],
@@ -46,7 +66,7 @@ export function sourceStatusView(
           : row.status;
     const errorText = isError
       ? row.lastError && row.lastError.trim().length > 0
-        ? row.lastError
+        ? humanizeSourceError(row.lastError)
         : "Sync failed"
       : null;
     return {

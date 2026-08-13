@@ -233,6 +233,9 @@ export async function updateAdminSettings(
 export const AuditEntrySchema = z.object({
   id: z.string(),
   actorUserId: z.string(),
+  // QA M-05: human-readable actor identity (older API builds omit these).
+  actorName: z.string().nullable().optional(),
+  actorEmail: z.string().nullable().optional(),
   action: z.string(),
   targetType: z.string().nullable(),
   targetId: z.string().nullable(),

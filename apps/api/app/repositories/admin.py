@@ -442,10 +442,15 @@ def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute('SELECT count(*) FROM "AdminAuditLog"')
             total = int(cur.fetchone()[0])
+            # QA M-05: join the actor's display name/email so the UI can show
+            # a human-readable actor instead of a raw CUID. LEFT JOIN keeps
+            # entries whose actor row was deleted (actorName/actorEmail null).
             cur.execute(
-                'SELECT "id","actorUserId","action","targetType","targetId",'
-                '"detailJson","ip","createdAt" FROM "AdminAuditLog" '
-                'ORDER BY "createdAt" DESC, "id" DESC LIMIT %s OFFSET %s',
+                'SELECT a."id",a."actorUserId",a."action",a."targetType",a."targetId",'
+                'a."detailJson",a."ip",a."createdAt",u."name" AS "actorName",'
+                'u."email" AS "actorEmail" FROM "AdminAuditLog" a '
+                'LEFT JOIN "User" u ON u."id" = a."actorUserId" '
+                'ORDER BY a."createdAt" DESC, a."id" DESC LIMIT %s OFFSET %s',
                 (limit, offset),
             )
             rows = rows_to_dicts(cur)
@@ -453,6 +458,8 @@ def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
         {
             "id": r["id"],
             "actorUserId": r["actorUserId"],
+            "actorName": r.get("actorName"),
+            "actorEmail": r.get("actorEmail"),
             "action": r["action"],
             "targetType": r["targetType"],
             "targetId": r["targetId"],
