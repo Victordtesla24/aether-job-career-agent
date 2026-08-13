@@ -300,13 +300,9 @@ describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
     // series=[44,43,290,103] — the FIRST vs LAST point of the whole
     // lookback window. Its own tile tooltip
     // (MarketPulse.tsx:148, `${t.label}: percentage change vs. the prior
-    // period.`) literally claims the badge describes the change from the
-    // series' own second-to-last point (290) to its last point (103) — a
-    // genuine DROP (-64.5%). Rendering "up"/green next to a tooltip that
-    // claims to describe the prior period, for data whose real prior
-    // period dropped, is a live, reproducible dishonesty defect: the
-    // rendered claim does not match the real computation the tooltip says
-    // it is.
+    // period.`) literally claims the badge describes the change vs. the
+    // prior period. Rendering a direction that disagrees with the real
+    // prior-period comparison is a live, reproducible dishonesty defect.
     const fixture: MarketPulseData = {
       ...FIXTURE,
       trendIndicators: [
@@ -330,13 +326,22 @@ describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
     expect(popover.textContent).toMatch(/vs\. the prior period/i);
 
     const series = fixture.trendIndicators[0].series;
-    const truePriorPeriodChange = series.at(-1)! - series.at(-2)!; // 103 - 290
+    // AX-REV-01 (2026-08-13 re-audit): series' LAST point (103) is always
+    // the current, still-in-progress Melbourne week — never a complete
+    // period — so the TRUE "prior period" comparison is the last TWO
+    // COMPLETE points (indices -2 and -3: 290 vs 43), not the raw tail
+    // (-1 and -2: 290 vs 103) the original MON-016 fix still used. That
+    // raw-tail comparison is exactly what let a request landing mid-week
+    // keep showing the wrong sign even after the MON-016 fix shipped.
+    const truePriorPeriodChange = series.at(-2)! - series.at(-3)!; // 290 - 43
     const trueDirection = truePriorPeriodChange >= 0 ? "up" : "down";
-    expect(trueDirection).toBe("down"); // sanity: this IS the audit's sign-flip case
+    expect(trueDirection).toBe("up"); // sanity: excluding the in-progress
+    // point flips this from the raw tail's spurious "down" to a genuine rise
 
     // The badge's color/direction is the ONLY signal next to a tooltip that
     // literally says "vs. the prior period" — it must match the TRUE
-    // prior-period direction, not the whole-window first-vs-last direction.
+    // last-COMPLETE-vs-prior-COMPLETE direction, not a comparison that
+    // treats the in-progress current week as if it were finished.
     expect((wrapper as HTMLElement).className).toContain(
       trueDirection === "up" ? "text-aether-green" : "text-aether-coral"
     );

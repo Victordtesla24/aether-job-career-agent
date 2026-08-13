@@ -85,16 +85,26 @@ function freshestDataAsOf(comparisons: MarketPulseData["marketVsYou"]["compariso
 
 /**
  * MON-016: the trend-indicator tooltip literally claims "vs. the prior
- * period" (the last data point vs. the one immediately before it) — so the
- * rendered up/down signal is derived straight from the series' own tail,
- * rather than trusting a separately-computed `direction` field that could
- * (and, in a live 2026-08-13 audit, did) disagree with what the series
- * itself shows for the most recent period.
+ * period" (the last COMPLETE data point vs. the one immediately before it)
+ * — so the rendered up/down signal is derived straight from the series'
+ * own tail, rather than trusting a separately-computed `direction` field
+ * that could (and, in a live 2026-08-13 audit, did) disagree with what the
+ * series itself shows for the most recent period.
+ *
+ * AX-REV-01 (2026-08-13 re-audit): every `series` passed here is a weekly
+ * rollup whose backend query has no upper bound short of "now" — the LAST
+ * point is always the current, still-in-progress Melbourne week, never a
+ * complete one (mirrors analytics.py's `_pct_delta`, which drops it for the
+ * same reason). Comparing it directly against the point before it divides a
+ * partial week against a complete one, biasing the signal toward "down"
+ * without bound the earlier in the week the page loads. This now always
+ * excludes that trailing in-progress point before comparing.
  */
 function priorPeriodDirection(series: number[]): "up" | "down" | "flat" {
-  if (series.length < 2) return "flat";
-  const last = series[series.length - 1];
-  const prior = series[series.length - 2];
+  const complete = series.slice(0, -1);
+  if (complete.length < 2) return "flat";
+  const last = complete[complete.length - 1];
+  const prior = complete[complete.length - 2];
   if (last === prior) return "flat";
   return last > prior ? "up" : "down";
 }

@@ -1015,6 +1015,135 @@ class TestAnalytics:
         )
         assert sum(flat) == 4, f"exactly one seeded application, got heatmap={heatmap}"
 
+    def test_activity_heatmap_buckets_by_aedt_not_a_fixed_utc10_offset(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """AX-REV-03: the sibling test above only pins an AEST (August,
+        UTC+10) boundary and its own docstring states "Melbourne is UTC+10
+        in August (no DST)" — so it would keep passing unchanged even if the
+        implementation were later replaced with a fixed ``+10`` offset
+        instead of a real ``Australia/Melbourne`` zone conversion. This test
+        pins an AEDT (UTC+11, daylight-saving) boundary instead: an
+        application created at 2026-10-15T13:30:00Z is, at the correct
+        Australia/Melbourne offset, local 2026-10-16T00:30 (+11:00) —
+        Melbourne-day Oct 16. A fixed +10 offset would compute
+        2026-10-15T23:30 instead — still Oct 15, one day EARLIER — so this
+        case genuinely distinguishes a real zone conversion from a
+        hardcoded-offset stand-in (independently verified live via
+        Postgres tzdata: 2026-10-15 13:30Z -> Melbourne 2026-10-16 AEDT+11).
+        The heatmap's own SQL has no upper bound on ``createdAt`` (only
+        ``>= NOW() - INTERVAL '35 days'``), so a same-year future date is a
+        valid, deterministic fixture regardless of the real wall-clock date
+        this suite runs on.
+        """
+        import app.routers.analytics as analytics_module
+
+        class _FixedNow(analytics_module.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+        monkeypatch.setattr(analytics_module, "datetime", _FixedNow)
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                jid = new_id()
+                cur.execute(
+                    '''
+                    INSERT INTO "Job" ("id", "userId", "title", "company",
+                        "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    ''',
+                    (jid, user_id, "AEDT Boundary Job", "Acme", "desc", "seek",
+                     f"https://example.com/{jid}"),
+                )
+                cur.execute(
+                    '''
+                    INSERT INTO "Resume" ("id", "userId", "sections", "formatHash", "updatedAt")
+                    VALUES (%s, %s, '{}', 'seedhash', NOW()) RETURNING "id"
+                    ''',
+                    (new_id(), user_id),
+                )
+                resume_id = cur.fetchone()[0]
+                cur.execute(
+                    '''
+                    INSERT INTO "Application" ("id", "userId", "jobId", "resumeId",
+                        "status", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, 'submitted'::"ApplicationStatus",
+                        '2026-10-15T13:30:00+00:00'::timestamptz, NOW())
+                    ''',
+                    (new_id(), user_id, jid, resume_id),
+                )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        heatmap = pulse["activityHeatmap"]
+        flat = [cell for row in heatmap for cell in row]
+        # Frozen "now" = 2026-10-20T12:00:00Z -> Melbourne-local (AEDT+11)
+        # 2026-10-20T23:00, so "today" = Oct 20. Correct Melbourne-day
+        # (Oct 16) is 4 days before that anchor -> flat index 30. A fixed
+        # +10 implementation would instead land the row on Oct 15 (5 days
+        # before) -> flat index 29.
+        assert flat[30] == 4, (
+            "the application must land on the AEDT-correct Melbourne-local "
+            f"Oct 16 (flat index 30), got heatmap={heatmap}"
+        )
+        assert flat[29] == 0, (
+            "the application must NOT land on the fixed-+10 Oct 15 "
+            f"(flat index 29), got heatmap={heatmap}"
+        )
+        assert sum(flat) == 4, f"exactly one seeded application, got heatmap={heatmap}"
+
+    def test_weekly_bucket_handles_dst_spring_forward_transition(
+        self, client, auth_headers
+    ):
+        """AX-REV-03: a DST-transition case for the WEEKLY bucketing every
+        trend series in this router shares (``DATE_TRUNC('week', ...
+        AT TIME ZONE 'UTC' AT TIME ZONE %s)``). Pins the exact 2026
+        Australia/Melbourne spring-forward instant (AEST 02:00 -> AEDT
+        03:00 on 2026-10-04, independently verified live via Postgres
+        tzdata) at a point that flips which WEEK a row belongs to, not just
+        which day: 2026-10-11T13:30:00Z is, at the correct AEDT (+11)
+        offset, Melbourne-local 2026-10-12T00:30 — the first minute of the
+        week starting Monday 2026-10-12. A fixed +10 offset would instead
+        compute 2026-10-11T23:30 — still Sunday, ONE WEEK EARLIER (the week
+        starting Monday 2026-10-05). The two implementations disagree about
+        the week bucket, so this genuinely exercises DST-aware zone
+        conversion rather than a boundary that any fixed offset would also
+        get right.
+        """
+        from datetime import datetime as real_datetime
+
+        import app.routers.analytics as analytics_module
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # NAIVE parameter, cast to plain ``timestamp`` — matching
+                # exactly how "createdAt"/"startedAt" are stored (confirmed
+                # UTC-naive, per this file's other TZ tests) and how the
+                # router's own SQL chains AT TIME ZONE against them. Binding
+                # a tz-aware value here instead would shift which leg of the
+                # two-step conversion runs first and silently test a
+                # different (wrong) expression.
+                cur.execute(
+                    '''
+                    SELECT DATE_TRUNC(
+                        'week', %s::timestamp AT TIME ZONE 'UTC' AT TIME ZONE %s
+                    )
+                    ''',
+                    (
+                        real_datetime(2026, 10, 11, 13, 30),
+                        analytics_module._ANALYTICS_TIMEZONE,
+                    ),
+                )
+                week_bucket = cur.fetchone()[0]
+
+        assert week_bucket == real_datetime(2026, 10, 12, 0, 0), (
+            f"expected the DST-correct Melbourne week start 2026-10-12, got "
+            f"{week_bucket} — a fixed +10 offset would wrongly compute "
+            "2026-10-05 (one week earlier)"
+        )
+
     def test_market_pulse_declares_the_bucketing_timezone(self, client, auth_headers):
         """MON-015 (part 2): the heatmap/weekly-trend day-and-week
         boundaries are computed in some timezone, but the response discloses
@@ -1033,17 +1162,27 @@ class TestAnalytics:
         """MON-016: ``_pct_delta()``'s own docstring says it compares "the
         first non-zero to last" point of the WHOLE lookback window, but the
         FE tooltip (MarketPulse.tsx:148) claims "percentage change vs. the
-        prior period" — i.e. the LAST period vs the one immediately before
-        it. Live prod evidence (2026-08-13 U-AX audit,
+        prior period" — i.e. the LAST COMPLETE period vs the one immediately
+        before it. Live prod evidence (2026-08-13 U-AX audit,
         api_market-pulse_20260813T130014Z.json) showed a SIGN REVERSAL:
         "Your application velocity" series [44,43,290,103] displayed
         "+134%"/"up" (first=44 vs last=103) while the true week-over-week
-        change (290 -> 103) was -64.5%/down. This fixture reproduces the
-        same first-vs-last / last-vs-prior sign-flip shape at small scale:
-        weekly distinct-jobId application counts [2, 2, 10, 3] -> naive
-        first-vs-last is +50%/up, true last-vs-prior (10 -> 3) is -70%/down.
+        change (290 -> 103) was -64.5%/down.
+
+        AX-REV-01 (2026-08-13 re-audit of that fix): the LAST bucket of any
+        weekly series is always the current, still-in-progress Melbourne
+        week — never a complete period — so it must be EXCLUDED from the
+        comparison, not treated as "the last period". This fixture seeds
+        weekly distinct-jobId application counts [2, 2, 10, 1] at weeks_ago
+        [3, 2, 1, 0]: the true last-COMPLETE-vs-prior-COMPLETE comparison is
+        weeks_ago=1 (10) vs weeks_ago=2 (2) -> a +400% RISE. A comparison
+        that (like the original MON-016 fix) still treats the in-progress
+        current week (weeks_ago=0, count=1) as the "last period" would
+        instead compute 10 -> 1, a spurious -90% DROP purely because the
+        current week hasn't finished yet — the exact sign-flip AX-REV-01
+        was opened for.
         """
-        weeks_ago_counts = [(3, 2), (2, 2), (1, 10), (0, 3)]  # (weeks_ago, distinct jobs)
+        weeks_ago_counts = [(3, 2), (2, 2), (1, 10), (0, 1)]  # (weeks_ago, distinct jobs)
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -1081,10 +1220,15 @@ class TestAnalytics:
         pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
         indicators = {t["label"]: t for t in pulse["trendIndicators"]}
         velocity = indicators["Your application velocity"]
-        assert velocity["series"] == [2, 2, 10, 3], velocity["series"]
+        # AX-REV-02: the series is zero-filled to the fixed 12-week grid
+        # (oldest -> newest); the trailing entry (weeks_ago=0, "this week
+        # so far") is real, honestly-reported data — it is just excluded
+        # from the delta comparison below, not from the series itself.
+        assert velocity["series"] == [0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 10, 1], velocity["series"]
 
-        # True week-over-week (last period vs the one immediately prior):
-        # 10 -> 3 is a DROP. The naive first-vs-last (2 -> 3) is a rise —
-        # this is the audit's sign-flip, reproduced at small scale.
-        assert velocity["direction"] == "down", velocity
-        assert velocity["delta"].startswith("-"), velocity["delta"]
+        # True last-COMPLETE-vs-prior-COMPLETE (weeks_ago=1 vs weeks_ago=2):
+        # 2 -> 10 is a RISE. Comparing weeks_ago=1 against the still-
+        # in-progress weeks_ago=0 (10 -> 1) would instead show a spurious
+        # -90% DROP — the exact sign-flip AX-REV-01 was opened for.
+        assert velocity["direction"] == "up", velocity
+        assert velocity["delta"] == "+400%", velocity["delta"]

@@ -376,22 +376,34 @@ def _relative_time(ts: datetime | None) -> str:
 
 
 def _pct_delta(series: list[float]) -> tuple[str, str]:
-    """Return (delta_label, direction) comparing the LAST period to the one
-    immediately prior to it — the literal "vs. the prior period" comparison
-    the Trend Indicators tooltip claims (MarketPulse.tsx).
+    """Return (delta_label, direction) comparing the last COMPLETE period to
+    the one immediately before it — the literal "vs. the prior period"
+    comparison the Trend Indicators tooltip claims (MarketPulse.tsx).
 
     MON-016: this used to compare the first non-zero point to the last point
     of the WHOLE lookback window, which can — and, in a live 2026-08-13
     audit, did — report the OPPOSITE sign of the true most-recent
     week-over-week change (series [44, 43, 290, 103] displayed "+134%"/up
     from first=44 vs last=103, while the real prior-period change,
-    290 -> 103, was -64.5%/down). "Prior period" means the period
-    immediately before the last one, so this now looks only at ``series``'s
-    final two points.
+    290 -> 103, was -64.5%/down).
+
+    AX-REV-01 (2026-08-13 re-audit of that fix): every series this is
+    called with is a weekly rollup whose SQL upper bound is literally "the
+    current Melbourne week" — so ``series[-1]`` is ALWAYS the still-in-
+    progress current period, never a complete one. Comparing it directly
+    against ``series[-2]`` (a complete prior week) divides a partial
+    numerator by a complete denominator, biasing the result toward "down"
+    without bound the earlier in the week the request lands (live
+    2026-08-13T16:11Z evidence: 4d02h into the week, a genuine -47.8%
+    like-for-like change rendered as -59.5%; a Monday request for a
+    perfectly flat user would render roughly -95%). "Prior period" means
+    the last two COMPLETE periods, so this now always drops the trailing
+    in-progress bucket before comparing.
     """
-    if len(series) < 2:
+    complete = series[:-1]
+    if len(complete) < 2:
         return ("no change", "flat")
-    prior, last = series[-2], series[-1]
+    prior, last = complete[-2], complete[-1]
     if prior == last:
         return ("no change", "flat")
     if prior == 0:
@@ -552,14 +564,33 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             agent_week_rows = rows_to_dicts(cur)
 
             # Weekly agent spend (last 12 weeks) for trend indicators.
+            # AX-REV-02: zero-filled across the SAME 12-week grid as
+            # agent_week_rows above (generate_series, not a bare GROUP BY) —
+            # without it, a week with $0 spend is simply ABSENT rather than
+            # present-as-zero, so series[-2]/series[-1] could silently
+            # compare two weeks separated by a multi-week gap while
+            # _pct_delta's own contract (and the FE tooltip) claims "the
+            # prior period" (live audit: this user's 84-day window had only
+            # 4 of 12 weeks present under the old bare GROUP BY).
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', '
-                '"startedAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
-                'COALESCE(SUM("costUsd"), 0) AS spend '
-                'FROM "AgentRun" WHERE "userId" = %s '
-                'AND "startedAt" >= NOW() - INTERVAL \'84 days\' '
-                'GROUP BY week ORDER BY week',
-                (_ANALYTICS_TIMEZONE, user_id),
+                '''
+                SELECT gs.week AS week, COALESCE(spend.total, 0) AS spend
+                FROM generate_series(
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    INTERVAL '1 week'
+                ) AS gs(week)
+                LEFT JOIN (
+                    SELECT DATE_TRUNC(
+                        'week', "startedAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
+                    ) AS week, SUM("costUsd") AS total
+                    FROM "AgentRun" WHERE "userId" = %s
+                    AND "startedAt" >= NOW() - INTERVAL '84 days'
+                    GROUP BY week
+                ) spend ON spend.week = gs.week
+                ORDER BY gs.week
+                ''',
+                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
             )
             agent_spend_rows = rows_to_dicts(cur)
 
@@ -572,26 +603,55 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             # this week, diverging from that canonical figure on the SAME
             # page for the SAME underlying data (GOLD-MASTER-V2 §15
             # raw-count divergence class).
+            # AX-REV-02: same zero-fill treatment as agent_spend_rows above —
+            # an application-free week must appear as a real 0, not vanish.
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', '
-                '"createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
-                'COUNT(DISTINCT "jobId") AS cnt '
-                'FROM "Application" WHERE "userId" = %s '
-                'AND "createdAt" >= NOW() - INTERVAL \'84 days\' '
-                'GROUP BY week ORDER BY week',
-                (_ANALYTICS_TIMEZONE, user_id),
+                '''
+                SELECT gs.week AS week, COALESCE(apps.cnt, 0) AS cnt
+                FROM generate_series(
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    INTERVAL '1 week'
+                ) AS gs(week)
+                LEFT JOIN (
+                    SELECT DATE_TRUNC(
+                        'week', "createdAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
+                    ) AS week, COUNT(DISTINCT "jobId") AS cnt
+                    FROM "Application" WHERE "userId" = %s
+                    AND "createdAt" >= NOW() - INTERVAL '84 days'
+                    GROUP BY week
+                ) apps ON apps.week = gs.week
+                ORDER BY gs.week
+                ''',
+                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
             )
             app_week_rows = rows_to_dicts(cur)
 
-            # Average fit-score trend (weekly) as a demand proxy.
+            # Average fit-score trend (weekly) as a demand proxy. AX-REV-02:
+            # zero-filled to the same grid — a week with no newly-scored
+            # jobs reports 0 here (consistent with _pct_delta's own
+            # zero-baseline handling, which reports "new activity" rather
+            # than a fabricated percentage off an empty prior week), instead
+            # of being absent and letting the delta silently span a gap.
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', '
-                '"createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
-                'COALESCE(AVG("fitScore"), 0) AS fit '
-                'FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL '
-                'AND "createdAt" >= NOW() - INTERVAL \'84 days\' '
-                'GROUP BY week ORDER BY week',
-                (_ANALYTICS_TIMEZONE, user_id),
+                '''
+                SELECT gs.week AS week, COALESCE(fit.avg_fit, 0) AS fit
+                FROM generate_series(
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    INTERVAL '1 week'
+                ) AS gs(week)
+                LEFT JOIN (
+                    SELECT DATE_TRUNC(
+                        'week', "createdAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
+                    ) AS week, AVG("fitScore") AS avg_fit
+                    FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL
+                    AND "createdAt" >= NOW() - INTERVAL '84 days'
+                    GROUP BY week
+                ) fit ON fit.week = gs.week
+                ORDER BY gs.week
+                ''',
+                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
             )
             fit_week_rows = rows_to_dicts(cur)
 
