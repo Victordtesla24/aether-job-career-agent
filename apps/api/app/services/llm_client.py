@@ -1684,6 +1684,167 @@ _STATIC_MODEL_CATALOG: dict[str, list[dict[str, Any]]] = {
 _MODEL_CATALOG_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _MODEL_CATALOG_TTL = 3600.0  # 1 h — the catalog changes rarely.
 
+
+# ---------------------------------------------------------------------------
+# U1X-a reliability: affordable-window ``max_tokens`` sizing, wall-clock attempt
+# planning, and an honest remaining-credit reading.
+#
+# Ground truth (agents-uplift discovery, live-verified 2026-08-13): production
+# 402s were driven by an unbounded completion ask — the OpenAI-compatible body
+# omits ``max_tokens`` on every non-rescue attempt, so the upstream provider
+# default (up to 65536 for a reasoning-tier model) applies no matter how little
+# credit is left. The 503 storm was wall-clock exhaustion: a fixed 2-attempt
+# chain planned against a 65 s budget while observed REASONING-tier latency was
+# 70.9-94.4 s, so neither attempt could ever finish.
+# ---------------------------------------------------------------------------
+
+#: Per-call-class completion ceilings. These are what a call of that class can
+#: actually USE — an entailment verdict is a short strict-JSON object, a drafted
+#: letter is long-form prose — never the provider's unbounded default.
+_MAX_TOKENS_BY_CALL_CLASS: dict[str, int] = {
+    "tailor_entailment": 2048,
+    "tailor": 8192,
+    "cover_letter": 8192,
+    "story_extraction": 4096,
+}
+
+#: Ceiling for a call class we have no measured figure for. Deliberately well
+#: under the 65536 unbounded ask, and above every observed real completion.
+_DEFAULT_MAX_TOKENS = 4096
+
+#: Smallest completion window worth requesting. A near-empty credit balance is
+#: an honest 402/credits-check problem, not a reason to send ``max_tokens=0``
+#: (a request that can never produce output while still being billed for input).
+_MIN_MAX_TOKENS = 64
+
+
+def size_max_tokens_for_call(
+    prompt_name: str,
+    *,
+    remaining_credit_usd: float,
+    completion_price_per_m: float,
+) -> int:
+    """``max_tokens`` to REQUEST for a call of this class, capped to what the
+    remaining credit can actually afford.
+
+    ``completion_price_per_m`` is $/M completion tokens (the same unit
+    :data:`_STATIC_MODEL_CATALOG` and the OpenRouter catalog carry). The result
+    is ``min(per-call-class ceiling, affordable window)`` with a
+    :data:`_MIN_MAX_TOKENS` floor — never the provider's unbounded default, and
+    never ``0``.
+    """
+    ceiling = _MAX_TOKENS_BY_CALL_CLASS.get(prompt_name, _DEFAULT_MAX_TOKENS)
+    try:
+        price = float(completion_price_per_m)
+        credit = float(remaining_credit_usd)
+    except (TypeError, ValueError):
+        return ceiling
+    if price <= 0 or credit <= 0:
+        # No usable price signal (free model / unknown price) — the class
+        # ceiling is still a real bound, which is the whole point.
+        return ceiling
+    affordable = int((credit / price) * 1_000_000)
+    return max(_MIN_MAX_TOKENS, min(ceiling, affordable))
+
+
+def plan_attempt_count(
+    *,
+    budget_seconds: float,
+    per_attempt_seconds: float,
+    requested_attempts: int,
+) -> int:
+    """How many of ``requested_attempts`` actually FIT in the wall-clock budget.
+
+    Returns the largest count ``<= requested_attempts`` whose total attempt time
+    fits inside ``budget_seconds``, or ``0`` when not even one attempt fits —
+    an honest fail-fast signal instead of promising an attempt that is
+    guaranteed to be cut off mid-flight (indistinguishable, to the caller, from
+    a real provider failure).
+    """
+    try:
+        budget = float(budget_seconds)
+        per_attempt = float(per_attempt_seconds)
+        requested = int(requested_attempts)
+    except (TypeError, ValueError):
+        return max(0, int(requested_attempts or 0))
+    if requested <= 0:
+        return 0
+    if per_attempt <= 0:
+        return requested
+    return max(0, min(requested, int(budget // per_attempt)))
+
+
+class CreditsUnavailableError(RuntimeError):
+    """Raised when the provider's remaining credit can't be read (no
+    credential / network / upstream error). Mirrors :class:`ModelCatalogError`'s
+    honest-failure role: a credits reading is NEVER fabricated."""
+
+
+#: Cached credits reading: (fetched_at_monotonic, envelope).
+_CREDITS_CACHE: "tuple[float, dict[str, Any]] | None" = None
+#: Credits move only as spend happens; a short TTL keeps the reading honest
+#: without hammering the provider from every page render.
+_CREDITS_TTL = 60.0
+
+
+def get_openrouter_credits(*, force_refresh: bool = False) -> dict[str, Any]:
+    """Real remaining OpenRouter credit: ``{"remaining", "total", "asOf"}``.
+
+    Reads OpenRouter's own ``GET /credits`` with the deployment credential and
+    caches for :data:`_CREDITS_TTL` (same pattern as the model catalog). Fails
+    CLOSED with :class:`CreditsUnavailableError` — an unreachable upstream falls
+    back to the last real reading if one exists, and otherwise raises rather
+    than inventing a balance.
+    """
+    global _CREDITS_CACHE
+
+    now = time.monotonic()
+    cached = _CREDITS_CACHE
+    if not force_refresh and cached is not None and now - cached[0] < _CREDITS_TTL:
+        return dict(cached[1])
+
+    cred = resolve_credential("openrouter")
+    if cred is None or not getattr(cred, "secret", None):
+        raise CreditsUnavailableError(
+            "No OpenRouter credential is configured — remaining credit cannot be read."
+        )
+
+    import httpx
+
+    base = (getattr(cred, "base_url", None) or "https://openrouter.ai/api/v1").rstrip("/")
+    try:
+        resp = httpx.get(
+            f"{base}/credits",
+            headers={"Authorization": f"Bearer {cred.secret}"},
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
+            raise CreditsUnavailableError(
+                f"OpenRouter returned HTTP {resp.status_code} for GET /credits."
+            )
+        payload = resp.json() or {}
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            raise CreditsUnavailableError("OpenRouter /credits returned an unexpected shape.")
+        total = float(data.get("total_credits") or 0.0)
+        used = float(data.get("total_usage") or 0.0)
+    except CreditsUnavailableError:
+        if cached is not None:
+            return dict(cached[1])
+        raise
+    except Exception as exc:  # noqa: BLE001 — network/parse: honest failure
+        if cached is not None:
+            return dict(cached[1])
+        raise CreditsUnavailableError(f"OpenRouter /credits is unreachable: {exc}") from exc
+
+    envelope: dict[str, Any] = {
+        "remaining": round(total - used, 6),
+        "total": round(total, 6),
+        "asOf": datetime.now(timezone.utc).isoformat(),
+    }
+    _CREDITS_CACHE = (now, envelope)
+    return dict(envelope)
+
 #: F-2 (HIGH, uat/reports/evidence/prod-verify-5a/PROD-VERIFY-5A.json) —
 #: ``_MODEL_CATALOG_CACHE`` above is in-process memory only, so it reopens
 #: COLD on every API restart/deploy. Until something happens to browse the

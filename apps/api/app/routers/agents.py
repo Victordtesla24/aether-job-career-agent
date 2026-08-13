@@ -176,6 +176,30 @@ def _price_guarding_down_pricing(
     return price_in, price_out
 
 
+def _static_catalog_model_ids(provider_id: str) -> list[str]:
+    """The curated static catalog ids for a provider without an open ``/models``
+    endpoint (today: anthropic only — ADR-ML-4 justifies the static list because
+    Anthropic exposes no open catalog to curate FROM).
+
+    ONE source of truth: ``llm_client._STATIC_MODEL_CATALOG``, the exact list
+    ``GET /agents/providers/{provider}/models`` already serves. Returns ``[]``
+    for every provider that has no static catalog, so nothing is ever invented.
+    """
+    from app.services.llm_client import _STATIC_MODEL_CATALOG
+
+    return [m["id"] for m in _STATIC_MODEL_CATALOG.get(provider_id, [])]
+
+
+def _flagship_static_model_id(provider_id: str) -> str:
+    """The premium-tier ("flagship") id of a provider's static catalog, or ``""``."""
+    from app.services.llm_client import _STATIC_MODEL_CATALOG
+
+    for model in _STATIC_MODEL_CATALOG.get(provider_id, []):
+        if model.get("tier") == "premium":
+            return str(model["id"])
+    return ""
+
+
 #: The product's full agent catalog as shown in the Agent Configuration grid.
 #: ``backend`` maps a catalog agent to a runnable API agent where one exists
 #: (None → configuration-only). ``recommended`` is the wireframe's suggested
@@ -348,10 +372,19 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "whether a cover letter was attached. Reports observed association only "
             "— it never adapts, retrains or re-weights anything — and withholds "
             "every rate below the sample threshold. Deterministic, no LLM cost."},
+    # ML-U1X-b: the Orchestrator ROLE. Its sequencing today is deterministic
+    # code, but the role now carries the model the supervisor/planning step is
+    # assigned — defaulting to the Anthropic catalog's flagship, user-switchable
+    # down to sonnet/haiku through the SAME per-agent override machinery every
+    # other role uses (see ``_ROLE_MODEL_BACKENDS``).
     {"key": "orchestration", "name": "Orchestration Agent", "icon": "fa-sitemap",
-     "accent": "indigo", "backend": "supervisor", "recommended": "deterministic",
+     "accent": "indigo", "backend": "supervisor",
+     "recommended": _flagship_static_model_id("anthropic"),
      "tip": "Plans and sequences the live pipeline (supervisor node): scout → fitScorer → "
-            "matcher → tailor → coverLetter. Deterministic, no LLM cost."},
+            "matcher → tailor → coverLetter. The model assigned here is the "
+            "orchestrator role's model; today's sequencing itself is "
+            "deterministic, so this assignment costs nothing until a planning "
+            "call runs on it."},
     # ADR-AG-1 (wave-4C): "pushes timely alerts" claimed a push channel that does
     # not exist (no web-push, no SMS, no mobile app). The channel that DOES exist
     # is the user's own connected Gmail, so that is what this now says.
@@ -411,8 +444,15 @@ AGENT_NAMES: tuple[str, ...] = _PIPELINE_AGENT_NAMES + tuple(
 #: exist in the server environment (see ``_provider_env_state``). Nothing here
 #: may claim a connection that does not exist.
 PROVIDER_SEED: list[dict[str, Any]] = [
+    # ML-U1X-a: the anthropic seed hardcoded ``[]`` while a working 3-model
+    # curated catalog existed and was already served by
+    # GET /agents/providers/anthropic/models — so a genuinely connected+verified
+    # Anthropic credential still rendered "No preset models". The seed now
+    # carries that same catalog (identical wire shape: list[str]); whether a
+    # card actually OFFERS them still depends on a real credential existing
+    # (see ``_build_provider_entry`` / ``_build_user_provider_entry``, D-0020).
     {"id": "anthropic", "name": "Anthropic Claude", "auth": "API Key",
-     "models": [], "icon": "fa-a", "color": "#D97757"},
+     "models": _static_catalog_model_ids("anthropic"), "icon": "fa-a", "color": "#D97757"},
     {"id": "openrouter", "name": "OpenRouter", "auth": "OAuth + API Key",
      # No hardcoded seed models: OpenRouter's model list is the LIVE catalog
      # (GET /agents/providers/openrouter/models, 330+ models) shown by the model
@@ -623,6 +663,12 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
     ``metered_api`` for every supported credential (consumer subscription OAuth
     was removed for compliance — GAP-AUTH-001).
     """
+    # ML-U1X-b: a backend that makes no metered LLM call has no billing
+    # provenance to name — including a ROLE backend (supervisor) that carries an
+    # assigned model for the picker but never calls it. Unchanged behaviour for
+    # every metered backend below.
+    if agent_name not in _LLM_TIER_BY_BACKEND:
+        return {"quotaPath": "none"}, None
     # Reflect the user's chosen model so the audit names the credential/provider
     # of the model that will ACTUALLY serve the run (GAP-P7-MODEL-CHOICE-001).
     model = _model_for_agent(agent_name, override=_user_model_override(user_id, agent_name))
@@ -1572,12 +1618,30 @@ def _call_is_metered(agent_name: str, params: dict[str, Any]) -> bool:
     return True if predicate is None else predicate(params)
 
 
+#: ROLE backends (ML-U1X-b): backends whose model is a user-assignable ROLE
+#: rather than a metered per-call tier. ``supervisor`` (the Orchestrator card)
+#: is the first: its sequencing is deterministic code, so it is deliberately
+#: ABSENT from ``_LLM_TIER_BY_BACKEND`` — no quota is reserved and no spend is
+#: recorded for it (``_call_is_metered`` stays False) — but the operator/user
+#: does assign it a model, defaulting to the Anthropic catalog's flagship.
+#: Mapped to that default here, so the catalog reports the role's REAL assigned
+#: model instead of the "deterministic" sentinel a picker cannot bind to.
+_ROLE_MODEL_BACKENDS: dict[str, str] = {
+    "supervisor": _flagship_static_model_id("anthropic"),
+}
+
+
 def _model_for_agent(agent_name: str, override: "str | None" = None) -> str | None:
     """The model this backend agent ACTUALLY runs on, or None for deterministic
     agents that make no LLM calls. Costing against the model that really served
     the run keeps spend/ROI (and the USD spend cap) genuine — so when the user
     chose a model (``override``) it MUST be reflected for the same generation
     tiers ``get_model`` honours it on (STRUCTURED stays on the env default)."""
+    if agent_name in _ROLE_MODEL_BACKENDS:
+        # A role's assignment IS the answer — the user's pick when they made
+        # one, else the role's default. Never an env generation tier: the role
+        # is assigned explicitly, not inherited from a tier it never calls.
+        return (override or "").strip() or _ROLE_MODEL_BACKENDS[agent_name] or None
     tier = _LLM_TIER_BY_BACKEND.get(agent_name)
     if tier is None:
         return None
@@ -1601,7 +1665,14 @@ def _model_overridable(agent_name: "str | None") -> bool:
     LLM tier but is deliberately EXCLUDED from user override, so it resolves
     to False — an honest "fixed model, not user-selectable" lock rather than a
     picker whose selection is never read."""
-    if agent_name is None or agent_name in _DETERMINISTIC_BACKENDS:
+    if agent_name is None:
+        return False
+    # ML-U1X-b: a ROLE backend's assignment IS read back (through the same
+    # ``_user_model_override`` resolver as every other role), so its picker is
+    # genuinely functional even though the role reserves no quota.
+    if agent_name in _ROLE_MODEL_BACKENDS:
+        return True
+    if agent_name in _DETERMINISTIC_BACKENDS:
         return False
     tier = _LLM_TIER_BY_BACKEND.get(agent_name)
     if tier is None:
@@ -1642,11 +1713,18 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
     deliberate pick that points at an unconfigured provider fails HONESTLY at
     call time rather than being silently swapped.
     """
-    # Deterministic agents make no LLM call — nothing to override.
-    if agent_name not in _LLM_TIER_BY_BACKEND:
+    # Deterministic agents make no LLM call — nothing to override. ROLE
+    # backends (ML-U1X-b, ``_ROLE_MODEL_BACKENDS``) are the exception: they are
+    # not metered tiers, but their assignment IS a real, readable choice.
+    is_role = agent_name in _ROLE_MODEL_BACKENDS
+    if not is_role and agent_name not in _LLM_TIER_BY_BACKEND:
         return None
     ui_key = _UI_KEY_FOR_BACKEND.get(agent_name, agent_name)
-    default_model = _RECOMMENDED_FOR_BACKEND.get(agent_name, "")
+    # For a ROLE the stored value is ALWAYS the answer: a role has exactly one
+    # model (the picker writes it, the role default is what the card shows when
+    # unset), so a stored value equal to the default is still that role's real
+    # assignment — not the phantom seed the tier agents have to filter out.
+    default_model = "" if is_role else _RECOMMENDED_FOR_BACKEND.get(agent_name, "")
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -1660,6 +1738,11 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
                     chosen = row[0].strip()
                     if chosen != default_model:  # a real per-agent change
                         return chosen
+                if is_role:
+                    # A ROLE never inherits the provider card's default model:
+                    # its unset state is the role's OWN default (rendered by the
+                    # catalog), not whatever was last saved on another card.
+                    return None
                 # Fall through to the user's provider-level default model — SCOPED
                 # to the openrouter provider only. The ModelPicker sets exactly this
                 # row; scoping stops a stale/incidental model saved on ANOTHER
@@ -3557,6 +3640,18 @@ def _build_provider_entry(
             "(Connect with Anthropic, or Renew)."
         )
     model = override.get("model") or env_model
+    # ML-U1X-a: a provider whose catalog is a curated STATIC list (anthropic —
+    # no open /models endpoint, ADR-ML-4) offers exactly that list once a real
+    # credential exists for this scope, whether it came from the DB vault or the
+    # legacy env path. ``env_models`` never knew about the DB row at all, which
+    # is why a connected+verified deployment credential still rendered an empty
+    # <select>. ``source == "none"`` (no credential anywhere) keeps the honest
+    # empty list — a catalog is never offered for a provider nobody can call
+    # (D-0020).
+    models = env_models
+    static_ids = _static_catalog_model_ids(provider_id)
+    if static_ids:
+        models = static_ids if source != "none" else []
     return {
         "id": provider_id,
         "label": seed["name"],
@@ -3564,7 +3659,7 @@ def _build_provider_entry(
         "auth": seed["auth"],
         "icon": seed["icon"],
         "color": seed["color"],
-        "models": env_models,
+        "models": models,
         "status": status,
         "source": source,
         "authMode": auth_mode,
@@ -3890,6 +3985,38 @@ def verify_provider(provider: str, current_user: AdminUser) -> dict[str, Any]:
     return {"ok": ok, "status": status_token, "detail": detail}
 
 
+@router.get("/providers/openrouter/credits")
+def openrouter_credits_endpoint(current_user: AdminUser) -> dict[str, Any]:
+    """Real remaining OpenRouter credit for the DEPLOYMENT account (ML-U1X-a).
+
+    OPERATOR-ONLY, the same ``AdminUser`` gate as the rest of the
+    deployment-wide provider family (F-01): this is the operator's billing
+    balance, not the caller's. The figure is OpenRouter's own ``GET /credits``
+    reading, cached briefly upstream. When it cannot be read (no credential,
+    unreachable upstream) the answer is an explicit ``available: false``
+    envelope — never a fabricated balance, never an opaque 500 — so the UI can
+    say "unavailable" honestly instead of implying healthy credit.
+    """
+    from app.services import llm_client
+
+    try:
+        credits = llm_client.get_openrouter_credits(force_refresh=False)
+    except llm_client.CreditsUnavailableError as exc:
+        return {
+            "available": False,
+            "remaining": None,
+            "total": None,
+            "asOf": None,
+            "detail": str(exc),
+        }
+    return {
+        "available": True,
+        "remaining": credits.get("remaining"),
+        "total": credits.get("total"),
+        "asOf": credits.get("asOf"),
+    }
+
+
 @router.get("/providers/{provider}/models")
 def list_provider_models_endpoint(
     provider: str, current_user: CurrentUser
@@ -4000,6 +4127,15 @@ def _build_user_provider_entry(
         status_token = "unconfigured"
         source = "none"
         detail = f"You have not added your own {seed['name']} key."
+    # ML-U1X-a: same static-catalog rule as the deployment-wide builder, scoped
+    # to THIS user's own credential (F-01): a customer who added their own
+    # verified Anthropic key sees the real catalog; a customer with no key of
+    # their own sees an honest empty list — never the operator's state, never a
+    # fabricated catalog (D-0020).
+    models = seed["models"]
+    static_ids = _static_catalog_model_ids(seed["id"])
+    if static_ids:
+        models = static_ids if cred else []
     return {
         "id": seed["id"],
         "label": seed["name"],
@@ -4007,7 +4143,7 @@ def _build_user_provider_entry(
         "auth": seed["auth"],
         "icon": seed["icon"],
         "color": seed["color"],
-        "models": seed["models"],
+        "models": models,
         "status": status_token,
         "source": source,
         "authMode": cred.get("authMode") if cred else None,
