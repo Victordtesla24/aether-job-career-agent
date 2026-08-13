@@ -390,9 +390,14 @@ def _status_event(company: str, status_val: str) -> tuple[str, str]:
 
 @router.get("/market-pulse")
 def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
-    """Real-time market pulse panels — every figure derived from the user's
-    own DB rows (Job / Application / AgentRun). Empty datasets degrade to
-    zero-value / empty-array defaults rather than fabricated numbers."""
+    """Real-time market pulse panels. Every figure about THIS user is derived
+    from their own DB rows (Job / Application / AgentRun). The ONE external
+    input is the market side of Market vs. You, fetched live from the Adzuna
+    AU API (:func:`fetch_market_benchmark`); each row carries its own
+    ``connected`` / ``dataAsOf`` provenance so a reader can tell which side of
+    it came from outside. Empty datasets — and an absent, credential-less or
+    failing provider — degrade to zero-value / empty-array / honestly
+    not-connected defaults rather than fabricated numbers."""
     user_id = current_user["id"]
 
     with get_connection() as conn:
@@ -659,12 +664,15 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         ("Skill match", min(100, round(avg_fit)), fit_scored_jobs > 0, False),
     ]
     # STRUCTURAL GUARANTEE (F-04). Market-data dependence is part of a factor's
-    # DEFINITION and is filtered against the very same constant that drives the
-    # "Market vs. You" not-connected banner below, so a factor claiming market
-    # evidence cannot be emitted while that banner says none is connected —
-    # the factor is simply not built. No factor sets the flag today; the
-    # mechanism exists so the next one has to declare its dependence rather
-    # than quietly reintroduce the contradiction this fix removed.
+    # DEFINITION and is filtered against the very same constant this response
+    # publishes as ``probability.marketDataConnected``, so a factor claiming
+    # market evidence cannot be emitted while that panel says the model has
+    # none — the factor is simply not built. That constant is NOT the Market
+    # vs. You connection state, which is now per-row and live (R5): a posting
+    # count is not evidence about this user's chances, so it gates no factor.
+    # No factor sets the flag today; the mechanism exists so the next one has
+    # to declare its dependence rather than quietly reintroduce the
+    # contradiction this fix removed.
     factors: list[dict[str, Any]] = [
         {"label": label, "value": value if measured else None, "measured": measured}
         for label, value, measured, requires_market_data in factor_specs
@@ -820,8 +828,12 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             "note": _PROGRESS_NOTE,
             "methodology": _PROGRESS_METHODOLOGY,
             "unmeasuredReason": None if prob_score is not None else _PROGRESS_UNMEASURED_REASON,
-            # SAME constant as marketVsYou.marketDataConnected below — one
-            # source of truth, so this panel and that banner cannot disagree.
+            # DELIBERATELY DECOUPLED from marketVsYou.marketDataConnected (R5;
+            # see the constant's own comment). This flag reports whether the
+            # PROBABILITY model has market evidence to reason from — a flat
+            # ``False`` — while Market vs. You reports the live per-row state
+            # of the Adzuna benchmark. Once that benchmark returns data the two
+            # values DISAGREE by design: do not "fix" them back into sync.
             "marketDataConnected": _MARKET_DATA_SOURCE_CONNECTED,
             "factors": factors,
         },

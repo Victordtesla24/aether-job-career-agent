@@ -234,6 +234,15 @@ _BENCH_TTL_DEFAULT_SECONDS = 21600
 _BENCH_TTL_MIN_SECONDS = 60
 _BENCH_TTL_MAX_SECONDS = 21600
 
+#: How long a FAILED attempt is remembered (negative cache / backoff window).
+#: Without it a sustained provider outage would defeat the cache entirely —
+#: every request for that key would evict nothing, find nothing, and issue
+#: another live call, walking straight into the 25/min rate limit. What is
+#: cached is the ABSENCE of data (an honest "not connected"), never numbers,
+#: so this window is kept far shorter than the success TTL and the benchmark
+#: reappears within a minute of the provider recovering.
+_BENCH_FAILURE_TTL_SECONDS = 60
+
 #: The posting-count window. ``count`` under ``max_days_old=30`` is exactly
 #: "ads posted in the last 30 days" — a real per-month market-activity figure,
 #: not a rate derived from anything.
@@ -244,11 +253,13 @@ _BENCH_MAX_DAYS_OLD = 30
 #: quickly rather than hold the request open.
 _BENCH_HTTP_TIMEOUT_SECONDS = 10
 
-#: (role, location) -> (``time.monotonic()`` at fetch, benchmark). Module-level
-#: on purpose: the whole point is to serve many requests from one upstream
-#: call. ``monotonic`` (never wall-clock) so a clock adjustment can neither
-#: resurrect an expired entry nor expire a fresh one.
-_BENCH_CACHE: dict[tuple[str, str], tuple[float, "MarketBenchmark"]] = {}
+#: (role, location) -> (``time.monotonic()`` at the attempt, benchmark — or
+#: ``None`` when that attempt FAILED, held only for
+#: :data:`_BENCH_FAILURE_TTL_SECONDS`). Module-level on purpose: the whole
+#: point is to serve many requests from one upstream call. ``monotonic``
+#: (never wall-clock) so a clock adjustment can neither resurrect an expired
+#: entry nor expire a fresh one.
+_BENCH_CACHE: dict[tuple[str, str], tuple[float, "MarketBenchmark | None"]] = {}
 
 
 @dataclass(frozen=True)
@@ -365,6 +376,9 @@ def fetch_market_benchmark(role: str, location: str) -> MarketBenchmark | None:
     can reach the live provider). It is ALSO the answer whenever the fetch
     itself fails, including a refetch that fails after a cached entry expired:
     stale numbers are never re-served behind a fresh-looking "as of" label.
+    A failure is itself cached for a short backoff window
+    (:data:`_BENCH_FAILURE_TTL_SECONDS`) — the absence of data, never numbers
+    — so a sustained outage cannot turn every request back into a live call.
     """
     role_q = (role or "").strip()
     location_q = (location or "").strip()
@@ -385,7 +399,11 @@ def fetch_market_benchmark(role: str, location: str) -> MarketBenchmark | None:
     cached = _BENCH_CACHE.get(cache_key)
     if cached is not None:
         fetched_at, benchmark = cached
-        if time.monotonic() - fetched_at < ttl:
+        # A cached FAILURE is backoff, not data: it expires far sooner than a
+        # cached benchmark, so a recovered provider is picked up within the
+        # minute instead of waiting out the full data TTL.
+        entry_ttl = ttl if benchmark is not None else min(_BENCH_FAILURE_TTL_SECONDS, ttl)
+        if time.monotonic() - fetched_at < entry_ttl:
             return benchmark
         # Expired: evict FIRST, so a failing refetch below cannot fall back
         # onto the stale entry by any path.
@@ -393,6 +411,10 @@ def fetch_market_benchmark(role: str, location: str) -> MarketBenchmark | None:
 
     counts = _fetch_search_counts(app_id, app_key, role_q, location_q)
     if counts is None:
+        # Remember the FAILURE (never the previous numbers — the expired entry
+        # was already evicted above) so the next requests during an outage back
+        # off instead of each issuing their own live call.
+        _BENCH_CACHE[cache_key] = (time.monotonic(), None)
         return None
     postings, mean_salary = counts
 
