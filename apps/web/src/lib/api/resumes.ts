@@ -16,6 +16,13 @@ export const ResumeSchema = z.object({
   // Human-in-the-loop review state (MV-resume-studio-001). Nullish for backward
   // compatibility with any payload predating the column; defaults to "approved".
   approvalStatus: z.string().nullish(),
+  // MON-011 (MONITORING-LEDGER.md): true ONLY when GET /resumes/{id}/download
+  // would genuinely reproduce the original document (resolve_original_pdf
+  // finds a bundled-asset digest match) — the exact condition the download
+  // endpoint branches on. Nullish for backward compatibility with any fixture
+  // or cached payload predating this field; a missing value is NOT treated as
+  // an affirmative preservation claim (see page.tsx's per-version logic).
+  formatPreserved: z.boolean().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -95,12 +102,19 @@ export interface TailorRunResult {
 }
 
 /**
- * Download a resume version as a format-preserving PDF.
+ * Download a resume version as a PDF.
  *
  * Streams `GET /resumes/{id}/download` (a binary PDF, so it bypasses the JSON
  * `apiRequest` helper), then triggers a browser download of the returned blob.
- * The base resume comes back as the original PDF bytes; tailored versions come
- * back as the original layout with only the reworded bullets redrawn.
+ *
+ * MON-011 (MONITORING-LEDGER.md): whether the returned PDF actually
+ * reproduces the original document's layout depends on the server's
+ * `resolve_original_pdf` match (apps/api/app/services/resume_pdf.py) — true
+ * only for the bundled seed PDFs and versions tailored from them. Every real
+ * user upload (base or tailored) falls through to the generic branded
+ * template instead. This function makes no promise about which happened;
+ * callers must read the resume's own `formatPreserved` flag (`ResumeSchema`
+ * above) before telling the user their layout was preserved.
  */
 export async function downloadResume(id: string, options: RequestOptions = {}): Promise<void> {
   const baseUrl = options.baseUrl ?? apiBaseUrl();

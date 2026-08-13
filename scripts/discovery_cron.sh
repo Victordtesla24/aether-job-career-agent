@@ -64,22 +64,49 @@ fi
 # the REAL status and a body excerpt so every failure is loud, legible, and
 # honestly attributed in the discovery log -- never miscategorized as "curl
 # broke" when the API actually just said no (or vice versa).
+#
+# MON-004 (MONITORING-LEDGER.md): a TRANSIENT failure gets exactly ONE retry,
+# after a short backoff, before it is treated as fatal. The observed failure is
+# a restart race -- the systemd timer fires while the API process is bouncing,
+# so the call dies with a curl transport error (http_code 000) or a 5xx from a
+# half-started worker, and the whole discovery cycle was lost until the next
+# tick 30 minutes later (7 occurrences in discovery.log). One retry covers a
+# service bounce; the retry is BOUNDED at one so a genuinely-down API is still
+# reported loudly and promptly instead of being hammered. A 4xx is NEVER
+# retried: an honest refusal (402 paywall, 401 auth) will not change by asking
+# again, and re-asking would burn a real, already-answered request.
 http_call() {
   local method="$1" url="$2" data="$3"; shift 3
-  local resp status body
-  if [[ -n "$data" ]]; then
-    resp=$(curl -sS -w '\n%{http_code}' -X "$method" "$url" \
-      -H 'Content-Type: application/json' -d "$data" "$@")
-  else
-    resp=$(curl -sS -w '\n%{http_code}' -X "$method" "$url" "$@")
-  fi
-  status="${resp##*$'\n'}"
-  body="${resp%$'\n'"$status"}"
-  if (( status < 200 || status >= 300 )); then
-    log "FATAL: $method $url -> HTTP $status: ${body:0:300}"
+  local backoff="${AETHER_CRON_RETRY_BACKOFF_SECONDS:-5}"
+  local attempt resp status body curl_rc code
+  for attempt in 1 2; do
+    curl_rc=0
+    if [[ -n "$data" ]]; then
+      resp=$(curl -sS -w '\n%{http_code}' -X "$method" "$url" \
+        -H 'Content-Type: application/json' -d "$data" "$@") || curl_rc=$?
+    else
+      resp=$(curl -sS -w '\n%{http_code}' -X "$method" "$url" "$@") || curl_rc=$?
+    fi
+    status="${resp##*$'\n'}"
+    body="${resp%$'\n'"$status"}"
+    # A curl that never reached the server writes http_code 000; anything that
+    # is not a 3-digit code means curl itself produced no status line, which is
+    # the same "no HTTP answer" condition and is reported as such.
+    [[ "$status" =~ ^[0-9]{3}$ ]] || status="000"
+    code=$((10#$status))
+    if (( code >= 200 && code < 300 )); then
+      printf '%s' "$body"
+      return 0
+    fi
+    if (( attempt == 1 )) && (( code == 0 || code >= 500 )); then
+      log "TRANSIENT: $method $url -> HTTP $status (curl exit $curl_rc);" \
+          "retrying once in ${backoff}s"
+      sleep "$backoff"
+      continue
+    fi
+    log "FATAL: $method $url -> HTTP $status (curl exit $curl_rc): ${body:0:300}"
     exit 1
-  fi
-  printf '%s' "$body"
+  done
 }
 
 LOGIN_RESP=$(http_call POST "$API/auth/login" \
@@ -87,7 +114,24 @@ LOGIN_RESP=$(http_call POST "$API/auth/login" \
 TOKEN=$(printf '%s' "$LOGIN_RESP" \
   | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
 
-ME=$(http_call GET "$API/auth/me" "" -H "Authorization: Bearer $TOKEN")
+# MON-005 (MONITORING-LEDGER.md): the live JWT is handed to curl through a
+# CONFIG FILE it reads itself, never as an inline authorization-header argv
+# token. Command-line arguments are world-readable via `ps aux` /
+# /proc/<pid>/cmdline for the lifetime of the process, so every 30-minute tick
+# briefly exposed a valid access token (and the system-run secret) to any local
+# shell user. The file lives in a 0700 directory, is created with a 0077 umask
+# (0600), is removed on EVERY exit path by the trap below, and the token value
+# is never echoed or logged.
+CURL_CONF_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aether-discovery-curl.XXXXXX")"
+chmod 700 "$CURL_CONF_DIR"
+trap 'rm -rf "$CURL_CONF_DIR"' EXIT
+
+AUTH_CONF="$CURL_CONF_DIR/auth.conf"
+(umask 077; : > "$AUTH_CONF")
+printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$AUTH_CONF"
+AUTH_ARGS=(--config "$AUTH_CONF")
+
+ME=$(http_call GET "$API/auth/me" "" "${AUTH_ARGS[@]}")
 QUERY=$(echo "$ME" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("targetRole") or "Senior Technical Program Manager")')
 LOCATION=$(echo "$ME" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("location") or "Melbourne, AU")')
 
@@ -101,17 +145,27 @@ LOCATION=$(echo "$ME" | python3 -c 'import sys,json; print(json.load(sys.stdin).
 # echoed/logged. Omitted entirely when unset, so a missing/misconfigured
 # secret fails the SAME honest way an ordinary unpaid run would (402 -- now
 # loud thanks to http_call above), never a silent bypass or a silent skip.
-SYSTEM_RUN_ARGS=()
+#
+# MON-005: carried in a SECOND config file (same 0600 private dir) rather than
+# argv, for the same reason as the bearer token above. It stays a separate file
+# from AUTH_CONF so the system-run header still reaches ONLY the two agent
+# calls it is scoped to -- /auth/me above must not send it.
+AGENT_ARGS=("${AUTH_ARGS[@]}")
 if [[ -n "${AETHER_SYSTEM_RUN_SECRET:-}" ]]; then
-  SYSTEM_RUN_ARGS=(-H "X-Aether-System-Run: $AETHER_SYSTEM_RUN_SECRET")
+  AGENT_CONF="$CURL_CONF_DIR/agent.conf"
+  (umask 077; : > "$AGENT_CONF")
+  {
+    printf 'header = "Authorization: Bearer %s"\n' "$TOKEN"
+    printf 'header = "X-Aether-System-Run: %s"\n' "$AETHER_SYSTEM_RUN_SECRET"
+  } > "$AGENT_CONF"
+  AGENT_ARGS=(--config "$AGENT_CONF")
 fi
 
 log "scout run: query='$QUERY' location='$LOCATION'"
 SCOUT=$(http_call POST "$API/agents/scout/run" \
   "{\"query\":\"$QUERY\",\"location\":\"$LOCATION\"}" \
-  -H "Authorization: Bearer $TOKEN" "${SYSTEM_RUN_ARGS[@]}")
+  "${AGENT_ARGS[@]}")
 log "scout: $SCOUT"
 
-SCORER=$(http_call POST "$API/agents/fit-scorer/run" "" \
-  -H "Authorization: Bearer $TOKEN" "${SYSTEM_RUN_ARGS[@]}")
+SCORER=$(http_call POST "$API/agents/fit-scorer/run" "" "${AGENT_ARGS[@]}")
 log "fit-scorer: $SCORER"

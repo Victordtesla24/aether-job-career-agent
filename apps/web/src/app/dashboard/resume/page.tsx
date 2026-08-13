@@ -172,11 +172,25 @@ export default function ResumePage() {
     }
   };
 
-  const download = async (resumeId: string) => {
+  const download = async (resume: Resume) => {
     setDownloadNote(null);
     try {
-      await downloadResume(resumeId);
-      setDownloadNote("Downloaded — format-preserving PDF saved.");
+      await downloadResume(resume.id);
+      // MON-011 (MONITORING-LEDGER.md, mon-batch-1-fe-opus-review-verdict.json
+      // FE-MON011-A): the completion note used to claim format preservation
+      // unconditionally. Branch it on this exact resume's own authoritative
+      // `formatPreserved` flag (mirrors download's own resolve_original_pdf
+      // match) instead — explicit false gets an honest not-preserved note,
+      // and a missing flag (older cached payload) reads as unknown, never as
+      // an affirmative claim (same "missing must read as unknown" rule as
+      // the integrity strip below).
+      setDownloadNote(
+        resume.formatPreserved === false
+          ? "Downloaded — format not preserved: this PDF uses the Aether standard template, not your original layout."
+          : resume.formatPreserved === true
+            ? "Downloaded — format-preserving PDF saved."
+            : "Downloaded — format preservation for this version is unknown; check the layout before relying on it.",
+      );
     } catch (e) {
       setDownloadNote(e instanceof Error ? e.message : "Download failed");
     }
@@ -234,7 +248,31 @@ export default function ResumePage() {
   // panel below reflects THIS comparison instead of an unconditional claim.
   const baseResume = (resumes ?? []).find((r) => !r.parentId) ?? (resumes ?? [])[0];
   const baseHash = baseResume?.formatHash ?? null;
-  const formatIntact = selected ? selected.formatHash === baseHash : null;
+  // MON-011 (MONITORING-LEDGER.md): the hash comparison above is a self-
+  // comparison for a base résumé (its own hash always equals itself) and says
+  // nothing about whether GET /resumes/{id}/download can actually reproduce
+  // the original document. When the API's `formatPreserved` flag is
+  // EXPLICITLY false (it mirrors download's own resolve_original_pdf match),
+  // that is authoritative and overrides the hash comparison with an honest
+  // "not preserved" disclosure. A genuinely bundled-backed (explicit true)
+  // flag falls back to the existing hash-comparison signal, unchanged.
+  //
+  // mon-batch-1-fe-opus-review-verdict.json FE-MON011-C: a MISSING flag
+  // (older cached payload, or the API omitting it) used to fall through to
+  // that same hash comparison too — a trivial self-match for a base résumé —
+  // and rendered the affirmative claim for a real upload with no evidence
+  // either way. WHITELIST the known cases instead (same precedent as
+  // `semanticTrusted` below, GMV4-ats-002 round 3): a missing flag reads as
+  // UNKNOWN, never as preserved.
+  const formatPreservationKnown = selected != null && selected.formatPreserved != null;
+  const formatExplicitlyUnpreserved = selected != null && selected.formatPreserved === false;
+  const formatIntact = selected
+    ? formatPreservationKnown
+      ? formatExplicitlyUnpreserved
+        ? false
+        : selected.formatHash === baseHash
+      : null
+    : null;
   // Latest tailored version — `resumes` is ordered newest-first, so the first
   // match is the latest (MV-adv-resume-studio-006).
   const tailoredResume = (resumes ?? []).find((r) => r.label?.startsWith("Tailored"));
@@ -365,9 +403,19 @@ export default function ResumePage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Format Integrity Check</h2>
-            {formatIntact === null ? (
+            {!selected ? (
               <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
                 Select a version to verify its layout against the immutable base.
+              </p>
+            ) : !formatPreservationKnown ? (
+              <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
+                Format preservation status is unknown for this version — we can&apos;t yet
+                confirm whether download will match your original layout.
+              </p>
+            ) : formatExplicitlyUnpreserved ? (
+              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
+                Format not preserved for this upload — download renders in the Aether standard
+                template, not your original layout.
               </p>
             ) : formatIntact ? (
               <p className="mt-1 text-sm text-aether-green" data-testid="integrity-status">
@@ -540,7 +588,7 @@ export default function ResumePage() {
                   <button
                     type="button"
                     data-testid="download-resume-btn"
-                    onClick={() => void download(selected.id)}
+                    onClick={() => void download(selected)}
                     className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted transition hover:border-white/30 hover:text-white"
                   >
                     Download

@@ -395,6 +395,21 @@ describe("Role and Salary filters (MV-job-discovery-004)", () => {
     expect((screen.getByTestId("job-role-filter") as HTMLInputElement).value).toBe("");
     expect((screen.getByTestId("job-salary-filter") as HTMLSelectElement).value).toBe("0");
   });
+
+  it("MON-010: the filter-reset button reads 'Clear filters' (not the ambiguous 'Clear all')", async () => {
+    // MON-010 (MONITORING-LEDGER.md): a user reported "Clear all" as "not
+    // working"; repro found the button IS a correctly-functioning FILTER
+    // reset, not a board-clearing action — the label just overstates what it
+    // does and reads as ambiguous next to board-level actions elsewhere in
+    // the product. Fix: rename the label to say exactly what it does. The
+    // testid (clear-filters) and behaviour are unchanged — only the visible
+    // copy changes, so this is a pure text assertion.
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+
+    const resetButton = screen.getByTestId("clear-filters");
+    expect(resetButton.textContent?.trim()).toBe("Clear filters");
+  });
 });
 
 describe("Tailoring honesty note (MV-job-discovery-005)", () => {

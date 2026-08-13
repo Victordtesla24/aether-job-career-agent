@@ -48,7 +48,43 @@ _UNSUPPORTED_FORMAT_DETAIL = (
 
 @router.get("")
 def list_resumes(current_user: CurrentUser) -> list[dict[str, Any]]:
-    return ResumeRepository().list_by_user(current_user["id"])
+    return _with_format_preserved(ResumeRepository().list_by_user(current_user["id"]))
+
+
+def _with_format_preserved(resumes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Stamp each résumé with an honest ``formatPreserved`` boolean (MON-011).
+
+    ``True`` ONLY when ``GET /resumes/{id}/download`` would genuinely reproduce
+    the original document — i.e. when ``resolve_original_pdf`` finds a bundled
+    asset whose digest matches, which is the exact condition that endpoint
+    branches on, resolved through the SAME parent-then-self ``formatHash``
+    precedence it uses. Every other résumé (every real user upload, whose
+    ``formatHash`` is a digest of the user's OWN bytes/text and so can never
+    collide with a bundled asset) downloads as the re-flowed branded template,
+    and now says so.
+
+    Before this, the Resume Studio "Format Integrity Check" panel inferred a
+    preservation claim from ``formatHash === baseHash`` — a self-comparison
+    that is trivially true for a base résumé and says nothing about the
+    download path — so every paying user was told their typography, spacing,
+    columns and margins were preserved for a file that re-flows.
+
+    The parent lookup reads the SAME list (a résumé's parent is another of that
+    user's own versions), so this adds no query.
+    """
+    from app.services.resume_pdf import bundled_format_hashes
+
+    bundled = bundled_format_hashes()
+    by_id = {resume["id"]: resume for resume in resumes}
+    stamped: list[dict[str, Any]] = []
+    for resume in resumes:
+        parent = by_id.get(resume.get("parentId"))
+        format_hash = (parent or resume).get("formatHash") or resume.get("formatHash")
+        stamped.append({
+            **resume,
+            "formatPreserved": bool(format_hash) and format_hash in bundled,
+        })
+    return stamped
 
 
 class ResumeIngestRequest(BaseModel):
