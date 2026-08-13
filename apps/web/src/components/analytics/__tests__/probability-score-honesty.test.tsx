@@ -2,7 +2,7 @@
 /**
  * PROD-UAT-2026-08-03 F-04 — the job-search score panel must not claim market
  * evidence, must not present a not-measured signal as a number, and must not
- * contradict the "Market data: not connected" state shown on the same screen.
+ * contradict its OWN market-data-availability state.
  *
  * Production evidence
  * (uat/reports/evidence/prod-uat-2026-08-03/s13-probability-score-inconsistency.json):
@@ -16,6 +16,18 @@
  * conditions") were HARDCODED here, so the server could stop claiming market
  * evidence while the screen kept claiming it. These tests render the real
  * component.
+ *
+ * R5 DECOUPLING (I2 slice, D-0042): `marketVsYou.marketDataConnected` (the
+ * transitional global flag on the OTHER panel) is REMOVED/optional and no
+ * longer exists as a per-row concept — each `marketVsYou.comparisons[]` row
+ * now carries its own `connected`/`dataAsOf` state (see MarketPulse.test.tsx).
+ * `probability.marketDataConnected` is DECOUPLED from it by design: the
+ * probability model has zero market evidence and stays a flat `false`
+ * regardless of whether Market vs. You has real, live, connected rows. The
+ * two panels are therefore explicitly allowed — expected — to disagree once
+ * Market vs. You has live data. The tests below assert the probability
+ * caveat is driven ONLY by `probability.marketDataConnected`, using
+ * per-row `marketVsYou` fixtures that carry NO reliance on any global flag.
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +42,8 @@ vi.mock("../../../lib/api/workspaces", () => ({
 
 // eslint-disable-next-line import/first
 import MarketPulse from "../MarketPulse";
+
+const INTERVIEW_FOOTNOTE = "No external interview-conversion benchmark provider currently exists.";
 
 const BASE: MarketPulseData = {
   sources: [],
@@ -54,11 +68,46 @@ const BASE: MarketPulseData = {
   employerActivity: [],
   recruiterTrends: { series: [1, 2], rows: [] },
   marketVsYou: {
-    marketDataConnected: false,
-    comparisons: [{ label: "Interview rate", market: null, you: 0, unit: "%" }],
+    // Per-row shape only — no global flag anywhere in this fixture.
+    comparisons: [
+      {
+        label: "Interview rate",
+        market: null,
+        you: 0,
+        unit: "%",
+        connected: false,
+        dataAsOf: null,
+        footnote: INTERVIEW_FOOTNOTE,
+      },
+    ],
     summary: "No market data source connected — showing your own figures only.",
   },
   trendIndicators: [],
+};
+
+/** A live, connected Market vs. You row — real Adzuna data flowing — while
+ * `probability.marketDataConnected` stays its permanent `false` (R5). */
+const MARKET_VS_YOU_CONNECTED: MarketPulseData["marketVsYou"] = {
+  comparisons: [
+    {
+      label: "Applications / month",
+      market: 42,
+      you: 7,
+      connected: true,
+      dataAsOf: "2026-08-13T12:00:00+00:00",
+      marketNote: "Market = 42 job ads posted in the last 30 days (Adzuna Australia).",
+    },
+    {
+      label: "Interview rate",
+      market: null,
+      you: 25,
+      unit: "%",
+      connected: false,
+      dataAsOf: null,
+      footnote: INTERVIEW_FOOTNOTE,
+    },
+  ],
+  summary: "Market data: Adzuna Australia — 42 live postings (last 30 days) for your target role.",
 };
 
 afterEach(() => {
@@ -78,30 +127,59 @@ describe("score panel makes no market-evidence claim (F-04)", () => {
     expect(text).not.toMatch(/likelihood of landing an offer/);
     expect(text).not.toMatch(/job probability score/);
   });
+});
 
-  it("states the same market-data availability as the Market vs. You banner", async () => {
-    fetchMarketPulse.mockResolvedValue(BASE);
+describe("probability market-data caveat is driven ONLY by probability.marketDataConnected (R5 decoupling)", () => {
+  it("keeps the caveat when probability.marketDataConnected is false, even though a Market vs. You row IS connected", async () => {
+    fetchMarketPulse.mockResolvedValue({
+      ...BASE,
+      probability: { ...BASE.probability, marketDataConnected: false },
+      marketVsYou: MARKET_VS_YOU_CONNECTED,
+    });
     render(<MarketPulse />);
 
-    // Both surfaces read the same server flag, so a confident score can never
-    // sit next to an unqualified "not connected" banner again.
     const panel = await screen.findByTestId("probability-score");
     expect(panel.textContent?.toLowerCase()).toContain("market data: not connected");
-
-    const banner = await screen.findByTestId("market-vs-you");
-    expect(banner.textContent?.toLowerCase()).toContain("market data: not connected");
+    expect(panel.querySelector('[data-testid="probability-market-data-state"]')).not.toBeNull();
   });
 
-  it("drops the market-data caveat when a provider really is connected", async () => {
+  it("drops the caveat when probability.marketDataConnected is true, even though every Market vs. You row is disconnected", async () => {
     fetchMarketPulse.mockResolvedValue({
       ...BASE,
       probability: { ...BASE.probability, marketDataConnected: true },
-      marketVsYou: { ...BASE.marketVsYou, marketDataConnected: true },
+      // marketVsYou unchanged from BASE: every row is connected: false.
     });
     render(<MarketPulse />);
 
     const panel = await screen.findByTestId("probability-score");
     expect(panel.querySelector('[data-testid="probability-market-data-state"]')).toBeNull();
+  });
+});
+
+describe("Market vs. You connection state is governed ONLY by its own rows, independent of probability.marketDataConnected (R5 decoupling)", () => {
+  it("still shows the disconnected amber banner when probability.marketDataConnected is true but no row is connected", async () => {
+    fetchMarketPulse.mockResolvedValue({
+      ...BASE,
+      probability: { ...BASE.probability, marketDataConnected: true },
+      // marketVsYou unchanged: every row connected: false.
+    });
+    render(<MarketPulse />);
+
+    const banner = await screen.findByTestId("market-vs-you");
+    expect(banner.textContent).toMatch(/external market benchmark unavailable/i);
+  });
+
+  it("hides the amber banner (shows the connected attribution) when a row is connected, even though probability.marketDataConnected stays false", async () => {
+    fetchMarketPulse.mockResolvedValue({
+      ...BASE,
+      probability: { ...BASE.probability, marketDataConnected: false },
+      marketVsYou: MARKET_VS_YOU_CONNECTED,
+    });
+    render(<MarketPulse />);
+
+    const banner = await screen.findByTestId("market-vs-you");
+    expect(banner.textContent).not.toMatch(/external market benchmark unavailable/i);
+    expect(banner.querySelector('[data-testid="market-vs-you-attribution"]')).not.toBeNull();
   });
 });
 

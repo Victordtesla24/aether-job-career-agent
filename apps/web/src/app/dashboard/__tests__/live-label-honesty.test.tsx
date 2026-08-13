@@ -117,7 +117,9 @@ function marketPulse(): MarketPulseData {
     },
     employerActivity: [],
     recruiterTrends: { series: [], rows: [] },
-    marketVsYou: { marketDataConnected: false, comparisons: [], summary: "" },
+    // I2 (D-0042/R5): the global `marketDataConnected` flag is optional/deprecated
+    // on the wire type — this fixture omits it to match the per-row contract.
+    marketVsYou: { comparisons: [], summary: "" },
     trendIndicators: [],
   };
 }

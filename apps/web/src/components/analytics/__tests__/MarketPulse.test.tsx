@@ -1,16 +1,44 @@
 // @vitest-environment jsdom
 /**
- * GAP-P4-058 regression guard. The "sources" widget on /dashboard and
- * /dashboard/analytics visualizes a Job-source breakdown (analytics.py:
- * SELECT source, COUNT(*) FROM "Job" GROUP BY source), never an applications
- * count. A prior fix only relabeled the API's `sourcesLabel` field and the
- * center caption, leaving the widget's *primary* section heading and the
- * SVG's accessible name hardcoded as "Applications by Source" — a mislabel a
- * backend-only test cannot see. This test renders the real component and
- * asserts the visible heading and the donut's accessible name at the layer
- * where the defect actually ships.
+ * GAP-P4-058 regression guard, plus I2 (Market vs. You live Adzuna wiring,
+ * D-0042 / R2-R11) contract tests for the FRONTEND per-row payload shape.
+ *
+ * As of the I1 backend slice (analytics.py `market_pulse`, live-verified
+ * 2026-08-13), `marketVsYou.comparisons[]` items carry their OWN provenance —
+ * `connected: boolean`, `dataAsOf: string | null`, plus optional `marketNote`
+ * / `footnote` — instead of a single global `marketVsYou.marketDataConnected`
+ * flag. This file is written BEFORE the I2 frontend slice (workspaces.ts
+ * type + MarketPulse.tsx) exists, so the new assertions below are expected
+ * to be RED: the current component does not yet read `connected`, `dataAsOf`,
+ * `marketNote` or `footnote` off a comparison row, still branches on the
+ * removed global flag, and always renders a "you" bar even when `you` is
+ * `null`. The literal object fixtures below also violate the CURRENT
+ * (pre-I2) `MarketPulseData["marketVsYou"]["comparisons"]` element type
+ * (`connected`/`dataAsOf`/`marketNote`/`footnote` are unknown keys on it, and
+ * `you` is typed `number`, not `number | null`) — a `tsc --noEmit` red is
+ * expected alongside the runtime red until workspaces.ts is updated.
+ *
+ * Contract this file fixes for the I2 implementation (BRIEF-B):
+ *   - Per comparison row, a `data-testid="market-comparison-row-<index>"`
+ *     container (index = position in `comparisons`).
+ *   - Within a row: `connected && market !== null` renders the market value
+ *     + (when present) `marketNote` text + a `<time dateTime="<dataAsOf>">`
+ *     freshness label (human-readable text, not the raw ISO string).
+ *   - Within a row: NOT `(connected && market !== null)` renders the exact
+ *     "Market data: not connected" copy — regardless of any OTHER row's
+ *     connection state.
+ *   - `footnote`, when present, renders under the row regardless of
+ *     `connected`.
+ *   - `you === null` renders no coral "you" bar and no raw "NaN"/"null" text.
+ *   - When ANY row is `connected`, a `data-testid="market-vs-you-attribution"`
+ *     element replaces the amber banner, containing "Adzuna Australia" text
+ *     and a `<time dateTime="...">` for the freshest connected row.
+ *   - When NO row is `connected`, the EXACT pre-existing amber banner still
+ *     renders (copy unchanged).
+ *   - An unparseable `dataAsOf` string must not throw and must not render
+ *     "NaN" or "Invalid Date".
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MarketPulse as MarketPulseData } from "../../../lib/api/workspaces";
@@ -24,7 +52,18 @@ vi.mock("../../../lib/api/workspaces", () => ({
 // eslint-disable-next-line import/first
 import MarketPulse from "../MarketPulse";
 
-const FIXTURE: MarketPulseData = {
+/** Fixed instant well clear of any UTC-offset day boundary (year is a safe,
+ * TZ-independent substring for any reasonable date rendering of it). */
+const NOW_ISO = "2026-08-13T12:00:00+00:00";
+
+const POSTINGS_NOTE =
+  "Market = 42 job ads posted in the last 30 days in New South Wales for " +
+  "Business Analyst (Adzuna Australia) — employer demand, not applications " +
+  "sent by other candidates.";
+const INTERVIEW_FOOTNOTE = "No external interview-conversion benchmark provider currently exists.";
+const SALARY_FOOTNOTE = "No disclosed salary data in your saved jobs yet.";
+
+const BASE_NON_MARKET_FIELDS: Omit<MarketPulseData, "marketVsYou"> = {
   sources: [
     { label: "LinkedIn", value: 60, color: "#818CF8" },
     { label: "Indeed", value: 40, color: "#34D399" },
@@ -45,12 +84,65 @@ const FIXTURE: MarketPulseData = {
   },
   employerActivity: [{ company: "Acme", event: "posted a new role", when: "2h ago", signal: "hot" }],
   recruiterTrends: { series: [1, 2, 3], rows: [{ label: "Views", delta: "+3%" }] },
-  marketVsYou: {
-    marketDataConnected: false,
-    comparisons: [{ label: "Response rate", market: null, you: 12, unit: "%" }],
-    summary: "Market data: not connected.",
-  },
   trendIndicators: [{ label: "Postings", delta: "+2%", direction: "up", series: [1, 2, 3] }],
+};
+
+/** All rows disconnected — the honest no-provider state (R10). */
+const FIXTURE: MarketPulseData = {
+  ...BASE_NON_MARKET_FIELDS,
+  marketVsYou: {
+    comparisons: [
+      { label: "Applications / month", market: null, you: 7, connected: false, dataAsOf: null },
+      {
+        label: "Interview rate",
+        market: null,
+        you: 25,
+        unit: "%",
+        connected: false,
+        dataAsOf: null,
+        footnote: INTERVIEW_FOOTNOTE,
+      },
+    ],
+    summary: "No market data source connected — showing your own figures only.",
+  },
+};
+
+/** Row 0 (postings) and row 2 (salary, you=null) connected; row 1 (interview)
+ * permanently disconnected per R4 even though other rows are connected. */
+const CONNECTED_FIXTURE: MarketPulseData = {
+  ...BASE_NON_MARKET_FIELDS,
+  marketVsYou: {
+    comparisons: [
+      {
+        label: "Applications / month",
+        market: 42,
+        you: 7,
+        connected: true,
+        dataAsOf: NOW_ISO,
+        marketNote: POSTINGS_NOTE,
+      },
+      {
+        label: "Interview rate",
+        market: null,
+        you: 25,
+        unit: "%",
+        connected: false,
+        dataAsOf: null,
+        footnote: INTERVIEW_FOOTNOTE,
+      },
+      {
+        label: "Advertised salary (mean)",
+        market: 147925,
+        you: null,
+        unit: "A$",
+        connected: true,
+        dataAsOf: NOW_ISO,
+        footnote: SALARY_FOOTNOTE,
+      },
+    ],
+    summary:
+      "Market data: Adzuna Australia — 42 live postings (last 30 days) for your target role in New South Wales.",
+  },
 };
 
 afterEach(() => {
@@ -71,8 +163,8 @@ describe("MarketPulse sources widget label", () => {
   });
 });
 
-describe("MarketPulse unavailable external market data state (GAP-P4-004)", () => {
-  it("identifies the unavailable external provider and keeps it distinct from user-derived metrics", async () => {
+describe("MarketPulse unavailable external market data state (GAP-P4-004, R10)", () => {
+  it("all rows disconnected renders the EXACT amber banner copy", async () => {
     fetchMarketPulse.mockResolvedValue(FIXTURE);
     render(<MarketPulse />);
 
@@ -80,6 +172,100 @@ describe("MarketPulse unavailable external market data state (GAP-P4-004)", () =
     expect(marketComparison.textContent).toMatch(/external market benchmark unavailable/i);
     expect(marketComparison.textContent).toMatch(/provider: none configured/i);
     expect(marketComparison.textContent).toMatch(/your figures are derived from your saved jobs and applications/i);
+
+    // The new "connected" attribution line must NOT appear when nothing is connected.
+    expect(marketComparison.querySelector('[data-testid="market-vs-you-attribution"]')).toBeNull();
+  });
+});
+
+describe("MarketPulse per-row connected state (R2, R5, R7-R11)", () => {
+  it("a connected row renders its market value, marketNote, and a freshness label derived from dataAsOf", async () => {
+    fetchMarketPulse.mockResolvedValue(CONNECTED_FIXTURE);
+    render(<MarketPulse />);
+
+    const panel = await screen.findByTestId("market-vs-you");
+    // Banner is gone, replaced by an attribution line, once any row connects.
+    expect(panel.textContent).not.toMatch(/external market benchmark unavailable/i);
+
+    const row0 = within(panel).getByTestId("market-comparison-row-0");
+    expect(row0.textContent).toContain("42");
+    expect(row0.textContent).toContain(POSTINGS_NOTE);
+
+    const freshness = row0.querySelector(`time[datetime="${NOW_ISO}"]`);
+    expect(freshness).not.toBeNull();
+    expect(freshness?.textContent?.trim()).not.toBe("");
+    expect(freshness?.textContent).not.toBe(NOW_ISO);
+    expect(freshness?.textContent?.toLowerCase()).not.toContain("invalid date");
+    expect(freshness?.textContent).not.toContain("NaN");
+  });
+
+  it("shows a top-level Adzuna attribution + freshness label once any row is connected", async () => {
+    fetchMarketPulse.mockResolvedValue(CONNECTED_FIXTURE);
+    render(<MarketPulse />);
+
+    const attribution = await screen.findByTestId("market-vs-you-attribution");
+    expect(attribution.textContent?.toLowerCase()).toContain("adzuna australia");
+    expect(attribution.querySelector(`time[datetime="${NOW_ISO}"]`)).not.toBeNull();
+  });
+
+  it("the interview row stays 'not connected' with its own footnote EVEN WHEN another row is connected (R4)", async () => {
+    fetchMarketPulse.mockResolvedValue(CONNECTED_FIXTURE);
+    render(<MarketPulse />);
+
+    const panel = await screen.findByTestId("market-vs-you");
+    const interviewRow = within(panel).getByTestId("market-comparison-row-1");
+    expect(interviewRow.textContent).toMatch(/market data: not connected/i);
+    expect(interviewRow.textContent).toContain(INTERVIEW_FOOTNOTE);
+
+    // The connected postings row must NOT show the disconnected copy.
+    const postingsRow = within(panel).getByTestId("market-comparison-row-0");
+    expect(postingsRow.textContent).not.toMatch(/market data: not connected/i);
+  });
+
+  it("a row with you=null renders honest no-data copy: no you-bar, no NaN, no literal 'null'", async () => {
+    fetchMarketPulse.mockResolvedValue(CONNECTED_FIXTURE);
+    render(<MarketPulse />);
+
+    const panel = await screen.findByTestId("market-vs-you");
+    const salaryRow = within(panel).getByTestId("market-comparison-row-2");
+
+    expect(salaryRow.textContent).toContain(SALARY_FOOTNOTE);
+    expect(salaryRow.querySelector(".bg-aether-coral")).toBeNull();
+    expect(salaryRow.textContent).not.toContain("NaN");
+    expect(salaryRow.textContent?.toLowerCase()).not.toMatch(/\bnull\b/);
+  });
+
+  it("an unparseable dataAsOf string does not crash the component and never renders NaN/Invalid Date", async () => {
+    const brokenFixture: MarketPulseData = {
+      ...BASE_NON_MARKET_FIELDS,
+      marketVsYou: {
+        comparisons: [
+          {
+            label: "Applications / month",
+            market: 10,
+            you: 1,
+            connected: true,
+            dataAsOf: "not-a-real-date",
+          },
+        ],
+        summary: "Market data: Adzuna Australia — 10 live postings (last 30 days) for your target role.",
+      },
+    };
+    fetchMarketPulse.mockResolvedValue(brokenFixture);
+
+    expect(() => render(<MarketPulse />)).not.toThrow();
+
+    const panel = await screen.findByTestId("market-vs-you");
+    expect(panel.textContent).not.toContain("NaN");
+    expect(panel.textContent?.toLowerCase()).not.toContain("invalid date");
+
+    // Ties the crash-guard to the same new per-row contract as the other
+    // tests above, so this is a genuine red against the current component
+    // (which does not render this testid at all) rather than a vacuous pass
+    // that only exercises code paths that do not exist yet.
+    const row0 = within(panel).getByTestId("market-comparison-row-0");
+    expect(row0.textContent).not.toContain("NaN");
+    expect(row0.textContent?.toLowerCase()).not.toContain("invalid date");
   });
 });
 
