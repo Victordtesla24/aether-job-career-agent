@@ -111,13 +111,27 @@ describe("MV-resume-studio-003 — honest no-op tailoring", () => {
 
 describe("MV-resume-studio-004 — format integrity reflects a real signal", () => {
   it("is green when the version's formatHash matches the base, amber when it differs", async () => {
-    const base = resume({ id: "base", version: 1, parentId: null, formatHash: "H" });
+    // Current API contract (mon-batch-1-be-final-rereview-verdict.json FINAL-1 /
+    // ORCHESTRATOR CONTRACT RULING, round 3): GET /resumes ALWAYS stamps a
+    // `formatPreserved` boolean (routers/resumes.py `_with_format_preserved`,
+    // landed in e9385de) — it is never absent on a real payload. d248391
+    // (FE-MON011-C) correctly made an ABSENT flag render "unknown" instead of
+    // falling through to the hash self-comparison these fixtures used to rely
+    // on implicitly. These fixtures predate that field and must now say so
+    // explicitly: `formatPreserved: true` puts each version in the "genuinely
+    // preservation-tracked" branch, so the pre-existing hash-comparison signal
+    // this test locks (matches-the-base green vs differs-from-the-base amber)
+    // is reached exactly as it was before formatPreserved existed. This is not
+    // a behaviour change to the test's intent — it is the fixture catching up
+    // to a contract the code has honestly required since d248391.
+    const base = resume({ id: "base", version: 1, parentId: null, formatHash: "H", formatPreserved: true });
     const intact = resume({
       id: "v2",
       version: 2,
       label: "Tailored — X",
       parentId: "base",
       formatHash: "H",
+      formatPreserved: true,
     });
     const broken = resume({
       id: "v3",
@@ -125,6 +139,7 @@ describe("MV-resume-studio-004 — format integrity reflects a real signal", () 
       label: "Tailored — Y",
       parentId: "base",
       formatHash: "DIFFERENT",
+      formatPreserved: true,
     });
     vi.mocked(fetchResumes).mockResolvedValue([broken, intact, base]);
 

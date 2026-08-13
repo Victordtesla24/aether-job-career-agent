@@ -172,11 +172,44 @@ here:
     `--report-unused-disable-directives` exit 0; tsc filtered to the 3 changed
     files: 0 errors.
 
-## Known gap — NOT fixed by this remediation pass (out of mechanical scope)
+### (this commit) — fix(MON-011): round-3 — resume-mv-honesty.test.tsx MV-004 fixtures to the current formatPreserved contract; FINAL-2 citation correction
+
+Resolves both `must_fix` items in `../mon-batch-1-be-final-rereview-verdict.json`
+(FINAL-1, FINAL-2), per the orchestrator's binding contract ruling described
+in the round-3 disposition note under "Known gap" below.
+
+- **RED**: `mon-batch-1-round3-FAIL-BEFORE-20260813T131223Z.log` — genuine,
+  captured against pre-round-3 HEAD (`d248391`, before the fixture fix):
+  `resume-mv-honesty.test.tsx` MV-resume-studio-004 fails
+  (`1 failed | 3 passed (4)`, exit-status 1), reproducing FINAL-1 exactly.
+- **GREEN**:
+  - `mon-batch-1-round3-PASS-AFTER-20260813T131252Z.log` — same file, same
+    command, post-fix: `4 passed (4)`, exit-status 0.
+  - `mon-batch-1-round3-GATE-ALL-THREE-20260813T131302Z.log` — the three files
+    this batch's gate names (`resume-mv-honesty.test.tsx`,
+    `mon011-format-integrity-honesty.test.tsx`,
+    `dashboard/jobs/__tests__/page.test.tsx` — the MON-010 file): **3 files,
+    28 tests, 28 passed, exit-status 0.**
+  - `mon-batch-1-round3-TSC-LINT-20260813T131316Z.log` — `npx tsc --noEmit`:
+    0 errors; `npx next lint --dir src --dir __tests__`: 0 warnings.
+- **FINAL-2**: this file's own citation at the "Why it wasn't caught earlier"
+  bullet under "Known gap" (below) is corrected to cite
+  `mon-batch-1-fe-opus-rereview-verdict.json` instead of
+  `../mon-batch-1-fe-opus-review-verdict.json`; that file is now duplicated
+  byte-identical into the main checkout's copy of this directory.
+
+## Known gap (round 2) — FIXED in round 3; kept for history
 
 While producing the FRESH, complete FE capture called for by this task, a
 **genuine code-level regression** was discovered — distinct from, and more
-serious than, either evidence-hygiene finding this task was scoped to fix:
+serious than, either evidence-hygiene finding this task was scoped to fix.
+It was NOT fixed by the (round-2) remediation pass that discovered it —
+mechanical evidence-hygiene scope only — and is recorded below exactly as
+that pass left it. **It has since been fixed in round 3** (the `(this
+commit)` entry above, FINAL-1/FINAL-2 of
+`../mon-batch-1-be-final-rereview-verdict.json`); see the round-3
+"Disposition" bullet at the end of this section for the fix and its
+evidence.
 
 - **File**: `mon-batch-1-evidence-remediation-FE-ADJACENT-REGRESSION-DISCOVERY-20260813T125456Z.log`
   (captured 2026-08-13T12:54:56Z, current HEAD `d248391`).
@@ -203,23 +236,58 @@ serious than, either evidence-hygiene finding this task was scoped to fix:
   guarantee fd7cca0's own commit message made, because d248391's targeted gate
   ("vitest on this file" — its own commit message) never re-ran this adjacent
   file to check.
-- **Why it wasn't caught earlier**: both `../mon-batch-1-fe-opus-review-verdict.json`
-  (round-2 FE review) and `../mon-batch-1-be-rereview-verdict.json` (this task's
-  trigger, both one directory up from this file) verified d248391 only against
+- **Why it wasn't caught earlier**: both `mon-batch-1-fe-opus-rereview-verdict.json`
+  (the actual round-2 FE review — bare filename, same directory as this index,
+  per the path convention above; `head_sha=d248391`, `review_round=2`,
+  `verdict=PASS`) and `../mon-batch-1-be-rereview-verdict.json` (this task's
+  trigger, one directory up from this file) verified d248391 only against
   `mon011-format-integrity-honesty.test.tsx` in isolation — never against the
   adjacent suite fd7cca0's own evidence had exercised.
-- **Disposition**: this is a functional regression requiring a code change.
-  This remediation pass is mechanical evidence-hygiene scope only (explicitly
-  no production code or test-logic changes authorized) and does not fix it.
-  Flagging for the orchestrator to open a follow-up MON-011 fix slice
-  (round 3) before this batch is considered functionally closed — the
-  evidence trail being clean (this file's own purpose) does not mean the
-  round-2 FE fix is regression-free.
+  **Citation correction (round 3, mon-batch-1-be-final-rereview-verdict.json
+  FINAL-2):** an earlier revision of this paragraph wrongly cited
+  `../mon-batch-1-fe-opus-review-verdict.json` here — that is a DIFFERENT,
+  round-1 document (`head_sha=fd7cca0`, unlabeled/round-1, `verdict=FAIL`,
+  present only in the main checkout) generated *before* d248391 existed, so it
+  cannot have "verified d248391." It remains the correct citation at the two
+  other places in this file (the commit → evidence map entries for `d248391`
+  above) where the claim is only that it is the document that *originally
+  identified* FE-MON011-A/B/C/D — not that it reviewed the fix. The document
+  that actually reviewed and passed d248391 is
+  `mon-batch-1-fe-opus-rereview-verdict.json`, now duplicated byte-identical
+  into the main checkout alongside every other file this index cites (it
+  previously existed in the worktree only).
+- **Disposition**: the functional regression itself (FINAL-1) was fixed in a
+  dedicated round-3 MON-011 slice per the orchestrator's binding contract
+  ruling: the Format-Integrity state machine is three-valued and honest
+  (`formatPreserved===true` ⇒ preserved claim, `===false` ⇒ not-preserved
+  disclosure, field absent ⇒ honest "unknown" — the backend always sends the
+  field per e9385de, so re-introducing a hash self-comparison fallback for an
+  absent flag would resurrect the exact dishonesty MON-011 fixed). The fix was
+  to `resume-mv-honesty.test.tsx`'s MV-resume-studio-004 fixtures, not to
+  production code: they now set an explicit `formatPreserved: true` matching
+  the current, always-present API contract, which restores the pre-existing
+  green/amber hash-comparison intent this test has always locked. RED/GREEN
+  evidence: `mon-batch-1-round3-FAIL-BEFORE-20260813T131223Z.log` (1 failed /
+  3 passed, exit 1) and `mon-batch-1-round3-PASS-AFTER-20260813T131252Z.log`
+  (4 passed, exit 0); combined-gate re-run of all three files this batch's
+  contract names GREEN in `mon-batch-1-round3-GATE-ALL-THREE-20260813T131302Z.log`
+  (3 files / 28 passed, exit 0); `mon-batch-1-round3-TSC-LINT-20260813T131316Z.log`
+  (tsc 0 errors, next lint 0 warnings). fd7cca0's own commit message claim that
+  "MV-resume-studio-004's pre-existing green/amber hash-comparison behaviour
+  ... is untouched" was TRUE of fd7cca0's own tree at the time it was written,
+  but became FALSE the moment d248391 landed (exactly the FINAL-1 regression
+  above) — flagged here so a future reader does not take that sentence in
+  fd7cca0's message as still describing current HEAD.
 
 ## Bottom line
 
 Every citation in this index resolves to a real, complete file on disk, in
 both `aether-wt-market-perf` and `aether-job-career-agent`, byte-identical
-where the same filename appears in both. The one substantive problem
-surfaced while producing this index (the MV-resume-studio-004 regression) is
-called out above rather than concealed, papered over, or fixed out-of-scope.
+where the same filename appears in both (independently re-verified after the
+round-3 fix — see the file-existence sweep in the round-3 commit's own
+evidence trail). The one substantive problem surfaced while producing the
+round-2 pass of this index (the MV-resume-studio-004 regression, FINAL-1) was
+called out honestly rather than concealed or papered over, and has now been
+fixed in round 3 with its own RED/GREEN evidence; the wrong-artifact citation
+that accompanied it (FINAL-2) is corrected. This batch is functionally closed
+pending final review of round 3.
