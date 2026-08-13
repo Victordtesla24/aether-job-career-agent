@@ -1,15 +1,20 @@
 # EVIDENCE-INDEX.md — MON-batch-1
 
 Written by the evidence-remediation agent in response to
-`mon-batch-1-be-rereview-verdict.json` (verdict: FAIL on NEW-BE-1 and NEW-BE-2
-only; all four prior findings independently reconfirmed RESOLVED). This index
+`../mon-batch-1-be-rereview-verdict.json` (one directory up from this file —
+verdict: FAIL on NEW-BE-1 and NEW-BE-2 only; all four prior findings
+independently reconfirmed RESOLVED). This index
 maps every code-fix commit in MON-batch-1 to its RED (fail-before) and GREEN
 (pass-after) evidence. Mechanical evidence-hygiene scope only — no production
 code or test logic was changed to produce this file.
 
-**Path convention:** every path below is a bare filename, relative to this
-file's own directory. That directory exists in two places, kept byte-identical
-for every file cited here (verified with `diff -q` at write time):
+**Path convention:** every bare filename below (no `../` prefix) is relative
+to this file's own directory. That directory exists in two places, kept
+byte-identical for every file cited here (verified with `diff -q` at write
+time). The two `../mon-batch-1-*-review-verdict.json` files referenced in
+prose (not evidence-map entries — they are the review documents this
+remediation responds to) live one directory up, in
+`uat/reports/evidence/models-live/` directly, in both checkouts:
 
 - `aether-wt-market-perf` (this worktree, branch `feat/mon-batch-1`):
   `uat/reports/evidence/models-live/mon-batch-1/`
@@ -142,13 +147,14 @@ here:
 - **RED**: `mon-batch-1-refix-FAIL-BEFORE-20260813T123400Z.log` — round-2
   assertions run against `d248391^` (pre-fix `page.tsx`/`resumes.ts`):
   3 failed / 3 passed, failures match FE-MON011-A/C from
-  `mon-batch-1-fe-opus-review-verdict.json` exactly.
+  `../mon-batch-1-fe-opus-review-verdict.json` (one directory up) exactly.
 - **GREEN**:
   - `mon-batch-1-refix-PASS-AFTER-20260813T123400Z.log` — same file, committed
     fix, single-file run
     (`npx vitest run --maxWorkers=2
     src/app/dashboard/resume/__tests__/mon011-format-integrity-honesty.test.tsx`):
-    6/6 passed.
+    6/6 passed. Matches FE-MON011-A/B/C from
+    `../mon-batch-1-fe-opus-review-verdict.json` (one directory up).
   - `mon-batch-1-evidence-remediation-FE-PASSAFTER-20260813T125718Z.log` —
     FRESH, this remediation pass, current HEAD, widened by one file to match
     the literal MON-010+MON-011 scope (`page.test.tsx` +
@@ -189,9 +195,9 @@ serious than, either evidence-hygiene finding this task was scoped to fix:
   guarantee fd7cca0's own commit message made, because d248391's targeted gate
   ("vitest on this file" — its own commit message) never re-ran this adjacent
   file to check.
-- **Why it wasn't caught earlier**: both `mon-batch-1-fe-opus-review-verdict.json`
-  (round-2 FE review) and `mon-batch-1-be-rereview-verdict.json` (this task's
-  trigger) verified d248391 only against
+- **Why it wasn't caught earlier**: both `../mon-batch-1-fe-opus-review-verdict.json`
+  (round-2 FE review) and `../mon-batch-1-be-rereview-verdict.json` (this task's
+  trigger, both one directory up from this file) verified d248391 only against
   `mon011-format-integrity-honesty.test.tsx` in isolation — never against the
   adjacent suite fd7cca0's own evidence had exercised.
 - **Disposition**: this is a functional regression requiring a code change.
