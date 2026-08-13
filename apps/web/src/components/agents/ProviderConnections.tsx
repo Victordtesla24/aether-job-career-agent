@@ -19,7 +19,7 @@
 import type { Provider, ProviderModel } from "./api";
 import {
   providerAction,
-  providerModelDisabledReason,
+  providerSelectCopy,
   providerSourceBadge,
   type ProviderSourceBadge,
 } from "./logic";
@@ -148,10 +148,16 @@ export default function ProviderConnections({
             // R-2: also thread the anthropic card's REAL fetch-error text so
             // a connected-but-catalog-fetch-failed card gets the true cause
             // in its `title`, never the false "configure its credentials".
-            const modelLockReason =
+            // ML-U1X-refix4 (round-4 structural ruling): `providerSelectCopy`
+            // is the ONLY place either the `title` tooltip OR the visible
+            // empty-`<option>` text is written — neither <select> branch
+            // below may hand-write either string again (that hand-writing is
+            // exactly how the generic branch's option text fell out of sync
+            // with its own title after R-2 fixed only the anthropic branch).
+            const selectCopy =
               p.id === "anthropic"
-                ? providerModelDisabledReason(p, anthropicOptions.length, anthropicModelsError)
-                : providerModelDisabledReason(p);
+                ? providerSelectCopy(p, anthropicOptions.length, anthropicModelsError)
+                : providerSelectCopy(p);
             return (
               <div
                 key={p.id}
@@ -239,27 +245,18 @@ export default function ProviderConnections({
                     <select
                       data-testid={`provider-model-${p.id}`}
                       aria-label={`${p.name} model`}
-                      aria-disabled={modelLockReason !== null || undefined}
-                      title={modelLockReason ?? undefined}
+                      aria-disabled={selectCopy.title !== null || undefined}
+                      title={selectCopy.title ?? undefined}
                       value={p.model}
                       disabled={anthropicOptions.length === 0 || busy}
                       onChange={(e) => onModel(p.id, e.target.value)}
                       className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
                     >
                       {anthropicOptions.length === 0 ? (
-                        <option value="">
-                          {/* R-2 SECONDARY (final-review round 3): this visible
-                              option text must agree with the SAME `title`
-                              tooltip on this select (:236, providerModelDisabledReason
-                              via logic.ts) — a connected card is never told to
-                              "configure below" (that copy is only true when the
-                              provider isn't connected at all). */}
-                          {p.status === "connected"
-                            ? anthropicModelsError
-                              ? `Catalog unavailable — ${anthropicModelsError}`
-                              : "No published models yet"
-                            : "No preset models — configure below"}
-                        </option>
+                        // ML-U1X-refix4: text sourced from `selectCopy` —
+                        // see the shared computation above, never hand-write
+                        // this string here (that split is the round-4 bug).
+                        <option value="">{selectCopy.emptyOptionLabel}</option>
                       ) : (
                         anthropicOptions.map((m) => (
                           <option key={m.id} value={m.id}>
@@ -275,15 +272,22 @@ export default function ProviderConnections({
                     <select
                       data-testid={`provider-model-${p.id}`}
                       aria-label={`${p.name} model`}
-                      aria-disabled={modelLockReason !== null || undefined}
-                      title={modelLockReason ?? undefined}
+                      aria-disabled={selectCopy.title !== null || undefined}
+                      title={selectCopy.title ?? undefined}
                       value={p.model}
                       disabled={p.models.length === 0 || busy}
                       onChange={(e) => onModel(p.id, e.target.value)}
                       className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
                     >
                       {p.models.length === 0 ? (
-                        <option value="">No preset models — configure below</option>
+                        // ML-U1X-refix4: text sourced from `selectCopy` —
+                        // see the shared computation above. This branch used
+                        // to hand-write "No preset models — configure below"
+                        // unconditionally, which is exactly why a CONNECTED
+                        // generic provider (e.g. bedrock) with a genuinely
+                        // empty catalog told an already-connected user to go
+                        // configure credentials, contradicting its own title.
+                        <option value="">{selectCopy.emptyOptionLabel}</option>
                       ) : (
                         p.models.map((m) => (
                           <option key={m} value={m}>

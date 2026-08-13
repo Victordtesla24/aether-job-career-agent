@@ -24,6 +24,7 @@ import {
   LOW_CREDIT_USD_THRESHOLD,
   providerAction,
   providerModelDisabledReason,
+  providerSelectCopy,
   providerSourceBadge,
 } from "../../components/agents/logic";
 import type { CatalogAgent, Provider } from "../../components/agents/api";
@@ -116,6 +117,162 @@ describe("providerModelDisabledReason", () => {
   it("still explains the lock for a NOT-connected provider with an empty models seed", () => {
     const reason = providerModelDisabledReason({ ...base, status: "warning", models: [] });
     expect(reason).toMatch(/no selectable models/i);
+  });
+});
+
+// ML-U1X-refix4 (round-4 structural ruling): providerSelectCopy is now the
+// SINGLE branch tree behind both the `title` tooltip AND the visible empty
+// `<option>` text for every provider select — no component may hand-write
+// either string again (that hand-writing is exactly what let the generic
+// branch's option text diverge from its own title; see ProviderConnections
+// component pins below). Exhaustive table over every
+// status × models-empty/non-empty × fetchError present/absent combination.
+describe("providerSelectCopy — single source for title + empty-option text", () => {
+  const base: Provider = {
+    id: "bedrock",
+    name: "AWS Bedrock",
+    auth: "IAM / API Key",
+    status: "unconfigured",
+    model: "",
+    detail: "Not configured",
+    models: [],
+    icon: "fa-aws",
+    color: "#FF9900",
+  };
+
+  const providerWith = (status: Provider["status"], models: string[]): Provider => ({
+    ...base,
+    status,
+    models,
+  });
+
+  type Case = [
+    label: string,
+    provider: Provider,
+    optionCount: number,
+    fetchError: string | undefined,
+    expectTitle: RegExp | null,
+    expectOption: string,
+  ];
+
+  const cases: Case[] = [
+    // -- connected --------------------------------------------------------
+    [
+      "connected + empty + no fetchError",
+      providerWith("connected", []),
+      0,
+      undefined,
+      /no published models to choose from yet/i,
+      "No published models yet",
+    ],
+    [
+      "connected + empty + fetchError",
+      providerWith("connected", []),
+      0,
+      "network timeout after 3 retries",
+      /network timeout after 3 retries/,
+      "Catalog unavailable — network timeout after 3 retries",
+    ],
+    [
+      "connected + non-empty + no fetchError",
+      providerWith("connected", ["m1", "m2"]),
+      2,
+      undefined,
+      null,
+      "",
+    ],
+    [
+      "connected + non-empty + fetchError (irrelevant once options exist)",
+      providerWith("connected", ["m1", "m2"]),
+      2,
+      "network timeout after 3 retries",
+      null,
+      "",
+    ],
+    // -- warning (needs-reauth) --------------------------------------------
+    [
+      "warning + empty + no fetchError",
+      providerWith("warning", []),
+      0,
+      undefined,
+      /configure its credentials/i,
+      "No preset models — configure below",
+    ],
+    [
+      "warning + empty + fetchError (irrelevant while not connected)",
+      providerWith("warning", []),
+      0,
+      "irrelevant — not connected",
+      /configure its credentials/i,
+      "No preset models — configure below",
+    ],
+    [
+      "warning + non-empty + no fetchError",
+      providerWith("warning", ["m1"]),
+      1,
+      undefined,
+      null,
+      "",
+    ],
+    [
+      "warning + non-empty + fetchError",
+      providerWith("warning", ["m1"]),
+      1,
+      "irrelevant — not connected",
+      null,
+      "",
+    ],
+    // -- unconfigured -------------------------------------------------------
+    [
+      "unconfigured + empty + no fetchError",
+      providerWith("unconfigured", []),
+      0,
+      undefined,
+      /configure its credentials/i,
+      "No preset models — configure below",
+    ],
+    [
+      "unconfigured + empty + fetchError (irrelevant while not connected)",
+      providerWith("unconfigured", []),
+      0,
+      "irrelevant — not connected",
+      /configure its credentials/i,
+      "No preset models — configure below",
+    ],
+    [
+      "unconfigured + non-empty + no fetchError",
+      providerWith("unconfigured", ["m1"]),
+      1,
+      undefined,
+      null,
+      "",
+    ],
+    [
+      "unconfigured + non-empty + fetchError",
+      providerWith("unconfigured", ["m1"]),
+      1,
+      "irrelevant — not connected",
+      null,
+      "",
+    ],
+  ];
+
+  it.each(cases)("%s", (_label, provider, optionCount, fetchError, expectTitle, expectOption) => {
+    const copy = providerSelectCopy(provider, optionCount, fetchError);
+    if (expectTitle === null) {
+      expect(copy.title).toBeNull();
+    } else {
+      expect(copy.title).toMatch(expectTitle);
+    }
+    expect(copy.emptyOptionLabel).toBe(expectOption);
+  });
+
+  it("providerModelDisabledReason (back-compat wrapper) always returns exactly providerSelectCopy(...).title", () => {
+    for (const [, provider, optionCount, fetchError] of cases) {
+      expect(providerModelDisabledReason(provider, optionCount, fetchError)).toBe(
+        providerSelectCopy(provider, optionCount, fetchError).title,
+      );
+    }
   });
 });
 

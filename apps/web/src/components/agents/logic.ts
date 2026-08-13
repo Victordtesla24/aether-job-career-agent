@@ -62,21 +62,35 @@ export function agentStatusLabel(
   return { active: "Active", paused: "Paused", error: "Error", planned: "Planned" }[status];
 }
 
+/** The two strings a provider's model `<select>` needs when it has zero
+ *  options to render: the `title` tooltip on the (disabled) control, and the
+ *  visible `<option>` shown in place of a real model list. `title` is null
+ *  once the provider has real options; `emptyOptionLabel` is always a string
+ *  (callers only render it while there are zero options, so its value is
+ *  otherwise unused). */
+export interface ProviderSelectCopy {
+  title: string | null;
+  emptyOptionLabel: string;
+}
+
 /**
- * Why a provider's model select is intentionally locked (no models to choose
- * from), or null when it isn't. Per D-0020, a provider with no keys/models
- * configured legitimately disables its select — but a disabled control still
- * needs to explain itself, so this backs a `title` tooltip rather than
- * leaving the lock silent.
+ * SINGLE SOURCE OF TRUTH (ML-U1X-refix4) for what a provider's model
+ * `<select>` says when it has no models to choose from. Per D-0020, a
+ * provider with no keys/models configured legitimately disables its select
+ * — but a disabled control still needs to explain itself, both in the
+ * `title` tooltip AND in the visible `<option>` text that replaces the
+ * (absent) model list. Both strings are derived from ONE branch tree here;
+ * no component may hand-write either again — that split is exactly the bug
+ * this closes (see below).
  *
  * `optionCount` defaults to `provider.models.length` but a caller rendering a
  * DIFFERENT option list than the seed array (e.g. the anthropic card, which
  * prefers a live-fetched catalog over `provider.models`) must pass the
  * ACTUAL number of options it is about to render — the select's `disabled`
- * attribute and this reason must always agree on the same count, or a
+ * attribute and this copy must always agree on the same count, or a
  * genuinely locked control renders with no explanation (F-4).
  *
- * ML-U1X-b honesty-fix history: this once keyed PURELY on
+ * ML-U1X-b honesty-fix history: the reason once keyed PURELY on
  * `provider.models.length === 0` (told an already-connected provider to
  * "configure its credentials"), then briefly suppressed the reason entirely
  * for ANY `status === "connected"` provider — which silently dropped the
@@ -91,25 +105,59 @@ export function agentStatusLabel(
  * "configure its credentials" is a real cause only when the provider isn't
  * connected at all. A CONNECTED provider with zero rendered options has a
  * DIFFERENT true cause (its credentials are already configured), so the
- * copy now branches on it: a live catalog fetch that failed surfaces the
- * real error (`fetchError`, e.g. `anthropicModelsError`), a connected
- * provider with no fetch error just has no published catalog to select
- * from (e.g. `abacus`/`bedrock`'s empty seed), and only a genuinely
- * unconnected provider is told to configure credentials.
+ * copy branches on it: a live catalog fetch that failed surfaces the real
+ * error (`fetchError`, e.g. `anthropicModelsError`), a connected provider
+ * with no fetch error just has no published catalog to select from (e.g.
+ * `abacus`/`bedrock`'s empty seed), and only a genuinely unconnected
+ * provider is told to configure credentials.
+ *
+ * R-4 re-fix (round-4 structural ruling): R-2 only fixed the `title`. The
+ * anthropic branch's hand-written visible `<option>` text was updated to
+ * match by hand (R-2 SECONDARY), but the GENERIC (non-anthropic) branch's
+ * option text was never touched — it kept the unconditional "configure
+ * below" copy, so a CONNECTED generic provider with a genuinely empty
+ * catalog (e.g. bedrock's permanent `[]` seed, ADR-ML-4) showed a title
+ * saying "no published models to choose from yet" next to a visible option
+ * telling that same already-connected user to go configure credentials.
+ * Two hand-written copies of the same fact WILL diverge again the next time
+ * only one branch gets edited — so this function is now the only place
+ * either string is written, and `providerModelDisabledReason` below is a
+ * thin wrapper over it kept for existing callers.
  */
+export function providerSelectCopy(
+  provider: Provider,
+  optionCount: number = provider.models.length,
+  fetchError?: string | null,
+): ProviderSelectCopy {
+  if (optionCount > 0) return { title: null, emptyOptionLabel: "" };
+  if (provider.status !== "connected") {
+    return {
+      title: `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`,
+      emptyOptionLabel: "No preset models — configure below",
+    };
+  }
+  if (fetchError) {
+    return {
+      title: `${provider.name} has no selectable models yet — its catalog is unavailable (${fetchError}).`,
+      emptyOptionLabel: `Catalog unavailable — ${fetchError}`,
+    };
+  }
+  return {
+    title: `${provider.name} has no selectable models yet — it has no published models to choose from yet.`,
+    emptyOptionLabel: "No published models yet",
+  };
+}
+
+/** Back-compat wrapper over `providerSelectCopy` — returns only the `title`
+ *  half. Kept because it is pinned directly by several existing tests; new
+ *  callers that also need the visible option text should call
+ *  `providerSelectCopy` instead so both strings can never diverge. */
 export function providerModelDisabledReason(
   provider: Provider,
   optionCount: number = provider.models.length,
   fetchError?: string | null,
 ): string | null {
-  if (optionCount > 0) return null;
-  if (provider.status !== "connected") {
-    return `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`;
-  }
-  if (fetchError) {
-    return `${provider.name} has no selectable models yet — its catalog is unavailable (${fetchError}).`;
-  }
-  return `${provider.name} has no selectable models yet — it has no published models to choose from yet.`;
+  return providerSelectCopy(provider, optionCount, fetchError).title;
 }
 
 /**

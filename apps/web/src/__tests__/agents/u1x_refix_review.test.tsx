@@ -77,7 +77,7 @@ vi.mock("../../components/agents/api", async (importOriginal) => {
 
 import AgentsPage from "../../app/dashboard/agents/page";
 import type { CatalogAgent, Provider, ProviderModel } from "../../components/agents/api";
-import { providerModelDisabledReason } from "../../components/agents/logic";
+import { providerModelDisabledReason, providerSelectCopy } from "../../components/agents/logic";
 import AgentModelPicker from "../../components/agents/AgentModelPicker";
 
 const ANTHROPIC_MODELS: ProviderModel[] = [
@@ -316,6 +316,105 @@ describe("R-2 SECONDARY — anthropic select's visible option text matches its o
     // provider isn't connected at all).
     expect(select.textContent ?? "").not.toMatch(/configure below/i);
     expect(select.textContent ?? "").toMatch(/no published models/i);
+  });
+});
+
+// --------------------------------------------------------------------------- #
+// ML-U1X-refix4 (round-4 structural ruling, FAIL verdict on refix3 @5dd353d):
+// R-2 SECONDARY closed the divergence on the ANTHROPIC branch's visible
+// option text but left the GENERIC (non-anthropic) branch's option text
+// hand-written and unconditional — "No preset models — configure below"
+// regardless of `p.status`. A CONNECTED generic provider with a genuinely
+// empty catalog (e.g. bedrock: apps/api/app/routers/agents.py seeds
+// `"models": []` permanently, no static catalog to backfill per ADR-ML-4,
+// gated on the common AWS_ACCESS_KEY_ID env var) showed that false
+// "configure" claim next to a title that correctly said "no published
+// models to choose from yet" — the exact false-credentials claim R-2
+// eliminated from the title, reintroduced on the option 33 lines below.
+//
+// Structural fix: BOTH the anthropic and generic <select> branches now
+// derive their `title` AND empty-`<option>` text from ONE shared function,
+// `providerSelectCopy` (logic.ts) — neither branch may hand-write either
+// string again. These tests assert the RENDERED strings equal EXACTLY what
+// the helper itself returns for the same inputs, for a connected-empty
+// GENERIC provider (bedrock) AND the anthropic card — so a future edit that
+// touches only one branch (the defect class closed across all 4 rounds)
+// fails here immediately instead of shipping.
+// --------------------------------------------------------------------------- #
+
+function bedrockProvider(overrides: Partial<Provider>): Provider {
+  return {
+    id: "bedrock",
+    name: "AWS Bedrock",
+    auth: "IAM / API Key",
+    status: "unconfigured",
+    model: "",
+    detail: "You have not added your own AWS Bedrock key.",
+    models: [],
+    icon: "fa-aws",
+    color: "#FF9900",
+    source: "none",
+    authMode: null,
+    secretHint: null,
+    lastVerifiedAt: null,
+    lastVerifyStatus: null,
+    needsReauth: false,
+    ...overrides,
+  };
+}
+
+describe("ML-U1X-refix4 — every provider select's title + empty-option text derive from providerSelectCopy", () => {
+  it("a CONNECTED generic provider (bedrock) with an empty catalog: rendered title and visible option exactly match providerSelectCopy's own output", async () => {
+    const bedrock = bedrockProvider({
+      status: "connected",
+      source: "database",
+      secretHint: "…9f21",
+      models: [],
+    });
+    fetchProvidersMock.mockResolvedValue([bedrock]);
+    render(<AgentsPage />);
+    await waitFor(() => expect(screen.getByTestId("provider-bedrock")).toBeTruthy());
+
+    const select = (await screen.findByTestId("provider-model-bedrock")) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(true));
+
+    const expected = providerSelectCopy(bedrock, 0, null);
+    expect(expected.title).not.toBeNull();
+    expect(select.title).toBe(expected.title);
+    expect(select.textContent ?? "").toBe(expected.emptyOptionLabel);
+    // The regression this closes: a connected provider's visible option
+    // must NOT be the generic branch's old unconditional "configure below"
+    // string, even though its own title correctly says otherwise.
+    expect(select.textContent ?? "").not.toMatch(/configure below/i);
+  });
+
+  it("the anthropic card, connected with an empty live catalog and no fetch error: rendered title and visible option exactly match providerSelectCopy's own output", async () => {
+    fetchProviderModelsMock.mockImplementation((provider: string) =>
+      Promise.resolve(provider === "anthropic" ? [] : []),
+    );
+    const anthropic = anthropicProvider({
+      status: "connected",
+      source: "database",
+      authMode: "oauth_token",
+      secretHint: "…oat01",
+      lastVerifiedAt: "2026-08-13T12:36:27Z",
+      lastVerifyStatus: "ok",
+      models: [],
+    });
+    fetchProvidersMock.mockResolvedValue([anthropic]);
+    render(<AgentsPage />);
+    await waitFor(() => expect(screen.getByTestId("provider-anthropic")).toBeTruthy());
+
+    const select = (await screen.findByTestId("provider-model-anthropic")) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(true));
+
+    // The anthropic card renders against the LIVE-fetched option count (0
+    // here, since fetchProviderModels resolves []), matching
+    // ProviderConnections.tsx's own `anthropicOptions.length`.
+    const expected = providerSelectCopy(anthropic, 0, null);
+    expect(expected.title).not.toBeNull();
+    expect(select.title).toBe(expected.title);
+    expect(select.textContent ?? "").toBe(expected.emptyOptionLabel);
   });
 });
 
