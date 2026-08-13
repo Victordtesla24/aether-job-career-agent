@@ -84,7 +84,9 @@ const BASE_NON_MARKET_FIELDS: Omit<MarketPulseData, "marketVsYou"> = {
   },
   employerActivity: [{ company: "Acme", event: "posted a new role", when: "2h ago", signal: "hot" }],
   recruiterTrends: { series: [1, 2, 3], rows: [{ label: "Views", delta: "+3%" }] },
-  trendIndicators: [{ label: "Postings", delta: "+2%", direction: "up", series: [1, 2, 3] }],
+  trendIndicators: [
+    { label: "Postings", delta: "+2%", direction: "up", deltaKind: "percent", series: [1, 2, 3] },
+  ],
 };
 
 /** All rows disconnected — the honest no-provider state (R10). */
@@ -310,6 +312,7 @@ describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
           label: "Your application velocity",
           delta: "+134%",
           direction: "up",
+          deltaKind: "percent",
           series: [44, 43, 290, 103],
         },
       ],
@@ -345,5 +348,136 @@ describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
     expect((wrapper as HTMLElement).className).toContain(
       trueDirection === "up" ? "text-aether-green" : "text-aether-coral"
     );
+  });
+});
+
+describe("MarketPulse trend indicator sparkline honesty (R-03)", () => {
+  it("renders the trailing in-progress week as a visually distinct (reduced-opacity) segment, separate from the completed-week line", async () => {
+    // R-03 (AX re-review round 2): the sparkline used to plot the trailing,
+    // still-in-progress week as an ordinary, indistinguishable point on the
+    // same solid polyline as every completed week — contradicting the
+    // badge/tooltip next to it, which both exclude that week from the
+    // delta (RULING-A). The chart must now visually agree: the final
+    // segment (connecting the last completed point to the in-progress
+    // point) renders separately, at reduced opacity.
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      trendIndicators: [
+        {
+          label: "Your application velocity",
+          delta: "+400%",
+          direction: "up",
+          deltaKind: "percent",
+          series: [0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 10, 1],
+        },
+      ],
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const tile = await screen.findByTestId("trend-indicator-tile");
+    const svg = tile.querySelector("svg");
+    expect(svg).not.toBeNull();
+
+    const partial = within(tile).getByTestId("trend-partial-segment");
+    expect(partial.getAttribute("stroke-opacity")).toBe("0.35");
+
+    // The partial segment must be a SEPARATE element from the main
+    // (completed-weeks) polyline(s) — not the same fully-opaque path — so
+    // the chart cannot render the in-progress week as if it were finished.
+    const allPolylines = svg!.querySelectorAll("polyline");
+    expect(allPolylines.length).toBeGreaterThanOrEqual(2);
+    const mainPolylines = Array.from(allPolylines).filter(
+      (p) => p.getAttribute("data-testid") !== "trend-partial-segment",
+    );
+    for (const p of mainPolylines) {
+      expect(p.getAttribute("stroke-opacity")).not.toBe("0.35");
+    }
+  });
+
+  it("renders a genuine gap (no fabricated line) for a null week in an average series, never a flat-zero segment", async () => {
+    // R-01 companion: an AVERAGE series (e.g. "Avg job fit score") carries
+    // honest `null` gaps. The chart must not draw a line through a null
+    // point as if it were a real 0 — the two known points must render as
+    // disconnected segments, not one continuous polyline that dips to 0.
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      trendIndicators: [
+        {
+          label: "Avg job fit score",
+          delta: "insufficient data",
+          direction: "flat",
+          deltaKind: "insufficient-data",
+          series: [null, null, null, null, null, null, null, null, 55, null, null, null],
+        },
+      ],
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const tile = await screen.findByTestId("trend-indicator-tile");
+    const svg = tile.querySelector("svg");
+    // No trailing partial segment: the final (in-progress) week itself is
+    // null — there is nothing there to draw, which is itself honest.
+    expect(within(tile).queryByTestId("trend-partial-segment")).toBeNull();
+    // A single known point with no adjacent known point on either side has
+    // no line to draw at all.
+    expect(svg!.querySelectorAll("polyline").length).toBe(0);
+  });
+});
+
+describe("MarketPulse trend indicator neutral badge for non-percent deltas (R-04/RULING-C)", () => {
+  it("renders a neutral (non-green/coral) badge and matching tooltip copy for a zero-base 'new' delta, never through percent styling", async () => {
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      trendIndicators: [
+        {
+          label: "Your application velocity",
+          delta: "new activity",
+          direction: "up",
+          deltaKind: "new",
+          series: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1],
+        },
+      ],
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const container = await screen.findByTestId("trend-indicators");
+    const badgeValue = within(container).getByText("new activity");
+    const wrapper = badgeValue.closest('[data-testid="metric-tooltip"]') as HTMLElement;
+    expect(wrapper.className).not.toContain("text-aether-green");
+    expect(wrapper.className).not.toContain("text-aether-coral");
+
+    const popover = within(wrapper).getByTestId("metric-tooltip-popover");
+    expect(popover.textContent?.toLowerCase()).toMatch(/new activity/);
+    expect(popover.textContent?.toLowerCase()).not.toMatch(/percentage change/);
+  });
+
+  it("renders a neutral badge and matching tooltip copy for 'insufficient-data', never through percent styling", async () => {
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      trendIndicators: [
+        {
+          label: "Avg job fit score",
+          delta: "insufficient data",
+          direction: "flat",
+          deltaKind: "insufficient-data",
+          series: [null, null, null, null, null, null, null, null, null, null, null, null],
+        },
+      ],
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const container = await screen.findByTestId("trend-indicators");
+    const badgeValue = within(container).getByText("insufficient data");
+    const wrapper = badgeValue.closest('[data-testid="metric-tooltip"]') as HTMLElement;
+    expect(wrapper.className).not.toContain("text-aether-green");
+    expect(wrapper.className).not.toContain("text-aether-coral");
+
+    const popover = within(wrapper).getByTestId("metric-tooltip-popover");
+    expect(popover.textContent?.toLowerCase()).toMatch(/not enough completed-period data/);
+    expect(popover.textContent?.toLowerCase()).not.toMatch(/percentage change/);
   });
 });

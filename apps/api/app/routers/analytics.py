@@ -375,10 +375,32 @@ def _relative_time(ts: datetime | None) -> str:
     return f"{days}d ago"
 
 
-def _pct_delta(series: list[float]) -> tuple[str, str]:
-    """Return (delta_label, direction) comparing the last COMPLETE period to
-    the one immediately before it — the literal "vs. the prior period"
-    comparison the Trend Indicators tooltip claims (MarketPulse.tsx).
+def _period_delta(prior: float, last: float) -> tuple[str, str, str]:
+    """Return (delta_label, direction, kind) for exactly two already-chosen
+    "prior" and "last" complete-period values. ``kind`` is one of
+    "percent" | "new" | "insufficient-data" (RULING-C): a zero-base rise
+    reports the real direction without fabricating a magnitude — no honest
+    percentage is computable from a zero base — labelled "new" so callers
+    never route it through a percent formatter.
+    """
+    if prior == last:
+        return ("no change", "flat", "percent")
+    if prior == 0:
+        return ("new activity", "up", "new") if last > 0 else ("no change", "flat", "percent")
+    change = round((last - prior) / abs(prior) * 100)
+    if change > 0:
+        return (f"+{change}%", "up", "percent")
+    if change < 0:
+        return (f"{change}%", "down", "percent")
+    return ("no change", "flat", "percent")
+
+
+def _pct_delta(series: list[float]) -> tuple[str, str, str]:
+    """Return (delta_label, direction, kind) for a COUNT/SUM series (zero-
+    filled — every week is a real observed value, 0 included) comparing the
+    last COMPLETE period to the one immediately before it — the literal
+    "vs. the prior period" comparison the Trend Indicators tooltip claims
+    (MarketPulse.tsx).
 
     MON-016: this used to compare the first non-zero point to the last point
     of the WHOLE lookback window, which can — and, in a live 2026-08-13
@@ -398,24 +420,32 @@ def _pct_delta(series: list[float]) -> tuple[str, str]:
     like-for-like change rendered as -59.5%; a Monday request for a
     perfectly flat user would render roughly -95%). "Prior period" means
     the last two COMPLETE periods, so this now always drops the trailing
-    in-progress bucket before comparing.
+    in-progress bucket before comparing. Because the series is zero-filled,
+    every remaining entry is a real value — no gap-skipping is needed (that
+    is what distinguishes this from :func:`_pct_delta_avg` below).
     """
     complete = series[:-1]
     if len(complete) < 2:
-        return ("no change", "flat")
-    prior, last = complete[-2], complete[-1]
-    if prior == last:
-        return ("no change", "flat")
-    if prior == 0:
-        # No honest percentage change is computable from a zero base —
-        # report the real direction without fabricating a magnitude.
-        return ("new activity", "up") if last > 0 else ("no change", "flat")
-    change = round((last - prior) / abs(prior) * 100)
-    if change > 0:
-        return (f"+{change}%", "up")
-    if change < 0:
-        return (f"{change}%", "down")
-    return ("no change", "flat")
+        return ("no change", "flat", "percent")
+    return _period_delta(complete[-2], complete[-1])
+
+
+def _pct_delta_avg(series: list[float | None]) -> tuple[str, str, str]:
+    """Return (delta_label, direction, kind) for an AVERAGE series (RULING-B:
+    a missing week is a null gap, never fabricated as 0 — an average of
+    nothing is not really 0). Drops the trailing in-progress week first
+    (same rule as :func:`_pct_delta`, RULING-A), then compares the two most
+    recent COMPLETE weeks that actually HAVE data — skipping any null gaps
+    in between, since a week with no scored jobs is a real absence, not a
+    disqualifying one. If fewer than two complete weeks have data, the
+    delta is the honest "insufficient-data" state (RULING-C) rather than a
+    percentage silently computed across an undisclosed multi-week gap.
+    """
+    complete = series[:-1]
+    dated = [v for v in complete if v is not None]
+    if len(dated) < 2:
+        return ("insufficient data", "flat", "insufficient-data")
+    return _period_delta(dated[-2], dated[-1])
 
 
 def _status_event(company: str, status_val: str) -> tuple[str, str]:
@@ -444,6 +474,18 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     failing provider — degrade to zero-value / empty-array / honestly
     not-connected defaults rather than fabricated numbers."""
     user_id = current_user["id"]
+
+    # R-02/R-05 (AX re-review round 2): every day/week boundary below must
+    # agree on ONE instant, and it must be the same instant a test can
+    # freeze. Previously the Python "today" anchor (for the heatmap grid
+    # position) was frozen via ``datetime.now()`` while the SQL bucketing
+    # queries called Postgres's own ``NOW()`` directly — two independent
+    # clocks that a test could only pin one of, which is exactly why the
+    # prior round's DST test never actually exercised the router (it had
+    # no way to make the DB agree with a frozen Python "now"). Both sides
+    # now derive from this single anchor: Python via the value directly,
+    # SQL via a bound parameter (``%s::timestamptz``) instead of ``NOW()``.
+    now_utc = datetime.now(timezone.utc)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -480,9 +522,9 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             cur.execute(
                 'SELECT DATE("createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS day, '
                 'COUNT(*) AS cnt FROM "Application" '
-                'WHERE "userId" = %s AND "createdAt" >= NOW() - INTERVAL \'35 days\' '
+                'WHERE "userId" = %s AND "createdAt" >= %s::timestamptz - INTERVAL \'35 days\' '
                 'GROUP BY day ORDER BY day',
-                (_ANALYTICS_TIMEZONE, user_id),
+                (_ANALYTICS_TIMEZONE, user_id, now_utc),
             )
             heatmap_rows = rows_to_dicts(cur)
 
@@ -545,8 +587,8 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 '''
                 SELECT gs.week AS week, COALESCE(runs.cnt, 0) AS cnt
                 FROM generate_series(
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s),
                     INTERVAL '1 week'
                 ) AS gs(week)
                 LEFT JOIN (
@@ -554,12 +596,15 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                         'week', "startedAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
                     ) AS week, COUNT(*) AS cnt
                     FROM "AgentRun" WHERE "userId" = %s
-                    AND "startedAt" >= NOW() - INTERVAL '84 days'
+                    AND "startedAt" >= %s::timestamptz - INTERVAL '84 days'
                     GROUP BY week
                 ) runs ON runs.week = gs.week
                 ORDER BY gs.week
                 ''',
-                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
+                (
+                    now_utc, _ANALYTICS_TIMEZONE, now_utc, _ANALYTICS_TIMEZONE,
+                    _ANALYTICS_TIMEZONE, user_id, now_utc,
+                ),
             )
             agent_week_rows = rows_to_dicts(cur)
 
@@ -576,8 +621,8 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 '''
                 SELECT gs.week AS week, COALESCE(spend.total, 0) AS spend
                 FROM generate_series(
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s),
                     INTERVAL '1 week'
                 ) AS gs(week)
                 LEFT JOIN (
@@ -585,12 +630,15 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                         'week', "startedAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
                     ) AS week, SUM("costUsd") AS total
                     FROM "AgentRun" WHERE "userId" = %s
-                    AND "startedAt" >= NOW() - INTERVAL '84 days'
+                    AND "startedAt" >= %s::timestamptz - INTERVAL '84 days'
                     GROUP BY week
                 ) spend ON spend.week = gs.week
                 ORDER BY gs.week
                 ''',
-                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
+                (
+                    now_utc, _ANALYTICS_TIMEZONE, now_utc, _ANALYTICS_TIMEZONE,
+                    _ANALYTICS_TIMEZONE, user_id, now_utc,
+                ),
             )
             agent_spend_rows = rows_to_dicts(cur)
 
@@ -609,8 +657,8 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 '''
                 SELECT gs.week AS week, COALESCE(apps.cnt, 0) AS cnt
                 FROM generate_series(
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s),
                     INTERVAL '1 week'
                 ) AS gs(week)
                 LEFT JOIN (
@@ -618,27 +666,36 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                         'week', "createdAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
                     ) AS week, COUNT(DISTINCT "jobId") AS cnt
                     FROM "Application" WHERE "userId" = %s
-                    AND "createdAt" >= NOW() - INTERVAL '84 days'
+                    AND "createdAt" >= %s::timestamptz - INTERVAL '84 days'
                     GROUP BY week
                 ) apps ON apps.week = gs.week
                 ORDER BY gs.week
                 ''',
-                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
+                (
+                    now_utc, _ANALYTICS_TIMEZONE, now_utc, _ANALYTICS_TIMEZONE,
+                    _ANALYTICS_TIMEZONE, user_id, now_utc,
+                ),
             )
             app_week_rows = rows_to_dicts(cur)
 
-            # Average fit-score trend (weekly) as a demand proxy. AX-REV-02:
-            # zero-filled to the same grid — a week with no newly-scored
-            # jobs reports 0 here (consistent with _pct_delta's own
-            # zero-baseline handling, which reports "new activity" rather
-            # than a fabricated percentage off an empty prior week), instead
-            # of being absent and letting the delta silently span a gap.
+            # Average fit-score trend (weekly) as a demand proxy. The grid
+            # itself is zero-filled (every week 0..11 always has a row) so
+            # ``len(fit_week_rows)`` stays a fixed 12, but the FIT VALUE is
+            # deliberately left NULL, never COALESCEd to 0 (R-01, AX
+            # re-review round 2): this is an AVERAGE, not a count/sum, so
+            # "no job was scored this week" and "the average fit score was
+            # genuinely 0.00" are different facts — COALESCE(avg_fit, 0)
+            # collapsed them into the same fabricated number (live prod
+            # evidence: 8 of 12 weeks predating the account's own creation
+            # rendered as a flat "0.00" line, and a week with no scored jobs
+            # could compute a spurious "-100%" drop). A week with no scored
+            # jobs is an absent measurement and stays absent on the wire.
             cur.execute(
                 '''
-                SELECT gs.week AS week, COALESCE(fit.avg_fit, 0) AS fit
+                SELECT gs.week AS week, fit.avg_fit AS fit
                 FROM generate_series(
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
-                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', %s::timestamptz AT TIME ZONE %s),
                     INTERVAL '1 week'
                 ) AS gs(week)
                 LEFT JOIN (
@@ -646,12 +703,15 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                         'week', "createdAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
                     ) AS week, AVG("fitScore") AS avg_fit
                     FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL
-                    AND "createdAt" >= NOW() - INTERVAL '84 days'
+                    AND "createdAt" >= %s::timestamptz - INTERVAL '84 days'
                     GROUP BY week
                 ) fit ON fit.week = gs.week
                 ORDER BY gs.week
                 ''',
-                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
+                (
+                    now_utc, _ANALYTICS_TIMEZONE, now_utc, _ANALYTICS_TIMEZONE,
+                    _ANALYTICS_TIMEZONE, user_id, now_utc,
+                ),
             )
             fit_week_rows = rows_to_dicts(cur)
 
@@ -744,7 +804,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # today's MELBOURNE-local date (matching the query's SQL-side bucketing
     # above), not the UTC date — converted via astimezone() rather than
     # passed directly to now() so this stays correct under any tz argument.
-    today = datetime.now(timezone.utc).astimezone(_ANALYTICS_ZONEINFO).date()
+    today = now_utc.astimezone(_ANALYTICS_ZONEINFO).date()
     ordered: list[int] = []
     for offset in range(34, -1, -1):
         day = today - timedelta(days=offset)
@@ -838,7 +898,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     agent_series = [int(r["cnt"]) for r in agent_week_rows]
     total_runs = sum(agent_series)
     weeks_active = len(agent_series) or 1
-    delta_label, _ = _pct_delta([float(v) for v in agent_series])
+    delta_label, _, _ = _pct_delta([float(v) for v in agent_series])
     recruiter_trends = {
         "series": agent_series,
         "rows": [
@@ -961,26 +1021,53 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     }
 
     # ---- Trend indicators (all series from real weekly rollups) ----------
-    app_series = [int(r["cnt"]) for r in app_week_rows]
-    spend_series = [round(float(r["spend"]), 4) for r in agent_spend_rows]
-    fit_series = [round(float(r["fit"])) for r in fit_week_rows]
-    trend_indicators = []
-    for label, series in (
-        ("Your application velocity", [float(v) for v in app_series]),
-        ("Agent automation spend", [float(v) for v in spend_series]),
-        ("Avg job fit score", [float(v) for v in fit_series]),
-    ):
+    app_series: list[float] = [float(r["cnt"]) for r in app_week_rows]
+    spend_series: list[float] = [round(float(r["spend"]), 4) for r in agent_spend_rows]
+    # R-01: an unscored week is a real gap, not a fabricated 0 — see the
+    # fit_week_rows SQL comment above. ``None`` survives all the way to the
+    # wire so the FE renders a genuine gap, never a flat-zero line.
+    fit_series: list[float | None] = [
+        round(float(r["fit"]), 2) if r["fit"] is not None else None for r in fit_week_rows
+    ]
+
+    def _count_indicator(label: str, series: list[float]) -> dict[str, Any] | None:
+        """COUNT/SUM trend indicator: zero-filled, no gap-skipping needed."""
         if not series:
-            continue
-        delta, direction = _pct_delta(series)
-        trend_indicators.append(
-            {
-                "label": label,
-                "delta": delta,
-                "direction": direction,
-                "series": [round(v, 2) for v in series],
-            }
+            return None
+        delta, direction, kind = _pct_delta(series)
+        return {
+            "label": label,
+            "delta": delta,
+            "direction": direction,
+            "deltaKind": kind,
+            "series": [round(v, 2) for v in series],
+        }
+
+    def _avg_indicator(label: str, series: list[float | None]) -> dict[str, Any] | None:
+        """AVERAGE trend indicator (R-01/RULING-B): ``None`` weeks stay
+        ``None`` on the wire (never fabricated as 0) and the delta skips
+        them to find the two most recent complete weeks with real data.
+        """
+        if not series:
+            return None
+        delta, direction, kind = _pct_delta_avg(series)
+        return {
+            "label": label,
+            "delta": delta,
+            "direction": direction,
+            "deltaKind": kind,
+            "series": [round(v, 2) if v is not None else None for v in series],
+        }
+
+    trend_indicators = [
+        indicator
+        for indicator in (
+            _count_indicator("Your application velocity", app_series),
+            _count_indicator("Agent automation spend", spend_series),
+            _avg_indicator("Avg job fit score", fit_series),
         )
+        if indicator is not None
+    ]
 
     return {
         "sources": sources,

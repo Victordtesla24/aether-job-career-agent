@@ -558,7 +558,27 @@ export interface MarketPulse {
     }>;
     summary: string;
   };
-  trendIndicators: Array<{ label: string; delta: string; direction: string; series: number[] }>;
+  trendIndicators: Array<{
+    label: string;
+    delta: string;
+    direction: string;
+    /**
+     * R-04/RULING-C (AX re-review round 2): whether `delta` is a genuine
+     * computable percentage, a zero-base rise with no honest magnitude
+     * ("new" — e.g. this user's first-ever scored week), or not enough
+     * complete-period data to compare at all ("insufficient-data" — e.g.
+     * an average series with a null gap on one side). The FE must never
+     * run "new"/"insufficient-data" values through percent styling/copy.
+     */
+    deltaKind: "percent" | "new" | "insufficient-data";
+    /**
+     * `null` entries are real, honestly-absent weeks (RULING-B: an AVERAGE
+     * series — e.g. "Avg job fit score" — never fabricates 0 for a week
+     * with nothing measured). COUNT/SUM series are zero-filled and never
+     * contain `null`.
+     */
+    series: Array<number | null>;
+  }>;
   /**
    * MON-015: the IANA zone the activity heatmap / weekly trend day-and-week
    * boundaries are bucketed in (e.g. "Australia/Melbourne"). Optional so an

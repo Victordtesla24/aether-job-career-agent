@@ -1094,56 +1094,6 @@ class TestAnalytics:
         )
         assert sum(flat) == 4, f"exactly one seeded application, got heatmap={heatmap}"
 
-    def test_weekly_bucket_handles_dst_spring_forward_transition(
-        self, client, auth_headers
-    ):
-        """AX-REV-03: a DST-transition case for the WEEKLY bucketing every
-        trend series in this router shares (``DATE_TRUNC('week', ...
-        AT TIME ZONE 'UTC' AT TIME ZONE %s)``). Pins the exact 2026
-        Australia/Melbourne spring-forward instant (AEST 02:00 -> AEDT
-        03:00 on 2026-10-04, independently verified live via Postgres
-        tzdata) at a point that flips which WEEK a row belongs to, not just
-        which day: 2026-10-11T13:30:00Z is, at the correct AEDT (+11)
-        offset, Melbourne-local 2026-10-12T00:30 — the first minute of the
-        week starting Monday 2026-10-12. A fixed +10 offset would instead
-        compute 2026-10-11T23:30 — still Sunday, ONE WEEK EARLIER (the week
-        starting Monday 2026-10-05). The two implementations disagree about
-        the week bucket, so this genuinely exercises DST-aware zone
-        conversion rather than a boundary that any fixed offset would also
-        get right.
-        """
-        from datetime import datetime as real_datetime
-
-        import app.routers.analytics as analytics_module
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                # NAIVE parameter, cast to plain ``timestamp`` — matching
-                # exactly how "createdAt"/"startedAt" are stored (confirmed
-                # UTC-naive, per this file's other TZ tests) and how the
-                # router's own SQL chains AT TIME ZONE against them. Binding
-                # a tz-aware value here instead would shift which leg of the
-                # two-step conversion runs first and silently test a
-                # different (wrong) expression.
-                cur.execute(
-                    '''
-                    SELECT DATE_TRUNC(
-                        'week', %s::timestamp AT TIME ZONE 'UTC' AT TIME ZONE %s
-                    )
-                    ''',
-                    (
-                        real_datetime(2026, 10, 11, 13, 30),
-                        analytics_module._ANALYTICS_TIMEZONE,
-                    ),
-                )
-                week_bucket = cur.fetchone()[0]
-
-        assert week_bucket == real_datetime(2026, 10, 12, 0, 0), (
-            f"expected the DST-correct Melbourne week start 2026-10-12, got "
-            f"{week_bucket} — a fixed +10 offset would wrongly compute "
-            "2026-10-05 (one week earlier)"
-        )
-
     def test_market_pulse_declares_the_bucketing_timezone(self, client, auth_headers):
         """MON-015 (part 2): the heatmap/weekly-trend day-and-week
         boundaries are computed in some timezone, but the response discloses
@@ -1232,3 +1182,210 @@ class TestAnalytics:
         # -90% DROP — the exact sign-flip AX-REV-01 was opened for.
         assert velocity["direction"] == "up", velocity
         assert velocity["delta"] == "+400%", velocity["delta"]
+        assert velocity["deltaKind"] == "percent", velocity
+
+    def _seed_fit_scored_jobs(self, user_id: str, weeks_ago: int, scores: list[float]) -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for i, score in enumerate(scores):
+                    jid = new_id()
+                    cur.execute(
+                        '''
+                        INSERT INTO "Job" ("id", "userId", "title", "company",
+                            "description", "source", "sourceUrl", "fitScore",
+                            "createdAt", "updatedAt")
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                            NOW() - make_interval(weeks => %s), NOW())
+                        ''',
+                        (jid, user_id, f"Fit job wk{weeks_ago}-{i}", "Acme", "desc", "seek",
+                         f"https://example.com/{jid}", score, weeks_ago),
+                    )
+            conn.commit()
+
+    def test_avg_fit_score_series_preserves_null_gaps_not_fabricated_zero(
+        self, client, auth_headers, user_id
+    ):
+        """R-01 (AX re-review round 2, RULING-B): the AVERAGE fit-score
+        trend series must NOT zero-fill an unscored week — that fabricates
+        "your average fit score was 0.00" for a week where nothing was ever
+        measured, the exact honesty class MON-013 was opened for. Only
+        weeks_ago=3 and weeks_ago=1 have any scored jobs; weeks_ago=2 (a gap
+        in the MIDDLE) and weeks_ago=0 (the current, still-in-progress week)
+        must both be ``null`` on the wire, never ``0``. The delta must skip
+        the null gap at weeks_ago=2 and compare the two most recent COMPLETE
+        weeks that actually have data (weeks_ago=1 vs weeks_ago=3), per
+        RULING-B — not silently span the gap as if it were adjacent, and
+        never treat the still-in-progress weeks_ago=0 as data.
+        """
+        self._seed_fit_scored_jobs(user_id, weeks_ago=3, scores=[40.0, 40.0])  # avg 40
+        self._seed_fit_scored_jobs(user_id, weeks_ago=1, scores=[80.0, 80.0])  # avg 80
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        indicators = {t["label"]: t for t in pulse["trendIndicators"]}
+        fit = indicators["Avg job fit score"]
+
+        series = fit["series"]
+        assert len(series) == 12, series
+        # weeks_ago=0 -> index 11 (current, in-progress, unscored -> null).
+        assert series[11] is None, series
+        # weeks_ago=1 -> index 10 (scored, avg 80).
+        assert series[10] == 80.0, series
+        # weeks_ago=2 -> index 9 (unscored gap in the MIDDLE -> null, not 0).
+        assert series[9] is None, series
+        # weeks_ago=3 -> index 8 (scored, avg 40).
+        assert series[8] == 40.0, series
+
+        # Delta skips the null gap: 40 -> 80 is a genuine +100% rise, not a
+        # fabricated 0-based or gap-spanning number.
+        assert fit["deltaKind"] == "percent", fit
+        assert fit["delta"] == "+100%", fit["delta"]
+        assert fit["direction"] == "up", fit
+
+    def test_avg_fit_score_delta_reports_insufficient_data_not_fabricated_percent(
+        self, client, auth_headers, user_id
+    ):
+        """R-01 (AX re-review round 2, RULING-B/RULING-C): with only ONE
+        complete week ever having scored jobs (and the still-in-progress
+        current week excluded per RULING-A), there are not two complete
+        weeks WITH data to compare — the delta must be the honest
+        "insufficient-data" state, never a percentage computed against a
+        fabricated 0 (the OLD zero-filled bug would have reported this as a
+        spurious -100% "fell to zero").
+        """
+        self._seed_fit_scored_jobs(user_id, weeks_ago=5, scores=[55.0])
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        indicators = {t["label"]: t for t in pulse["trendIndicators"]}
+        fit = indicators["Avg job fit score"]
+
+        series = fit["series"]
+        assert series.count(55.0) == 1, series
+        # Every other week (including the current, in-progress one) is a
+        # real absence — null, never a fabricated 0.
+        assert all(v is None or v == 55.0 for v in series), series
+
+        assert fit["deltaKind"] == "insufficient-data", fit
+        assert fit["delta"] == "insufficient data", fit["delta"]
+        assert fit["direction"] == "flat", fit
+        assert "%" not in fit["delta"]
+
+    def test_weekly_trend_delta_new_activity_from_zero_base_carries_new_kind(
+        self, client, auth_headers, user_id
+    ):
+        """R-04/RULING-C: a genuine zero-base rise (last COMPLETE week has
+        activity, the COMPLETE week before it has none) must carry
+        ``deltaKind == "new"`` — never ``"percent"`` — so the FE can never
+        route a fabricated-magnitude-free label through percent styling.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    INSERT INTO "Resume" ("id", "userId", "sections", "formatHash", "updatedAt")
+                    VALUES (%s, %s, '{}', 'seedhash', NOW()) RETURNING "id"
+                    ''',
+                    (new_id(), user_id),
+                )
+                resume_id = cur.fetchone()[0]
+                # weeks_ago=1 (the last COMPLETE week) has 3 distinct-job
+                # applications; weeks_ago=2 (the one before it) has none.
+                for i in range(3):
+                    jid = new_id()
+                    cur.execute(
+                        '''
+                        INSERT INTO "Job" ("id", "userId", "title", "company",
+                            "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                        VALUES (%s, %s, %s, %s, %s, %s, %s,
+                            NOW() - make_interval(weeks => 1), NOW())
+                        ''',
+                        (jid, user_id, f"New activity job {i}", "Acme", "desc", "seek",
+                         f"https://example.com/{jid}"),
+                    )
+                    cur.execute(
+                        '''
+                        INSERT INTO "Application" ("id", "userId", "jobId", "resumeId",
+                            "status", "createdAt", "updatedAt")
+                        VALUES (%s, %s, %s, %s, 'submitted'::"ApplicationStatus",
+                            NOW() - make_interval(weeks => 1), NOW())
+                        ''',
+                        (new_id(), user_id, jid, resume_id),
+                    )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        indicators = {t["label"]: t for t in pulse["trendIndicators"]}
+        velocity = indicators["Your application velocity"]
+        assert velocity["series"][-2] == 3, velocity["series"]
+        assert velocity["series"][-3] == 0, velocity["series"]
+        assert velocity["deltaKind"] == "new", velocity
+        assert velocity["delta"] == "new activity", velocity["delta"]
+        assert velocity["direction"] == "up", velocity
+
+    def test_weekly_bucket_dst_spring_forward_flips_week_via_real_endpoint(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """R-02 (AX re-review round 2): the prior DST-transition test never
+        called ``client.get`` at all — it opened a raw DB connection and
+        asserted on Postgres tzdata directly, so it would still pass
+        unchanged even if the router's own bucketing were rewritten to a
+        hardcoded ``+10`` offset (exactly the failure mode AX-REV-03 was
+        opened to forbid). This version seeds a REAL ``AgentRun`` row at the
+        exact 2026 Australia/Melbourne spring-forward instant (AEST 02:00 ->
+        AEDT 03:00 on 2026-10-04, independently verified live via Postgres
+        tzdata) and asserts on ``pulse["recruiterTrends"]["series"]`` from a
+        real ``client.get`` call through the router.
+
+        RULING-D: the Python clock and the SQL time filter are anchored to
+        the SAME frozen instant — this router now derives every ``NOW()``-
+        equivalent SQL parameter from the module's ``datetime.now(UTC)``
+        (see analytics.py's ``now_utc``, R-02/R-05 fix), so freezing
+        ``analytics_module.datetime`` here pins BOTH sides consistently
+        instead of leaving the SQL-side window keyed to the real wall clock.
+
+        2026-10-11T13:30:00Z is, at the correct AEDT (+11) offset, Melbourne
+        local 2026-10-12T00:30 — the first minute of the week starting
+        Monday 2026-10-12. A fixed +10 offset would instead compute
+        2026-10-11T23:30 (still Sunday) -> the week starting Monday
+        2026-10-05, ONE WEEK EARLIER. With "now" frozen at
+        2026-10-20T12:00:00Z (independently verified live: the 12-week grid
+        anchored there runs 2026-08-03 .. 2026-10-19), the correct bucket is
+        grid index 10 (2026-10-12) and the fixed-+10 bucket would instead be
+        index 9 (2026-10-05) — the two implementations disagree about which
+        index gets the count, so this genuinely distinguishes a real
+        DST-aware zone conversion from a hardcoded-offset stand-in.
+        """
+        import app.routers.analytics as analytics_module
+
+        class _FixedNow(analytics_module.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+        monkeypatch.setattr(analytics_module, "datetime", _FixedNow)
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    INSERT INTO "AgentRun" ("id", "userId", "agentName", "status",
+                        "costUsd", "startedAt", "completedAt", "createdAt")
+                    VALUES (%s, %s, 'scout', 'completed', 0,
+                        '2026-10-11T13:30:00+00:00'::timestamptz, NOW(), NOW())
+                    ''',
+                    (new_id(), user_id),
+                )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        series = pulse["recruiterTrends"]["series"]
+        assert len(series) == 12, series
+        assert series[10] == 1, (
+            "the AgentRun must land on the DST-correct Melbourne week "
+            f"starting 2026-10-12 (grid index 10), got series={series}"
+        )
+        assert series[9] == 0, (
+            "the AgentRun must NOT land on the fixed-+10 week starting "
+            f"2026-10-05 (grid index 9), got series={series}"
+        )
+        assert series[11] == 0, f"the current in-progress week must stay 0, got series={series}"
+        assert sum(series) == 1, f"exactly one seeded AgentRun, got series={series}"

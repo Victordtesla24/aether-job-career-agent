@@ -99,14 +99,85 @@ function freshestDataAsOf(comparisons: MarketPulseData["marketVsYou"]["compariso
  * partial week against a complete one, biasing the signal toward "down"
  * without bound the earlier in the week the page loads. This now always
  * excludes that trailing in-progress point before comparing.
+ *
+ * R-01/RULING-B: an AVERAGE series (e.g. "Avg job fit score") carries
+ * honest `null` gaps for weeks with nothing measured — skipped here (never
+ * treated as 0) to find the two most recent COMPLETE weeks that actually
+ * have data, mirroring analytics.py's `_pct_delta_avg`.
  */
-function priorPeriodDirection(series: number[]): "up" | "down" | "flat" {
-  const complete = series.slice(0, -1);
+function priorPeriodDirection(series: Array<number | null>): "up" | "down" | "flat" {
+  const complete = series.slice(0, -1).filter((v): v is number => v !== null);
   if (complete.length < 2) return "flat";
   const last = complete[complete.length - 1];
   const prior = complete[complete.length - 2];
   if (last === prior) return "flat";
   return last > prior ? "up" : "down";
+}
+
+/**
+ * R-03 (AX re-review round 2): splits a trend-indicator series into drawable
+ * polyline segments so the chart can never visually contradict the badge/
+ * tooltip next to it, both of which exclude the trailing in-progress week
+ * (RULING-A) — the ORIGINAL single-polyline render plotted that point
+ * unmarked and indistinguishable from a completed week. Returns:
+ *   - `complete`: the solid line through every point up to (not including)
+ *     the last index — always drawn at full opacity.
+ *   - `partial`: the short trailing segment connecting the last KNOWN point
+ *     to the final (in-progress) point, rendered at reduced opacity, or
+ *     `null` when the final week has no data yet (RULING-B: a `null` final
+ *     entry has nothing to draw, which is itself honest — no line is
+ *     fabricated across it).
+ * Internal `null` gaps (an unscored week in the middle of an average
+ * series) simply break the `complete` line rather than being interpolated
+ * across, so a genuine data gap reads as a gap, not a flat 0.
+ */
+function sparkSegments(series: Array<number | null>, w = 120, h = 36) {
+  const known = series.filter((v): v is number => v !== null);
+  const max = Math.max(...known, 1);
+  const min = known.length ? Math.min(...known) : 0;
+  const range = max - min || 1;
+  const n = series.length;
+  const xy = (i: number, v: number) => {
+    const x = n > 1 ? (i / (n - 1)) * w : w / 2;
+    const y = h - ((v - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  };
+
+  const lastIdx = n - 1;
+  const lastVal = series[lastIdx];
+
+  // A single isolated known point (no adjacent known point on either side)
+  // has no line to draw — pushing it as a 1-point "polyline" would render
+  // nothing visible anyway, so only runs of 2+ points become a segment.
+  const completeRuns: string[] = [];
+  let run: string[] = [];
+  for (let i = 0; i < lastIdx; i++) {
+    const v = series[i];
+    if (v === null) {
+      if (run.length >= 2) completeRuns.push(run.join(" "));
+      run = [];
+      continue;
+    }
+    run.push(xy(i, v));
+  }
+  if (run.length >= 2) completeRuns.push(run.join(" "));
+
+  let partial: string | null = null;
+  if (lastVal !== null) {
+    let priorKnownIdx = -1;
+    for (let i = lastIdx - 1; i >= 0; i--) {
+      if (series[i] !== null) {
+        priorKnownIdx = i;
+        break;
+      }
+    }
+    partial =
+      priorKnownIdx >= 0
+        ? `${xy(priorKnownIdx, series[priorKnownIdx] as number)} ${xy(lastIdx, lastVal)}`
+        : null; // a single trailing point with no prior data has no line to draw
+  }
+
+  return { completeRuns, partial };
 }
 
 function sparkPoints(series: number[], w = 120, h = 36) {
@@ -166,28 +237,64 @@ export default function MarketPulse() {
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Trend Indicators</h3>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {data.trendIndicators.map((t) => {
-          // MON-016: derive the rendered signal from the series' own last
-          // two points (the true "prior period" the tooltip claims), not
-          // from `t.direction` alone.
+          // MON-016/AX-REV-01: derive the rendered signal from the series'
+          // own last two COMPLETE points (the true "prior period" the
+          // tooltip claims), not from `t.direction` alone.
           const isUp = priorPeriodDirection(t.series) === "up";
+          // R-04/RULING-C: "new"/"insufficient-data" are not a percentage
+          // and must never render through green/coral percent styling —
+          // a neutral badge, matched by tooltip copy that states the real
+          // reason instead of the generic "percentage change" claim.
+          const isPercent = t.deltaKind === "percent";
+          const badgeClass = !isPercent
+            ? "text-aether-muted-dim"
+            : isUp
+              ? "text-aether-green"
+              : "text-aether-coral";
+          const strokeColor = !isPercent ? "#8A8A9E" : isUp ? "#34D399" : "#FF6B35";
+          const tooltipCopy =
+            t.deltaKind === "new"
+              ? `${t.label}: no prior completed period to compare — this is new activity.`
+              : t.deltaKind === "insufficient-data"
+                ? `${t.label}: not enough completed-period data yet to compute a change.`
+                : `${t.label}: percentage change vs. the prior period (this week's still-in-progress data isn't counted yet).`;
+          const { completeRuns, partial } = sparkSegments(t.series);
           return (
-            <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
+            <div key={t.label} className="glass rounded-2xl border border-white/10 p-4" data-testid="trend-indicator-tile">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
                 <MetricTooltip
                   value={t.delta}
-                  tooltip={`${t.label}: percentage change vs. the prior period.`}
-                  className={`mono text-xs font-bold ${isUp ? "text-aether-green" : "text-aether-coral"}`}
+                  tooltip={tooltipCopy}
+                  className={`mono text-xs font-bold ${badgeClass}`}
                 />
               </div>
               <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
-                <polyline
-                  points={sparkPoints(t.series)}
-                  fill="none"
-                  stroke={isUp ? "#34D399" : "#FF6B35"}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+                {completeRuns.map((points, i) => (
+                  <polyline
+                    key={i}
+                    points={points}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {partial && (
+                  // RULING-A: the trailing point is always the current,
+                  // still-in-progress week — excluded from the delta above,
+                  // so it renders visually distinct (reduced opacity) here
+                  // too, rather than looking like a completed data point.
+                  <polyline
+                    points={partial}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeOpacity="0.35"
+                    data-testid="trend-partial-segment"
+                  />
+                )}
               </svg>
             </div>
           );
