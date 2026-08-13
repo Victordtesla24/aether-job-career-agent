@@ -838,3 +838,253 @@ class TestAnalytics:
         assert you_apps_month == submitted
         assert you_apps_month == funnel["applied"]
         assert you_apps_month != total
+
+    # -----------------------------------------------------------------
+    # MON-batch-AX (2026-08-13 U-AX audit, MON-013..016) — failing tests
+    # written BEFORE the fix. Each reproduces a live, evidenced defect in
+    # uat/reports/evidence/market-perf/MONITORING-LEDGER.md.
+    # -----------------------------------------------------------------
+
+    def test_market_vs_you_summary_omits_band_sentence_when_histogram_all_zero(
+        self, client, auth_headers, monkeypatch
+    ):
+        """MON-013: Adzuna's live ``/histogram`` can return every band at
+        count 0 (verified live 2026-08-13,
+        adzuna_histogram_raw_20260813T130212Z.json:
+        {"20000":0,"80000":0,"100000":0,"60000":0,"140000":0,"40000":0,
+        "120000":0}). ``_market_summary``'s ``if bands:`` truthy check still
+        passes on a non-empty all-zero dict, so
+        ``max(bands, key=lambda b: bands[b])`` picks an arbitrary tied band
+        and prints the self-contradicting live sentence "Most live ads for
+        your target role (0) advertise the A$80,000 band." Expected: when
+        every band's count is 0, the band sentence must be omitted entirely
+        (honest empty state) — the non-zero-histogram case (this file's
+        ``test_market_vs_you_summary_enriches_with_real_12mo_trend_and_top_
+        histogram_band``) must keep printing the sentence unchanged.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        search_payload = {"count": 107, "mean": 147924.58, "results": []}
+        all_zero_histogram = {
+            "histogram": {
+                "20000": 0, "40000": 0, "60000": 0, "80000": 0,
+                "100000": 0, "120000": 0, "140000": 0,
+            }
+        }
+        fetch = _route_by_endpoint(search=search_payload, histogram=all_zero_histogram)
+        _enable_live_adzuna(monkeypatch, fetch)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        summary = pulse["marketVsYou"]["summary"]
+
+        # The postings sentence (unaffected data) must still be present...
+        assert "107" in summary, summary
+        # ...but the self-contradicting "(0) advertise the ... band" clause
+        # must be gone entirely when every band tied at zero.
+        assert "advertise the" not in summary, summary
+        assert "band" not in summary, summary
+
+    def test_source_donut_percentages_normalize_to_sources_total_with_other_slice(
+        self, client, auth_headers, user_id
+    ):
+        """MON-014: the Jobs-by-Source donut's percentages must be computed
+        against ``sourcesTotal`` (the true ``COUNT(*)`` shown in the same
+        chart's center text), not the top-5-source subtotal — normalizing to
+        the truncated subtotal silently drops every long-tail source from
+        the percentage math while still counting it in the displayed total
+        (live audit: top-5=7,626 of sourcesTotal=7,801 -> the displayed
+        Adzuna 77% was really 75.72% of sourcesTotal, and 175 long-tail jobs
+        (2.24%) vanished from the math entirely). This fixture reproduces
+        the same shape at small scale: top-5 counts [60,20,10,5,3] (=98) plus
+        a 2-job long tail, sourcesTotal=100 -> the top-5 percentages must
+        equal their own raw counts (60/20/10/5/3, not the top-5-subtotal-
+        normalized 61/21/10/5/3) and an honest "Other" slice (~2%) must
+        appear so the full donut (top-5 + Other) sums to 100.
+        """
+        counts = {
+            "srca": 60, "srcb": 20, "srcc": 10, "srcd": 5, "srce": 3,
+            "srcf": 1, "srcg": 1,
+        }
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for source, n in counts.items():
+                    for i in range(n):
+                        jid = new_id()
+                        cur.execute(
+                            '''
+                            INSERT INTO "Job" ("id", "userId", "title", "company",
+                                "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                            ''',
+                            (jid, user_id, f"{source} job {i}", "Acme", "desc", source,
+                             f"https://example.com/{jid}"),
+                        )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        assert pulse["sourcesTotal"] == 100
+
+        by_label = {s["label"].lower(): s["value"] for s in pulse["sources"]}
+        # These 5 must be normalized against sourcesTotal=100 — at this
+        # fixture's round numbers, each source's own count IS its honest
+        # percentage.
+        assert by_label.get("srca") == 60, by_label
+        assert by_label.get("srcb") == 20, by_label
+        assert by_label.get("srcc") == 10, by_label
+        assert by_label.get("srcd") == 5, by_label
+        assert by_label.get("srce") == 3, by_label
+
+        # The 2 long-tail sources (srcf, srcg = 2% of sourcesTotal) must not
+        # vanish from the percentage math: an honest "Other" slice must
+        # appear, and the whole donut (top-5 + Other) must sum to 100.
+        assert "other" in by_label, pulse["sources"]
+        assert by_label["other"] == 2, by_label
+        assert sum(by_label.values()) == 100, by_label
+
+    def test_activity_heatmap_buckets_by_australia_melbourne_not_utc(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """MON-015: the activity heatmap buckets ``Application`` rows by
+        ``DATE("createdAt")`` in the DB's UTC-naive storage — a UTC calendar
+        day — even though the page is explicitly AU/Melbourne-branded
+        (MarketPulse.tsx caption "hiring & recruitment trends · AU").
+        Melbourne is UTC+10 in August (no DST). Live audit evidence: 144 of
+        512 (28%) of this user's applications created at UTC hour>=14 land
+        on the WRONG Melbourne calendar day. This test pins the audit's own
+        boundary example: an application created at 2026-08-12T15:30:00Z is
+        UTC-day Aug 12 but Melbourne-day Aug 13 (15:30 + 10h = 01:30 next
+        day). The "now" anchor is frozen well clear of the affected date so
+        the grid position is unambiguous regardless of which anchor
+        timezone the fix eventually uses.
+        """
+        import app.routers.analytics as analytics_module
+
+        class _FixedNow(analytics_module.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 8, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+        monkeypatch.setattr(analytics_module, "datetime", _FixedNow)
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                jid = new_id()
+                cur.execute(
+                    '''
+                    INSERT INTO "Job" ("id", "userId", "title", "company",
+                        "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    ''',
+                    (jid, user_id, "Boundary Job", "Acme", "desc", "seek",
+                     f"https://example.com/{jid}"),
+                )
+                cur.execute(
+                    '''
+                    INSERT INTO "Resume" ("id", "userId", "sections", "formatHash", "updatedAt")
+                    VALUES (%s, %s, '{}', 'seedhash', NOW()) RETURNING "id"
+                    ''',
+                    (new_id(), user_id),
+                )
+                resume_id = cur.fetchone()[0]
+                cur.execute(
+                    '''
+                    INSERT INTO "Application" ("id", "userId", "jobId", "resumeId",
+                        "status", "createdAt", "updatedAt")
+                    VALUES (%s, %s, %s, %s, 'submitted'::"ApplicationStatus",
+                        '2026-08-12T15:30:00+00:00'::timestamptz, NOW())
+                    ''',
+                    (new_id(), user_id, jid, resume_id),
+                )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        heatmap = pulse["activityHeatmap"]
+        flat = [cell for row in heatmap for cell in row]
+        # Frozen "now" = 2026-08-20T12:00:00Z. Melbourne-day (Aug 13) is 7
+        # days before that anchor -> flat index 27 (row 3, col 6). UTC-day
+        # (Aug 12) is 8 days before -> flat index 26 (row 3, col 5). Only 1
+        # application was seeded, so exactly one non-zero cell must exist.
+        assert flat[27] == 4, (
+            "the application must land on Melbourne-local Aug 13 "
+            f"(flat index 27), got heatmap={heatmap}"
+        )
+        assert flat[26] == 0, (
+            "the application must NOT be counted on UTC-day Aug 12 "
+            f"(flat index 26), got heatmap={heatmap}"
+        )
+        assert sum(flat) == 4, f"exactly one seeded application, got heatmap={heatmap}"
+
+    def test_market_pulse_declares_the_bucketing_timezone(self, client, auth_headers):
+        """MON-015 (part 2): the heatmap/weekly-trend day-and-week
+        boundaries are computed in some timezone, but the response discloses
+        none today — a reader has no way to tell which calendar the
+        boundaries use, on a page explicitly branded AU/Melbourne
+        (MarketPulse.tsx captions "hiring & recruitment trends · AU" /
+        "Weekly Activity"). Expect an explicit, honest timezone label on the
+        wire once the buckets are fixed to Australia/Melbourne.
+        """
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        assert pulse.get("timezone") == "Australia/Melbourne", pulse.get("timezone")
+
+    def test_trend_indicator_delta_compares_last_vs_prior_period_not_first_vs_last(
+        self, client, auth_headers, user_id
+    ):
+        """MON-016: ``_pct_delta()``'s own docstring says it compares "the
+        first non-zero to last" point of the WHOLE lookback window, but the
+        FE tooltip (MarketPulse.tsx:148) claims "percentage change vs. the
+        prior period" — i.e. the LAST period vs the one immediately before
+        it. Live prod evidence (2026-08-13 U-AX audit,
+        api_market-pulse_20260813T130014Z.json) showed a SIGN REVERSAL:
+        "Your application velocity" series [44,43,290,103] displayed
+        "+134%"/"up" (first=44 vs last=103) while the true week-over-week
+        change (290 -> 103) was -64.5%/down. This fixture reproduces the
+        same first-vs-last / last-vs-prior sign-flip shape at small scale:
+        weekly distinct-jobId application counts [2, 2, 10, 3] -> naive
+        first-vs-last is +50%/up, true last-vs-prior (10 -> 3) is -70%/down.
+        """
+        weeks_ago_counts = [(3, 2), (2, 2), (1, 10), (0, 3)]  # (weeks_ago, distinct jobs)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    INSERT INTO "Resume" ("id", "userId", "sections", "formatHash", "updatedAt")
+                    VALUES (%s, %s, '{}', 'seedhash', NOW()) RETURNING "id"
+                    ''',
+                    (new_id(), user_id),
+                )
+                resume_id = cur.fetchone()[0]
+                for weeks_ago, count in weeks_ago_counts:
+                    for i in range(count):
+                        jid = new_id()
+                        cur.execute(
+                            '''
+                            INSERT INTO "Job" ("id", "userId", "title", "company",
+                                "description", "source", "sourceUrl", "createdAt", "updatedAt")
+                            VALUES (%s, %s, %s, %s, %s, %s, %s,
+                                NOW() - make_interval(weeks => %s), NOW())
+                            ''',
+                            (jid, user_id, f"Job wk{weeks_ago}-{i}", "Acme", "desc", "seek",
+                             f"https://example.com/{jid}", weeks_ago),
+                        )
+                        cur.execute(
+                            '''
+                            INSERT INTO "Application" ("id", "userId", "jobId", "resumeId",
+                                "status", "createdAt", "updatedAt")
+                            VALUES (%s, %s, %s, %s, 'submitted'::"ApplicationStatus",
+                                NOW() - make_interval(weeks => %s), NOW())
+                            ''',
+                            (new_id(), user_id, jid, resume_id, weeks_ago),
+                        )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        indicators = {t["label"]: t for t in pulse["trendIndicators"]}
+        velocity = indicators["Your application velocity"]
+        assert velocity["series"] == [2, 2, 10, 3], velocity["series"]
+
+        # True week-over-week (last period vs the one immediately prior):
+        # 10 -> 3 is a DROP. The naive first-vs-last (2 -> 3) is a rise —
+        # this is the audit's sign-flip, reproduced at small scale.
+        assert velocity["direction"] == "down", velocity
+        assert velocity["delta"].startswith("-"), velocity["delta"]

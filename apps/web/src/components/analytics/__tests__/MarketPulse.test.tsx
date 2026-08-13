@@ -291,3 +291,54 @@ describe("MarketPulse top-skills honest empty state (MV-mobile-dashboard-006, MV
     expect(widget.textContent?.toLowerCase()).not.toMatch(/not enough job data|no skill data/);
   });
 });
+
+describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
+  it("the 'vs. the prior period' tooltip claim must agree with the direction implied by the indicator's own last two data points", async () => {
+    // Live prod evidence, 2026-08-13 U-AX audit
+    // (api_market-pulse_20260813T130014Z.json): the backend served
+    // "Your application velocity" as delta="+134%"/direction="up" for
+    // series=[44,43,290,103] — the FIRST vs LAST point of the whole
+    // lookback window. Its own tile tooltip
+    // (MarketPulse.tsx:148, `${t.label}: percentage change vs. the prior
+    // period.`) literally claims the badge describes the change from the
+    // series' own second-to-last point (290) to its last point (103) — a
+    // genuine DROP (-64.5%). Rendering "up"/green next to a tooltip that
+    // claims to describe the prior period, for data whose real prior
+    // period dropped, is a live, reproducible dishonesty defect: the
+    // rendered claim does not match the real computation the tooltip says
+    // it is.
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      trendIndicators: [
+        {
+          label: "Your application velocity",
+          delta: "+134%",
+          direction: "up",
+          series: [44, 43, 290, 103],
+        },
+      ],
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const container = await screen.findByTestId("trend-indicators");
+    const badgeValue = within(container).getByText("+134%");
+    const wrapper = badgeValue.closest('[data-testid="metric-tooltip"]');
+    expect(wrapper).not.toBeNull();
+
+    const popover = within(wrapper as HTMLElement).getByTestId("metric-tooltip-popover");
+    expect(popover.textContent).toMatch(/vs\. the prior period/i);
+
+    const series = fixture.trendIndicators[0].series;
+    const truePriorPeriodChange = series.at(-1)! - series.at(-2)!; // 103 - 290
+    const trueDirection = truePriorPeriodChange >= 0 ? "up" : "down";
+    expect(trueDirection).toBe("down"); // sanity: this IS the audit's sign-flip case
+
+    // The badge's color/direction is the ONLY signal next to a tooltip that
+    // literally says "vs. the prior period" — it must match the TRUE
+    // prior-period direction, not the whole-window first-vs-last direction.
+    expect((wrapper as HTMLElement).className).toContain(
+      trueDirection === "up" ? "text-aether-green" : "text-aether-coral"
+    );
+  });
+});
