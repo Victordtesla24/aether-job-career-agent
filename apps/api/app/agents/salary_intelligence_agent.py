@@ -301,18 +301,26 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def benchmark_query_terms(role: str) -> list[str]:
+    """The exact titles the benchmark OR-searches for ``role``.
+
+    The caller's whole target-role family, exactly as the discovery adapter
+    broadens it (GAP-SRC-001), so the benchmark measures the same market this
+    user's scout actually searches. Exposed because a surface reporting the
+    resulting count MUST be able to say how wide the search really was: for a
+    role outside the recognised families this is the single title the user
+    typed, for one inside a family it is the whole family.
+    """
+    return [term.strip() for term in build_scout_query(role).split(",") if term.strip()]
+
+
 def _fetch_search_counts(
     app_id: str, app_key: str, role: str, location: str
 ) -> tuple[int | None, float | None] | None:
     """``(count, mean)`` from one Adzuna ``/search`` call, or ``None`` if the
     call failed. A failure is logged with the REAL error — never swallowed,
     never replaced with a placeholder figure."""
-    # OR-search the caller's whole target-role family, exactly as the discovery
-    # adapter does (GAP-SRC-001), so the benchmark counts the same market this
-    # user's scout actually searches.
-    what_or = " ".join(
-        term.strip() for term in build_scout_query(role).split(",") if term.strip()
-    )
+    what_or = " ".join(benchmark_query_terms(role))
     url = f"{_ADZUNA_API_BASE}/au/search/1?" + urlencode(
         {
             "app_id": app_id,

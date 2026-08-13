@@ -7,7 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.agents.salary_intelligence_agent import MarketBenchmark, fetch_market_benchmark
+from app.agents.salary_intelligence_agent import (
+    MarketBenchmark,
+    benchmark_query_terms,
+    fetch_market_benchmark,
+)
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 
@@ -735,10 +739,20 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     if benchmark is not None and postings_market is not None:
         # The two sides are NOT the same quantity, and the row says so: "you"
         # is applications this user submitted, "market" is employer demand.
+        # The scope must be stated as widely as the search really was — the
+        # benchmark OR-searches the whole target-role family (the same
+        # broadening discovery uses), so a count for a family may never be
+        # described as a count for the one title the user typed.
+        searched = benchmark_query_terms(benchmark.role)
+        scope = (
+            benchmark.role
+            if len(searched) <= 1
+            else f"{benchmark.role} and {len(searched) - 1} related titles in the same role family"
+        )
         postings_row["marketNote"] = (
-            f"Market = {postings_market} job ads posted in the last 30 days for "
-            f"{benchmark.role} in {benchmark.location} (Adzuna Australia) — "
-            "employer demand, not applications sent by other candidates."
+            f"Market = {postings_market} job ads posted in the last 30 days in "
+            f"{benchmark.location} for {scope} (Adzuna Australia) — employer "
+            "demand, not applications sent by other candidates."
         )
 
     interview_row: dict[str, Any] = {
