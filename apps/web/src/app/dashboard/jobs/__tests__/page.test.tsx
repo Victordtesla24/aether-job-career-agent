@@ -588,3 +588,65 @@ describe("Per-card Apply button (GOV-010 / GMV2 §10.2)", () => {
     expect(within(cardFor("AU Product Manager")).getByTestId("job-card-apply")).not.toBeNull();
   });
 });
+
+// U-UI JOBS-HEIGHT-BLOWOUT-MOBILE / JOBS-SCREENSHOT-TIMEOUT-DESKTOP: a real
+// account with ~3,800 discovered jobs rendered all of them into the DOM at
+// once (2,921 unvirtualized cards), blowing document.body.scrollHeight out
+// to ~870x the viewport height. Only the first page of matches is now
+// mounted as cards; "Load more" grows the window.
+describe("Job list render window (U-UI JOBS-HEIGHT-BLOWOUT-MOBILE)", () => {
+  const MANY_JOBS = Array.from({ length: 75 }, (_, i) => ({
+    id: `job-many-${i}`,
+    title: `AU Job ${i}`,
+    company: `Co ${i}`,
+    location: "Sydney NSW",
+    remote: false,
+    description: "",
+    source: "greenhouse",
+    sourceUrl: `https://greenhouse.io/job/many-${i}`,
+    status: "matched",
+    fitScore: 80,
+    saved: false,
+    createdAt: "2026-07-15T00:00:00Z",
+  }));
+
+  beforeEach(() => {
+    apiRequest.mockImplementation(
+      async (path: string) => {
+        if (path.startsWith("/jobs?")) return MANY_JOBS;
+        const insightsMatch = /^\/jobs\/([^/]+)\/insights$/.exec(path);
+        if (insightsMatch) return insightsFor(insightsMatch[1]);
+        if (path === "/agents") return [{ name: "scout", last_run: "2026-07-16T00:00:00Z" }];
+        throw new Error(`unexpected apiRequest(${path})`);
+      },
+    );
+  });
+
+  afterEach(() => {
+    // Restore the shared default so later-defined tests in this file (were
+    // any appended after this block) aren't affected by this override.
+    apiRequest.mockImplementation(defaultApiRequestImpl);
+  });
+
+  it("renders only the first page of matches, not all 75, and offers Load more", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByTestId("job-card").length).toBeGreaterThan(0));
+
+    const cards = screen.getAllByTestId("job-card");
+    expect(cards.length).toBe(60);
+    const loadMore = screen.getByTestId("jobs-load-more");
+    expect(loadMore.textContent).toMatch(/15 remaining/);
+  });
+
+  it("grows the render window when Load more is clicked, without re-fetching", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByTestId("job-card").length).toBe(60));
+    apiRequest.mockClear();
+
+    fireEvent.click(screen.getByTestId("jobs-load-more"));
+
+    await waitFor(() => expect(screen.getAllByTestId("job-card").length).toBe(75));
+    expect(screen.queryByTestId("jobs-load-more")).toBeNull();
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+});

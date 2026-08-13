@@ -12,7 +12,8 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals, type Approval } from "../lib/api/approvals";
 import { isExpired } from "./approvals/lib";
@@ -62,6 +63,41 @@ export function actionableApprovalCount(
   now: number = Date.now(),
 ): number {
   return approvals.filter((a) => a.status === "pending" && !isExpired(a, now)).length;
+}
+
+export interface BellPanelPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
+/**
+ * Anchors the notification panel's `position: fixed` box to the bell
+ * button's bottom-right, clamped so it always stays fully inside the
+ * viewport (BELL-OVERLAP-01 / BELL-OFFSCREEN-*).
+ *
+ * The previous implementation positioned the panel with `right: 0` relative
+ * to its header wrapper, nested inside the `.glass` topbar's
+ * `backdrop-filter`. That produced two live defects: on narrow (mobile)
+ * viewports the panel's left edge landed well past x=0 (measured x=-107 on
+ * a 390px viewport, live audit BELL-OFFSCREEN-*), and — because the panel's
+ * lower portion extended outside the filtered header's own box — the
+ * backdrop blur bled semi-transparent page content through the panel
+ * (live audit BELL-OVERLAP-01 / KANBAN-HEADER-OVERLAP-01). Computing a
+ * viewport-relative `fixed` position here (used together with rendering the
+ * panel through a portal, out of the blurred ancestor's subtree) removes
+ * both failure modes at the source instead of patching the symptom.
+ */
+export function computeBellPanelPosition(
+  buttonRect: { right: number; bottom: number },
+  viewportWidth: number,
+  margin = 16,
+  panelWidth = 320,
+): BellPanelPosition {
+  const width = Math.min(panelWidth, Math.max(0, viewportWidth - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - width - margin);
+  const left = Math.min(Math.max(buttonRect.right - width, margin), maxLeft);
+  return { top: buttonRect.bottom + 8, left, width };
 }
 
 /** Human label for the notifications panel (M-05/M-09). */
@@ -194,7 +230,17 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   // list them, honestly reflecting the same items the count is derived from.
   const [approvalItems, setApprovalItems] = useState<Approval[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  // U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*: the panel now renders through a
+  // portal as a viewport-anchored `position: fixed` box (see
+  // computeBellPanelPosition) instead of `absolute` inside the blurred
+  // header. `bellRendered` keeps it mounted for a beat after close so the
+  // exit transition can play instead of the panel vanishing instantly.
+  const [bellRendered, setBellRendered] = useState(false);
+  const [panelPos, setPanelPos] = useState<BellPanelPosition | null>(null);
+  const [mounted, setMounted] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
+  const bellButtonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchIndex = useRef<SearchHit[] | null>(null);
@@ -296,11 +342,35 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     };
   }, []);
 
+  // The panel now portals to document.body (see the render below), so it
+  // can only mount once we're on the client.
+  useEffect(() => setMounted(true), []);
+
+  // U-UI: keep the panel mounted for one transition tick after close so the
+  // exit (opacity/scale) animation can play instead of the panel just
+  // disappearing — "smooth open/close transition" per the design bar.
+  useEffect(() => {
+    if (bellOpen) {
+      setBellRendered(true);
+      return;
+    }
+    if (!bellRendered) return;
+    const t = setTimeout(() => setBellRendered(false), 180);
+    return () => clearTimeout(t);
+  }, [bellOpen, bellRendered]);
+
   // M-05/M-09: close the notifications panel on an outside click or Escape.
+  // The full-viewport backdrop rendered with the panel is the primary
+  // click-to-close affordance; this listener is defence-in-depth for clicks
+  // that land on the bell button itself (which sits under the backdrop) or
+  // any future content stacked above it.
   useEffect(() => {
     if (!bellOpen) return;
     function onDown(e: MouseEvent) {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+      const target = e.target as Node;
+      if (bellRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setBellOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setBellOpen(false);
@@ -310,6 +380,27 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+    };
+  }, [bellOpen]);
+
+  // U-UI BELL-OFFSCREEN-*/BELL-OVERLAP-01: recompute the panel's
+  // viewport-anchored position whenever it opens or the viewport changes —
+  // getBoundingClientRect on the real bell button, not a class-based guess,
+  // so the panel is provably on-screen at any width.
+  useLayoutEffect(() => {
+    if (!bellOpen) return;
+    function update() {
+      const btn = bellButtonRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      setPanelPos(computeBellPanelPosition(rect, window.innerWidth));
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
     };
   }, [bellOpen]);
 
@@ -415,6 +506,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
         <div className="relative" ref={bellRef}>
           <button
+            ref={bellButtonRef}
             type="button"
             onClick={() => setBellOpen((v) => !v)}
             aria-haspopup="menu"
@@ -433,56 +525,91 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
               <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
             ) : null}
           </button>
-          {bellOpen ? (
-            <div
-              role="menu"
-              data-testid="notification-panel"
-              className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                <span className="text-sm font-semibold text-aether-text">Notifications</span>
-                {pendingApprovals > 0 ? (
-                  <span className="rounded-full bg-aether-coral/15 px-2 py-0.5 text-[11px] font-medium text-aether-coral">
-                    {pendingApprovals} pending
-                  </span>
-                ) : null}
-              </div>
-              {approvalItems.length === 0 ? (
-                <p
-                  data-testid="notification-empty"
-                  className="px-4 py-6 text-center text-sm text-aether-muted"
-                >
-                  No new notifications.
-                </p>
-              ) : (
-                <ul className="max-h-80 overflow-y-auto py-1">
-                  {approvalItems.slice(0, 6).map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        href="/dashboard/approvals"
-                        role="menuitem"
-                        onClick={() => setBellOpen(false)}
-                        className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5"
-                      >
-                        <span className="text-sm text-aether-text">{approvalLabel(a.type)}</span>
-                        <span className="text-[11px] text-aether-muted-dim">
-                          {timeAgo(a.createdAt)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link
-                href="/dashboard/approvals"
-                onClick={() => setBellOpen(false)}
-                className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-semibold text-aether-indigo hover:bg-white/5"
-              >
-                View all approvals
-              </Link>
-            </div>
-          ) : null}
         </div>
+        {/*
+          U-UI BELL-OVERLAP-01 / KANBAN-HEADER-OVERLAP-01 / BELL-OFFSCREEN-*:
+          the panel + its backdrop are portaled to document.body and
+          positioned with `fixed` + computeBellPanelPosition instead of
+          living `absolute` inside the `.glass` (backdrop-filter) header.
+          That escapes the ancestor's filter/stacking context entirely, so
+          the panel's own opaque surface renders correctly (no bleed-through)
+          and its geometry is measured against the real viewport (never
+          off-screen). It may still legitimately sit on top of page content
+          (e.g. kanban column headers) — that's an intentional overlay now
+          backed by a solid surface, a dismissible backdrop and a real
+          z-index, not a rendering defect.
+        */}
+        {mounted && bellRendered
+          ? createPortal(
+              <>
+                <div
+                  aria-hidden="true"
+                  onClick={() => setBellOpen(false)}
+                  className={`fixed inset-0 z-[90] bg-black/20 transition-opacity duration-150 ${
+                    bellOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                  }`}
+                />
+                <div
+                  ref={panelRef}
+                  role="menu"
+                  data-testid="notification-panel"
+                  style={
+                    panelPos
+                      ? { top: panelPos.top, left: panelPos.left, width: panelPos.width }
+                      : { top: 0, left: 0, width: 320, visibility: "hidden" }
+                  }
+                  className={`fixed z-[100] max-w-[calc(100vw-2rem)] origin-top-right rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40 transition duration-150 ease-out ${
+                    bellOpen
+                      ? "translate-y-0 scale-100 opacity-100"
+                      : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                    <span className="text-sm font-semibold text-aether-text">Notifications</span>
+                    {pendingApprovals > 0 ? (
+                      <span className="rounded-full bg-aether-coral/15 px-2 py-0.5 text-[11px] font-medium text-aether-coral">
+                        {pendingApprovals} pending
+                      </span>
+                    ) : null}
+                  </div>
+                  {approvalItems.length === 0 ? (
+                    <p
+                      data-testid="notification-empty"
+                      className="px-4 py-6 text-center text-sm text-aether-muted"
+                    >
+                      No new notifications.
+                    </p>
+                  ) : (
+                    <ul className="max-h-80 overflow-y-auto py-1">
+                      {approvalItems.slice(0, 6).map((a) => (
+                        <li key={a.id}>
+                          <Link
+                            href="/dashboard/approvals"
+                            role="menuitem"
+                            onClick={() => setBellOpen(false)}
+                            className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5"
+                          >
+                            <span className="text-sm text-aether-text">{approvalLabel(a.type)}</span>
+                            <span className="text-[11px] text-aether-muted-dim">
+                              {timeAgo(a.createdAt)}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Link
+                    href="/dashboard/approvals"
+                    onClick={() => setBellOpen(false)}
+                    className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-semibold text-aether-indigo hover:bg-white/5"
+                  >
+                    View all approvals
+                  </Link>
+                </div>
+              </>,
+              document.body,
+            )
+          : null}
         {isAdmin ? (
           <Link
             href="/admin"

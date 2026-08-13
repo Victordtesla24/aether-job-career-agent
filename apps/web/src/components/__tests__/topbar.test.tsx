@@ -16,7 +16,7 @@
  * they can never exceed the header's box, and the header's height must be a
  * `min-h` (allowed to grow) rather than a hard-clamped `h-16`.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -45,7 +45,7 @@ const fetchApprovalsMock = vi.hoisted(() => vi.fn());
 vi.mock("../../lib/api/approvals", () => ({ fetchApprovals: fetchApprovalsMock }));
 
 // eslint-disable-next-line import/first
-import { Topbar } from "../topbar";
+import { Topbar, computeBellPanelPosition } from "../topbar";
 
 beforeEach(() => {
   fetchSettingsMock.mockResolvedValue({
@@ -83,6 +83,78 @@ describe("Topbar mobile header clip (MV-mobile-dashboard-001)", () => {
     const classes = header.className.split(/\s+/);
     expect(classes).not.toContain("h-16");
     expect(classes).toContain("min-h-16");
+  });
+});
+
+describe("computeBellPanelPosition (U-UI BELL-OVERLAP-01 / BELL-OFFSCREEN-*)", () => {
+  it("keeps the panel fully on-screen on a narrow (390px) mobile viewport", () => {
+    // Live audit geometry: bell button near the right edge of a 390px
+    // viewport (BELL-OFFSCREEN-dashboard measured the OLD panel at
+    // x=-107.375, i.e. 107px off-screen left).
+    const buttonRect = { right: 374, bottom: 52 };
+    const pos = computeBellPanelPosition(buttonRect, 390);
+    expect(pos.left).toBeGreaterThanOrEqual(0);
+    expect(pos.left + pos.width).toBeLessThanOrEqual(390);
+  });
+
+  it("anchors flush to the button's right edge when there is room (desktop)", () => {
+    const buttonRect = { right: 1104.625, bottom: 59.5 };
+    const pos = computeBellPanelPosition(buttonRect, 1440);
+    expect(pos.left + pos.width).toBe(1104.625);
+    expect(pos.width).toBe(320);
+  });
+
+  it("clamps the panel so it never starts left of the margin even for a button pinned at x=0", () => {
+    const pos = computeBellPanelPosition({ right: 10, bottom: 40 }, 390);
+    expect(pos.left).toBeGreaterThanOrEqual(16);
+  });
+
+  it("shrinks the panel width (never overflows) on a viewport narrower than the default 320px panel", () => {
+    const pos = computeBellPanelPosition({ right: 300, bottom: 40 }, 320);
+    expect(pos.width).toBeLessThanOrEqual(320 - 16 * 2);
+    expect(pos.left + pos.width).toBeLessThanOrEqual(320);
+    expect(pos.left).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("Topbar notification panel (U-UI BELL-OVERLAP-01/KANBAN-HEADER-OVERLAP-01)", () => {
+  it("renders the open panel outside the blurred header's DOM subtree (portaled), with a solid surface and a high z-index", async () => {
+    render(<Topbar />);
+    fireEvent.click(screen.getByTestId("notification-bell"));
+
+    const panel = await screen.findByTestId("notification-panel");
+    const header = screen.getByRole("banner");
+    // U-UI BELL-OVERLAP-01: previously nested inside the `.glass`
+    // (backdrop-filter) header — the ancestor whose filter context produced
+    // the transparency bleed-through. A portaled panel is never contained by
+    // it, regardless of any future header markup changes.
+    expect(header.contains(panel)).toBe(false);
+    expect(panel.className).toMatch(/\bbg-aether-bg-elevated\b/);
+    expect(panel.className).toMatch(/z-\[100\]/);
+  });
+
+  it("renders a click-to-close backdrop alongside the panel", async () => {
+    render(<Topbar />);
+    fireEvent.click(screen.getByTestId("notification-bell"));
+
+    const panel = await screen.findByTestId("notification-panel");
+    expect(panel.className).toMatch(/z-\[100\]/);
+    // The backdrop is the panel's previous sibling in the portal root.
+    const backdrop = panel.previousElementSibling as HTMLElement;
+    expect(backdrop).not.toBeNull();
+    expect(backdrop.className).toMatch(/fixed inset-0/);
+
+    fireEvent.click(backdrop);
+    expect(screen.getByTestId("notification-bell").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes the panel on Escape", async () => {
+    render(<Topbar />);
+    fireEvent.click(screen.getByTestId("notification-bell"));
+    await screen.findByTestId("notification-panel");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByTestId("notification-bell").getAttribute("aria-expanded")).toBe("false");
   });
 });
 

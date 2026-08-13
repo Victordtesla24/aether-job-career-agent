@@ -9,7 +9,8 @@
  * Status + config are real: derived from GET /agents/catalog and mutated via
  * PUT /agents/config/{key} (see components/agents/api.ts).
  */
-import { useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import AgentModelPicker from "./AgentModelPicker";
 import AgentSettingsPanel from "./AgentSettingsPanel";
@@ -63,6 +64,80 @@ const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
   planned: "Planned",
 };
 
+/**
+ * U-UI AGENTS-PHANTOM-OVERFLOW-01 / AGENTS-CARD-OVERLAP-01: the recommendation
+ * tooltip used to be a `.group`/`group-hover` CSS-only popover living inline
+ * next to its trigger. Even while closed (`opacity-0`) it stayed in normal
+ * flow, so all 22 cards' hidden description boxes contributed to their
+ * card's `scrollHeight` (70 flagged elements, 71px phantom overflow on the
+ * whole grid) and could geometrically overlap the next row's card.
+ *
+ * Rendering the open popover through a portal, positioned with `fixed`
+ * coordinates measured from the real trigger, means a closed tooltip
+ * contributes NOTHING to any ancestor's layout (it isn't in the DOM at all)
+ * and an open one can never overlap a neighbouring card's box (there's at
+ * most one portaled popover per hovered/focused trigger). Same trigger
+ * icon, same popover copy/style, same hover+focus reveal — identical visual
+ * behaviour, different (safe) place in the DOM.
+ */
+function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip: string }) {
+  const tipId = useId();
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+  }, [open]);
+
+  const close = () => setOpen(false);
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        ref={triggerRef}
+        type="button"
+        data-testid={`agent-tip-${agentKey}`}
+        aria-label={`Model recommendation for ${name}`}
+        aria-describedby={tipId}
+        aria-expanded={open}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={close}
+        onFocus={() => setOpen(true)}
+        onBlur={close}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            close();
+            triggerRef.current?.focus();
+          }
+        }}
+        className="flex h-5 w-5 items-center justify-center rounded text-aether-muted-dim outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/60"
+      >
+        <i className="fa-solid fa-circle-info text-xs" aria-hidden="true" />
+      </button>
+      {open && mounted
+        ? createPortal(
+            <span
+              id={tipId}
+              role="tooltip"
+              data-testid={`agent-tip-popover-${agentKey}`}
+              style={{ top: pos.top, right: pos.right }}
+              className="pointer-events-none fixed z-[100] w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] leading-relaxed text-aether-muted opacity-100 shadow-2xl"
+            >
+              {tip}
+            </span>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
 /** ML-U1X-b: the ONE catalog key whose model is a user-assignable ROLE
  *  (`_ROLE_MODEL_BACKENDS`, backend "supervisor") rather than a metered
  *  per-call tier — its default/downshift options are Anthropic's own static
@@ -103,7 +178,6 @@ function AgentCard({
   const pickerModels = isOrchestratorRole ? orchestratorModels : catalogModels;
   const pickerLoading = isOrchestratorRole ? orchestratorModelsLoading : catalogLoading;
   const pickerError = isOrchestratorRole ? orchestratorModelsError : catalogError;
-  const tipId = useId();
   const runLockReason = agentRunDisabledReason(agent);
   const [showSettings, setShowSettings] = useState(false);
   return (
@@ -116,24 +190,7 @@ function AgentCard({
           <i className={`fa-solid ${agent.icon} text-xs`} aria-hidden="true" />
         </div>
         <div className="flex items-center gap-2">
-          <span className="group relative inline-flex">
-            <button
-              type="button"
-              data-testid={`agent-tip-${agent.key}`}
-              aria-label={`Model recommendation for ${agent.name}`}
-              aria-describedby={tipId}
-              className="flex h-5 w-5 items-center justify-center rounded text-aether-muted-dim outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/60"
-            >
-              <i className="fa-solid fa-circle-info text-xs" aria-hidden="true" />
-            </button>
-            <span
-              id={tipId}
-              role="tooltip"
-              className="pointer-events-none absolute right-0 top-6 z-20 w-56 rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] leading-relaxed text-aether-muted opacity-0 shadow-2xl transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-            >
-              {agent.tip}
-            </span>
-          </span>
+          <AgentTip agentKey={agent.key} name={agent.name} tip={agent.tip} />
           <span
             className={`h-2 w-2 rounded-full ${STATUS_DOT[agent.status]}`}
             aria-hidden="true"

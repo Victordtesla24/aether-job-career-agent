@@ -159,3 +159,19 @@ describe("Analytics period selector (MV-analytics-004)", () => {
     await within(summary).findByText(/dashboard summary \(7d\)/i);
   });
 });
+
+// U-UI ANALYTICS-STAT-TILE-OVERFLOW: a hard `grid-cols-3` at a 390px mobile
+// viewport left each Agent ROI tile ~61px wide — too narrow for `text-2xl`
+// values ("$8.16", "166.0s"), which measured 22-59% wider than their box.
+describe("Agent ROI tile grid (U-UI ANALYTICS-STAT-TILE-OVERFLOW)", () => {
+  it("stacks to a single column below the sm breakpoint instead of a hard 3-column grid", async () => {
+    render(<AnalyticsPage />);
+    const roi = await screen.findByTestId("agent-roi");
+    const dl = roi.querySelector("dl");
+    expect(dl).not.toBeNull();
+    const classes = dl!.className.split(/\s+/);
+    expect(classes).toContain("grid-cols-1");
+    expect(classes).toContain("sm:grid-cols-3");
+    expect(classes).not.toContain("grid-cols-3");
+  });
+});

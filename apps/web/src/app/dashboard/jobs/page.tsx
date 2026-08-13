@@ -92,6 +92,18 @@ type SourceFilter = (typeof SOURCE_FILTERS)[number];
 const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
 type SalaryFilter = (typeof SALARY_FILTERS)[number];
 
+/**
+ * U-UI JOBS-HEIGHT-BLOWOUT-MOBILE / JOBS-SCREENSHOT-TIMEOUT-DESKTOP: with
+ * every discovered job rendered into the DOM at once, a real account with
+ * ~3,800 discovered jobs pushed `document.body.scrollHeight` to ~733,000px
+ * (≈870x a 844px mobile viewport) — 2,921 unvirtualized card DOM nodes.
+ * Render only the first `JOBS_RENDER_PAGE_SIZE` matches; "Load more" grows
+ * the render window. Selection, counts, the detail panel and bulk actions
+ * all keep operating against the full filtered `visible` list below — only
+ * the list DOM is paginated.
+ */
+const JOBS_RENDER_PAGE_SIZE = 60;
+
 /** Display label + badge for a job source (wireframe source bar naming). */
 const SOURCE_LABEL: Record<string, string> = {
   seek: "Seek.com.au",
@@ -502,6 +514,21 @@ export default function JobsPage() {
       return true;
     });
   }, [marketJobs, remoteOnly, matchMin, locationQuery, roleQuery, salaryMinFilter]);
+
+  // U-UI JOBS-HEIGHT-BLOWOUT-MOBILE: only the first `renderLimit` matches of
+  // `visible` are mounted as cards; `visible` itself (used for selection,
+  // counts, "select all" and the detail panel below) stays the full filtered
+  // list. Reset to the first page whenever the filter/sort criteria change —
+  // not merely when `visible`'s contents shift (e.g. a background refresh
+  // updating a fitScore in place shouldn't yank an already-loaded page back).
+  const [renderLimit, setRenderLimit] = useState(JOBS_RENDER_PAGE_SIZE);
+  useEffect(() => {
+    setRenderLimit(JOBS_RENDER_PAGE_SIZE);
+  }, [market, remoteOnly, matchMin, locationQuery, roleQuery, salaryMinFilter, sort, sourceFilter]);
+  const renderedJobs = useMemo(
+    () => visible.slice(0, renderLimit),
+    [visible, renderLimit],
+  );
 
   const counts = useMemo(() => {
     const all = jobs ?? [];
@@ -1344,7 +1371,7 @@ export default function JobsPage() {
             </div>
 
             <div className="grid content-start gap-3">
-              {visible.map((job) => {
+              {renderedJobs.map((job) => {
                 const ins = insights[job.id];
                 const active = selected?.id === job.id;
                 return (
@@ -1495,6 +1522,18 @@ export default function JobsPage() {
                 );
               })}
             </div>
+            {visible.length > renderedJobs.length ? (
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  data-testid="jobs-load-more"
+                  onClick={() => setRenderLimit((n) => n + JOBS_RENDER_PAGE_SIZE)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-aether-muted transition hover:bg-white/10 hover:text-white"
+                >
+                  Load more ({visible.length - renderedJobs.length} remaining)
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* Detail panel (jd16–jd36) */}

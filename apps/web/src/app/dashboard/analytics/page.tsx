@@ -363,7 +363,14 @@ export default function AnalyticsPage() {
           {roi === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
           ) : (
-            <dl className="mt-4 grid grid-cols-3 gap-4">
+            /* U-UI ANALYTICS-STAT-TILE-OVERFLOW: a hard `grid-cols-3` at a
+             * 390px mobile viewport left each tile ~61px wide — too narrow
+             * for `text-2xl` values ("$8.16", "166.0s"), which measured
+             * 22–59% wider than their box. Stack to one column below the
+             * `sm` breakpoint (matching the responsive `dl` grids used
+             * elsewhere on this page) so every tile keeps its full-width
+             * value on screen; unchanged from `sm` up. */
+            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 p-4 text-center">
                 <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-green">
                   <MetricTooltip
