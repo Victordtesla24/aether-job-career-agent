@@ -52,6 +52,7 @@ function formatDataAsOf(iso: string): string | null {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    timeZoneName: "short",
   }).format(date);
 }
 
@@ -304,8 +305,10 @@ export default function MarketPulse() {
             {score === null ? prob.unmeasuredReason : prob.note}
           </p>
           {!prob.marketDataConnected && (
-            // Driven by the SAME server flag as the "Market vs. Your
-            // Performance" banner below, so the two surfaces cannot disagree.
+            // DECOUPLED (D-0042 / R5): governed ONLY by probability.marketDataConnected.
+            // The "Market vs. Your Performance" banner below is derived independently
+            // from comparisons[].connected — the two surfaces are explicitly allowed
+            // to disagree once Market vs. You has live Adzuna data.
             <p
               className="mt-2 text-[11px] italic text-aether-muted-dim"
               data-testid="probability-market-data-state"
