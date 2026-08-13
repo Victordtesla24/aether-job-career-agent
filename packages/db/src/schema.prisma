@@ -158,6 +158,18 @@ model Resume {
   // additively via lazy DDL (app.db.ensure_resume_columns) — there is no
   // migration runner in this repo (ADR-TR-1).
   approvalStatus String @default("approved")
+  // The user's uploaded document, kept EXACTLY as received (U2a / R-F1, mirrored
+  // in apps/api/migrations/0027_resume_original_upload.sql). This is the
+  // immutable baseline every tailoring run derives from, served back verbatim by
+  // GET /resumes/{id}/original; formatHash is the full SHA-256 of these bytes.
+  // Written once at upload and never updated. Nullable with no default and no
+  // backfill: NULL means "no original stored" — every row predating this slice,
+  // plus JSON-ingested and tailored versions, which genuinely have no file.
+  // Added additively via lazy DDL (app.db.ensure_resume_columns); declared here
+  // so a Prisma push never drops a column holding an unrecoverable user file.
+  originalFile        Bytes?
+  originalFilename    String?
+  originalContentType String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

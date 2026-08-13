@@ -278,13 +278,27 @@ def ensure_admin_user_columns() -> None:
     _admin_user_columns_ready = True
 
 
-#: Guard so the additive ``Resume`` approval column is only ensured once per
-#: worker process (see ``ensure_resume_columns``).
+#: Guard so the additive ``Resume`` approval + original-upload columns are only
+#: ensured once per worker process (see ``ensure_resume_columns``).
 _resume_columns_ready = False
+
+#: Every additive ``Resume`` column managed by :func:`ensure_resume_columns`.
+#: ``formatHash`` is listed because the function's contract is "these columns
+#: exist"; it is already created NOT NULL by Prisma, so its ``ADD COLUMN IF NOT
+#: EXISTS`` below is a permanent no-op on any real schema — it is kept so the
+#: runtime DDL and ``migrations/0027_resume_original_upload.sql`` state exactly
+#: the same set of columns the résumé paths depend on.
+_RESUME_MANAGED_COLUMNS = (
+    "approvalStatus",
+    "originalFile",
+    "originalFilename",
+    "originalContentType",
+    "formatHash",
+)
 
 
 def ensure_resume_columns() -> None:
-    """Idempotently add the additive ``Resume.approvalStatus`` column on first use.
+    """Idempotently add the additive ``Resume`` columns on first use.
 
     ``approvalStatus`` (MV-resume-studio-001) records the human-in-the-loop review
     state of a résumé version — ``pending`` for a freshly tailored child version
@@ -302,28 +316,48 @@ def ensure_resume_columns() -> None:
     versions are created ``pending``. A transaction-scoped advisory lock serializes
     concurrent first-hit callers so the DDL cannot race; ``TRUNCATE`` never drops
     columns, so this survives the test-suite teardown.
+
+    ``originalFile``/``originalFilename``/``originalContentType`` (U2a, R-F1)
+    hold the EXACT bytes the user uploaded plus their identity, so the baseline
+    résumé is a real immutable document and not just extracted text — before
+    this, upload bytes were discarded and only ``sections`` survived, which is
+    why every real upload could only ever be re-flowed into the generic branded
+    template on download. All three are added with NO default: every
+    pre-existing row therefore reads NULL, which means exactly "no original
+    stored (uploaded before format preservation existed)" — an honest gap that
+    ``GET /resumes/{id}/original`` reports as a 404 rather than fabricating a
+    file. Nothing is backfilled because the bytes genuinely no longer exist.
     """
     global _resume_columns_ready
     if _resume_columns_ready:
         return
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER when the column
-            # already exists (production / warm test schema).
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTERs when every
+            # managed column already exists (production / warm test schema).
             cur.execute(
                 "SELECT count(*) FROM information_schema.columns"
                 " WHERE table_name = 'Resume'"
                 " AND table_schema = ANY(current_schemas(false))"
-                " AND column_name = 'approvalStatus'"
+                " AND column_name = ANY(%s)",
+                (list(_RESUME_MANAGED_COLUMNS),),
             )
             row = cur.fetchone()
-            if row and row[0] == 1:
+            if row and row[0] == len(_RESUME_MANAGED_COLUMNS):
                 _resume_columns_ready = True
                 return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240721,))
             cur.execute(
                 'ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "approvalStatus" text'
                 " NOT NULL DEFAULT 'approved'"
+            )
+            cur.execute('ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "formatHash" text')
+            cur.execute('ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalFile" bytea')
+            cur.execute(
+                'ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalFilename" text'
+            )
+            cur.execute(
+                'ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalContentType" text'
             )
         conn.commit()
     _resume_columns_ready = True

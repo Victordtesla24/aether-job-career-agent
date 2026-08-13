@@ -1,0 +1,61 @@
+-- 0027_resume_original_upload.sql — U2a / R-F1: the immutable baseline résumé
+-- becomes a real stored DOCUMENT, not just extracted text.
+--
+-- RECORD ONLY (documentary mirror). The API applies this additively and
+-- idempotently at runtime via ``app.db.ensure_resume_columns`` — the same
+-- lazy-DDL pattern 0020/0023/0026 use (ADR-TR-1: this repo has no migration
+-- runner) — so a deploy that has not re-run Prisma still gets working columns.
+-- The columns are also declared in packages/db/src/schema.prisma so a Prisma
+-- push never drops them (losing an ``originalFile`` would destroy a user's
+-- uploaded baseline document, which cannot be regenerated from anything).
+--
+-- WHY: the doc-pipeline scout (2026-08-13, evidence
+-- uat/reports/evidence/agents-uplift/doc-pipeline/) live-verified that the
+-- ORIGINAL upload bytes were NEVER stored — only ``sections`` jsonb
+-- (raw_text/bullets/contact), with no bytea column anywhere on "Resume"
+-- (7 base + 378 tailored rows, all text-only). Consequences that follow from
+-- that single gap:
+--   * ``GET /resumes/{id}/download`` can byte-preserve ONLY the two hardcoded
+--     bundled seed PDFs (resume_pdf.resolve_original_pdf's formatHash gate);
+--     every real user upload is re-flowed into the generic branded template.
+--   * There is no artefact for a format-preserving tailoring engine (R-F4) to
+--     edit, because the source document no longer exists after upload.
+--   * A user could never retrieve the exact file they gave us.
+--
+-- WHAT THIS ADDS (all additive, all nullable, no default, no backfill):
+--   "originalFile"        bytea — the EXACT uploaded bytes, written once at
+--                         upload and never rewritten (baseline immutability,
+--                         enforced in ResumeRepository: no UPDATE statement in
+--                         the codebase names this column, and update_sections
+--                         raises BaselineImmutableError on an attempted
+--                         formatHash change for a row that has bytes stored).
+--   "originalFilename"    text  — the uploaded file's own name, served back in
+--                         Content-Disposition by GET /resumes/{id}/original.
+--   "originalContentType" text  — the content type Aether actually VERIFIED by
+--                         sniffing the bytes (never the client's claim).
+--   "formatHash"          text  — already created NOT NULL by Prisma, so the
+--                         statement below is a permanent no-op on any real
+--                         schema; it is written out because ensure_resume_columns
+--                         manages the same set and because the column's MEANING
+--                         changed for new uploads: /resumes/upload used to store
+--                         sha256(bytes)[:16], and now stores the FULL SHA-256 hex
+--                         digest, matching resume_parser.compute_format_hash's
+--                         long-standing convention. Existing truncated values are
+--                         left untouched and keep working — resolve_original_pdf
+--                         already accepts both (``digest == h or digest[:16] == h``).
+--
+-- EXISTING ROWS: every pre-existing "Resume" row reads NULL for all three new
+-- columns. That is the honest, accurate state — those uploads happened before
+-- format preservation existed and their bytes are genuinely gone, so nothing is
+-- backfilled and nothing is synthesised. GET /resumes/{id}/original returns an
+-- honest 404 naming that gap rather than re-rendering a lookalike file.
+--
+-- ADD COLUMN with no default is metadata-only on PostgreSQL (existing rows are
+-- not rewritten), so this is fast and safe on the production "Resume" table and
+-- backfills the shared aether_test schema. Additive and non-destructive: no
+-- existing column, constraint or row is altered or dropped.
+
+ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "formatHash" text;
+ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalFile" bytea;
+ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalFilename" text;
+ALTER TABLE "Resume" ADD COLUMN IF NOT EXISTS "originalContentType" text;

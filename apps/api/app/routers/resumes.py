@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import urllib.parse
+import zipfile
+from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
@@ -11,6 +15,35 @@ from app.middleware.auth import CurrentUser
 from app.repositories.resume import ResumeRepository
 
 router = APIRouter()
+
+#: Hard ceiling on an uploaded résumé (U2a). The bytes are now persisted whole
+#: in ``Resume.originalFile``, so an unbounded upload would be an unbounded row;
+#: 10MB is far above any real résumé (the bundled reference PDFs are ~100KB)
+#: while still refusing an accidental or hostile large-file POST. Enforced on a
+#: BOUNDED read, so an oversized body is never fully buffered.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+_PDF_MAGIC = b"%PDF"
+#: Local-file-header / empty-archive / spanned-archive ZIP signatures. A .docx
+#: is an OOXML ZIP, so this is the first (cheap) gate before opening it.
+_ZIP_MAGICS = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+
+_PDF_CONTENT_TYPE = "application/pdf"
+_DOCX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+_TEXT_EXTENSIONS = (".txt", ".text", ".md", ".markdown")
+
+#: Honest rejection copy (MON-012). Before U2a, ANY non-PDF upload was decoded
+#: with ``errors="replace"``, so a .docx, a screenshot or a corrupt file was
+#: silently persisted as a Resume row full of U+FFFD replacement characters and
+#: presented to the user as their résumé. Naming the formats Aether genuinely
+#: supports is the honest answer; guessing is not.
+_UNSUPPORTED_FORMAT_DETAIL = (
+    "Unsupported file format. Aether reads PDF (.pdf), Word (.docx) and "
+    "plain-text (.txt/.md) résumés; this file is not a readable document in "
+    "any of those formats."
+)
 
 
 @router.get("")
@@ -58,6 +91,123 @@ def create_resume(body: ResumeIngestRequest, current_user: CurrentUser) -> dict[
     )
 
 
+def _looks_like_docx(data: bytes) -> bool:
+    """True when ``data`` really is an OOXML word-processing package.
+
+    Checked by CONTENT, never by the client's filename or Content-Type: the
+    bytes must be a readable ZIP that contains the WordprocessingML part
+    (``word/document.xml``). Random bytes behind a ``.docx`` extension fail
+    here and are rejected honestly instead of being decoded into garbage text.
+    """
+    if not data.startswith(_ZIP_MAGICS):
+        return False
+    try:
+        with zipfile.ZipFile(BytesIO(data)) as archive:
+            return any(name.startswith("word/") for name in archive.namelist())
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    import fitz
+
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc)
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse PDF: {exc}"
+        ) from exc
+
+
+def _extract_docx_text(data: bytes) -> str:
+    """Real WordprocessingML text extraction (U2a / R-F3).
+
+    Reads the document's own paragraph and table model via ``python-docx``, so
+    a .docx yields the actual words the user wrote. Paragraph order and blank
+    lines are preserved because ``extract_bullets`` uses line structure (marker
+    lines, all-caps section banners) to reassemble bullets. Table cells are
+    appended after the body paragraphs — ``document.paragraphs`` covers only
+    body-level paragraphs, so nothing is emitted twice.
+    """
+    from docx import Document
+    from docx.opc.exceptions import PackageNotFoundError
+
+    try:
+        document = Document(BytesIO(data))
+    except (PackageNotFoundError, KeyError, ValueError, zipfile.BadZipFile) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse DOCX: {exc}"
+        ) from exc
+    lines = [paragraph.text.strip() for paragraph in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+def _extract_upload_text(filename: str, data: bytes) -> tuple[str, str]:
+    """Extract résumé text from an upload, and report the format Aether VERIFIED.
+
+    Returns ``(raw_text, content_type)`` where ``content_type`` is derived from
+    what the bytes actually are (or, for plain text, from the extension) — never
+    echoed from the client's Content-Type header, which is unverified input.
+    Anything that is not a readable PDF, DOCX or UTF-8 text document raises an
+    honest 422 (MON-012) rather than being force-decoded into noise.
+    """
+    lowered = filename.lower()
+    if data.startswith(_PDF_MAGIC) or lowered.endswith(".pdf"):
+        return _extract_pdf_text(data), _PDF_CONTENT_TYPE
+    if _looks_like_docx(data):
+        return _extract_docx_text(data), _DOCX_CONTENT_TYPE
+    if lowered.endswith(_TEXT_EXTENSIONS):
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "This file is not valid UTF-8 text, so it cannot be read as a "
+                "plain-text résumé. Supported formats: PDF (.pdf), Word (.docx) "
+                "and UTF-8 text (.txt/.md).",
+            ) from exc
+        content_type = (
+            "text/markdown; charset=utf-8"
+            if lowered.endswith((".md", ".markdown"))
+            else "text/plain; charset=utf-8"
+        )
+        return text, content_type
+    raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, _UNSUPPORTED_FORMAT_DETAIL)
+
+
+def _safe_upload_filename(filename: str) -> str:
+    """The upload's own name, stripped of anything that is not a file name.
+
+    Drops directory components (a browser or a hostile client may send a path),
+    non-printable characters and quotes — the same characters that would let a
+    stored name break out of the ``Content-Disposition`` header when it is
+    served back by ``GET /resumes/{id}/original``.
+    """
+    base = os.path.basename(filename.replace("\\", "/")).strip()
+    cleaned = "".join(ch for ch in base if ch.isprintable() and ch not in '"\\')
+    return cleaned[:255] or "resume"
+
+
+def _content_disposition(filename: str) -> str:
+    """An ``attachment`` disposition carrying the original file name.
+
+    Non-latin-1 names cannot travel in a bare ``filename=`` parameter, so they
+    are emitted as RFC 5987 ``filename*=UTF-8''…`` instead of being mangled.
+    """
+    try:
+        filename.encode("latin-1")
+    except UnicodeEncodeError:
+        quoted = urllib.parse.quote(filename, safe="")
+        return f"attachment; filename*=UTF-8''{quoted}"
+    return f'attachment; filename="{filename}"'
+
+
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_resume(
     current_user: CurrentUser,
@@ -66,10 +216,27 @@ async def upload_resume(
 ) -> dict[str, Any]:
     """Upload a resume file as a new root version (SC-ST-03).
 
-    Extracts text server-side (PDF via PyMuPDF; anything else decoded as
-    UTF-8 text) and registers a new ROOT resume through the same
+    Extracts text server-side and registers a new ROOT resume through the same
     section-building path as JSON ingestion. Uploading, on its own, makes no
     LLM call and consumes NOTHING of the caller's metered run allowance.
+
+    U2a (R-F1/R-F3/MON-012) — what the upload now does with the FILE, not just
+    its text:
+
+    * The exact bytes are stored on the new résumé (``originalFile``) with
+      their name and their VERIFIED content type, and ``formatHash`` becomes the
+      full SHA-256 of those bytes. That upload is the user's immutable baseline
+      document: it is written once here and no code path ever rewrites it, so
+      every later tailoring run derives from a source that still exists.
+      ``GET /resumes/{id}/original`` serves it back byte-identical.
+    * Format is decided by CONTENT, not by the client's claims: ``%PDF`` magic
+      → PyMuPDF, an OOXML ZIP containing ``word/`` → python-docx paragraph and
+      table text, ``.txt``/``.md`` → strict UTF-8. Anything else is a 422 that
+      names the supported formats. Previously every non-PDF upload was decoded
+      with ``errors="replace"``, so a real .docx, a screenshot, or a corrupt
+      file became a Resume row of U+FFFD garbage presented back as the user's
+      résumé (MON-012).
+    * Uploads over ``MAX_UPLOAD_BYTES`` are refused with 413 on a bounded read.
 
     ``extract_stories`` (F-03, PROD-UAT-2026-08-03) — OPT-IN, default OFF.
     This endpoint used to dispatch the ``storyExtractor`` agent
@@ -94,20 +261,17 @@ async def upload_resume(
     run result — ``None`` when it was not requested, so no caller can render
     after-the-fact copy claiming a run that never happened.
     """
-    data = await file.read()
-    filename = file.filename or "resume"
-    if filename.lower().endswith(".pdf") or data[:4] == b"%PDF":
-        import fitz
-
-        try:
-            doc = fitz.open(stream=data, filetype="pdf")
-            raw_text = "\n".join(page.get_text() for page in doc)
-        except Exception as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse PDF: {exc}"
-            ) from exc
-    else:
-        raw_text = data.decode("utf-8", errors="replace")
+    # Bounded read: one byte past the cap is enough to prove the file is over
+    # it, so an oversized upload is never fully buffered or persisted.
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Resume file is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)}MB "
+            "upload limit.",
+        )
+    filename = _safe_upload_filename(file.filename or "resume")
+    raw_text, content_type = _extract_upload_text(filename, data)
     if len(raw_text.strip()) < 50:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -128,9 +292,17 @@ async def upload_resume(
     resume = repo.create(
         current_user["id"],
         sections,
-        hashlib.sha256(data).hexdigest()[:16],
+        # FULL SHA-256 of the stored bytes (U2a / R-F1). This used to be
+        # truncated to 16 hex chars; the digest now identifies a document we
+        # actually keep, and matches resume_parser.compute_format_hash's
+        # long-standing convention. resolve_original_pdf accepts both widths,
+        # so pre-existing truncated hashes keep resolving.
+        hashlib.sha256(data).hexdigest(),
         label=f"Uploaded — {stem}",
         version=repo.next_version(current_user["id"]),
+        original_file=data,
+        original_filename=filename,
+        original_content_type=content_type,
     )
     extraction: dict[str, Any] | None = None
     if extract_stories:
@@ -348,4 +520,43 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="resume-{resume_id[:8]}.pdf"'},
+    )
+
+
+@router.get("/{resume_id}/original")
+def download_original_resume(resume_id: str, current_user: CurrentUser) -> Response:
+    """Download the résumé EXACTLY as it was uploaded (U2a / R-F1).
+
+    This is the immutable baseline document — the same bytes, the same content
+    type, the same file name the user gave us. It is deliberately distinct from
+    ``/download``, which RENDERS a résumé (verbatim bundled PDF, in-place
+    tailored splice, or the branded template) and can therefore return a
+    document that never existed on the user's disk.
+
+    Owner-only, exactly like every other ``/resumes/{id}`` route: another
+    account's résumé is indistinguishable from a non-existent one (404).
+
+    A résumé with no stored bytes 404s with an honest explanation instead of
+    synthesising a stand-in file. That is the state of every row created before
+    this slice (original bytes were never kept), of every JSON-ingested résumé
+    (``POST /resumes`` carries text, not a file), and of every tailored child
+    version (produced by the pipeline, never uploaded).
+    """
+    record = ResumeRepository().get_original_file(resume_id, current_user["id"])
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
+    data = record["originalFile"]
+    if not data:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No original file is stored for this résumé. It was created without "
+            "a file upload (typed/ingested text or a tailored version), or it "
+            "was uploaded before Aether began preserving original documents — "
+            "those bytes no longer exist, so there is nothing to return.",
+        )
+    filename = _safe_upload_filename(record["originalFilename"] or f"resume-{resume_id[:8]}")
+    return Response(
+        content=data,
+        media_type=record["originalContentType"] or "application/octet-stream",
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
