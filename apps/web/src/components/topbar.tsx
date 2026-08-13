@@ -198,7 +198,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   // U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*: the panel (+ its backdrop) now
   // render through a portal, out of the blurred `.glass` header's subtree,
   // as a `position: fixed` box positioned entirely with viewport-safe CSS
-  // (`inset-x-4 sm:inset-x-auto sm:right-4 sm:w-80` — see the render below)
+  // (`inset-x-4 sm:inset-x-auto sm:right-8 sm:w-80` — see the render below)
   // instead of `absolute right-0` nested inside that header. `mounted`
   // gates the portal until we're on the client (SSR safety).
   const [mounted, setMounted] = useState(false);
