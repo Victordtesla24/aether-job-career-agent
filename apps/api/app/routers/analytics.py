@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -18,6 +19,18 @@ from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 
 router = APIRouter()
+
+#: MON-015: Market Pulse's activity heatmap and weekly trend series bucket
+#: calendar days/weeks in THIS timezone, not the DB's UTC-naive storage — the
+#: page is explicitly AU/Melbourne-branded (target-role location, "hiring &
+#: recruitment trends · AU" caption) but previously bucketed by raw UTC
+#: calendar day, silently shifting ~28% of a live user's applications onto
+#: the wrong Melbourne day. Both the SQL bucketing (``AT TIME ZONE 'UTC' AT
+#: TIME ZONE _ANALYTICS_TIMEZONE``) and the Python "today" anchor below use
+#: this SAME zone, and the response discloses it on the wire so a reader is
+#: never left guessing which calendar the boundaries use.
+_ANALYTICS_TIMEZONE = "Australia/Melbourne"
+_ANALYTICS_ZONEINFO = ZoneInfo(_ANALYTICS_TIMEZONE)
 
 #: Supported look-back windows (days). ``all`` disables the filter.
 _PERIODS = {"7d": 7, "30d": 30, "90d": 90, "all": None}
@@ -363,14 +376,29 @@ def _relative_time(ts: datetime | None) -> str:
 
 
 def _pct_delta(series: list[float]) -> tuple[str, str]:
-    """Return (delta_label, direction) comparing the first non-zero to last."""
-    nonzero = [v for v in series if v]
-    if len(nonzero) < 2:
+    """Return (delta_label, direction) comparing the LAST period to the one
+    immediately prior to it — the literal "vs. the prior period" comparison
+    the Trend Indicators tooltip claims (MarketPulse.tsx).
+
+    MON-016: this used to compare the first non-zero point to the last point
+    of the WHOLE lookback window, which can — and, in a live 2026-08-13
+    audit, did — report the OPPOSITE sign of the true most-recent
+    week-over-week change (series [44, 43, 290, 103] displayed "+134%"/up
+    from first=44 vs last=103, while the real prior-period change,
+    290 -> 103, was -64.5%/down). "Prior period" means the period
+    immediately before the last one, so this now looks only at ``series``'s
+    final two points.
+    """
+    if len(series) < 2:
         return ("no change", "flat")
-    first, last = nonzero[0], nonzero[-1]
-    if first == 0:
+    prior, last = series[-2], series[-1]
+    if prior == last:
         return ("no change", "flat")
-    change = round((last - first) / abs(first) * 100)
+    if prior == 0:
+        # No honest percentage change is computable from a zero base —
+        # report the real direction without fabricating a magnitude.
+        return ("new activity", "up") if last > 0 else ("no change", "flat")
+    change = round((last - prior) / abs(prior) * 100)
     if change > 0:
         return (f"+{change}%", "up")
     if change < 0:
@@ -433,11 +461,16 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             requirement_rows = rows_to_dicts(cur)
 
             # --- Activity heatmap: applications per day (last 35 days) -----
+            # MON-015: bucket by the Melbourne-local calendar day, not the
+            # DB's UTC-naive storage — "createdAt" AT TIME ZONE 'UTC' AT TIME
+            # ZONE _ANALYTICS_TIMEZONE reinterprets the naive UTC value as
+            # Melbourne wall-clock time before truncating to a day.
             cur.execute(
-                'SELECT DATE("createdAt") AS day, COUNT(*) AS cnt FROM "Application" '
+                'SELECT DATE("createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS day, '
+                'COUNT(*) AS cnt FROM "Application" '
                 'WHERE "userId" = %s AND "createdAt" >= NOW() - INTERVAL \'35 days\' '
                 'GROUP BY day ORDER BY day',
-                (user_id,),
+                (_ANALYTICS_TIMEZONE, user_id),
             )
             heatmap_rows = rows_to_dicts(cur)
 
@@ -493,34 +526,40 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             # so a divisor of len(agent_week_rows) always equals the fixed
             # window length instead of collapsing to the count of weeks that
             # merely happen to have data (GAP-P4-059).
+            # MON-015: both the zero-fill anchor and the joined actuals bucket
+            # in Melbourne-local weeks (Monday-start, per Postgres's
+            # DATE_TRUNC), so the two sides of the LEFT JOIN agree.
             cur.execute(
                 '''
                 SELECT gs.week AS week, COALESCE(runs.cnt, 0) AS cnt
                 FROM generate_series(
-                    DATE_TRUNC('week', NOW()) - INTERVAL '11 weeks',
-                    DATE_TRUNC('week', NOW()),
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s) - INTERVAL '11 weeks',
+                    DATE_TRUNC('week', NOW() AT TIME ZONE %s),
                     INTERVAL '1 week'
                 ) AS gs(week)
                 LEFT JOIN (
-                    SELECT DATE_TRUNC('week', "startedAt") AS week, COUNT(*) AS cnt
+                    SELECT DATE_TRUNC(
+                        'week', "startedAt" AT TIME ZONE 'UTC' AT TIME ZONE %s
+                    ) AS week, COUNT(*) AS cnt
                     FROM "AgentRun" WHERE "userId" = %s
                     AND "startedAt" >= NOW() - INTERVAL '84 days'
                     GROUP BY week
                 ) runs ON runs.week = gs.week
                 ORDER BY gs.week
                 ''',
-                (user_id,),
+                (_ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, _ANALYTICS_TIMEZONE, user_id),
             )
             agent_week_rows = rows_to_dicts(cur)
 
             # Weekly agent spend (last 12 weeks) for trend indicators.
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', "startedAt") AS week, '
+                'SELECT DATE_TRUNC(\'week\', '
+                '"startedAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
                 'COALESCE(SUM("costUsd"), 0) AS spend '
                 'FROM "AgentRun" WHERE "userId" = %s '
                 'AND "startedAt" >= NOW() - INTERVAL \'84 days\' '
                 'GROUP BY week ORDER BY week',
-                (user_id,),
+                (_ANALYTICS_TIMEZONE, user_id),
             )
             agent_spend_rows = rows_to_dicts(cur)
 
@@ -534,32 +573,46 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             # page for the SAME underlying data (GOLD-MASTER-V2 §15
             # raw-count divergence class).
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', "createdAt") AS week, '
+                'SELECT DATE_TRUNC(\'week\', '
+                '"createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
                 'COUNT(DISTINCT "jobId") AS cnt '
                 'FROM "Application" WHERE "userId" = %s '
                 'AND "createdAt" >= NOW() - INTERVAL \'84 days\' '
                 'GROUP BY week ORDER BY week',
-                (user_id,),
+                (_ANALYTICS_TIMEZONE, user_id),
             )
             app_week_rows = rows_to_dicts(cur)
 
             # Average fit-score trend (weekly) as a demand proxy.
             cur.execute(
-                'SELECT DATE_TRUNC(\'week\', "createdAt") AS week, '
+                'SELECT DATE_TRUNC(\'week\', '
+                '"createdAt" AT TIME ZONE \'UTC\' AT TIME ZONE %s) AS week, '
                 'COALESCE(AVG("fitScore"), 0) AS fit '
                 'FROM "Job" WHERE "userId" = %s AND "fitScore" IS NOT NULL '
                 'AND "createdAt" >= NOW() - INTERVAL \'84 days\' '
                 'GROUP BY week ORDER BY week',
-                (user_id,),
+                (_ANALYTICS_TIMEZONE, user_id),
             )
             fit_week_rows = rows_to_dicts(cur)
 
     # ---- Sources → percentages -------------------------------------------
-    src_sum = sum(int(r["cnt"]) for r in source_rows) or 1
-    sources: list[dict[str, Any]] = []
+    # MON-014: percentages must be normalized against sourcesTotal (the true
+    # COUNT(*) of this user's Job rows, shown in this SAME donut's center
+    # text) — not the top-5-source subtotal. Normalizing to the truncated
+    # subtotal silently dropped every long-tail source from the percentage
+    # math while still counting it in the displayed center total (live
+    # audit: top-5 subtotal 7,626 vs sourcesTotal 7,801 — 175 jobs vanished
+    # from the math). An honest "Other" slice carries whatever the top 5
+    # don't, computed by the SAME largest-remainder rounding as every named
+    # slice, so the full donut (top-5 + Other) still sums to exactly 100.
+    denom = sources_total or 1
+    top5_counts = [int(r["cnt"]) for r in source_rows]
+    other_count = sources_total - sum(top5_counts)
+    has_other = other_count > 0
+    slice_counts = [*top5_counts, other_count] if has_other else top5_counts
 
     # Compute rounded percentages via largest remainder so they sum to 100%.
-    raw_pcts = [int(r["cnt"]) / src_sum * 100 for r in source_rows]
+    raw_pcts = [c / denom * 100 for c in slice_counts]
     floored = [int(p) for p in raw_pcts]
     remainders = [(raw_pcts[i] - floored[i], i) for i in range(len(raw_pcts))]
     remaining = 100 - sum(floored)
@@ -575,6 +628,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     }
     fallback_cycle = [c for c in _PALETTE if c not in claimed] or list(_PALETTE)
     fallback_idx = 0
+    sources: list[dict[str, Any]] = []
     for idx, r in enumerate(source_rows):
         label = str(r["source"])
         color = _SOURCE_COLORS.get(label.lower())
@@ -586,6 +640,14 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
                 "label": label[:1].upper() + label[1:],
                 "value": floored[idx],
                 "color": color,
+            }
+        )
+    if has_other:
+        sources.append(
+            {
+                "label": "Other",
+                "value": floored[len(top5_counts)],
+                "color": fallback_cycle[fallback_idx % len(fallback_cycle)],
             }
         )
 
@@ -618,8 +680,11 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # ---- Activity heatmap (5 weeks × 7 days, values 0-4) -----------------
     day_counts = {r["day"]: int(r["cnt"]) for r in heatmap_rows}
     max_day = max(day_counts.values()) if day_counts else 0
-    # Oldest → newest across 35 days; row 0 = oldest week.
-    today = datetime.now(timezone.utc).date()
+    # Oldest → newest across 35 days; row 0 = oldest week. MON-015: anchor on
+    # today's MELBOURNE-local date (matching the query's SQL-side bucketing
+    # above), not the UTC date — converted via astimezone() rather than
+    # passed directly to now() so this stays correct under any tz argument.
+    today = datetime.now(timezone.utc).astimezone(_ANALYTICS_ZONEINFO).date()
     ordered: list[int] = []
     for offset in range(34, -1, -1):
         day = today - timedelta(days=offset)
@@ -865,6 +930,10 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         "sourcesLabel": "jobs sourced",
         "topSkills": top_skills,
         "activityHeatmap": activity_heatmap,
+        # MON-015: the calendar the heatmap/weekly-trend day-and-week
+        # boundaries above are actually computed in — disclosed on the wire
+        # so a reader (or the FE) never has to guess it.
+        "timezone": _ANALYTICS_TIMEZONE,
         # The wire key stays "probability" for its six existing consumers, but
         # nothing rendered from it claims a probability any more (F-04): the
         # score is null when unmeasurable, every factor states its own
@@ -1038,7 +1107,13 @@ def _market_summary(benchmark: MarketBenchmark | None) -> str:
             f"to A${round(max(trend.values())):,}."
         )
     bands = benchmark.salaryHistogram
-    if bands:
+    # MON-013: a live Adzuna /histogram response can be a non-empty dict
+    # where EVERY band's count is 0 (verified live 2026-08-13) — `if bands:`
+    # alone still passes (the dict is non-empty), so `max(...)` picked an
+    # arbitrary tied-at-zero band and printed the self-contradicting
+    # "(0) advertise the A$X band" sentence. Only emit the clause when some
+    # band actually has a non-zero count to name honestly.
+    if bands and max(bands.values()) > 0:
         top_band = max(bands, key=lambda band: bands[band])
         sentences.append(
             f"Most live ads for your target role ({bands[top_band]}) advertise "

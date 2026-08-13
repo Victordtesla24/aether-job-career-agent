@@ -559,6 +559,13 @@ export interface MarketPulse {
     summary: string;
   };
   trendIndicators: Array<{ label: string; delta: string; direction: string; series: number[] }>;
+  /**
+   * MON-015: the IANA zone the activity heatmap / weekly trend day-and-week
+   * boundaries are bucketed in (e.g. "Australia/Melbourne"). Optional so an
+   * older cached payload shape still satisfies this type; absent entirely
+   * only if the backend has not deployed the fix yet.
+   */
+  timezone?: string;
 }
 
 export const fetchMarketPulse = (options: RequestOptions = {}) =>

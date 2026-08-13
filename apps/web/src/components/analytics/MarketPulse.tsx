@@ -83,6 +83,22 @@ function freshestDataAsOf(comparisons: MarketPulseData["marketVsYou"]["compariso
   return best?.iso ?? null;
 }
 
+/**
+ * MON-016: the trend-indicator tooltip literally claims "vs. the prior
+ * period" (the last data point vs. the one immediately before it) — so the
+ * rendered up/down signal is derived straight from the series' own tail,
+ * rather than trusting a separately-computed `direction` field that could
+ * (and, in a live 2026-08-13 audit, did) disagree with what the series
+ * itself shows for the most recent period.
+ */
+function priorPeriodDirection(series: number[]): "up" | "down" | "flat" {
+  if (series.length < 2) return "flat";
+  const last = series[series.length - 1];
+  const prior = series[series.length - 2];
+  if (last === prior) return "flat";
+  return last > prior ? "up" : "down";
+}
+
 function sparkPoints(series: number[], w = 120, h = 36) {
   // A 0/1-point series would divide by zero below (NaN polyline coords);
   // render a flat line instead.
@@ -139,27 +155,33 @@ export default function MarketPulse() {
       <div data-testid="trend-indicators">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Trend Indicators</h3>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {data.trendIndicators.map((t) => (
-          <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
-              <MetricTooltip
-                value={t.delta}
-                tooltip={`${t.label}: percentage change vs. the prior period.`}
-                className={`mono text-xs font-bold ${t.direction === "up" ? "text-aether-green" : "text-aether-coral"}`}
-              />
+        {data.trendIndicators.map((t) => {
+          // MON-016: derive the rendered signal from the series' own last
+          // two points (the true "prior period" the tooltip claims), not
+          // from `t.direction` alone.
+          const isUp = priorPeriodDirection(t.series) === "up";
+          return (
+            <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
+                <MetricTooltip
+                  value={t.delta}
+                  tooltip={`${t.label}: percentage change vs. the prior period.`}
+                  className={`mono text-xs font-bold ${isUp ? "text-aether-green" : "text-aether-coral"}`}
+                />
+              </div>
+              <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
+                <polyline
+                  points={sparkPoints(t.series)}
+                  fill="none"
+                  stroke={isUp ? "#34D399" : "#FF6B35"}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
             </div>
-            <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
-              <polyline
-                points={sparkPoints(t.series)}
-                fill="none"
-                stroke={t.direction === "up" ? "#34D399" : "#FF6B35"}
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-        ))}
+          );
+        })}
         </div>
       </div>
 
@@ -322,9 +344,17 @@ export default function MarketPulse() {
       <div className="grid gap-4 xl:grid-cols-4">
         {/* Activity heatmap */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="activity-heatmap">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Weekly Activity
           </h3>
+          {/* MON-015: disclose which calendar the day/week boundaries below
+           * actually use — sourced from the API, never hardcoded, so this
+           * can never drift out of sync with the bucketing it describes. */}
+          {data.timezone && (
+            <p className="mb-3 text-[10px] text-aether-muted-dim" data-testid="heatmap-timezone-label">
+              Days bucketed in {data.timezone} time
+            </p>
+          )}
           <div className="grid grid-cols-7 gap-1.5">
             {data.activityHeatmap.flatMap((week, wi) =>
               week.map((v, di) => (
