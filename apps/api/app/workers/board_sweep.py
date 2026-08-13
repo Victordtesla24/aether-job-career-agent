@@ -33,7 +33,7 @@ import logging
 import os
 import time
 from datetime import timedelta
-from typing import Any
+from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +362,194 @@ def _cover_failure_count(user_id: str, job_id: str) -> int:
     return row[0] if row else 0
 
 
+#: Candidate rows the sweep's target walk pulls per round-trip (MON-001). Same
+#: value and same reason as ``JobRepository._BOARD_PAGE_SIZE`` /
+#: ``_SCORING_BATCH_SIZE``: a per-STATEMENT bound so the cost of ONE statement
+#: stays flat as the board grows, instead of scaling with it. It is NOT a
+#: result cap — the walk pages until the eligible set is exhausted, so every
+#: eligible job is still considered on every call (see
+#: ``_candidates_with_failure_counts``).
+_CANDIDATE_PAGE_SIZE = 500
+
+#: The sweep's eligibility gate (``{job}`` = the ``"Job"`` alias), lifted
+#: VERBATIM out of the pre-MON-001 ``_next_target`` / ``_saturated_job_ids``
+#: statements so the bounded walk selects exactly the same row set it always
+#: did: ``tailoring`` jobs, or ``screening``/``matched`` jobs that carry a
+#: fitScore; never ``applied``/``archived``; never a job that already has an
+#: ``Application`` row.
+_ELIGIBLE_JOB_PREDICATE = '''
+    (
+      ({job}."status" = 'tailoring')
+   OR ({job}."status" IN ('screening','matched')
+       AND {job}."fitScore" IS NOT NULL)
+    )
+    AND {job}."status" NOT IN ('applied','archived')
+    AND NOT EXISTS (
+          SELECT 1 FROM "Application" a
+          WHERE a."jobId" = {job}."id" AND a."userId" = {job}."userId"
+        )
+'''
+
+
+def _iter_candidate_pages(
+    user_id: str, attempted: set[str]
+) -> Iterator[list[dict[str, Any]]]:
+    """Walk this user's ELIGIBLE, not-yet-attempted jobs in bounded
+    keyset-paged batches — the narrow four-column projection the sweep's
+    target selection actually reads, and NOT one row of ``"AgentRun"``
+    (MON-001).
+
+    The cover-failure backoff used to be a correlated subquery inside this
+    statement: for every candidate row Postgres re-scanned that user's whole
+    ``coverLetter`` history twice, joined on ``input->>'job_id'`` — a JSONB
+    extraction no index can serve. Cost therefore scaled with (eligible jobs)
+    x (AgentRun rows), which is what the hosted 5 s ``statement_timeout``
+    killed on every ~10-minute ``board_sweep_user`` tick (MONITORING-LEDGER
+    MON-001: ``psycopg2.errors.QueryCanceled``, 100% failure for one user).
+    The backoff is now counted set-wise, once per page, by
+    ``_letterless_counts``.
+
+    Same idiom as ``JobRepository.iter_scoring_candidates`` (BLOCKER-007) and
+    ``JobRepository.list_by_user`` (BLOCKER-008): the cursor advances on
+    ``"id"`` — served by ``Job_pkey``, and no sweep write touches it — and the
+    connection is released before each page is yielded, so the caller's own
+    reads/writes never run inside a held read connection (the hosted database
+    caps concurrent connections at 25).
+    """
+    from app.db import get_connection
+
+    sql = f'''
+        SELECT j."id", j."status", j."fitScore", j."createdAt"
+        FROM "Job" j
+        WHERE j."userId" = %s
+          AND j."id" > %s
+          AND j."id" != ALL(%s)
+          AND {_ELIGIBLE_JOB_PREDICATE.format(job="j")}
+        ORDER BY j."id"
+        LIMIT {int(_CANDIDATE_PAGE_SIZE)}
+    '''
+    excluded = list(attempted) or ["-"]
+    last_id = ""
+    while True:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, last_id, excluded))
+                page = [
+                    {"id": row[0], "status": row[1], "fitScore": row[2],
+                     "createdAt": row[3]}
+                    for row in cur.fetchall()
+                ]
+        if not page:
+            return
+        yield page
+        last_id = page[-1]["id"]
+
+
+def _letterless_counts(user_id: str, job_ids: list[str]) -> dict[str, int]:
+    """``{job_id: letterless coverLetter runs}`` for the supplied, explicitly
+    BOUNDED id set — one statement that walks the user's ``coverLetter``
+    history ONCE, instead of once per candidate job (MON-001).
+
+    Same three predicates, same meaning, as the correlated form it replaces:
+    ``_COVER_RUN_PRODUCED_NO_LETTER`` is what gets counted, the window is
+    ``cover_failure_window_hours()``, and the floor is
+    ``_SINCE_LAST_SUCCESS_OR_CLEAR`` — the later of the job's last GENUINELY
+    produced letter and its last ops-clear stamp — expressed as a ``GROUP BY``
+    (``floors``) rather than a correlated ``MAX``. Set-wise is the same shape
+    ``JobRepository._autopilot_suppression_expiry_sql`` already uses for the
+    board's suppression hint (BLOCKER-008), whose equivalence against the
+    correlated form was measured row-by-row over 5932 production jobs with 0
+    mismatches.
+
+    Jobs with no qualifying run are ABSENT from the mapping; callers read that
+    as 0. ``window`` is inlined as a validated positive int (never a raw
+    string), the same precedent BLOCKER-008 set for this predicate's SQL text.
+    """
+    from app.db import get_connection
+
+    if not job_ids:
+        return {}
+    window = cover_failure_window_hours()
+    sql = f'''
+        WITH targets AS (
+            SELECT j."id", j."coverFailureClearedAt"
+            FROM "Job" j
+            WHERE j."userId" = %s AND j."id" = ANY(%s)
+        ),
+        runs AS (
+            SELECT (r."input"->>'job_id') AS job_id, r."createdAt",
+                   {_COVER_RUN_PRODUCED_A_LETTER.format(run="r").strip()}
+                       AS produced_letter,
+                   {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r").strip()}
+                       AS letterless
+            FROM "AgentRun" r
+            WHERE r."userId" = %s AND r."agentName" = 'coverLetter'
+        ),
+        floors AS (
+            SELECT job_id, MAX("createdAt") AS last_letter
+            FROM runs WHERE produced_letter GROUP BY job_id
+        )
+        SELECT t."id", count(*)
+        FROM targets t
+        JOIN runs x ON x.job_id = t."id"
+        LEFT JOIN floors f ON f.job_id = t."id"
+        WHERE x.letterless
+          AND x."createdAt" >= NOW() - (INTERVAL '1 hour' * {int(window)})
+          AND x."createdAt" > GREATEST(
+                COALESCE(f.last_letter, '-infinity'::timestamptz),
+                COALESCE(t."coverFailureClearedAt", '-infinity'::timestamptz))
+        GROUP BY t."id"
+    '''
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (user_id, job_ids, user_id))
+            return {row[0]: int(row[1]) for row in cur.fetchall()}
+
+
+def _candidates_with_failure_counts(
+    user_id: str, attempted: set[str]
+) -> list[dict[str, Any]]:
+    """Every eligible, not-yet-attempted job of this user, each carrying its
+    current ``coverFailures`` count — read in bounded statements only
+    (MON-001).
+
+    BOUNDED, NOT TRUNCATED: the page size caps what ONE statement costs, never
+    how many jobs are considered. Both callers below see the identical row set
+    the single unbounded statement used to produce, so neither the target
+    choice nor the saturated set can silently shrink as a board grows.
+    """
+    from app.db import ensure_job_cover_suppression_column
+
+    ensure_job_cover_suppression_column()
+    candidates: list[dict[str, Any]] = []
+    for page in _iter_candidate_pages(user_id, attempted):
+        counts = _letterless_counts(user_id, [row["id"] for row in page])
+        for row in page:
+            row["coverFailures"] = counts.get(row["id"], 0)
+            candidates.append(row)
+    return candidates
+
+
+def _sweep_priority(candidate: dict[str, Any]) -> tuple[int, float, Any]:
+    """``_next_target``'s ordering, applied after the bounded walk instead of
+    inside it (BLOCKER-008 does the same for the board read).
+
+    Reproduces the pre-MON-001 ``ORDER BY (status = 'tailoring') DESC,
+    "fitScore" DESC NULLS LAST, "createdAt" ASC`` exactly: cover-only
+    completions first (finish work a prior stretch started), then best fit,
+    then oldest. A missing fitScore sorts last (``+inf`` under the ascending
+    ``-fitScore`` key), which is what ``NULLS LAST`` means here. Remaining ties
+    resolve by ``"id"`` because Python's sort is stable and the walk yields
+    id-ascending — the SQL left those ties to the planner.
+    """
+    fit = candidate.get("fitScore")
+    return (
+        0 if candidate["status"] == "tailoring" else 1,
+        float("inf") if fit is None else -float(fit),
+        candidate["createdAt"],
+    )
+
+
 def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
     """Ids of eligible jobs that are CURRENTLY skipped solely due to the cover
     failure backoff (they have ``max_cover_failures()``+ letterless coverLetter
@@ -372,45 +560,17 @@ def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
     stretch summary — the latter tells the operator the sweep is NOT done,
     it's backing off — and (ML-W-12) to compute the honest tick log's
     earliest suppression-expiry time via ``_job_suppression_expiry``.
-    """
-    from app.db import ensure_job_cover_suppression_column, get_connection
 
-    ensure_job_cover_suppression_column()
-    window = cover_failure_window_hours()
+    MON-001: reads through the bounded walk above. It used to be the more
+    severe of the two offending statements — the same per-candidate-row
+    ``"AgentRun"`` correlation as ``_next_target``, and no ``LIMIT`` at all.
+    """
     limit = max_cover_failures()
-    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(
-        user_ref='j."userId"', job_ref='j."id"'
-    )
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f'''
-                SELECT j."id" FROM "Job" j
-                WHERE j."userId" = %s
-                  AND j."id" != ALL(%s)
-                  AND (
-                        (j."status" = 'tailoring')
-                     OR (j."status" IN ('screening','matched')
-                         AND j."fitScore" IS NOT NULL)
-                      )
-                  AND j."status" NOT IN ('applied','archived')
-                  AND NOT EXISTS (
-                        SELECT 1 FROM "Application" a
-                        WHERE a."jobId" = j."id" AND a."userId" = j."userId"
-                      )
-                  AND (
-                        SELECT count(*) FROM "AgentRun" r
-                        WHERE r."userId" = %s
-                          AND r."agentName" = 'coverLetter'
-                          AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
-                          AND r."createdAt" >= NOW() - INTERVAL '%s hours'
-                          AND (r."input"->>'job_id') = j."id"
-                          AND r."createdAt" > {since_floor}
-                      ) >= %s
-                ''',
-                (user_id, list(attempted) or ["-"], user_id, window, limit),
-            )
-            return [row[0] for row in cur.fetchall()]
+    return [
+        candidate["id"]
+        for candidate in _candidates_with_failure_counts(user_id, attempted)
+        if candidate["coverFailures"] >= limit
+    ]
 
 
 def _saturated_job_count(user_id: str, attempted: set[str]) -> int:
@@ -493,54 +653,26 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     past the window, OR the job earns a coverLetter run that genuinely
     produces a letter, OR ops clears it (``Job.coverFailureClearedAt``,
     ML-W-12), the job re-eligibilises without code changes.
-    """
-    from app.db import ensure_job_cover_suppression_column, get_connection
 
-    ensure_job_cover_suppression_column()
-    window = cover_failure_window_hours()
+    MON-001: the exclusion is applied to a bounded, set-wise failure count
+    (``_candidates_with_failure_counts``) instead of a correlated
+    ``"AgentRun"`` subquery evaluated per candidate row — same jobs, same
+    priority order, but the cost of one statement no longer scales with
+    (eligible jobs) x (that user's AgentRun history), which is what the hosted
+    5 s statement timeout was cancelling on every tick.
+    """
     limit = max_cover_failures()
-    since_floor = _SINCE_LAST_SUCCESS_OR_CLEAR.format(
-        user_ref='j."userId"', job_ref='j."id"'
-    )
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f'''
-                SELECT j."id", j."status" FROM "Job" j
-                WHERE j."userId" = %s
-                  AND j."id" != ALL(%s)
-                  AND (
-                        (j."status" = 'tailoring')
-                     OR (j."status" IN ('screening','matched')
-                         AND j."fitScore" IS NOT NULL)
-                      )
-                  AND j."status" NOT IN ('applied','archived')
-                  AND NOT EXISTS (
-                        SELECT 1 FROM "Application" a
-                        WHERE a."jobId" = j."id" AND a."userId" = j."userId"
-                      )
-                  AND (
-                        SELECT count(*) FROM "AgentRun" r
-                        WHERE r."userId" = %s
-                          AND r."agentName" = 'coverLetter'
-                          AND {_COVER_RUN_PRODUCED_NO_LETTER.format(run="r")}
-                          AND r."createdAt" >= NOW() - INTERVAL '%s hours'
-                          AND (r."input"->>'job_id') = j."id"
-                          AND r."createdAt" > {since_floor}
-                      ) < %s
-                ORDER BY (j."status" = 'tailoring') DESC, j."fitScore" DESC NULLS LAST,
-                         j."createdAt" ASC
-                LIMIT 1
-                ''',
-                (user_id, list(attempted) or ["-"], user_id, window, limit),
-            )
-            row = cur.fetchone()
-    if row is None:
+    eligible = [
+        candidate
+        for candidate in _candidates_with_failure_counts(user_id, attempted)
+        if candidate["coverFailures"] < limit
+    ]
+    if not eligible:
         return None
-    job_id, job_status = row
+    target = min(eligible, key=_sweep_priority)
     return {
-        "job_id": job_id,
-        "mode": "cover_only" if job_status == "tailoring" else "full",
+        "job_id": target["id"],
+        "mode": "cover_only" if target["status"] == "tailoring" else "full",
     }
 
 
