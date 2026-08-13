@@ -960,6 +960,91 @@ echo "=========================================="
 
 ---
 
+## 5.1. Auto-Deploy (Pull-Based, Automatic)
+
+A `systemd` timer polls `origin/main` every 5 minutes and runs the exact
+"Complete Deploy Recipe" above automatically when it moves — this VM pulls
+its own updates rather than being pushed to by a CI/CD pipeline. There is no
+separate pipeline to operate or debug: the mechanism is the same manual
+recipe this section already documents, invoked on a schedule.
+
+### Mechanism
+
+- `deploy/auto-deploy.sh` — the recipe: `git fetch origin main`; if this
+  checkout's `HEAD` already equals `origin/main`, it exits `0` immediately
+  (no-op — this is what makes 5-minute polling cheap). Otherwise it takes
+  `flock -n /tmp/aether-deploy.lock` (the same lock every manual/agent-driven
+  deploy on this VM uses, so a manual deploy and the timer can never race),
+  checks the working tree for foreign uncommitted WIP (never stashes,
+  resets, or cleans it away — see the `FOREIGN-WIP-MOVED.md` precedent — it
+  refuses loudly instead), then runs `git pull --ff-only`, installs Python
+  deps only if `apps/api/requirements.txt` changed, builds the web app only
+  if `apps/web/**` changed (through the same `verify-web-build.sh` gate as
+  §0.4), restarts all three services, and runs the same 3 health checks as
+  §5 Phase 5 (items 3, 3b, 4: API health via nginx, the Next.js `/api`
+  rewrite check, and the web root).
+- `deploy/aether-autodeploy.service` — `Type=oneshot` unit that runs the
+  script once per trigger.
+- `deploy/aether-autodeploy.timer` — `OnCalendar=*:0/5` (every 5 minutes),
+  `Persistent=false` (a missed tick while the VM was off is not replayed —
+  the next real tick will simply find `origin/main` has moved and deploy).
+
+Both unit files are tracked in-repo under `deploy/` per this repo's
+existing in-repo-unit-plus-symlink convention (see `deploy/aether-api.service`
+et al. in §1) and symlinked into `/etc/systemd/system/`, so `git log` on
+`deploy/` is the audit trail for the automation itself, and a VM image
+rebuild cannot silently lose it.
+
+### Failure behavior — read before relying on this
+
+On **any** failure — a blocked pull (foreign WIP or diverged history), a
+failed dependency install, a failed web build or `verify-web-build.sh` gate,
+a service that doesn't come back active, or a failed health check — the
+script logs one `FAILURE: ...` line to `/var/log/aether/deploy.log` and
+exits non-zero. **There is no automatic retry and no automatic rollback.**
+If the failure happened after `git pull` already advanced `HEAD` (the common
+case, since pull is early in the recipe), the next timer tick sees
+`HEAD == origin/main` and exits `0` — it will **not** re-attempt the failed
+build/restart/health-check steps on its own, because nothing new arrived to
+deploy. Treat any `FAILURE` line in `/var/log/aether/deploy.log` as
+requiring manual attention: fix the underlying issue, then either wait for
+the next `origin/main` commit or re-run `deploy/auto-deploy.sh` (or the
+manual §5 recipe) by hand. For a bad deploy that DID complete (services
+restarted, health checks passed, but the change itself is wrong), use the
+normal §6 Rollback Procedure — this mechanism does not change how rollback
+works.
+
+### Install
+
+```bash
+cd /home/ubuntu/github_repos/aether-job-career-agent
+sudo ln -sf "$PWD/deploy/aether-autodeploy.service" /etc/systemd/system/aether-autodeploy.service
+sudo ln -sf "$PWD/deploy/aether-autodeploy.timer" /etc/systemd/system/aether-autodeploy.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now aether-autodeploy.timer
+```
+
+### Disable
+
+```bash
+sudo systemctl disable --now aether-autodeploy.timer
+```
+
+This stops future polling immediately; it does not affect the currently
+running services or require a restart of anything else. Manual deploys via
+§5 continue to work exactly as before (same lock file, so they still can't
+race a timer tick you forgot to disable).
+
+### Check status / logs
+
+```bash
+systemctl list-timers aether-autodeploy.timer     # next scheduled run
+tail -20 /var/log/aether/deploy.log                # per-deploy narrative log
+journalctl -u aether-autodeploy.service -n 50      # last run's stdout/stderr, if any
+```
+
+---
+
 ## 6. Rollback Procedure
 
 ### Prerequisite
