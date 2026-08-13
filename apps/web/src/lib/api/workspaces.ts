@@ -527,7 +527,23 @@ export interface MarketPulse {
     factors: Array<{ label: string; value: number | null; measured: boolean }>;
   };
   employerActivity: Array<{ company: string; event: string; when: string; signal: string }>;
-  recruiterTrends: { series: number[]; rows: Array<{ label: string; delta: string }> };
+  recruiterTrends: {
+    series: number[];
+    rows: Array<{
+      label: string;
+      delta: string;
+      /**
+       * MUST-FIX-1 (AX round-3 final re-review): mirrors trendIndicators'
+       * direction/deltaKind contract (RULING-A/C extended to this sibling
+       * card) — the FE must branch on these instead of always painting the
+       * delta green regardless of sign/kind. "total" marks a plain
+       * cumulative count (e.g. "8 total") that is not a comparison at all
+       * and must never carry directional (green/coral) styling.
+       */
+      direction: "up" | "down" | "flat";
+      deltaKind: "percent" | "new" | "insufficient-data" | "total";
+    }>;
+  };
   marketVsYou: {
     /**
      * TRANSITIONAL (I1→I3, D-0042 / R5): the backend still sends this global

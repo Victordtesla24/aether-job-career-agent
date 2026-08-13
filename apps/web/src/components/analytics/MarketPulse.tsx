@@ -180,18 +180,6 @@ function sparkSegments(series: Array<number | null>, w = 120, h = 36) {
   return { completeRuns, partial };
 }
 
-function sparkPoints(series: number[], w = 120, h = 36) {
-  // A 0/1-point series would divide by zero below (NaN polyline coords);
-  // render a flat line instead.
-  const pts = series.length >= 2 ? series : [series[0] ?? 0, series[0] ?? 0];
-  const max = Math.max(...pts, 1);
-  const min = Math.min(...pts);
-  const range = max - min || 1;
-  return pts
-    .map((v, i) => `${(i / (pts.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`)
-    .join(" ");
-}
-
 export default function MarketPulse() {
   const [data, setData] = useState<MarketPulseData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -522,22 +510,69 @@ export default function MarketPulse() {
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Recruiter Activity
           </h3>
-          <svg viewBox="0 0 120 36" className="h-16 w-full" aria-hidden="true">
-            <polyline
-              points={sparkPoints(data.recruiterTrends.series)}
-              fill="none"
-              stroke="#818CF8"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
+          {(() => {
+            // MUST-FIX-1 (AX round-3 final re-review): this used to be a
+            // single fully-opaque sparkPoints() polyline, so the trailing
+            // in-progress Melbourne week was indistinguishable from a
+            // completed one — while the "Avg runs / week" delta directly
+            // beneath it (backend _pct_delta) EXCLUDES that same week.
+            // sparkSegments() is the SAME remedy already applied to the
+            // Trend Indicators tiles (R-03): the trailing segment renders
+            // separately, at reduced opacity, so the chart can never
+            // visually contradict the badge beside it (RULING-A, applied to
+            // every sparkline/series render, not only named instances).
+            const { completeRuns, partial } = sparkSegments(data.recruiterTrends.series);
+            return (
+              <svg viewBox="0 0 120 36" className="h-16 w-full" aria-hidden="true">
+                {completeRuns.map((points, i) => (
+                  <polyline
+                    key={i}
+                    points={points}
+                    fill="none"
+                    stroke="#818CF8"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {partial && (
+                  <polyline
+                    points={partial}
+                    fill="none"
+                    stroke="#818CF8"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeOpacity="0.35"
+                    data-testid="trend-partial-segment"
+                  />
+                )}
+              </svg>
+            );
+          })()}
           <div className="mt-3 space-y-2">
-            {data.recruiterTrends.rows.map((r) => (
-              <div key={r.label} className="flex items-center justify-between text-xs">
-                <span className="text-aether-muted">{r.label}</span>
-                <span className="mono text-aether-green">{r.delta}</span>
-              </div>
-            ))}
+            {data.recruiterTrends.rows.map((r) => {
+              // MUST-FIX-1 COMPOUNDING (AX round-3 final re-review): this
+              // used to render className="mono text-aether-green"
+              // UNCONDITIONALLY — _pct_delta can return a count-only
+              // "total" (no comparison at all), "no change"/negative
+              // percentages, or "new activity", and all painted success
+              // green. Same isPercent/isUp branch the Trend Indicators
+              // tiles already use (R-04/RULING-C) — a non-percent kind
+              // never carries directional styling, and a percent kind
+              // matches its own direction (mirrors the sibling tile's
+              // isUp-only convention: "flat"/"down" both render coral).
+              const isPercent = r.deltaKind === "percent";
+              const deltaClass = !isPercent
+                ? "text-aether-muted-dim"
+                : r.direction === "up"
+                  ? "text-aether-green"
+                  : "text-aether-coral";
+              return (
+                <div key={r.label} className="flex items-center justify-between text-xs">
+                  <span className="text-aether-muted">{r.label}</span>
+                  <span className={`mono ${deltaClass}`}>{r.delta}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

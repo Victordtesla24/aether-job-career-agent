@@ -49,7 +49,10 @@ def _period_clause(period: str, column: str) -> str:
 
 
 def get_application_counts(
-    cur: Any, user_id: str, period_clause: str = ""
+    cur: Any,
+    user_id: str,
+    period_clause: str = "",
+    period_params: tuple[Any, ...] = (),
 ) -> dict[str, int]:
     """Canonical application counts for a user — the single source of truth
     every CUMULATIVE "applications" figure across the dashboard, mobile
@@ -82,6 +85,14 @@ def get_application_counts(
 
     ``period_clause`` is an optional ``AND ...`` SQL fragment (see
     ``_period_clause``) applied to both counts, e.g. a rolling time window.
+    Any ``%s`` placeholder(s) inside a caller-supplied ``period_clause`` are
+    bound from ``period_params``, appended after ``user_id`` in that order
+    (MUST-FIX-2, AX round-3 final re-review) — this lets a caller pass an
+    explicit anchor instant (e.g. market-pulse's single frozen ``now_utc``)
+    instead of a raw ``NOW()`` literal baked into the clause, while every
+    existing caller that passes a literal (non-parameterized) clause via
+    ``_period_clause`` keeps its exact prior default-now behavior unchanged
+    (``period_params`` defaults to empty).
     """
     # RT-004: count DISTINCT JOBS, not Application rows. Application rows
     # double as cover-letter versions (one row per draft/refine), so raw
@@ -109,7 +120,7 @@ def get_application_counts(
             ) AS interviewed
         FROM "Application" WHERE "userId" = %s{period_clause}
         ''',
-        (user_id,),
+        (user_id, *period_params),
     )
     total, submitted, interviewed = cur.fetchone()
     return {
@@ -546,8 +557,20 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             # in the window, or a rolling monthly count can silently exceed
             # the all-time "Applied" total (MV-mobile-dashboard-005: drafts
             # inflated this to "you 14" against the funnel's honest 7).
+            # MUST-FIX-2 (AX round-3 final re-review): this used to bind a raw
+            # Postgres ``NOW()`` literal directly in the clause — a SECOND,
+            # independent clock from every other query in this endpoint,
+            # which all derive from the single frozen ``now_utc`` Python
+            # anchor above (R-02/R-05). A frozen-clock test could pin every
+            # other boundary here while this one figure still floated on the
+            # real DB wall clock, so a single response could mix instants.
+            # Now bound via the SAME ``%s::timestamptz`` parameter pattern
+            # every other market-pulse query already uses.
             f_last_month = get_application_counts(
-                cur, user_id, ' AND "createdAt" >= NOW() - INTERVAL \'30 days\''
+                cur,
+                user_id,
+                ' AND "createdAt" >= %s::timestamptz - INTERVAL \'30 days\'',
+                (now_utc,),
             )["submitted"]
 
             # Average fit score across scored jobs (skill-match proxy). The
@@ -898,14 +921,32 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     agent_series = [int(r["cnt"]) for r in agent_week_rows]
     total_runs = sum(agent_series)
     weeks_active = len(agent_series) or 1
-    delta_label, _, _ = _pct_delta([float(v) for v in agent_series])
+    delta_label, delta_direction, delta_kind = _pct_delta([float(v) for v in agent_series])
     recruiter_trends = {
         "series": agent_series,
         "rows": [
-            {"label": "Agent runs (last 12 wks)", "delta": f"{total_runs} total"},
+            {
+                "label": "Agent runs (last 12 wks)",
+                "delta": f"{total_runs} total",
+                # MUST-FIX-1 (AX round-3 final re-review, RULING-A/C extended
+                # to this sibling card): this is a plain cumulative count, not
+                # a comparison — "total" is a NEW deltaKind (not one of
+                # trendIndicators' percent/new/insufficient-data) so the FE
+                # can never route it through green/coral directional styling,
+                # the exact defect this row previously had (COMPOUNDING part
+                # of MUST-FIX-1: unconditional text-aether-green).
+                "direction": "flat",
+                "deltaKind": "total",
+            },
             {
                 "label": "Avg runs / week",
                 "delta": f"{round(total_runs / weeks_active, 1)} · {delta_label}",
+                # `_pct_delta` already computes a real direction/kind for
+                # this SAME comparison the delta text embeds — plumbed onto
+                # the row (previously discarded) so the FE badge can agree
+                # with it instead of hardcoding a color regardless of sign.
+                "direction": delta_direction,
+                "deltaKind": delta_kind,
             },
         ],
     }

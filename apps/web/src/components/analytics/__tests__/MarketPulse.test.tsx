@@ -83,7 +83,10 @@ const BASE_NON_MARKET_FIELDS: Omit<MarketPulseData, "marketVsYou"> = {
     factors: [{ label: "Fit", value: 80, measured: true }],
   },
   employerActivity: [{ company: "Acme", event: "posted a new role", when: "2h ago", signal: "hot" }],
-  recruiterTrends: { series: [1, 2, 3], rows: [{ label: "Views", delta: "+3%" }] },
+  recruiterTrends: {
+    series: [1, 2, 3],
+    rows: [{ label: "Views", delta: "+3%", direction: "up", deltaKind: "percent" }],
+  },
   trendIndicators: [
     { label: "Postings", delta: "+2%", direction: "up", deltaKind: "percent", series: [1, 2, 3] },
   ],
@@ -479,5 +482,75 @@ describe("MarketPulse trend indicator neutral badge for non-percent deltas (R-04
     const popover = within(wrapper).getByTestId("metric-tooltip-popover");
     expect(popover.textContent?.toLowerCase()).toMatch(/not enough completed-period data/);
     expect(popover.textContent?.toLowerCase()).not.toMatch(/percentage change/);
+  });
+});
+
+describe("MarketPulse recruiter-trends sparkline + badge honesty (MUST-FIX-1, AX round-3 final re-review)", () => {
+  it("renders the trailing in-progress week as a visually distinct partial segment, same remedy as the Trend Indicators tiles (R-03 extended)", async () => {
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      recruiterTrends: {
+        series: [0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 10, 1],
+        rows: [
+          { label: "Agent runs (last 12 wks)", delta: "15 total", direction: "flat", deltaKind: "total" },
+          { label: "Avg runs / week", delta: "1.3 · +400%", direction: "up", deltaKind: "percent" },
+        ],
+      },
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const card = await screen.findByTestId("recruiter-trends");
+    const svg = card.querySelector("svg");
+    expect(svg).not.toBeNull();
+
+    const partial = within(card).getByTestId("trend-partial-segment");
+    expect(partial.getAttribute("stroke-opacity")).toBe("0.35");
+
+    // The partial segment must be a SEPARATE element from the main
+    // (completed-weeks) polyline(s) — not the same fully-opaque path — so
+    // the chart cannot render the in-progress week as if it were finished.
+    const allPolylines = svg!.querySelectorAll("polyline");
+    expect(allPolylines.length).toBeGreaterThanOrEqual(2);
+    const mainPolylines = Array.from(allPolylines).filter(
+      (p) => p.getAttribute("data-testid") !== "trend-partial-segment",
+    );
+    for (const p of mainPolylines) {
+      expect(p.getAttribute("stroke-opacity")).not.toBe("0.35");
+    }
+  });
+
+  it("never paints a non-percent ('total') delta green or coral — the cumulative-count row is always neutral", async () => {
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      recruiterTrends: {
+        series: [1, 1, 1],
+        rows: [{ label: "Agent runs (last 12 wks)", delta: "3 total", direction: "flat", deltaKind: "total" }],
+      },
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const card = await screen.findByTestId("recruiter-trends");
+    const badge = within(card).getByText("3 total");
+    expect(badge.className).not.toContain("text-aether-green");
+    expect(badge.className).not.toContain("text-aether-coral");
+  });
+
+  it("colors a genuine percent delta by its real direction, matching the sibling Trend Indicators tile convention, instead of always green", async () => {
+    const fixture: MarketPulseData = {
+      ...FIXTURE,
+      recruiterTrends: {
+        series: [1, 1, 1],
+        rows: [{ label: "Avg runs / week", delta: "2.0 · -50%", direction: "down", deltaKind: "percent" }],
+      },
+    };
+    fetchMarketPulse.mockResolvedValue(fixture);
+    render(<MarketPulse />);
+
+    const card = await screen.findByTestId("recruiter-trends");
+    const badge = within(card).getByText("2.0 · -50%");
+    expect(badge.className).toContain("text-aether-coral");
+    expect(badge.className).not.toContain("text-aether-green");
   });
 });

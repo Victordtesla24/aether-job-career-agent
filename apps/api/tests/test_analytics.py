@@ -1,14 +1,77 @@
 """P2-S10 — Analytics endpoint tests (funnel, periods, agent ROI)."""
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from conftest import seed_search_target
 
 from app.db import get_connection, new_id
+
+
+class _RecordingCursor:
+    """Delegating psycopg2 cursor wrapper that records every SQL string —
+    same idiom as ``test_mon001_board_sweep_bounded_read.py``'s
+    ``_RecordingCursor``, reused here so MUST-FIX-2 (AX round-3 final
+    re-review) can assert on the ACTUAL SQL text ``market_pulse()`` issues,
+    rather than trusting a comment or evidence-doc claim that no raw
+    ``NOW()`` remains."""
+
+    def __init__(self, cursor: Any, sink: list[str]) -> None:
+        self._cursor = cursor
+        self._sink = sink
+
+    def execute(self, query: Any, vars: Any = None) -> Any:  # noqa: A002
+        self._sink.append(query if isinstance(query, str) else str(query))
+        return self._cursor.execute(query, vars)
+
+    def __enter__(self) -> "_RecordingCursor":
+        self._cursor.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._cursor.__exit__(*exc)
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self._cursor, item)
+
+
+class _RecordingConnection:
+    def __init__(self, conn: Any, sink: list[str]) -> None:
+        self._conn = conn
+        self._sink = sink
+
+    def cursor(self, *args: Any, **kwargs: Any) -> _RecordingCursor:
+        return _RecordingCursor(self._conn.cursor(*args, **kwargs), self._sink)
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self._conn, item)
+
+
+@pytest.fixture()
+def market_pulse_sql(monkeypatch) -> list[str]:
+    """Records every SQL statement ``market_pulse()`` issues through its
+    module-level ``get_connection`` import (MUST-FIX-2, AX round-3 final
+    re-review). ``analytics.py`` imports ``get_connection`` directly into
+    its own module namespace (unlike ``board_sweep``'s lazy per-call
+    import), so patching that module attribute — not ``app.db``'s — is what
+    the router's global name lookup actually resolves at call time."""
+    import app.routers.analytics as analytics_module
+
+    real_get_connection = analytics_module.get_connection
+    sink: list[str] = []
+
+    @contextlib.contextmanager
+    def _recording():
+        with real_get_connection() as conn:
+            yield _RecordingConnection(conn, sink)
+
+    monkeypatch.setattr(analytics_module, "get_connection", _recording)
+    return sink
 
 
 @pytest.fixture()
@@ -1031,10 +1094,18 @@ class TestAnalytics:
         case genuinely distinguishes a real zone conversion from a
         hardcoded-offset stand-in (independently verified live via
         Postgres tzdata: 2026-10-15 13:30Z -> Melbourne 2026-10-16 AEDT+11).
-        The heatmap's own SQL has no upper bound on ``createdAt`` (only
-        ``>= NOW() - INTERVAL '35 days'``), so a same-year future date is a
-        valid, deterministic fixture regardless of the real wall-clock date
-        this suite runs on.
+        The heatmap's own SQL has no upper bound on ``createdAt`` — only a
+        lower bound of ``>= %s::timestamptz - INTERVAL '35 days'`` bound to
+        the single frozen ``now_utc`` anchor (R-02/R-05: derived from the
+        ``analytics_module.datetime`` monkeypatched above), NOT Postgres's
+        own wall-clock ``NOW()`` (MUST-FIX-3, AX round-3 final re-review —
+        this sentence previously described the pre-R-02 raw-``NOW()``
+        implementation, which R-02 already replaced; the conclusion below
+        was still true, but for the wrong reason). Because the lower bound
+        is pinned to the frozen anchor rather than the real wall clock, a
+        same-year future date positioned relative to that anchor is a valid,
+        deterministic fixture regardless of the real wall-clock date this
+        suite runs on.
         """
         import app.routers.analytics as analytics_module
 
@@ -1389,3 +1460,76 @@ class TestAnalytics:
         )
         assert series[11] == 0, f"the current in-progress week must stay 0, got series={series}"
         assert sum(series) == 1, f"exactly one seeded AgentRun, got series={series}"
+
+    def test_recruiter_trends_rows_carry_delta_kind_and_direction(
+        self, client, auth_headers, user_id
+    ):
+        """MUST-FIX-1 (AX round-3 final re-review, RULING-A/C extended to
+        this sibling card): ``recruiterTrends.rows`` previously carried only
+        ``label``/``delta`` — the FE painted every row's delta unconditionally
+        green regardless of sign or kind. Both rows must now expose the SAME
+        deltaKind/direction contract trendIndicators already carries, so the
+        FE can branch honestly instead of hardcoding a color.
+
+        Seeds 2 AgentRun rows two COMPLETE weeks ago and 6 one COMPLETE week
+        ago (the current, in-progress week stays empty) -> the real
+        last-COMPLETE-vs-prior-COMPLETE comparison is 2 -> 6, a genuine
+        +200% rise, which the wire rows must expose structurally, not only
+        bake into a pre-formatted string. The "Agent runs (last 12 wks)" row
+        is a plain cumulative total, not a comparison at all — it must carry
+        the neutral "total" kind, never "percent".
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for _ in range(2):
+                    cur.execute(
+                        '''
+                        INSERT INTO "AgentRun" ("id", "userId", "agentName", "status",
+                            "costUsd", "startedAt", "completedAt", "createdAt")
+                        VALUES (%s, %s, 'scout', 'completed', 0,
+                            NOW() - make_interval(weeks => 2), NOW(), NOW())
+                        ''',
+                        (new_id(), user_id),
+                    )
+                for _ in range(6):
+                    cur.execute(
+                        '''
+                        INSERT INTO "AgentRun" ("id", "userId", "agentName", "status",
+                            "costUsd", "startedAt", "completedAt", "createdAt")
+                        VALUES (%s, %s, 'scout', 'completed', 0,
+                            NOW() - make_interval(weeks => 1), NOW(), NOW())
+                        ''',
+                        (new_id(), user_id),
+                    )
+            conn.commit()
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        rows = {r["label"]: r for r in pulse["recruiterTrends"]["rows"]}
+
+        total_row = rows["Agent runs (last 12 wks)"]
+        assert total_row["deltaKind"] == "total", total_row
+        assert total_row["direction"] == "flat", total_row
+
+        avg_row = rows["Avg runs / week"]
+        assert avg_row["deltaKind"] == "percent", avg_row
+        assert avg_row["direction"] == "up", avg_row
+        assert avg_row["delta"].endswith("+200%"), avg_row
+
+    def test_market_pulse_sql_never_calls_postgres_now_directly(
+        self, client, auth_headers, market_pulse_sql
+    ):
+        """MUST-FIX-2 (AX round-3 final re-review): every day/week boundary
+        market_pulse() computes must derive from the single frozen
+        ``now_utc`` Python anchor, bound via ``%s::timestamptz`` — never
+        Postgres's own ``NOW()``. This closes the residual instance the
+        prior round's evidence claimed fixed but was not: the
+        ``get_application_counts()`` call behind "Applications / month"
+        still issued a raw ``NOW() - INTERVAL '30 days'`` literal, a SECOND
+        independent clock a frozen-clock test could not pin. Asserts on the
+        ACTUAL recorded SQL text of a real request, not on a code comment.
+        """
+        resp = client.get("/analytics/market-pulse", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        assert market_pulse_sql, "no SQL was recorded — fixture not wired to the router's connection"
+        offenders = [stmt for stmt in market_pulse_sql if "NOW()" in stmt.upper()]
+        assert offenders == [], f"raw NOW() found in market_pulse SQL: {offenders}"
