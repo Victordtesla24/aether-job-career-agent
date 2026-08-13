@@ -499,9 +499,11 @@ export interface MarketPulse {
     /** Populated exactly when `score` is null. */
     unmeasuredReason: string | null;
     /**
-     * SAME flag as `marketVsYou.marketDataConnected` — one server-side source
-     * of truth, so this panel can never claim market evidence while the
-     * Market-vs-You banner reports none is connected (F-04).
+     * DECOUPLED from `marketVsYou` (D-0042 / R5, I2 slice): the probability
+     * model uses zero market evidence and this stays a flat `false`
+     * regardless of whether Market vs. You has real, live, connected rows —
+     * the two panels are explicitly allowed to disagree once Market vs. You
+     * has live Adzuna data. This flag governs ONLY this panel's own caveat.
      */
     marketDataConnected: boolean;
     factors: Array<{ label: string; value: number | null; measured: boolean }>;
@@ -509,9 +511,33 @@ export interface MarketPulse {
   employerActivity: Array<{ company: string; event: string; when: string; signal: string }>;
   recruiterTrends: { series: number[]; rows: Array<{ label: string; delta: string }> };
   marketVsYou: {
-    /** False until a real external market-benchmark data provider is wired up. */
-    marketDataConnected: boolean;
-    comparisons: Array<{ label: string; market: number | null; you: number; unit?: string }>;
+    /**
+     * TRANSITIONAL (I1→I3, D-0042 / R5): the backend still sends this global
+     * flag for one more slice so an old deployed frontend's amber banner
+     * honestly disappears once real data shows. It is unread by this UI —
+     * every row now carries its own `connected`/`dataAsOf` provenance below.
+     * Removed from the payload in I3; kept optional here so this type still
+     * matches the live wire shape without the UI depending on it.
+     */
+    marketDataConnected?: boolean;
+    comparisons: Array<{
+      label: string;
+      market: number | null;
+      you: number | null;
+      unit?: string;
+      /** Per-row provenance (D-0042 / R2-R5) — replaces the old global flag. */
+      connected: boolean;
+      /** ISO-8601 timestamp of the fetch behind `market`, or `null` when
+       * `connected` is false. */
+      dataAsOf: string | null;
+      /** Honest one-line explanation of what `market` actually measures
+       * (e.g. postings-count scope), present only on connected rows that
+       * warrant it. */
+      marketNote?: string;
+      /** Honest caveat rendered under the row regardless of `connected`
+       * (e.g. "no benchmark provider exists" / "no disclosed salary data"). */
+      footnote?: string;
+    }>;
     summary: string;
   };
   trendIndicators: Array<{ label: string; delta: string; direction: string; series: number[] }>;

@@ -24,6 +24,64 @@ function donutSegments(sources: MarketPulseData["sources"]) {
   });
 }
 
+/**
+ * Render a value the way its unit calls for (D-0042 / I2 BRIEF-B): "A$" is a
+ * PREFIX with thousands separators (A$147,925); any other unit (e.g. "%")
+ * stays a SUFFIX as before; no unit is just the formatted number.
+ */
+function formatMarketValue(value: number, unit?: string): string {
+  const formatted = new Intl.NumberFormat("en-AU").format(value);
+  if (unit === "A$") return `A$${formatted}`;
+  return unit ? `${formatted}${unit}` : formatted;
+}
+
+/**
+ * Human-readable "data as of" text for an ISO-8601 timestamp, formatted in a
+ * FIXED locale + timezone (en-AU / UTC) so it renders identically in SSR and
+ * in tests regardless of the host machine's local timezone. Returns `null` on
+ * an unparseable string — the caller omits the label entirely rather than
+ * rendering "Invalid Date"/"NaN" (guard required by BRIEF-B).
+ */
+function formatDataAsOf(iso: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+/** Freshness mini-label used both per-row and in the top-level attribution
+ * line. Renders nothing (not even a wrapper) for a null/unparseable `iso` —
+ * never a crash, never "Invalid Date"/"NaN" text. */
+function DataAsOfLabel({ iso, className }: { iso: string | null; className?: string }) {
+  if (!iso) return null;
+  const label = formatDataAsOf(iso);
+  if (label === null) return null;
+  return (
+    <span className={className}>
+      data as of <time dateTime={iso}>{label}</time>
+    </span>
+  );
+}
+
+/** Most recent `dataAsOf` among CONNECTED rows, skipping unparseable values
+ * (never lets one broken row block the freshness line for the others). */
+function freshestDataAsOf(comparisons: MarketPulseData["marketVsYou"]["comparisons"]): string | null {
+  let best: { iso: string; t: number } | null = null;
+  for (const c of comparisons) {
+    if (!c.connected || !c.dataAsOf) continue;
+    const t = new Date(c.dataAsOf).getTime();
+    if (Number.isNaN(t)) continue;
+    if (!best || t > best.t) best = { iso: c.dataAsOf, t };
+  }
+  return best?.iso ?? null;
+}
+
 function sparkPoints(series: number[], w = 120, h = 36) {
   // A 0/1-point series would divide by zero below (NaN polyline coords);
   // render a flat line instead.
@@ -339,41 +397,69 @@ export default function MarketPulse() {
             Market vs. Your Performance
           </h3>
 
-          {!data.marketVsYou.marketDataConnected && (
-            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-              <p className="text-xs font-semibold text-amber-300">External market benchmark unavailable</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-aether-muted-dim">
-                Provider: none configured — your figures are derived from your saved jobs and applications.
-              </p>
-            </div>
-          )}
+          {(() => {
+            const anyConnected = data.marketVsYou.comparisons.some((c) => c.connected);
+            if (!anyConnected) {
+              return (
+                <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <p className="text-xs font-semibold text-amber-300">External market benchmark unavailable</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-aether-muted-dim">
+                    Provider: none configured — your figures are derived from your saved jobs and applications.
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <div
+                className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-aether-muted-dim"
+                data-testid="market-vs-you-attribution"
+              >
+                <span>Market data: Adzuna Australia</span>
+                <DataAsOfLabel iso={freshestDataAsOf(data.marketVsYou.comparisons)} />
+              </div>
+            );
+          })()}
 
           <div className="space-y-4">
-            {data.marketVsYou.comparisons.map((c) => {
-              const max = Math.max(c.market ?? 0, c.you, 1);
+            {data.marketVsYou.comparisons.map((c, i) => {
+              // Narrowed to a local const so JSX below can treat it as
+              // `number` without a non-null assertion (BRIEF-B: connected &&
+              // market !== null is the ONLY condition that draws the bar).
+              const marketValue = c.connected ? c.market : null;
+              const max = Math.max(c.market ?? 0, c.you ?? 0, 1);
               return (
-                <div key={c.label}>
+                <div key={c.label} data-testid={`market-comparison-row-${i}`}>
                   <p className="mb-1.5 text-xs text-aether-muted">{c.label}</p>
                   <div className="space-y-1">
-                    {c.market !== null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 rounded-full bg-white/20" style={{ width: `${(c.market / max) * 70}%` }} />
-                        <span className="mono text-[10px] text-aether-muted-dim">
-                          market {c.market}
-                          {c.unit ?? ""}
-                        </span>
+                    {marketValue !== null ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="h-2 rounded-full bg-white/20"
+                            style={{ width: `${(marketValue / max) * 70}%` }}
+                          />
+                          <span className="mono text-[10px] text-aether-muted-dim">
+                            market {formatMarketValue(marketValue, c.unit)}
+                          </span>
+                        </div>
+                        {c.marketNote && <p className="text-[10px] text-aether-muted-dim">{c.marketNote}</p>}
+                        <DataAsOfLabel iso={c.dataAsOf} className="block text-[10px] text-aether-muted-dim" />
                       </div>
                     ) : (
                       <p className="text-[10px] italic text-aether-muted-dim">Market data: not connected</p>
                     )}
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 rounded-full bg-aether-coral" style={{ width: `${(c.you / max) * 70}%` }} />
-                      <span className="mono text-[10px] text-aether-coral">
-                        you {c.you}
-                        {c.unit ?? ""}
-                      </span>
-                    </div>
+                    {c.you === null ? (
+                      <p className="text-[10px] text-aether-coral">—</p>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 rounded-full bg-aether-coral" style={{ width: `${(c.you / max) * 70}%` }} />
+                        <span className="mono text-[10px] text-aether-coral">
+                          you {formatMarketValue(c.you, c.unit)}
+                        </span>
+                      </div>
+                    )}
                   </div>
+                  {c.footnote && <p className="mt-1 text-[10px] italic text-aether-muted-dim">{c.footnote}</p>}
                 </div>
               );
             })}
