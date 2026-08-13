@@ -104,13 +104,70 @@ MINIMAL_PROFILE = {
 #: Same profile, PLUS explicit answers for the two fixtures' real required
 #: custom questions, keyed by the REAL field id/name captured in the
 #: fixture -- used for the success-path tests.
+#:
+#: BUILDER CORRECTION (U5b implementation, 2026-08-13): these two maps
+#: originally carried ONE answer each, on the premise that each fixture had a
+#: single unanswerable required question. That premise is factually wrong
+#: about the captured pages — the README in fixtures/apply_pages/ already says
+#: "several REQUIRED custom questions" in passing. Enumerating the real
+#: captures shows the Ashby page marks 14 fields required (label class
+#: ``_required_f7cvd_91`` — the same marker that renders the asterisk a human
+#: applicant sees), NINE of them employer-specific questions; and the
+#: Greenhouse page marks 12 required (``aria-required="true"`` / ``required``
+#: / a trailing ``*`` on the visible label), FIVE of them employer questions
+#: plus ``country``. A profile answering only one of those leaves an honest
+#: executor with 8 (resp. 5) unanswerable required questions — a MANUAL STEP,
+#: not a submission — so the success-path tests below could never pass against
+#: any implementation that refuses to invent answers.
+#:
+#: The correction makes the fixture premise TRUE instead of weakening the
+#: guard: every answer below is a VERBATIM option string parsed out of the
+#: real captured page (free-text/select questions get a plain answer a real
+#: applicant would give), representing a user who recorded these answers once.
+#: MINIMAL_PROFILE is untouched, so the "unknown required question =>
+#: ManualStepRequired carrying the real question text" guard is still
+#: exercised exactly as originally written.
 FULL_PROFILE_ASHBY = {
     **MINIMAL_PROFILE,
-    "customAnswers": {"f640164d-eb74-4d28-9138-34363365f514": "Yes"},
+    "customAnswers": {
+        "f8c5b910-4ccf-4e77-ad4a-a0fd7debbadd": "They/Them",  # Pronouns (required)
+        "7a7c0d97-04e5-43b5-b311-f5593531b72a": "No",  # previously employed by Xero?
+        "f640164d-eb74-4d28-9138-34363365f514": (
+            "Hybrid - a combination of office and remote"
+        ),  # Flexible Working
+        "065a1d0c-8c31-4162-bdc2-9e2d4e904e72": "I am a citizen",  # Working Rights
+        "236693a4-2f3f-44cd-a320-38c3e3db8ad3": (
+            "I start with the task myself, and consider using AI if the task "
+            "is ambiguous or when an opportunity presents."
+        ),
+        "13d4b33e-77c8-4630-b45c-e1a9c90ded0d": (
+            "I use AI for individual tasks as they come up (e.g. drafting, "
+            "research, or troubleshooting)."
+        ),
+        "cbe94de5-743d-47a3-82a2-a718b0e3116e": (
+            "When AI is used, I assess whether the result is accurate, and "
+            "fits the task and audience."
+        ),
+        "04096d85-a3c8-4d5a-8d3e-986c7aa92152": (
+            "I follow approved policies, and own the result however it was "
+            "produced."
+        ),
+        "376d8fa2-a627-44a0-af14-37b01943a63c": "Yes",  # Declaration & Background Checking
+    },
 }
 FULL_PROFILE_GREENHOUSE = {
     **MINIMAL_PROFILE,
-    "customAnswers": {"question_36740801002": "Yes"},
+    "country": "Australia",  # a real required field on the capture ("Country*")
+    "customAnswers": {
+        "question_36740801002": "Yes",  # legally authorized to work
+        "question_36740802002": "No",  # need sponsorship
+        "question_36740803002": "No",  # previously worked for Databricks
+        "question_36740804002[]": "None of the above",
+        "question_36740805002[]": (
+            "Not applicable (i.e., I selected “none of the above” for "
+            "the prior question)"
+        ),
+    },
 }
 
 
