@@ -16,6 +16,13 @@ export const ResumeSchema = z.object({
   // Human-in-the-loop review state (MV-resume-studio-001). Nullish for backward
   // compatibility with any payload predating the column; defaults to "approved".
   approvalStatus: z.string().nullish(),
+  // MON-011 (MONITORING-LEDGER.md): true ONLY when GET /resumes/{id}/download
+  // would genuinely reproduce the original document (resolve_original_pdf
+  // finds a bundled-asset digest match) — the exact condition the download
+  // endpoint branches on. Nullish for backward compatibility with any fixture
+  // or cached payload predating this field; a missing value is NOT treated as
+  // an affirmative preservation claim (see page.tsx's per-version logic).
+  formatPreserved: z.boolean().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

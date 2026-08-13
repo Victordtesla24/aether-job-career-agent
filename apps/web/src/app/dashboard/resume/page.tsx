@@ -234,7 +234,21 @@ export default function ResumePage() {
   // panel below reflects THIS comparison instead of an unconditional claim.
   const baseResume = (resumes ?? []).find((r) => !r.parentId) ?? (resumes ?? [])[0];
   const baseHash = baseResume?.formatHash ?? null;
-  const formatIntact = selected ? selected.formatHash === baseHash : null;
+  // MON-011 (MONITORING-LEDGER.md): the hash comparison above is a self-
+  // comparison for a base résumé (its own hash always equals itself) and says
+  // nothing about whether GET /resumes/{id}/download can actually reproduce
+  // the original document. When the API's `formatPreserved` flag is
+  // EXPLICITLY false (it mirrors download's own resolve_original_pdf match),
+  // that is authoritative and overrides the hash comparison with an honest
+  // "not preserved" disclosure. A missing/true flag (older cached payloads,
+  // or a genuinely bundled-backed match) falls back to the existing
+  // hash-comparison signal, unchanged.
+  const formatExplicitlyUnpreserved = selected != null && selected.formatPreserved === false;
+  const formatIntact = selected
+    ? formatExplicitlyUnpreserved
+      ? false
+      : selected.formatHash === baseHash
+    : null;
   // Latest tailored version — `resumes` is ordered newest-first, so the first
   // match is the latest (MV-adv-resume-studio-006).
   const tailoredResume = (resumes ?? []).find((r) => r.label?.startsWith("Tailored"));
@@ -368,6 +382,11 @@ export default function ResumePage() {
             {formatIntact === null ? (
               <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
                 Select a version to verify its layout against the immutable base.
+              </p>
+            ) : formatExplicitlyUnpreserved ? (
+              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
+                Format not preserved for this upload — download renders in the Aether standard
+                template, not your original layout.
               </p>
             ) : formatIntact ? (
               <p className="mt-1 text-sm text-aether-green" data-testid="integrity-status">

@@ -1244,7 +1244,7 @@ export default function JobsPage() {
           onClick={clearAll}
           className="ml-auto text-xs text-aether-muted transition hover:text-white"
         >
-          Clear all
+          Clear filters
         </button>
       </div>
 
@@ -1281,7 +1281,7 @@ export default function JobsPage() {
           <p className="text-lg font-semibold">No matching jobs</p>
           <p className="mt-1 text-sm text-aether-muted">
             {(jobs ?? []).length > 0
-              ? "No roles match the current market and filters — try Clear all."
+              ? "No roles match the current market and filters — try Clear filters."
               : historyCount && historyCount > 0
                 ? `None of your ${historyCount} saved roles are on the active board right now — they have been applied to, archived, or their source has stopped listing them.`
                 : "Run Sync to let the Scout agent find matching roles."}
