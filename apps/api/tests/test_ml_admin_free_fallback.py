@@ -527,7 +527,33 @@ def test_admin_user_chosen_model_402_still_rescues_and_logs(
 # cap plus reasoning DISABLED. Everyone else's request body must stay
 # byte-identical — that is what the negative pins below enforce.
 
-_UNSHAPED_KEYS = {"model", "temperature", "messages"}
+#: Keys an ORDINARY (non-rescue) request carries.
+#:
+#: ``max_tokens`` joined this set in U1X-a: every body now carries a bounded
+#: completion window, because omitting it never meant "no cap" — it meant the
+#: upstream reasoning-tier default (up to 65536) applied, which is what drove
+#: the production 402s. What stays scoped to the ADMIN rescue chain is the
+#: ``reasoning`` override AND the rescue-sized cap; an ordinary attempt gets its
+#: own per-call-class ceiling. :func:`_assert_unshaped` pins both halves.
+_UNSHAPED_KEYS = {"model", "temperature", "messages", "max_tokens"}
+
+
+def _assert_unshaped(payload: dict, *, context: str = "") -> None:
+    """Assert a payload carries NO rescue shaping: no ``reasoning`` override and
+    a class-ceiling ``max_tokens`` rather than the rescue cap."""
+    from app.services.llm_client import (
+        _MAX_TOKENS_BY_CALL_CLASS,
+        get_admin_free_fallback_max_tokens,
+    )
+
+    assert set(payload) == _UNSHAPED_KEYS, (context, sorted(payload))
+    assert "reasoning" not in payload, (context, payload)
+    assert payload["max_tokens"] == _MAX_TOKENS_BY_CALL_CLASS["cover_letter"], (
+        context, payload["max_tokens"],
+    )
+    assert payload["max_tokens"] != get_admin_free_fallback_max_tokens(), (
+        context, "an ordinary attempt must not inherit the rescue cap",
+    )
 
 
 def _payload_for(payloads: list[dict], model: str) -> dict:
@@ -583,8 +609,9 @@ def test_paid_attempt_payload_stays_byte_identical(
     monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
 ):
     """ZERO-REGRESSION PIN: the paid / system-default attempts in the very same
-    run must carry NO ``max_tokens`` and NO ``reasoning`` — the shaping is scoped
-    to the rescue models alone, so no paying user's request shape changes."""
+    run must carry NO ``reasoning`` override and their OWN per-call-class
+    ``max_tokens`` — never the rescue cap. The rescue shaping stays scoped to
+    the rescue models alone, so no paying user's request is degraded."""
 
     def _responder(payload: dict) -> _Resp:
         if payload["model"].endswith(":free"):
@@ -600,8 +627,7 @@ def test_paid_attempt_payload_stays_byte_identical(
         llm.complete("cover_letter", "sys", "usr", model=_PAID_PRIMARY)
 
     for model in (_PAID_PRIMARY, _PAID_FALLBACK):
-        paid = _payload_for(payloads, model)
-        assert set(paid) == _UNSHAPED_KEYS, (model, sorted(paid))
+        _assert_unshaped(_payload_for(payloads, model), context=model)
 
 
 def test_non_admin_free_model_choice_is_never_shaped(
@@ -624,7 +650,7 @@ def test_non_admin_free_model_choice_is_never_shaped(
             llm.complete("cover_letter", "sys", "usr", model=_FREE_A)
 
     assert len(payloads) == 1, payloads
-    assert set(payloads[0]) == _UNSHAPED_KEYS, sorted(payloads[0])
+    _assert_unshaped(payloads[0], context=_FREE_A)
 
 
 def test_free_chain_max_tokens_is_env_overridable(

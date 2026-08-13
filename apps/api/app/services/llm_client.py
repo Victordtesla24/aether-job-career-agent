@@ -1559,6 +1559,25 @@ def _build_openrouter_request(
     if free_chain:
         body["max_tokens"] = get_admin_free_fallback_max_tokens()
         body["reasoning"] = {"enabled": False}
+    else:
+        # U1X-a: every OTHER request carries a BOUNDED completion window too.
+        # Omitting ``max_tokens`` does not mean "no cap" — it means the upstream
+        # provider default applies, which for a reasoning-tier model reached
+        # 65536 and is what drove the production 402s (a call is pre-authorised
+        # against max_tokens, so an unbounded ask fails on credit long before
+        # the real ~500-token completion would have). The size is the per-call
+        # -class ceiling, narrowed to the affordable window only when a FRESH
+        # cached credits+price reading exists. This is a transport bound, not a
+        # model choice: the model, prompts, temperature and every downstream
+        # guard are untouched (ADR-ML-3 is about substitution, not token caps),
+        # and a truncated response still fails the caller's validator honestly
+        # rather than being passed off as a complete generation.
+        remaining_credit, completion_price = _affordability_signal(model)
+        body["max_tokens"] = size_max_tokens_for_call(
+            _prompt_name_context.get() or "",
+            remaining_credit_usd=remaining_credit,
+            completion_price_per_m=completion_price,
+        )
     return {
         "url": f"{base}/chat/completions",
         "json": body,
@@ -1696,6 +1715,13 @@ _MODEL_CATALOG_TTL = 3600.0  # 1 h — the catalog changes rarely.
 # credit is left. The 503 storm was wall-clock exhaustion: a fixed 2-attempt
 # chain planned against a 65 s budget while observed REASONING-tier latency was
 # 70.9-94.4 s, so neither attempt could ever finish.
+#
+# WHERE THESE ARE APPLIED (they are not advisory helpers — the production paths
+# call them, and the tests below assert the real request/attempt shape):
+#   * ``size_max_tokens_for_call`` -> ``_build_openrouter_request`` sets
+#     ``max_tokens`` on EVERY non-rescue body from it.
+#   * ``plan_attempt_count``       -> ``LLMClient._auto`` decides from it whether
+#     to slice the wall-clock budget for a fallback attempt at all.
 # ---------------------------------------------------------------------------
 
 #: Per-call-class completion ceilings. These are what a call of that class can
@@ -1772,6 +1798,74 @@ def plan_attempt_count(
     if per_attempt <= 0:
         return requested
     return max(0, min(requested, int(budget // per_attempt)))
+
+
+#: Call class (``prompt_name``) of the generation currently in flight, so the
+#: transport layer can size ``max_tokens`` per class without changing
+#: :meth:`LLMClient._call_live`'s signature (several suites install
+#: strict-signature doubles on that seam; a ContextVar keeps every existing
+#: call site byte-identical). Set once in :meth:`LLMClient.complete`.
+_prompt_name_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_llm_prompt_name", default=None
+)
+
+
+def get_expected_attempt_seconds() -> float:
+    """Wall-clock seconds a single live attempt is EXPECTED to take, used by
+    :func:`plan_attempt_count` to decide whether the budget can really hold
+    more than one attempt.
+
+    The default is the LOW end of the live-observed REASONING-tier latency band
+    (70.9-94.4 s, agents-uplift discovery 2026-08-13) — deliberately the low
+    end, so the multi-attempt slicing is only abandoned when even the most
+    optimistic estimate says a second attempt cannot fit. Env-overridable via
+    ``AETHER_LLM_EXPECTED_ATTEMPT_SECONDS`` once ops has a better measurement.
+    """
+    try:
+        seconds = float(os.environ.get("AETHER_LLM_EXPECTED_ATTEMPT_SECONDS", "70.9"))
+    except ValueError:
+        seconds = 70.9
+    return max(0.0, seconds)
+
+
+def _cached_completion_price_per_m(model: str) -> float:
+    """$/M completion tokens for ``model`` from ALREADY-CACHED catalogs only.
+
+    Never performs a network call — this runs on the request path. ``0.0`` means
+    "unknown", which makes :func:`size_max_tokens_for_call` fall back to the
+    per-call-class ceiling (still a real bound, never the upstream default).
+    """
+    for _fetched_at, entries in _MODEL_CATALOG_CACHE.values():
+        for entry in entries or ():
+            if entry.get("id") == model:
+                try:
+                    return float(entry.get("completionPerM") or 0.0)
+                except (TypeError, ValueError):
+                    return 0.0
+    for entries in _STATIC_MODEL_CATALOG.values():
+        for entry in entries:
+            if entry.get("id") == model:
+                return float(entry.get("completionPerM") or 0.0)
+    return 0.0
+
+
+def _affordability_signal(model: str) -> tuple[float, float]:
+    """``(remaining_credit_usd, completion_price_per_m)`` from cached readings.
+
+    Both come from in-process caches (:data:`_CREDITS_CACHE`,
+    :data:`_MODEL_CATALOG_CACHE`) — a request must never block on a credits or
+    catalog fetch, and a stale-cache miss must never be papered over with an
+    invented number. When either is unknown the pair is ``(0.0, 0.0)`` and the
+    caller falls back to the per-call-class ceiling.
+    """
+    cached = _CREDITS_CACHE
+    if cached is None or (time.monotonic() - cached[0]) >= _CREDITS_TTL:
+        return (0.0, 0.0)
+    try:
+        remaining = float(cached[1].get("remaining") or 0.0)
+    except (TypeError, ValueError):
+        return (0.0, 0.0)
+    return (remaining, _cached_completion_price_per_m(model))
 
 
 class CreditsUnavailableError(RuntimeError):
@@ -2232,17 +2326,25 @@ class LLMClient:
         """
         if self.mode == "replay":
             return self._replay(prompt_name, fixture_key)
-        if self.mode == "auto":
-            return self._auto(
-                prompt_name, system, user,
-                model=model, temperature=temperature, fixture_key=fixture_key,
-                validate=validate,
-            )
-        # live / record modes: propagate live errors unchanged (developer modes).
-        content = self._call_live(system, user, model=model, temperature=temperature)
-        if self.mode == "record":
-            self._record(prompt_name, fixture_key, content)
-        return content
+        # Carry the call class down to the transport so the request can be sized
+        # per class (U1X-a ``max_tokens``) without touching ``_call_live``'s
+        # signature. Reset on the way out so a nested/subsequent call can never
+        # inherit a stale class.
+        token = _prompt_name_context.set(prompt_name)
+        try:
+            if self.mode == "auto":
+                return self._auto(
+                    prompt_name, system, user,
+                    model=model, temperature=temperature, fixture_key=fixture_key,
+                    validate=validate,
+                )
+            # live / record modes: propagate live errors unchanged (dev modes).
+            content = self._call_live(system, user, model=model, temperature=temperature)
+            if self.mode == "record":
+                self._record(prompt_name, fixture_key, content)
+            return content
+        finally:
+            _prompt_name_context.reset(token)
 
     def complete_json(self, prompt_name: str, system: str, user: str, **kwargs: Any) -> Any:
         """Like :meth:`complete` but parses the response as JSON.
@@ -2381,9 +2483,35 @@ class LLMClient:
                     # (possibly shared) budget, so this is a fraction of the
                     # total; the fallback (last attempt) keeps the entire
                     # remaining budget.
-                    attempt_seconds = max(
-                        _MIN_ATTEMPT_SECONDS, remaining * get_primary_budget_fraction()
-                    )
+                    #
+                    # U1X-a: that slicing is only WORTH doing when the budget can
+                    # actually hold more than one attempt. Production ran a 65 s
+                    # budget against 70.9-94.4 s observed REASONING-tier latency,
+                    # so the fraction handed the primary ~39 s — too short to ever
+                    # finish — and the leftover was too short for the fallback
+                    # either: both attempts were structurally guaranteed to be cut
+                    # off, which is the 503 storm. When the planner says a second
+                    # attempt cannot fit, the primary gets the WHOLE remaining
+                    # window (one attempt that can actually complete) instead of a
+                    # fraction that cannot.
+                    if plan_attempt_count(
+                        budget_seconds=remaining,
+                        per_attempt_seconds=get_expected_attempt_seconds(),
+                        requested_attempts=len(chain) - idx,
+                    ) > 1:
+                        attempt_seconds = max(
+                            _MIN_ATTEMPT_SECONDS,
+                            remaining * get_primary_budget_fraction(),
+                        )
+                    else:
+                        logger.info(
+                            "LLM budget %.1fs holds fewer than 2 attempts at the "
+                            "expected %.1fs/attempt — giving the primary model %s "
+                            "the full window instead of a %.0f%% slice "
+                            "(prompt=%s)",
+                            remaining, get_expected_attempt_seconds(), attempt_model,
+                            get_primary_budget_fraction() * 100, prompt_name,
+                        )
                 try:
                     # ``free_chain`` is passed ONLY for a rescue attempt, so the
                     # ``_call_live`` seam keeps its exact pre-existing signature

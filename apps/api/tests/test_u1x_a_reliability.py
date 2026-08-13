@@ -264,3 +264,202 @@ def test_credits_endpoint_is_operator_scoped(client, auth_headers):
     (GET /agents/providers, .../credential, .../verify)."""
     r = client.get("/agents/providers/openrouter/credits", headers=auth_headers)
     assert r.status_code == 403, r.text
+
+
+# --------------------------------------------------------------------------- #
+# INTEGRATION — the REAL request/attempt path, not the helpers in isolation
+#
+# Review finding (U1X re-review): the helpers above are only meaningful if the
+# production code actually calls them. These tests mock at ``httpx.post`` (the
+# same seam ``test_ml_admin_free_fallback.py`` uses), so the whole real path
+# runs — ``complete`` -> ``_auto`` -> ``_model_chain`` -> ``_call_live`` ->
+# ``_build_openrouter_request`` -> the bytes on the wire. A regression that
+# unwires either helper fails HERE, which unit-testing them cannot catch.
+# --------------------------------------------------------------------------- #
+
+_PAID_PRIMARY = "deepseek/deepseek-v4-pro"
+_PAID_FALLBACK = "deepseek/deepseek-v4-flash"
+
+
+@pytest.fixture()
+def openrouter_env(monkeypatch):
+    """Env exactly like production: paid primary + paid fallback on OpenRouter."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    monkeypatch.delenv("AETHER_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("ABACUS_API_KEY", raising=False)
+    monkeypatch.setenv("AETHER_MODEL_REASONING", _PAID_PRIMARY)
+    monkeypatch.setenv("AETHER_MODEL_FALLBACK", _PAID_FALLBACK)
+    monkeypatch.delenv("AETHER_ADMIN_FREE_FALLBACK_MODELS", raising=False)
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _clear_credit_cache():
+    """The affordability signal reads a module-level cache; never let one test's
+    primed balance leak into another's request shape."""
+    from app.services import llm_client
+
+    llm_client._CREDITS_CACHE = None
+    yield
+    llm_client._CREDITS_CACHE = None
+
+
+def _record_payloads(monkeypatch, responder):
+    import copy
+
+    import httpx
+
+    payloads: list[dict] = []
+
+    def _post(url, **kwargs):  # noqa: ANN001 — httpx.post signature
+        payloads.append(copy.deepcopy(kwargs["json"]))
+        return responder(kwargs["json"])
+
+    monkeypatch.setattr(httpx, "post", _post)
+    return payloads
+
+
+class _Resp:
+    def __init__(self, status_code: int, payload: dict, text: str = "") -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.text = text
+
+    def json(self) -> dict:
+        return self._payload
+
+
+def _ok(content: str) -> _Resp:
+    return _Resp(200, {"choices": [{"message": {"content": content}}]}, content)
+
+
+def test_real_request_body_carries_a_bounded_max_tokens(
+    monkeypatch, openrouter_env, tmp_path
+):
+    """The ORDINARY paid path — the one that produced the production 402s.
+
+    Before the fix ``_build_openrouter_request`` omitted ``max_tokens`` on every
+    non-rescue attempt, so the upstream reasoning-tier default (up to 65536)
+    applied and the call was pre-authorised against a completion window the
+    remaining credit could never cover. The body on the wire must now carry the
+    per-call-class ceiling.
+    """
+    from app.services.llm_client import LLMClient, _MAX_TOKENS_BY_CALL_CLASS
+
+    payloads = _record_payloads(monkeypatch, lambda _p: _ok('{"entailed": true}'))
+    LLMClient(mode="auto", fixture_dir=tmp_path).complete(
+        "tailor_entailment", "sys", "usr"
+    )
+
+    assert len(payloads) == 1, payloads
+    body = payloads[0]
+    assert body["model"] == _PAID_PRIMARY
+    assert "max_tokens" in body, (
+        "the real request path still omits max_tokens — the 65536 upstream "
+        f"default applies: {sorted(body)}"
+    )
+    assert body["max_tokens"] == _MAX_TOKENS_BY_CALL_CLASS["tailor_entailment"]
+    assert body["max_tokens"] < 65536
+    # The bound is transport-level ONLY: an ordinary paid attempt must not pick
+    # up the ADMIN rescue chain's reasoning override (QA-FAIL-01 shaping).
+    assert "reasoning" not in body, body
+
+
+def test_real_request_body_narrows_to_the_affordable_window(
+    monkeypatch, openrouter_env, tmp_path
+):
+    """With a FRESH cached credits reading and a known completion price, the
+    real body must ask only for what the remaining credit can pay for — the
+    affordable window, not the class ceiling."""
+    import time as _time
+
+    from app.services import llm_client
+    from app.services.llm_client import LLMClient
+
+    # A real cached reading (what GET /credits stores) — $0.05 left.
+    llm_client._CREDITS_CACHE = (
+        _time.monotonic(),
+        {"remaining": 0.05, "total": 2850.50, "asOf": "2026-08-13T12:00:00+00:00"},
+    )
+    # A real cached catalog entry carrying this model's completion price.
+    monkeypatch.setitem(
+        llm_client._MODEL_CATALOG_CACHE,
+        "openrouter",
+        (
+            _time.monotonic(),
+            [{"id": _PAID_PRIMARY, "name": "primary", "completionPerM": 10.0}],
+        ),
+    )
+
+    payloads = _record_payloads(monkeypatch, lambda _p: _ok('{"entailed": true}'))
+    LLMClient(mode="auto", fixture_dir=tmp_path).complete(
+        "tailor_entailment", "sys", "usr"
+    )
+
+    # $0.05 at $10/M completion tokens affords 5000 tokens, which is BELOW the
+    # 8192 'tailor' ceiling and above the 2048 entailment ceiling — so the
+    # entailment call stays at its class ceiling ...
+    assert payloads[0]["max_tokens"] == 2048, payloads[0]
+
+    payloads.clear()
+    llm_client._CREDITS_CACHE = (
+        _time.monotonic(),
+        {"remaining": 0.005, "total": 2850.50, "asOf": "2026-08-13T12:00:00+00:00"},
+    )
+    LLMClient(mode="auto", fixture_dir=tmp_path).complete(
+        "tailor_entailment", "sys", "usr"
+    )
+    # ... and $0.005 affords only 500, which now binds below that ceiling.
+    assert payloads[0]["max_tokens"] == 500, payloads[0]
+
+
+def test_auto_gives_the_primary_the_whole_window_when_only_one_attempt_fits(
+    monkeypatch, openrouter_env, tmp_path
+):
+    """The 503-storm defect, at its real integration point.
+
+    Production ran ``AETHER_LLM_BUDGET_SECONDS=65`` against 70.9-94.4 s observed
+    REASONING-tier latency while ``_auto`` still sliced the budget by
+    ``get_primary_budget_fraction()`` to reserve room for a fallback — so the
+    primary got ~39 s (never enough to finish) and the leftover was too short
+    for the fallback either. With the planner wired in, a budget that cannot
+    hold two attempts gives the primary the FULL window.
+    """
+    from app.services import llm_client
+    from app.services.llm_client import LLMClient
+
+    monkeypatch.setenv("AETHER_LLM_EXPECTED_ATTEMPT_SECONDS", "70.9")
+    monkeypatch.setenv("AETHER_LLM_PRIMARY_BUDGET_FRACTION", "0.55")
+
+    seen: list[tuple[str, float | None]] = []
+
+    def _spy(self, system, user, *, model, temperature, max_seconds=None, **kwargs):
+        seen.append((model, max_seconds))
+        raise RuntimeError("transport down (forces the chain to walk on)")
+
+    monkeypatch.setattr(llm_client.LLMClient, "_call_live", _spy)
+
+    # Tight production-shaped budget: 65 s < 2 x 70.9 s.
+    monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "65")
+    with pytest.raises(llm_client.LLMUnavailableError):
+        LLMClient(mode="auto", fixture_dir=tmp_path).complete("tailor", "sys", "usr")
+
+    assert seen, "no live attempt was made"
+    primary_model, primary_seconds = seen[0]
+    assert primary_model == _PAID_PRIMARY
+    assert primary_seconds is not None
+    assert primary_seconds > 65 * 0.55 + 1, (
+        f"primary was still handed a {primary_seconds:.1f}s slice of a 65s "
+        "budget that cannot hold two attempts — the 503-storm shape"
+    )
+    assert primary_seconds <= 65.0
+
+    # A budget that COMFORTABLY holds two attempts keeps the existing
+    # GAP-P6-TAIL-003 slicing so the fallback still gets its turn.
+    seen.clear()
+    monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "400")
+    with pytest.raises(llm_client.LLMUnavailableError):
+        LLMClient(mode="auto", fixture_dir=tmp_path).complete("tailor", "sys", "usr")
+
+    assert len(seen) >= 2, seen
+    assert seen[0][1] == pytest.approx(400 * 0.55, rel=0.05), seen
