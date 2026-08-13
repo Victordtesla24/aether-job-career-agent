@@ -527,7 +527,23 @@ export interface MarketPulse {
     factors: Array<{ label: string; value: number | null; measured: boolean }>;
   };
   employerActivity: Array<{ company: string; event: string; when: string; signal: string }>;
-  recruiterTrends: { series: number[]; rows: Array<{ label: string; delta: string }> };
+  recruiterTrends: {
+    series: number[];
+    rows: Array<{
+      label: string;
+      delta: string;
+      /**
+       * MUST-FIX-1 (AX round-3 final re-review): mirrors trendIndicators'
+       * direction/deltaKind contract (RULING-A/C extended to this sibling
+       * card) — the FE must branch on these instead of always painting the
+       * delta green regardless of sign/kind. "total" marks a plain
+       * cumulative count (e.g. "8 total") that is not a comparison at all
+       * and must never carry directional (green/coral) styling.
+       */
+      direction: "up" | "down" | "flat";
+      deltaKind: "percent" | "new" | "insufficient-data" | "total";
+    }>;
+  };
   marketVsYou: {
     /**
      * TRANSITIONAL (I1→I3, D-0042 / R5): the backend still sends this global
@@ -558,7 +574,34 @@ export interface MarketPulse {
     }>;
     summary: string;
   };
-  trendIndicators: Array<{ label: string; delta: string; direction: string; series: number[] }>;
+  trendIndicators: Array<{
+    label: string;
+    delta: string;
+    direction: string;
+    /**
+     * R-04/RULING-C (AX re-review round 2): whether `delta` is a genuine
+     * computable percentage, a zero-base rise with no honest magnitude
+     * ("new" — e.g. this user's first-ever scored week), or not enough
+     * complete-period data to compare at all ("insufficient-data" — e.g.
+     * an average series with a null gap on one side). The FE must never
+     * run "new"/"insufficient-data" values through percent styling/copy.
+     */
+    deltaKind: "percent" | "new" | "insufficient-data";
+    /**
+     * `null` entries are real, honestly-absent weeks (RULING-B: an AVERAGE
+     * series — e.g. "Avg job fit score" — never fabricates 0 for a week
+     * with nothing measured). COUNT/SUM series are zero-filled and never
+     * contain `null`.
+     */
+    series: Array<number | null>;
+  }>;
+  /**
+   * MON-015: the IANA zone the activity heatmap / weekly trend day-and-week
+   * boundaries are bucketed in (e.g. "Australia/Melbourne"). Optional so an
+   * older cached payload shape still satisfies this type; absent entirely
+   * only if the backend has not deployed the fix yet.
+   */
+  timezone?: string;
 }
 
 export const fetchMarketPulse = (options: RequestOptions = {}) =>

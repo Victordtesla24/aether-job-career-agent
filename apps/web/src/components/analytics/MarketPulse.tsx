@@ -83,16 +83,101 @@ function freshestDataAsOf(comparisons: MarketPulseData["marketVsYou"]["compariso
   return best?.iso ?? null;
 }
 
-function sparkPoints(series: number[], w = 120, h = 36) {
-  // A 0/1-point series would divide by zero below (NaN polyline coords);
-  // render a flat line instead.
-  const pts = series.length >= 2 ? series : [series[0] ?? 0, series[0] ?? 0];
-  const max = Math.max(...pts, 1);
-  const min = Math.min(...pts);
+/**
+ * MON-016: the trend-indicator tooltip literally claims "vs. the prior
+ * period" (the last COMPLETE data point vs. the one immediately before it)
+ * — so the rendered up/down signal is derived straight from the series'
+ * own tail, rather than trusting a separately-computed `direction` field
+ * that could (and, in a live 2026-08-13 audit, did) disagree with what the
+ * series itself shows for the most recent period.
+ *
+ * AX-REV-01 (2026-08-13 re-audit): every `series` passed here is a weekly
+ * rollup whose backend query has no upper bound short of "now" — the LAST
+ * point is always the current, still-in-progress Melbourne week, never a
+ * complete one (mirrors analytics.py's `_pct_delta`, which drops it for the
+ * same reason). Comparing it directly against the point before it divides a
+ * partial week against a complete one, biasing the signal toward "down"
+ * without bound the earlier in the week the page loads. This now always
+ * excludes that trailing in-progress point before comparing.
+ *
+ * R-01/RULING-B: an AVERAGE series (e.g. "Avg job fit score") carries
+ * honest `null` gaps for weeks with nothing measured — skipped here (never
+ * treated as 0) to find the two most recent COMPLETE weeks that actually
+ * have data, mirroring analytics.py's `_pct_delta_avg`.
+ */
+function priorPeriodDirection(series: Array<number | null>): "up" | "down" | "flat" {
+  const complete = series.slice(0, -1).filter((v): v is number => v !== null);
+  if (complete.length < 2) return "flat";
+  const last = complete[complete.length - 1];
+  const prior = complete[complete.length - 2];
+  if (last === prior) return "flat";
+  return last > prior ? "up" : "down";
+}
+
+/**
+ * R-03 (AX re-review round 2): splits a trend-indicator series into drawable
+ * polyline segments so the chart can never visually contradict the badge/
+ * tooltip next to it, both of which exclude the trailing in-progress week
+ * (RULING-A) — the ORIGINAL single-polyline render plotted that point
+ * unmarked and indistinguishable from a completed week. Returns:
+ *   - `complete`: the solid line through every point up to (not including)
+ *     the last index — always drawn at full opacity.
+ *   - `partial`: the short trailing segment connecting the last KNOWN point
+ *     to the final (in-progress) point, rendered at reduced opacity, or
+ *     `null` when the final week has no data yet (RULING-B: a `null` final
+ *     entry has nothing to draw, which is itself honest — no line is
+ *     fabricated across it).
+ * Internal `null` gaps (an unscored week in the middle of an average
+ * series) simply break the `complete` line rather than being interpolated
+ * across, so a genuine data gap reads as a gap, not a flat 0.
+ */
+function sparkSegments(series: Array<number | null>, w = 120, h = 36) {
+  const known = series.filter((v): v is number => v !== null);
+  const max = Math.max(...known, 1);
+  const min = known.length ? Math.min(...known) : 0;
   const range = max - min || 1;
-  return pts
-    .map((v, i) => `${(i / (pts.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`)
-    .join(" ");
+  const n = series.length;
+  const xy = (i: number, v: number) => {
+    const x = n > 1 ? (i / (n - 1)) * w : w / 2;
+    const y = h - ((v - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  };
+
+  const lastIdx = n - 1;
+  const lastVal = series[lastIdx];
+
+  // A single isolated known point (no adjacent known point on either side)
+  // has no line to draw — pushing it as a 1-point "polyline" would render
+  // nothing visible anyway, so only runs of 2+ points become a segment.
+  const completeRuns: string[] = [];
+  let run: string[] = [];
+  for (let i = 0; i < lastIdx; i++) {
+    const v = series[i];
+    if (v === null) {
+      if (run.length >= 2) completeRuns.push(run.join(" "));
+      run = [];
+      continue;
+    }
+    run.push(xy(i, v));
+  }
+  if (run.length >= 2) completeRuns.push(run.join(" "));
+
+  let partial: string | null = null;
+  if (lastVal !== null) {
+    let priorKnownIdx = -1;
+    for (let i = lastIdx - 1; i >= 0; i--) {
+      if (series[i] !== null) {
+        priorKnownIdx = i;
+        break;
+      }
+    }
+    partial =
+      priorKnownIdx >= 0
+        ? `${xy(priorKnownIdx, series[priorKnownIdx] as number)} ${xy(lastIdx, lastVal)}`
+        : null; // a single trailing point with no prior data has no line to draw
+  }
+
+  return { completeRuns, partial };
 }
 
 export default function MarketPulse() {
@@ -139,27 +224,69 @@ export default function MarketPulse() {
       <div data-testid="trend-indicators">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Trend Indicators</h3>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {data.trendIndicators.map((t) => (
-          <div key={t.label} className="glass rounded-2xl border border-white/10 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
-              <MetricTooltip
-                value={t.delta}
-                tooltip={`${t.label}: percentage change vs. the prior period.`}
-                className={`mono text-xs font-bold ${t.direction === "up" ? "text-aether-green" : "text-aether-coral"}`}
-              />
+        {data.trendIndicators.map((t) => {
+          // MON-016/AX-REV-01: derive the rendered signal from the series'
+          // own last two COMPLETE points (the true "prior period" the
+          // tooltip claims), not from `t.direction` alone.
+          const isUp = priorPeriodDirection(t.series) === "up";
+          // R-04/RULING-C: "new"/"insufficient-data" are not a percentage
+          // and must never render through green/coral percent styling —
+          // a neutral badge, matched by tooltip copy that states the real
+          // reason instead of the generic "percentage change" claim.
+          const isPercent = t.deltaKind === "percent";
+          const badgeClass = !isPercent
+            ? "text-aether-muted-dim"
+            : isUp
+              ? "text-aether-green"
+              : "text-aether-coral";
+          const strokeColor = !isPercent ? "#8A8A9E" : isUp ? "#34D399" : "#FF6B35";
+          const tooltipCopy =
+            t.deltaKind === "new"
+              ? `${t.label}: no prior completed period to compare — this is new activity.`
+              : t.deltaKind === "insufficient-data"
+                ? `${t.label}: not enough completed-period data yet to compute a change.`
+                : `${t.label}: percentage change vs. the prior period (this week's still-in-progress data isn't counted yet).`;
+          const { completeRuns, partial } = sparkSegments(t.series);
+          return (
+            <div key={t.label} className="glass rounded-2xl border border-white/10 p-4" data-testid="trend-indicator-tile">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
+                <MetricTooltip
+                  value={t.delta}
+                  tooltip={tooltipCopy}
+                  className={`mono text-xs font-bold ${badgeClass}`}
+                />
+              </div>
+              <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
+                {completeRuns.map((points, i) => (
+                  <polyline
+                    key={i}
+                    points={points}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {partial && (
+                  // RULING-A: the trailing point is always the current,
+                  // still-in-progress week — excluded from the delta above,
+                  // so it renders visually distinct (reduced opacity) here
+                  // too, rather than looking like a completed data point.
+                  <polyline
+                    points={partial}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeOpacity="0.35"
+                    data-testid="trend-partial-segment"
+                  />
+                )}
+              </svg>
             </div>
-            <svg viewBox="0 0 120 36" className="mt-2 h-9 w-full" aria-hidden="true">
-              <polyline
-                points={sparkPoints(t.series)}
-                fill="none"
-                stroke={t.direction === "up" ? "#34D399" : "#FF6B35"}
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-        ))}
+          );
+        })}
         </div>
       </div>
 
@@ -322,9 +449,17 @@ export default function MarketPulse() {
       <div className="grid gap-4 xl:grid-cols-4">
         {/* Activity heatmap */}
         <div className="glass rounded-2xl border border-white/10 p-5" data-testid="activity-heatmap">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Weekly Activity
           </h3>
+          {/* MON-015: disclose which calendar the day/week boundaries below
+           * actually use — sourced from the API, never hardcoded, so this
+           * can never drift out of sync with the bucketing it describes. */}
+          {data.timezone && (
+            <p className="mb-3 text-[10px] text-aether-muted-dim" data-testid="heatmap-timezone-label">
+              Days bucketed in {data.timezone} time
+            </p>
+          )}
           <div className="grid grid-cols-7 gap-1.5">
             {data.activityHeatmap.flatMap((week, wi) =>
               week.map((v, di) => (
@@ -375,22 +510,69 @@ export default function MarketPulse() {
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
             Recruiter Activity
           </h3>
-          <svg viewBox="0 0 120 36" className="h-16 w-full" aria-hidden="true">
-            <polyline
-              points={sparkPoints(data.recruiterTrends.series)}
-              fill="none"
-              stroke="#818CF8"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
+          {(() => {
+            // MUST-FIX-1 (AX round-3 final re-review): this used to be a
+            // single fully-opaque sparkPoints() polyline, so the trailing
+            // in-progress Melbourne week was indistinguishable from a
+            // completed one — while the "Avg runs / week" delta directly
+            // beneath it (backend _pct_delta) EXCLUDES that same week.
+            // sparkSegments() is the SAME remedy already applied to the
+            // Trend Indicators tiles (R-03): the trailing segment renders
+            // separately, at reduced opacity, so the chart can never
+            // visually contradict the badge beside it (RULING-A, applied to
+            // every sparkline/series render, not only named instances).
+            const { completeRuns, partial } = sparkSegments(data.recruiterTrends.series);
+            return (
+              <svg viewBox="0 0 120 36" className="h-16 w-full" aria-hidden="true">
+                {completeRuns.map((points, i) => (
+                  <polyline
+                    key={i}
+                    points={points}
+                    fill="none"
+                    stroke="#818CF8"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {partial && (
+                  <polyline
+                    points={partial}
+                    fill="none"
+                    stroke="#818CF8"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeOpacity="0.35"
+                    data-testid="trend-partial-segment"
+                  />
+                )}
+              </svg>
+            );
+          })()}
           <div className="mt-3 space-y-2">
-            {data.recruiterTrends.rows.map((r) => (
-              <div key={r.label} className="flex items-center justify-between text-xs">
-                <span className="text-aether-muted">{r.label}</span>
-                <span className="mono text-aether-green">{r.delta}</span>
-              </div>
-            ))}
+            {data.recruiterTrends.rows.map((r) => {
+              // MUST-FIX-1 COMPOUNDING (AX round-3 final re-review): this
+              // used to render className="mono text-aether-green"
+              // UNCONDITIONALLY — _pct_delta can return a count-only
+              // "total" (no comparison at all), "no change"/negative
+              // percentages, or "new activity", and all painted success
+              // green. Same isPercent/isUp branch the Trend Indicators
+              // tiles already use (R-04/RULING-C) — a non-percent kind
+              // never carries directional styling, and a percent kind
+              // matches its own direction (mirrors the sibling tile's
+              // isUp-only convention: "flat"/"down" both render coral).
+              const isPercent = r.deltaKind === "percent";
+              const deltaClass = !isPercent
+                ? "text-aether-muted-dim"
+                : r.direction === "up"
+                  ? "text-aether-green"
+                  : "text-aether-coral";
+              return (
+                <div key={r.label} className="flex items-center justify-between text-xs">
+                  <span className="text-aether-muted">{r.label}</span>
+                  <span className={`mono ${deltaClass}`}>{r.delta}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
