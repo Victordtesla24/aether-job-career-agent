@@ -136,13 +136,20 @@ def test_story_extraction_structured_tier_is_not_overridable(client, auth_header
 
 @pytest.mark.parametrize(
     "key",
+    # ML-U1X-b: ``orchestration`` (backend ``supervisor``) deliberately LEFT this
+    # list. It stays deterministic for COST — it reserves no quota and records no
+    # model spend — but it is now a ROLE backend whose saved model assignment IS
+    # read back by ``_user_model_override``, so its picker is functional and
+    # ``modelOverridable`` is True BY DESIGN. That contract is pinned by
+    # test_u1x_b_orchestrator_role.py::
+    # test_orchestrator_catalog_defaults_to_flagship_anthropic_model.
     ["jobDiscovery", "atsOptimization", "matchScoring", "jobMatching",
-     "skillGap", "orchestration"],
+     "skillGap"],
 )
 def test_deterministic_backed_agents_are_not_overridable(client, auth_headers, key):
     """Every catalog entry backed by a deterministic backend (scout/fitScorer/
-    matcher/supervisor — no LLM call, `_model_for_agent` returns None) must
-    also report `modelOverridable=False`. FAILS NOW: field absent."""
+    matcher — no LLM call, `_model_for_agent` returns None) must also report
+    `modelOverridable=False`. FAILS NOW: field absent."""
     agents = _catalog_by_key(client, auth_headers)
     assert agents[key].get("modelOverridable") is False, (
         f"{key} (deterministic backend {agents[key]['backend']!r}) must "
