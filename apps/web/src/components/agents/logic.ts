@@ -86,15 +86,30 @@ export function agentStatusLabel(
  * is never told it has none, and a connected-but-currently-optionless
  * provider (failed live fetch, cold cache, ...) still gets an honest reason
  * instead of a silently-locked control.
+ *
+ * R-2 re-fix (F-4 residual): the STRING itself then stayed unconditional —
+ * "configure its credentials" is a real cause only when the provider isn't
+ * connected at all. A CONNECTED provider with zero rendered options has a
+ * DIFFERENT true cause (its credentials are already configured), so the
+ * copy now branches on it: a live catalog fetch that failed surfaces the
+ * real error (`fetchError`, e.g. `anthropicModelsError`), a connected
+ * provider with no fetch error just has no published catalog to select
+ * from (e.g. `abacus`/`bedrock`'s empty seed), and only a genuinely
+ * unconnected provider is told to configure credentials.
  */
 export function providerModelDisabledReason(
   provider: Provider,
   optionCount: number = provider.models.length,
+  fetchError?: string | null,
 ): string | null {
-  if (optionCount === 0) {
+  if (optionCount > 0) return null;
+  if (provider.status !== "connected") {
     return `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`;
   }
-  return null;
+  if (fetchError) {
+    return `${provider.name} has no selectable models yet — its catalog is unavailable (${fetchError}).`;
+  }
+  return `${provider.name} has no selectable models yet — it has no published models to choose from yet.`;
 }
 
 /**

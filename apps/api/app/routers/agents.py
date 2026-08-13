@@ -4566,7 +4566,18 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
     model = llm_model or "deterministic"
     est_cost = None
     est_tokens: int | None = None
-    if llm_model is not None:
+    # R-1 re-fix (ML-U1X-refix round 2): mirror the run-costing tail's
+    # zero-cost gate (agents.py's ``_record_run``, "F-1 re-fix" comment
+    # above). ``llm_model is not None`` alone is no longer sufficient — a
+    # ROLE backend (``supervisor``/Orchestrator, ``_ROLE_MODEL_BACKENDS``)
+    # now returns a real display id from ``_model_for_agent`` even though it
+    # makes NO LLM call today (see ``_LLM_TIER_BY_BACKEND``'s module
+    # comment). Only a backend actually METERED — present in
+    # ``_LLM_TIER_BY_BACKEND`` — gets a derived spend/token estimate; every
+    # other backend keeps its role/display id in ``model`` but leaves
+    # est_cost/est_tokens genuinely null, exactly like the deterministic
+    # agents this docstring already promises never fabricate spend.
+    if llm_model is not None and backend in _LLM_TIER_BY_BACKEND:
         price_in, price_out = _price_for(llm_model)
         est_tokens_in, est_tokens_out = 2800, 1400
         est_tokens = est_tokens_in + est_tokens_out

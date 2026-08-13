@@ -222,6 +222,64 @@ describe("F-4 — providerModelDisabledReason keys on the real option count", ()
 });
 
 // --------------------------------------------------------------------------- #
+// R-2 (BE/FE re-fix round 2, F-4 residual): the disabled-reason STRING must
+// branch on the REAL cause, not just on whether optionCount is zero. F-4
+// fixed *whether* a reason appears; R-2 fixes *what it says*. A CONNECTED
+// provider — credentials genuinely configured — must never be told to
+// "configure its credentials"; that claim is only true when the provider
+// isn't connected at all.
+// --------------------------------------------------------------------------- #
+
+describe("R-2 — providerModelDisabledReason branches on the real cause", () => {
+  it("connected + a live catalog fetch error surfaces the REAL error, never the false 'configure credentials' claim", () => {
+    const connected = anthropicProvider({ status: "connected", models: [] });
+    const reason = providerModelDisabledReason(connected, 0, "network timeout after 3 retries");
+    expect(reason).not.toBeNull();
+    expect(reason).toContain("network timeout after 3 retries");
+    expect(reason).not.toMatch(/configure its credentials/i);
+  });
+
+  it("connected + no catalog fetch error (e.g. abacus/bedrock's empty published seed) still avoids the false 'configure credentials' claim", () => {
+    const connected = anthropicProvider({ status: "connected", models: [] });
+    const reason = providerModelDisabledReason(connected, 0, null);
+    expect(reason).not.toBeNull();
+    expect(reason).not.toMatch(/configure its credentials/i);
+  });
+
+  it("(contrast guard) a genuinely non-connected provider keeps the 'configure its credentials' reason", () => {
+    const unconfigured = anthropicProvider({ status: "unconfigured", models: [] });
+    const reason = providerModelDisabledReason(unconfigured, 0, "irrelevant — not connected");
+    expect(reason).toMatch(/configure its credentials/i);
+  });
+});
+
+describe("R-2 — anthropic select title reflects the real cause when connected with an empty catalog", () => {
+  it("a CONNECTED anthropic card whose live catalog fetch failed shows the true error in the title, not 'configure its credentials'", async () => {
+    fetchProviderModelsMock.mockImplementation((provider: string) =>
+      provider === "anthropic"
+        ? Promise.reject(new Error("upstream 503"))
+        : Promise.resolve([]),
+    );
+    fetchProvidersMock.mockResolvedValue([
+      anthropicProvider({
+        status: "connected",
+        source: "database",
+        authMode: "oauth_token",
+        secretHint: "…oat01",
+        lastVerifiedAt: "2026-08-13T12:36:27Z",
+        lastVerifyStatus: "ok",
+      }),
+    ]);
+    render(<AgentsPage />);
+    await waitFor(() => expect(screen.getByTestId("provider-anthropic")).toBeTruthy());
+
+    const select = (await screen.findByTestId("provider-model-anthropic")) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(true));
+    expect(select.title ?? "").not.toMatch(/configure its credentials/i);
+  });
+});
+
+// --------------------------------------------------------------------------- #
 // F-2: the Orchestrator role card's billing-disclosure copy must not claim
 // an LLM call runs immediately, and must not assert an unconditional
 // "connected" credential.

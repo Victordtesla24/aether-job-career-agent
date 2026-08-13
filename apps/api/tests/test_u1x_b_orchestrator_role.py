@@ -191,3 +191,41 @@ def test_supervisor_role_run_still_records_zero_cost_and_no_model(
         "(_call_is_metered is False for it)."
     )
     assert out["billingAudit"] == {"quotaPath": "none"}, out["billingAudit"]
+
+
+def test_test_run_estimator_supervisor_role_stays_zero_cost(
+    client, auth_headers
+):
+    """R-1 (BE re-fix round 2): the SAME regression as
+    ``test_supervisor_role_run_still_records_zero_cost_and_no_model`` above,
+    but at the dry-run estimator (``POST /agents/test-run``) instead of the
+    real run-costing tail. ``_model_for_agent('supervisor', ...)`` now
+    returns the flagship anthropic id (U1X-b), so the estimator's
+    ``if llm_model is not None`` guard no longer excludes the Orchestration
+    Agent — it fabricates ``estCost``/``estTokens`` off two hardcoded
+    literals (2800/1400 input/output tokens) for a backend that makes ZERO
+    LLM calls today. The role's display id must still surface in ``model``
+    (U1X-b's own contract — the picker needs it to show what the role is
+    assigned), but the derived spend/token figures must stay genuinely null,
+    exactly like every other backend absent from ``_LLM_TIER_BY_BACKEND``."""
+    res = client.post(
+        "/agents/test-run", json={"agent_key": "orchestration"}, headers=auth_headers
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["model"] not in (None, "deterministic"), (
+        "the role's assigned display id must still surface in `model` — "
+        f"got {body['model']!r}"
+    )
+    assert body["estCost"] is None, (
+        f"estCost={body['estCost']!r} for agent_key='orchestration' — the "
+        "supervisor backend makes NO LLM call (absent from "
+        "_LLM_TIER_BY_BACKEND), so this is a fabricated spend figure "
+        "rendered to the user as a real dollar estimate."
+    )
+    assert body["estTokens"] is None, (
+        f"estTokens={body['estTokens']!r} for agent_key='orchestration' — "
+        "same fabrication as estCost, fed by the endpoint's own hardcoded "
+        "2800/1400 literals for a backend with no real LLM call."
+    )
+    assert body["creditsCharged"] == 0.0, body

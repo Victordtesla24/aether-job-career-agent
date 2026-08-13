@@ -145,9 +145,12 @@ export default function ProviderConnections({
             // actually about to render (never the raw seed length for
             // anthropic), so the tooltip and the `disabled` attribute below
             // — both driven by `anthropicOptions.length` — can never diverge.
+            // R-2: also thread the anthropic card's REAL fetch-error text so
+            // a connected-but-catalog-fetch-failed card gets the true cause
+            // in its `title`, never the false "configure its credentials".
             const modelLockReason =
               p.id === "anthropic"
-                ? providerModelDisabledReason(p, anthropicOptions.length)
+                ? providerModelDisabledReason(p, anthropicOptions.length, anthropicModelsError)
                 : providerModelDisabledReason(p);
             return (
               <div
