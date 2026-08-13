@@ -1421,3 +1421,147 @@ closed as implemented (superseding its "intentional-by-design without UI delete"
 GAP-P4-004 is formally out of scope with the honest banner retained; the admin panel reports
 scheduler health from evidence rather than assertion. All four changes are covered by
 fails-before/passes-after tests (evidence: `uat/reports/evidence/phase4/`).
+
+
+## D-0042 — Market vs. You: live Adzuna AU benchmark wiring
+
+**Date:** 2026-08-13 · **Author:** Orchestrator (Fable 5) + sub-agent swarm · **Status:** Adopted
+
+**Context.** D-0041 §3 declared GAP-P4-004 ("Market Pulse not connected") formally out of scope,
+reasoning that a real market-data source would require a paid, procurement-gated provider. A
+2026-08-13 discovery pass established that is not the case: Aether already holds licensed Adzuna
+AU credentials (`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`, D-0034/RT-003) for the discovery adapter, and the
+same free-tier API exposes real market figures the Analytics page's Market vs. You panel can use
+without any new procurement. Live discovery (`uat/reports/evidence/market-perf/discovery/`) also
+surfaced two deviations from the initial integration assumption, both evidence-backed against the
+real provider rather than its documentation, which this ADR records before describing the
+implementation.
+
+**Decisions.**
+
+1. **No Adzuna "Intelligence API" exists — evidence-backed correction of the discovery
+   assumption.** The initial scout inventory (`SCOUT-INVENTORY-market-vs-you-adzuna.md`) assumed a
+   dedicated salary/intelligence endpoint. Four plausible endpoint guesses were probed live against
+   `api.adzuna.com/v1/api` on 2026-08-13T05:53Z and every one returned HTTP 404
+   `UNKNOWN_METHOD` — never a partial response, never a 200 with an unexpected shape:
+   `reports/salary/au`, `reports/salary/history/au`, `jobs/au/reports/salary`, and
+   `intelligence/reports/salary/au`. Evidence:
+   `uat/reports/evidence/market-perf/discovery/D5a-reports-salary-au.{request,headers,body}.txt`,
+   `D5b-reports-salary-history-au.*`, `D5c-jobs-au-reports-salary.*`, `D5d-intelligence-v1.*` (each
+   body is the provider's own `{"exception":"UNKNOWN_METHOD", ...}` error, not a constructed
+   fixture). The only real endpoints are the three the discovery adapter already used —
+   `/v1/api/jobs/au/search/1`, `/v1/api/jobs/au/history`, `/v1/api/jobs/au/histogram` — and none of
+   them publishes a percentile or median, so Aether computes neither (`salary_intelligence_agent.py`
+   module docstring, "no percentile or median is ever interpolated"). Alternatives rejected: (a)
+   keep probing for an undocumented intelligence endpoint — rejected, four independent guesses
+   spanning the plausible URL space all failed identically; continuing would spend calls against
+   the 250/day ToS ceiling on a resource that does not exist; (b) synthesize a percentile from the
+   histogram's bands — rejected as fabrication (D-0028's own standard: no derived number the
+   provider did not itself publish).
+
+2. **`/jobs/au/history` is salary, not volume, and requires the country's full name, not its
+   two-letter code — a second evidence-backed correction.** The endpoint's name suggests posting
+   *volume* history; live-verified 2026-08-13, its `month` map is actually the AVERAGE ADVERTISED
+   SALARY per month for the last 12 months, across every advertised role in the queried region —
+   not filtered by role at all. Separately, `/history` and `/histogram` are keyed by Adzuna's
+   location hierarchy (`location0`), which is NOT the same segment as the two-letter country code
+   used in the `/search` path (`/jobs/au/...`): `location0=Australia` (the full country name)
+   returns HTTP 200 with real data, while `location0=AU` returns HTTP 400 — an HTML error page from
+   the provider's edge, before its API is even reached. Evidence:
+   `uat/reports/evidence/market-perf/discovery/01-history-au-victoria.*` (200, full name) vs.
+   `01a-history-au-victoria.*` (400, two-letter code), re-confirmed in the D-series re-verification
+   pass. The shipped code hardcodes the full name (`_ADZUNA_COUNTRY = "Australia"`,
+   `salary_intelligence_agent.py`) and the panel's own copy states the endpoint's real scope
+   ("month" is every advertised role in the state/country, not this caller's target role) rather
+   than letting the field name imply a role-scoped figure it is not.
+
+3. **Environment configuration.** `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` (`.env.example`, documented since
+   D-0034/RT-003) remain the only required keys — free operator-registered credentials
+   (developer.adzuna.com); their absence makes `fetch_market_benchmark` return `None` without any
+   network call, never a fabricated figure. One new **optional** key,
+   `AETHER_ADZUNA_BENCH_TTL_SECONDS`, overrides the benchmark cache TTL and is clamped to
+   `[60, 21600]` seconds (60s floor, 6h ceiling): an unparseable or out-of-range value falls back
+   into range rather than disabling the cache (which would breach the ToS rate limits below) or
+   extending it past the point where a "market data as of" label stops being true
+   (`_bench_ttl_seconds`, `salary_intelligence_agent.py`). Left unset, the default is the 6h
+   ceiling itself.
+
+4. **Per-row `{connected, dataAsOf, marketNote, footnote}` contract replaces the global boolean
+   D-0041 §3 had implicitly assumed (R5).** Market vs. You is three rows — Applications/month,
+   Interview rate, Advertised salary (mean) — and their market-data provenance genuinely differs:
+   the interview-rate row has no provider at all and never will, so a single page-level "connected"
+   boolean could only ever be an OR that misdescribes at least one row. Each row instead states its
+   own `connected` (is a real external figure backing this row's market side), `dataAsOf` (when that
+   figure was actually fetched — never the request time), `marketNote` (what the market number
+   literally counts and how widely it searched, e.g. "N job ads posted in the last 30 days ... for
+   ROLE and K related titles in the same role family"), and `footnote` (why it is absent, when it
+   is). No consumer reads a page-level flag; every consumer reads the rows
+   (`apps/api/app/routers/analytics.py`, "Market vs you" section).
+
+5. **Probability-score decoupling (`_PROBABILITY_USES_MARKET_EVIDENCE = False`).** Wiring live
+   market data into the DISPLAYED Market vs. You panel is a separate claim from whether the
+   application-probability SCORE consumes that evidence, and this ADR keeps them separate on
+   purpose: the flag stays `False`, so the probability score's inputs are unchanged by this work,
+   and the score's own honesty summary continues to state plainly that no market evidence backs it
+   (`_NO_MARKET_DATA_SUMMARY`, `analytics.py`). Flipping the flag to let the score actually use
+   market evidence is an explicit future decision, not a side effect of this one. Alternatives
+   rejected: quietly wiring the score to the new benchmark at the same time — rejected, because a
+   reviewer diffing "did the score change" against "did the panel change" must be able to trust
+   they are independent; conflating them here would make a future score change impossible to
+   attribute.
+
+6. **6-hour-ceiling, never-stale cache is the ToS rate-limit control — not a request-time
+   limiter.** Adzuna's published ToS defaults are 25 calls/minute and 250 calls/day
+   (`salary_intelligence_agent.py` module comment). Aether does not implement a token-bucket or
+   sliding-window limiter against those numbers; instead it fetches at most once per `(role,
+   location)` pair per TTL window (default 6h, floor 60s) via an in-process cache
+   (`_BENCH_CACHE`, keyed on `time.monotonic()` so a clock adjustment can neither resurrect an
+   expired entry nor expire a fresh one), which keeps live calls orders of magnitude under both
+   ceilings for realistic traffic. A FAILED attempt is remembered too, for a much shorter 60s
+   backoff window, so a sustained provider outage cannot defeat the cache by making every request
+   look like a cache miss — and so a recovered provider is picked up again within a minute rather
+   than waiting out the full 6h TTL. An expired entry is evicted BEFORE a refetch is attempted, so
+   a refetch that itself fails has no path back to serving the stale figures behind a fresh-looking
+   "as of" label — the failure is cached as `None`, never as the old numbers.
+
+7. **Fail-closed rules, per call.** No target role or location (`F-02`, no substitution) or absent
+   credentials or fixture mode (`AETHER_DISCOVERY_FIXTURE_DIR` set — the gate the test suite uses so
+   no test can reach the live provider) short-circuits to `None` with zero network calls. A
+   `/search` failure fails the WHOLE benchmark closed (`None`) — it is the row `postingsLast30d` and
+   `meanAdvertisedSalary` are built from. A `/history` or `/histogram` failure degrades only its OWN
+   field to `None` and leaves the `/search` figures intact ("partial honesty", R11 in the module
+   docstring) — discarding data the provider genuinely returned would itself be a kind of
+   dishonesty. The interview-rate row is a fourth, permanent case: no external interview-conversion
+   benchmark provider exists for any market, so its `connected` is hardcoded `False` with a static
+   footnote (`_INTERVIEW_RATE_FOOTNOTE`) rather than a runtime check that could someday flip true by
+   accident.
+
+8. **Carries forward the AX analytics standards already in `analytics.py`.** This work shares the
+   router file with the Market Pulse trend/heatmap fixes (MON-015, AX-REV-01) and follows the same
+   two rules rather than inventing new ones: (a) every date/week boundary is computed in
+   `Australia/Melbourne` wall-clock time (`_ANALYTICS_TIMEZONE`), both in SQL bucketing and the
+   Python "today" anchor, because the page is explicitly AU/Melbourne-branded and UTC-naive
+   bucketing was shown live to shift ~28% of a real user's applications onto the wrong calendar day
+   (MON-015); (b) every computed delta carries an explicit `deltaKind` (`"percent"` | `"new"` |
+   `"insufficient-data"` | `"total"`) rather than a bare number, so a renderer never applies
+   percent/directional styling to a value that is not a percent comparison (AX-REV-01). The new
+   `marketNote`/`footnote`/`dataAsOf` fields on the Market vs. You rows follow the same underlying
+   principle — a row states its own scope and provenance rather than leaving a downstream renderer
+   to infer it.
+
+**Consequences.** GAP-P4-004 is superseded: Market vs. You's Applications/month and Advertised
+salary (mean) rows now render a real, live Adzuna AU figure whenever credentials are configured (as
+they are in production) and cite exactly what they measured; the Interview-rate row stays honestly
+`connected: false` forever, by design. D-0041 §3's "Market Pulse not connected" framing no longer
+describes production. The probability score is unaffected (`_PROBABILITY_USES_MARKET_EVIDENCE`
+stays `False`). Covered by `apps/api/tests/test_analytics.py`,
+`apps/api/tests/test_market_pulse_interview_count_divergence.py`,
+`apps/web/src/components/analytics/__tests__/MarketPulse.test.tsx`, and
+`apps/web/src/components/analytics/__tests__/probability-score-honesty.test.tsx`, plus live
+production deploy/smoke evidence across three increments
+(`uat/reports/evidence/market-perf/i1/smoke-market-pulse.json`,
+`i2/smoke-api-sanity-market-pulse.json`, `i3/smoke-adzuna-mean-crosscheck.json`,
+`i3/smoke-widget-3rows.png`). **Reversible?** Yes — every decision here is a data-source/contract
+choice behind existing env keys and an internal in-process cache; removing or swapping the provider
+requires no schema change, and the per-row contract degrades every row to its existing honest
+`connected: false` state by construction whenever the provider is unset.
