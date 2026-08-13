@@ -39,14 +39,14 @@ vi.mock("../../../../lib/api/resumes", () => ({
   downloadResume: (...args: unknown[]) => downloadResume(...args),
 }));
 
-// eslint-disable-next-line import/first
 import ResumePage from "../page";
 
 /** A base (no-parent) résumé — the fixture's own hash never matches a
- *  bundled asset, exactly like a real upload. `formatPreserved: false` is
- *  the NEW field the fix must add and read; today's page.tsx ignores it
- *  entirely. */
-function baseResumeFixture(formatPreserved: boolean) {
+ *  bundled asset, exactly like a real upload. `formatPreserved` is a field
+ *  already present on the `Resume` type (resumes.ts). Omit the argument to
+ *  simulate a payload that leaves the flag out entirely (older cached
+ *  payload / API predating the field) — the fail-open regression case. */
+function baseResumeFixture(formatPreserved?: boolean) {
   return {
     id: "r-base",
     userId: "u1",
@@ -56,7 +56,6 @@ function baseResumeFixture(formatPreserved: boolean) {
     sourceJobId: null,
     parentId: null,
     formatHash: "user-upload-hash-abc123",
-    // eslint-disable-next-line @typescript-eslint/naming-convention -- API-shaped fixture field, not yet in the Resume type
     formatPreserved,
     approvalStatus: "approved",
     createdAt: "2026-07-15T00:00:00Z",
@@ -70,9 +69,10 @@ afterEach(() => {
   fetchResumes.mockReset();
   fetchResumeDiff.mockReset();
   runTailorAgent.mockReset();
+  downloadResume.mockReset();
 });
 
-async function openBaseResumeIntegrityPanel(formatPreserved: boolean) {
+async function renderWithBaseResume(formatPreserved?: boolean) {
   const resume = baseResumeFixture(formatPreserved);
   fetchResumes.mockResolvedValue([resume]);
   fetchResumeDiff.mockResolvedValue({ resume_id: "r-base", parent_id: null, changes: [] });
@@ -84,6 +84,10 @@ async function openBaseResumeIntegrityPanel(formatPreserved: boolean) {
   render(<ResumePage />);
   const card = await screen.findByTestId("resume-version-card");
   fireEvent.click(card);
+}
+
+async function openBaseResumeIntegrityPanel(formatPreserved?: boolean) {
+  await renderWithBaseResume(formatPreserved);
   return screen.findByTestId("integrity-status");
 }
 
@@ -105,5 +109,54 @@ describe("MON-011 — honest Format Integrity Check copy", () => {
 
     expect(text).toContain("layout hash matches the base");
     expect(text).toContain("preserved");
+  });
+});
+
+describe("MON-011 fix-round-2 — a MISSING formatPreserved flag reads as unknown, never as preserved (FE-MON011-C, mon-batch-1-fe-opus-review-verdict.json)", () => {
+  it("does not fall through to the hash self-comparison and claim preservation when the API omits the flag", async () => {
+    const status = await openBaseResumeIntegrityPanel(undefined);
+    const text = (status.textContent ?? "").toLowerCase();
+
+    // Reviewer probe (12:07:09Z) proved this exact fixture rendered the
+    // affirmative claim pre-fix via the base résumé's trivial self-hash-match.
+    expect(text).not.toContain("layout hash matches the base");
+    expect(text).not.toContain("not preserved");
+    expect(text).toContain("unknown");
+  });
+});
+
+describe("MON-011 fix-round-2 — honest download-completion copy (FE-MON011-A, mon-batch-1-fe-opus-review-verdict.json)", () => {
+  it("does not claim a format-preserving PDF was saved for a resume the download path cannot byte-preserve", async () => {
+    downloadResume.mockResolvedValue(undefined);
+    await renderWithBaseResume(false);
+
+    fireEvent.click(await screen.findByTestId("download-resume-btn"));
+    const note = await screen.findByTestId("download-note");
+    const text = (note.textContent ?? "").toLowerCase();
+
+    expect(text).not.toContain("format-preserving pdf saved");
+    expect(text).toContain("not preserved");
+  });
+
+  it("does not claim preservation either way for a resume whose formatPreserved flag is missing", async () => {
+    downloadResume.mockResolvedValue(undefined);
+    await renderWithBaseResume(undefined);
+
+    fireEvent.click(await screen.findByTestId("download-resume-btn"));
+    const note = await screen.findByTestId("download-note");
+    const text = (note.textContent ?? "").toLowerCase();
+
+    expect(text).not.toContain("format-preserving pdf saved");
+    expect(text).toContain("unknown");
+  });
+
+  it("keeps the affirmative download-completion claim for a resume the download path genuinely byte-preserves", async () => {
+    downloadResume.mockResolvedValue(undefined);
+    await renderWithBaseResume(true);
+
+    fireEvent.click(await screen.findByTestId("download-resume-btn"));
+    const note = await screen.findByTestId("download-note");
+
+    expect((note.textContent ?? "").toLowerCase()).toContain("format-preserving pdf saved");
   });
 });

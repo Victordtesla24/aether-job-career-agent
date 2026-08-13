@@ -102,12 +102,19 @@ export interface TailorRunResult {
 }
 
 /**
- * Download a resume version as a format-preserving PDF.
+ * Download a resume version as a PDF.
  *
  * Streams `GET /resumes/{id}/download` (a binary PDF, so it bypasses the JSON
  * `apiRequest` helper), then triggers a browser download of the returned blob.
- * The base resume comes back as the original PDF bytes; tailored versions come
- * back as the original layout with only the reworded bullets redrawn.
+ *
+ * MON-011 (MONITORING-LEDGER.md): whether the returned PDF actually
+ * reproduces the original document's layout depends on the server's
+ * `resolve_original_pdf` match (apps/api/app/services/resume_pdf.py) — true
+ * only for the bundled seed PDFs and versions tailored from them. Every real
+ * user upload (base or tailored) falls through to the generic branded
+ * template instead. This function makes no promise about which happened;
+ * callers must read the resume's own `formatPreserved` flag (`ResumeSchema`
+ * above) before telling the user their layout was preserved.
  */
 export async function downloadResume(id: string, options: RequestOptions = {}): Promise<void> {
   const baseUrl = options.baseUrl ?? apiBaseUrl();
