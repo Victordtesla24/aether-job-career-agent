@@ -280,6 +280,46 @@ describe("R-2 — anthropic select title reflects the real cause when connected 
 });
 
 // --------------------------------------------------------------------------- #
+// R-2 SECONDARY (final-review round 3): the SAME "false cause on a locked
+// control" defect R-2 fixed for the `title` tooltip also existed on the
+// VISIBLE <option> text of the identical <select> — a connected anthropic
+// card with zero rendered options and no fetch error kept the unconditional
+// "No preset models — configure below" copy, contradicting its own tooltip
+// (which correctly said "no published models to choose from yet"). Pin both
+// surfaces so they can never diverge again.
+// --------------------------------------------------------------------------- #
+
+describe("R-2 SECONDARY — anthropic select's visible option text matches its own title when connected with no fetch error", () => {
+  it("a CONNECTED anthropic card with an empty catalog and NO fetch error shows an honest visible option, never 'configure below'", async () => {
+    fetchProviderModelsMock.mockImplementation((provider: string) =>
+      Promise.resolve(provider === "anthropic" ? [] : []),
+    );
+    fetchProvidersMock.mockResolvedValue([
+      anthropicProvider({
+        status: "connected",
+        source: "database",
+        authMode: "oauth_token",
+        secretHint: "…oat01",
+        lastVerifiedAt: "2026-08-13T12:36:27Z",
+        lastVerifyStatus: "ok",
+        models: [],
+      }),
+    ]);
+    render(<AgentsPage />);
+    await waitFor(() => expect(screen.getByTestId("provider-anthropic")).toBeTruthy());
+
+    const select = (await screen.findByTestId("provider-model-anthropic")) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(true));
+    // The `title` tooltip (R-2, logic.ts) already says "no published models
+    // to choose from yet" for this exact state — the visible option text
+    // must agree, never the "configure below" copy (only true when the
+    // provider isn't connected at all).
+    expect(select.textContent ?? "").not.toMatch(/configure below/i);
+    expect(select.textContent ?? "").toMatch(/no published models/i);
+  });
+});
+
+// --------------------------------------------------------------------------- #
 // F-2: the Orchestrator role card's billing-disclosure copy must not claim
 // an LLM call runs immediately, and must not assert an unconditional
 // "connected" credential.

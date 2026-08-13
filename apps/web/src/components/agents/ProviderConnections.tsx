@@ -248,8 +248,16 @@ export default function ProviderConnections({
                     >
                       {anthropicOptions.length === 0 ? (
                         <option value="">
-                          {p.status === "connected" && anthropicModelsError
-                            ? `Catalog unavailable — ${anthropicModelsError}`
+                          {/* R-2 SECONDARY (final-review round 3): this visible
+                              option text must agree with the SAME `title`
+                              tooltip on this select (:236, providerModelDisabledReason
+                              via logic.ts) — a connected card is never told to
+                              "configure below" (that copy is only true when the
+                              provider isn't connected at all). */}
+                          {p.status === "connected"
+                            ? anthropicModelsError
+                              ? `Catalog unavailable — ${anthropicModelsError}`
+                              : "No published models yet"
                             : "No preset models — configure below"}
                         </option>
                       ) : (

@@ -91,14 +91,26 @@ describe("providerModelDisabledReason", () => {
     expect(providerModelDisabledReason({ ...base, models: ["claude-sonnet-5"] })).toBeNull();
   });
 
-  // ML-U1X-b honesty fix: a CONNECTED provider is never told to "configure
-  // its credentials" — its `models` seed being empty is not evidence of a
-  // locked select once a real credential exists (the live catalog may be
-  // fetched from elsewhere, e.g. Anthropic's static catalog).
-  it("returns null for a connected provider even with an empty models seed", () => {
-    expect(
-      providerModelDisabledReason({ ...base, status: "connected", models: [] }),
-    ).toBeNull();
+  // ML-U1X-b honesty fix, SUPERSEDED in review round 2 (R-2): this pin
+  // originally asserted the reason came back null for ANY connected
+  // provider with an empty models seed, on the theory that "connected"
+  // alone proves real options exist elsewhere (e.g. Anthropic's static
+  // catalog). The round-2 adversarial review found the failure mode that
+  // assumption hides: a connected provider whose ACTUAL rendered option
+  // count is genuinely zero (cold cache, failed live fetch, an empty
+  // published catalog such as abacus/bedrock's seed) would then render a
+  // SILENTLY locked control with no explanation at all — worse than a wrong
+  // reason. F-4 restored a reason for that case; R-2 fixed what it SAYS —
+  // it now branches on the real cause instead of ever claiming credentials
+  // are missing. This pin is superseded to assert the surviving contract: a
+  // connected provider is NEVER told to "configure its credentials" (that
+  // claim is only ever true when `status !== "connected"`), independent of
+  // whether a reason string comes back at all. See also the sibling pins in
+  // u1x_refix_review.test.tsx ("R-2 — providerModelDisabledReason branches
+  // on the real cause").
+  it("never claims a connected provider needs to configure credentials, even with an empty models seed", () => {
+    const reason = providerModelDisabledReason({ ...base, status: "connected", models: [] });
+    expect(reason).not.toMatch(/configure its credentials/i);
   });
 
   it("still explains the lock for a NOT-connected provider with an empty models seed", () => {
